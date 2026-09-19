@@ -10,6 +10,13 @@
 # the row `generating` for the whole stale window; an enqueue failure
 # therefore releases it into `failed` with the reason.
 #
+# A caller whose data changed (a finished ranking calculation) passes
+# `rerun_if_generating: true`: when its claim is refused by a run already in
+# flight, it flags the row `rerun_requested` instead of walking away, and
+# GenerateJob re-requests a generation after that run -- the in-flight run
+# plucked its ids before the new ranks landed, so its file is already stale.
+# Every claim clears the flag: a fresh run satisfies any pending request.
+#
 # Model constants are root-anchored: inside Services::CsvExports a bare
 # CsvExports resolves to this module.
 module Services
@@ -21,19 +28,20 @@ module Services
       ALREADY_GENERATING = "The export is already being generated."
       ENQUEUE_FAILED = "The export could not be queued. Try again in a moment."
 
-      def self.call(ranking_configuration:)
-        new(ranking_configuration: ranking_configuration).call
+      def self.call(ranking_configuration:, rerun_if_generating: false)
+        new(ranking_configuration: ranking_configuration, rerun_if_generating: rerun_if_generating).call
       end
 
-      def initialize(ranking_configuration:)
+      def initialize(ranking_configuration:, rerun_if_generating: false)
         @config = ranking_configuration
+        @rerun_if_generating = rerun_if_generating
       end
 
       def call
         return failure(nil, :not_exportable, NOT_EXPORTABLE) unless ::CsvExports::Registry.exportable?(config)
 
         export = find_or_create
-        return failure(export, :already_generating, ALREADY_GENERATING) unless claim(export)
+        return failure(export, :already_generating, ALREADY_GENERATING) unless claim_or_request_rerun(export)
 
         begin
           ::CsvExports::GenerateJob.perform_async(export.id)
@@ -47,7 +55,7 @@ module Services
 
       private
 
-      attr_reader :config
+      attr_reader :config, :rerun_if_generating
 
       def statuses
         ::CsvExport.statuses
@@ -61,14 +69,37 @@ module Services
         ::CsvExport.find_or_create_by!(ranking_configuration_id: config.id)
       end
 
-      # CsvExport.claimable is the SQL twin of CsvExport#claimable?.
+      # CsvExport.claimable is the SQL twin of CsvExport#claimable?. The same
+      # UPDATE clears any pending rerun request: this run satisfies it.
       def claim(export)
         claimed = ::CsvExport.claimable.where(id: export.id)
-          .update_all(status: statuses[:generating], requested_at: Time.current)
+          .update_all(status: statuses[:generating], requested_at: Time.current, rerun_requested: false)
         return false unless claimed == 1
 
         export.reload
         true
+      end
+
+      # A refused claim ends here unless the caller asked for a rerun: then the
+      # flag lands on the still-generating row, or -- if that run finished
+      # between the two statements -- the row is claimed after all.
+      def claim_or_request_rerun(export)
+        return true if claim(export)
+        return false unless rerun_if_generating
+        return false if request_rerun(export)
+
+        claim(export)
+      end
+
+      # A data-changing caller (a finished ranking calculation) that lost the
+      # claim asks the running job to go again when it is done: the in-flight
+      # run plucked its ids before the new ranks landed. Guarded by
+      # `status = generating` so the flag can only land on a row the running
+      # job has not finished with yet -- GenerateJob reads it after its run.
+      # Returns false when the row is no longer generating, so the caller
+      # claims it instead.
+      def request_rerun(export)
+        ::CsvExport.where(id: export.id, status: statuses[:generating]).update_all(rerun_requested: true) == 1
       end
 
       # Scoped to the claim this call holds (claim reloaded requested_at from

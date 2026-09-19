@@ -67,22 +67,33 @@ it then cached files on a 24-hour TTL behind nginx and served them stale. Here:
   through the `claimable` scope + enqueue; an enqueue failure releases *the claim this call holds*
   into `failed`. Mirrors `Services::RankingConfigurations::RequestRefresh`. The Result carries the
   reason in `data[:reason]` (`:not_exportable`, `:already_generating`, `:enqueue_failed`) and a
-  human message in `errors`.
+  human message in `errors`. A caller whose data changed passes `rerun_if_generating: true`: when
+  its claim is refused by a run in flight it sets `rerun_requested` on the row (only while the row
+  is still `generating`; if the run finished in between it claims normally), because that run
+  plucked its ids before the new ranks landed. Every claim clears the flag in the same UPDATE.
 - `app/lib/services/csv_exports/generate.rb` — builds into a Tempfile, then
   `ActiveStorage::Blob.create_and_upload!` **before** touching the row, then one `update!` that
   attaches and stamps `ready`. Not `attach(io:)`: on a persisted record that swaps the attachment
   rows first and uploads in `after_commit`, so a storage failure would leave the row pointing at a
-  blob that was never written. On failure: `failed` + message (scoped to the held claim), previous
+  blob that was never written. The `update!` happens under `with_lock` and only while the run still
+  holds its claim (`generating`, `requested_at` equal to the stamp captured when the service
+  started): a run that outlived the 15-minute stale window, or sat that long in the `low` queue,
+  may have been re-claimed by a newer worker and must not overwrite that worker's file; it purges
+  its upload and returns `data[:reason] = :claim_lost` instead. On failure: `failed` + message
+  (scoped to the captured stamp, never the reloaded one) and `data[:reason] = :failed`, previous
   file untouched and — when the failure is at or after the upload — one unattached blob row
   left behind (the standard `ActiveStorage::Blob.unattached` orphan).
 - `app/sidekiq/csv_exports/generate_job.rb` (`low`, `retry: false` — the row carries the outcome;
   the raise is logged and the job acknowledged, it does not reach the Dead set; the admin Regenerate
-  button is the retry), `refresh_global_job.rb` (nightly, `config/schedule.yml`; per-configuration
-  failures are collected and raised once at the end so one bad row cannot stop the others).
-- `CalculateRankingsJob` and `RankingConfigurations::RefreshJob` call `RequestGenerate` on success,
-  each in its own rescue: the CSV is a side effect of the calculation, and a failure there must
-  neither flip a configuration whose rankings did land to "failed" nor make Sidekiq recompute a
-  21k-row ranking.
+  button is the retry). After its run the job steps aside on `:claim_lost` (the new owner honours
+  any rerun request) and otherwise, success or failure, calls `RequestGenerate` again when
+  `rerun_requested` is set. `refresh_global_job.rb` (nightly, `config/schedule.yml`;
+  per-configuration failures are collected and raised once at the end so one bad row cannot stop
+  the others).
+- `CalculateRankingsJob` and `RankingConfigurations::RefreshJob` call `RequestGenerate` on success
+  with `rerun_if_generating: true`, each in its own rescue: the CSV is a side effect of the
+  calculation, and a failure there must neither flip a configuration whose rankings did land to
+  "failed" nor make Sidekiq recompute a 21k-row ranking.
 - `app/controllers/concerns/csv_exportable.rb` — the export-action skeleton. Its filters are
   **lambdas, not symbols**: ActiveSupport de-duplicates a same-named symbol callback, so a
   controller that later declares its own `before_action :require_signed_in!, only: [...]`

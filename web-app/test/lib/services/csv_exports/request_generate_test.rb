@@ -49,6 +49,33 @@ module Services
         assert_equal :already_generating, result.data[:reason]
       end
 
+      test "a data-changing caller refused by an in-flight run asks for a rerun" do
+        ::CsvExport.create!(ranking_configuration: @config, status: :generating, requested_at: 1.minute.ago)
+        ::CsvExports::GenerateJob.expects(:perform_async).never
+
+        result = RequestGenerate.call(ranking_configuration: @config, rerun_if_generating: true)
+
+        refute result.success?
+        assert_equal :already_generating, result.data[:reason]
+        assert @config.reload.csv_export.rerun_requested?
+      end
+
+      test "a caller that does not change data leaves no rerun request" do
+        ::CsvExport.create!(ranking_configuration: @config, status: :generating, requested_at: 1.minute.ago)
+
+        RequestGenerate.call(ranking_configuration: @config)
+
+        refute @config.reload.csv_export.rerun_requested?
+      end
+
+      test "a claim clears a pending rerun request" do
+        ::CsvExport.create!(ranking_configuration: @config, status: :ready, rerun_requested: true)
+        ::CsvExports::GenerateJob.expects(:perform_async).once
+
+        assert RequestGenerate.call(ranking_configuration: @config).success?
+        refute @config.reload.csv_export.rerun_requested?
+      end
+
       test "reclaims a generation abandoned longer than the stale window" do
         ::CsvExport.create!(ranking_configuration: @config, status: :generating,
           requested_at: (::CsvExport::GENERATION_STALE_AFTER + 1.minute).ago)

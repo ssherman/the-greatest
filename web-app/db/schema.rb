@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_19_040205) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -355,6 +355,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_040205) do
     t.datetime "generated_at"
     t.bigint "ranking_configuration_id", null: false
     t.datetime "requested_at"
+    t.boolean "rerun_requested", default: false, null: false
     t.integer "row_count"
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false

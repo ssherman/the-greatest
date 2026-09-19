@@ -17,6 +17,14 @@ module CsvExports
       return if export.nil? # deleted while queued -- not a failure
 
       result = Services::CsvExports::Generate.call(csv_export: export)
+      # Another worker re-claimed the row during a long run and owns it now,
+      # including any rerun request.
+      return if result.data[:reason] == :claim_lost
+
+      # A calculation landed while this run was in flight; its ranks are not
+      # in the file just written. Whether this run succeeded or failed, go again.
+      Services::CsvExports::RequestGenerate.call(ranking_configuration: export.ranking_configuration) if export.reload.rerun_requested?
+
       raise "CSV export #{csv_export_id} failed: #{result.errors.join(", ")}" unless result.success?
     end
   end

@@ -10,6 +10,10 @@
 # treated as abandoned too, not just one whose claim is older than
 # GENERATION_STALE_AFTER -- a claim always stamps the timestamp, so a missing
 # one means the row was never properly claimed.
+#
+# rerun_requested: set by a data-changing caller whose claim was refused
+# because a run was already in flight; the next claim clears it and the job
+# re-requests after its run.
 class CsvExport < ApplicationRecord
   GENERATION_STALE_AFTER = 15.minutes
 

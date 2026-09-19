@@ -59,8 +59,10 @@ module RankingConfigurations
     # must not flip a configuration whose rankings did land to "failed". Logged
     # rather than raised -- retry: false means a raise would only be logged
     # anyway, and the next Refresh or member download re-claims the row.
+    # rerun_if_generating: a run already in flight plucked its ids before
+    # these ranks landed, so it must go again when it finishes.
     def request_csv_regenerate(config)
-      Services::CsvExports::RequestGenerate.call(ranking_configuration: config)
+      Services::CsvExports::RequestGenerate.call(ranking_configuration: config, rerun_if_generating: true)
     rescue => e
       Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{config.id}: CSV regenerate not requested: #{e.message}"
     end

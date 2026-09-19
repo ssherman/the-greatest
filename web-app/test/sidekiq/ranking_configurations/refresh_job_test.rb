@@ -100,7 +100,7 @@ module RankingConfigurations
     test "requests a CSV export regenerate after a successful run" do
       Rankings::BulkWeightCalculator.any_instance.expects(:call).returns(@clean_weights)
       RankingConfiguration.any_instance.expects(:calculate_rankings).returns(@success)
-      Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: @config).once
+      Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: @config, rerun_if_generating: true).once
 
       RefreshJob.new.perform(@config.id)
     end

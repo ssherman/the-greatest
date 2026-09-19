@@ -116,7 +116,7 @@ class CalculateRankingsJobTest < ActiveSupport::TestCase
     RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(
       ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
     )
-    Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: @ranking_configuration).once
+    Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: @ranking_configuration, rerun_if_generating: true).once
 
     CalculateRankingsJob.new.perform(@ranking_configuration.id)
   end
@@ -135,7 +135,7 @@ class CalculateRankingsJobTest < ActiveSupport::TestCase
     RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(
       ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
     )
-    Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: config).once
+    Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: config, rerun_if_generating: true).once
 
     CalculateRankingsJob.new.perform(config.id)
   end
