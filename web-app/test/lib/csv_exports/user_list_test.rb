@@ -33,7 +33,7 @@ module CsvExports
       rows = CSV.parse(UserList.call(list: list, items: items).string.delete_prefix(Writer::BOM))
 
       assert_equal ["Position", "Title", "Authors", "Year"], rows.first
-      assert_equal items.first.listable.first_published_year.to_s, rows[1][3].to_s
+      assert_equal ["1", "War and Peace", "Leo Tolstoy", "1869"], rows[1]
     end
 
     test "games and movies have no creator column" do

@@ -6,8 +6,8 @@
 # whose list_type supports a completion date. Uncapped -- a list is the
 # viewer's own data, or data someone chose to make public.
 #
-# Model constants are root-anchored where they could be shadowed: inside
-# CsvExports a bare UserList is this class.
+# Inside CsvExports a bare UserList is this class -- write ::UserList if the
+# model is ever needed here.
 module CsvExports
   class UserList
     def self.call(list:, items:, io: StringIO.new)
