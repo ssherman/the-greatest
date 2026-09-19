@@ -12,14 +12,14 @@ module CsvExports
     attr_reader :rows
 
     def initialize(io, headers:)
-      @io = io
+      io.write(BOM)
+      @csv = CSV.new(io)
+      @csv << headers
       @rows = 0
-      @io.write(BOM)
-      @io.write(CSV.generate_line(headers))
     end
 
     def row(values)
-      @io.write(CSV.generate_line(values))
+      @csv << values
       @rows += 1
     end
   end
