@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_031308) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_19_040205) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -346,6 +346,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_031308) do
     t.index ["resolved_by_id"], name: "index_corrections_on_resolved_by_id"
     t.index ["status", "created_at"], name: "index_corrections_on_status_and_created_at"
     t.index ["user_id"], name: "index_corrections_on_user_id"
+  end
+
+  create_table "csv_exports", force: :cascade do |t|
+    t.bigint "byte_size"
+    t.datetime "created_at", null: false
+    t.text "error_message"
+    t.datetime "generated_at"
+    t.bigint "ranking_configuration_id", null: false
+    t.datetime "requested_at"
+    t.integer "row_count"
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["ranking_configuration_id"], name: "index_csv_exports_on_ranking_configuration_id", unique: true
   end
 
   create_table "descriptions", force: :cascade do |t|
@@ -1148,6 +1161,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_031308) do
   add_foreign_key "correction_fields", "corrections"
   add_foreign_key "corrections", "users"
   add_foreign_key "corrections", "users", column: "resolved_by_id"
+  add_foreign_key "csv_exports", "ranking_configurations"
   add_foreign_key "domain_roles", "users"
   add_foreign_key "donations", "users"
   add_foreign_key "external_links", "users", column: "submitted_by_id"
