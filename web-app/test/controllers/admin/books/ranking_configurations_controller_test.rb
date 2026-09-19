@@ -115,6 +115,30 @@ module Admin
           params: {action_name: "CreateNextYearConfiguration"}
         assert_response :redirect
       end
+
+      test "show renders the CSV export card" do
+        sign_in_as(@admin_user, stub_auth: true)
+        CsvExport.create!(ranking_configuration: @rc, status: :failed, error_message: "disk full")
+
+        get admin_books_ranking_configuration_path(@rc)
+
+        assert_response :success
+        assert_select "[data-testid=csv-export-card]" do
+          assert_select "*", text: /Failed/
+          assert_select "*", text: /disk full/
+          assert_select "form[action=?]", execute_action_admin_books_ranking_configuration_path(@rc, action_name: "RegenerateCsvExport")
+        end
+      end
+
+      test "RegenerateCsvExport is an allowed action" do
+        sign_in_as(@admin_user, stub_auth: true)
+        Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: @rc)
+          .returns(Services::CsvExports::RequestGenerate::Result.new(success?: true, data: {}, errors: []))
+
+        post execute_action_admin_books_ranking_configuration_path(@rc, action_name: "RegenerateCsvExport")
+
+        assert_redirected_to admin_books_ranking_configuration_path(@rc)
+      end
     end
   end
 end

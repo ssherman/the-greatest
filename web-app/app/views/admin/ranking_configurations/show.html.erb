@@ -359,6 +359,45 @@
         </div>
       </div>
 
+      <% if CsvExports::Registry.exportable?(@ranking_configuration) %>
+        <% export = @ranking_configuration.csv_export %>
+        <div class="card bg-base-100 shadow-xl" data-testid="csv-export-card">
+          <div class="card-body">
+            <h2 class="card-title">CSV Export</h2>
+            <% if export %>
+              <dl class="text-sm space-y-1">
+                <div><dt class="inline font-semibold">Status:</dt> <dd class="inline"><%= export.status.humanize %></dd></div>
+                <div>
+                  <dt class="inline font-semibold">Generated:</dt>
+                  <dd class="inline"><%= export.generated_at ? "#{time_ago_in_words(export.generated_at)} ago" : "never" %></dd>
+                </div>
+                <% if export.row_count %>
+                  <div><dt class="inline font-semibold">Rows:</dt> <dd class="inline"><%= number_with_delimiter(export.row_count) %></dd></div>
+                <% end %>
+                <% if export.byte_size %>
+                  <div><dt class="inline font-semibold">Size:</dt> <dd class="inline"><%= number_to_human_size(export.byte_size) %></dd></div>
+                <% end %>
+                <% if export.error_message.present? %>
+                  <%# "Last error": a claim does not clear it, so a row that failed and is now
+                      regenerating shows both until Generate succeeds. %>
+                  <div class="text-error">Last error: <%= export.error_message %></div>
+                <% end %>
+              </dl>
+            <% else %>
+              <p class="text-sm text-base-content/70">No export has been generated yet.</p>
+            <% end %>
+            <% if ranking_configuration_policy.execute_action? %>
+              <div class="card-actions mt-2">
+                <%= button_to "Regenerate CSV",
+                    execute_action_ranking_configuration_path(@ranking_configuration, action_name: "RegenerateCsvExport"),
+                    method: :post,
+                    class: "btn btn-sm btn-outline" %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <h2 class="card-title text-sm">Metadata</h2>
