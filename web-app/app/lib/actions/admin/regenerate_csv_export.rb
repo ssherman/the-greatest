@@ -18,6 +18,7 @@ module Actions
 
         config = models.first
         result = Services::CsvExports::RequestGenerate.call(ranking_configuration: config)
+        return warn(result.errors.join(", ")) if result.data[:reason] == :already_generating
         return error(result.errors.join(", ")) unless result.success?
 
         succeed "CSV export regeneration queued for #{config.name}."

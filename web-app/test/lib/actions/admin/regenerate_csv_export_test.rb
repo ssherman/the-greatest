@@ -40,6 +40,15 @@ module Actions
         assert result.error?
         assert_equal Services::CsvExports::RequestGenerate::NOT_EXPORTABLE, result.message
       end
+
+      test "an export already being generated is a warning, not an error" do
+        CsvExport.create!(ranking_configuration: @config, status: :generating, requested_at: 1.minute.ago)
+
+        result = RegenerateCsvExport.call(user: @user, models: [@config])
+
+        assert result.warning?
+        assert_equal Services::CsvExports::RequestGenerate::ALREADY_GENERATING, result.message
+      end
     end
   end
 end
