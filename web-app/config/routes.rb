@@ -65,6 +65,7 @@ Rails.application.routes.draw do
       # Album routes
       get "albums", to: "music/albums/ranked_items#index", as: :albums
       get "albums/page/:page", to: "music/albums/ranked_items#index", as: :albums_page, constraints: {page: /\d+/}
+      get "albums/export", to: "music/albums/ranked_items#export", as: :albums_export, format: true, constraints: {format: /csv/}
       get "albums/lists", to: "music/albums/lists#index", as: :music_albums_lists
       get "albums/lists/page/:page", to: "music/albums/lists#index", as: :music_albums_lists_page, constraints: {page: /\d+/}
       get "albums/lists/:id", to: "music/albums/lists#show", as: :music_album_list
@@ -89,6 +90,7 @@ Rails.application.routes.draw do
       # Song routes
       get "songs", to: "music/songs/ranked_items#index", as: :songs
       get "songs/page/:page", to: "music/songs/ranked_items#index", as: :songs_page, constraints: {page: /\d+/}
+      get "songs/export", to: "music/songs/ranked_items#export", as: :songs_export, format: true, constraints: {format: /csv/}
       get "songs/lists", to: "music/songs/lists#index", as: :music_songs_lists
       get "songs/lists/page/:page", to: "music/songs/lists#index", as: :music_songs_lists_page, constraints: {page: /\d+/}
       get "songs/lists/:id", to: "music/songs/lists#show", as: :music_song_list
