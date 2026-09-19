@@ -19,15 +19,17 @@ module Services
         assert export.generating?
         assert_in_delta Time.current, export.requested_at, 5.seconds
         assert_equal export, result.data[:csv_export]
+        assert result.data[:csv_export].generating?
       end
 
       test "reuses the existing row" do
-        existing = ::CsvExport.create!(ranking_configuration: @config, status: :ready)
+        existing = ::CsvExport.create!(ranking_configuration: @config, status: :ready, generated_at: 1.day.ago, row_count: 42)
         ::CsvExports::GenerateJob.expects(:perform_async).with(existing.id).once
 
         assert RequestGenerate.call(ranking_configuration: @config).success?
         assert_equal 1, ::CsvExport.where(ranking_configuration: @config).count
         assert existing.reload.generating?
+        assert_equal [42, true], [existing.row_count, existing.generated_at.present?]
       end
 
       test "a failed row is claimable" do
@@ -53,6 +55,9 @@ module Services
         ::CsvExports::GenerateJob.expects(:perform_async).once
 
         assert RequestGenerate.call(ranking_configuration: @config).success?
+        export = @config.reload.csv_export
+        assert export.generating?
+        assert_in_delta Time.current, export.requested_at, 5.seconds
       end
 
       test "only one of two back-to-back calls wins" do
@@ -79,6 +84,7 @@ module Services
 
         refute result.success?
         assert_equal :enqueue_failed, result.data[:reason]
+        assert result.data[:csv_export].failed?
         export = @config.reload.csv_export
         assert export.failed?
         assert_includes export.error_message, "redis is down"

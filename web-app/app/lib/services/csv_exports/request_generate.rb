@@ -71,9 +71,12 @@ module Services
         true
       end
 
+      # Scoped to the claim this call holds (claim reloaded requested_at from
+      # the row), so a stale reclaim by another caller in the meantime is never
+      # clobbered back to failed.
       def release(export, error)
         Rails.logger.error "[Services::CsvExports::RequestGenerate] export #{export.id}: #{error.class}: #{error.message}"
-        ::CsvExport.where(id: export.id).update_all(
+        ::CsvExport.where(id: export.id, status: statuses[:generating], requested_at: export.requested_at).update_all(
           status: statuses[:failed],
           error_message: "Could not queue the export: #{error.message}".truncate(500)
         )
