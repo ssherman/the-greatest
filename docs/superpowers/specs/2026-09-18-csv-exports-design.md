@@ -64,8 +64,12 @@ it is dominated by the many-to-many text columns.
   country edits change the file's contents without touching `ranked_items`, and there is no
   cheap, honest way to detect that drift at download time (an author merge does not bump the
   book's `updated_at`; a `max(updated_at)` scan is a TTL in disguise). A nightly job caps that
-  drift at 24 hours for the four exportable global configurations at under a minute of
-  `low`-queue time. User-owned configurations regenerate on their own refresh only.
+  drift at 24 hours for every active global configuration of an exportable type — seven in
+  the current production restore: two music, one games, and four books (the primary plus three
+  year lists, the latter with no ranked items yet, so their file is a header-only CSV) — at
+  under a minute of `low`-queue time. User-owned configurations regenerate on their own
+  refresh only. Unpublished global configurations are included: `/rc/:id` serves them to
+  anyone, and the live music primaries have no `published_at`.
 - **D6 — Files are proxied through Rails, never linked.** The R2 bucket is `public: true`, so
   a blob URL is a permanent unauthenticated link to the paid artifact. `rails_blob_path` is
   also out: its signed ids do not expire.
