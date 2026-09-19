@@ -837,8 +837,11 @@ module CsvExports
         types = ::Category.category_types
 
         {
+          # position is NULL on every row of the dev database, so the id tiebreaker
+          # is what keeps two exports of the same book byte-identical.
           authors: Aggregate.names(::Books::BookAuthor.joins(:author).where(book_id: book_ids),
-            group_by: "books_book_authors.book_id", name: "books_authors.name", order: "books_book_authors.position"),
+            group_by: "books_book_authors.book_id", name: "books_authors.name",
+            order: "books_book_authors.position NULLS LAST, books_book_authors.id"),
           countries: Aggregate.names(::Books::BookCountry.joins(:country).where(book_id: book_ids),
             group_by: "books_book_countries.book_id", name: "books_countries.name", order: "books_countries.name"),
           genres: category_names(categories, types[:genre]),
@@ -1037,7 +1040,8 @@ module CsvExports
       def self.context(album_ids)
         {
           artists: Aggregate.names(::Music::AlbumArtist.joins(:artist).where(album_id: album_ids),
-            group_by: "music_album_artists.album_id", name: "music_artists.name", order: "music_album_artists.position"),
+            group_by: "music_album_artists.album_id", name: "music_artists.name",
+            order: "music_album_artists.position NULLS LAST, music_album_artists.id"),
           genres: Aggregate.names(
             ::CategoryItem.joins(:category).where(item_type: "Music::Album", item_id: album_ids,
               categories: {deleted: false, category_type: ::Category.category_types[:genre]}),
@@ -1085,7 +1089,8 @@ module CsvExports
       def self.context(song_ids)
         {
           artists: Aggregate.names(::Music::SongArtist.joins(:artist).where(song_id: song_ids),
-            group_by: "music_song_artists.song_id", name: "music_artists.name", order: "music_song_artists.position")
+            group_by: "music_song_artists.song_id", name: "music_artists.name",
+            order: "music_song_artists.position NULLS LAST, music_song_artists.id")
         }
       end
 

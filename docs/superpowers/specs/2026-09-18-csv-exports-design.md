@@ -383,6 +383,10 @@ pre-built file and today for an on-demand one; saved search
   crawler is redirected away before any CSV is built.
 - Rate limit is per user, not per IP.
 - No export action ever redirects to storage or emits a blob URL.
+- Cell values are written as data, never escaped against spreadsheet formula evaluation: a
+  handful of real titles begin with `+` or `-` ("---- You"), the values are admin-curated
+  rather than user-supplied, and prefixing them would corrupt the value for every non-Excel
+  consumer. A conscious decision, recorded so it is not mistaken for an oversight.
 
 ## 14. Testing
 
