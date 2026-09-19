@@ -1208,9 +1208,9 @@ module CsvExports
       @row_class = Games::RankedGameRow
     end
 
-    def export(limit:)
+    def export(limit:, batch: RankedItems::BATCH)
       io = StringIO.new
-      rows = RankedItems.call(relation: @relation, row_class: @row_class, limit: limit, io: io)
+      rows = RankedItems.call(relation: @relation, row_class: @row_class, limit: limit, io: io, batch: batch)
       [rows, CSV.parse(io.string.delete_prefix(Writer::BOM))]
     end
 
@@ -1231,10 +1231,9 @@ module CsvExports
     end
 
     test "rank order survives batching" do
-      stub_const_batch(2) do
-        _rows, parsed = export(limit: nil)
-        assert_equal %w[1 2 3 4], parsed.drop(1).map(&:first)
-      end
+      _rows, parsed = export(limit: nil, batch: 2)
+
+      assert_equal %w[1 2 3 4], parsed.drop(1).map(&:first)
     end
 
     test "a ranked item whose item is gone is skipped, not raised" do
@@ -1248,6 +1247,24 @@ module CsvExports
       assert_equal %w[1 2 4], parsed.drop(1).map(&:first)
     end
 
+    # The music and games relations JOIN the media table, so an orphan never
+    # reaches Ruby there; the books relation has no join, which is where the
+    # preloaded-item guard and its warning are actually exercised.
+    test "an orphan in an unjoined relation is skipped and logged" do
+      config = ranking_configurations(:books_global)
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: config, rank: 1, score: 1)
+      RankedItem.insert_all([{item_type: "Books::Book", item_id: -1, ranking_configuration_id: config.id,
+                              rank: 2, score: 1, created_at: Time.current, updated_at: Time.current}])
+      Rails.logger.expects(:warn).with("[CsvExports::RankedItems] skipped 1 ranked item(s) with no item in batch")
+      io = StringIO.new
+
+      rows = RankedItems.call(relation: Registry.for_config(config).relation.call(config),
+        row_class: Books::RankedBookRow, limit: nil, io: io)
+
+      assert_equal 1, rows
+      assert_equal ["1"], CSV.parse(io.string.delete_prefix(Writer::BOM)).drop(1).map(&:first)
+    end
+
     test "the relation's own includes do not break the id pluck" do
       config = ranking_configurations(:books_global)
       RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: config, rank: 1, score: 1)
@@ -1259,16 +1276,15 @@ module CsvExports
       assert_equal 1, rows
     end
 
-    private
+    test "an empty relation yields a header-only file" do
+      config = ranking_configurations(:books_inherited)
+      io = StringIO.new
 
-    def stub_const_batch(size)
-      original = RankedItems::BATCH
-      RankedItems.send(:remove_const, :BATCH)
-      RankedItems.const_set(:BATCH, size)
-      yield
-    ensure
-      RankedItems.send(:remove_const, :BATCH)
-      RankedItems.const_set(:BATCH, original)
+      rows = RankedItems.call(relation: Registry.for_config(config).relation.call(config),
+        row_class: Books::RankedBookRow, limit: nil, io: io)
+
+      assert_equal 0, rows
+      assert_equal [Books::RankedBookRow::HEADERS], CSV.parse(io.string.delete_prefix(Writer::BOM))
     end
   end
 end
@@ -1302,16 +1318,19 @@ module CsvExports
   class RankedItems
     BATCH = 1000
 
-    def self.call(relation:, row_class:, limit:, io:)
+    # limit: nil means no cap; it replaces any limit the relation carried.
+    def self.call(relation:, row_class:, limit:, io:, batch: BATCH)
       writer = Writer.new(io, headers: row_class::HEADERS)
 
-      ids = relation.unscope(:includes, :preload, :eager_load).limit(limit).pluck(:id)
-      ids.each_slice(BATCH) do |slice|
-        scope = ::RankedItem.where(id: slice)
-        scope = row_class.preloads.empty? ? scope.preload(:item) : scope.preload(item: row_class.preloads)
-        by_id = scope.index_by(&:id)
+      # rank then id: nothing enforces unique ranks, and an unstable sort on a tie would make the pre-built file and an on-demand export differ.
+      ids = relation.unscope(:includes, :preload, :eager_load).order(:id).limit(limit).pluck(:id)
+      ids.each_slice(batch) do |slice|
+        by_id = ::RankedItem.where(id: slice).preload(item: row_class.preloads).index_by(&:id)
 
         items = slice.filter_map { |id| by_id[id] }.select(&:item)
+        dropped = slice.size - items.size
+        Rails.logger.warn("[CsvExports::RankedItems] skipped #{dropped} ranked item(s) with no item in batch") if dropped.positive?
+
         ctx = row_class.context(items.map(&:item_id))
         items.each { |ranked_item| writer.row(row_class.row(ranked_item, ctx)) }
       end
