@@ -80,12 +80,14 @@ module CsvExports
         assert_equal ["Novels", "Politics", "France"], row[8..10]
       end
 
-      test "several authors are joined in insertion order and page range and word count are carried" do
+      test "several authors with no position are joined in id order, and page range and word count are carried" do
         other = ::Books::Author.insert_all([{name: "Second Author", slug: "second-author",
                                              created_at: Time.current, updated_at: Time.current}], returning: :id).rows.flatten.first
         ::Books::BookAuthor.insert_all([{book_id: @book.id, author_id: other, position: nil,
                                          created_at: Time.current, updated_at: Time.current}])
         @book.update_columns(page_range: "300-350", word_count: 587_287)
+        # update_columns skips BookAuthor's reindex callback.
+        books_book_authors(:war_and_peace_tolstoy).update_columns(position: nil)
 
         row = RankedBookRow.row(@ranked.reload, RankedBookRow.context([@book.id]))
 
