@@ -26,6 +26,10 @@ class SavedSearchesController < ApplicationController
   # Before require_signed_in!, so /searches on a host with no saved searches
   # 404s instead of bouncing an anonymous visitor to a sign-in that would not
   # have helped.
+  # The export action is the exception: CsvExportable's own sign-in filter is
+  # registered at include time and runs first, so an anonymous export on a
+  # host without saved searches redirects to sign-in rather than 404ing --
+  # nothing about the id is confirmed either way.
   before_action :require_domain_support!
   before_action :require_signed_in!, only: [:index, :new, :create, :edit, :update, :destroy]
   before_action :set_owned_search, only: [:edit, :update, :destroy]
@@ -98,7 +102,7 @@ class SavedSearchesController < ApplicationController
 
     io = StringIO.new
     CsvExports::SavedSearch.call(search: @search, limit: export_limit, io: io)
-    send_csv io.string, filename: "#{@search.display_name.parameterize.presence || "search"}-#{Date.current.iso8601}.csv"
+    send_csv io.string, filename: "#{@search.display_name.parameterize.truncate(80, omission: "").presence || "search"}-#{Date.current.iso8601}.csv"
   end
 
   # GET /searches/new

@@ -61,6 +61,20 @@ module CsvExports
       assert_equal 1, rows
     end
 
+    test "a page that hydrates short does not stop the export early" do
+      # Page 1 returns a full page of ids of which one no longer exists in
+      # Postgres; page 2 must still be requested.
+      ::Search::Books::Search::BookAdvanced.expects(:call).with { |_c, opts| opts[:page] == 1 }
+        .returns({ids: [@books.first.id, -1], total: 3, total_relation: "eq"})
+      ::Search::Books::Search::BookAdvanced.expects(:call).with { |_c, opts| opts[:page] == 2 }
+        .returns({ids: [@books.last.id], total: 3, total_relation: "eq"})
+
+      rows, _parsed = export(limit: 2)
+
+      assert_equal 2, rows
+    end
+
+    # Only the ceiling is pinned; driving the pager to page 10 would need 10,000 hydratable books.
     test "never asks past the OpenSearch window" do
       assert_equal 10, SavedSearch.max_page(per_page: 1000)
     end

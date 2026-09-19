@@ -2,7 +2,7 @@
 
 # Exports a saved search by paging its query (spec §9): OpenSearch picks the
 # ids, SavedSearchQuery hydrates a page, and the books row class writes it.
-# Stops at the limit, at a short page, or at the last page inside OpenSearch's
+# Stops at the limit, at OpenSearch's total, or at the last page inside its
 # 10,000-result window, whichever comes first. hide_read stays about the
 # search's owner, exactly as on the page.
 #
@@ -25,7 +25,8 @@ module CsvExports
 
       page = 1
       loop do
-        books = query_class.call(criteria: search.criteria_object, owner: search.user, page: page, per_page: per_page).books
+        result = query_class.call(criteria: search.criteria_object, owner: search.user, page: page, per_page: per_page)
+        books = result.books
         break if books.empty?
 
         ActiveRecord::Associations::Preloader.new(records: books, associations: row_class.preloads).call
@@ -36,7 +37,9 @@ module CsvExports
           writer.row(row_class.row_for_book(book, rank: book.ranked_position, score: book.ranked_score, ctx: ctx))
         end
 
-        break if (limit && writer.rows >= limit) || books.size < per_page || page >= last_page
+        # result.total, not books.size: hydration drops ids Postgres no longer
+        # has, and a short hydrated page must not end the export early.
+        break if (limit && writer.rows >= limit) || page * per_page >= result.total || page >= last_page
 
         page += 1
       end
