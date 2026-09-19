@@ -22,8 +22,9 @@ class CsvExport < ApplicationRecord
   # so the two cannot drift: not generating, or generating with no claim
   # timestamp, or generating under a claim older than the stale window.
   scope :claimable, -> {
-    where("status <> :generating OR requested_at IS NULL OR requested_at < :stale",
-      generating: statuses[:generating], stale: GENERATION_STALE_AFTER.ago)
+    where.not(status: :generating)
+      .or(where(requested_at: nil))
+      .or(where(requested_at: ...GENERATION_STALE_AFTER.ago))
   }
 
   def claimable?
