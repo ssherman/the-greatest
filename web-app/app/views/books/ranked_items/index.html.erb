@@ -28,6 +28,10 @@
         collection: @collection
       ) %>
 
+  <div class="flex justify-center">
+    <%= render CsvExports::DownloadButtonComponent.new(export_path: @csv_export_path, noun: "books") %>
+  </div>
+
   <% if @ranked_books.any? %>
     <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
       <% @ranked_books.each_with_index do |ranked_item, index| %>

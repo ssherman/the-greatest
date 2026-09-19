@@ -273,6 +273,12 @@ module Games
       assert_equal "/video-games/export.csv?year=2017&year_mode=since", @controller.view_assigns["csv_export_path"]
     end
 
+    test "the games page renders the download button" do
+      get "/video-games"
+
+      assert_select "a[data-testid=download-csv][href='/video-games/export.csv']"
+    end
+
     test "export is a 404 when games has no primary configuration yet" do
       Games::RankingConfiguration.stubs(:default_primary).returns(nil)
       sign_in_as users(:regular_user), stub_auth: true

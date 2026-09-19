@@ -529,6 +529,13 @@ module Books
       assert_equal "/rc/#{@rc.id}/export.csv", @controller.view_assigns["csv_export_path"]
     end
 
+    test "the rankings page renders the download button and its dialog" do
+      get "/"
+
+      assert_select "a[data-testid=download-csv][href='/export.csv']"
+      assert_select "dialog#csv_export_modal"
+    end
+
     private
 
     # Bulk-inserts filler so tests can reach page 2+ against the controller's

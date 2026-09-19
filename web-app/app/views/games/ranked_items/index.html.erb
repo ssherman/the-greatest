@@ -33,6 +33,10 @@
     ) %>
   </div>
 
+  <div class="flex justify-center mb-4">
+    <%= render CsvExports::DownloadButtonComponent.new(export_path: @csv_export_path, noun: "games") %>
+  </div>
+
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
     <% @games.each do |ranked_item| %>
       <%= render Games::CardComponent.new(ranked_item: ranked_item, ranking_configuration: @ranking_configuration) %>

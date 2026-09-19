@@ -164,6 +164,12 @@ module Music
         assert_equal "/songs/export.csv", @controller.view_assigns["csv_export_path"]
       end
 
+      test "the songs page renders the download button" do
+        get "/songs"
+
+        assert_select "a[data-testid=download-csv][href='/songs/export.csv']"
+      end
+
       private
 
       # Bulk-inserts filler so tests can reach page 2+ against the

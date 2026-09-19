@@ -24,14 +24,18 @@
     <% end %>
   </div>
 
-  <% if @owner %>
-    <div class="flex flex-wrap gap-2">
+  <div class="flex flex-wrap gap-2">
+    <%= render CsvExports::DownloadButtonComponent.new(
+          export_path: export_saved_search_path(@search, format: :csv),
+          noun: "results"
+        ) %>
+    <% if @owner %>
       <%= link_to "Edit", edit_saved_search_path(@search), class: "btn btn-sm btn-outline" %>
       <%= button_to "Delete", saved_search_path(@search), method: :delete,
             class: "btn btn-sm btn-error btn-outline",
             form: {data: {turbo_confirm: "Delete this saved search?"}} %>
-    </div>
-  <% end %>
+    <% end %>
+  </div>
 
   <%= render "saved_searches/#{Current.domain}/active_filters", groups: @filter_groups %>
 

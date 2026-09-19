@@ -203,6 +203,12 @@ module Music
         assert_equal "/albums/export.csv?year=1980&year_mode=since", @controller.view_assigns["csv_export_path"]
       end
 
+      test "the albums page renders the download button" do
+        get "/albums"
+
+        assert_select "a[data-testid=download-csv][href='/albums/export.csv']"
+      end
+
       test "an explicit ranking configuration exports its own ranks" do
         secondary = ranking_configurations(:music_albums_secondary)
         RankedItem.create!(item: music_albums(:dark_side_of_the_moon), ranking_configuration: secondary, rank: 1, score: 50)

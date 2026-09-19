@@ -319,6 +319,14 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_select "form[action=?][method=post]", saved_search_path(@public_search)
   end
 
+  test "show renders the download button" do
+    stub_advanced(ids: [], total: 0)
+    get saved_search_path(@public_search)
+
+    assert_select "a[data-testid=download-csv][href='#{export_saved_search_path(@public_search, format: :csv)}']"
+    assert_select "dialog#csv_export_modal h3", text: /top 500 results/
+  end
+
   test "show 404s on a domain with no saved searches" do
     host! Rails.application.config.domains[:music]
     get saved_search_path(@public_search)

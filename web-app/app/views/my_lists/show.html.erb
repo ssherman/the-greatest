@@ -54,10 +54,11 @@
         </div>
       <% end %>
 
-      <%= link_to "Download",
-            my_list_path(@list, format: :csv, view_mode: @view_mode, sort: ranking_sort),
-            class: "btn btn-sm btn-outline",
-            data: { turbo: false, testid: "download-csv" } %>
+      <%= render CsvExports::DownloadButtonComponent.new(
+            export_path: my_list_path(@list, format: :csv, view_mode: @view_mode, sort: ranking_sort),
+            noun: "items",
+            capped: false
+          ) %>
     </div>
   </div>
 
