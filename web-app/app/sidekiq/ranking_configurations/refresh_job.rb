@@ -42,6 +42,8 @@ module RankingConfigurations
         last_refreshed_at: Time.current,
         last_refresh_error: nil
       )
+
+      Services::CsvExports::RequestGenerate.call(ranking_configuration: config)
     rescue => e
       Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{ranking_configuration_id}: #{e.message}"
       ::RankingConfiguration.where(id: ranking_configuration_id).update_all(

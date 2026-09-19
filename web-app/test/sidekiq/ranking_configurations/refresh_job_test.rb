@@ -10,6 +10,9 @@ module RankingConfigurations
         needs_refresh: true, refresh_requested_at: Time.current)
       @success = ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
       @clean_weights = {processed: 1, updated: 1, errors: [], weights_calculated: []}
+      Services::CsvExports::RequestGenerate.stubs(:call).returns(
+        Services::CsvExports::RequestGenerate::Result.new(success?: true, data: {}, errors: [])
+      )
     end
 
     test "runs on the low queue and never retries" do
@@ -90,6 +93,24 @@ module RankingConfigurations
       RankingConfiguration.any_instance.expects(:calculate_rankings).returns(@success)
       Books::ReindexRankedFieldsJob.expects(:perform_async).never
       Books::CalculateAuthorRankingsJob.expects(:perform_async).never
+
+      RefreshJob.new.perform(@config.id)
+    end
+
+    test "requests a CSV export regenerate after a successful run" do
+      Rankings::BulkWeightCalculator.any_instance.expects(:call).returns(@clean_weights)
+      RankingConfiguration.any_instance.expects(:calculate_rankings).returns(@success)
+      Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: @config).once
+
+      RefreshJob.new.perform(@config.id)
+    end
+
+    test "does not request a CSV export regenerate after a failed run" do
+      Rankings::BulkWeightCalculator.any_instance.expects(:call).returns(@clean_weights)
+      RankingConfiguration.any_instance.expects(:calculate_rankings).returns(
+        ItemRankings::Calculator::Result.new(success?: false, data: nil, errors: ["nope"])
+      )
+      Services::CsvExports::RequestGenerate.expects(:call).never
 
       RefreshJob.new.perform(@config.id)
     end

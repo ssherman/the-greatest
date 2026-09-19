@@ -5,6 +5,9 @@ require "test_helper"
 class CalculateRankingsJobTest < ActiveSupport::TestCase
   def setup
     @ranking_configuration = ranking_configurations(:music_albums_global)
+    Services::CsvExports::RequestGenerate.stubs(:call).returns(
+      Services::CsvExports::RequestGenerate::Result.new(success?: true, data: {}, errors: [])
+    )
   end
 
   test "perform calls calculate_rankings on configuration" do
@@ -107,5 +110,23 @@ class CalculateRankingsJobTest < ActiveSupport::TestCase
     Books::ReindexRankedFieldsJob.expects(:perform_async).never
 
     CalculateRankingsJob.new.perform(config.id)
+  end
+
+  test "requests a CSV export regenerate after a successful calculation" do
+    RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(
+      ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
+    )
+    Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: @ranking_configuration).once
+
+    CalculateRankingsJob.new.perform(@ranking_configuration.id)
+  end
+
+  test "does not request a CSV export regenerate after a failed calculation" do
+    RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(
+      ItemRankings::Calculator::Result.new(success?: false, data: nil, errors: ["nope"])
+    )
+    Services::CsvExports::RequestGenerate.expects(:call).never
+
+    assert_raises(StandardError) { CalculateRankingsJob.new.perform(@ranking_configuration.id) }
   end
 end

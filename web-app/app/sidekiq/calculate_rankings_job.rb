@@ -15,6 +15,10 @@ class CalculateRankingsJob
         Books::CalculateAuthorRankingsJob.perform_async
         Books::ReindexRankedFieldsJob.perform_async
       end
+
+      # The pre-built CSV must never be behind the ranks it describes (spec D4).
+      # RequestGenerate is a no-op for a type with no export.
+      Services::CsvExports::RequestGenerate.call(ranking_configuration: ranking_configuration)
     else
       Rails.logger.error "Failed to calculate rankings for configuration #{ranking_configuration_id}: #{result.errors}"
       raise "Ranking calculation failed: #{result.errors.join(", ")}"
