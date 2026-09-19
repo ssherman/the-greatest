@@ -1221,6 +1221,7 @@ Rails.application.routes.draw do
         constraints: {id: /\d+/, page: /\d+/}
       get "video-games", to: "games/ranked_items#index", as: :video_games
       get "video-games/page/:page", to: "games/ranked_items#index", as: :video_games_page, constraints: {page: /\d+/}
+      get "video-games/export", to: "games/ranked_items#export", as: :video_games_export, format: true, constraints: {format: /csv/}
       # Year-filtered games (must come before generic patterns)
       get "video-games/since/:year", to: "games/ranked_items#index", as: :video_games_since_year,
         constraints: {year: /\d{4}/}, defaults: {year_mode: "since"}

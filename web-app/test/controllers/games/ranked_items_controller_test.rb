@@ -1,4 +1,5 @@
 require "test_helper"
+require "csv"
 
 module Games
   class RankedItemsControllerTest < ActionDispatch::IntegrationTest
@@ -199,6 +200,77 @@ module Games
 
       assert_equal "/rc/#{ranking_configurations(:games_global).id}/video-games/page/2", url
       refute_includes url, "ranking_configuration_id="
+    end
+
+    # --- CSV export (spec §9) ---
+
+    test "export requires sign-in" do
+      get "/video-games/export.csv"
+
+      assert_redirected_to "/"
+    end
+
+    test "export without the csv format is not routable" do
+      get "/video-games/export"
+
+      assert_response :not_found
+    end
+
+    test "a non-member exports the ranked games on demand in rank order" do
+      sign_in_as users(:user_with_expired_membership), stub_auth: true
+
+      get "/video-games/export.csv"
+
+      assert_response :success
+      assert_includes response.media_type, "text/csv"
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+      assert_equal "noindex", response.headers["X-Robots-Tag"]
+      rows = CSV.parse(response.body.delete_prefix(CsvExports::Writer::BOM))
+      assert_equal CsvExports::Games::RankedGameRow::HEADERS, rows.first
+      assert_equal %w[1 2 3 4], rows.drop(1).map(&:first)
+    end
+
+    test "a since-year filter applies to the export" do
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/video-games/export.csv?year=2017&year_mode=since"
+
+      assert_response :success
+      titles = CSV.parse(response.body.delete_prefix(CsvExports::Writer::BOM)).drop(1).map { |row| row[3] }
+      assert_includes titles, "The Legend of Zelda: Breath of the Wild"
+      refute_includes titles, "Half-Life 2"
+    end
+
+    test "a member's unfiltered export with a ready file downloads it" do
+      export = CsvExport.create!(ranking_configuration: ranking_configurations(:games_global), status: :ready,
+        generated_at: Time.current)
+      export.file.attach(io: StringIO.new("#{CsvExports::Writer::BOM}Rank\n1\n"),
+        filename: "the-greatest-games-rankings-2026-09-18.csv", content_type: "text/csv")
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/video-games/export.csv"
+
+      assert_response :success
+      assert_equal "#{CsvExports::Writer::BOM}Rank\n1\n", response.body
+    end
+
+    test "a member's unfiltered export with no file shows the preparing page" do
+      Services::CsvExports::RequestGenerate.expects(:call)
+        .with(ranking_configuration: ranking_configurations(:games_global)).once
+        .returns(Services::CsvExports::RequestGenerate::Result.new(success?: true, data: {}, errors: []))
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/video-games/export.csv"
+
+      assert_response :accepted
+      assert_equal "15", response.headers["Refresh"]
+      assert_select "a[href='/video-games']", text: "Back to the rankings"
+    end
+
+    test "the index carries the export link" do
+      get "/video-games/since/2017"
+
+      assert_equal "/video-games/export.csv?year=2017&year_mode=since", @controller.view_assigns["csv_export_path"]
     end
 
     private
