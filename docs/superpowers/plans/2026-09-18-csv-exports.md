@@ -205,7 +205,7 @@ class CsvExportTest < ActiveSupport::TestCase
     export = CsvExport.create!(ranking_configuration: @config, status: :ready)
     refute export.downloadable?
 
-    export.file.attach(io: StringIO.new("﻿Rank\n"), filename: "x.csv", content_type: "text/csv")
+    export.file.attach(io: StringIO.new("\uFEFFRank\n"), filename: "x.csv", content_type: "text/csv")
     assert export.downloadable?
 
     export.update!(status: :failed)
@@ -588,7 +588,7 @@ module CsvExports
       writer.row([2, "Crime, and Punishment"])
 
       assert_equal 2, writer.rows
-      assert_equal "﻿Rank,Title\n1,War and Peace\n2,\"Crime, and Punishment\"\n", io.string
+      assert_equal "\uFEFFRank,Title\n1,War and Peace\n2,\"Crime, and Punishment\"\n", io.string
     end
 
     test "a header-only export is still a valid file" do
@@ -596,7 +596,7 @@ module CsvExports
       writer = Writer.new(io, headers: ["Rank"])
 
       assert_equal 0, writer.rows
-      assert_equal "﻿Rank\n", io.string
+      assert_equal "\uFEFFRank\n", io.string
     end
   end
 end
@@ -658,7 +658,7 @@ require "csv"
 # pre-built file and an on-demand response are byte-for-byte the same shape.
 module CsvExports
   class Writer
-    BOM = "﻿"
+    BOM = "\uFEFF"
 
     attr_reader :rows
 
@@ -1608,7 +1608,7 @@ module Services
       end
 
       test "a failure marks the row failed with the message and keeps the previous file" do
-        @export.file.attach(io: StringIO.new("﻿old\n"), filename: "old.csv", content_type: "text/csv")
+        @export.file.attach(io: StringIO.new("\uFEFFold\n"), filename: "old.csv", content_type: "text/csv")
         ::CsvExports::RankedItems.stubs(:call).raises(StandardError, "opensearch exploded")
 
         result = Generate.call(csv_export: @export)
@@ -1618,7 +1618,7 @@ module Services
         @export.reload
         assert @export.failed?
         assert_equal "opensearch exploded", @export.error_message
-        assert_equal "﻿old\n", @export.file.download
+        assert_equal "\uFEFFold\n", @export.file.download
       end
 
       test "a configuration that stopped being exportable fails cleanly" do
@@ -2166,7 +2166,7 @@ Append inside `Books::RankedItemsControllerTest` (before the `private` helpers):
 ```ruby
     # --- CSV export (spec §9) ---
 
-    BOM = "﻿"
+    BOM = "\uFEFF"
 
     def parsed_csv
       CSV.parse(response.body.delete_prefix(BOM))
@@ -2208,7 +2208,7 @@ Append inside `Books::RankedItemsControllerTest` (before the `private` helpers):
 
     test "a member's unfiltered export is served from the pre-built file" do
       export = CsvExport.create!(ranking_configuration: @rc, status: :ready, generated_at: Time.current)
-      export.file.attach(io: StringIO.new("﻿Rank,Title\n1,Prebuilt\n"),
+      export.file.attach(io: StringIO.new("\uFEFFRank,Title\n1,Prebuilt\n"),
         filename: "the-greatest-books-rankings-2026-09-18.csv", content_type: "text/csv")
       Services::CsvExports::RequestGenerate.expects(:call).never
       sign_in_as users(:regular_user), stub_auth: true
@@ -2216,7 +2216,7 @@ Append inside `Books::RankedItemsControllerTest` (before the `private` helpers):
       get "/export.csv"
 
       assert_response :success
-      assert_equal "﻿Rank,Title\n1,Prebuilt\n", response.body
+      assert_equal "\uFEFFRank,Title\n1,Prebuilt\n", response.body
       assert_includes response.headers["Content-Disposition"], "the-greatest-books-rankings-2026-09-18.csv"
       assert_match "no-store", response.headers["Cache-Control"].to_s
     end
@@ -2469,7 +2469,7 @@ Append inside the albums test class:
         assert_response :success
         assert_includes response.media_type, "text/csv"
         assert_match "no-store", response.headers["Cache-Control"].to_s
-        rows = CSV.parse(response.body.delete_prefix("﻿"))
+        rows = CSV.parse(response.body.delete_prefix("\uFEFF"))
         assert_equal CsvExports::Music::RankedAlbumRow::HEADERS, rows.first
         assert_equal ["The Dark Side of the Moon"], rows.drop(1).map { |row| row[3] }
       end
@@ -2482,7 +2482,7 @@ Append inside the albums test class:
         get "/albums/export.csv?year=1990&year_mode=since"
 
         assert_response :success
-        assert_equal 1, CSV.parse(response.body.delete_prefix("﻿")).size
+        assert_equal 1, CSV.parse(response.body.delete_prefix("\uFEFF")).size
       end
 
       test "a member's unfiltered export with no file shows the preparing page" do
@@ -2516,7 +2516,7 @@ Append inside the songs test class:
 
         assert_response :success
         assert_includes response.media_type, "text/csv"
-        rows = CSV.parse(response.body.delete_prefix("﻿"))
+        rows = CSV.parse(response.body.delete_prefix("\uFEFF"))
         assert_equal CsvExports::Music::RankedSongRow::HEADERS, rows.first
         assert_equal ["Time"], rows.drop(1).map { |row| row[3] }
       end
@@ -2528,7 +2528,7 @@ Append inside the songs test class:
         get "/songs/export.csv?year=1973"
 
         assert_response :success
-        assert_equal ["Time"], CSV.parse(response.body.delete_prefix("﻿")).drop(1).map { |row| row[3] }
+        assert_equal ["Time"], CSV.parse(response.body.delete_prefix("\uFEFF")).drop(1).map { |row| row[3] }
       end
 
       test "the index carries the export link" do
@@ -2667,7 +2667,7 @@ Append inside the games test class (add `require "csv"` at the top of the file):
 
         assert_response :success
         assert_includes response.media_type, "text/csv"
-        rows = CSV.parse(response.body.delete_prefix("﻿"))
+        rows = CSV.parse(response.body.delete_prefix("\uFEFF"))
         assert_equal CsvExports::Games::RankedGameRow::HEADERS, rows.first
         assert_equal %w[1 2 3 4], rows.drop(1).map(&:first)
       end
@@ -2678,7 +2678,7 @@ Append inside the games test class (add `require "csv"` at the top of the file):
         get "/video-games/export.csv?year=2017&year_mode=since"
 
         assert_response :success
-        titles = CSV.parse(response.body.delete_prefix("﻿")).drop(1).map { |row| row[3] }
+        titles = CSV.parse(response.body.delete_prefix("\uFEFF")).drop(1).map { |row| row[3] }
         assert_includes titles, "The Legend of Zelda: Breath of the Wild"
         refute_includes titles, "Half-Life 2"
       end
@@ -2686,14 +2686,14 @@ Append inside the games test class (add `require "csv"` at the top of the file):
       test "a member's unfiltered export with a ready file downloads it" do
         export = CsvExport.create!(ranking_configuration: ranking_configurations(:games_global), status: :ready,
           generated_at: Time.current)
-        export.file.attach(io: StringIO.new("﻿Rank\n1\n"), filename: "the-greatest-games-rankings-2026-09-18.csv",
+        export.file.attach(io: StringIO.new("\uFEFFRank\n1\n"), filename: "the-greatest-games-rankings-2026-09-18.csv",
           content_type: "text/csv")
         sign_in_as users(:regular_user), stub_auth: true
 
         get "/video-games/export.csv"
 
         assert_response :success
-        assert_equal "﻿Rank\n1\n", response.body
+        assert_equal "\uFEFFRank\n1\n", response.body
       end
 
       test "the index carries the export link" do
@@ -2898,7 +2898,7 @@ Append to `test/controllers/saved_searches_controller_test.rb`:
     assert_includes response.media_type, "text/csv"
     assert_match "no-store", response.headers["Cache-Control"].to_s
     assert_includes response.headers["Content-Disposition"], "great-russian-novels-#{Date.current.iso8601}.csv"
-    rows = CSV.parse(response.body.delete_prefix("﻿"))
+    rows = CSV.parse(response.body.delete_prefix("\uFEFF"))
     assert_equal CsvExports::Books::RankedBookRow::HEADERS, rows.first
     assert_equal ["War and Peace"], rows.drop(1).map { |row| row[3] }
   end
@@ -3882,7 +3882,7 @@ test.describe('Books rankings CSV export (non-member)', () => {
     expect(response.headers()['content-type']).toContain('text/csv');
     expect(response.headers()['cache-control']).toContain('no-store');
     const lines = (await response.text()).trim().split('\n');
-    expect(lines[0]).toMatch(/^﻿Rank,Score,ID,Title/);
+    expect(lines[0]).toMatch(/^\uFEFFRank,Score,ID,Title/);
     expect(lines.length).toBeLessThanOrEqual(501);
   });
 });
@@ -3977,7 +3977,7 @@ test.describe('Music CSV export', () => {
       const response = await page.request.get(exportPath);
       expect(response.status()).toBe(200);
       expect(response.headers()['content-type']).toContain('text/csv');
-      expect(await response.text()).toMatch(/^﻿Rank,Score,ID,Title,Artists/);
+      expect(await response.text()).toMatch(/^\uFEFFRank,Score,ID,Title,Artists/);
     });
   }
 });
@@ -3996,7 +3996,7 @@ test.describe('Games CSV export', () => {
     const response = await page.request.get('/video-games/export.csv?year=2017&year_mode=since');
     expect(response.status()).toBe(200);
     expect(response.headers()['content-type']).toContain('text/csv');
-    expect(await response.text()).toMatch(/^﻿Rank,Score,ID,Title,Year,Platforms/);
+    expect(await response.text()).toMatch(/^\uFEFFRank,Score,ID,Title,Year,Platforms/);
   });
 });
 ```
