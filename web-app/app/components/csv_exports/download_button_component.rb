@@ -1,13 +1,15 @@
 # frozen_string_literal: true
 
-# "Download CSV" (spec §11). On an edge-cached page the HTML is the same for
-# everyone, so the top-500 explanation is a static dialog that
-# csv_export_controller.js opens for a signed-in non-member. The <a href> is
-# real: with JS off the link still works and the server applies the cap. The
-# dialog explains; it never enforces.
+# "Download CSV" (spec §11): a quiet ghost icon button (lucide download) with
+# a "Download CSV" tooltip, meant for the far right of a page's toolbar row.
+# On an edge-cached page the HTML is the same for everyone, so the top-500
+# explanation is a static dialog that csv_export_controller.js opens for a
+# signed-in non-member. The <a href> is real: with JS off the link still works
+# and the server applies the cap. The dialog explains; it never enforces.
 #
-# capped: false (user lists) renders a bare link -- no controller, no dialog.
-# The component renders its own dialog, so it is rendered once per page.
+# capped: false (user lists) renders the same icon as a bare link -- no
+# controller, no dialog. The component renders its own dialog, so it is
+# rendered once per page.
 module CsvExports
   class DownloadButtonComponent < ViewComponent::Base
     MODAL_ID = "csv_export_modal"

@@ -54,11 +54,13 @@
         </div>
       <% end %>
 
-      <%= render CsvExports::DownloadButtonComponent.new(
-            export_path: my_list_path(@list, format: :csv, view_mode: @view_mode, sort: ranking_sort),
-            noun: "items",
-            capped: false
-          ) %>
+      <div class="ml-auto">
+        <%= render CsvExports::DownloadButtonComponent.new(
+              export_path: my_list_path(@list, format: :csv, view_mode: @view_mode, sort: ranking_sort),
+              noun: "items",
+              capped: false
+            ) %>
+      </div>
     </div>
   </div>
 

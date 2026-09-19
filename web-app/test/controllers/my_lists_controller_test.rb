@@ -327,7 +327,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
     get my_list_path(@albums_listened)
 
-    assert_select "a[data-testid=download-csv][href*='.csv']", text: "Download CSV"
+    assert_select "a[data-testid=download-csv][href*='.csv'][aria-label='Download CSV']"
     assert_select "dialog#csv_export_modal", count: 0
   end
 
