@@ -241,7 +241,11 @@ through `Collections::Registry.find(:books, slug)` (404 on unknown).
 
 **`CsvExportable` concern** — included by every controller with an export action:
 
-- `before_action :prevent_caching, :require_signed_in!, only: [:export]`
+- `before_action -> { prevent_caching }` and `-> { require_signed_in! }`, `only: [:export]` — as
+  lambdas, because ActiveSupport de-duplicates a same-named symbol callback and
+  `SavedSearchesController` declares its own `before_action :require_signed_in!, only: [...]`
+  after the include, which would silently replace the export-scoped one and leave the export
+  reachable anonymously
 - `rate_limit to: 20, within: 1.hour, by: -> { current_user.id }, scope: :csv_export, only:
   [:export]` on `Rails.application.config.x.rate_limit_store` — one bucket per user across every
   export controller, not one per domain
@@ -284,8 +288,9 @@ action on these controllers, so `/rc/` gating is inherited.
 **Saved search export.** `SavedSearchesController#export` resolves the search with
 `visible_to(current_user).find` (404, never 403), then `CsvExports::SavedSearch.call(search:,
 limit:)` pages `Books::SavedSearchQuery.call(criteria:, owner: search.user, page:, per_page:
-1000)` until the limit, an empty page, or `SavedSearchQuery.max_page(per_page: 1000)` (10),
-whichever first. `hide_read` stays about the owner, as on the page.
+1000)` until the limit, OpenSearch's own total (`page * per_page >= result.total` — not a short
+hydrated page, since hydration drops ids Postgres no longer has), or
+`SavedSearchQuery.max_page(per_page: 1000)` (10), whichever first. `hide_read` stays about the owner, as on the page.
 
 **User lists.** `MyListsController#show`'s `format.csv` branch calls
 `CsvExports::UserList.call(list:, items:)`. Output is byte-identical to today; the controller's

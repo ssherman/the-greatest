@@ -2117,9 +2117,14 @@ module CsvExportable
   REFRESH_SECONDS = 15
 
   included do
-    before_action :prevent_caching, only: [:export]
+    # Lambdas, not symbols: ActiveSupport de-duplicates a same-named symbol
+    # callback, so a controller that later declares its own
+    # `before_action :require_signed_in!, only: [...]` would silently replace
+    # the export-scoped one here (SavedSearchesController does exactly that)
+    # and leave the export reachable anonymously. A lambda is never a duplicate.
+    before_action -> { prevent_caching }, only: [:export]
     before_action -> { response.headers["X-Robots-Tag"] = "noindex" }, only: [:export]
-    before_action :require_signed_in!, only: [:export]
+    before_action -> { require_signed_in! }, only: [:export]
     # scope: one bucket per user across every export controller, not 20/h per domain.
     rate_limit to: 20, within: 1.hour,
       by: -> { current_user&.id },
