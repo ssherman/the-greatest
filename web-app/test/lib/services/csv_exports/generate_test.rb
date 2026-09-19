@@ -5,6 +5,8 @@ require "test_helper"
 module Services
   module CsvExports
     class GenerateTest < ActiveSupport::TestCase
+      include ActiveJob::TestHelper
+
       setup do
         @config = ranking_configurations(:games_global)
         @export = ::CsvExport.create!(ranking_configuration: @config, status: :generating, requested_at: Time.current,
@@ -44,6 +46,32 @@ module Services
         assert @export.failed?
         assert_equal "opensearch exploded", @export.error_message
         assert_equal "#{::CsvExports::Writer::BOM}old\n", @export.file.download.force_encoding(Encoding::UTF_8)
+      end
+
+      test "a storage upload failure leaves the previous file and the row untouched" do
+        @export.file.attach(io: StringIO.new("#{::CsvExports::Writer::BOM}old\n"), filename: "old.csv", content_type: "text/csv")
+        ActiveStorage::Service::DiskService.any_instance.stubs(:upload).raises(StandardError, "r2 hiccup")
+
+        result = Generate.call(csv_export: @export)
+
+        refute result.success?
+        @export.reload
+        assert @export.failed?
+        assert_equal "r2 hiccup", @export.error_message
+        assert_equal "#{::CsvExports::Writer::BOM}old\n", @export.file.download.force_encoding(Encoding::UTF_8)
+      end
+
+      test "a successful regeneration replaces the file and purges the old blob" do
+        @export.file.attach(io: StringIO.new("#{::CsvExports::Writer::BOM}old\n"), filename: "old.csv", content_type: "text/csv")
+        old_blob_id = @export.file.blob.id
+
+        assert_enqueued_with(job: ActiveStorage::PurgeJob) do
+          assert Generate.call(csv_export: @export).success?
+        end
+
+        @export.reload
+        refute_equal old_blob_id, @export.file.blob.id
+        assert_equal 4, @export.row_count
       end
 
       test "a configuration that stopped being exportable fails cleanly" do
