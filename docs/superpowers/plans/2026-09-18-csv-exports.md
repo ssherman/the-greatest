@@ -3295,7 +3295,7 @@ git commit -m "Move the user-list CSV into CsvExports::UserList (output unchange
 - [ ] **Step 1: Generate the component**
 
 ```bash
-bin/rails g component CsvExports::DownloadButton export_path noun capped
+bin/rails g view_component:component CsvExports::DownloadButton export_path noun capped
 ```
 
 - [ ] **Step 2: Write the failing component test**
