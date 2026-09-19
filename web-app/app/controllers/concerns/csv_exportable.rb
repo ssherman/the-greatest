@@ -79,7 +79,8 @@ module CsvExportable
     entry = ::CsvExports::Registry.for_config(ranking_configuration)
     relation = entry.relation.call(ranking_configuration)
     if year_filter
-      relation = Services::RankedItemsFilterService.new(relation, table_name: entry.media_table).apply_year_filter(year_filter)
+      table = entry.media_table or raise ArgumentError, "#{entry.slug} has no media_table; year filters need one"
+      relation = ::Services::RankedItemsFilterService.new(relation, table_name: table).apply_year_filter(year_filter)
     end
     send_on_demand_ranked_items(relation, row_class: entry.row_class,
       filename: ::CsvExports::Registry.filename_for(ranking_configuration))

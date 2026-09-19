@@ -273,6 +273,28 @@ module Games
       assert_equal "/video-games/export.csv?year=2017&year_mode=since", @controller.view_assigns["csv_export_path"]
     end
 
+    test "export is a 404 when games has no primary configuration yet" do
+      Games::RankingConfiguration.stubs(:default_primary).returns(nil)
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/video-games/export.csv"
+
+      assert_response :not_found
+    end
+
+    test "an explicit ranking configuration exports its own ranks" do
+      secondary = ranking_configurations(:games_secondary)
+      RankedItem.create!(item: games_games(:half_life_2), ranking_configuration: secondary, rank: 1, score: 50)
+      sign_in_as users(:user_with_expired_membership), stub_auth: true
+
+      get "/rc/#{secondary.id}/video-games/export.csv"
+
+      assert_response :success
+      rows = CSV.parse(response.body.delete_prefix(CsvExports::Writer::BOM))
+      assert_equal 2, rows.size
+      assert_equal ["1", "50.00"], rows[1][0..1]
+    end
+
     private
 
     # Bulk-inserts filler so tests can reach page 2+ against the controller's
