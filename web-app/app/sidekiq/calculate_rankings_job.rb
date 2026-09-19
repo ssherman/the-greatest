@@ -16,12 +16,22 @@ class CalculateRankingsJob
         Books::ReindexRankedFieldsJob.perform_async
       end
 
-      # The pre-built CSV must never be behind the ranks it describes (spec D4).
-      # RequestGenerate is a no-op for a type with no export.
-      Services::CsvExports::RequestGenerate.call(ranking_configuration: ranking_configuration)
+      request_csv_regenerate(ranking_configuration)
     else
       Rails.logger.error "Failed to calculate rankings for configuration #{ranking_configuration_id}: #{result.errors}"
       raise "Ranking calculation failed: #{result.errors.join(", ")}"
     end
+  end
+
+  private
+
+  # The pre-built CSV must never be behind the ranks it describes (spec D4).
+  # RequestGenerate is a no-op for a type with no export. Its own rescue: the
+  # CSV is a side effect of the calculation, and a DB blip on csv_exports must
+  # not make Sidekiq retry a 21k-row ranking that already landed.
+  def request_csv_regenerate(ranking_configuration)
+    Services::CsvExports::RequestGenerate.call(ranking_configuration: ranking_configuration)
+  rescue => e
+    Rails.logger.error "[CalculateRankingsJob] configuration #{ranking_configuration.id}: CSV regenerate not requested: #{e.message}"
   end
 end

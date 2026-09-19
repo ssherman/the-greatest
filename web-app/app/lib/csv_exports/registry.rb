@@ -14,7 +14,6 @@ module CsvExports
       :ranking_configuration_class, # "Books::RankingConfiguration"
       :row_class_name,              # "CsvExports::Books::RankedBookRow"
       :slug,                        # filename token
-      :noun,                        # "top 500 <noun>" in the modal
       :relation,                    # ->(config) { the full, unfiltered ranked relation in rank order }
       :media_table,                 # the media table the relation joins; the year filter addresses it by name
       keyword_init: true
@@ -33,14 +32,12 @@ module CsvExports
         ranking_configuration_class: "Books::RankingConfiguration",
         row_class_name: "CsvExports::Books::RankedBookRow",
         slug: "books",
-        noun: "books",
         relation: ->(config) { ::Books::RankedBooksQuery.call(ranking_configuration: config) }
       ),
       Entry.new(
         ranking_configuration_class: "Music::Albums::RankingConfiguration",
         row_class_name: "CsvExports::Music::RankedAlbumRow",
         slug: "albums",
-        noun: "albums",
         relation: ->(config) {
           config.ranked_items
             .joins("JOIN music_albums ON ranked_items.item_id = music_albums.id AND ranked_items.item_type = 'Music::Album'")
@@ -52,7 +49,6 @@ module CsvExports
         ranking_configuration_class: "Music::Songs::RankingConfiguration",
         row_class_name: "CsvExports::Music::RankedSongRow",
         slug: "songs",
-        noun: "songs",
         relation: ->(config) {
           config.ranked_items
             .joins("JOIN music_songs ON ranked_items.item_id = music_songs.id AND ranked_items.item_type = 'Music::Song'")
@@ -64,7 +60,6 @@ module CsvExports
         ranking_configuration_class: "Games::RankingConfiguration",
         row_class_name: "CsvExports::Games::RankedGameRow",
         slug: "games",
-        noun: "games",
         relation: ->(config) {
           config.ranked_items
             .joins("JOIN games_games ON ranked_items.item_id = games_games.id AND ranked_items.item_type = 'Games::Game'")

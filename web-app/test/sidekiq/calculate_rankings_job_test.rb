@@ -139,4 +139,12 @@ class CalculateRankingsJobTest < ActiveSupport::TestCase
 
     CalculateRankingsJob.new.perform(config.id)
   end
+  test "a failure requesting the CSV regenerate does not fail the job or trigger a retry" do
+    RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(
+      ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
+    )
+    Services::CsvExports::RequestGenerate.expects(:call).raises(StandardError, "csv_exports hiccup")
+
+    assert_nothing_raised { CalculateRankingsJob.new.perform(@ranking_configuration.id) }
+  end
 end

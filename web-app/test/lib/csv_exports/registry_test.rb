@@ -17,12 +17,11 @@ module CsvExports
       end
     end
 
-    test "an entry names its row class, slug and noun" do
+    test "an entry names its row class and slug" do
       entry = Registry.for_config(ranking_configurations(:books_global))
 
       assert_equal "CsvExports::Books::RankedBookRow", entry.row_class_name
       assert_equal "books", entry.slug
-      assert_equal "books", entry.noun
     end
 
     test "media_table names the table the year filter addresses; books has none" do
