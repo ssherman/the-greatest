@@ -15,12 +15,8 @@ class CsvExportTest < ActiveSupport::TestCase
     refute export.downloadable?
   end
 
-  test "one export per configuration" do
+  test "the unique index allows one export per configuration" do
     CsvExport.create!(ranking_configuration: @config)
-
-    duplicate = CsvExport.new(ranking_configuration: @config)
-    refute duplicate.valid?
-    assert_includes duplicate.errors[:ranking_configuration_id], "has already been taken"
 
     # insert_all (no bang) would skip the duplicate silently; the bang form raises.
     assert_raises(ActiveRecord::RecordNotUnique) do
@@ -58,22 +54,43 @@ class CsvExportTest < ActiveSupport::TestCase
     assert export.claimable?
   end
 
-  test "downloadable only when ready with a file attached" do
+  test "downloadable whenever a file is attached, whatever the latest attempt says" do
     export = CsvExport.create!(ranking_configuration: @config, status: :ready)
     refute export.downloadable?
 
-    export.file.attach(io: StringIO.new("﻿Rank\n"), filename: "x.csv", content_type: "text/csv")
+    export.file.attach(io: StringIO.new("\uFEFFRank\n"), filename: "x.csv", content_type: "text/csv")
     assert export.downloadable?
 
+    export.update!(status: :generating)
+    assert export.downloadable?, "the last good file is served during a regeneration"
+
     export.update!(status: :failed)
-    refute export.downloadable?
+    assert export.downloadable?, "the last good file is served after a failed regeneration"
   end
 
-  test "is destroyed with its configuration" do
+  test "the claimable scope agrees with claimable?" do
+    pending = CsvExport.create!(ranking_configuration: @config)
+    fresh = CsvExport.create!(ranking_configuration: ranking_configurations(:music_albums_secondary),
+      status: :generating, requested_at: 1.minute.ago)
+    stale = CsvExport.create!(ranking_configuration: ranking_configurations(:music_songs_secondary),
+      status: :generating, requested_at: (CsvExport::GENERATION_STALE_AFTER + 1.minute).ago)
+    unstamped = CsvExport.create!(ranking_configuration: ranking_configurations(:books_inherited),
+      status: :generating, requested_at: nil)
+
+    assert_equal [pending, stale, unstamped].map(&:id).sort, CsvExport.claimable.pluck(:id).sort
+    [pending, fresh, stale, unstamped].each do |export|
+      assert_equal export.claimable?, CsvExport.claimable.exists?(export.id), "#{export.status} disagrees"
+    end
+  end
+
+  test "is destroyed with its configuration, attachment included" do
     export = CsvExport.create!(ranking_configuration: @config)
+    export.file.attach(io: StringIO.new("\uFEFFRank\n"), filename: "x.csv", content_type: "text/csv")
+    attachment_id = export.file.attachment.id
 
     @config.destroy!
 
     assert_nil CsvExport.find_by(id: export.id)
+    assert_nil ActiveStorage::Attachment.find_by(id: attachment_id)
   end
 end
