@@ -13,16 +13,19 @@ module CsvExports
   class RankedItems
     BATCH = 1000
 
-    def self.call(relation:, row_class:, limit:, io:)
+    # limit: nil means no cap; it replaces any limit the relation carried.
+    def self.call(relation:, row_class:, limit:, io:, batch: BATCH)
       writer = Writer.new(io, headers: row_class::HEADERS)
 
-      ids = relation.unscope(:includes, :preload, :eager_load).limit(limit).pluck(:id)
-      ids.each_slice(BATCH) do |slice|
-        scope = ::RankedItem.where(id: slice)
-        scope = row_class.preloads.empty? ? scope.preload(:item) : scope.preload(item: row_class.preloads)
-        by_id = scope.index_by(&:id)
+      # rank then id: nothing enforces unique ranks, and an unstable sort on a tie would make the pre-built file and an on-demand export differ.
+      ids = relation.unscope(:includes, :preload, :eager_load).order(:id).limit(limit).pluck(:id)
+      ids.each_slice(batch) do |slice|
+        by_id = ::RankedItem.where(id: slice).preload(item: row_class.preloads).index_by(&:id)
 
         items = slice.filter_map { |id| by_id[id] }.select(&:item)
+        dropped = slice.size - items.size
+        Rails.logger.warn("[CsvExports::RankedItems] skipped #{dropped} ranked item(s) with no item in batch") if dropped.positive?
+
         ctx = row_class.context(items.map(&:item_id))
         items.each { |ranked_item| writer.row(row_class.row(ranked_item, ctx)) }
       end
