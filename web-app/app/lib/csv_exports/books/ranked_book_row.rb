@@ -18,7 +18,7 @@ module CsvExports
 
       def self.context(book_ids)
         categories = ::CategoryItem.joins(:category)
-          .where(item_type: "Books::Book", item_id: book_ids, categories: {deleted: false})
+          .where(item_type: "Books::Book", item_id: book_ids, categories: {type: "Books::Category", deleted: false})
         types = ::Category.category_types
 
         {
@@ -27,8 +27,14 @@ module CsvExports
           authors: Aggregate.names(::Books::BookAuthor.joins(:author).where(book_id: book_ids),
             group_by: "books_book_authors.book_id", name: "books_authors.name",
             order: "books_book_authors.position NULLS LAST, books_book_authors.id"),
-          countries: Aggregate.names(::Books::BookCountry.joins(:country).where(book_id: book_ids),
-            group_by: "books_book_countries.book_id", name: "books_countries.name", order: "books_countries.name"),
+          # Unknown is a placeholder for "no country recorded", not a real
+          # answer -- the book page hides it (Books::Country.filterable), and
+          # 11% of ranked books carry it alone, so leaving it in would put
+          # "Unknown" in a cell the site shows as blank.
+          countries: Aggregate.names(
+            ::Books::BookCountry.joins(:country).merge(::Books::Country.filterable).where(book_id: book_ids),
+            group_by: "books_book_countries.book_id", name: "books_countries.name", order: "books_countries.name"
+          ),
           genres: category_names(categories, types[:genre]),
           subjects: category_names(categories, types[:subject]),
           locations: category_names(categories, types[:location])
@@ -42,7 +48,7 @@ module CsvExports
       def self.row_for_book(book, rank:, score:, ctx:)
         [
           rank,
-          format_score(score),
+          Cells.score(score),
           book.id,
           book.title,
           ctx[:authors][book.id],
@@ -56,10 +62,6 @@ module CsvExports
           book.word_count,
           "#{Api::Host.base_url(:books)}#{URL_HELPERS.book_path(book)}"
         ]
-      end
-
-      def self.format_score(score)
-        score.nil? ? nil : format("%.2f", score)
       end
 
       def self.category_names(scope, category_type)

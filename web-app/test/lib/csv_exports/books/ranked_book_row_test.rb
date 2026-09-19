@@ -62,6 +62,36 @@ module CsvExports
       test "preloads only the belongs_to columns the row reads" do
         assert_equal [:original_language], RankedBookRow.preloads
       end
+
+      test "the Unknown placeholder country is left out, as on the book page" do
+        ::Books::BookCountry.create!(book: @book, country: books_countries(:unknown))
+
+        ctx = RankedBookRow.context([@book.id])
+
+        assert_equal "French", RankedBookRow.row(@ranked, ctx)[7]
+      end
+
+      test "genres, subjects and locations land in their own columns" do
+        book = books_books(:crime_and_punishment)
+        ranked = RankedItem.create!(item: book, ranking_configuration: @config, rank: 2, score: 90)
+
+        row = RankedBookRow.row(ranked, RankedBookRow.context([book.id]))
+
+        assert_equal ["Novels", "Politics", "France"], row[8..10]
+      end
+
+      test "several authors are joined in insertion order and page range and word count are carried" do
+        other = ::Books::Author.insert_all([{name: "Second Author", slug: "second-author",
+                                             created_at: Time.current, updated_at: Time.current}], returning: :id).rows.flatten.first
+        ::Books::BookAuthor.insert_all([{book_id: @book.id, author_id: other, position: nil,
+                                         created_at: Time.current, updated_at: Time.current}])
+        @book.update_columns(page_range: "300-350", word_count: 587_287)
+
+        row = RankedBookRow.row(@ranked.reload, RankedBookRow.context([@book.id]))
+
+        assert_equal "Leo Tolstoy, Second Author", row[4]
+        assert_equal ["300-350", 587_287], row[11..12]
+      end
     end
   end
 end
