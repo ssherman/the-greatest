@@ -27,6 +27,25 @@ module CsvExports
       test "no preloads beyond the item" do
         assert_equal [], RankedAlbumRow.preloads
       end
+
+      test "artists are ordered by position, not by insertion" do
+        album = music_albums(:abbey_road)
+        ::Music::AlbumArtist.create!(album: album, artist: music_artists(:david_gilmour), position: 2)
+        ::Music::AlbumArtist.create!(album: album, artist: music_artists(:roger_waters), position: 1)
+        ranked = RankedItem.create!(item: album, ranking_configuration: ranking_configurations(:music_albums_global), rank: 2, score: 90)
+
+        row = RankedAlbumRow.row(ranked, RankedAlbumRow.context([album.id]))
+
+        assert_equal "Roger Waters, David Gilmour", row[4]
+      end
+
+      test "a soft-deleted genre is left out" do
+        ::CategoryItem.create!(category: categories(:music_deleted_genre), item: @album)
+
+        row = RankedAlbumRow.row(@ranked, RankedAlbumRow.context([@album.id]))
+
+        assert_equal "Progressive Rock, Rock", row[6]
+      end
     end
   end
 end

@@ -13,6 +13,7 @@ module CsvExports
 
       def self.context(song_ids)
         {
+          # position is defaulted and validated on the join model; NULLS LAST is belt-and-braces for raw inserts.
           artists: Aggregate.names(::Music::SongArtist.joins(:artist).where(song_id: song_ids),
             group_by: "music_song_artists.song_id", name: "music_artists.name",
             order: "music_song_artists.position NULLS LAST, music_song_artists.id")
