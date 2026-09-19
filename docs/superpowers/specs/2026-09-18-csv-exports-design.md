@@ -115,7 +115,14 @@ does: shared or owner, else 404.
 abandoned (worker killed before its rescue) and may be re-claimed — the same idea as
 `RankingConfiguration::REFRESH_STALE_AFTER`.
 
-`claimable?` is `!generating? || requested_at < GENERATION_STALE_AFTER.ago`.
+`claimable?` is `!generating? || requested_at.nil? || requested_at < GENERATION_STALE_AFTER.ago`
+(a claim always stamps the timestamp, so a missing one means the row was never properly
+claimed), and `CsvExport.claimable` is the same predicate as a scope, kept beside it so the SQL
+the claim issues cannot drift from it. `downloadable?` is `file.attached?` regardless of
+`status`: `Generate` attaches only on success, so an attached file is always a good file, and a
+member keeps downloading the last good one while a regeneration runs or after one fails. There
+is no uniqueness validation — it would turn a race on a configuration's first row into
+`RecordInvalid`, which `find_or_create_by!` does not rescue; the unique index is the invariant.
 
 ## 7. Code layout
 
@@ -157,11 +164,12 @@ Each row builder declares `HEADERS`, `preloads` (the `includes` hash for one bat
 **`Services::CsvExports::RequestGenerate.call(ranking_configuration:)`**
 1. Return `success?: false, errors: [:not_exportable]` if the registry has no entry for the
    configuration's type.
-2. `CsvExport.find_or_create_by!(ranking_configuration:)`. Rescue `RecordNotUnique` (two
-   callers racing past the find) by re-finding.
-3. One atomic claim: `UPDATE csv_exports SET status = generating, requested_at = now()
-   WHERE id = ? AND (status <> generating OR requested_at < now() - 15 min)`. Zero rows
-   updated → `success?: false, errors: [:already_generating]`.
+2. `CsvExport.find_or_create_by!(ranking_configuration:)` — Rails falls through to
+   `create_or_find_by!` on a miss, which absorbs two callers racing past the find.
+3. One atomic claim through the `claimable` scope: `UPDATE csv_exports SET status = generating,
+   requested_at = now() WHERE id = ? AND (status <> generating OR requested_at IS NULL OR
+   requested_at < now() - 15 min)`. Zero rows updated → `success?: false, errors:
+   [:already_generating]`.
 4. `CsvExports::GenerateJob.perform_async(csv_export.id)`. If the enqueue raises (Redis
    unreachable), release the claim into `failed` with the message and return failure, so the
    next trigger can retry instead of waiting out the 15 minutes.
@@ -228,7 +236,8 @@ through `Collections::Registry.find(:books, slug)` (404 on unknown).
 - `send_csv(io_or_string, filename:)` — `Content-Type: text/csv; charset=utf-8`,
   `Content-Disposition: attachment`, `X-Robots-Tag: noindex`
 - `serve_prebuilt_or_prepare(ranking_configuration)` — for the member + unfiltered case:
-  - `ranking_configuration.csv_export` exists, is `ready?`, and `file.attached?` →
+  - `ranking_configuration.csv_export` exists and `downloadable?` (a file is attached, whatever
+    the latest attempt's `status`) →
     `send_csv(csv_export.file.download, filename: "<slug>-<generated_at date>.csv")`
   - otherwise → `RequestGenerate.call(ranking_configuration:)` (which creates the row if
     needed), then render `csv_exports/preparing` (HTML, status 202, `no-store`, with an HTTP

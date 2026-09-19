@@ -253,16 +253,26 @@ class CsvExport < ApplicationRecord
 
   enum :status, {pending: 0, generating: 1, ready: 2, failed: 3}
 
-  validates :ranking_configuration_id, uniqueness: true
+  # No uniqueness validation: it would run a SELECT inside create! and turn a
+  # race on a configuration's first row into RecordInvalid, which
+  # find_or_create_by! does not rescue. The unique index is the invariant.
+
+  # The rows a caller may claim for generation, as SQL, kept beside claimable?
+  # so the two cannot drift.
+  scope :claimable, -> {
+    where("status <> :generating OR requested_at IS NULL OR requested_at < :stale",
+      generating: statuses[:generating], stale: GENERATION_STALE_AFTER.ago)
+  }
 
   def claimable?
     !generating? || requested_at.nil? || requested_at < GENERATION_STALE_AFTER.ago
   end
 
-  # A `ready` row with no attachment is a row whose attach never completed;
-  # serving it would 500 inside blob.download, so it counts as not ready.
+  # Whatever `status` says about the latest attempt, an attached file is a good
+  # file: Generate only attaches on success. So a member keeps downloading the
+  # last good file while a regeneration runs or after one fails (spec §8, §13).
   def downloadable?
-    ready? && file.attached?
+    file.attached?
   end
 end
 ```
@@ -1502,18 +1512,17 @@ module Services
         ::CsvExport.statuses
       end
 
-      # Two callers can both miss the find; the unique index makes the loser's
-      # create raise RecordNotUnique, and it then finds the winner's row.
+      # Two callers can both miss the find; Rails' find_or_create_by! falls
+      # through to create_or_find_by!, which rescues the unique-index violation
+      # and returns the winner's row. That only holds because CsvExport has no
+      # uniqueness validation (a validation would raise RecordInvalid instead).
       def find_or_create
         ::CsvExport.find_or_create_by!(ranking_configuration_id: config.id)
-      rescue ActiveRecord::RecordNotUnique
-        ::CsvExport.find_by!(ranking_configuration_id: config.id)
       end
 
+      # CsvExport.claimable is the SQL twin of CsvExport#claimable?.
       def claim(export)
-        claimed = ::CsvExport.where(id: export.id)
-          .where("status <> :generating OR requested_at IS NULL OR requested_at < :stale",
-            generating: statuses[:generating], stale: ::CsvExport::GENERATION_STALE_AFTER.ago)
+        claimed = ::CsvExport.claimable.where(id: export.id)
           .update_all(status: statuses[:generating], requested_at: Time.current)
         return false unless claimed == 1
 
@@ -2075,8 +2084,10 @@ module CsvExportable
     send_data data, type: "text/csv; charset=utf-8", filename: filename, disposition: "attachment"
   end
 
-  # The member + unfiltered case: serve the pre-built file, or claim a
-  # generate and show the preparing page. The HTTP Refresh header re-requests
+  # The member + unfiltered case: serve the pre-built file (any attached file
+  # is a good one -- Generate attaches only on success -- so this holds during
+  # a regeneration and after a failed one), or claim a generate and show the
+  # preparing page. The HTTP Refresh header re-requests
   # this URL; once the file exists the response is an attachment and the
   # browser downloads it without leaving the page. Not a flash: the cached
   # rankings page skips the session, so a flash set here would never render.
