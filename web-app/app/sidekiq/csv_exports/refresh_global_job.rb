@@ -11,11 +11,21 @@ module CsvExports
     sidekiq_options queue: :low
 
     def perform
+      requested = 0
+      failures = []
+
       ::RankingConfiguration.global.active.find_each do |config|
         next unless Registry.exportable?(config)
 
-        Services::CsvExports::RequestGenerate.call(ranking_configuration: config)
+        result = Services::CsvExports::RequestGenerate.call(ranking_configuration: config)
+        requested += 1 if result.success?
+      rescue => e
+        Rails.logger.error "[CsvExports::RefreshGlobalJob] configuration #{config.id}: #{e.class}: #{e.message}"
+        failures << config.id
       end
+
+      Rails.logger.info "[CsvExports::RefreshGlobalJob] requested #{requested} export(s); #{failures.size} failure(s)"
+      raise "CsvExports::RefreshGlobalJob failed for configuration(s) #{failures.join(", ")}" if failures.any?
     end
   end
 end

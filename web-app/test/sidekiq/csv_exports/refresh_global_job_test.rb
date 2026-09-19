@@ -19,10 +19,24 @@ module CsvExports
 
       requested = ::CsvExport.pluck(:ranking_configuration_id)
       expected = RankingConfiguration.global.active.select { |config| Registry.exportable?(config) }.map(&:id)
+      assert_includes requested, ranking_configurations(:games_global).id, "at least the games primary is requested"
       assert_equal expected.sort, requested.sort
       refute_includes requested, ranking_configurations(:books_user).id, "user-owned configurations are skipped"
       refute_includes requested, ranking_configurations(:games_secondary).id, "archived configurations are skipped"
       refute_includes requested, ranking_configurations(:books_authors_global).id, "non-exportable types are skipped"
+    end
+
+    test "one configuration failing does not stop the others, and the run still raises" do
+      GenerateJob.stubs(:perform_async)
+      games = ranking_configurations(:games_global)
+      Services::CsvExports::RequestGenerate.stubs(:call).returns(
+        Services::CsvExports::RequestGenerate::Result.new(success?: true, data: {}, errors: [])
+      )
+      Services::CsvExports::RequestGenerate.stubs(:call).with(ranking_configuration: games).raises(StandardError, "db hiccup")
+
+      error = assert_raises(RuntimeError) { RefreshGlobalJob.new.perform }
+
+      assert_includes error.message, games.id.to_s
     end
 
     test "is scheduled nightly" do

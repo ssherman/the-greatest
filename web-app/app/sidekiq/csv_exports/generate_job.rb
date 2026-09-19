@@ -3,7 +3,9 @@
 # Generates one configuration's pre-built CSV. `retry: false` because the row
 # carries the outcome (spec §8): a silent Sidekiq retry would run while the
 # admin card still said "failed", and every trigger (calculation, nightly,
-# download, admin button) re-claims a failed row anyway.
+# download, admin button) re-claims a failed row anyway. With retry: false the
+# raise is logged by Sidekiq and the job is acknowledged -- it does not reach
+# the Dead set; the admin Regenerate button is the retry.
 module CsvExports
   class GenerateJob
     include Sidekiq::Job
