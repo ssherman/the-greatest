@@ -2118,11 +2118,14 @@ module CsvExportable
 
   included do
     before_action :prevent_caching, only: [:export]
+    before_action -> { response.headers["X-Robots-Tag"] = "noindex" }, only: [:export]
     before_action :require_signed_in!, only: [:export]
+    # scope: one bucket per user across every export controller, not 20/h per domain.
     rate_limit to: 20, within: 1.hour,
       by: -> { current_user&.id },
       with: -> { head :too_many_requests },
       store: Rails.application.config.x.rate_limit_store,
+      scope: :csv_export,
       only: [:export]
   end
 
@@ -2133,8 +2136,13 @@ module CsvExportable
   end
 
   def send_csv(data, filename:)
-    response.headers["X-Robots-Tag"] = "noindex"
     send_data data, type: "text/csv; charset=utf-8", filename: filename, disposition: "attachment"
+  end
+
+  # Where the preparing page's back link goes; each controller overrides it
+  # with its own rankings path.
+  def csv_export_back_path
+    nil
   end
 
   # The member + unfiltered case: serve the pre-built file (any attached file
@@ -2153,6 +2161,7 @@ module CsvExportable
     else
       Services::CsvExports::RequestGenerate.call(ranking_configuration: ranking_configuration)
       response.headers["Refresh"] = REFRESH_SECONDS.to_s
+      @csv_export_back_path = csv_export_back_path
       render "csv_exports/preparing", status: :accepted, formats: [:html], content_type: "text/html"
     end
   end
@@ -2184,7 +2193,7 @@ end
   </div>
 
   <p class="text-sm text-base-content/70">
-    <%= link_to "Back to the rankings", :back, class: "link" %>
+    <%= link_to "Back to the rankings", @csv_export_back_path || "/", class: "link" %>
   </p>
 </div>
 ```

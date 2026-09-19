@@ -223,7 +223,7 @@ All under the domain's existing host constraint; `.csv` is the only format.
 
 | Route | Controller action | Filter params (query string) |
 |---|---|---|
-| `GET (/rc/:ranking_configuration_id)/export.csv` on books | `Books::RankedItemsController#export` | `category_id`, `country_id`, `year_start`, `year_end`, `collection` |
+| `GET (/rc/:ranking_configuration_id)/export.csv` on books | `Books::RankedItemsController#export` | `category_id`, `country_id`, `year`, `published_start`, `published_end`, `collection` |
 | `GET (/rc/:ranking_configuration_id)/albums/export.csv` on music | `Music::Albums::RankedItemsController#export` | `year`, `year_mode` |
 | `GET (/rc/:ranking_configuration_id)/songs/export.csv` on music | `Music::Songs::RankedItemsController#export` | `year`, `year_mode` |
 | `GET (/rc/:ranking_configuration_id)/video-games/export.csv` on games | `Games::RankedItemsController#export` | `year`, `year_mode` |
@@ -242,10 +242,13 @@ through `Collections::Registry.find(:books, slug)` (404 on unknown).
 **`CsvExportable` concern** — included by every controller with an export action:
 
 - `before_action :prevent_caching, :require_signed_in!, only: [:export]`
-- `rate_limit to: 20, within: 1.hour, by: -> { current_user.id }, only: [:export]` on
-  `Rails.application.config.x.rate_limit_store`
+- `rate_limit to: 20, within: 1.hour, by: -> { current_user.id }, scope: :csv_export, only:
+  [:export]` on `Rails.application.config.x.rate_limit_store` — one bucket per user across every
+  export controller, not one per domain
+- `before_action` setting `X-Robots-Tag: noindex` on every export response (the file and the
+  preparing page alike)
 - `send_csv(io_or_string, filename:)` — `Content-Type: text/csv; charset=utf-8`,
-  `Content-Disposition: attachment`, `X-Robots-Tag: noindex`
+  `Content-Disposition: attachment`
 - `serve_prebuilt_or_prepare(ranking_configuration)` — for the member + unfiltered case:
   - `ranking_configuration.csv_export` exists and `downloadable?` (a file is attached, whatever
     the latest attempt's `status`) →
@@ -424,9 +427,11 @@ pre-built file and today for an on-demand one; saved search
   unfiltered without one → 202 and `RequestGenerate` called once; member filtered → on demand,
   uncapped, and the filter changes the rows; `/rc/` gating (private user-owned config → 404
   for a stranger); `no-store` on every export response; the rate limit trips on the 21st
-  request; a `.csv` request to a cached `index` route never yields a CSV body (Rails' implicit
-  `(.:format)` routes `/.csv` to `index`, which has no CSV template and answers 406), so no CSV
-  can ever come from a cached action.
+  request; a `.csv` request to a cached `index` route never yields a CSV body — every non-root
+  index route carries Rails' implicit `(.:format)`, so `/page/2.csv` and `/rc/<id>.csv` reach
+  `index`, which has no CSV template and answers 406 without the public cache headers (`/.csv`
+  itself is a router 404: `root` has no format segment) — so no CSV can ever come from a cached
+  action.
 - **E2E** (`e2e/tests/books/rankings-csv-export.spec.ts` plus one each for music and games
   rankings, saved searches, and the existing my-lists spec updated): a signed-in non-member
   clicks Download, sees the modal (`getByRole("dialog")`), "Download top 500" yields a
