@@ -21,6 +21,9 @@ application.register("clipboard-copy", ClipboardCopyController)
 import Contact__FormController from "../controllers/contact/form_controller"
 application.register("contact--form", Contact__FormController)
 
+import CsvExportController from "../controllers/csv_export_controller"
+application.register("csv-export", CsvExportController)
+
 import MembershipStateController from "../controllers/membership_state_controller"
 application.register("membership-state", MembershipStateController)
 
