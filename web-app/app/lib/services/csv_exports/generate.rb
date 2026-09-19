@@ -52,7 +52,8 @@ module Services
         Result.new(success?: true, data: {csv_export: export, rows: rows}, errors: [])
       rescue => error
         Rails.logger.error "[Services::CsvExports::Generate] export #{export.id}: #{error.class}: #{error.message}"
-        # Only the claim this run holds: a run that outlived the stale window must not flip a row another worker has since re-claimed.
+        # Only the claim this run holds: a run that outlived the stale window must
+        # not flip a row another worker has since re-claimed.
         ::CsvExport.where(id: export.id, status: ::CsvExport.statuses[:generating], requested_at: export.requested_at).update_all(
           status: ::CsvExport.statuses[:failed],
           error_message: error.message.truncate(500)

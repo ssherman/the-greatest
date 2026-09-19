@@ -48,7 +48,7 @@ module Services
         assert_equal "#{::CsvExports::Writer::BOM}old\n", @export.file.download.force_encoding(Encoding::UTF_8)
       end
 
-      test "a storage upload failure leaves the previous file and the row untouched" do
+      test "a storage upload failure leaves the previous file attached and records the failure" do
         @export.file.attach(io: StringIO.new("#{::CsvExports::Writer::BOM}old\n"), filename: "old.csv", content_type: "text/csv")
         ActiveStorage::Service::DiskService.any_instance.stubs(:upload).raises(StandardError, "r2 hiccup")
 
@@ -63,14 +63,14 @@ module Services
 
       test "a successful regeneration replaces the file and purges the old blob" do
         @export.file.attach(io: StringIO.new("#{::CsvExports::Writer::BOM}old\n"), filename: "old.csv", content_type: "text/csv")
-        old_blob_id = @export.file.blob.id
+        old_blob = @export.file.blob
 
-        assert_enqueued_with(job: ActiveStorage::PurgeJob) do
+        assert_enqueued_with(job: ActiveStorage::PurgeJob, args: [old_blob]) do
           assert Generate.call(csv_export: @export).success?
         end
 
         @export.reload
-        refute_equal old_blob_id, @export.file.blob.id
+        refute_equal old_blob.id, @export.file.blob.id
         assert_equal 4, @export.row_count
       end
 
