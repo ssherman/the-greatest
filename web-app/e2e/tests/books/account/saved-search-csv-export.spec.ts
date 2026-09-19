@@ -14,18 +14,22 @@ test.describe('Saved search CSV export', () => {
     await page.getByRole('button', { name: 'Create search' }).click();
     await expect(page.getByRole('heading', { level: 1 })).toContainText(name);
 
-    const link = page.getByTestId('download-csv');
-    await expect(link).toBeVisible();
-    const href = (await link.getAttribute('href'))!;
-    expect(href).toMatch(/^\/searches\/\d+\/export\.csv$/);
+    // From here the search exists on the shared dev database and the page is
+    // its show page, so the cleanup in `finally` runs whether or not the
+    // export assertions pass -- the account must not accumulate searches.
+    try {
+      const link = page.getByTestId('download-csv');
+      await expect(link).toBeVisible();
+      const href = (await link.getAttribute('href'))!;
+      expect(href).toMatch(/^\/searches\/\d+\/export\.csv$/);
 
-    const response = await page.request.get(href);
-    expect(response.status()).toBe(200);
-    expect(response.headers()['content-type']).toContain('text/csv');
-
-    // Clean up so the account does not accumulate searches across runs.
-    page.on('dialog', (dialog) => dialog.accept());
-    await page.getByRole('button', { name: 'Delete' }).click();
-    await expect(page).toHaveURL('/searches');
+      const response = await page.request.get(href);
+      expect(response.status()).toBe(200);
+      expect(response.headers()['content-type']).toContain('text/csv');
+    } finally {
+      page.on('dialog', (dialog) => dialog.accept());
+      await page.getByRole('button', { name: 'Delete' }).click();
+      await expect(page).toHaveURL('/searches');
+    }
   });
 });

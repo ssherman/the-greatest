@@ -18,7 +18,10 @@ test.describe('Music CSV export', () => {
       const response = await page.request.get(exportPath);
       expect(response.status()).toBe(200);
       expect(response.headers()['content-type']).toContain('text/csv');
-      expect((await response.text()).startsWith(BOM + 'Rank,Score,ID,Title,Artists')).toBe(true);
+      // Compared as a slice rather than startsWith so a failure shows what
+      // actually came back.
+      const expected = BOM + 'Rank,Score,ID,Title,Artists';
+      expect((await response.text()).slice(0, expected.length)).toBe(expected);
     });
   }
 });

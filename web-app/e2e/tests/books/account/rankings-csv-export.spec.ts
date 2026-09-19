@@ -35,7 +35,10 @@ test.describe('Books rankings CSV export (non-member)', () => {
     expect(response.headers()['content-type']).toContain('text/csv');
     expect(response.headers()['cache-control']).toContain('no-store');
     const text = await response.text();
-    expect(text.startsWith(BOM + 'Rank,Score,ID,Title')).toBe(true);
+    // Compared as a slice rather than startsWith so a failure shows what
+    // actually came back.
+    const expected = BOM + 'Rank,Score,ID,Title';
+    expect(text.slice(0, expected.length)).toBe(expected);
     // Header line plus at most 500 rows.
     expect(text.trim().split('\n').length).toBeLessThanOrEqual(501);
   });

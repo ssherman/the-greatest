@@ -14,6 +14,9 @@ test.describe('Games CSV export', () => {
     const response = await page.request.get('/video-games/export.csv?year=2017&year_mode=since');
     expect(response.status()).toBe(200);
     expect(response.headers()['content-type']).toContain('text/csv');
-    expect((await response.text()).startsWith(BOM + 'Rank,Score,ID,Title,Year,Platforms')).toBe(true);
+    // Compared as a slice rather than startsWith so a failure shows what
+    // actually came back.
+    const expected = BOM + 'Rank,Score,ID,Title,Year,Platforms';
+    expect((await response.text()).slice(0, expected.length)).toBe(expected);
   });
 });
