@@ -180,11 +180,15 @@ Each row builder declares `HEADERS`, `preloads` (the `includes` hash for one bat
 **`Services::CsvExports::Generate.call(csv_export:)`**
 1. Resolve the registry entry; build the unfiltered relation for the configuration.
 2. Stream it through `CsvExports::RankedItems` with `limit: nil` into a `Tempfile`.
-3. `csv_export.file.attach(io:, filename:, content_type: "text/csv")`, then update
-   `status: ready, generated_at, row_count, byte_size, error_message: nil`.
-4. On any exception: `status: failed, error_message: e.message.truncate(500)`, re-raise. The
-   previously attached file is untouched — a download during a failed regeneration still
-   serves the last good file.
+3. `ActiveStorage::Blob.create_and_upload!(io:, filename:, content_type: "text/csv")` **first**,
+   then one `update!(file: blob, status: ready, generated_at, row_count, byte_size, error_message:
+   nil)`. Upload-then-attach, not `attach(io:)`: on a persisted record `attach` swaps the
+   attachment rows before uploading (the upload runs in `after_commit`), so a storage failure
+   would leave the row pointing at a blob that was never written.
+4. On any exception: `status: failed, error_message: e.message.truncate(500)` (scoped to the
+   claim this run holds), return a failure Result; the job re-raises so it lands in the Sidekiq
+   log. The previously attached file is untouched — a download during a failed regeneration
+   still serves the last good file.
 
 **`CsvExports::GenerateJob`** — `sidekiq_options queue: :low, retry: false`. The row carries the
 outcome; a silent Sidekiq retry would run while the row says `failed`, the same reasoning as
@@ -430,7 +434,10 @@ pre-built file and today for an on-demand one; saved search
 
 1. Deploy. Run `CsvExports::RefreshGlobalJob.perform_async` once from a console to build the
    four global files; until then a member's first unfiltered download gets the "being prepared"
-   page for a minute or two.
+   page for a minute or two. Before that first run, confirm the R2 token has `DeleteObject`
+   permission: this is the first place the app routinely *replaces* an attachment, so
+   `ActiveStorage::PurgeJob` will delete the previous CSV on every regeneration — without the
+   permission, old files accumulate silently.
 2. `docs/features/csv-exports.md` is written as part of the work; the CSV section of
    `docs/features/user-lists.md` points at it.
 3. No production data migration: `csv_exports` starts empty and fills itself.
