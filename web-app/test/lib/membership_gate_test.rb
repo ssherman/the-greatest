@@ -32,4 +32,8 @@ class MembershipGateTest < ActiveSupport::TestCase
   test "validate! returns the symbol for a registered feature" do
     assert_equal :members_area, MembershipGate.validate!("members_area")
   end
+
+  test "the full CSV export is registered as a paid feature" do
+    assert MembershipGate.members_only?(:csv_export_full)
+  end
 end
