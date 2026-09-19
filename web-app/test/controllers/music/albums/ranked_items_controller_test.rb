@@ -203,6 +203,46 @@ module Music
         assert_equal "/albums/export.csv?year=1980&year_mode=since", @controller.view_assigns["csv_export_path"]
       end
 
+      test "an explicit ranking configuration exports its own ranks" do
+        secondary = ranking_configurations(:music_albums_secondary)
+        RankedItem.create!(item: music_albums(:dark_side_of_the_moon), ranking_configuration: secondary, rank: 1, score: 50)
+        sign_in_as users(:user_with_expired_membership), stub_auth: true
+
+        get "/rc/#{secondary.id}/albums/export.csv"
+
+        assert_response :success
+        rows = CSV.parse(response.body.delete_prefix(CsvExports::Writer::BOM))
+        assert_equal ["1", "50.00"], rows[1][0..1]
+      end
+
+      test "a shared user-owned configuration's export is reachable by a non-owner member" do
+        config = ranking_configurations(:music_albums_user_shared)
+        Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: config).once
+          .returns(Services::CsvExports::RequestGenerate::Result.new(success?: true, data: {}, errors: []))
+        sign_in_as users(:editor_user), stub_auth: true
+
+        get "/rc/#{config.id}/albums/export.csv"
+
+        assert_response :accepted
+        assert_select "a[href='/rc/#{config.id}/albums']", text: "Back to the rankings"
+      end
+
+      # scope: :csv_export in CsvExportable -- one bucket per user across every
+      # export controller. This is the only test that fails if scope: is dropped.
+      test "the rate limit bucket is shared with the other domains' exports" do
+        user = users(:user_with_expired_membership)
+        host! Rails.application.config.domains[:books]
+        sign_in_as user, stub_auth: true
+        20.times { get "/export.csv" }
+        assert_response :success
+
+        host! "dev.thegreatestmusic.org"
+        sign_in_as user, stub_auth: true
+        get "/albums/export.csv"
+
+        assert_response :too_many_requests
+      end
+
       private
 
       # Bulk-inserts filler so tests can reach page 2+ against the
