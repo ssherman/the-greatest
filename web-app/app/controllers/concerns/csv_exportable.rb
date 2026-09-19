@@ -12,15 +12,22 @@
 # rate_limit is declared after require_signed_in! so an anonymous caller is
 # turned away before `by:` runs, otherwise every anonymous request would share
 # one nil bucket.
+#
+# Those two are lambdas, not symbols, on purpose: a later
+# `before_action :require_signed_in!, only: [...]` in the including controller
+# REPLACES an earlier symbol callback of the same name (CallbackChain#append_one
+# drops duplicates by filter), which silently un-gated the saved-search export
+# once SavedSearchesController declared its own. A lambda never matches as a
+# duplicate, so the gate holds whatever the controller declares.
 module CsvExportable
   extend ActiveSupport::Concern
 
   REFRESH_SECONDS = 15
 
   included do
-    before_action :prevent_caching, only: [:export]
+    before_action -> { prevent_caching }, only: [:export]
     before_action -> { response.headers["X-Robots-Tag"] = "noindex" }, only: [:export]
-    before_action :require_signed_in!, only: [:export]
+    before_action -> { require_signed_in! }, only: [:export]
     rate_limit to: 20, within: 1.hour,
       by: -> { current_user&.id },
       with: -> { head :too_many_requests },

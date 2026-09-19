@@ -544,6 +544,13 @@ Rails.application.routes.draw do
   put "searches/:id", to: "saved_searches#update", constraints: {id: /\d+/}
   delete "searches/:id", to: "saved_searches#destroy", constraints: {id: /\d+/}
 
+  # CSV export (spec §9). Same visibility as show but sign-in only (via
+  # CsvExportable), and not an execution. `format: true` makes the extension
+  # mandatory and the constraint pins it to .csv, so /export alone 404s.
+  # Declared above `searches/:id`, like the other sub-paths.
+  get "searches/:id/export", to: "saved_searches#export", as: :export_saved_search,
+    format: true, constraints: {id: /\d+/, format: /csv/}
+
   # show serves the owner or any viewer when the search is public, including
   # anonymous, and 404s everything else via SavedSearch.visible_to.
   get "searches/:id", to: "saved_searches#show", as: :saved_search,
