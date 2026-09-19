@@ -25,7 +25,7 @@ module CsvExports
       assert_equal "books", entry.noun
     end
 
-    test "the unfiltered relation is the configuration's ranked items in rank order, unranked excluded" do
+    test "the unfiltered relation is the configuration's ranked items in rank order" do
       config = ranking_configurations(:games_global)
 
       ids = Registry.for_config(config).relation.call(config).pluck(:item_id)
@@ -51,6 +51,17 @@ module CsvExports
         Registry.filename_for(ranking_configurations(:books_global), date: Date.new(2026, 9, 18))
       assert_equal "user-books-ranking-books-2026-09-18.csv",
         Registry.filename_for(ranking_configurations(:books_user), date: Date.new(2026, 9, 18))
+    end
+
+    test "filename_for refuses a non-exportable configuration" do
+      assert_raises(ArgumentError) { Registry.filename_for(ranking_configurations(:books_authors_global)) }
+    end
+
+    test "a long user-owned name is capped in the filename" do
+      config = ranking_configurations(:books_user)
+      config.name = "x" * 255
+
+      assert_operator Registry.filename_for(config, date: Date.new(2026, 9, 18)).length, :<, 120
     end
   end
 end

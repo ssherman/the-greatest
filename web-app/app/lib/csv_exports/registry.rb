@@ -79,13 +79,14 @@ module CsvExports
     end
 
     # "the-greatest-books-rankings-2026-09-18.csv" for a global configuration;
-    # a user-owned one is named after itself so two downloads are told apart.
+    # a user-owned one is named after itself (capped so a long name cannot push
+    # the filename past the 255-byte filesystem limit).
     def self.filename_for(config, date: Date.current)
-      entry = for_config(config)
+      entry = for_config(config) or raise ArgumentError, "#{config.type} is not exportable"
       base = if config.global?
         "the-greatest-#{entry.slug}-rankings"
       else
-        "#{config.name.parameterize.presence || "rankings"}-#{entry.slug}"
+        "#{config.name.parameterize.truncate(80, omission: "").presence || "rankings"}-#{entry.slug}"
       end
       "#{base}-#{date.iso8601}.csv"
     end
