@@ -132,8 +132,10 @@ is no uniqueness validation — it would turn a race on a configuration's first 
 
 ```
 app/lib/csv_exports/
-  registry.rb              # exportable configuration types -> row builder + filename slug
+  registry.rb              # exportable configuration types -> row class, unfiltered relation, media table, filename slug
   writer.rb                # BOM + header + rows -> IO; shared by every path
+  aggregate.rb             # one grouped string_agg query per many-to-many column per batch
+  cells.rb                 # shared cell formatting (score to two decimals)
   ranked_items.rb          # relation + row builder + limit -> CSV (pre-built and on demand)
   saved_search.rb          # pages Books::SavedSearchQuery up to the cap / 10,000
   user_list.rb             # today's MyListsController CSV code, moved verbatim
@@ -160,8 +162,10 @@ configuration class (`Books::RankingConfiguration`, `Music::Albums::RankingConfi
 class, the unfiltered relation builder (`->(config) { … }`), and a filename slug. Authors and
 artists configurations are absent, which is what makes them a no-op everywhere below.
 
-Each row builder declares `HEADERS`, `preloads` (the `includes` hash for one batch), and
-`row(ranked_item)`.
+Each row class declares `HEADERS`, `preloads` (belongs_to associations to preload per batch),
+`context(item_ids)` (one grouped query per many-to-many column for the whole batch, returning a
+hash the rows read from) and a pure `row(ranked_item, ctx)`; the books class also has
+`row_for_book(book, rank:, score:, ctx:)` for the saved-search path.
 
 ## 8. Services, jobs, triggers
 
@@ -306,8 +310,10 @@ controller, no modal — so an anonymous viewer of a public list downloads exact
 One code path for both the pre-built file and on-demand exports:
 
 ```
-relation.in_batches(of: 1000, order: :asc) -> batch.includes(row_class.preloads).order(:rank)
-  -> row_class.row(ranked_item) -> CSV line -> IO (Tempfile pre-built, StringIO on demand)
+relation ids plucked once in (rank, id) order, with the cap as a SQL LIMIT
+  -> each slice of 1000: RankedItem.where(id: slice).preload(item: row_class.preloads), re-ordered to the slice
+  -> row_class.context(item_ids) (one grouped query per column) -> row_class.row(ranked_item, ctx)
+  -> CSV line -> IO (Tempfile pre-built, StringIO on demand)
 ```
 
 Memory is flat at one batch regardless of total rows. The limit is applied to the relation
@@ -442,7 +448,8 @@ pre-built file and today for an on-demand one; saved search
   itself is a router 404: `root` has no format segment) — so no CSV can ever come from a cached
   action.
 - **E2E** (`e2e/tests/books/rankings-csv-export.spec.ts` plus one each for music and games
-  rankings, saved searches, and the existing my-lists spec updated): a signed-in non-member
+  rankings, saved searches; the existing my-lists spec is left as is since its testid and href
+  survive): a signed-in non-member
   clicks Download, sees the modal (`getByRole("dialog")`), "Download top 500" yields a
   `.csv` download event; an anonymous click opens the login modal. The member path is
   controller-tested unless the E2E account is comped.
@@ -451,11 +458,12 @@ pre-built file and today for an on-demand one; saved search
 ## 15. Rollout
 
 1. Deploy. Run `CsvExports::RefreshGlobalJob.perform_async` once from a console to build the
-   four global files; until then a member's first unfiltered download gets the "being prepared"
+   global files (seven today); until then a member's first unfiltered download gets the "being prepared"
    page for a minute or two. Before that first run, confirm the R2 token has `DeleteObject`
    permission: this is the first place the app routinely *replaces* an attachment, so
    `ActiveStorage::PurgeJob` will delete the previous CSV on every regeneration — without the
-   permission, old files accumulate silently.
+   permission, old files accumulate — the purge job's `AccessDenied` lands in the Sidekiq retry
+   set, so look there.
 2. `docs/features/csv-exports.md` is written as part of the work; the CSV section of
    `docs/features/user-lists.md` points at it.
 3. No production data migration: `csv_exports` starts empty and fills itself.
