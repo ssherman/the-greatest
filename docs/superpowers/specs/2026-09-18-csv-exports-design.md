@@ -162,17 +162,20 @@ Each row builder declares `HEADERS`, `preloads` (the `includes` hash for one bat
 ## 8. Services, jobs, triggers
 
 **`Services::CsvExports::RequestGenerate.call(ranking_configuration:)`**
-1. Return `success?: false, errors: [:not_exportable]` if the registry has no entry for the
-   configuration's type.
+1. Return `success?: false, data: {reason: :not_exportable}, errors: [<message>]` if the registry
+   has no entry for the configuration's type (the symbol travels in `data[:reason]`, the human
+   message in `errors`, as in `Services::RankingConfigurations::RequestRefresh`).
 2. `CsvExport.find_or_create_by!(ranking_configuration:)` — Rails falls through to
    `create_or_find_by!` on a miss, which absorbs two callers racing past the find.
 3. One atomic claim through the `claimable` scope: `UPDATE csv_exports SET status = generating,
    requested_at = now() WHERE id = ? AND (status <> generating OR requested_at IS NULL OR
-   requested_at < now() - 15 min)`. Zero rows updated → `success?: false, errors:
-   [:already_generating]`.
+   requested_at < now() - 15 min)`. Zero rows updated → `success?: false, data: {reason:
+   :already_generating}`.
 4. `CsvExports::GenerateJob.perform_async(csv_export.id)`. If the enqueue raises (Redis
    unreachable), release the claim into `failed` with the message and return failure, so the
-   next trigger can retry instead of waiting out the 15 minutes.
+   next trigger can retry instead of waiting out the 15 minutes. The release is scoped to the
+   claim this call holds (`status = generating AND requested_at = <the stamp it wrote>`), so a
+   stale reclaim by another caller in the meantime is never clobbered.
 
 **`Services::CsvExports::Generate.call(csv_export:)`**
 1. Resolve the registry entry; build the unfiltered relation for the configuration.

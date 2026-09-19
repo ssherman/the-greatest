@@ -3797,7 +3797,9 @@ In `app/views/admin/ranking_configurations/show.html.erb`, in the right-hand `<d
                   <div><dt class="inline font-semibold">Size:</dt> <dd class="inline"><%= number_to_human_size(export.byte_size) %></dd></div>
                 <% end %>
                 <% if export.error_message.present? %>
-                  <div class="text-error"><%= export.error_message %></div>
+                  <%# "Last error": a claim does not clear it, so a row that failed and is now
+                      regenerating shows both until Generate succeeds. %>
+                  <div class="text-error">Last error: <%= export.error_message %></div>
                 <% end %>
               </dl>
             <% else %>
