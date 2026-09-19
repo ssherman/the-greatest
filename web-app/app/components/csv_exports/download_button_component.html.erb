@@ -9,7 +9,7 @@
       <h3 class="text-lg font-bold">This download includes the top <%= preview_rows %> <%= noun %></h3>
       <p class="py-4">Members can download the whole ranking and the full results of any filter or saved search.</p>
       <div class="modal-action">
-        <a href="<%= export_path %>" class="btn btn-primary" data-turbo="false">Download top <%= preview_rows %></a>
+        <a href="<%= export_path %>" rel="nofollow" class="btn btn-primary" data-turbo="false">Download top <%= preview_rows %></a>
         <%= link_to "Become a member", helpers.membership_path, class: "btn btn-outline" %>
         <form method="dialog"><button class="btn btn-ghost">Cancel</button></form>
       </div>

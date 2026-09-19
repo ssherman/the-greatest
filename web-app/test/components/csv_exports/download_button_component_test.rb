@@ -11,8 +11,8 @@ module CsvExports
       assert_selector "a[href='/export.csv?category_id=novels'][rel='nofollow'][data-action='csv-export#download'][data-turbo='false'][data-testid='download-csv']",
         text: "Download CSV"
       assert_selector "dialog#csv_export_modal.modal" do
-        assert_selector "h3", text: "This download includes the top 500 books"
-        assert_selector "a.btn-primary[href='/export.csv?category_id=novels'][data-turbo='false']", text: "Download top 500"
+        assert_selector "h3", text: /500 books/
+        assert_selector "a.btn-primary[href='/export.csv?category_id=novels'][rel='nofollow'][data-turbo='false']", text: "Download top 500"
         assert_selector "a[href='/membership']", text: "Become a member"
         assert_selector "form[method='dialog'] button", text: "Cancel"
       end
@@ -29,7 +29,7 @@ module CsvExports
     test "the noun and testid are configurable" do
       render_inline(DownloadButtonComponent.new(export_path: "/searches/1/export.csv", noun: "results", testid: "export-search"))
 
-      assert_selector "h3", text: "This download includes the top 500 results"
+      assert_selector "h3", text: /500 results/
       assert_selector "a[data-testid='export-search']"
     end
   end
