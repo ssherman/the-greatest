@@ -358,7 +358,10 @@ enforces.
 | User list | today's columns unchanged: Position, Title, Authors/Artists (where the listable has them), Year, Completed On (only when `completed_on_enabled?`) |
 
 Multi-valued columns join with `", "`; genre/subject/location split on
-`Category#category_type`; URL is the item's canonical public page on its domain. Scores are
+`Category#category_type`, restricted to the domain's own category subclass and never a
+soft-deleted category; the books Countries column leaves out the `unknown` placeholder country
+exactly as the book page does (`Books::Country.filterable`); URL is the item's canonical public
+page on its domain. Scores are
 rounded to two decimals. Every file starts with a UTF-8 BOM. A ranking export contains only
 ranked rows (`rank IS NOT NULL`) — the books page already excludes unranked items, and the
 music and games pages list them last with no rank, which in a CSV is an empty Rank cell and

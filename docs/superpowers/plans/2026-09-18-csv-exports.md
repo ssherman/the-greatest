@@ -907,6 +907,9 @@ git commit -m "CsvExports: books row class with grouped many-to-many columns" -m
 
 ### Task 5: Music and games row classes
 
+`CsvExports::Cells.score(value)` (added in Task 4's review round) formats a score cell; use it rather than
+inlining the `format` call.
+
 **Files:**
 - Create: `web-app/app/lib/csv_exports/music/ranked_album_row.rb`, `ranked_song_row.rb`, `web-app/app/lib/csv_exports/games/ranked_game_row.rb`
 - Test: `web-app/test/lib/csv_exports/music/ranked_album_row_test.rb`, `ranked_song_row_test.rb`, `web-app/test/lib/csv_exports/games/ranked_game_row_test.rb`
@@ -1044,7 +1047,7 @@ module CsvExports
             order: "music_album_artists.position NULLS LAST, music_album_artists.id"),
           genres: Aggregate.names(
             ::CategoryItem.joins(:category).where(item_type: "Music::Album", item_id: album_ids,
-              categories: {deleted: false, category_type: ::Category.category_types[:genre]}),
+              categories: {type: "Music::Category", deleted: false, category_type: ::Category.category_types[:genre]}),
             group_by: "category_items.item_id", name: "categories.name", order: "categories.name"
           )
         }
@@ -1054,7 +1057,7 @@ module CsvExports
         album = ranked_item.item
         [
           ranked_item.rank,
-          ranked_item.score.nil? ? nil : format("%.2f", ranked_item.score),
+          Cells.score(ranked_item.score),
           album.id,
           album.title,
           ctx[:artists][album.id],
@@ -1098,7 +1101,7 @@ module CsvExports
         song = ranked_item.item
         [
           ranked_item.rank,
-          ranked_item.score.nil? ? nil : format("%.2f", ranked_item.score),
+          Cells.score(ranked_item.score),
           song.id,
           song.title,
           ctx[:artists][song.id],
@@ -1137,7 +1140,7 @@ module CsvExports
             group_by: "games_game_companies.game_id", name: "games_companies.name", order: "games_companies.name"),
           genres: Aggregate.names(
             ::CategoryItem.joins(:category).where(item_type: "Games::Game", item_id: game_ids,
-              categories: {deleted: false, category_type: ::Category.category_types[:genre]}),
+              categories: {type: "Games::Category", deleted: false, category_type: ::Category.category_types[:genre]}),
             group_by: "category_items.item_id", name: "categories.name", order: "categories.name"
           )
         }
@@ -1147,7 +1150,7 @@ module CsvExports
         game = ranked_item.item
         [
           ranked_item.rank,
-          ranked_item.score.nil? ? nil : format("%.2f", ranked_item.score),
+          Cells.score(ranked_item.score),
           game.id,
           game.title,
           game.release_year,
