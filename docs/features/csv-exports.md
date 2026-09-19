@@ -33,7 +33,7 @@ it then cached files on a 24-hour TTL behind nginx and served them stale. Here:
   them — to pick up title, author, category and country edits that no calculation would notice.
   There is no TTL.
 - **Everything else** is generated on demand by the same code and never stored. The full books
-  export (21,392 rows, 6 MB) builds in about 2.5 s: rows are batched 1000 at a time with one grouped
+  export (21,392 rows, 6.3 MB) builds in 2.5–5 s on the dev DB: rows are batched 1000 at a time with one grouped
   `string_agg` query per many-to-many column, instead of preloading ~150k join rows (which took 10 s).
 - No CSV is ever a format of an edge-cached `index` action. Every export is its own `export` action
   with `no-store`, `X-Robots-Tag: noindex`, `require_signed_in!` and a per-user rate limit
@@ -54,7 +54,7 @@ it then cached files on a 24-hour TTL behind nginx and served them stale. Here:
   good file during a regeneration or after a failed one.
 - `app/lib/csv_exports/registry.rb` — the exportable configuration types (books, music albums,
   music songs, games) and, per type, the row class, the unfiltered relation, the media table the
-  year filter addresses, the filename slug and the modal noun. A type with no entry (authors,
+  year filter addresses, and the filename slug. A type with no entry (authors,
   artists, movies) is a no-op everywhere. `filename_for` names the file
   (`the-greatest-books-rankings-<date>.csv`; user-owned configurations after themselves, capped).
 - `app/lib/csv_exports/{writer,aggregate,cells,ranked_items,saved_search,user_list,limits}.rb` and
@@ -73,15 +73,16 @@ it then cached files on a 24-hour TTL behind nginx and served them stale. Here:
   attaches and stamps `ready`. Not `attach(io:)`: on a persisted record that swaps the attachment
   rows first and uploads in `after_commit`, so a storage failure would leave the row pointing at a
   blob that was never written. On failure: `failed` + message (scoped to the held claim), previous
-  file untouched, one unattached blob row left behind (the standard `ActiveStorage::Blob.unattached`
-  orphan).
+  file untouched and — when the failure is at or after the upload — one unattached blob row
+  left behind (the standard `ActiveStorage::Blob.unattached` orphan).
 - `app/sidekiq/csv_exports/generate_job.rb` (`low`, `retry: false` — the row carries the outcome;
   the raise is logged and the job acknowledged, it does not reach the Dead set; the admin Regenerate
   button is the retry), `refresh_global_job.rb` (nightly, `config/schedule.yml`; per-configuration
   failures are collected and raised once at the end so one bad row cannot stop the others).
-- `CalculateRankingsJob` and `RankingConfigurations::RefreshJob` call `RequestGenerate` on success.
-  In `RefreshJob` the call sits in its own rescue: the CSV is a side effect of the refresh, and a
-  failure there must not flip a configuration whose rankings did land to "failed".
+- `CalculateRankingsJob` and `RankingConfigurations::RefreshJob` call `RequestGenerate` on success,
+  each in its own rescue: the CSV is a side effect of the calculation, and a failure there must
+  neither flip a configuration whose rankings did land to "failed" nor make Sidekiq recompute a
+  21k-row ranking.
 - `app/controllers/concerns/csv_exportable.rb` — the export-action skeleton. Its filters are
   **lambdas, not symbols**: ActiveSupport de-duplicates a same-named symbol callback, so a
   controller that later declares its own `before_action :require_signed_in!, only: [...]`
@@ -139,7 +140,8 @@ that. `/.csv` itself is a router 404 (`root` has no format segment).
   with `+` or `-`); a conscious decision, recorded in the spec.
 - Backfill after first deploy: `CsvExports::RefreshGlobalJob.perform_async` once from a console.
   Before that, confirm the R2 token can `DeleteObject`: every regeneration purges the previous
-  blob, and without the permission old files accumulate silently.
+  blob, and without the permission old files accumulate — not silently: the purge job raises
+  `Aws::S3::Errors::AccessDenied` into the Sidekiq retry set, so look there.
 
 ## Testing
 
