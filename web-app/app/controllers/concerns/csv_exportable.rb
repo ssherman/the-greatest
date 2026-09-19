@@ -72,4 +72,16 @@ module CsvExportable
     ::CsvExports::RankedItems.call(relation: relation, row_class: row_class, limit: export_limit, io: io)
     send_csv io.string, filename: filename
   end
+
+  # The music/games shape: the registry's unfiltered relation, optionally
+  # narrowed by the page's year filter, sent on demand under the viewer's cap.
+  def send_year_filtered_export(ranking_configuration, year_filter:)
+    entry = ::CsvExports::Registry.for_config(ranking_configuration)
+    relation = entry.relation.call(ranking_configuration)
+    if year_filter
+      relation = Services::RankedItemsFilterService.new(relation, table_name: entry.media_table).apply_year_filter(year_filter)
+    end
+    send_on_demand_ranked_items(relation, row_class: entry.row_class,
+      filename: ::CsvExports::Registry.filename_for(ranking_configuration))
+  end
 end

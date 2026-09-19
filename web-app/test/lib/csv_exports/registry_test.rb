@@ -25,6 +25,11 @@ module CsvExports
       assert_equal "books", entry.noun
     end
 
+    test "media_table names the table the year filter addresses; books has none" do
+      assert_equal "music_albums", Registry.for_config(ranking_configurations(:music_albums_global)).media_table
+      assert_nil Registry.for_config(ranking_configurations(:books_global)).media_table
+    end
+
     test "the unfiltered relation is the configuration's ranked items in rank order" do
       config = ranking_configurations(:games_global)
 

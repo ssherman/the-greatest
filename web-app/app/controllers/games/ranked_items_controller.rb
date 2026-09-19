@@ -44,13 +44,7 @@ class Games::RankedItemsController < RankedItemsController
     raise ActiveRecord::RecordNotFound if @ranking_configuration.nil? # no primary yet: index shows "coming soon"
     return serve_prebuilt_or_prepare(@ranking_configuration) if @year_filter.nil? && current_user.member?
 
-    entry = CsvExports::Registry.for_config(@ranking_configuration)
-    relation = entry.relation.call(@ranking_configuration)
-    if @year_filter
-      relation = Services::RankedItemsFilterService.new(relation, table_name: "games_games").apply_year_filter(@year_filter)
-    end
-    send_on_demand_ranked_items(relation, row_class: entry.row_class,
-      filename: CsvExports::Registry.filename_for(@ranking_configuration))
+    send_year_filtered_export(@ranking_configuration, year_filter: @year_filter)
   end
 
   private

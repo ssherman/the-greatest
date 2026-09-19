@@ -16,6 +16,7 @@ module CsvExports
       :slug,                        # filename token
       :noun,                        # "top 500 <noun>" in the modal
       :relation,                    # ->(config) { the full, unfiltered ranked relation in rank order }
+      :media_table,                 # the media table the relation joins; the year filter addresses it by name
       keyword_init: true
     ) do
       def row_class
@@ -44,7 +45,8 @@ module CsvExports
           config.ranked_items
             .joins("JOIN music_albums ON ranked_items.item_id = music_albums.id AND ranked_items.item_type = 'Music::Album'")
             .where(item_type: "Music::Album").where.not(rank: nil).order(:rank)
-        }
+        },
+        media_table: "music_albums"
       ),
       Entry.new(
         ranking_configuration_class: "Music::Songs::RankingConfiguration",
@@ -55,7 +57,8 @@ module CsvExports
           config.ranked_items
             .joins("JOIN music_songs ON ranked_items.item_id = music_songs.id AND ranked_items.item_type = 'Music::Song'")
             .where(item_type: "Music::Song").where.not(rank: nil).order(:rank)
-        }
+        },
+        media_table: "music_songs"
       ),
       Entry.new(
         ranking_configuration_class: "Games::RankingConfiguration",
@@ -66,7 +69,8 @@ module CsvExports
           config.ranked_items
             .joins("JOIN games_games ON ranked_items.item_id = games_games.id AND ranked_items.item_type = 'Games::Game'")
             .where(item_type: "Games::Game").where.not(rank: nil).order(:rank)
-        }
+        },
+        media_table: "games_games"
       )
     ].freeze
 
