@@ -2046,10 +2046,24 @@ In `app/sidekiq/calculate_rankings_job.rb`, inside `if result.success?`, after t
 
 - [ ] **Step 4: Hook `RankingConfigurations::RefreshJob`**
 
-In `app/sidekiq/ranking_configurations/refresh_job.rb`, after the final `config.update_columns(refresh_status: ... idle ...)` and before `rescue`:
+In `app/sidekiq/ranking_configurations/refresh_job.rb`, after the final `config.update_columns(refresh_status: ... idle ...)` and before `rescue`, call a private method that has its own rescue -- the CSV is a side effect of the refresh, not part of it, and the method-level rescue would otherwise mislabel a successful ranking refresh as failed:
 
 ```ruby
+      request_csv_regenerate(config)
+```
+
+```ruby
+    private
+
+    # The CSV is a side effect of the refresh, not part of it: a failure here
+    # must not flip a configuration whose rankings did land to "failed". Logged
+    # rather than raised -- retry: false means a raise would only be logged
+    # anyway, and the next Refresh or member download re-claims the row.
+    def request_csv_regenerate(config)
       Services::CsvExports::RequestGenerate.call(ranking_configuration: config)
+    rescue => e
+      Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{config.id}: CSV regenerate not requested: #{e.message}"
+    end
 ```
 
 - [ ] **Step 5: Run the tests to see them pass**
