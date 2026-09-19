@@ -125,6 +125,16 @@ class Books::RankedItemsController < RankedItemsController
     end
   end
 
+  # The preparing page's way back: the rankings page for the configuration
+  # in the URL (CsvExportable#csv_export_back_path).
+  def csv_export_back_path
+    if params[:ranking_configuration_id].present?
+      books_rc_path(ranking_configuration_id: @ranking_configuration.id)
+    else
+      books_root_path
+    end
+  end
+
   # request.path_parameters, not params: params also picks up the query
   # string, and on a non-collection route (e.g. plain "/") there is no
   # :collection path segment, so params[:collection] would fall through to

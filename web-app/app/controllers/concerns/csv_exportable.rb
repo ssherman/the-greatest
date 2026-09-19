@@ -19,11 +19,14 @@ module CsvExportable
 
   included do
     before_action :prevent_caching, only: [:export]
+    before_action -> { response.headers["X-Robots-Tag"] = "noindex" }, only: [:export]
     before_action :require_signed_in!, only: [:export]
     rate_limit to: 20, within: 1.hour,
       by: -> { current_user&.id },
       with: -> { head :too_many_requests },
       store: Rails.application.config.x.rate_limit_store,
+      # scope: one bucket per user across every export controller, not 20/h per domain.
+      scope: :csv_export,
       only: [:export]
   end
 
@@ -34,7 +37,6 @@ module CsvExportable
   end
 
   def send_csv(data, filename:)
-    response.headers["X-Robots-Tag"] = "noindex"
     send_data data, type: "text/csv; charset=utf-8", filename: filename, disposition: "attachment"
   end
 
@@ -54,9 +56,16 @@ module CsvExportable
     else
       Services::CsvExports::RequestGenerate.call(ranking_configuration: ranking_configuration)
       response.headers["Refresh"] = REFRESH_SECONDS.to_s
+      @csv_export_back_path = csv_export_back_path
       render "csv_exports/preparing", status: :accepted, formats: [:html], content_type: "text/html"
     end
   end
+
+  # Where the preparing page sends someone back to. The including controller
+  # overrides this with its rankings page; the view falls back to "/".
+  # Not request.referer: after a Refresh-triggered reload the referer is the
+  # export URL itself.
+  def csv_export_back_path = nil
 
   def send_on_demand_ranked_items(relation, row_class:, filename:)
     io = StringIO.new

@@ -391,7 +391,42 @@ module Books
       assert_equal "text/html", response.media_type
       assert_equal "15", response.headers["Refresh"]
       assert_match "no-store", response.headers["Cache-Control"].to_s
+      assert_equal "noindex", response.headers["X-Robots-Tag"]
       assert_select "[data-testid=csv-export-preparing]"
+      assert_select "a[href='/']", text: "Back to the rankings"
+    end
+
+    test "a member's failed export that still has a file is served" do
+      export = CsvExport.create!(ranking_configuration: @rc, status: :failed, error_message: "last run died")
+      export.file.attach(io: StringIO.new("#{BOM}Rank\n1\n"), filename: "old.csv", content_type: "text/csv")
+      Services::CsvExports::RequestGenerate.expects(:call).never
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/export.csv"
+
+      assert_response :success
+      assert_equal "#{BOM}Rank\n1\n", response.body
+    end
+
+    test "an export already being generated still shows the preparing page without enqueueing again" do
+      CsvExport.create!(ranking_configuration: @rc, status: :generating, requested_at: 1.minute.ago)
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/export.csv"
+
+      assert_response :accepted
+      assert_equal "15", response.headers["Refresh"]
+      assert CsvExport.find_by(ranking_configuration: @rc).generating?
+    end
+
+    test "the owner of a user-owned configuration requests that configuration's export" do
+      config = ranking_configurations(:books_user)
+      Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: config).once.returns(generate_ok)
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/rc/#{config.id}/export.csv"
+
+      assert_response :accepted
     end
 
     # Both fixture books carry the novels category; the 600 filler books carry
@@ -463,16 +498,22 @@ module Books
       assert_response :too_many_requests
     end
 
-    # Rails appends an optional (.:format) to every route, so /.csv does reach
-    # the cached index action -- and must come back as an error (406, no
-    # template for csv), never as a CSV body carrying public cache headers.
+    # Every non-root index route carries Rails' implicit (.:format), so
+    # /page/2.csv and /rc/<id>.csv DO reach the cached index action. There is
+    # no csv template, so it must answer 406 -- and that error response must
+    # not carry the public cache headers index sets, or Cloudflare could keep
+    # it. (/.csv itself is a router 404: root has no format segment.)
     test "the cached index never answers with a csv body" do
-      get "/.csv"
-      refute_equal 200, response.status
-      refute_equal "text/csv", response.media_type
+      seed_ranked_books(100)
 
-      get "/index.csv"
-      assert_response :not_found
+      get "/page/2.csv"
+      assert_response :not_acceptable
+      refute_equal "text/csv", response.media_type
+      refute_match "public", response.headers["Cache-Control"].to_s
+
+      get "/rc/#{@rc.id}.csv"
+      assert_response :not_acceptable
+      refute_match "public", response.headers["Cache-Control"].to_s
     end
 
     test "the index carries the export link with the current filters" do
