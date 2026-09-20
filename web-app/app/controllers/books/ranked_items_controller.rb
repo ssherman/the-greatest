@@ -2,6 +2,7 @@ class Books::RankedItemsController < RankedItemsController
   include Pagy::Method
   include Cacheable
   include PathBasedPagination
+  include CsvExportable
 
   layout "books/application"
 
@@ -67,9 +68,72 @@ class Books::RankedItemsController < RankedItemsController
 
     @indexable = Books::FilterPath.indexable?(categories: @categories, countries: @countries) &&
       (!@filtered || @ranked_books.any?)
+    @csv_export_path = csv_export_path
+  end
+
+  # GET (/rc/:ranking_configuration_id)/export.csv
+  #
+  # Filters arrive as query params and are parsed by the same FilterParams the
+  # page uses, so the relation is identical by construction. `collection` is a
+  # query param here, unlike index (see find_collection): this endpoint is
+  # uncached, nofollow and sign-in only, so the soft-duplicate-URL concern
+  # that keeps ?collection= off the index does not apply.
+  def export
+    filters = Books::FilterParams.call(params)
+    collection = export_collection
+    unfiltered = filters.categories.empty? && filters.countries.empty? &&
+      filters.year_start.blank? && filters.year_end.blank? && collection.nil?
+
+    return serve_prebuilt_or_prepare(@ranking_configuration) if unfiltered && current_user.member?
+
+    relation = Books::RankedBooksQuery.call(
+      ranking_configuration: @ranking_configuration,
+      categories: filters.categories,
+      countries: filters.countries,
+      year_start: filters.year_start,
+      year_end: filters.year_end,
+      collection: collection
+    )
+    send_on_demand_ranked_items(relation, row_class: CsvExports::Books::RankedBookRow,
+      filename: CsvExports::Registry.filename_for(@ranking_configuration))
   end
 
   private
+
+  def export_collection
+    slug = params[:collection]
+    return nil if slug.blank?
+
+    Collections::Registry.find(:books, slug) || raise(ActiveRecord::RecordNotFound)
+  end
+
+  # The export link for the page being rendered: the same filters, as query
+  # params, on the export route that matches the configuration in the URL.
+  def csv_export_path
+    filter_params = {
+      category_id: @categories.map(&:slug).join(",").presence,
+      country_id: @countries.map(&:slug).join(",").presence,
+      published_start: @year_start.presence,
+      published_end: @year_end.presence,
+      collection: @collection&.slug
+    }.compact
+
+    if params[:ranking_configuration_id].present?
+      books_rc_export_path(ranking_configuration_id: @ranking_configuration.id, format: :csv, **filter_params)
+    else
+      books_export_path(format: :csv, **filter_params)
+    end
+  end
+
+  # The preparing page's way back: the rankings page for the configuration
+  # in the URL (CsvExportable#csv_export_back_path).
+  def csv_export_back_path
+    if params[:ranking_configuration_id].present?
+      books_rc_path(ranking_configuration_id: @ranking_configuration.id)
+    else
+      books_root_path
+    end
+  end
 
   # request.path_parameters, not params: params also picks up the query
   # string, and on a non-collection route (e.g. plain "/") there is no

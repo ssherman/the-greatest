@@ -83,6 +83,7 @@ class RankingConfiguration < ApplicationRecord
   has_many :ranked_lists, dependent: :delete_all
   has_many :penalty_applications, dependent: :destroy, inverse_of: :ranking_configuration
   has_many :penalties, through: :penalty_applications, inverse_of: :ranking_configurations
+  has_one :csv_export, dependent: :destroy
 
   # Validations
   validates :name, presence: true, length: {maximum: 255}

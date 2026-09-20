@@ -65,6 +65,7 @@ Rails.application.routes.draw do
       # Album routes
       get "albums", to: "music/albums/ranked_items#index", as: :albums
       get "albums/page/:page", to: "music/albums/ranked_items#index", as: :albums_page, constraints: {page: /\d+/}
+      get "albums/export", to: "music/albums/ranked_items#export", as: :albums_export, format: true, constraints: {format: /csv/}
       get "albums/lists", to: "music/albums/lists#index", as: :music_albums_lists
       get "albums/lists/page/:page", to: "music/albums/lists#index", as: :music_albums_lists_page, constraints: {page: /\d+/}
       get "albums/lists/:id", to: "music/albums/lists#show", as: :music_album_list
@@ -89,6 +90,7 @@ Rails.application.routes.draw do
       # Song routes
       get "songs", to: "music/songs/ranked_items#index", as: :songs
       get "songs/page/:page", to: "music/songs/ranked_items#index", as: :songs_page, constraints: {page: /\d+/}
+      get "songs/export", to: "music/songs/ranked_items#export", as: :songs_export, format: true, constraints: {format: /csv/}
       get "songs/lists", to: "music/songs/lists#index", as: :music_songs_lists
       get "songs/lists/page/:page", to: "music/songs/lists#index", as: :music_songs_lists_page, constraints: {page: /\d+/}
       get "songs/lists/:id", to: "music/songs/lists#show", as: :music_song_list
@@ -542,6 +544,13 @@ Rails.application.routes.draw do
   put "searches/:id", to: "saved_searches#update", constraints: {id: /\d+/}
   delete "searches/:id", to: "saved_searches#destroy", constraints: {id: /\d+/}
 
+  # CSV export (spec §9). Same visibility as show but sign-in only (via
+  # CsvExportable), and not an execution. `format: true` makes the extension
+  # mandatory and the constraint pins it to .csv, so /export alone 404s.
+  # Declared above `searches/:id`, like the other sub-paths.
+  get "searches/:id/export", to: "saved_searches#export", as: :export_saved_search,
+    format: true, constraints: {id: /\d+/, format: /csv/}
+
   # show serves the owner or any viewer when the search is public, including
   # anonymous, and 404s everything else via SavedSearch.visible_to.
   get "searches/:id", to: "saved_searches#show", as: :saved_search,
@@ -866,6 +875,14 @@ Rails.application.routes.draw do
     # Ranked index. Root is canonical; pagination is path-based.
     # Order matters: /page/1 must precede the generic /page/:page.
     root to: "books/ranked_items#index", as: :books_root
+    # CSV export (spec §9). Its own action, never a format of the cached
+    # index. `format: true` makes the extension mandatory (a bare constraint
+    # only restricts the optional segment, so /export alone would still route)
+    # and the constraint pins it to .csv, so /export and /export.json both 404.
+    get "export", to: "books/ranked_items#export", as: :books_export,
+      format: true, constraints: {format: /csv/}
+    get "rc/:ranking_configuration_id/export", to: "books/ranked_items#export", as: :books_rc_export,
+      format: true, constraints: {format: /csv/}
     get "page/1", to: redirect("/", status: 301)
     get "page/:page", to: "books/ranked_items#index", as: :books_page, constraints: {page: /\d+/}
     get "the-greatest-books", to: redirect("/", status: 301)
@@ -1211,6 +1228,7 @@ Rails.application.routes.draw do
         constraints: {id: /\d+/, page: /\d+/}
       get "video-games", to: "games/ranked_items#index", as: :video_games
       get "video-games/page/:page", to: "games/ranked_items#index", as: :video_games_page, constraints: {page: /\d+/}
+      get "video-games/export", to: "games/ranked_items#export", as: :video_games_export, format: true, constraints: {format: /csv/}
       # Year-filtered games (must come before generic patterns)
       get "video-games/since/:year", to: "games/ranked_items#index", as: :video_games_since_year,
         constraints: {year: /\d{4}/}, defaults: {year_mode: "since"}

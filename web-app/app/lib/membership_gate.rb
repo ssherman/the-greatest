@@ -16,7 +16,8 @@ module MembershipGate
   # key => what a person would call it
   FEATURES = {
     members_area: "The members' area at /members",
-    api: "The public API at /api/v1 (tokens managed at /developers/tokens)"
+    api: "The public API at /api/v1 (tokens managed at /developers/tokens)",
+    csv_export_full: "Full CSV downloads of rankings and saved searches (non-members get the top 500 rows)"
   }.freeze
 
   def self.members_only?(feature) = FEATURES.key?(feature.to_sym)

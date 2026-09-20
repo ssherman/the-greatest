@@ -1,4 +1,5 @@
 require "test_helper"
+require "csv"
 
 module Music
   module Songs
@@ -119,6 +120,54 @@ module Music
 
         assert_equal "/songs/since/1990/page/2", url
         refute_includes url, "year="
+      end
+
+      # --- CSV export (spec §9) ---
+
+      test "a non-member exports the ranked songs on demand" do
+        sign_in_as users(:user_with_expired_membership), stub_auth: true
+
+        get "/songs/export.csv"
+
+        assert_response :success
+        assert_includes response.media_type, "text/csv"
+        rows = CSV.parse(response.body.delete_prefix(CsvExports::Writer::BOM))
+        assert_equal CsvExports::Music::RankedSongRow::HEADERS, rows.first
+        assert_equal ["Time"], rows.drop(1).map { |row| row[3] }
+      end
+
+      test "a member's filtered export is on demand" do
+        Services::CsvExports::RequestGenerate.expects(:call).never
+        sign_in_as users(:regular_user), stub_auth: true
+
+        get "/songs/export.csv?year=1973"
+
+        assert_response :success
+        assert_equal ["Time"], CSV.parse(response.body.delete_prefix(CsvExports::Writer::BOM)).drop(1).map { |row| row[3] }
+      end
+
+      test "a member's unfiltered export with no file shows the preparing page" do
+        Services::CsvExports::RequestGenerate.expects(:call)
+          .with(ranking_configuration: ranking_configurations(:music_songs_global)).once
+          .returns(Services::CsvExports::RequestGenerate::Result.new(success?: true, data: {}, errors: []))
+        sign_in_as users(:regular_user), stub_auth: true
+
+        get "/songs/export.csv"
+
+        assert_response :accepted
+        assert_select "a[href='/songs']", text: "Back to the rankings"
+      end
+
+      test "the index carries the export link" do
+        get "/songs"
+
+        assert_equal "/songs/export.csv", @controller.view_assigns["csv_export_path"]
+      end
+
+      test "the songs page renders the download button" do
+        get "/songs"
+
+        assert_select "a[data-testid=download-csv][href='/songs/export.csv']"
       end
 
       private

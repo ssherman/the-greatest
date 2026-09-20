@@ -1,0 +1,29 @@
+<% if capped? %>
+  <div data-controller="csv-export" data-csv-export-modal-value="<%= modal_id %>"
+       class="tooltip tooltip-left" data-tip="Download CSV">
+    <a href="<%= export_path %>" rel="nofollow" class="btn btn-ghost btn-sm btn-square" aria-label="Download CSV"
+       data-action="csv-export#download" data-turbo="false" data-testid="<%= testid %>">
+      <%= helpers.icon("download", class: "size-5") %>
+    </a>
+  </div>
+
+  <dialog id="<%= modal_id %>" class="modal">
+    <div class="modal-box">
+      <h3 class="text-lg font-bold">This download includes the top <%= preview_rows %> <%= noun %></h3>
+      <p class="py-4">Members can download the whole ranking and the full results of any filter or saved search.</p>
+      <div class="modal-action">
+        <a href="<%= export_path %>" rel="nofollow" class="btn btn-primary" data-turbo="false">Download top <%= preview_rows %></a>
+        <%= link_to "Become a member", helpers.membership_path, class: "btn btn-outline" %>
+        <form method="dialog"><button class="btn btn-ghost">Cancel</button></form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+<% else %>
+  <div class="tooltip tooltip-left" data-tip="Download CSV">
+    <a href="<%= export_path %>" class="btn btn-ghost btn-sm btn-square" aria-label="Download CSV"
+       data-turbo="false" data-testid="<%= testid %>">
+      <%= helpers.icon("download", class: "size-5") %>
+    </a>
+  </div>
+<% end %>

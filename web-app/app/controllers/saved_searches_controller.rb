@@ -14,6 +14,7 @@ class SavedSearchesController < ApplicationController
   include PathBasedPagination
   include DomainLayout
   include SavedSearchDomainScoped
+  include CsvExportable
 
   # Fixed, with no ?limit= escape hatch -- legacy honoured one, which makes the
   # page space unbounded. 50 also divides OpenSearch's 10,000-result window
@@ -25,6 +26,10 @@ class SavedSearchesController < ApplicationController
   # Before require_signed_in!, so /searches on a host with no saved searches
   # 404s instead of bouncing an anonymous visitor to a sign-in that would not
   # have helped.
+  # The export action is the exception: CsvExportable's own sign-in filter is
+  # registered at include time and runs first, so an anonymous export on a
+  # host without saved searches redirects to sign-in rather than 404ing --
+  # nothing about the id is confirmed either way.
   before_action :require_domain_support!
   before_action :require_signed_in!, only: [:index, :new, :create, :edit, :update, :destroy]
   before_action :set_owned_search, only: [:edit, :update, :destroy]
@@ -84,6 +89,20 @@ class SavedSearchesController < ApplicationController
     # and no callback fires. Legacy recorded this for any viewer, including a
     # stranger reading a public search; that is preserved.
     @search.update_column(:last_executed_at, Time.current)
+  end
+
+  # GET /searches/:id/export.csv
+  #
+  # Same visibility as show (owner, or anyone for a public search -- but
+  # signed in, per CsvExportable), and deliberately not an execution: it does
+  # not write last_executed_at.
+  def export
+    @search = domain_class.visible_to(current_user).find(params[:id])
+    authorize @search, :show?, policy_class: SavedSearchPolicy
+
+    io = StringIO.new
+    CsvExports::SavedSearch.call(search: @search, limit: export_limit, io: io)
+    send_csv io.string, filename: "#{@search.display_name.parameterize.truncate(80, omission: "").presence || "search"}-#{Date.current.iso8601}.csv"
   end
 
   # GET /searches/new

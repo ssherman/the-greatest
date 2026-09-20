@@ -18,3 +18,8 @@ user_favorites_lists:
   class: GenerateUserFavoritesListsJob
   cron: "0 3 * * *"
   description: "Rebuild each domain's generated users' favorites list"
+
+csv_exports_refresh_global:
+  class: CsvExports::RefreshGlobalJob
+  cron: "30 4 * * *"
+  description: "Regenerate the pre-built CSV export of every global ranking configuration"

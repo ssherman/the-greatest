@@ -19,14 +19,19 @@
     </div>
   <% end %>
 
-  <%= render Books::FilterBarComponent.new(
-        categories: @categories,
-        countries: @countries,
-        year_start: @year_start,
-        year_end: @year_end,
-        ranking_configuration: @ranking_configuration,
-        collection: @collection
-      ) %>
+  <div class="flex items-start gap-2">
+    <div class="flex-1 min-w-0">
+      <%= render Books::FilterBarComponent.new(
+            categories: @categories,
+            countries: @countries,
+            year_start: @year_start,
+            year_end: @year_end,
+            ranking_configuration: @ranking_configuration,
+            collection: @collection
+          ) %>
+    </div>
+    <%= render CsvExports::DownloadButtonComponent.new(export_path: @csv_export_path, noun: "books") %>
+  </div>
 
   <% if @ranked_books.any? %>
     <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">

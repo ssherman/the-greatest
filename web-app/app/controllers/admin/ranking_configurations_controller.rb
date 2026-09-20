@@ -186,7 +186,7 @@ class Admin::RankingConfigurationsController < Admin::BaseController
   # validate_action_name! is inherited from Admin::BaseController; this class only
   # declares which names it accepts.
   def allowed_action_names
-    %w[RefreshRankings BulkCalculateWeights GenerateDynamicLists CreateNextYearConfiguration]
+    %w[RefreshRankings BulkCalculateWeights GenerateDynamicLists CreateNextYearConfiguration RegenerateCsvExport]
   end
 
   def table_partial_path
