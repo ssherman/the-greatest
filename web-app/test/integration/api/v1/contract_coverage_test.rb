@@ -31,7 +31,17 @@ module Api
         ["GET", "/api/v1/authors/{slug}", "401"] => -> { get "/api/v1/authors/leo-tolstoy" },
         ["GET", "/api/v1/authors/{slug}", "403"] => -> { get "/api/v1/authors/leo-tolstoy", headers: bearer(ApiTokenSecrets::NON_MEMBER) },
         ["GET", "/api/v1/authors/{slug}", "404"] => -> { get "/api/v1/authors/no-such-author", headers: bearer(ApiTokenSecrets::MEMBER) },
-        ["GET", "/api/v1/authors/{slug}", "429"] => -> { with_exhausted_limit { get "/api/v1/authors/leo-tolstoy", headers: bearer(ApiTokenSecrets::MEMBER) } }
+        ["GET", "/api/v1/authors/{slug}", "429"] => -> { with_exhausted_limit { get "/api/v1/authors/leo-tolstoy", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/ranking_configurations", "200"] => -> { get "/api/v1/ranking_configurations", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations", "400"] => -> { get "/api/v1/ranking_configurations?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations", "401"] => -> { get "/api/v1/ranking_configurations" },
+        ["GET", "/api/v1/ranking_configurations", "403"] => -> { get "/api/v1/ranking_configurations", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/ranking_configurations", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/ranking_configurations/{id}", "200"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}", "401"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}" },
+        ["GET", "/api/v1/ranking_configurations/{id}", "403"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}", headers: bearer(ApiTokenSecrets::NON_MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}", "404"] => -> { get "/api/v1/ranking_configurations/999999999", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}", headers: bearer(ApiTokenSecrets::MEMBER) } }
       }.freeze
 
       setup do

@@ -26,7 +26,8 @@ module Api
 
         get "/api/v1/openapi.json"
 
-        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/authors", "/api/v1/authors/{slug}"], response.parsed_body["paths"].keys
+        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/authors", "/api/v1/authors/{slug}",
+          "/api/v1/ranking_configurations", "/api/v1/ranking_configurations/{id}"], response.parsed_body["paths"].keys
       end
 
       test "on the music and games hosts the document advertises only what those hosts serve" do
@@ -93,7 +94,8 @@ module Api
 
       test "the document itself is valid enough to load" do
         assert_kind_of Hash, ::Api::OpenapiDocument.raw
-        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/authors", "/api/v1/authors/{slug}"], ::Api::OpenapiDocument.raw["paths"].keys
+        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/authors", "/api/v1/authors/{slug}",
+          "/api/v1/ranking_configurations", "/api/v1/ranking_configurations/{id}"], ::Api::OpenapiDocument.raw["paths"].keys
       end
     end
   end

@@ -171,6 +171,78 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations:
+    x-domain: books
+    get:
+      operationId: listRankingConfigurations
+      summary: Ranking configurations
+      description: The global book rankings the site publishes, primary first. A book's `rank` and a list's `weight` are always relative to one of these.
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of ranking configurations.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankingConfigurationCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}:
+    x-domain: books
+    get:
+      operationId: getRankingConfiguration
+      summary: One ranking configuration
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The ranking configuration.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankingConfigurationItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -201,6 +273,14 @@ components:
       required: true
       schema:
         type: string
+    id:
+      name: id
+      in: path
+      required: true
+      description: The resource's integer id.
+      schema:
+        type: integer
+        minimum: 1
   headers:
     X-RateLimit-Limit:
       description: Requests allowed per calendar minute.
@@ -477,3 +557,52 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/AuthorFull"
+    RankingConfiguration:
+      type: object
+      required: [id, name, kind, primary, year, description, published_at, last_refreshed_at, item_count, list_count, url, api_url, books_api_url]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        kind:
+          type: string
+          enum: [books]
+          description: What this configuration ranks. Only `books` today; more kinds will be added, never removed.
+        primary:
+          type: boolean
+          description: Whether this is the site's primary ranking — the one `/api/v1/books` and every `rank` outside this resource refer to.
+        year: {type: [integer, "null"]}
+        description: {type: [string, "null"]}
+        published_at: {type: [string, "null"], format: date-time}
+        last_refreshed_at:
+          type: [string, "null"]
+          format: date-time
+          description: When the ranking was last calculated.
+        item_count:
+          type: integer
+          minimum: 0
+          description: Books ranked by this configuration.
+        list_count:
+          type: integer
+          minimum: 0
+          description: Active lists that feed this configuration.
+        url: {type: string, format: uri, description: The ranking's page on the site.}
+        api_url: {type: string, format: uri}
+        books_api_url: {type: string, format: uri, description: The ranked books, best first.}
+    RankingConfigurationCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RankingConfiguration"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    RankingConfigurationItem:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/RankingConfiguration"

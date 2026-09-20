@@ -625,6 +625,7 @@ Rails.application.routes.draw do
         scope module: :books do
           resources :books, only: [:index, :show], param: :slug
           resources :authors, only: [:index, :show], param: :slug
+          resources :ranking_configurations, only: [:index, :show], constraints: {id: /\d+/}
         end
       end
     end
