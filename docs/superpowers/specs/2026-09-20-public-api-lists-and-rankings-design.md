@@ -227,9 +227,9 @@ Collections use the framework envelope (`data`, `meta`, `links`) unchanged.
 `config/api/v1/openapi.yaml` gains nine path items, all `x-domain: books`, and these
 components: schemas `RankingConfiguration`, `RankingConfigurationCollection`,
 `RankingConfigurationItem`, `List`, `ListFull`, `ListCollection`, `ListItem`, `ListItemRow`,
-`ListItemCollection`, `BookListingRow`, `BookListingCollection`; parameter `id` (path,
-integer, minimum 1) beside `slug`, plus `ranking_configuration_id` and `list_id` for the
-nested paths. Every operation carries the six rate-limit response headers and 400/401/403/429;
+`ListItemCollection`, `BookListingRow`, `BookListingCollection`; one parameter `id` (path,
+integer, minimum 1) beside `slug`, used by every id-addressed path including the nested
+ones (`/ranking_configurations/{id}/books`, `/lists/{id}/items`). Every operation carries the six rate-limit response headers and 400/401/403/429;
 the ones with a parent or an id (`/ranking_configurations/{id}`, its two sub-collections,
 `/lists/{id}`, `/lists/{id}/items`, `/books/{slug}/lists`, `/authors/{slug}/books`) add 404.
 Index operations without a parent (`/ranking_configurations`, `/lists`) do not document 404.
@@ -287,9 +287,11 @@ One PR each, green on `bin/rails test` and `standardrb` before the next starts.
 
 1. **Ranking configurations.** `RankingConfigurationResource`, `RankingConfigurationsController`,
    the two `BaseController` helpers, the nested `books#index` route, contract entries,
-   coverage entries, tests, the E2E call.
+   coverage entries, tests, the E2E call. The payload ships without `lists_api_url`: a link
+   to a route that 404s until increment 2 is worse than a field added later.
 2. **Lists.** `ListResource`, `ListsController`, `ListItemsController`, `BookListsController`,
-   the nested `lists#index` route, contract, coverage, tests, the E2E call.
+   the nested `lists#index` route, `lists_api_url` on the configuration payload, contract,
+   coverage, tests, the E2E call.
 3. **Author books.** `Books::AuthorBooksQuery` extraction with the site controller switched
    over, `AuthorBooksController`, contract, coverage, tests, the E2E call. Update
    `docs/features/public-api.md` (the "Not yet" line and the D13 pointer) and the framework
