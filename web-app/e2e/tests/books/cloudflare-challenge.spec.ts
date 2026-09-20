@@ -102,30 +102,48 @@ test.describe('Cloudflare challenge hand-off', () => {
     await expect(page).toHaveURL('/the-greatest/novels/books');
   });
 
-  test('a challenged hover prefetch does not navigate the visitor', async ({ page }) => {
-    await page.goto('/the-greatest/novels/books');
+  // Turbo 8 fetches a hovered link after 100ms and caches that FetchRequest
+  // whatever the response was, then replays it on the click without calling
+  // window.fetch -- so the hand-off wrapper never sees the click. The layouts
+  // switch prefetch off; the pause is long enough that a hover which was going
+  // to prefetch has already done so.
+  const HOVER_SETTLE_MS = 500;
 
+  async function firstBookLink(page: import('@playwright/test').Page) {
     const link = page.locator('main a[href^="/book/"]').first();
     await link.waitFor();
     const href = await link.getAttribute('href');
-    const target = new URL(href!, page.url()).href;
+    return { link, target: new URL(href!, page.url()).href };
+  }
+
+  test('hovering a link does not fetch it', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books');
+    const { link, target } = await firstBookLink(page);
 
     let hits = 0;
-    await page.route(target, (route) => {
-      hits += 1;
-      return route.fulfill({
-        status: 403,
-        contentType: 'text/html',
-        headers: { 'cf-mitigated': 'challenge' },
-        body: CHALLENGE_BODY,
-      });
+    page.on('request', (request) => {
+      if (request.url() === target) hits += 1;
     });
 
     await link.hover();
-    await expect.poll(() => hits).toBeGreaterThan(0);
+    await page.waitForTimeout(HOVER_SETTLE_MS);
 
-    await expect(page.getByTestId('stub-challenge')).toHaveCount(0);
+    expect(hits).toBe(0);
     await expect(page).toHaveURL('/the-greatest/novels/books');
+  });
+
+  test('a link hovered before it is clicked still hands the whole page off when challenged', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books');
+    const { link, target } = await firstBookLink(page);
+    await stubChallenge(page, target);
+
+    await link.hover();
+    await page.waitForTimeout(HOVER_SETTLE_MS);
+
+    await expectReload(page, () => link.click());
+
+    await expect(page).toHaveURL(target);
+    await expect(page.getByTestId('stub-challenge')).toBeVisible();
   });
 
   test('the same URL does not hand off twice inside the guard window', async ({ page }) => {

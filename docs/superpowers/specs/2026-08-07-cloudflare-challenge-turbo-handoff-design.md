@@ -257,6 +257,37 @@ so nothing but a rebuilt bundle exercises this module locally. It still reaches 
 `jsbundling-rails` hooks the build into `assets:precompile`, which the Dockerfile runs at image build
 time.
 
+### The prefetch premise was wrong (2026-09-19)
+
+The "A prefetch" bullet above says a challenged prefetch "is discarded harmlessly" because Turbo's
+prefetch delegate has empty success/failure handlers. The handlers are empty, but the conclusion is
+false. `PrefetchCache.putLater` performs the request and then `put`s the `FetchRequest` **whatever
+the response was**, for 10 s (`turbo.es2017-esm.js:1053-1057`, Turbo 8.0.23). A click on that link
+inside the window takes the cached object via `turbo:before-fetch-request` and reads its `.response`
+**instead of calling `window.fetch`** (`:796-797`), so the wrapper never sees the click. The Visit
+then gets a non-2xx HTML response and `ErrorRenderer` replaces `<head>` and `<body>` with the
+challenge page; the challenge page's `<meta http-equiv="Content-Security-Policy">` becomes the
+document's policy (this app sends no CSP of its own — `config/initializers/content_security_policy.rb`
+is fully commented out), which blocks the challenge's own inline script and every off-site image.
+Dead page. Seen in production on 2026-09-19: hover a saved search, click it, get a 429 challenge
+rendered inline.
+
+The existing "a challenged hover prefetch does not navigate the visitor" test hovered but never
+clicked afterwards, which is exactly the gap.
+
+Fix: every layout that loads Turbo now carries `<meta name="turbo-prefetch" content="false">`, so a
+click is always a fresh `window.fetch` and reaches the wrapper. `test/lint/turbo_prefetch_disabled_test.rb`
+fails if a layout with a `javascript_include_tag` lacks the tag. The `isPrefetch` bypass stays, for
+`data-turbo-preload` (whose `Preloader` really does cache successes only), with a corrected comment.
+The prefetch test was replaced by two: hovering a link makes no request at all, and a link hovered and
+then clicked within the old cache window still hands the whole page off. The second one fails on the
+pre-fix code by timing out waiting for a `load` event — the cached challenge was rendered inline, and
+the URL and visible body do not discriminate because `ErrorRenderer` pushes history too.
+
+A side effect worth knowing: hover prefetch fired one full server render per link mouse-over, and
+those requests counted toward whatever Cloudflare rate-limiting rule issued the 429. Turning it off
+removes that burst as well as the replay bug.
+
 ## Out of scope
 
 - Any Cloudflare dashboard change.
