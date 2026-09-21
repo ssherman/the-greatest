@@ -48,8 +48,12 @@ module Api
       # when the relation is nil so a bad page is always a 400 -- the COUNT is
       # cheap and runs regardless, but a page beyond total_pages skips the
       # offset query entirely rather than asking Postgres to run and discard it.
+      #
+      # count(:all), not count: a relation carrying a custom select (a book's
+      # listings ride their weight along) would otherwise be counted as
+      # COUNT(<select list>), which Postgres rejects. It is what Pagy does too.
       def render_page(relation, path:)
-        page = ::Api::Page.from_params(params, total_count: relation&.count || 0)
+        page = ::Api::Page.from_params(params, total_count: relation&.count(:all) || 0)
         rows = (relation && page.page <= page.total_pages) ? relation.offset(page.offset).limit(page.per_page).to_a : []
 
         render json: {

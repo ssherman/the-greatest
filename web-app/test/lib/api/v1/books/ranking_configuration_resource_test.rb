@@ -13,7 +13,7 @@ module Api
           hash = RankingConfigurationResource.new(@configuration, params: {item_count: 12, list_count: 3}).to_h
 
           assert_equal(
-            %i[id name kind primary year description published_at last_refreshed_at item_count list_count url api_url books_api_url],
+            %i[id name kind primary year description published_at last_refreshed_at item_count list_count url api_url books_api_url lists_api_url],
             hash.keys
           )
           assert_equal @configuration.id, hash[:id]
@@ -29,6 +29,7 @@ module Api
           assert_equal "https://dev-new.thegreatestbooks.org/rc/#{@configuration.id}", hash[:url]
           assert_equal "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{@configuration.id}", hash[:api_url]
           assert_equal "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{@configuration.id}/books", hash[:books_api_url]
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{@configuration.id}/lists", hash[:lists_api_url]
         end
 
         test "a non-primary configuration with a year" do

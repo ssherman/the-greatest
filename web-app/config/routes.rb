@@ -624,10 +624,15 @@ Rails.application.routes.draw do
       namespace :v1 do
         scope module: :books do
           resources :books, only: [:index, :show], param: :slug
+          get "books/:slug/lists", to: "book_lists#index", as: :book_lists
           resources :authors, only: [:index, :show], param: :slug
           resources :ranking_configurations, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/books", to: "books#index",
             as: :ranking_configuration_books, constraints: {ranking_configuration_id: /\d+/}
+          resources :lists, only: [:index, :show], constraints: {id: /\d+/}
+          get "ranking_configurations/:ranking_configuration_id/lists", to: "lists#index",
+            as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
+          get "lists/:list_id/items", to: "list_items#index", as: :list_items, constraints: {list_id: /\d+/}
         end
       end
     end

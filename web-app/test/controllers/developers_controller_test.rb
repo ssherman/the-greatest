@@ -64,6 +64,11 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     assert_select "[id=?]", "endpoint-listRankingConfigurations"
     assert_select "[id=?]", "endpoint-getRankingConfiguration"
     assert_select "[id=?]", "endpoint-listRankingConfigurationBooks"
+    assert_select "[id=?]", "endpoint-listRankingConfigurationLists"
+    assert_select "[id=?]", "endpoint-listLists"
+    assert_select "[id=?]", "endpoint-getList"
+    assert_select "[id=?]", "endpoint-listListItems"
+    assert_select "[id=?]", "endpoint-listBookLists"
 
     host! host_for(:music)
     get developers_path
@@ -71,6 +76,7 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     assert_select "[id=?]", "endpoint-listBooks", count: 0
     assert_select "[id=?]", "endpoint-listAuthors", count: 0
     assert_select "[id=?]", "endpoint-listRankingConfigurations", count: 0
+    assert_select "[id=?]", "endpoint-listLists", count: 0
   end
 
   # `slug` is `in: path` in the contract and already shows in the path as
@@ -81,13 +87,14 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
 
     get developers_path
 
-    %w[listBooks listAuthors].each do |operation_id|
+    %w[listBooks listAuthors listLists].each do |operation_id|
       assert_select "[id=endpoint-#{operation_id}] code", text: "page"
       assert_select "[id=endpoint-#{operation_id}] code", text: "per_page"
     end
     %w[getBook getAuthor].each do |operation_id|
       assert_select "[id=endpoint-#{operation_id}] code", text: "slug", count: 0
     end
+    assert_select "[id=endpoint-getList] code", text: "id", count: 0
   end
 
   # Api::Problem#to_h points `type` at <host>/developers#errors-<code>. A code

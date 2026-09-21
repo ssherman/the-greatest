@@ -50,6 +50,10 @@ module Api
         attribute :books_api_url do |configuration|
           "#{::Api::Host.base_url}/api/v1/ranking_configurations/#{configuration.id}/books"
         end
+
+        attribute :lists_api_url do |configuration|
+          "#{::Api::Host.base_url}/api/v1/ranking_configurations/#{configuration.id}/lists"
+        end
       end
     end
   end
