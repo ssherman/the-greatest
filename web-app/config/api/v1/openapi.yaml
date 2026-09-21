@@ -98,6 +98,46 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/books/{slug}/lists:
+    x-domain: books
+    get:
+      operationId: listBookLists
+      summary: Lists a book is on
+      description: Every active list the book appears on, with its `position` there. Lists that feed the primary ranking come first, heaviest first; the rest follow by id with `weight` null.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the book's listings.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookListingCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/authors:
     x-domain: books
     get:
@@ -872,6 +912,28 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ListItemRow"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    BookListingRow:
+      type: object
+      required: [position, list]
+      properties:
+        position:
+          type: [integer, "null"]
+          minimum: 1
+          description: The book's place on this list as published; null when the list is unordered.
+        list:
+          $ref: "#/components/schemas/List"
+    BookListingCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/BookListingRow"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
         links:

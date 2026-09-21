@@ -26,7 +26,7 @@ module Api
 
         get "/api/v1/openapi.json"
 
-        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/authors", "/api/v1/authors/{slug}",
+        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/books/{slug}/lists", "/api/v1/authors", "/api/v1/authors/{slug}",
           "/api/v1/ranking_configurations", "/api/v1/ranking_configurations/{id}", "/api/v1/ranking_configurations/{id}/books",
           "/api/v1/ranking_configurations/{id}/lists", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items"], response.parsed_body["paths"].keys
       end
@@ -95,7 +95,7 @@ module Api
 
       test "the document itself is valid enough to load" do
         assert_kind_of Hash, ::Api::OpenapiDocument.raw
-        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/authors", "/api/v1/authors/{slug}",
+        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/books/{slug}/lists", "/api/v1/authors", "/api/v1/authors/{slug}",
           "/api/v1/ranking_configurations", "/api/v1/ranking_configurations/{id}", "/api/v1/ranking_configurations/{id}/books",
           "/api/v1/ranking_configurations/{id}/lists", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items"], ::Api::OpenapiDocument.raw["paths"].keys
       end

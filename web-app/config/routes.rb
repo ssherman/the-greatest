@@ -624,6 +624,7 @@ Rails.application.routes.draw do
       namespace :v1 do
         scope module: :books do
           resources :books, only: [:index, :show], param: :slug
+          get "books/:slug/lists", to: "book_lists#index", as: :book_lists
           resources :authors, only: [:index, :show], param: :slug
           resources :ranking_configurations, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/books", to: "books#index",
