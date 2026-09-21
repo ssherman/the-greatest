@@ -47,13 +47,14 @@ module Api
         end
 
         # The list items the API serves and counts: rows whose listable is a
-        # Books::Book that is set. Importers can leave listable_id null or write
-        # another listable_type; filtering in the relation rather than in the
-        # serializer keeps total_count, per_page and the rows consistent (spec
-        # D6), and item_counts_for uses the same predicate so a list's
-        # item_count always equals its /items total_count.
+        # Books::Book that exists -- importers can leave listable_id null,
+        # write another listable_type, or leave an id whose book is gone.
+        # Filtering in the relation rather than in the serializer keeps
+        # total_count, per_page and the rows consistent (spec D6), and
+        # item_counts_for uses the same predicate so a list's item_count
+        # always equals its /items total_count.
         def book_items(scope)
-          scope.by_listable_type("Books::Book").with_listable
+          scope.by_listable_type("Books::Book").where(listable_id: ::Books::Book.select(:id))
         end
 
         # {list_id => item_count} in one grouped query for a page of lists, and

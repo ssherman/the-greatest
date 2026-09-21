@@ -63,6 +63,19 @@ module Api
           refute_includes json[:data].map { |row| row[:position] }, 3, "the movie row"
         end
 
+        test "a row whose book no longer exists is neither counted nor served" do
+          # A dangling listable_id: what a re-run of the books data migration leaves
+          # behind. Written without validation, as an importer would.
+          ListItem.new(list: @list, listable_type: "Books::Book", listable_id: 999_999_999, position: 4).save!(validate: false)
+
+          get "/api/v1/lists/#{@list.id}/items", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal 4, json[:meta][:total_count]
+          assert_equal 4, json[:data].size
+          refute_includes json[:data].map { |row| row[:position] }, 4, "the dangling row"
+        end
+
         test "a list's item_count on /lists/{id} equals this endpoint's total_count" do
           get "/api/v1/lists/#{@list.id}/items", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)

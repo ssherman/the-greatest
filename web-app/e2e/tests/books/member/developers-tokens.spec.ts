@@ -84,7 +84,7 @@ test.describe('Books API tokens, as a member', () => {
     expect(configurationsBody.data[0]).toMatchObject({ kind: 'books', primary: true });
 
     // The lists resource answers on the same token; its first row is the
-    // heaviest list on the primary and carries the weight that ranking gave it.
+    // heaviest list on the primary and carries the list shape.
     const lists = await page.request.get('/api/v1/lists?per_page=1', {
       headers: { Authorization: `Bearer ${secret}` },
     });

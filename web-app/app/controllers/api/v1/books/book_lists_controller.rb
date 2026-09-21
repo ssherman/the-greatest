@@ -34,9 +34,10 @@ module Api
         # orders weighted lists first and pagination stays consistent. With
         # no primary yet every weight is NULL and the order is by list id.
         #
-        # preload, not includes: where(lists: …) references the lists table,
-        # which would promote includes to an eager-load JOIN and clash with
-        # the custom select.
+        # preload, not includes: where(lists: …) references the lists table
+        # and joins(:list) is already there — either one would promote
+        # includes to an eager-load JOIN, which clashes with the custom
+        # select.
         def listings_for(book)
           relation = ::ListItem.where(listable: book).joins(:list)
             .where(::Books::ListsQuery.active_list_conditions)

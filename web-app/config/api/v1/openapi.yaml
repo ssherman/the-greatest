@@ -858,7 +858,7 @@ components:
           description: Books on the list — the rows `items_api_url` serves.
         weight:
           type: [integer, "null"]
-          description: The list's weight on the ranking configuration it was read through — the primary for `/api/v1/lists`, `/api/v1/lists/{id}` and a book's listings; null when the list does not feed it.
+          description: The list's weight on the ranking configuration it was read through — the primary for `/api/v1/lists`, `/api/v1/lists/{id}` and a book's listings; null when the list has no weight on it — it does not feed that configuration, or has not been weighted yet.
         activated_at:
           type: [string, "null"]
           format: date-time
