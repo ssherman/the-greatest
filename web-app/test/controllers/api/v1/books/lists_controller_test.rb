@@ -49,6 +49,18 @@ module Api
           assert_nil json[:links][:next]
         end
 
+        test "index puts a list with no weight yet last, with a null weight" do
+          # Admin attaches a list with only a list_id; its weight is nil until
+          # the next refresh. It must not sort ahead of the heaviest lists.
+          just_attached = create_list("Just attached", weight: nil)
+
+          get "/api/v1/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal [@heavy.id, @mid_a.id, @mid_b.id, just_attached.id], json[:data].map { |row| row[:id] }
+          assert_nil json[:data].last[:weight]
+        end
+
         test "index rows are the compact shape with batched item counts" do
           get "/api/v1/lists", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)

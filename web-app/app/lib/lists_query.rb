@@ -40,11 +40,13 @@ class ListsQuery
 
   private
 
+  # NULLS LAST on both: a list the admin has just attached has no weight until
+  # the next refresh, and Postgres would otherwise put it first on a DESC sort.
   def order_clause
     if @sort == "newest"
       "lists.activated_at DESC NULLS LAST, lists.id ASC"
     else
-      "ranked_lists.weight DESC, lists.id ASC"
+      "ranked_lists.weight DESC NULLS LAST, lists.id ASC"
     end
   end
 end

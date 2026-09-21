@@ -22,6 +22,16 @@ module Books
       assert_equal [@heavy.list_id], result.map(&:list_id)
     end
 
+    test "puts lists with no weight yet last in the weight sort" do
+      # Admin attaches a list with only a list_id; its weight stays nil until
+      # the next refresh, and Postgres sorts nulls FIRST on a DESC order.
+      unweighted = create_list("Just attached", weight: nil, activated_at: Time.current)
+
+      result = Books::ListsQuery.call(ranking_configuration: @rc)
+
+      assert_equal [@heavy.list_id, @light.list_id, unweighted.list_id], result.map(&:list_id)
+    end
+
     test "orders by activated_at descending for the newest sort" do
       result = Books::ListsQuery.call(ranking_configuration: @rc, sort: "newest")
 
