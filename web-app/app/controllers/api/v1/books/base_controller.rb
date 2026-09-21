@@ -10,6 +10,13 @@ module Api
 
         private
 
+        # The configuration id from the PATH only. params[] merges the query
+        # string, and ?ranking_configuration_id= would otherwise turn the bare
+        # index into the nested one and skip the route's digits-only constraint.
+        def nested_configuration_id
+          request.path_parameters[:ranking_configuration_id]
+        end
+
         # The configuration an index reads: the one named in the path when the
         # request came in under /ranking_configurations/:ranking_configuration_id,
         # else the site's primary (nil when there is none yet). Only global,
@@ -17,9 +24,12 @@ module Api
         # shared or not, an archived one, or the authors configuration is a 404
         # (spec D3). Runs before Api::Page parses the page params, so a missing
         # parent is a 404 even when the page is also bad.
+        #
+        # This is the *books* configuration -- the authors ranking has its own
+        # primary and must not use this helper.
         def ranking_configuration
-          if params[:ranking_configuration_id]
-            ::Books::RankingConfiguration.global.active.find(params[:ranking_configuration_id])
+          if (id = nested_configuration_id)
+            ::Books::RankingConfiguration.global.active.find(id)
           else
             ::Books::RankingConfiguration.default_primary
           end
@@ -29,8 +39,8 @@ module Api
         # request came in nested, so a client paging a configuration's books
         # stays on that configuration.
         def collection_path(suffix)
-          if params[:ranking_configuration_id]
-            "/api/v1/ranking_configurations/#{params[:ranking_configuration_id]}/#{suffix}"
+          if (id = nested_configuration_id)
+            "/api/v1/ranking_configurations/#{id}/#{suffix}"
           else
             "/api/v1/#{suffix}"
           end

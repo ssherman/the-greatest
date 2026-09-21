@@ -13,8 +13,14 @@ module Api
     extend ActiveSupport::Concern
 
     included do
-      rescue_from ActiveRecord::RecordNotFound do
-        render_problem(::Api::Problem.new(:not_found, detail: "No #{controller_name.singularize} with that slug"))
+      # `model` is the class name ActiveRecord raised for (find and find_by!
+      # both set it), so a nested route names the parent that was missing --
+      # "No ranking configuration" on /ranking_configurations/{id}/books, not
+      # "No book". Resources are addressed by slug or by id, so the detail
+      # names neither.
+      rescue_from ActiveRecord::RecordNotFound do |error|
+        noun = (error.model || controller_name.singularize).demodulize.underscore.humanize.downcase
+        render_problem(::Api::Problem.new(:not_found, detail: "No #{noun} at that address"))
       end
 
       rescue_from ::Api::Page::InvalidParameter do |error|

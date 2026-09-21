@@ -392,7 +392,7 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     NotFound:
-      description: No record with that slug.
+      description: No record at that address (unknown slug or id).
       headers:
         X-RateLimit-Limit:
           $ref: "#/components/headers/X-RateLimit-Limit"

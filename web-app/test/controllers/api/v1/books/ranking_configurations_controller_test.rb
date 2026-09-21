@@ -141,6 +141,7 @@ module Api
           assert_response :not_found
           assert_equal "application/problem+json; charset=utf-8", response.content_type
           assert_equal "not_found", json[:code]
+          assert_equal "No ranking configuration at that address", json[:detail]
           RATE_HEADERS.each { |name| assert response.headers[name].present?, name }
         end
 

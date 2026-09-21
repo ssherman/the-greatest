@@ -164,6 +164,7 @@ module Api
 
           assert_response :not_found
           assert_equal "not_found", json[:code]
+          assert_equal "No ranking configuration at that address", json[:detail]
         end
 
         test "a non-numeric configuration id is a routing 404" do
@@ -176,6 +177,19 @@ module Api
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)
 
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/books?page=1&per_page=50", json[:links][:self]
+        end
+
+        test "the bare index ignores a ranking_configuration_id query parameter" do
+          year = ranking_configurations(:books_year_2025)
+          RankedItem.create!(item: @mice, ranking_configuration: year, rank: 1, score: 100)
+
+          get "/api/v1/books?ranking_configuration_id=#{year.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          # Response-only: the parameter is deliberately undocumented, and
+          # request validation would reject it -- which is the point.
+          assert_api_response_conform(status: 200)
+
+          assert_equal %w[war-and-peace crime-and-punishment of-mice-and-men], json[:data].map { |b| b[:slug] }
           assert_equal "https://dev-new.thegreatestbooks.org/api/v1/books?page=1&per_page=50", json[:links][:self]
         end
 
@@ -208,6 +222,7 @@ module Api
           assert_response :not_found
           assert_equal "application/problem+json; charset=utf-8", response.content_type
           assert_equal "not_found", json[:code]
+          assert_equal "No book at that address", json[:detail]
         end
 
         test "show does not fall back to a primary-key lookup" do
