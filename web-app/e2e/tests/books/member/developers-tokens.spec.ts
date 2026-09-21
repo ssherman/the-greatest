@@ -83,6 +83,17 @@ test.describe('Books API tokens, as a member', () => {
     const configurationsBody = await configurations.json();
     expect(configurationsBody.data[0]).toMatchObject({ kind: 'books', primary: true });
 
+    // The lists resource answers on the same token; its first row is the
+    // heaviest list on the primary and carries the weight that ranking gave it.
+    const lists = await page.request.get('/api/v1/lists?per_page=1', {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    expect(lists.status()).toBe(200);
+    const listsBody = await lists.json();
+    expect(listsBody.data).toHaveLength(1);
+    expect(listsBody.data[0]).toHaveProperty('weight');
+    expect(listsBody.data[0]).toHaveProperty('items_api_url');
+
     // Shown once also means no Turbo snapshot: a Drive visit away and Back
     // restores the cached page without a request, so the panel must be
     // marked data-turbo-temporary or it would come back here.
