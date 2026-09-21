@@ -609,7 +609,7 @@ components:
           description: What this configuration ranks. Only `books` today; more kinds will be added, never removed.
         primary:
           type: boolean
-          description: Whether this is the site's primary ranking — the one `/api/v1/books` and every `rank` outside this resource refer to.
+          description: Whether this is the site's primary book ranking — the one `/api/v1/books` reads and a book's `rank` refers to everywhere outside this resource. An author's `rank` comes from the separate primary author ranking.
         year: {type: [integer, "null"]}
         description: {type: [string, "null"]}
         published_at: {type: [string, "null"], format: date-time}
