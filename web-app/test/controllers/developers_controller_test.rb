@@ -61,12 +61,16 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     assert_select "[id=?]", "endpoint-listAuthors"
     assert_select "[id=?]", "endpoint-getAuthor"
     assert_select "[id=?]", "endpoint-getOpenapi"
+    assert_select "[id=?]", "endpoint-listRankingConfigurations"
+    assert_select "[id=?]", "endpoint-getRankingConfiguration"
+    assert_select "[id=?]", "endpoint-listRankingConfigurationBooks"
 
     host! host_for(:music)
     get developers_path
     assert_select "[id=?]", "endpoint-getOpenapi"
     assert_select "[id=?]", "endpoint-listBooks", count: 0
     assert_select "[id=?]", "endpoint-listAuthors", count: 0
+    assert_select "[id=?]", "endpoint-listRankingConfigurations", count: 0
   end
 
   # `slug` is `in: path` in the contract and already shows in the path as
