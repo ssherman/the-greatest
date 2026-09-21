@@ -71,6 +71,10 @@ module Books
       assert_equal 2, result.size
     end
 
+    test "active_list_conditions is the predicate call filters on" do
+      assert_equal({lists: {type: "Books::List", status: List.statuses[:active]}}, Books::ListsQuery.active_list_conditions)
+    end
+
     private
 
     def create_list(name, weight:, activated_at: Time.current, source: nil, ranking_configuration: nil)

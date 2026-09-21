@@ -15,4 +15,8 @@ class ListsQueryTest < ActiveSupport::TestCase
   test "the base class refuses to run without a list type" do
     assert_raises(NotImplementedError) { ListsQuery.list_type }
   end
+
+  test "the base class refuses to give the active-list predicate without a list type" do
+    assert_raises(NotImplementedError) { ListsQuery.active_list_conditions }
+  end
 end

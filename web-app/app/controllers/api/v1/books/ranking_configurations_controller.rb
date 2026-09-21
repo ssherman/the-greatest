@@ -35,16 +35,16 @@ module Api
         private
 
         # {id => {item_count:, list_count:}} in two grouped queries whatever the
-        # page size, and none at all for an empty page. list_count uses the
-        # predicate ::Books::ListsQuery uses, so it equals the lists
-        # sub-collection's total_count once that ships.
+        # page size, and none at all for an empty page. list_count filters on
+        # ::Books::ListsQuery's own predicate, so it equals the lists
+        # sub-collection's total_count.
         def counts_for(ids)
           return {} if ids.empty?
 
           items = ::RankedItem.where(ranking_configuration_id: ids, item_type: "Books::Book").where.not(rank: nil)
             .group(:ranking_configuration_id).count
           lists = ::RankedList.where(ranking_configuration_id: ids).joins(:list)
-            .where(lists: {type: "Books::List", status: ::List.statuses[:active]})
+            .where(::Books::ListsQuery.active_list_conditions)
             .group(:ranking_configuration_id).count
 
           ids.index_with { |id| {item_count: items.fetch(id, 0), list_count: lists.fetch(id, 0)} }

@@ -5,6 +5,14 @@ class ListsQuery
     raise NotImplementedError, "#{name} must define .list_type"
   end
 
+  # The "an active list of this medium" predicate, for a relation that has
+  # joined lists. Anything that must agree with this query's row count -- the
+  # API's list_count on a configuration, the lists a book is on -- filters on
+  # this rather than restating it.
+  def self.active_list_conditions
+    {lists: {type: list_type, status: ::List.statuses[:active]}}
+  end
+
   def self.normalize_sort(value)
     SORTS.include?(value.to_s) ? value.to_s : "weight"
   end
@@ -22,7 +30,7 @@ class ListsQuery
   def call
     scope = @ranking_configuration.ranked_lists
       .joins(:list)
-      .where(lists: {type: self.class.list_type, status: ::List.statuses[:active]})
+      .where(self.class.active_list_conditions)
       .includes(:list)
 
     scope = scope.where(list_id: ::List.search_text(@query).select(:id)) if @query.present?
