@@ -110,6 +110,75 @@ module Api
           assert_equal one.size, three.size, "query count grew with page size:\n#{three.join("\n")}"
         end
 
+        # --- nested under a ranking configuration --------------------------------
+
+        test "the nested index on the primary returns the same rows with nested links" do
+          get "/api/v1/ranking_configurations/#{@rc.id}/books", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_response :success
+          assert_equal %w[war-and-peace crime-and-punishment of-mice-and-men], json[:data].map { |b| b[:slug] }
+          assert_equal [1, 2, 3], json[:data].map { |b| b[:rank] }
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{@rc.id}/books?page=1&per_page=50", json[:links][:self]
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{@rc.id}/books?page=1&per_page=50", json[:links][:first]
+        end
+
+        test "the nested index reads the named configuration, and rank is relative to it" do
+          year = ranking_configurations(:books_year_2025)
+          RankedItem.create!(item: @mice, ranking_configuration: year, rank: 1, score: 100)
+          RankedItem.create!(item: @war_and_peace, ranking_configuration: year, rank: 2, score: 90)
+
+          get "/api/v1/ranking_configurations/#{year.id}/books", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal %w[of-mice-and-men war-and-peace], json[:data].map { |b| b[:slug] }
+          assert_equal [1, 2], json[:data].map { |b| b[:rank] }
+          assert_equal 2, json[:meta][:total_count]
+        end
+
+        test "the nested index paginates with nested links" do
+          get "/api/v1/ranking_configurations/#{@rc.id}/books?page=2&per_page=2", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal ["of-mice-and-men"], json[:data].map { |b| b[:slug] }
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{@rc.id}/books?page=1&per_page=2", json[:links][:prev]
+        end
+
+        test "the nested index never serves a user-owned, archived or author configuration" do
+          archived = ranking_configurations(:books_inherited)
+          archived.update!(archived: true)
+
+          [archived, ranking_configurations(:books_user), ranking_configurations(:books_user_shared),
+            ranking_configurations(:books_authors_global)].each do |configuration|
+            get "/api/v1/ranking_configurations/#{configuration.id}/books", headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_conform(status: 404)
+
+            assert_response :not_found, configuration.name
+            assert_equal "not_found", json[:code]
+          end
+        end
+
+        test "a missing parent is a 404 even when the page is also bad" do
+          get "/api/v1/ranking_configurations/999999999/books?page=0", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 404)
+
+          assert_response :not_found
+          assert_equal "not_found", json[:code]
+        end
+
+        test "a non-numeric configuration id is a routing 404" do
+          get "/api/v1/ranking_configurations/primary/books", headers: bearer(ApiTokenSecrets::MEMBER)
+
+          assert_response :not_found
+        end
+
+        test "the bare index still reads the primary and links to itself" do
+          get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/books?page=1&per_page=50", json[:links][:self]
+        end
+
         # --- show ----------------------------------------------------------------
 
         test "show renders the full book" do
