@@ -63,7 +63,13 @@ module Api
         ["GET", "/api/v1/lists/{id}", "401"] => -> { get "/api/v1/lists/#{@list.id}" },
         ["GET", "/api/v1/lists/{id}", "403"] => -> { get "/api/v1/lists/#{@list.id}", headers: bearer(ApiTokenSecrets::NON_MEMBER) },
         ["GET", "/api/v1/lists/{id}", "404"] => -> { get "/api/v1/lists/999999999", headers: bearer(ApiTokenSecrets::MEMBER) },
-        ["GET", "/api/v1/lists/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/lists/#{@list.id}", headers: bearer(ApiTokenSecrets::MEMBER) } }
+        ["GET", "/api/v1/lists/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/lists/#{@list.id}", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/lists/{id}/items", "200"] => -> { get "/api/v1/lists/#{@list.id}/items", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/lists/{id}/items", "400"] => -> { get "/api/v1/lists/#{@list.id}/items?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/lists/{id}/items", "401"] => -> { get "/api/v1/lists/#{@list.id}/items" },
+        ["GET", "/api/v1/lists/{id}/items", "403"] => -> { get "/api/v1/lists/#{@list.id}/items", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/lists/{id}/items", "404"] => -> { get "/api/v1/lists/999999999/items", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/lists/{id}/items", "429"] => -> { with_exhausted_limit { get "/api/v1/lists/#{@list.id}/items", headers: bearer(ApiTokenSecrets::MEMBER) } }
       }.freeze
 
       setup do

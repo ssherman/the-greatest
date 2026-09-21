@@ -631,6 +631,7 @@ Rails.application.routes.draw do
           resources :lists, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/lists", to: "lists#index",
             as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
+          get "lists/:list_id/items", to: "list_items#index", as: :list_items, constraints: {list_id: /\d+/}
         end
       end
     end
