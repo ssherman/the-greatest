@@ -121,6 +121,90 @@ module Api
           assert_equal one.size, three.size, "query count grew with page size:\n#{three.join("\n")}"
         end
 
+        # --- nested under a ranking configuration --------------------------------
+
+        test "the nested index on the primary returns the same rows with nested links" do
+          get "/api/v1/ranking_configurations/#{@primary.id}/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_response :success
+          assert_equal [@heavy.id, @mid_a.id, @mid_b.id], json[:data].map { |row| row[:id] }
+          assert_equal [90, 50, 50], json[:data].map { |row| row[:weight] }
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{@primary.id}/lists?page=1&per_page=50", json[:links][:self]
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{@primary.id}/lists?page=1&per_page=50", json[:links][:first]
+        end
+
+        test "the nested index reads the named configuration, and weight is relative to it" do
+          RankedList.create!(list: @heavy, ranking_configuration: @year, weight: 5)
+
+          get "/api/v1/ranking_configurations/#{@year.id}/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal [@year_only.id, @heavy.id], json[:data].map { |row| row[:id] }
+          assert_equal [70, 5], json[:data].map { |row| row[:weight] }
+          assert_equal 2, json[:meta][:total_count]
+        end
+
+        test "the nested total_count equals the configuration's list_count, which links here" do
+          get "/api/v1/ranking_configurations/#{@primary.id}/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+          total = json[:meta][:total_count]
+
+          get "/api/v1/ranking_configurations/#{@primary.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal 3, total
+          assert_equal total, json[:data][:list_count]
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{@primary.id}/lists", json[:data][:lists_api_url]
+        end
+
+        test "the nested index paginates with nested links" do
+          get "/api/v1/ranking_configurations/#{@primary.id}/lists?page=2&per_page=2", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal [@mid_b.id], json[:data].map { |row| row[:id] }
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{@primary.id}/lists?page=1&per_page=2", json[:links][:prev]
+        end
+
+        test "the nested index never serves a user-owned, archived or author configuration" do
+          archived = ranking_configurations(:books_inherited)
+          archived.update!(archived: true)
+
+          [archived, ranking_configurations(:books_user), ranking_configurations(:books_user_shared),
+            ranking_configurations(:books_authors_global)].each do |configuration|
+            get "/api/v1/ranking_configurations/#{configuration.id}/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_conform(status: 404)
+
+            assert_response :not_found, configuration.name
+            assert_equal "not_found", json[:code]
+          end
+        end
+
+        test "a missing parent is a 404 even when the page is also bad" do
+          get "/api/v1/ranking_configurations/999999999/lists?page=0", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 404)
+
+          assert_response :not_found
+          assert_equal "not_found", json[:code]
+          assert_equal "No ranking configuration at that address", json[:detail]
+        end
+
+        test "a non-numeric configuration id is a routing 404" do
+          get "/api/v1/ranking_configurations/primary/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+
+          assert_response :not_found
+        end
+
+        test "the bare index ignores a ranking_configuration_id query parameter" do
+          get "/api/v1/lists?ranking_configuration_id=#{@year.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          # Response-only: the parameter is deliberately undocumented, and
+          # request validation would reject it -- which is the point.
+          assert_api_response_conform(status: 200)
+
+          assert_equal [@heavy.id, @mid_a.id, @mid_b.id], json[:data].map { |row| row[:id] }
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/lists?page=1&per_page=50", json[:links][:self]
+        end
+
         # --- show ----------------------------------------------------------------
 
         test "show renders the full list with its weight on the primary" do

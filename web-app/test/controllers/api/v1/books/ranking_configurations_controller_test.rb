@@ -47,7 +47,7 @@ module Api
           assert_api_conform(status: 200)
 
           primary = json[:data].first
-          assert_equal %i[id name kind primary year description published_at last_refreshed_at item_count list_count url api_url books_api_url], primary.keys
+          assert_equal %i[id name kind primary year description published_at last_refreshed_at item_count list_count url api_url books_api_url lists_api_url], primary.keys
           assert_equal "books", primary[:kind]
           assert_equal true, primary[:primary]
           assert_equal 2, primary[:item_count], "item_count must exclude the RankedItem with a nil rank"

@@ -3,8 +3,9 @@
 module Api
   module V1
     module Books
-      # GET /api/v1/lists      -- the primary ranking's active lists, heaviest first
-      # GET /api/v1/lists/:id  -- any active list, full shape
+      # GET /api/v1/lists                              -- the primary ranking's active lists, heaviest first
+      # GET /api/v1/ranking_configurations/:id/lists   -- the same, on the named configuration
+      # GET /api/v1/lists/:id                          -- any active list, full shape
       #
       # weight is a property of the (list, configuration) pair (spec D1): a
       # collection row carries the weight on the configuration it was read
