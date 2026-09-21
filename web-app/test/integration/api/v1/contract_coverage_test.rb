@@ -47,13 +47,30 @@ module Api
         ["GET", "/api/v1/ranking_configurations/{id}/books", "401"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books" },
         ["GET", "/api/v1/ranking_configurations/{id}/books", "403"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
         ["GET", "/api/v1/ranking_configurations/{id}/books", "404"] => -> { get "/api/v1/ranking_configurations/999999999/books", headers: bearer(ApiTokenSecrets::MEMBER) },
-        ["GET", "/api/v1/ranking_configurations/{id}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books", headers: bearer(ApiTokenSecrets::MEMBER) } }
+        ["GET", "/api/v1/ranking_configurations/{id}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/lists", "200"] => -> { get "/api/v1/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/lists", "400"] => -> { get "/api/v1/lists?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/lists", "401"] => -> { get "/api/v1/lists" },
+        ["GET", "/api/v1/lists", "403"] => -> { get "/api/v1/lists", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/lists", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/lists/{id}", "200"] => -> { get "/api/v1/lists/#{@list.id}", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/lists/{id}", "401"] => -> { get "/api/v1/lists/#{@list.id}" },
+        ["GET", "/api/v1/lists/{id}", "403"] => -> { get "/api/v1/lists/#{@list.id}", headers: bearer(ApiTokenSecrets::NON_MEMBER) },
+        ["GET", "/api/v1/lists/{id}", "404"] => -> { get "/api/v1/lists/999999999", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/lists/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/lists/#{@list.id}", headers: bearer(ApiTokenSecrets::MEMBER) } }
       }.freeze
 
       setup do
         host! "dev-new.thegreatestbooks.org"
         RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: ranking_configurations(:books_global), rank: 1, score: 100)
         RankedItem.create!(item: books_authors(:tolstoy), ranking_configuration: ranking_configurations(:books_authors_global), rank: 1, score: 100)
+        # One active books list, weighted on the primary and carrying one
+        # resolved item, so every lists response in the map renders a row. The
+        # fixtures cannot supply it: none is active, and the two that carry
+        # items point at a book that does not exist or at a movie.
+        @list = ::Books::List.create!(name: "Coverage list", status: :active)
+        ListItem.create!(list: @list, listable: books_books(:war_and_peace), position: 1)
+        RankedList.create!(list: @list, ranking_configuration: ranking_configurations(:books_global), weight: 10)
       end
 
       test "the map and the document describe the same responses" do

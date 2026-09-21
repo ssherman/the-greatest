@@ -45,6 +45,25 @@ module Api
             "/api/v1/#{suffix}"
           end
         end
+
+        # The list items the API serves and counts: rows whose listable is a
+        # Books::Book that is set. Importers can leave listable_id null or write
+        # another listable_type; filtering in the relation rather than in the
+        # serializer keeps total_count, per_page and the rows consistent (spec
+        # D6), and item_counts_for uses the same predicate so a list's
+        # item_count always equals its /items total_count.
+        def book_items(scope)
+          scope.by_listable_type("Books::Book").with_listable
+        end
+
+        # {list_id => item_count} in one grouped query for a page of lists, and
+        # none at all for an empty page. A list with no served items has no
+        # key -- callers fetch with a default of 0.
+        def item_counts_for(list_ids)
+          return {} if list_ids.empty?
+
+          book_items(::ListItem.where(list_id: list_ids)).group(:list_id).count
+        end
       end
     end
   end
