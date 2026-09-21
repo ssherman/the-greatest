@@ -74,6 +74,15 @@ test.describe('Books API tokens, as a member', () => {
     expect(body.data).toHaveLength(1);
     expect(body.data[0]).toHaveProperty('rank');
 
+    // The ranking configurations resource answers on the same token, and its
+    // first row is the primary the books call above was ranked by.
+    const configurations = await page.request.get('/api/v1/ranking_configurations', {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    expect(configurations.status()).toBe(200);
+    const configurationsBody = await configurations.json();
+    expect(configurationsBody.data[0]).toMatchObject({ kind: 'books', primary: true });
+
     // Shown once also means no Turbo snapshot: a Drive visit away and Back
     // restores the cached page without a request, so the panel must be
     // marked data-turbo-temporary or it would come back here.

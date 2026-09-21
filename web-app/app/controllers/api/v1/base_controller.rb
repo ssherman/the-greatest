@@ -41,21 +41,28 @@ module Api
         )
       end
 
-      # Paginates a rank-ordered relation (or nil, when there is no ranking to
-      # read from) and renders the collection envelope. The block turns one
-      # RankedItem row into its hash. Page params are validated even when the
-      # relation is nil so a bad page is always a 400 -- the COUNT is cheap and
-      # runs regardless, but a page beyond total_pages skips the offset query
-      # entirely rather than asking Postgres to run and discard it.
-      def render_ranked_page(relation, path:)
+      # Paginates a relation (or nil, when there is nothing to read from) and
+      # renders the collection envelope. The block receives the page's rows as
+      # an Array and returns their hashes, so a controller can batch per-page
+      # lookups (counts, ranks) before mapping. Page params are validated even
+      # when the relation is nil so a bad page is always a 400 -- the COUNT is
+      # cheap and runs regardless, but a page beyond total_pages skips the
+      # offset query entirely rather than asking Postgres to run and discard it.
+      def render_page(relation, path:)
         page = ::Api::Page.from_params(params, total_count: relation&.count || 0)
-        rows = (relation && page.page <= page.total_pages) ? relation.offset(page.offset).limit(page.per_page) : []
+        rows = (relation && page.page <= page.total_pages) ? relation.offset(page.offset).limit(page.per_page).to_a : []
 
         render json: {
-          data: rows.map { |row| yield(row) },
+          data: yield(rows),
           meta: page.meta,
           links: page.links("#{::Api::Host.base_url}#{path}")
         }
+      end
+
+      # One row at a time, for collections with no per-page lookups. The block
+      # turns one row into its hash.
+      def render_ranked_page(relation, path:, &row)
+        render_page(relation, path:) { |rows| rows.map(&row) }
       end
     end
   end

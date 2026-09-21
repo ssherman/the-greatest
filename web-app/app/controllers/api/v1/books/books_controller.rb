@@ -3,17 +3,18 @@
 module Api
   module V1
     module Books
-      # GET /api/v1/books        -- the primary ranking, best first, paginated
-      # GET /api/v1/books/:slug  -- one book, full shape
+      # GET /api/v1/books                                  -- the primary ranking, best first, paginated
+      # GET /api/v1/ranking_configurations/:id/books       -- the same, on the named configuration
+      # GET /api/v1/books/:slug                            -- one book, full shape
       #
       # Every model reference is root-anchored (::Books::…): inside this module
       # a bare Books:: resolves to Api::V1::Books:: and raises NameError.
       class BooksController < BaseController
         def index
-          ranking_configuration = ::Books::RankingConfiguration.default_primary
-          relation = ranking_configuration && ::Books::RankedBooksQuery.call(ranking_configuration: ranking_configuration)
+          configuration = ranking_configuration
+          relation = configuration && ::Books::RankedBooksQuery.call(ranking_configuration: configuration)
 
-          render_ranked_page(relation, path: "/api/v1/books") do |ranked_item|
+          render_ranked_page(relation, path: collection_path("books")) do |ranked_item|
             BookResource.new(ranked_item.item, params: {rank: ranked_item.rank}).to_h
           end
         end
