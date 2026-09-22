@@ -1,0 +1,12 @@
+# Resident Evil 4 and Half-Life 2 stand in for any two same-type records.
+# Ids are fixture-hash ids, so item_a_id/item_b_id are set through ERB in
+# ascending order.
+<% a, b = [ActiveRecord::FixtureSet.identify(:resident_evil_4), ActiveRecord::FixtureSet.identify(:half_life_2)].minmax %>
+resident_evil_4_pair:
+  item_type: Games::Game
+  item_a_id: <%= a %>
+  item_b_id: <%= b %>
+  source: 2
+  status: 0
+  evidence: {"reason": "same title, different release year"}
+  occurrences: 1

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_22_225925) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_22_230839) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -410,6 +410,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_225925) do
     t.bigint "user_id"
     t.index ["stripe_payment_intent_id"], name: "index_donations_on_stripe_payment_intent_id", unique: true, where: "(stripe_payment_intent_id IS NOT NULL)"
     t.index ["user_id"], name: "index_donations_on_user_id"
+  end
+
+  create_table "duplicate_candidates", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.jsonb "evidence", default: {}, null: false
+    t.bigint "item_a_id", null: false
+    t.bigint "item_b_id", null: false
+    t.string "item_type", null: false
+    t.bigint "match_decision_id"
+    t.integer "occurrences", default: 1, null: false
+    t.text "resolution_note"
+    t.datetime "resolved_at"
+    t.bigint "resolved_by_id"
+    t.integer "source", null: false
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["item_type", "item_a_id", "item_b_id"], name: "index_duplicate_candidates_on_pair", unique: true
+    t.index ["item_type", "item_b_id"], name: "index_duplicate_candidates_on_type_and_b"
+    t.index ["match_decision_id"], name: "index_duplicate_candidates_on_match_decision_id"
+    t.index ["resolved_by_id"], name: "index_duplicate_candidates_on_resolved_by_id"
+    t.index ["status", "created_at"], name: "index_duplicate_candidates_on_status_and_created_at"
+    t.check_constraint "item_a_id < item_b_id", name: "duplicate_candidates_a_before_b"
   end
 
   create_table "external_links", force: :cascade do |t|
@@ -1203,6 +1225,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_225925) do
   add_foreign_key "csv_exports", "ranking_configurations"
   add_foreign_key "domain_roles", "users"
   add_foreign_key "donations", "users"
+  add_foreign_key "duplicate_candidates", "match_decisions", on_delete: :nullify
+  add_foreign_key "duplicate_candidates", "users", column: "resolved_by_id", on_delete: :nullify
   add_foreign_key "external_links", "users", column: "submitted_by_id"
   add_foreign_key "games_game_companies", "games_companies", column: "company_id"
   add_foreign_key "games_game_companies", "games_games", column: "game_id"
