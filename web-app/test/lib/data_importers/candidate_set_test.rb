@@ -39,6 +39,21 @@ module DataImporters
       assert_equal [:opensearch, :open_library], merged.sources
     end
 
+    test "two distinct local records sharing an external key both stay in the set" do
+      set = CandidateSet.new
+      set.add(Candidate.new(record: @book, sources: [:exact], evidence: {title: "War and Peace"}))
+      set.add(Candidate.new(record: @other, external_key: "OL1W", external_source: :open_library, sources: [:open_library], evidence: {title: "Crime and Punishment", year: 1866}))
+      set.add(Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:open_library]))
+
+      assert_equal 2, set.size
+      assert_equal [@book, @other], set.to_a.map(&:record)
+      book_candidate = set.to_a.first
+      assert_equal "OL1W", book_candidate.external_key
+      assert_equal [:exact, :open_library], book_candidate.sources
+      assert_nil book_candidate.evidence[:year], "the other record's evidence must not leak in"
+      assert_equal 1866, set.to_a.last.evidence[:year]
+    end
+
     test "keeps distinct records and distinct keys apart, in insertion order" do
       set = CandidateSet.new
       set.add(Candidate.new(record: @book, sources: [:exact]))

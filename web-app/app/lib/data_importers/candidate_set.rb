@@ -12,11 +12,11 @@ module DataImporters
       by_record = candidate.local? ? find_local(candidate.record) : nil
       by_key = candidate.external? ? find_external(candidate.external_source, candidate.external_key) : nil
 
-      if by_record && by_key && !by_record.equal?(by_key)
+      if by_record && by_key && !by_record.equal?(by_key) && !by_key.local?
         # A local candidate and an external-only candidate turn out to be
         # the same thing: fold the external one into the local one.
         by_record.absorb(by_key)
-        @candidates.delete(by_key)
+        @candidates.reject! { |c| c.equal?(by_key) }
         by_record.absorb(candidate)
       elsif by_record
         by_record.absorb(candidate)
