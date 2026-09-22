@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_22_225332) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_22_225925) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -645,6 +645,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_225332) do
     t.index ["type", "auto_generated_kind", "auto_generated_year"], name: "index_lists_on_type_and_auto_generated_kind_and_year", unique: true, where: "(auto_generated_kind IS NOT NULL)", nulls_not_distinct: true
   end
 
+  create_table "match_decisions", force: :cascade do |t|
+    t.bigint "ai_chat_id"
+    t.jsonb "candidates", default: [], null: false
+    t.integer "confidence", null: false
+    t.datetime "created_at", null: false
+    t.integer "decided_by", null: false
+    t.string "finder", null: false
+    t.boolean "needs_review", default: false, null: false
+    t.integer "outcome", null: false
+    t.jsonb "query", default: {}, null: false
+    t.text "reason"
+    t.bigint "record_id"
+    t.string "record_type"
+    t.text "review_note"
+    t.datetime "reviewed_at"
+    t.bigint "reviewed_by_id"
+    t.integer "selected_index"
+    t.string "sources_failed", default: [], null: false, array: true
+    t.bigint "subject_id"
+    t.string "subject_type"
+    t.datetime "updated_at", null: false
+    t.boolean "verify", default: false, null: false
+    t.index ["ai_chat_id"], name: "index_match_decisions_on_ai_chat_id"
+    t.index ["created_at"], name: "index_match_decisions_on_created_at"
+    t.index ["finder"], name: "index_match_decisions_on_finder"
+    t.index ["needs_review", "reviewed_at"], name: "index_match_decisions_on_needs_review_and_reviewed_at"
+    t.index ["record_type", "record_id"], name: "index_match_decisions_on_record"
+    t.index ["reviewed_by_id"], name: "index_match_decisions_on_reviewed_by_id"
+    t.index ["subject_type", "subject_id"], name: "index_match_decisions_on_subject"
+  end
+
   create_table "memberships", force: :cascade do |t|
     t.boolean "cancel_at_period_end", default: false, null: false
     t.datetime "canceled_at"
@@ -1183,6 +1214,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_225332) do
   add_foreign_key "list_penalties", "lists"
   add_foreign_key "list_penalties", "penalties"
   add_foreign_key "lists", "users", column: "submitted_by_id"
+  add_foreign_key "match_decisions", "ai_chats", on_delete: :nullify
+  add_foreign_key "match_decisions", "users", column: "reviewed_by_id", on_delete: :nullify
   add_foreign_key "memberships", "users"
   add_foreign_key "memberships", "users", column: "granted_by_id"
   add_foreign_key "movies_credits", "movies_people", column: "person_id"

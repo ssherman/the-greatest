@@ -43,6 +43,7 @@ class Books::Author < ApplicationRecord
   has_many :books, through: :book_authors, class_name: "Books::Book"
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
+  has_many :match_decisions, as: :record, dependent: :nullify
   has_many :images, as: :parent, dependent: :destroy
   has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"
   has_many :external_links, as: :parent, dependent: :destroy

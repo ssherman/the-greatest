@@ -87,6 +87,7 @@ class Games::Game < ApplicationRecord
   has_many :user_list_items, as: :listable, dependent: :destroy
   has_many :user_lists, through: :user_list_items
   has_many :ranked_items, as: :item, dependent: :destroy
+  has_many :match_decisions, as: :record, dependent: :nullify
 
   # Validations
   validates :title, presence: true

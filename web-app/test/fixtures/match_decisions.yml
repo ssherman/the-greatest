@@ -1,0 +1,14 @@
+# One low-confidence decision, so later increments' audit pages have a row to
+# render. The finders in test create their own rows.
+low_confidence_book_match:
+  finder: DataImporters::Books::Book::Finder
+  record: war_and_peace (Books::Book)
+  outcome: 0
+  confidence: 3
+  decided_by: 2
+  verify: false
+  query: {"title": "War & Peace", "author_names": ["Tolstoy"]}
+  candidates: [{"record_type": "Books::Book", "record_id": 1, "sources": ["opensearch"], "scores": {"opensearch": 7.2}, "evidence": {"title": "War and Peace"}}]
+  selected_index: 1
+  reason: "Same title and author; year missing on the incoming item."
+  needs_review: true

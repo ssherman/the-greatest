@@ -43,6 +43,7 @@ class ListItem < ApplicationRecord
   belongs_to :list, touch: true
   belongs_to :listable, polymorphic: true, optional: true
   alias_method :item, :listable
+  has_many :match_decisions, as: :subject, dependent: :nullify
 
   # Callbacks
   before_validation :parse_metadata_if_string

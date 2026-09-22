@@ -72,6 +72,7 @@ class User < ApplicationRecord
   has_many :resolved_corrections, class_name: "Correction", foreign_key: :resolved_by_id, dependent: :nullify
   has_many :donations, dependent: :nullify
   has_many :granted_memberships, class_name: "Membership", foreign_key: :granted_by_id, dependent: :nullify
+  has_many :reviewed_match_decisions, class_name: "MatchDecision", foreign_key: :reviewed_by_id, dependent: :nullify
   has_many :news_posts, dependent: :destroy
 
   enum :role, [:user, :admin, :editor]
