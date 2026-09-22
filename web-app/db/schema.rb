@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_22_225332) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -116,6 +116,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "slug", null: false
     t.string "sort_name"
     t.datetime "updated_at", null: false
+    t.index "lower((name)::text)", name: "index_books_authors_on_lower_name"
     t.index ["alternate_names"], name: "index_books_authors_on_alternate_names", using: :gin
     t.index ["gender"], name: "index_books_authors_on_gender"
     t.index ["kind"], name: "index_books_authors_on_kind"
@@ -173,6 +174,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.integer "word_count"
+    t.index "lower((title)::text)", name: "index_books_books_on_lower_title"
     t.index ["alternate_titles"], name: "index_books_books_on_alternate_titles", using: :gin
     t.index ["book_kind"], name: "index_books_books_on_book_kind"
     t.index ["default_edition_id"], name: "index_books_books_on_default_edition_id"
@@ -465,6 +467,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "slug", null: false
     t.datetime "updated_at", null: false
     t.integer "year_founded"
+    t.index "lower((name)::text)", name: "index_games_companies_on_lower_name"
     t.index ["name"], name: "index_games_companies_on_name"
     t.index ["slug"], name: "index_games_companies_on_slug", unique: true
   end
@@ -503,6 +506,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "slug", null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.index "lower((title)::text)", name: "index_games_games_on_lower_title"
     t.index ["game_type"], name: "index_games_games_on_game_type"
     t.index ["parent_game_id"], name: "index_games_games_on_parent_game_id"
     t.index ["release_year"], name: "index_games_games_on_release_year"
@@ -746,6 +750,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "slug", null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.index "lower((title)::text)", name: "index_music_albums_on_lower_title"
     t.index ["release_year"], name: "index_music_albums_on_release_year"
     t.index ["slug"], name: "index_music_albums_on_slug", unique: true
   end
@@ -762,6 +767,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.integer "year_died"
     t.integer "year_disbanded"
     t.integer "year_formed"
+    t.index "lower((name)::text)", name: "index_music_artists_on_lower_name"
     t.index ["kind"], name: "index_music_artists_on_kind"
     t.index ["slug"], name: "index_music_artists_on_slug", unique: true
   end
@@ -844,6 +850,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "slug", null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.index "lower((title)::text)", name: "index_music_songs_on_lower_title"
     t.index ["isrc"], name: "index_music_songs_on_isrc", unique: true, where: "(isrc IS NOT NULL)"
     t.index ["release_year"], name: "index_music_songs_on_release_year"
     t.index ["slug"], name: "index_music_songs_on_slug", unique: true
