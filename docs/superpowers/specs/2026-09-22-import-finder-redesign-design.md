@@ -116,7 +116,9 @@ we import from.
 
 ### 1. The contract
 
-`FinderBase#call(query:, verify: false, subject: nil)` returns a `Match`:
+`FinderBase#call(query:, verify: false, subject: nil, exclude: nil)` returns a `Match`. `exclude`
+names one local record that every source drops from its results, so a record can be resolved
+against the rest of the catalog (the duplicate sweep in Section 16).
 
 ```ruby
 Match
@@ -298,7 +300,7 @@ Index on `created_at` as well. The importer updates `record` after it saves a ne
 |---|---|---|
 | `item_type` | string | both records share it |
 | `item_a_id`, `item_b_id` | bigint | check constraint `item_a_id < item_b_id`; unique with `item_type` |
-| `source` | enum: identifier_collision 0, external_key_collision 1, ai 2, human 3 | |
+| `source` | enum: identifier_collision 0, external_key_collision 1, ai 2, human 3, bulk_verify 4 | |
 | `status` | enum: open 0, merged 1, not_duplicate 2 | |
 | `evidence` | jsonb | scores, reasoning, identifier values |
 | `occurrences` | integer, default 1 | how many finder calls raised it |
@@ -484,6 +486,27 @@ minutes to tens of minutes in the background, which is accepted.
   removes what it seeded. It never performs a merge.
 - `CI=1 bin/rails zeitwerk:check` for the new `app/lib` directories; no new warnings; standardrb.
 
+### 16. The duplicate sweep
+
+The finder resolves an existing record against the rest of the catalog when called with the
+record's own fields and `exclude:` set to it. A `Books::FindDuplicatesJob` on the `serial` queue
+loops the books in the primary ranking and, for each, builds a query from the book's title,
+author names, year and identifiers and calls the finder with `verify: true`, `subject: book`,
+`exclude: book`. A `matched` outcome means another local book is the same work: the job raises
+the pair `(book, match.record)` with source `bulk_verify` and the decision's reason as evidence.
+Same-entity groups from the AI raise their pairs as usual. Nothing else is written; the finder
+never runs providers. The pairs go to the duplicates queue with the rest and obey the same
+never-re-raise rule.
+
+With the Open Library source on, the sweep costs about six seconds a book, serialized, so a
+ranked set of ten thousand is a couple of days of background work. That source is also what finds
+translations held under another title, so it stays on.
+
+The sweep gathers, for every ranked book, exactly the evidence a "should this be
+`book_kind: collection`" classifier would want (the Open Library work record, subjects, edition
+counts). That classifier is a separate AI task on the same candidate case, not a finder decision,
+and is future work.
+
 ## Increments
 
 Each gets its own plan under `docs/superpowers/plans/`.
@@ -495,7 +518,7 @@ Each gets its own plan under `docs/superpowers/plans/`.
    its current lookup logic (the music finders' MusicBrainz calls included), so behaviour does
    not change and the suite stays green. The Release finder is deleted.
 2. **Books.** `BookByTitleAndAuthors`, the Open Library source, the provider reusing the
-   resolution, the whitespace one-off task.
+   resolution, the whitespace one-off task, and the duplicate sweep job.
 3. **Audit UI.** Both pages per domain and the E2E spec, so books imports are auditable as soon
    as they exist.
 4. **Authors.** The importer, finder and provider, and the book provider's author step.
@@ -511,9 +534,7 @@ Each gets its own plan under `docs/superpowers/plans/`.
   `books_author_viaf`, `books_author_isni`, `books_author_wikidata_qid` and `books_author_lcnaf`
   from the chosen cluster. Everything it needs exists after increment 4.
 - **Books list wizard.** The first real caller; its own spec.
-- **Bulk re-verification** of existing books with `verify: true`, populating the duplicates
-  queue. Serial Open Library calls make it days of background work; decide after the incidental
-  queue has been used for a while.
+- **A `book_kind: collection` classifier** riding on the sweep's evidence (Section 16).
 - **Stale local Open Library keys.** A local key that redirects or no longer exists never matches
   the canonical key the service returns. A backfill through `redirects` is separate data work.
 - **Retiring the wizard AI validate step**, and stamping an external key onto a local record when
