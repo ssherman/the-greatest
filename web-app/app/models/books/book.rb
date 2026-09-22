@@ -235,7 +235,9 @@ class Books::Book < ApplicationRecord
   private
 
   def normalize_title
-    self.title = Services::Text::QuoteNormalizer.call(title) if title.present?
+    return if title.blank?
+
+    self.title = Services::Text::NameNormalizer.call(Services::Text::QuoteNormalizer.call(title))
   end
 
   def derive_book_length

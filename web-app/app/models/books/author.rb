@@ -73,7 +73,9 @@ class Books::Author < ApplicationRecord
   private
 
   def normalize_name
-    self.name = Services::Text::QuoteNormalizer.call(name) if name.present?
+    return if name.blank?
+
+    self.name = Services::Text::NameNormalizer.call(Services::Text::QuoteNormalizer.call(name))
   end
 
   def queue_books_for_reindexing

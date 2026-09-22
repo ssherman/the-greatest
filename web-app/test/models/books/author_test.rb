@@ -151,5 +151,11 @@ module Books
 
       assert_nil Books::Author.find(author.id).primary_ranked_item
     end
+
+    test "normalizes exotic whitespace in the name on save" do
+      author = ::Books::Author.create!(name: "Kathleen Alcott")
+
+      assert_equal "Kathleen Alcott", author.reload.name
+    end
   end
 end
