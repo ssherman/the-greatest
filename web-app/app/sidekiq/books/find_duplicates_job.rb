@@ -79,7 +79,8 @@ class Books::FindDuplicatesJob
 
   def query_for(book)
     by_type = book.identifiers.group_by(&:identifier_type)
-    values = ->(type) { Array(by_type[type]).map(&:value) }
+    # Sorted so the capped subset is the same on every run of the sweep.
+    values = ->(type) { Array(by_type[type]).map(&:value).sort }
 
     DataImporters::Books::Book::ImportQuery.new(
       title: book.title,

@@ -43,7 +43,7 @@ module DataImporters
         def candidate_sources(query)
           [
             DataImporters::Sources::Identifiers.new(model_class: ::Books::Book, lookups: identifier_lookups(query)),
-            DataImporters::Sources::Exact.new(scope: exact_scope(query)),
+            DataImporters::Sources::Exact.new(scope: exact_scope(query), limit: EXACT_LIMIT),
             DataImporters::Sources::OpenSearch.new(
               model_class: ::Books::Book,
               search_class: ::Search::Books::Search::BookByTitleAndAuthors,

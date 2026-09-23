@@ -124,7 +124,8 @@ as a `bulk_verify` `DuplicateCandidate`; nothing is merged and no provider runs.
 finder's Open Library source failed, the job raises `Books::FindDuplicatesJob::SourceFailed`
 instead of flagging (or silently skipping) a decision made without it -- Open Library is what
 finds a translation held under another title (spec §16) -- so Sidekiq retries the book; the
-retry writes a fresh `match_decisions` row, which is expected. Watch for a stuck circuit with
+retry writes a fresh `match_decisions` row, bumps `occurrences` on any pair the finder itself
+raised, and repeats the AI call when the rules could not decide, which is expected. Watch for a stuck circuit with
 `MatchDecision.where("'open_library' = ANY(sources_failed)").count` during a run.
 
 Run the sweep **after** `bin/rails books:normalize_names:apply`: the exact source compares a

@@ -176,7 +176,7 @@ module DataImporters
 
       # Capped: match_decisions.candidates stored 6 KB per candidate for a
       # ranked book carrying over a hundred identifier rows.
-      record.identifiers.first(25).map { |identifier| {type: identifier.identifier_type, value: identifier.value} }
+      record.identifiers.sort_by(&:id).first(25).map { |identifier| {type: identifier.identifier_type, value: identifier.value} }
     end
 
     # Domain-specific facts worth showing the AI and keeping on the decision
