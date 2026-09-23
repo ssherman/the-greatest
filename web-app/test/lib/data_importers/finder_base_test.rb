@@ -108,7 +108,7 @@ module DataImporters
 
     test "never_merge? consults the duplicate_candidates verdict" do
       assert_not @finder.never_merge?(@book, @other)
-      DuplicateCandidate.flag!(item_type: "Books::Book", ids: [@book.id, @other.id], source: :ai).update!(status: :not_duplicate)
+      ::Services::DuplicateCandidates::Flag.call(item_type: "Books::Book", ids: [@book.id, @other.id], source: :ai).data.update!(status: :not_duplicate)
 
       assert @finder.never_merge?(@other, @book)
     end

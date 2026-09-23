@@ -312,7 +312,7 @@ module DataImporters
       pairs = (decision.duplicate_pairs + collision_pairs(run.candidates))
         .uniq { |record_a, record_b, _source| [record_a.id, record_b.id].minmax }
       pairs.each do |record_a, record_b, source|
-        ::DuplicateCandidate.flag!(
+        ::Services::DuplicateCandidates::Flag.call(
           item_type: model_class.name, ids: [record_a.id, record_b.id], source: source,
           evidence: {reason: decision.reason, decided_by: decision.decided_by.to_s}, match_decision: row
         )

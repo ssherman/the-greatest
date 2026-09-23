@@ -262,7 +262,7 @@ module Music
       # match_decisions that named the source now name the target. Inside the
       # transaction so a rollback undoes it with the rest.
       def resolve_duplicate_candidates
-        ::DuplicateCandidate.record_merge(item_type: "Music::Artist", source_id: @source_artist_id, target_id: target_artist.id)
+        ::Services::DuplicateCandidates::RecordMerge.call(item_type: "Music::Artist", source_id: @source_artist_id, target_id: target_artist.id)
       end
 
       def destroy_source_artist

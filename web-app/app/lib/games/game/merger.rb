@@ -412,7 +412,7 @@ module Games
       # match_decisions that named the source now name the target. Inside the
       # transaction so a rollback undoes it with the rest.
       def resolve_duplicate_candidates
-        ::DuplicateCandidate.record_merge(item_type: "Games::Game", source_id: @source_game_id, target_id: target_game.id)
+        ::Services::DuplicateCandidates::RecordMerge.call(item_type: "Games::Game", source_id: @source_game_id, target_id: target_game.id)
       end
 
       def destroy_source_game

@@ -590,8 +590,8 @@ module Games
 
       test "records the merge on duplicate_candidates and repoints match decisions to the target" do
         third = games_games(:resident_evil_4)
-        pair = DuplicateCandidate.flag!(item_type: "Games::Game", ids: [@source.id, @target.id], source: :ai)
-        other_pair = DuplicateCandidate.flag!(item_type: "Games::Game", ids: [@source.id, third.id], source: :ai)
+        pair = ::Services::DuplicateCandidates::Flag.call(item_type: "Games::Game", ids: [@source.id, @target.id], source: :ai).data
+        other_pair = ::Services::DuplicateCandidates::Flag.call(item_type: "Games::Game", ids: [@source.id, third.id], source: :ai).data
         decision = MatchDecision.create!(finder: "F", record: @source, outcome: :matched, confidence: :high, decided_by: :ai)
 
         result = ::Games::Game::Merger.call(source: @source, target: @target)

@@ -740,8 +740,8 @@ module Music
 
       test "records the merge on duplicate_candidates and repoints match decisions to the target" do
         third = music_songs(:wish_you_were_here)
-        pair = DuplicateCandidate.flag!(item_type: "Music::Song", ids: [@source_song.id, @target_song.id], source: :ai)
-        other_pair = DuplicateCandidate.flag!(item_type: "Music::Song", ids: [@source_song.id, third.id], source: :ai)
+        pair = ::Services::DuplicateCandidates::Flag.call(item_type: "Music::Song", ids: [@source_song.id, @target_song.id], source: :ai).data
+        other_pair = ::Services::DuplicateCandidates::Flag.call(item_type: "Music::Song", ids: [@source_song.id, third.id], source: :ai).data
         decision = MatchDecision.create!(finder: "F", record: @source_song, outcome: :matched, confidence: :high, decided_by: :ai)
 
         result = Music::Song::Merger.call(source: @source_song, target: @target_song)

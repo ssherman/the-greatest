@@ -330,7 +330,7 @@ art and AI description ignore the match.
 
 Each of the six mergers (`Books::Book`, `Books::Author`, `Music::Album`, `Music::Artist`,
 `Music::Song`, `Games::Game`) gains one call inside its transaction,
-`DuplicateCandidate.record_merge(item_type:, source_id:, target_id:)`, which marks the
+`Services::DuplicateCandidates::RecordMerge.call(item_type:, source_id:, target_id:)`, which marks the
 `(source, target)` pair `merged`, repoints every other open pair from the source id to the target
 id (dropping any that would now pair the target with itself or collide with an existing row), and
 repoints `match_decisions.record` from source to target. `Books::Book::Merger` already folds the

@@ -53,7 +53,7 @@ and points the decision at a record it creates.
 4. **Record.** A `MatchDecision` is always written (a failed source caps a `high` confidence
    at `medium` so the decision is reviewed; a `certain` decision stands. A Postgres error
    inside a source raises instead of counting as a failed source.). Pairs go through
-   `DuplicateCandidate.flag!`. The record stage also flags every pair of local candidates
+   `Services::DuplicateCandidates::Flag`. The record stage also flags every pair of local candidates
    sharing an `(external_source, external_key)`, whatever the rules decided, de-duplicated
    against the decision's own pairs.
 
@@ -84,11 +84,12 @@ outcome/confidence/decided_by enums, `verify`, `query` and `candidates` jsonb sn
 `duplicate_candidates`: one row per unordered pair of local records (`item_a_id <
 item_b_id`, unique with `item_type`), `source` (identifier_collision, external_key_collision,
 ai, human, bulk_verify), `status` (pending, merged, not_duplicate), `evidence`,
-`occurrences`, the first `match_decision_id`, and the resolution columns. `flag!` never
-reopens a `merged` or `not_duplicate` row; a pending one gains an occurrence and evidence.
-Every merger calls `DuplicateCandidate.record_merge` inside its transaction: the pair
-becomes merged, other pending pairs naming the source re-key onto the target, and decisions
-that named the source now name the target.
+`occurrences`, the first `match_decision_id`, and the resolution columns.
+`Services::DuplicateCandidates::Flag` never reopens a `merged` or `not_duplicate` row; a
+pending one gains an occurrence and evidence. Every merger calls
+`Services::DuplicateCandidates::RecordMerge` inside its transaction: the pair becomes
+merged, other pending pairs naming the source re-key onto the target, and decisions that
+named the source now name the target.
 
 ## State after increment 1
 
