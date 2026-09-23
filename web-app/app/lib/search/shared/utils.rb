@@ -14,7 +14,8 @@ module Search
 
             cleaned = normalized
               .strip
-              .gsub(/[^\w\s\-'"]/, " ")  # Replace special chars with space
+              # \p{L}\p{N}, not \w: Ruby's \w is ASCII-only, and a stripped accent turns "Misérables" into "mis rables", which the folding analyzer cannot match.
+              .gsub(/[^\p{L}\p{N}_\s\-'"]/, " ")  # Replace special chars with space
               .gsub(/\s+/, " ")          # Collapse multiple spaces
               .strip
 
@@ -30,7 +31,8 @@ module Search
           normalized
             .strip
             .downcase
-            .gsub(/[^\w\s\-'.]/, " ")  # Replace special chars with space (keep periods for acronyms like B.O.B.)
+            # \p{L}\p{N}, not \w: Ruby's \w is ASCII-only, and a stripped accent turns "Misérables" into "mis rables", which the folding analyzer cannot match.
+            .gsub(/[^\p{L}\p{N}_\s\-'.]/, " ")  # Replace special chars with space (keep periods for acronyms like B.O.B.)
             .gsub(/\s+/, " ")          # Collapse multiple spaces
             .strip
         end

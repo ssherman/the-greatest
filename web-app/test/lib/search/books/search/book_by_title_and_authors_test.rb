@@ -31,6 +31,12 @@ module Search
           assert_equal [], ::Search::Books::Search::BookByTitleAndAuthors.call(title: nil)
         end
 
+        test "returns an empty array without searching when the title normalizes to nothing" do
+          ::Search::Books::Search::BookByTitleAndAuthors.expects(:search).never
+
+          assert_equal [], ::Search::Books::Search::BookByTitleAndAuthors.call(title: "***")
+        end
+
         test "finds a book by title and author" do
           book = books_books(:war_and_peace)
           index(book, books_books(:crime_and_punishment))
@@ -50,6 +56,14 @@ module Search
           assert_equal [book.id.to_s], results.map { |hit| hit[:id] }
         end
 
+        test "an accented query finds the accented title, and so does its ASCII spelling" do
+          book = ::Books::Book.create!(title: "Trilogía De Las Fundaciones")
+          index(book)
+
+          assert_equal [book.id.to_s], ::Search::Books::Search::BookByTitleAndAuthors.call(title: "Trilogía De Las Fundaciones").map { |hit| hit[:id] }
+          assert_equal [book.id.to_s], ::Search::Books::Search::BookByTitleAndAuthors.call(title: "Trilogia de las Fundaciones").map { |hit| hit[:id] }
+        end
+
         test "authors are optional: a title-only query still finds the book" do
           book = books_books(:war_and_peace)
           index(book)
@@ -65,6 +79,12 @@ module Search
 
           assert_equal 8.0, definition[:min_score]
           assert_equal 5.0, with_authors[:min_score]
+        end
+
+        test "min_score keys off the built author clauses, not the raw author list" do
+          definition = ::Search::Books::Search::BookByTitleAndAuthors.build_query_definition("War and Peace", ["***"], nil, nil, 5, 0)
+
+          assert_equal 8.0, definition[:min_score]
         end
 
         test "an explicit min_score overrides the default" do
@@ -93,11 +113,12 @@ module Search
         end
 
         test "respects size" do
-          index(books_books(:got), books_books(:clash))
+          first = ::Books::Book.create!(title: "Dune", first_published_year: 1965)
+          second = ::Books::Book.create!(title: "Dune", first_published_year: 2021)
+          index(first, second)
 
-          results = ::Search::Books::Search::BookByTitleAndAuthors.call(title: "A Game of Thrones", authors: ["Stephen King"], size: 1)
-
-          assert_equal 1, results.size
+          assert_equal 2, ::Search::Books::Search::BookByTitleAndAuthors.call(title: "Dune").size
+          assert_equal 1, ::Search::Books::Search::BookByTitleAndAuthors.call(title: "Dune", size: 1).size
         end
 
         private

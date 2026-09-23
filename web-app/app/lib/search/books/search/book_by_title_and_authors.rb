@@ -18,6 +18,7 @@ module Search
 
         def self.call(title:, authors: [], year: nil, **options)
           return empty_response if title.blank?
+          return empty_response if ::Search::Shared::Utils.normalize_search_text(title).blank?
 
           authors = Array(authors).compact_blank
           size = options[:size] || 10
@@ -33,7 +34,8 @@ module Search
 
         def self.build_query_definition(title, authors, year, min_score, size, from)
           cleaned_title = ::Search::Shared::Utils.normalize_search_text(title)
-          min_score ||= authors.any? ? MIN_SCORE_WITH_AUTHORS : MIN_SCORE_TITLE_ONLY
+          author_clauses = build_author_clauses(authors)
+          min_score ||= author_clauses.any? ? MIN_SCORE_WITH_AUTHORS : MIN_SCORE_TITLE_ONLY
 
           {
             min_score: min_score,
@@ -46,7 +48,7 @@ module Search
                   minimum_should_match: 1
                 )
               ],
-              should: build_author_clauses(authors) + build_year_clauses(year)
+              should: author_clauses + build_year_clauses(year)
             )
           }
         end

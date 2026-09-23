@@ -67,6 +67,18 @@ module Search
         assert_equal ["'Don't Stop'", "\"The Wall\""], result
       end
 
+      test "normalize_search_text keeps non-ASCII letters and still strips punctuation" do
+        assert_equal "trilog\u00EDa de las fundaciones", ::Search::Shared::Utils.normalize_search_text("Trilog\u00EDa De Las Fundaciones!")
+        assert_equal "\u0432\u043E\u0439\u043D\u0430 \u0438 \u043C\u0438\u0440", ::Search::Shared::Utils.normalize_search_text("\u0412\u043E\u0439\u043D\u0430 \u0438 \u043C\u0438\u0440")
+        assert_equal "\u6751\u4E0A\u6625\u6A39", ::Search::Shared::Utils.normalize_search_text("\u6751\u4E0A\u6625\u6A39")
+        assert_equal "war peace", ::Search::Shared::Utils.normalize_search_text("War & Peace:")
+        assert_equal "b.o.b.", ::Search::Shared::Utils.normalize_search_text("B.O.B.")
+      end
+
+      test "cleanup_for_indexing keeps non-ASCII letters" do
+        assert_equal ["Les Mis\u00E9rables", "Bj\u00F6rk"], ::Search::Shared::Utils.cleanup_for_indexing(["Les Mis\u00E9rables!", "Bj\u00F6rk", ""])
+      end
+
       test "build_match_query creates correct match query structure" do
         result = Search::Shared::Utils.build_match_query("title", "test query", boost: 2.0, operator: "and")
 
