@@ -200,6 +200,23 @@ module DataImporters
       assert match.decision.needs_review
     end
 
+    test "an ActiveRecord error inside a source propagates and records no decision" do
+      @finder.sources = [FakeSource.new(:exact, error: ActiveRecord::StatementInvalid.new("PG::ConnectionBad: server closed the connection"))]
+
+      assert_no_difference("MatchDecision.count") do
+        assert_raises(ActiveRecord::StatementInvalid) { @finder.call(query: @query) }
+      end
+    end
+
+    test "a source that returns nil contributes nothing" do
+      @finder.sources = [FakeSource.new(:opensearch, candidates: nil)]
+
+      match = @finder.call(query: @query)
+
+      assert match.unmatched?
+      assert_equal [], match.sources_failed
+    end
+
     test "a failing source does not downgrade a certain decision" do
       @finder.sources = [
         FakeSource.new(:opensearch, error: StandardError.new("down")),

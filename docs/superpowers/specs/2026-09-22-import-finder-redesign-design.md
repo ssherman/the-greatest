@@ -455,9 +455,12 @@ pairs.
 
 ### 14. Failure handling and cost
 
-A fuzzy source that raises contributes nothing, is named in `sources_failed`, and caps the
-decision's confidence at medium so it is reviewed. A Postgres failure raises. An AI failure takes
-the fallback. A decision that cannot be written raises; that is our own database.
+A fuzzy source that raises contributes nothing, is named in `sources_failed`, and caps a `high`
+confidence at `medium` so the decision is reviewed. A `certain` decision stands: it comes from a
+corroborated identifier hit (or, in increment 1, the legacy lookup), which is complete identity
+evidence a failed fuzzy source cannot weaken, and gathering stops at a decisive hit anyway. A
+Postgres failure raises. An AI failure takes the fallback. A decision that cannot be written
+raises; that is our own database.
 
 Worst case for a book is roughly twelve seconds (five or six for the resolve, a few for the AI).
 Anything on a request path runs the finder in a job; bulk callers serialize Open Library calls
@@ -558,3 +561,4 @@ Each gets its own plan under `docs/superpowers/plans/`.
   `lower(name)` for the exact source.
 - **Performance is not a constraint.** The finder mostly runs inside slow admin list imports.
 - **Three names changed at implementation:** outcome `unmatched` (not `new`), pair status `pending` (not `open`), and sources take no argument on `call`. Increment 1's plan explains each.
+- **The failed-source cap spares `certain` decisions** (declared at implementation; see §14).

@@ -50,8 +50,9 @@ and points the decision at a record it creates.
    reasoning and `same_entity_groups`. `AiSelection` turns that into a decision: a ranked
    record wins a same-entity group over an unranked pick; every group of two local records
    becomes a duplicate pair. A failed call falls back to unmatched, low, `:fallback`.
-4. **Record.** A `MatchDecision` is always written (a failed fuzzy source caps a high
-   confidence at medium so the decision is reviewed). Pairs go through
+4. **Record.** A `MatchDecision` is always written (a failed source caps a `high` confidence
+   at `medium` so the decision is reviewed; a `certain` decision stands. A Postgres error
+   inside a source raises instead of counting as a failed source.). Pairs go through
    `DuplicateCandidate.flag!`. The record stage also flags every pair of local candidates
    sharing an `(external_source, external_key)`, whatever the rules decided, de-duplicated
    against the decision's own pairs.

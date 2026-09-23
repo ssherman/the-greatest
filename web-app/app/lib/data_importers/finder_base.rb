@@ -198,7 +198,11 @@ module DataImporters
       candidate_sources(run.query).each do |source|
         run.sources_run += 1
         begin
-          found = source.call
+          found = Array(source.call)
+        rescue ActiveRecord::ActiveRecordError
+          # Our own database failing is a bug or an outage, never "no candidates":
+          # spec §14, "a Postgres failure raises".
+          raise
         rescue => e
           Rails.logger.warn "#{self.class.name}: source #{source.name} failed: #{e.class}: #{e.message}"
           run.sources_failed << source.name.to_s
