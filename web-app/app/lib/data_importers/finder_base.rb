@@ -177,6 +177,13 @@ module DataImporters
       record.identifiers.map { |identifier| {type: identifier.identifier_type, value: identifier.value} }
     end
 
+    # Domain-specific facts worth showing the AI and keeping on the decision
+    # (books: book_kind, alternate_titles). Merged into every local
+    # candidate's evidence after the shared keys.
+    def record_extra_evidence(_record)
+      {}
+    end
+
     # Kept for the legacy lookups (increment 1); the Identifiers source
     # replaces it as each domain migrates.
     def find_by_identifier(identifier_type:, identifier_value:, model_class:)
@@ -242,7 +249,7 @@ module DataImporters
         ranked_position: ranked_position(record),
         list_count: list_count(record),
         identifiers: record_identifiers(record)
-      }
+      }.merge(record_extra_evidence(record))
     end
 
     # Local and multi-source candidates first, then by best score; stable.

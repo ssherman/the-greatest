@@ -50,6 +50,14 @@ module DataImporters
       def record_year(record) = record.first_published_year
     end
 
+    # A one-off subclass for the record_extra_evidence hook test. Defined at
+    # file scope, not via `Class.new` inside the test: an anonymous class
+    # assigned to a local variable is never named, and MatchDecision
+    # validates `finder` (the class name) present.
+    class ExtraEvidenceFinder < TestFinder
+      def record_extra_evidence(record) = {kind: "extra-#{record.id}"}
+    end
+
     def setup
       @book = books_books(:war_and_peace)      # Leo Tolstoy, 1869, alternate title "Voyna i mir"
       @other = books_books(:crime_and_punishment)
@@ -366,6 +374,15 @@ module DataImporters
       assert_equal 1869, evidence[:year]
       assert_equal({type: "books_work_isbn13", value: "9780140447934"}, evidence[:matched_identifier])
       assert_includes evidence[:identifiers], {type: "books_work_isbn13", value: "9780140447934"}
+    end
+
+    test "record_extra_evidence is merged into a local candidate's evidence" do
+      finder = ExtraEvidenceFinder.new
+      finder.sources = [FakeSource.new(:exact, candidates: [Candidate.new(record: @book, sources: [:exact])])]
+
+      match = finder.call(query: @query)
+
+      assert_equal "extra-#{@book.id}", match.candidates.first.evidence[:kind]
     end
 
     test "two local candidates sharing an external key are flagged as an external key collision whatever the rules decide" do
