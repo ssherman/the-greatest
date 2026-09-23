@@ -27,8 +27,9 @@ a query `Kathleen Alcott` until that row is saved once. `apply` saves those rows
 | `books_books.title` | 158,220 | 1,965 (1.2%) | 1,729 | 236 |
 | `books_authors.name` | 71,083 | 3,436 (4.8%) | 3,403 | 33 |
 
-(Each row is classified once: NFKC if the full normalizer changes more than
-whitespace folding alone would, otherwise whitespace only.)
+(Each row is classified once: "whitespace only" means no NFKC change beyond
+whitespace folding or a quote fold -- the classifier applies `QuoteNormalizer`
+to both sides before comparing -- otherwise NFKC.)
 
 Whitespace-only changes are runs of spaces (`House Of X   Powers Of X`), trailing
 spaces (`Robin Morgan `), zero-width spaces (`Sheridan Keith​`, U+200B) and the
@@ -48,17 +49,33 @@ NFKC changes beyond whitespace are, in order of frequency:
   `2ª Ed` → `2a Ed`, `E=Mc²` → `E=Mc2`, `ﷺ` → `صلى الله عليه وسلم`, `Ⅱ` → `II`.
   Lossy in the typographic sense, harmless for identity.
 - **one regression, now fixed**: NFKC maps U+00B4 ACUTE ACCENT to a space plus a
-  combining acute, so `Ardal O´Hanlon` became `Ardal O ́Hanlon`. Two rows.
-  `QuoteNormalizer` now folds U+00B4 to `'` first.
+  combining acute, so `Ardal O´Hanlon` became `Ardal O ́Hanlon`. Three rows (two
+  titles, one author). `QuoteNormalizer` now folds U+00B4 to `'` first, so by the
+  time NFKC runs there is nothing left for it to change beyond whitespace -- the
+  report counts these three as whitespace only rather than NFKC, which is why its
+  split differs from the pre-fix measurement by exactly these rows.
 
 ## What `apply` does
 
 Saves each changed row through the model callbacks (so slugs are untouched —
-FriendlyId only generates a slug when it is blank — and the search index gets a
-reindex request as on any save), normalizes `alternate_names` and
-`alternate_titles` the same way, and raises a `bulk_verify` duplicate pair for an
-author whose folded name equals another author's and for a book whose folded
-title equals another book's by an author of the same name. Nothing is merged; the
-pairs wait in the duplicates queue.
+FriendlyId only generates a slug when the slug column is nil, and both slug
+columns are NOT NULL, so a rewrite never re-slugs — and the search index gets
+a reindex request as on any save), normalizes `alternate_names` and
+`alternate_titles` the same way, and raises a `bulk_verify` duplicate pair for
+an author whose folded name equals another author's, for a book whose folded
+title equals another book's by an author of the same name, and for a book
+whose authors were only made equal by an author rename. That last case is
+checked without saving the book — a no-op save would still queue an index
+request the book does not need. `pairs_flagged` is a count of distinct pairs,
+not of flag calls. Nothing is merged; the pairs wait in the duplicates queue.
+
+An author rename also queues one search-index request per book of that author
+(`Books::Author` reindexes its books when its name changes), so expect tens of
+thousands of index requests from the author pass alone — the bulk index queue
+absorbs this fine.
+
+A row the normalizer trims down to blank (an all-whitespace title or name)
+fails presence validation; that row is reported in `errors` and left as-is
+rather than aborting every other row's normalization.
 
 Idempotent: a second run finds nothing to change.

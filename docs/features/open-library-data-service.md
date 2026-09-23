@@ -705,9 +705,9 @@ than writing any identifier (R113) -- otherwise write the identifier(s), `succes
 bare `rescue => e` (catches any `StandardError`), not a match on
 `Books::OpenLibrary::Exceptions::Error` specifically: every client exception (circuit open, timeout,
 network, HTTP, parse) *and* any other `StandardError` raised while building the request or calling
-the client becomes a `failure_result` naming the exception class and message. Exactly one HTTP call
-per `populate` -- the accepted candidate's `record` is a full `Work`, so no follow-up `GET` is
-needed.
+the client becomes a `failure_result` naming the exception class and message. At most one HTTP call
+per `populate`: a new book reuses the finder's resolution and makes none -- when a call is made, the
+accepted candidate's `record` is a full `Work`, so no follow-up `GET` is needed.
 
 ### Running a manual import locally
 

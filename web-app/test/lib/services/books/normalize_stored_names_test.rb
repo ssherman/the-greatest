@@ -97,6 +97,70 @@ module Services
 
         assert_equal "Leo Tolstoy", author.reload.name
       end
+
+      test "apply flags two books with the same title whose authors were only made equal by the author rename, without saving the books" do
+        author_a = ::Books::Author.create!(name: "Kathleen Alcott")
+        author_b = raw_author("Kathleen#{NNBSP}Alcott")
+        book_a = ::Books::Book.create!(title: "The Secret Lives")
+        ::Books::BookAuthor.create!(book: book_a, author: author_a, position: 1)
+        book_b = ::Books::Book.create!(title: "The Secret Lives")
+        ::Books::BookAuthor.create!(book: book_b, author: author_b, position: 1)
+        ::Books::Book.any_instance.expects(:save!).never
+
+        result = NormalizeStoredNames.call(apply: true)
+
+        assert DuplicateCandidate.exists?(item_type: "Books::Book", item_a_id: [book_a.id, book_b.id].min, item_b_id: [book_a.id, book_b.id].max)
+        assert DuplicateCandidate.exists?(item_type: "Books::Author", item_a_id: [author_a.id, author_b.id].min, item_b_id: [author_a.id, author_b.id].max)
+        assert_equal 2, result.data[:pairs_flagged]
+      end
+
+      test "pairs_flagged counts distinct pairs, not flag calls" do
+        raw_author("Kathleen#{NNBSP}Alcott")
+        raw_author("Kathleen  Alcott")
+        ::Books::Author.create!(name: "Kathleen Alcott")
+
+        result = NormalizeStoredNames.call(apply: true)
+
+        assert_equal DuplicateCandidate.where(item_type: "Books::Author").count, result.data[:pairs_flagged]
+      end
+
+      test "apply does not raise a collision for a row visited only because its alternate list is stale" do
+        existing = ::Books::Author.create!(name: "Kathleen Alcott")
+        clean_name_stale_alt = ::Books::Author.create!(name: "Kathleen Alcott")
+        clean_name_stale_alt.update_columns(alternate_names: ["Kathleen#{NNBSP}Alcott"])
+
+        NormalizeStoredNames.call(apply: true)
+
+        assert_not DuplicateCandidate.exists?(
+          item_type: "Books::Author",
+          item_a_id: [existing.id, clean_name_stale_alt.id].min,
+          item_b_id: [existing.id, clean_name_stale_alt.id].max
+        )
+      end
+
+      test "a row the normalizer empties is reported in errors and does not abort the run" do
+        empty_book = raw_book("   ")
+        stray_author = raw_author("Kathleen#{NNBSP}Alcott")
+
+        result = NormalizeStoredNames.call(apply: true)
+
+        assert_not result.success?
+        assert_match(/Books::Book##{empty_book.id}/, result.errors.first)
+        assert_equal "Kathleen Alcott", stray_author.reload.name
+      end
+
+      test "apply a second time is idempotent: nothing saved, nothing flagged" do
+        raw_author("Kathleen#{NNBSP}Alcott")
+        raw_book("Dune   Messiah")
+
+        NormalizeStoredNames.call(apply: true)
+
+        ::Books::Author.any_instance.expects(:save!).never
+        ::Books::Book.any_instance.expects(:save!).never
+        assert_no_difference "DuplicateCandidate.count" do
+          NormalizeStoredNames.call(apply: true)
+        end
+      end
     end
   end
 end

@@ -170,10 +170,11 @@ section for the full contract).
   conflict or an enrichment is left alone and reported in `data_populated` as `"skipped:<field>"`.
   Authors and subjects are never applied from this provider -- creating authors or categories from
   them belongs to a separate reconciliation effort.
-- **Idempotency:** re-running `Importer.call` with any identifier is idempotent (identifier-first
-  finder; the provider persists the query's identifiers on accept); a title+author-only import is
-  NOT idempotent yet because the provider creates no author rows (that is the reconciliation
-  spec's), so the finder's title+author fallback cannot see an importer-created book. This holds for
+- **Idempotency:** re-running `Importer.call` with any identifier is idempotent (the finder's
+  identifier and exact sources find it; the provider persists the query's identifiers on accept); a
+  title+author-only import is NOT idempotent yet because the provider creates no author rows (that
+  is the reconciliation spec's), so the finder's identifier and exact sources cannot see an
+  importer-created book. This holds for
   `isbn13`/`isbn10`/`asin`/`goodreads_id` and for a CURRENT Open Library work key, but not for a
   query keyed by an OLD (redirected) OL key: the provider stores the canonical key the service
   returns, while the finder looks up the key the caller supplied.

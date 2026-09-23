@@ -18,9 +18,13 @@ namespace :books do
 
     desc "Normalize every stored book title and author name the normalizer would change, in place, and flag the collisions"
     task apply: :environment do
-      data = Services::Books::NormalizeStoredNames.call(apply: true).data
-      print_report.call(data)
-      puts "flagged #{data[:pairs_flagged]} duplicate pairs"
+      result = Services::Books::NormalizeStoredNames.call(apply: true)
+      print_report.call(result.data)
+      puts "flagged #{result.data[:pairs_flagged]} duplicate pairs"
+      unless result.errors.empty?
+        result.errors.each { |error| puts "ERROR: #{error}" }
+        abort "#{result.errors.size} row(s) could not be saved"
+      end
     end
   end
 end
