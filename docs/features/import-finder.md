@@ -115,15 +115,18 @@ and music is increment 6.
 
 ## The duplicate sweep
 
-`Books::FindDuplicatesJob` resolves one ranked book against the rest of the catalog: it builds
-a query from the book's own title, authors, year and identifiers (capped at
+`Services::Books::FindDuplicates.call(book:)` resolves one book against the rest of the
+catalog: it builds a query from the book's own title, authors, year and identifiers (capped at
 `IDENTIFIERS_PER_TYPE` = 3 values per type -- a ranked book can carry dozens, and the sweep
 only needs a few for the identifier source's collision evidence), then calls the finder with
 `verify: true, subject: book, exclude: book` so no early exit applies. A match raises the pair
-as a `bulk_verify` `DuplicateCandidate`; nothing is merged and no provider runs. When the
-finder's Open Library source failed, the job raises `Books::FindDuplicatesJob::SourceFailed`
-instead of flagging (or silently skipping) a decision made without it -- Open Library is what
-finds a translation held under another title (spec §16) -- so Sidekiq retries the book; the
+as a `bulk_verify` `DuplicateCandidate`; nothing is merged and no provider runs. The result's
+`data[:match]` is the finder's `Match` and `data[:pair]` the row, so one book can be swept from
+a console. When the finder's Open Library source failed the service fails without flagging --
+Open Library is what finds a translation held under another title (spec §16), so a decision
+made without it is not the sweep's answer. `Books::FindDuplicatesJob` drives the service one
+book per job on the `serial` queue and raises `Books::FindDuplicatesJob::SourceFailed` on a
+failed result so Sidekiq retries the book; the
 retry writes a fresh `match_decisions` row, bumps `occurrences` on any pair the finder itself
 raised, and repeats the AI call when the rules could not decide, which is expected. Watch for a stuck circuit with
 `MatchDecision.where("'open_library' = ANY(sources_failed)").count` during a run.
