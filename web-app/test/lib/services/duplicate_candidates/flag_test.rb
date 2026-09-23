@@ -76,6 +76,29 @@ module Services
           Flag.call(item_type: nil, ids: [@a.id, @b.id], source: :ai)
         end
       end
+
+      test "fails without writing when an id is missing" do
+        assert_no_difference("DuplicateCandidate.count") do
+          result = Flag.call(item_type: @type, ids: [@a.id, nil], source: :bulk_verify)
+
+          refute result.success?
+          assert_nil result.data
+          assert_match(/two ids/, result.errors.first)
+        end
+      end
+
+      test "a concurrent insert of the same pair is retried once and lands on the existing row" do
+        existing = Flag.call(item_type: @type, ids: [@a.id, @b.id], source: :ai).data
+        fresh = ::DuplicateCandidate.new(item_type: @type, item_a_id: [@a.id, @b.id].min, item_b_id: [@a.id, @b.id].max)
+        fresh.stubs(:save!).raises(ActiveRecord::RecordNotUnique, "duplicate key")
+        ::DuplicateCandidate.expects(:find_or_initialize_by).twice.returns(fresh, existing)
+
+        result = Flag.call(item_type: @type, ids: [@a.id, @b.id], source: :bulk_verify, evidence: {reason: "again"})
+
+        assert result.success?
+        assert_equal existing, result.data
+        assert_equal 2, existing.reload.occurrences
+      end
     end
   end
 end
