@@ -13,6 +13,10 @@ module Search
             normalized = Services::Text::QuoteNormalizer.call(text.to_s)
 
             cleaned = normalized
+              # A decomposed accent (a base letter followed by a combining
+              # mark, U+0301 etc.) is not \p{L}: composing first turns it
+              # into one precomposed character the filter below keeps.
+              .unicode_normalize(:nfkc)
               .strip
               # \p{L}\p{N}, not \w: Ruby's \w is ASCII-only, and a stripped accent turns "Misérables" into "mis rables", which the folding analyzer cannot match.
               .gsub(/[^\p{L}\p{N}_\s\-'"]/, " ")  # Replace special chars with space
@@ -29,6 +33,10 @@ module Search
           normalized = Services::Text::QuoteNormalizer.call(text.to_s)
 
           normalized
+            # A decomposed accent (a base letter followed by a combining
+            # mark, U+0301 etc.) is not \p{L}: composing first turns it
+            # into one precomposed character the filter below keeps.
+            .unicode_normalize(:nfkc)
             .strip
             .downcase
             # \p{L}\p{N}, not \w: Ruby's \w is ASCII-only, and a stripped accent turns "Misérables" into "mis rables", which the folding analyzer cannot match.

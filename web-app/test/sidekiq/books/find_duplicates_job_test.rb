@@ -47,6 +47,26 @@ class Books::FindDuplicatesJobTest < ActiveSupport::TestCase
     assert_equal @decision, pair.match_decision
   end
 
+  test "the sweep caps identifiers per type: a book with five ISBN-13 rows sends the finder three" do
+    4.times { |i| @book.identifiers.create!(identifier_type: :books_work_isbn13, value: "isbn-cap-#{i}") }
+    assert_equal 5, @book.identifiers.where(identifier_type: :books_work_isbn13).count
+    DataImporters::Books::Book::Finder.any_instance.expects(:call).with { |args| args[:query].isbn13.size == 3 }
+      .returns(DataImporters::Match.new(outcome: :unmatched))
+
+    Books::FindDuplicatesJob.new.perform(@book.id)
+  end
+
+  test "a match decided with the Open Library source failed raises instead of flagging a degraded pair" do
+    DataImporters::Books::Book::Finder.any_instance.stubs(:call).returns(
+      DataImporters::Match.new(outcome: :matched, record: @other, confidence: :medium, decided_by: :rule,
+        reason: "Exact title and author match.", sources_failed: ["open_library"])
+    )
+
+    assert_no_difference("DuplicateCandidate.count") do
+      assert_raises(Books::FindDuplicatesJob::SourceFailed) { Books::FindDuplicatesJob.new.perform(@book.id) }
+    end
+  end
+
   test "a missing book is skipped without calling the finder" do
     DataImporters::Books::Book::Finder.any_instance.expects(:call).never
 

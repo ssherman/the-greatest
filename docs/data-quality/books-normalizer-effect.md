@@ -53,7 +53,10 @@ NFKC changes beyond whitespace are, in order of frequency:
   titles, one author). `QuoteNormalizer` now folds U+00B4 to `'` first, so by the
   time NFKC runs there is nothing left for it to change beyond whitespace -- the
   report counts these three as whitespace only rather than NFKC, which is why its
-  split differs from the pre-fix measurement by exactly these rows.
+  split differs from the pre-fix measurement by exactly these rows. The fold lives
+  in `QuoteNormalizer`, which every domain's name and title normalizer calls, so a
+  music, games or series row carrying U+00B4 is rewritten on its next save too --
+  this measurement covers books only.
 
 ## What `apply` does
 

@@ -18,6 +18,7 @@ module DataImporters
         ].freeze
         OPENSEARCH_SIZE = 5
         OPEN_LIBRARY_LIMIT = 5
+        EXACT_LIMIT = 5
 
         # open_library_client: injected by tests; nil builds the real client
         # lazily inside OpenLibrarySource.
@@ -85,18 +86,26 @@ module DataImporters
         # when the query names authors. A title-only query still yields
         # title matches: they are candidates for the AI, never a rule-4
         # match, because creators_required? is true for books.
+        #
+        # The filtered ids are plucked first, with no ORDER BY or LIMIT on
+        # the filtered query: measured on 158k books, ORDER BY id + LIMIT 5
+        # on the filtered relation makes the planner walk the primary key
+        # (59 ms, every row filtered) instead of using
+        # index_books_books_on_lower_title (0.01 ms). A title matches a
+        # handful of rows, so plucking them all is cheap.
         def exact_scope(query)
           return ::Books::Book.none if query.title.blank?
 
-          scope = ::Books::Book.where("LOWER(books_books.title) = ?", normalize(query.title))
+          filtered = ::Books::Book.where("LOWER(books_books.title) = ?", normalize(query.title))
           names = query.author_names.map { |name| normalize(name) }.compact_blank
           if names.any?
-            scope = scope.joins(book_authors: :author).where(
+            filtered = filtered.joins(book_authors: :author).where(
               "LOWER(books_authors.name) IN (:names) OR EXISTS (SELECT 1 FROM unnest(books_authors.alternate_names) AS alternate WHERE LOWER(alternate) IN (:names))",
               names: names
             )
           end
-          scope.includes(:authors, :identifiers).distinct.order(:id)
+          ids = filtered.distinct.pluck(:id).sort.first(EXACT_LIMIT)
+          ::Books::Book.where(id: ids).includes(:authors, :identifiers).order(:id)
         end
 
         def search_params(query)

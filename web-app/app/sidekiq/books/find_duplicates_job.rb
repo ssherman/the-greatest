@@ -14,7 +14,14 @@
 class Books::FindDuplicatesJob
   include Sidekiq::Job
 
+  # A retried book writes a second match_decisions row (accepted -- see the
+  # class comment above on re-running).
   sidekiq_options queue: :serial, retry: 3
+
+  # Raised when the finder's Open Library source failed, so Sidekiq retries
+  # the book instead of the job silently recording a decision made without
+  # it.
+  class SourceFailed < StandardError; end
 
   QUERY_IDENTIFIERS = {
     isbn13: "books_work_isbn13",
@@ -23,6 +30,12 @@ class Books::FindDuplicatesJob
     goodreads_id: "books_work_goodreads_id",
     open_library_work_key: "books_work_openlibrary_id"
   }.freeze
+
+  # A ranked book can carry dozens of identifiers per type (the #1 book has
+  # 107). The sweep wants OTHER local books, and a few values per type give
+  # the identifier source its collision evidence without 100 lookups per
+  # job or a /resolve body the service was never timed against.
+  IDENTIFIERS_PER_TYPE = 3
 
   # Enqueues one job per book in the primary ranking, best rank first.
   # Returns how many were enqueued.
@@ -42,6 +55,15 @@ class Books::FindDuplicatesJob
     return if book.nil?
 
     match = DataImporters::Books::Book::Finder.new.call(query: query_for(book), verify: true, subject: book, exclude: book)
+    # The Open Library source is what finds a translation held under
+    # another title (spec §16); a decision made without it is not the
+    # sweep's answer. Raising lets Sidekiq retry the book -- a retry writes
+    # a fresh match_decisions row, which is accepted (see sidekiq_options).
+    # This check comes before the matched? early return so a degraded
+    # match is never flagged.
+    if match.sources_failed.include?("open_library")
+      raise SourceFailed, "Open Library source failed for Books::Book##{book.id}: #{match.reason}"
+    end
     return unless match.matched?
 
     Services::DuplicateCandidates::Flag.call(
@@ -63,10 +85,10 @@ class Books::FindDuplicatesJob
       title: book.title,
       author_names: book.authors.map(&:name),
       year: book.first_published_year,
-      isbn13: values.call(QUERY_IDENTIFIERS[:isbn13]),
-      isbn10: values.call(QUERY_IDENTIFIERS[:isbn10]),
-      asin: values.call(QUERY_IDENTIFIERS[:asin]),
-      goodreads_id: values.call(QUERY_IDENTIFIERS[:goodreads_id]),
+      isbn13: values.call(QUERY_IDENTIFIERS[:isbn13]).first(IDENTIFIERS_PER_TYPE),
+      isbn10: values.call(QUERY_IDENTIFIERS[:isbn10]).first(IDENTIFIERS_PER_TYPE),
+      asin: values.call(QUERY_IDENTIFIERS[:asin]).first(IDENTIFIERS_PER_TYPE),
+      goodreads_id: values.call(QUERY_IDENTIFIERS[:goodreads_id]).first(IDENTIFIERS_PER_TYPE),
       open_library_work_key: values.call(QUERY_IDENTIFIERS[:open_library_work_key]).first
     )
   end

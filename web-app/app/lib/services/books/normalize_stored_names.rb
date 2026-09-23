@@ -122,7 +122,11 @@ module Services
             next if before == after # F3: nothing to collide against a row we didn't rename
 
             renamed_ids << author.id
-            collision = ::Books::Author.where("LOWER(name) = ?", after.downcase).where.not(id: author.id).order(:id).first
+            # No ORDER BY/LIMIT on the filtered query -- see exact_scope in
+            # DataImporters::Books::Book::Finder for why that shape defeats
+            # index_books_authors_on_lower_name.
+            collision_ids = ::Books::Author.where("LOWER(name) = ?", after.downcase).where.not(id: author.id).pluck(:id)
+            collision = ::Books::Author.find(collision_ids.min) if collision_ids.any?
             flag("Books::Author", author, collision, before: before) if collision
           end
         end
@@ -163,15 +167,19 @@ module Services
         end
       end
 
+      # No ORDER BY/LIMIT on the filtered query -- see exact_scope in
+      # DataImporters::Books::Book::Finder for why that shape defeats
+      # index_books_books_on_lower_title.
       def book_collision(book, title)
         author_names = book.authors.map { |author| normalize(author.name).downcase }
         return nil if author_names.empty?
 
-        ::Books::Book.joins(book_authors: :author)
+        ids = ::Books::Book.joins(book_authors: :author)
           .where("LOWER(books_books.title) = ?", title.downcase)
           .where("LOWER(books_authors.name) IN (?)", author_names)
           .where.not(id: book.id)
-          .distinct.order(:id).first
+          .distinct.pluck(:id)
+        ::Books::Book.find(ids.min) if ids.any?
       end
 
       def normalize_list(values)

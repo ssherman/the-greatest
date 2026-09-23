@@ -116,13 +116,38 @@ and music is increment 6.
 ## The duplicate sweep
 
 `Books::FindDuplicatesJob` resolves one ranked book against the rest of the catalog: it builds
-a query from the book's own title, authors, year and identifiers, then calls the finder with
+a query from the book's own title, authors, year and identifiers (capped at
+`IDENTIFIERS_PER_TYPE` = 3 values per type -- a ranked book can carry dozens, and the sweep
+only needs a few for the identifier source's collision evidence), then calls the finder with
 `verify: true, subject: book, exclude: book` so no early exit applies. A match raises the pair
-as a `bulk_verify` `DuplicateCandidate`; nothing is merged and no provider runs. One job per
-book on the `serial` queue, which the Amazon enrichment jobs also share, so start with
-`bin/rails books:find_duplicates[100]` and widen the limit once the first pairs look right;
+as a `bulk_verify` `DuplicateCandidate`; nothing is merged and no provider runs. When the
+finder's Open Library source failed, the job raises `Books::FindDuplicatesJob::SourceFailed`
+instead of flagging (or silently skipping) a decision made without it -- Open Library is what
+finds a translation held under another title (spec §16) -- so Sidekiq retries the book; the
+retry writes a fresh `match_decisions` row, which is expected. Watch for a stuck circuit with
+`MatchDecision.where("'open_library' = ANY(sources_failed)").count` during a run.
+
+Run the sweep **after** `bin/rails books:normalize_names:apply`: the exact source compares a
+normalized query against the stored value, so an unnormalized row is invisible to it until
+normalized. Full sequence: `books:normalize_names:report` (read-only) →
+`books:normalize_names:apply` → `books:find_duplicates[100]` → inspect the pairs it raised →
+`books:find_duplicates[all]`. `books:find_duplicates` requires its argument -- a count or
+`all` -- and aborts otherwise; one job per book on the `serial` queue, which the Amazon
+enrichment jobs also share, so start small and widen once the first pairs look right.
 `Books::FindDuplicatesJob.enqueue_ranked` walks the primary ranking configuration
 best-rank-first.
+
+After deploying the redesign, run `ANALYZE` on the seven tables carrying `lower()` expression
+indexes (`books_books`, `books_authors`, `music_albums`, `music_artists`, `music_songs`,
+`games_games`, `games_companies`) -- they have no statistics until the first analyze, and
+without them the planner can pick a full scan over the expression index regardless of the
+query shape below. Confirm with `EXPLAIN` that the exact source's query uses
+`index_books_books_on_lower_title`:
+
+```ruby
+sql = Books::Book.where("LOWER(books_books.title) = ?", "war and peace").distinct.select(:id).to_sql
+ActiveRecord::Base.connection.execute("EXPLAIN (ANALYZE, BUFFERS) #{sql}").each { |r| puts r["QUERY PLAN"] }
+```
 
 ## Stored-name normalization
 

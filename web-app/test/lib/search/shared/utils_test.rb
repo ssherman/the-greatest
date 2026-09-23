@@ -79,6 +79,22 @@ module Search
         assert_equal ["Les Mis\u00E9rables", "Bj\u00F6rk"], ::Search::Shared::Utils.cleanup_for_indexing(["Les Mis\u00E9rables!", "Bj\u00F6rk", ""])
       end
 
+      test "normalize_search_text composes a decomposed accent before stripping combining marks" do
+        # "e" (U+0065) followed by a combining acute accent (U+0301), the
+        # way some external data decomposes it, rather than the precomposed
+        # "\u00E9". Without NFKC first, the bare combining mark is not
+        # \p{L} and gets replaced with a space, fragmenting the word.
+        decomposed = "Mise\u0301rables"
+
+        assert_equal "mis\u00E9rables", ::Search::Shared::Utils.normalize_search_text(decomposed)
+      end
+
+      test "cleanup_for_indexing composes a decomposed accent before stripping combining marks" do
+        decomposed = "Mise\u0301rables"
+
+        assert_equal ["Mis\u00E9rables"], ::Search::Shared::Utils.cleanup_for_indexing([decomposed])
+      end
+
       test "build_match_query creates correct match query structure" do
         result = Search::Shared::Utils.build_match_query("title", "test query", boost: 2.0, operator: "and")
 

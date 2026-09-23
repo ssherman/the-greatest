@@ -376,6 +376,15 @@ module DataImporters
       assert_includes evidence[:identifiers], {type: "books_work_isbn13", value: "9780140447934"}
     end
 
+    test "record_identifiers caps the evidence list at 25 rows" do
+      30.times { |i| @book.identifiers.create!(identifier_type: :books_work_isbn13, value: "test-isbn-#{i}") }
+      @finder.sources = [FakeSource.new(:identifier, candidates: [Candidate.new(record: @book, sources: [:identifier])])]
+
+      match = @finder.call(query: @query)
+
+      assert_equal 25, match.candidates.first.evidence[:identifiers].size
+    end
+
     test "record_extra_evidence is merged into a local candidate's evidence" do
       finder = ExtraEvidenceFinder.new
       finder.sources = [FakeSource.new(:exact, candidates: [Candidate.new(record: @book, sources: [:exact])])]
