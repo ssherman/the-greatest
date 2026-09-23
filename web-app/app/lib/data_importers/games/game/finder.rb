@@ -3,10 +3,23 @@
 module DataImporters
   module Games
     module Game
-      # Finds existing Games::Game records before import
-      # Uses IGDB game identifier for deduplication
+      # Finds an existing Games::Game before import and answers with a Match.
+      # Increment 1: the IGDB id lookup runs as the single decisive source;
+      # increment 5 adds the exact, OpenSearch and IGDB search sources.
       class Finder < DataImporters::FinderBase
-        def call(query:)
+        protected
+
+        def model_class = ::Games::Game
+
+        def ranking_configuration_class = ::Games::RankingConfiguration
+
+        def candidate_sources(query)
+          [DataImporters::Sources::Legacy.new { legacy_lookup(query) }]
+        end
+
+        private
+
+        def legacy_lookup(query)
           return nil if query.igdb_id.blank?
 
           find_by_identifier(

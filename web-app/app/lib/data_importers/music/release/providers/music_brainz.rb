@@ -5,7 +5,7 @@ module DataImporters
     module Release
       module Providers
         class MusicBrainz < ProviderBase
-          def populate(item, query:)
+          def populate(item, query:, match: nil)
             album = query.album
             release_group_mbid = get_release_group_mbid(album)
             return failure_result(errors: ["No release group MBID found for album"]) unless release_group_mbid

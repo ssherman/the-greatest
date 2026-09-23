@@ -6,14 +6,14 @@ module DataImporters
       # Main importer for single Music::Album records
       # For bulk album discovery, use BulkImporter instead
       class Importer < DataImporters::ImporterBase
-        def self.call(artist: nil, release_group_musicbrainz_id: nil, item: nil, force_providers: false, providers: nil, **options)
+        def self.call(artist: nil, release_group_musicbrainz_id: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false, **options)
           if item.present?
             # Item-based import: use existing album
             super(item: item, force_providers: force_providers, providers: providers)
           else
             # Query-based import: create query object
             query = ImportQuery.new(artist: artist, release_group_musicbrainz_id: release_group_musicbrainz_id, **options)
-            super(query: query, force_providers: force_providers, providers: providers)
+            super(query: query, force_providers: force_providers, providers: providers, subject: subject, verify: verify)
           end
         end
 

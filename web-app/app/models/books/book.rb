@@ -103,6 +103,7 @@ class Books::Book < ApplicationRecord
   has_many :credits, as: :creditable, class_name: "Books::Credit", dependent: :destroy
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
+  has_many :match_decisions, as: :record, dependent: :nullify
   has_many :images, as: :parent, dependent: :destroy
   has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"
   has_many :external_links, as: :parent, dependent: :destroy
@@ -235,7 +236,9 @@ class Books::Book < ApplicationRecord
   private
 
   def normalize_title
-    self.title = Services::Text::QuoteNormalizer.call(title) if title.present?
+    return if title.blank?
+
+    self.title = Services::Text::NameNormalizer.call(Services::Text::QuoteNormalizer.call(title))
   end
 
   def derive_book_length

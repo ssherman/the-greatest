@@ -7,7 +7,7 @@ module DataImporters
       # resolve service.
       class Importer < DataImporters::ImporterBase
         def self.call(title: nil, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [],
-          open_library_work_key: nil, item: nil, force_providers: false, providers: nil)
+          open_library_work_key: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false)
           if item.present?
             super(item: item, force_providers: force_providers, providers: providers)
           else
@@ -21,7 +21,7 @@ module DataImporters
               goodreads_id: goodreads_id,
               open_library_work_key: open_library_work_key
             )
-            super(query: query, force_providers: force_providers, providers: providers)
+            super(query: query, force_providers: force_providers, providers: providers, subject: subject, verify: verify)
           end
         end
 

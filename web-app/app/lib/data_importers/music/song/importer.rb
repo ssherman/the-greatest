@@ -4,9 +4,9 @@ module DataImporters
   module Music
     module Song
       class Importer < DataImporters::ImporterBase
-        def self.call(title: nil, musicbrainz_recording_id: nil, force_providers: false, **options)
+        def self.call(title: nil, musicbrainz_recording_id: nil, force_providers: false, subject: nil, verify: false, **options)
           query = ImportQuery.new(title: title, musicbrainz_recording_id: musicbrainz_recording_id, **options)
-          super(query: query, force_providers: force_providers)
+          super(query: query, force_providers: force_providers, subject: subject, verify: verify)
         end
 
         protected

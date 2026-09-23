@@ -40,6 +40,7 @@ class Music::Artist < ApplicationRecord
   has_many :songs, through: :song_artists, class_name: "Music::Song"
   has_many :credits, class_name: "Music::Credit", dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
+  has_many :match_decisions, as: :record, dependent: :nullify
   has_many :identifiers, as: :identifiable, dependent: :destroy
 
   # Ranking associations

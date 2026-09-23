@@ -116,7 +116,7 @@ module DataImporters
 
           # Mock the finder to return existing song
           finder = mock
-          finder.expects(:call).returns(existing_song)
+          finder.expects(:call).returns(DataImporters::Match.new(outcome: :matched, record: existing_song, confidence: :certain, decided_by: :identifier))
           Finder.stubs(:new).returns(finder)
 
           result = Importer.call(title: "Time")

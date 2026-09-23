@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_22_230839) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -116,6 +116,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "slug", null: false
     t.string "sort_name"
     t.datetime "updated_at", null: false
+    t.index "lower((name)::text)", name: "index_books_authors_on_lower_name"
     t.index ["alternate_names"], name: "index_books_authors_on_alternate_names", using: :gin
     t.index ["gender"], name: "index_books_authors_on_gender"
     t.index ["kind"], name: "index_books_authors_on_kind"
@@ -173,6 +174,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.integer "word_count"
+    t.index "lower((title)::text)", name: "index_books_books_on_lower_title"
     t.index ["alternate_titles"], name: "index_books_books_on_alternate_titles", using: :gin
     t.index ["book_kind"], name: "index_books_books_on_book_kind"
     t.index ["default_edition_id"], name: "index_books_books_on_default_edition_id"
@@ -410,6 +412,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.index ["user_id"], name: "index_donations_on_user_id"
   end
 
+  create_table "duplicate_candidates", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.jsonb "evidence", default: {}, null: false
+    t.bigint "item_a_id", null: false
+    t.bigint "item_b_id", null: false
+    t.string "item_type", null: false
+    t.bigint "match_decision_id"
+    t.integer "occurrences", default: 1, null: false
+    t.text "resolution_note"
+    t.datetime "resolved_at"
+    t.bigint "resolved_by_id"
+    t.integer "source", null: false
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["item_type", "item_a_id", "item_b_id"], name: "index_duplicate_candidates_on_pair", unique: true
+    t.index ["item_type", "item_b_id"], name: "index_duplicate_candidates_on_type_and_b"
+    t.index ["match_decision_id"], name: "index_duplicate_candidates_on_match_decision_id"
+    t.index ["resolved_by_id"], name: "index_duplicate_candidates_on_resolved_by_id"
+    t.index ["status", "created_at"], name: "index_duplicate_candidates_on_status_and_created_at"
+    t.check_constraint "item_a_id < item_b_id", name: "duplicate_candidates_a_before_b"
+  end
+
   create_table "external_links", force: :cascade do |t|
     t.integer "click_count", default: 0, null: false
     t.datetime "created_at", null: false
@@ -465,6 +489,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "slug", null: false
     t.datetime "updated_at", null: false
     t.integer "year_founded"
+    t.index "lower((name)::text)", name: "index_games_companies_on_lower_name"
     t.index ["name"], name: "index_games_companies_on_name"
     t.index ["slug"], name: "index_games_companies_on_slug", unique: true
   end
@@ -503,6 +528,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "slug", null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.index "lower((title)::text)", name: "index_games_games_on_lower_title"
     t.index ["game_type"], name: "index_games_games_on_game_type"
     t.index ["parent_game_id"], name: "index_games_games_on_parent_game_id"
     t.index ["release_year"], name: "index_games_games_on_release_year"
@@ -641,6 +667,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.index ["type", "auto_generated_kind", "auto_generated_year"], name: "index_lists_on_type_and_auto_generated_kind_and_year", unique: true, where: "(auto_generated_kind IS NOT NULL)", nulls_not_distinct: true
   end
 
+  create_table "match_decisions", force: :cascade do |t|
+    t.bigint "ai_chat_id"
+    t.jsonb "candidates", default: [], null: false
+    t.integer "confidence", null: false
+    t.datetime "created_at", null: false
+    t.integer "decided_by", null: false
+    t.string "finder", null: false
+    t.boolean "needs_review", default: false, null: false
+    t.integer "outcome", null: false
+    t.jsonb "query", default: {}, null: false
+    t.text "reason"
+    t.bigint "record_id"
+    t.string "record_type"
+    t.text "review_note"
+    t.datetime "reviewed_at"
+    t.bigint "reviewed_by_id"
+    t.integer "selected_index"
+    t.string "sources_failed", default: [], null: false, array: true
+    t.bigint "subject_id"
+    t.string "subject_type"
+    t.datetime "updated_at", null: false
+    t.boolean "verify", default: false, null: false
+    t.index ["ai_chat_id"], name: "index_match_decisions_on_ai_chat_id"
+    t.index ["created_at"], name: "index_match_decisions_on_created_at"
+    t.index ["finder"], name: "index_match_decisions_on_finder"
+    t.index ["needs_review", "reviewed_at"], name: "index_match_decisions_on_needs_review_and_reviewed_at"
+    t.index ["record_type", "record_id"], name: "index_match_decisions_on_record"
+    t.index ["reviewed_by_id"], name: "index_match_decisions_on_reviewed_by_id"
+    t.index ["subject_type", "subject_id"], name: "index_match_decisions_on_subject"
+  end
+
   create_table "memberships", force: :cascade do |t|
     t.boolean "cancel_at_period_end", default: false, null: false
     t.datetime "canceled_at"
@@ -746,6 +803,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "slug", null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.index "lower((title)::text)", name: "index_music_albums_on_lower_title"
     t.index ["release_year"], name: "index_music_albums_on_release_year"
     t.index ["slug"], name: "index_music_albums_on_slug", unique: true
   end
@@ -762,6 +820,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.integer "year_died"
     t.integer "year_disbanded"
     t.integer "year_formed"
+    t.index "lower((name)::text)", name: "index_music_artists_on_lower_name"
     t.index ["kind"], name: "index_music_artists_on_kind"
     t.index ["slug"], name: "index_music_artists_on_slug", unique: true
   end
@@ -844,6 +903,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
     t.string "slug", null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.index "lower((title)::text)", name: "index_music_songs_on_lower_title"
     t.index ["isrc"], name: "index_music_songs_on_isrc", unique: true, where: "(isrc IS NOT NULL)"
     t.index ["release_year"], name: "index_music_songs_on_release_year"
     t.index ["slug"], name: "index_music_songs_on_slug", unique: true
@@ -1165,6 +1225,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
   add_foreign_key "csv_exports", "ranking_configurations"
   add_foreign_key "domain_roles", "users"
   add_foreign_key "donations", "users"
+  add_foreign_key "duplicate_candidates", "match_decisions", on_delete: :nullify
+  add_foreign_key "duplicate_candidates", "users", column: "resolved_by_id", on_delete: :nullify
   add_foreign_key "external_links", "users", column: "submitted_by_id"
   add_foreign_key "games_game_companies", "games_companies", column: "company_id"
   add_foreign_key "games_game_companies", "games_games", column: "game_id"
@@ -1176,6 +1238,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_230404) do
   add_foreign_key "list_penalties", "lists"
   add_foreign_key "list_penalties", "penalties"
   add_foreign_key "lists", "users", column: "submitted_by_id"
+  add_foreign_key "match_decisions", "ai_chats", on_delete: :nullify
+  add_foreign_key "match_decisions", "users", column: "reviewed_by_id", on_delete: :nullify
   add_foreign_key "memberships", "users"
   add_foreign_key "memberships", "users", column: "granted_by_id"
   add_foreign_key "movies_credits", "movies_people", column: "person_id"

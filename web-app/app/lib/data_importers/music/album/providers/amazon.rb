@@ -7,7 +7,7 @@ module DataImporters
         # Amazon Product API provider for Music::Album data
         # This is our first async provider - launches background job and returns success immediately
         class Amazon < DataImporters::ProviderBase
-          def populate(album, query:)
+          def populate(album, query:, match: nil)
             # Validate we have required data for Amazon search
             return failure_result(errors: ["Album title required for Amazon search"]) if album.title.blank?
             return failure_result(errors: ["Album must have at least one artist for Amazon search"]) if album.artists.empty?

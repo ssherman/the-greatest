@@ -12,7 +12,7 @@ module DataImporters
           # @param company [Games::Company] the company to enrich
           # @param query [ImportQuery] contains igdb_id
           # @return [ProviderResult] success or failure result
-          def populate(company, query:)
+          def populate(company, query:, match: nil)
             api_result = search_service.find_with_details(query.igdb_id)
 
             return failure_result(errors: api_result[:errors]) unless api_result[:success]

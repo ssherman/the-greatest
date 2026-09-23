@@ -63,7 +63,7 @@ module DataImporters
 
           # Mock the finder to return existing album
           finder = mock
-          finder.expects(:call).returns(existing_album)
+          finder.expects(:call).returns(DataImporters::Match.new(outcome: :matched, record: existing_album, confidence: :certain, decided_by: :identifier))
           Finder.stubs(:new).returns(finder)
 
           result = Importer.call(artist: @artist, title: "The Dark Side of the Moon")
@@ -231,7 +231,7 @@ module DataImporters
 
           # Mock the finder to return existing album
           finder = mock
-          finder.expects(:call).returns(existing_album)
+          finder.expects(:call).returns(DataImporters::Match.new(outcome: :matched, record: existing_album, confidence: :certain, decided_by: :identifier))
 
           Finder.stubs(:new).returns(finder)
 

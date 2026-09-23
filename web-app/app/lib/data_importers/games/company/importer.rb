@@ -6,9 +6,9 @@ module DataImporters
       # Main importer for Games::Company records
       # Orchestrates finding existing companies and importing from IGDB
       class Importer < DataImporters::ImporterBase
-        def self.call(igdb_id: nil, force_providers: false, **options)
+        def self.call(igdb_id: nil, force_providers: false, subject: nil, verify: false, **options)
           query = ImportQuery.new(igdb_id: igdb_id, **options)
-          super(query: query, force_providers: force_providers)
+          super(query: query, force_providers: force_providers, subject: subject, verify: verify)
         end
 
         protected

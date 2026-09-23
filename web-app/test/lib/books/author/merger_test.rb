@@ -580,6 +580,20 @@ module Books
           "with swapped source and target can deadlock each other"
       end
 
+      test "records the merge on duplicate_candidates and repoints match decisions to the target" do
+        third = books_authors(:tolstoy)
+        pair = ::Services::DuplicateCandidates::Flag.call(item_type: "Books::Author", ids: [@source.id, @target.id], source: :ai).data
+        other_pair = ::Services::DuplicateCandidates::Flag.call(item_type: "Books::Author", ids: [@source.id, third.id], source: :ai).data
+        decision = MatchDecision.create!(finder: "F", record: @source, outcome: :matched, confidence: :high, decided_by: :ai)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert pair.reload.merged?
+        assert_equal [@target.id, third.id].minmax, [other_pair.reload.item_a_id, other_pair.item_b_id]
+        assert_equal @target.id, decision.reload.record_id
+      end
+
       def attach_image(author, primary:)
         author.images.create!(primary: primary) do |image|
           image.file.attach(

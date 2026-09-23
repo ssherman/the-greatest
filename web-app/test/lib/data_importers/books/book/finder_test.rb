@@ -16,7 +16,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_equal books_books(:crime_and_punishment), result
+          assert_equal books_books(:crime_and_punishment), result.record
         end
 
         test "finds by books_work_isbn13" do
@@ -25,7 +25,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_equal books_books(:war_and_peace), result
+          assert_equal books_books(:war_and_peace), result.record
         end
 
         test "finds by books_work_goodreads_id" do
@@ -34,7 +34,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_equal books_books(:of_mice_and_men), result
+          assert_equal books_books(:of_mice_and_men), result.record
         end
 
         test "identifier lookup wins over a title match" do
@@ -47,7 +47,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_equal books_books(:crime_and_punishment), result
+          assert_equal books_books(:crime_and_punishment), result.record
         end
 
         test "title + author fallback finds an exact case-insensitive match" do
@@ -55,7 +55,18 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_equal books_books(:war_and_peace), result
+          assert_equal books_books(:war_and_peace), result.record
+        end
+
+        test "finds a book by title and author when the query carries the whitespace the model folded away on save" do
+          author = ::Books::Author.create!(name: "Kathleen Alcott")
+          book = ::Books::Book.create!(title: "The Secret Lives")
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          query = ImportQuery.new(title: "The Secret Lives", author_names: ["Kathleen Alcott"])
+
+          result = @finder.call(query: query)
+
+          assert_equal book, result.record
         end
 
         test "title alone with no author names returns nil even when the title exists" do
@@ -63,7 +74,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "title with a non-matching author returns nil" do
@@ -71,7 +82,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "returns nil when nothing matches" do
@@ -79,7 +90,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "makes no HTTP request" do
@@ -93,6 +104,35 @@ module DataImporters
           @finder.call(query: query)
 
           assert_not_requested(:any, /.*/)
+        end
+
+        test "a hit is a certain, rule-decided match recorded as a MatchDecision" do
+          isbn = identifiers(:war_and_peace_isbn13).value
+          query = ImportQuery.new(title: nil, isbn13: [isbn])
+
+          result = @finder.call(query: query)
+
+          assert result.matched?
+          assert_equal [:certain, :rule], [result.confidence, result.decided_by]
+          assert_equal [:legacy], result.candidates.first.sources
+          decision = result.decision
+          assert_equal "DataImporters::Books::Book::Finder", decision.finder
+          assert_equal books_books(:war_and_peace), decision.record
+          assert decision.certain?
+          assert_equal [isbn], decision.query["isbn13"]
+          assert_not decision.needs_review
+        end
+
+        test "a miss is a high-confidence unmatched, recorded with no record" do
+          query = ImportQuery.new(title: "No Such Book", author_names: ["Nobody"])
+
+          result = @finder.call(query: query)
+
+          assert result.unmatched?
+          assert_nil result.record
+          assert_equal [:high, :rule], [result.confidence, result.decided_by]
+          assert result.decision.unmatched?
+          assert_nil result.decision.record
         end
       end
     end

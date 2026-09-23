@@ -27,7 +27,7 @@ module DataImporters
 
           result = @finder.call(query: @query)
 
-          assert_equal music_artists(:pink_floyd), result
+          assert_equal music_artists(:pink_floyd), result.record
         end
 
         test "call returns existing artist when found by exact name match" do
@@ -42,7 +42,7 @@ module DataImporters
 
           result = @finder.call(query: @query)
 
-          assert_equal music_artists(:pink_floyd), result
+          assert_equal music_artists(:pink_floyd), result.record
         end
 
         test "call returns nil when no artist found by any method" do
@@ -58,7 +58,7 @@ module DataImporters
           unknown_query = ImportQuery.new(name: "Unknown Artist")
           result = @finder.call(query: unknown_query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call handles MusicBrainz search errors gracefully" do
@@ -73,7 +73,7 @@ module DataImporters
           # Should still fall back to name matching
           result = @finder.call(query: @query)
 
-          assert_equal music_artists(:pink_floyd), result
+          assert_equal music_artists(:pink_floyd), result.record
         end
 
         test "call returns nil for unknown artist when MusicBrainz fails" do
@@ -88,7 +88,7 @@ module DataImporters
           unknown_query = ImportQuery.new(name: "Unknown Artist")
           result = @finder.call(query: unknown_query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call prioritizes MusicBrainz ID over name matching" do
@@ -108,7 +108,7 @@ module DataImporters
           # Should return David Bowie (found by MBID) not Pink Floyd (found by name)
           result = @finder.call(query: @query)
 
-          assert_equal music_artists(:david_bowie), result
+          assert_equal music_artists(:david_bowie), result.record
         end
 
         # Tests for new MusicBrainz ID lookup functionality
@@ -124,7 +124,7 @@ module DataImporters
           result = @finder.call(query: query)
 
           # Should find Pink Floyd by MBID identifier
-          assert_equal music_artists(:pink_floyd), result
+          assert_equal music_artists(:pink_floyd), result.record
         end
 
         test "call returns nil when musicbrainz_id is provided but no artist found with that MBID" do
@@ -133,7 +133,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call prioritizes musicbrainz_id over name when both are provided" do
@@ -148,7 +148,7 @@ module DataImporters
           result = @finder.call(query: query)
 
           # Should find Pink Floyd by MBID, ignoring the name
-          assert_equal music_artists(:pink_floyd), result
+          assert_equal music_artists(:pink_floyd), result.record
         end
 
         test "call falls back to name-based search when musicbrainz_id is blank" do
@@ -168,7 +168,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_equal music_artists(:pink_floyd), result
+          assert_equal music_artists(:pink_floyd), result.record
         end
       end
     end

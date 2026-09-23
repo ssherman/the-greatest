@@ -588,6 +588,20 @@ module Games
           "with swapped source and target can deadlock each other"
       end
 
+      test "records the merge on duplicate_candidates and repoints match decisions to the target" do
+        third = games_games(:resident_evil_4)
+        pair = ::Services::DuplicateCandidates::Flag.call(item_type: "Games::Game", ids: [@source.id, @target.id], source: :ai).data
+        other_pair = ::Services::DuplicateCandidates::Flag.call(item_type: "Games::Game", ids: [@source.id, third.id], source: :ai).data
+        decision = MatchDecision.create!(finder: "F", record: @source, outcome: :matched, confidence: :high, decided_by: :ai)
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert pair.reload.merged?
+        assert_equal [@target.id, third.id].minmax, [other_pair.reload.item_a_id, other_pair.item_b_id]
+        assert_equal @target.id, decision.reload.record_id
+      end
+
       # Give the target the same release_year as the source (via update_all, which
       # skips callbacks) so reconcile_scalars leaves target_game unchanged. Otherwise
       # merge_release_year's own target_game.save! fires SearchIndexable's after_commit
