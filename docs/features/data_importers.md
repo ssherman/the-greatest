@@ -10,13 +10,13 @@ The DataImporters system provides a flexible, extensible framework for importing
 - **Domain-Agnostic Base Classes**: Shared logic for all media types
 - **Incremental Saving**: Items saved after each successful provider for background job compatibility
 - **Provider Aggregation**: Multiple providers can enrich the same record
-- **Intelligent Duplicate Detection**: Uses external identifiers and fallback matching strategies
+- **Finder returns a decision, not a record**: every finder answers with a `Match` (matched or unmatched, confidence, candidates, who decided, why) and records a `MatchDecision`. See [Import finder](./import-finder.md).
 
 ### System Components
 
 #### Base Classes (Domain-Agnostic)
 - **ImporterBase** - Main orchestration logic with provider aggregation and incremental saving
-- **FinderBase** - Base class for finding existing records via external identifiers
+- **FinderBase** - The four-stage finder pipeline (gather candidates, rules, AI selection, record); see [Import finder](./import-finder.md)
 - **ProviderBase** - Base class for external data source integration
 - **ImportQuery** - Factory for domain-specific query objects with validation
 - **ImportResult** - Aggregated results from all providers with success/failure tracking
@@ -246,8 +246,8 @@ result = DataImporters::Games::Game::Importer.call(
 
 ### Standard Single-Item Import
 1. **Input Validation**: Domain-specific query object validates parameters
-2. **Find Existing**: Use external identifiers for reliable duplicate detection
-3. **Early Return**: Skip providers if existing item found (unless force_providers: true)
+2. **Find Existing**: The finder returns a `Match`; `match.record` is the existing record or nil
+3. **Early Return**: Skip providers if a record matched (unless force_providers: true); providers otherwise receive the match as `populate(item, query:, match:)`
 4. **Initialize Item**: Create new record if none found
 5. **Provider Execution**: Each provider contributes data, item saved after successful providers
 6. **Result Aggregation**: Return detailed ImportResult with provider feedback

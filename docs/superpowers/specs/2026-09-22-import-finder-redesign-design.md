@@ -122,7 +122,7 @@ against the rest of the catalog (the duplicate sweep in Section 16).
 
 ```ruby
 Match
-  outcome              :matched | :new
+  outcome              :matched | :unmatched   (the spec's "new"; an enum value `new` would shadow MatchDecision.new)
   record               the local record, or nil when :new
   confidence           :certain | :high | :medium | :low
   decided_by           :identifier | :rule | :ai | :fallback
@@ -170,7 +170,7 @@ enrichers call it directly), and is not transactional.
 
 ### 2. Candidate sources
 
-Sources are small objects with `call(query) -> [Candidate]`. Three are shared:
+Sources are small objects with `#name` and `#call -> [Candidate]`, built by the finder with what they need. Three are shared:
 
 - **`Sources::Identifiers`.** Postgres lookup on `Identifier` for the query's values, in the
   domain's priority order, through the existing `(identifiable_type, value)` index. Two local
@@ -279,13 +279,13 @@ one class.
 | `finder` | string, indexed | finder class name; filters by domain and entity |
 | `record_type`, `record_id` | polymorphic, nullable, indexed | the matched record, or the created one once the importer saves it |
 | `subject_type`, `subject_id` | polymorphic, nullable, indexed | what the caller was resolving for (a list item), via `Importer.call(..., subject:)` |
-| `outcome` | enum: matched 0, new 1 | |
+| `outcome` | enum: matched 0, unmatched 1 | |
 | `confidence` | enum: certain 0, high 1, medium 2, low 3 | |
 | `decided_by` | enum: identifier 0, rule 1, ai 2, fallback 3 | |
 | `verify` | boolean | early exits disabled |
 | `query` | jsonb | the query fields as sent |
 | `candidates` | jsonb | array of `{record_type, record_id, external_source, external_key, sources, scores, evidence}` |
-| `selected_index` | integer, nullable | 1-based, as the AI saw it; nil for none |
+| `selected_index` | integer, nullable | 1-based, as the AI saw it; nil for none (the AI's 0 is stored as nil) |
 | `reason` | text | |
 | `ai_chat_id` | bigint, nullable, FK | the prompt and response |
 | `sources_failed` | string array | |
@@ -301,14 +301,14 @@ Index on `created_at` as well. The importer updates `record` after it saves a ne
 | `item_type` | string | both records share it |
 | `item_a_id`, `item_b_id` | bigint | check constraint `item_a_id < item_b_id`; unique with `item_type` |
 | `source` | enum: identifier_collision 0, external_key_collision 1, ai 2, human 3, bulk_verify 4 | |
-| `status` | enum: open 0, merged 1, not_duplicate 2 | |
+| `status` | enum: pending 0, merged 1, not_duplicate 2 | |
 | `evidence` | jsonb | scores, reasoning, identifier values |
 | `occurrences` | integer, default 1 | how many finder calls raised it |
 | `match_decision_id` | bigint, nullable, FK | the first decision that raised it |
 | `resolved_at`, `resolved_by_id`, `resolution_note` | | the human verdict |
 
 No foreign keys on `item_a_id`/`item_b_id`, matching `ranked_items`. Flagging goes through
-`find_or_initialize_by` on `(item_type, item_a_id, item_b_id)`: an open row gains an occurrence
+`find_or_initialize_by` on `(item_type, item_a_id, item_b_id)`: a pending row gains an occurrence
 and merged evidence; a `merged` or `not_duplicate` row is left untouched.
 
 ### 6. Importer and provider changes
@@ -557,3 +557,4 @@ Each gets its own plan under `docs/superpowers/plans/`.
 - **Postgres and OpenSearch, no tsvector.** Expression indexes on `lower(title)` and
   `lower(name)` for the exact source.
 - **Performance is not a constraint.** The finder mostly runs inside slow admin list imports.
+- **Three names changed at implementation:** outcome `unmatched` (not `new`), pair status `pending` (not `open`), and sources take no argument on `call`. Increment 1's plan explains each.
