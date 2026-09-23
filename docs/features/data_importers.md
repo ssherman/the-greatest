@@ -156,27 +156,31 @@ section for the full contract).
 
 - **Query** (`ImportQuery`) takes `title` (required unless an identifier is present),
   `author_names`, `year`, `isbn13`, `isbn10`, `asin`, `goodreads_id`, `open_library_work_key`.
-- **Finder is identifier-first**, never the service: it checks `open_library_work_key`, then
-  `isbn13`, `isbn10`, `asin`, `goodreads_id` in that order, and falls back to an exact
-  case-insensitive title match joined to a matching author name only when both a title and author
-  names are present. A title alone never matches -- the local data holds many same-title works,
-  and disambiguating them is the matcher's job, not the finder's.
+- **Finder** runs four candidate sources in order (identifiers, an exact title/author match, an
+  OpenSearch title-plus-authors query, and the Open Library `/resolve` service); see
+  [Import finder](./import-finder.md) for what each one does.
 - **Provider** calls the service's `/resolve` endpoint with the *book's* current state (not just
   the query) and, on an accept verdict, applies fills only to blank fields (`title`, `subtitle`,
-  `description`, `first_published_year`). `title`, `subtitle` and `first_published_year` are blank
+  `description`, `first_published_year`); for a new book it reuses the resolution the finder
+  already obtained, so a title import makes one `/resolve` call in total. `title`, `subtitle` and
+  `first_published_year` are blank
   scalar columns; `description` is stored as a `descriptions` row (`source: openlibrary`) via
   `Describable#assign_description`, never the legacy `books_books.description` column, and "ours"
   sent to the service is the book's primary description. A populated field the service calls a
   conflict or an enrichment is left alone and reported in `data_populated` as `"skipped:<field>"`.
   Authors and subjects are never applied from this provider -- creating authors or categories from
   them belongs to a separate reconciliation effort.
-- **Idempotency:** re-running `Importer.call` with any identifier is idempotent (identifier-first
-  finder; the provider persists the query's identifiers on accept); a title+author-only import is
-  NOT idempotent yet because the provider creates no author rows (that is the reconciliation
-  spec's), so the finder's title+author fallback cannot see an importer-created book. This holds for
-  `isbn13`/`isbn10`/`asin`/`goodreads_id` and for a CURRENT Open Library work key, but not for a
-  query keyed by an OLD (redirected) OL key: the provider stores the canonical key the service
-  returns, while the finder looks up the key the caller supplied.
+- **Idempotency:** re-running `Importer.call` with any identifier is idempotent (the finder's
+  identifier and exact sources find it; the provider persists the query's identifiers on accept),
+  including a query keyed by an OLD (redirected) OL key as long as it still carries the title the
+  service can accept on: the service resolves the old key to its terminal work,
+  `OpenLibrarySource#local_holders` finds the book holding that canonical key (it also counts any
+  key in the work's `redirected_from` list, which `/resolve` does not populate), and rule 2 matches
+  on the external accept. A key-only re-run earns no accept, because the service has no title or
+  identifier evidence for it, so that one reaches the AI. A title+author-only import is NOT
+  idempotent by rule yet because the provider creates no author rows (that is increment 4's), so
+  the exact rule cannot match an importer-created book; OpenSearch still surfaces it and the AI
+  decides.
 
 ## Usage Examples
 

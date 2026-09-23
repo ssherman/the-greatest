@@ -8,6 +8,10 @@ module DataImporters
       class ImporterTest < ActiveSupport::TestCase
         BASE_URL = "http://open-library.test:8080"
 
+        def setup
+          ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([])
+        end
+
         def stub_open_library_client
           client = ::Books::OpenLibrary::Client.new(
             config: ::Books::OpenLibrary::Configuration.new(base_url: BASE_URL),
@@ -98,6 +102,17 @@ module DataImporters
           assert_equal "https://openlibrary.org/works/OL468431W", descriptions.first.source_url
           assert_predicate descriptions.first, :license_cc0?
           assert result.item.identifiers.exists?(identifier_type: :books_work_openlibrary_id, value: "OL468431W")
+        end
+
+        test "importing a new title resolves once: the finder's resolution feeds the provider" do
+          stub_open_library_client
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: accept_response(diff: []).to_json)
+
+          result = Importer.call(title: "The Great Gatsby", author_names: ["F. Scott Fitzgerald"])
+
+          assert result.success?
+          assert result.match.unmatched?
+          assert_requested(:post, "#{BASE_URL}/resolve", times: 1)
         end
 
         test "force_providers runs providers against an existing book" do

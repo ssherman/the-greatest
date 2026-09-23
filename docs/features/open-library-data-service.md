@@ -654,14 +654,11 @@ nil/empty so the service's own defaults apply. `Resolution` is built straight fr
 here (the server's rank order is the contract), and `#accepted` looks up the candidate matching
 `decision.key` rather than re-deciding anything client-side.
 
-### The finder rule (R104)
+### The finder rule (R104) -- superseded
 
-`DataImporters::Books::Book::Finder` checks identifiers first, in order: `open_library_work_key`,
-`isbn13`, `isbn10`, `asin`, `goodreads_id`. Only if none of those match does it fall back to one
-query: an exact case-insensitive title match joined to an author whose name matches one of the
-query's `author_names` case-insensitively. A title with no author names never matches -- the local
-data holds many same-title works, and disambiguating them is the matcher's job, not the finder's.
-The finder never calls the Open Library service.
+The increment-1/2 finder is described in `docs/features/import-finder.md`. The service is now
+one of four candidate sources, and the finder does call `/resolve`; the old rule that it never
+did is gone.
 
 ### The provider's write rule (R105/R106/R107/R117)
 
@@ -708,9 +705,9 @@ than writing any identifier (R113) -- otherwise write the identifier(s), `succes
 bare `rescue => e` (catches any `StandardError`), not a match on
 `Books::OpenLibrary::Exceptions::Error` specifically: every client exception (circuit open, timeout,
 network, HTTP, parse) *and* any other `StandardError` raised while building the request or calling
-the client becomes a `failure_result` naming the exception class and message. Exactly one HTTP call
-per `populate` -- the accepted candidate's `record` is a full `Work`, so no follow-up `GET` is
-needed.
+the client becomes a `failure_result` naming the exception class and message. At most one HTTP call
+per `populate`: a new book reuses the finder's resolution and makes none -- when a call is made, the
+accepted candidate's `record` is a full `Work`, so no follow-up `GET` is needed.
 
 ### Running a manual import locally
 
@@ -729,16 +726,16 @@ measured" above), so a background job importing many books should serialize its 
 through the `serial` Sidekiq queue the way the CoverArt and Amazon-enrichment jobs already do
 (`sidekiq_options queue: :serial` in `app/sidekiq/{games,music}/cover_art_download_job.rb` and
 `app/sidekiq/{books,games,music}/amazon_product_enrichment_job.rb`) -- not run several in parallel,
-which makes every one of them slower rather than any one faster. No such job exists yet: Increment 5
-ships the importer and provider only; a Sidekiq job driving many imports through them is deferred.
+which makes every one of them slower rather than any one faster. `Books::FindDuplicatesJob` is the
+first bulk caller: one job per ranked book on that same `serial` queue, and `verify: true` means
+every source runs, so every job makes one `/resolve` call.
 
 ### Deferred
 
-Language/MARC mapping (`language`, `oclc`, `lccn` are not sent -- R103); a Sidekiq job to drive bulk
-imports through the `serial` queue; the batch reconciliation of the 126,330 books (a separate spec,
-written after the service exists and its real behaviour is known); and the matcher's accept/margin
-dial, which "Service, measured" above already calls a deliberately deferred calibration decision
-for whoever operates the service.
+Language/MARC mapping (`language`, `oclc`, `lccn` are not sent -- R103); the batch reconciliation
+of the 126,330 books (a separate spec, written after the service exists and its real behaviour is
+known); and the matcher's accept/margin dial, which "Service, measured" above already calls a
+deliberately deferred calibration decision for whoever operates the service.
 
 ### Carry-forwards
 

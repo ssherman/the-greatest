@@ -56,6 +56,16 @@ module DataImporters
       assert local.decisive?
     end
 
+    test "absorb keeps the higher score when both halves scored the same source" do
+      a = Candidate.new(record: books_books(:war_and_peace), sources: [:open_library], scores: {open_library: 0.4})
+      b = Candidate.new(record: books_books(:war_and_peace), sources: [:open_library], scores: {open_library: 0.9})
+
+      a.absorb(b)
+
+      assert_equal({open_library: 0.9}, a.scores)
+      assert_equal({open_library: 0.9}, Candidate.new(scores: {open_library: 0.9}).absorb(Candidate.new(scores: {open_library: 0.4})).scores)
+    end
+
     test "snapshot is JSON-safe and carries no record object" do
       candidate = Candidate.new(
         record: @book, external_key: "OL1W", external_source: :open_library,

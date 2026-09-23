@@ -360,7 +360,8 @@ or rejects, the query's `author_names` go through the author importer by name. A
 already has authors is left alone, the same ruling as the merger. This closes the documented
 gap where a title-plus-author import was not idempotent.
 
-**One-off task:** normalize the 365 books and their authors that carry exotic spaces, in place.
+**One-off task:** normalize every stored title and author name the save-time normalizer would
+change, in place (`docs/data-quality/books-normalizer-effect.md`).
 Any duplicate pairs that fall out go to the duplicates queue; nothing is merged automatically.
 
 ### 9. Authors
@@ -562,3 +563,5 @@ Each gets its own plan under `docs/superpowers/plans/`.
 - **Performance is not a constraint.** The finder mostly runs inside slow admin list imports.
 - **Three names changed at implementation:** outcome `unmatched` (not `new`), pair status `pending` (not `open`), and sources take no argument on `call`. Increment 1's plan explains each.
 - **The failed-source cap spares `certain` decisions** (declared at implementation; see §14).
+- **Rule 4 counts exact-matching locals** (declared in increment 2): the rule fires when exactly one local candidate passes the exact test, whatever else the fuzzy sources returned; two exact locals go to the AI. Increment 1 had read it as "exactly one local candidate, and it is exact", which would have sent nearly every import with an OpenSearch neighbour to the AI.
+- **Increment 2 readings** (declared at implementation): `alternate_titles` sits inside the required title group of `BookByTitleAndAuthors`, so a merged-away title satisfies the search; the Open Library source treats a local book holding a key in the work's `redirected_from` list as a holder of that work; the one-off normalization covers every row the save-time normalizer would change (1,965 titles, 3,436 author names measured 2026-09-23), not only the 365 with exotic spaces; `U+00B4` joins `QuoteNormalizer`; the sweep is one job per ranked book rather than one looping job; the one-off's collision pairs use source `bulk_verify`.

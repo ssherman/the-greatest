@@ -50,6 +50,14 @@ module DataImporters
       def record_year(record) = record.first_published_year
     end
 
+    # A one-off subclass for the record_extra_evidence hook test. Defined at
+    # file scope, not via `Class.new` inside the test: an anonymous class
+    # assigned to a local variable is never named, and MatchDecision
+    # validates `finder` (the class name) present.
+    class ExtraEvidenceFinder < TestFinder
+      def record_extra_evidence(record) = {kind: "extra-#{record.id}", title: "hook title"}
+    end
+
     def setup
       @book = books_books(:war_and_peace)      # Leo Tolstoy, 1869, alternate title "Voyna i mir"
       @other = books_books(:crime_and_punishment)
@@ -170,7 +178,7 @@ module DataImporters
       @finder.call(query: @query)
       assert_equal 0, second.calls
 
-      stub_ai({selected_index: 1, confidence: "high", reasoning: "", same_entity_groups: []})
+      ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new).never
       match = @finder.call(query: @query, verify: true)
 
       assert_equal 1, second.calls
@@ -237,7 +245,9 @@ module DataImporters
       end.returns(@task)
       @task.stubs(:call).returns(::Services::Ai::Result.new(success: true, data: {selected_index: 2, confidence: "medium", reasoning: "Closest.", same_entity_groups: []}, ai_chat: ai_chats(:general_chat)))
 
-      match = @finder.call(query: @query)
+      # A year conflict keeps rule 4 from resolving @book outright (its title
+      # and creator otherwise match @query exactly), so this genuinely reaches the AI.
+      match = @finder.call(query: @query.merge(year: 1990))
 
       assert match.matched?
       assert_equal @other, match.record
@@ -287,7 +297,8 @@ module DataImporters
       ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new).with { |args| args[:parent] == subject }.returns(@task)
       @task.stubs(:call).returns(::Services::Ai::Result.new(success: true, data: {selected_index: 0, confidence: "low", reasoning: "", same_entity_groups: []}))
 
-      match = @finder.call(query: @query, subject: subject)
+      # A year conflict keeps rule 4 from resolving @book outright.
+      match = @finder.call(query: @query.merge(year: 1990), subject: subject)
 
       assert_equal subject, match.decision.subject
     end
@@ -296,7 +307,8 @@ module DataImporters
       @finder.sources = [FakeSource.new(:opensearch, candidates: [Candidate.new(record: @book, sources: [:opensearch]), Candidate.new(record: @other, sources: [:opensearch])])]
       stub_ai({selected_index: 1, confidence: "high", reasoning: "Both the same.", same_entity_groups: [[1, 2]]})
 
-      match = @finder.call(query: @query)
+      # A year conflict keeps rule 4 from resolving @book outright.
+      match = @finder.call(query: @query.merge(year: 1990))
 
       pair = DuplicateCandidate.find_by(item_type: "Books::Book", item_a_id: [@book.id, @other.id].min, item_b_id: [@book.id, @other.id].max)
       assert pair.pending?
@@ -310,7 +322,8 @@ module DataImporters
       @finder.sources = [FakeSource.new(:opensearch, candidates: [Candidate.new(record: @book, sources: [:opensearch]), Candidate.new(record: @other, sources: [:opensearch])])]
       stub_ai({selected_index: 1, confidence: "high", reasoning: "Picked one.", same_entity_groups: [[1, 2]]})
 
-      match = @finder.call(query: @query)
+      # A year conflict keeps rule 4 from resolving @book outright.
+      match = @finder.call(query: @query.merge(year: 1990))
 
       assert_equal @other, match.record
       assert_match(/Preferred ranked #2/, match.reason)
@@ -320,7 +333,8 @@ module DataImporters
       @finder.sources = [FakeSource.new(:opensearch, candidates: [Candidate.new(record: @book, sources: [:opensearch]), Candidate.new(record: @other, sources: [:opensearch])])]
       stub_ai(nil, success: false, error: "boom")
 
-      match = @finder.call(query: @query)
+      # A year conflict keeps rule 4 from resolving @book outright.
+      match = @finder.call(query: @query.merge(year: 1990))
 
       assert match.unmatched?
       assert_equal [:low, :fallback], [match.confidence, match.decided_by]
@@ -333,7 +347,8 @@ module DataImporters
       @finder.sources = [FakeSource.new(:opensearch, candidates: [Candidate.new(record: @book, sources: [:opensearch]), Candidate.new(record: @other, sources: [:opensearch])])]
       ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).raises(ArgumentError, "Unknown provider")
 
-      match = @finder.call(query: @query)
+      # A year conflict keeps rule 4 from resolving @book outright.
+      match = @finder.call(query: @query.merge(year: 1990))
 
       assert match.decision.decided_by_fallback?
       assert_includes match.reason, "Unknown provider"
@@ -361,11 +376,31 @@ module DataImporters
       assert_includes evidence[:identifiers], {type: "books_work_isbn13", value: "9780140447934"}
     end
 
+    test "record_identifiers caps the evidence list at 25 rows" do
+      30.times { |i| @book.identifiers.create!(identifier_type: :books_work_isbn13, value: "test-isbn-#{i}") }
+      @finder.sources = [FakeSource.new(:identifier, candidates: [Candidate.new(record: @book, sources: [:identifier])])]
+
+      match = @finder.call(query: @query)
+
+      assert_equal 25, match.candidates.first.evidence[:identifiers].size
+    end
+
+    test "record_extra_evidence is merged into a local candidate's evidence" do
+      finder = ExtraEvidenceFinder.new
+      finder.sources = [FakeSource.new(:exact, candidates: [Candidate.new(record: @book, sources: [:exact])])]
+
+      match = finder.call(query: @query)
+
+      assert_equal "extra-#{@book.id}", match.candidates.first.evidence[:kind]
+      # the hook merges after the shared keys
+      assert_equal "hook title", match.candidates.first.evidence[:title]
+    end
+
     test "two local candidates sharing an external key are flagged as an external key collision whatever the rules decide" do
       first = Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:opensearch, :open_library])
       second = Candidate.new(record: @other, external_key: "OL1W", external_source: :open_library, sources: [:opensearch, :open_library])
       @finder.sources = [FakeSource.new(:opensearch, candidates: [first, second])]
-      stub_ai({selected_index: 1, confidence: "high", reasoning: "", same_entity_groups: []})
+      ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new).never
 
       match = @finder.call(query: @query)
 
