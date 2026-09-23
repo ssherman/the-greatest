@@ -7,7 +7,7 @@ module DataImporters
         # AI Description provider for Music::Artist data
         # This is an async provider - launches background job and returns success immediately
         class AiDescription < DataImporters::ProviderBase
-          def populate(artist, query:)
+          def populate(artist, query:, match: nil)
             # Validate we have required data for AI description
             return failure_result(errors: ["Artist name required for AI description"]) if artist.name.blank?
 

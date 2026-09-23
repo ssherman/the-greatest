@@ -13,7 +13,7 @@ module DataImporters
           # - query: ImportQuery - contains name
           #
           # Returns: Result(success:, data_populated:|errors:)
-          def populate(artist, query:)
+          def populate(artist, query:, match: nil)
             # Use different API based on what information we have
             api_result = if query.musicbrainz_id.present?
               lookup_artist_by_mbid(query.musicbrainz_id)

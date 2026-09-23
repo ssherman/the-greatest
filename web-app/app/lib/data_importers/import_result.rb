@@ -3,12 +3,13 @@
 module DataImporters
   # Aggregated results from all providers for an import operation
   class ImportResult
-    attr_reader :item, :provider_results, :success
+    attr_reader :item, :provider_results, :success, :match
 
-    def initialize(item:, provider_results:, success:)
+    def initialize(item:, provider_results:, success:, match: nil)
       @item = item
       @provider_results = Array(provider_results)
       @success = success
+      @match = match
     end
 
     def success?
@@ -39,7 +40,9 @@ module DataImporters
         providers_succeeded: successful_providers.count,
         providers_failed: failed_providers.count,
         data_populated: successful_providers.flat_map(&:data_populated).uniq,
-        errors: all_errors
+        errors: all_errors,
+        match_outcome: match&.outcome,
+        match_confidence: match&.confidence
       }
     end
 

@@ -37,7 +37,7 @@ module DataImporters
           # book: ::Books::Book -- the local record. query: DataImporters::Books::Book::ImportQuery
           # or nil (item-based / force_providers import, where the book alone
           # must carry everything the request needs).
-          def populate(book, query: nil)
+          def populate(book, query: nil, match: nil)
             resolution = client.resolve(**resolve_args(book, query))
 
             if resolution.accept?

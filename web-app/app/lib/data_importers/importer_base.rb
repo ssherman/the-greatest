@@ -4,11 +4,11 @@ module DataImporters
   # Base class for all importers
   # Orchestrates the import process: find existing, create new, run providers, save
   class ImporterBase
-    def self.call(query: nil, item: nil, force_providers: false, providers: nil)
-      new.call(query: query, item: item, force_providers: force_providers, providers: providers)
+    def self.call(query: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false)
+      new.call(query: query, item: item, force_providers: force_providers, providers: providers, subject: subject, verify: verify)
     end
 
-    def call(query: nil, item: nil, force_providers: false, providers: nil)
+    def call(query: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false)
       # Validate input parameters
       if item.nil? && query.nil?
         raise ArgumentError, "Either item or query must be provided"
@@ -37,19 +37,24 @@ module DataImporters
           success: provider_results.any?(&:success?)
         )
       else
+        match = nil
+
         # Determine the item to work with
         if item.present?
           # Item-based import: use provided item
           target_item = item
           is_existing_item = true
         else
-          # Query-based import: try to find existing record
-          existing = finder.call(query: query)
+          # Query-based import: ask the finder. It always answers, and records
+          # the answer; `match.record` is nil when nothing matched.
+          match = finder.call(query: query, verify: verify, subject: subject)
+          existing = match.record
           if existing && !force_providers
             return ImportResult.new(
               item: existing,
               provider_results: [],
-              success: true
+              success: true,
+              match: match
             )
           end
 
@@ -59,7 +64,12 @@ module DataImporters
         end
 
         # Run providers to populate data, saving after each successful provider
-        provider_results = run_providers_with_saving(target_item, query, is_existing_item, providers)
+        provider_results = run_providers_with_saving(target_item, query, is_existing_item, providers, match: match)
+
+        # A new record now exists: point the finder's decision at it.
+        if match && !is_existing_item && target_item.persisted?
+          match.decision&.update!(record: target_item)
+        end
 
         # Overall success if any provider succeeded
         success = provider_results.any?(&:success?)
@@ -68,7 +78,8 @@ module DataImporters
         ImportResult.new(
           item: target_item,
           provider_results: provider_results,
-          success: success
+          success: success,
+          match: match
         )
       end
     end
@@ -99,11 +110,11 @@ module DataImporters
       false
     end
 
-    def run_providers(item, query, selected_providers = nil)
+    def run_providers(item, query, selected_providers = nil, match: nil)
       target_providers = filter_providers(selected_providers)
 
       target_providers.map do |provider|
-        provider.populate(item, query: query)
+        provider.populate(item, query: query, match: match)
       rescue => e
         ProviderResult.failure(
           provider: provider.class.name,
@@ -112,12 +123,12 @@ module DataImporters
       end
     end
 
-    def run_providers_with_saving(item, query, is_existing_item, selected_providers = nil)
+    def run_providers_with_saving(item, query, is_existing_item, selected_providers = nil, match: nil)
       provider_results = []
       target_providers = filter_providers(selected_providers)
 
       target_providers.each do |provider|
-        result = provider.populate(item, query: query)
+        result = provider.populate(item, query: query, match: match)
         provider_results << result
 
         # Save after each successful provider to persist both attribute changes and associations

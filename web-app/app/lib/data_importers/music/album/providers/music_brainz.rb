@@ -13,7 +13,7 @@ module DataImporters
           # - query: ImportQuery - contains artist OR release_group_musicbrainz_id, optional title, primary_albums_only
           #
           # Returns: Result(success:, data_populated:|errors:)
-          def populate(album, query:)
+          def populate(album, query:, match: nil)
             # Handle item-based import where query might be nil
             if query.nil?
               # For item-based import, check if album already has MusicBrainz ID
