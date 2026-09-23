@@ -51,7 +51,7 @@ The `force_providers: true` parameter allows:
 **Synchronous Provider:**
 ```ruby
 class Providers::MusicBrainz < ProviderBase
-  def populate(item, query:)
+  def populate(item, query:, match: nil)
     # Fetch and populate data immediately
     # Save happens automatically after this returns success
     ProviderResult.new(success: true, provider_name: self.class.name)
@@ -62,7 +62,7 @@ end
 **Asynchronous Provider:**
 ```ruby
 class Providers::CoverArt < ProviderBase
-  def populate(item, query:)
+  def populate(item, query:, match: nil)
     # Queue background job for rate-limited API
     Games::CoverArtDownloadJob.perform_async(item.id)
     # Return success immediately - job updates item later
@@ -327,7 +327,7 @@ When creating new platforms, the IGDB provider infers `platform_family` from slu
 
 ### Adding New Providers
 1. Create provider class inheriting from `ProviderBase`
-2. Implement `populate(item, query:)` method
+2. Implement `populate(item, query:, match: nil)`; `match` is the finder's Match for a query-based import, nil for an item-based one — see [Import finder](./import-finder.md)
 3. Use `find_or_initialize_by` for identifiers to prevent duplicates
 4. Add to domain-specific importer's `providers` array
 
