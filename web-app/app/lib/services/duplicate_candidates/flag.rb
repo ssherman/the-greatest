@@ -38,8 +38,6 @@ module Services
         row.assign_attributes(source: @source, evidence: @evidence.deep_stringify_keys, match_decision: @match_decision, status: :pending, occurrences: 1)
         row.save!
         Result.new(success?: true, data: row, errors: [])
-      rescue ActiveRecord::RecordInvalid => e
-        Result.new(success?: false, data: nil, errors: [e.message])
       end
 
       private

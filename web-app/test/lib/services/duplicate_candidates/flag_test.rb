@@ -70,6 +70,12 @@ module Services
         assert again.merged?
         assert_equal 1, again.occurrences
       end
+
+      test "an invalid pair write raises instead of returning a failure result" do
+        assert_raises(ActiveRecord::RecordInvalid) do
+          Flag.call(item_type: nil, ids: [@a.id, @b.id], source: :ai)
+        end
+      end
     end
   end
 end
