@@ -65,6 +65,15 @@ module DataImporters
       assert_equal [@book, @other], set.locals.map(&:record)
     end
 
+    test "a local candidate for a different record than the one holding its external key is kept apart" do
+      set = CandidateSet.new
+      set.add(Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:open_library]))
+      set.add(Candidate.new(record: @other, external_key: "OL1W", external_source: :open_library, sources: [:open_library]))
+
+      assert_equal 2, set.size
+      assert_equal [@book, @other], set.to_a.map(&:record)
+    end
+
     test "empty? and size" do
       set = CandidateSet.new
 

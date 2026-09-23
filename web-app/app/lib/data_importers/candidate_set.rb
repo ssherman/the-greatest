@@ -12,6 +12,11 @@ module DataImporters
       by_record = candidate.local? ? find_local(candidate.record) : nil
       by_key = candidate.external? ? find_external(candidate.external_source, candidate.external_key) : nil
 
+      # A local candidate for a different record than the one holding its
+      # external key is a distinct candidate (a suspected duplicate), never
+      # something to fold into that other record.
+      by_key = nil if by_key&.local? && candidate.local? && !same_record?(by_key.record, candidate.record)
+
       if by_record && by_key && !by_record.equal?(by_key) && !by_key.local?
         # A local candidate and an external-only candidate turn out to be
         # the same thing: fold the external one into the local one.
@@ -51,6 +56,10 @@ module DataImporters
 
     def find_external(source, key)
       @candidates.find { |c| c.external? && c.external_source == source && c.external_key == key }
+    end
+
+    def same_record?(a, b)
+      a.instance_of?(b.class) && a.id == b.id
     end
   end
 end
