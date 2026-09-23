@@ -64,13 +64,18 @@ module DataImporters
         def find_by_title_and_author(query)
           return nil if query.title.blank? || query.author_names.empty?
 
-          normalized_title = ::Services::Text::QuoteNormalizer.call(query.title)
-
           ::Books::Book
             .joins(book_authors: :author)
-            .where("LOWER(books_books.title) = LOWER(?)", normalized_title)
-            .where("LOWER(books_authors.name) IN (?)", query.author_names.map(&:downcase))
+            .where("LOWER(books_books.title) = LOWER(?)", normalize(query.title))
+            .where("LOWER(books_authors.name) IN (?)", query.author_names.map { |name| normalize(name).downcase })
             .first
+        end
+
+        # The same normalization Books::Book#normalize_title and
+        # Books::Author#normalize_name apply on save, so what we look up is
+        # what was stored.
+        def normalize(text)
+          ::Services::Text::NameNormalizer.call(::Services::Text::QuoteNormalizer.call(text))
         end
       end
     end

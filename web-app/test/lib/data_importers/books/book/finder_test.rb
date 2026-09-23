@@ -58,6 +58,17 @@ module DataImporters
           assert_equal books_books(:war_and_peace), result.record
         end
 
+        test "finds a book by title and author when the query carries the whitespace the model folded away on save" do
+          author = ::Books::Author.create!(name: "Kathleen Alcott")
+          book = ::Books::Book.create!(title: "The Secret Lives")
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          query = ImportQuery.new(title: "The Secret Lives", author_names: ["Kathleen Alcott"])
+
+          result = @finder.call(query: query)
+
+          assert_equal book, result.record
+        end
+
         test "title alone with no author names returns nil even when the title exists" do
           query = ImportQuery.new(title: "War and Peace")
 
