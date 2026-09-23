@@ -178,6 +178,7 @@ module DataImporters
       @finder.call(query: @query)
       assert_equal 0, second.calls
 
+      ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new).never
       match = @finder.call(query: @query, verify: true)
 
       assert_equal 1, second.calls
@@ -390,6 +391,7 @@ module DataImporters
       first = Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:opensearch, :open_library])
       second = Candidate.new(record: @other, external_key: "OL1W", external_source: :open_library, sources: [:opensearch, :open_library])
       @finder.sources = [FakeSource.new(:opensearch, candidates: [first, second])]
+      ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new).never
 
       match = @finder.call(query: @query)
 
