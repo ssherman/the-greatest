@@ -212,7 +212,7 @@ module DataImporters
       assert_not match.needs_review?
     end
 
-    test "candidates that the rules cannot settle go to the AI with at most six lines, and the selection is recorded" do
+    test "candidates that the rules cannot settle go to the AI, and the selection is recorded" do
       candidates = [@book, @other, books_books(:combo_steinbeck), books_books(:got)].map { |b| Candidate.new(record: b, sources: [:opensearch], scores: {opensearch: 5.0}) }
       @finder.sources = [FakeSource.new(:opensearch, candidates: candidates)]
       ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new).with do |args|
@@ -230,6 +230,38 @@ module DataImporters
       assert_equal 2, match.decision.selected_index
       assert match.decision.decided_by_ai?
       assert match.decision.needs_review
+    end
+
+    test "at most six candidates reach the AI, and the match still carries every candidate" do
+      externals = (1..7).map do |i|
+        Candidate.new(external_key: "OL#{i}W", external_source: :open_library, sources: [:open_library], scores: {open_library: 1.0 - (i * 0.1)})
+      end
+      @finder.sources = [FakeSource.new(:open_library, candidates: externals)]
+      ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new).with do |args|
+        args[:candidate_lines].size == 6 && args[:candidate_lines].none? { |line| line.include?("OL7W") }
+      end.returns(@task)
+      @task.stubs(:call).returns(::Services::Ai::Result.new(success: true, data: {selected_index: 0, confidence: "low", reasoning: "", same_entity_groups: []}))
+
+      match = @finder.call(query: @query)
+
+      assert_equal 7, match.candidates.size
+      assert_equal 7, match.decision.candidates.size
+    end
+
+    test "candidates are ordered local first, then by number of sources, then by best score, keeping insertion order on ties" do
+      external_low = Candidate.new(external_key: "OL1W", external_source: :open_library, sources: [:open_library], scores: {open_library: 0.2})
+      external_high = Candidate.new(external_key: "OL2W", external_source: :open_library, sources: [:open_library], scores: {open_library: 0.9})
+      tie_a = Candidate.new(external_key: "OL3W", external_source: :open_library, sources: [:open_library], scores: {open_library: 0.5})
+      tie_b = Candidate.new(external_key: "OL4W", external_source: :open_library, sources: [:open_library], scores: {open_library: 0.5})
+      local_single = Candidate.new(record: @book, sources: [:opensearch], scores: {opensearch: 3.0})
+      local_multi = Candidate.new(record: @other, sources: [:exact, :opensearch], scores: {opensearch: 1.0})
+      @finder.sources = [FakeSource.new(:mixed, candidates: [external_low, tie_a, external_high, local_single, tie_b, local_multi])]
+      stub_ai({selected_index: 0, confidence: "low", reasoning: "", same_entity_groups: []})
+
+      match = @finder.call(query: @query)
+
+      assert_equal [@other, @book], match.candidates.first(2).map(&:record), "locals first, the multi-source one ahead of the single-source one"
+      assert_equal ["OL2W", "OL3W", "OL4W", "OL1W"], match.candidates.drop(2).map(&:external_key), "externals by best score, insertion order on the tie"
     end
 
     test "the subject is passed to the AI task as its parent and recorded on the decision" do
