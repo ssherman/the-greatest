@@ -117,16 +117,18 @@ module Services
           ::Books::Author.where(id: slice).order(:id).each do |author|
             before = author.name
             after = normalize(before)
-            author.alternate_names = normalize_list(author.alternate_names)
+            stale_alternates = Array(author.alternate_names)
+            author.alternate_names = normalize_list(stale_alternates)
+            changed_alternates = author.alternate_names - stale_alternates
             next unless save_row!(author)
-            next if before == after # F3: nothing to collide against a row we didn't rename
 
-            renamed_ids << author.id
-            # No ORDER BY/LIMIT on the filtered query -- see exact_scope in
-            # DataImporters::Books::Book::Finder for why that shape defeats
-            # index_books_authors_on_lower_name.
-            collision_ids = ::Books::Author.where("LOWER(name) = ?", after.downcase).where.not(id: author.id).pluck(:id)
-            collision = ::Books::Author.find(collision_ids.min) if collision_ids.any?
+            renamed_ids << author.id if before != after
+            # Only values this run changed are checked (F3): the renamed name,
+            # and any alternate name that only now equals another author's
+            # name -- the finder counts alternate names as creator agreement.
+            candidates = (before == after) ? [] : [after]
+            candidates += changed_alternates
+            collision = first_collision(candidates) { |value| author_collision(author, value) }
             flag("Books::Author", author, collision, before: before) if collision
           end
         end
@@ -138,14 +140,36 @@ module Services
           ::Books::Book.where(id: slice).includes(:authors).order(:id).each do |book|
             before = book.title
             after = normalize(before)
-            book.alternate_titles = normalize_list(book.alternate_titles)
+            stale_alternates = Array(book.alternate_titles)
+            book.alternate_titles = normalize_list(stale_alternates)
+            changed_alternates = book.alternate_titles - stale_alternates
             next unless save_row!(book)
-            next if before == after # F3: nothing to collide against a row we didn't retitle
 
-            collision = book_collision(book, after)
+            # Same rule as the authors: the retitled title, plus any alternate
+            # title that only now equals another same-author book's title --
+            # the finder counts alternate titles as title agreement.
+            candidates = (before == after) ? [] : [after]
+            candidates += changed_alternates
+            collision = first_collision(candidates) { |value| book_collision(book, value) }
             flag("Books::Book", book, collision, before: before) if collision
           end
         end
+      end
+
+      def first_collision(values)
+        values.each do |value|
+          collision = yield(value)
+          return collision if collision
+        end
+        nil
+      end
+
+      # No ORDER BY/LIMIT on the filtered query -- see exact_scope in
+      # DataImporters::Books::Book::Finder for why that shape defeats
+      # index_books_authors_on_lower_name.
+      def author_collision(author, name)
+        ids = ::Books::Author.where("LOWER(name) = ?", name.downcase).where.not(id: author.id).pluck(:id)
+        ::Books::Author.find(ids.min) if ids.any?
       end
 
       # Every book of a renamed author, checked for a title collision WITHOUT

@@ -159,10 +159,12 @@ existed; it also rewrites `alternate_names`/`alternate_titles` entries the same 
 row whose only defect is in one of those lists, which the report's counts do not include.
 `bin/rails books:normalize_names:report` is read-only; `bin/rails books:normalize_names:apply`
 saves the changed rows through the model callbacks and flags a `bulk_verify` pair for an author
-whose folded name equals another author's, for a book whose folded title equals another book's
+whose folded name (or a folded alternate name that only now changed) equals another author's, for
+a book whose folded title, or a folded alternate title that only now changed, equals another book's
 **by an author of the same name** (a book with no authors is never checked), and for a book
 whose authors were only made equal by an author rename, checked against the rest of the catalog
-without the book itself being saved. The report's "whitespace only" bucket also holds the
+without the book itself being saved. Only values the run changed are checked, because the finder
+counts alternate titles and alternate names as agreement. The report's "whitespace only" bucket also holds the
 handful of rows whose only change is a quote fold (for example the `U+00B4` rows; any row whose
 only defect was a curly quote lands there too), because the report classifies each row as
 NFKC-or-not and `QuoteNormalizer` folds these before the NFKC step runs. See

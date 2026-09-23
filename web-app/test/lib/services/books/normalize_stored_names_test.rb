@@ -124,18 +124,45 @@ module Services
         assert_equal DuplicateCandidate.where(item_type: "Books::Author").count, result.data[:pairs_flagged]
       end
 
-      test "apply does not raise a collision for a row visited only because its alternate list is stale" do
+      test "apply does not raise a pre-existing duplicate for a row visited only because its alternate list is stale" do
         existing = ::Books::Author.create!(name: "Kathleen Alcott")
         clean_name_stale_alt = ::Books::Author.create!(name: "Kathleen Alcott")
-        clean_name_stale_alt.update_columns(alternate_names: ["Kathleen#{NNBSP}Alcott"])
+        clean_name_stale_alt.update_columns(alternate_names: ["K.#{NNBSP}Alcott"])
 
         NormalizeStoredNames.call(apply: true)
 
+        assert_equal ["K. Alcott"], clean_name_stale_alt.reload.alternate_names
         assert_not DuplicateCandidate.exists?(
           item_type: "Books::Author",
           item_a_id: [existing.id, clean_name_stale_alt.id].min,
           item_b_id: [existing.id, clean_name_stale_alt.id].max
         )
+      end
+
+      test "apply flags a book whose normalized alternate title now equals another same-author book's title" do
+        author = ::Books::Author.create!(name: "Frank Herbert")
+        dune = ::Books::Book.create!(title: "Dune")
+        ::Books::BookAuthor.create!(book: dune, author: author, position: 1)
+        messiah = ::Books::Book.create!(title: "Dune Messiah")
+        ::Books::BookAuthor.create!(book: messiah, author: author, position: 1)
+        messiah.update_columns(alternate_titles: ["Dune#{NNBSP}"])
+
+        result = NormalizeStoredNames.call(apply: true)
+
+        assert_equal ["Dune"], messiah.reload.alternate_titles
+        pair = DuplicateCandidate.find_by(item_type: "Books::Book", item_a_id: [dune.id, messiah.id].min, item_b_id: [dune.id, messiah.id].max)
+        assert pair.raised_by_bulk_verify?
+        assert_equal 1, result.data[:pairs_flagged]
+      end
+
+      test "apply flags an author whose normalized alternate name now equals another author's name" do
+        herbert = ::Books::Author.create!(name: "Frank Herbert")
+        inverted = ::Books::Author.create!(name: "Herbert, Frank")
+        inverted.update_columns(alternate_names: ["Frank  Herbert"])
+
+        NormalizeStoredNames.call(apply: true)
+
+        assert DuplicateCandidate.exists?(item_type: "Books::Author", item_a_id: [herbert.id, inverted.id].min, item_b_id: [herbert.id, inverted.id].max)
       end
 
       test "a row the normalizer empties is reported in errors and does not abort the run" do

@@ -65,9 +65,10 @@ FriendlyId only generates a slug when the slug column is nil, and both slug
 columns are NOT NULL, so a rewrite never re-slugs — and the search index gets
 a reindex request as on any save), normalizes `alternate_names` and
 `alternate_titles` the same way, and raises a `bulk_verify` duplicate pair for
-an author whose folded name equals another author's, for a book whose folded
-title equals another book's by an author of the same name, and for a book
-whose authors were only made equal by an author rename. That last case is
+an author whose folded name (or a folded alternate name this run changed)
+equals another author's, for a book whose folded title, or a folded alternate
+title this run changed, equals another book's by an author of the same name,
+and for a book whose authors were only made equal by an author rename. That last case is
 checked without saving the book — a no-op save would still queue an index
 request the book does not need. `pairs_flagged` is a count of distinct pairs,
 not of flag calls. Nothing is merged; the pairs wait in the duplicates queue.
