@@ -654,7 +654,7 @@ nil/empty so the service's own defaults apply. `Resolution` is built straight fr
 here (the server's rank order is the contract), and `#accepted` looks up the candidate matching
 `decision.key` rather than re-deciding anything client-side.
 
-### The finder rule (R104) — superseded
+### The finder rule (R104) -- superseded
 
 The increment-1/2 finder is described in `docs/features/import-finder.md`. The service is now
 one of four candidate sources, and the finder does call `/resolve`; the old rule that it never

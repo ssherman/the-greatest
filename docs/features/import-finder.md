@@ -109,7 +109,9 @@ query has authors), `Sources::OpenSearch` over `Search::Books::Search::BookByTit
 score without authors), and `DataImporters::Books::Book::OpenLibrarySource` (`POST /resolve`,
 limit 5; one candidate per local holder of the work key or a key it redirects from; the whole
 `Resolution` on `match.external_resolution`, which the provider reuses for a new book). Music
-and games still run their legacy lookups until increments 5 and 6.
+and games still run their legacy lookups until increments 5 and 6. The audit UI is increment 3,
+the authors importer and the book provider's author step are increment 4, games is increment 5
+and music is increment 6.
 
 ## The duplicate sweep
 
@@ -127,13 +129,18 @@ best-rank-first.
 `Services::Books::NormalizeStoredNames` rewrites every stored book title and author name the
 save-time normalizer (`QuoteNormalizer` then `NameNormalizer`) would still change, so the exact
 source's `lower(title)`/`lower(name)` comparison can see rows written before that normalizer
-existed. `bin/rails books:normalize_names:report` is read-only; `bin/rails
-books:normalize_names:apply` saves the changed rows through the model callbacks and flags a
-`bulk_verify` pair for any title or name that collides once normalized. The report's
-"whitespace only" bucket also holds the handful of rows whose only change is a quote fold (the
-`U+00B4` rows), because the report classifies each row as NFKC-or-not and `QuoteNormalizer`
-folds `U+00B4` before the NFKC step runs. See `docs/data-quality/books-normalizer-effect.md`
-for the measured counts.
+existed; it also rewrites `alternate_names`/`alternate_titles` entries the same way and saves a
+row whose only defect is in one of those lists, which the report's counts do not include.
+`bin/rails books:normalize_names:report` is read-only; `bin/rails books:normalize_names:apply`
+saves the changed rows through the model callbacks and flags a `bulk_verify` pair for an author
+whose folded name equals another author's, for a book whose folded title equals another book's
+**by an author of the same name** (a book with no authors is never checked), and for a book
+whose authors were only made equal by an author rename, checked against the rest of the catalog
+without the book itself being saved. The report's "whitespace only" bucket also holds the
+handful of rows whose only change is a quote fold (for example the `U+00B4` rows; any row whose
+only defect was a curly quote lands there too), because the report classifies each row as
+NFKC-or-not and `QuoteNormalizer` folds these before the NFKC step runs. See
+`docs/data-quality/books-normalizer-effect.md` for the measured counts.
 
 ## Adding a domain
 

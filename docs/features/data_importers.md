@@ -157,8 +157,8 @@ section for the full contract).
 - **Query** (`ImportQuery`) takes `title` (required unless an identifier is present),
   `author_names`, `year`, `isbn13`, `isbn10`, `asin`, `goodreads_id`, `open_library_work_key`.
 - **Finder** runs four candidate sources in order (identifiers, an exact title/author match, an
-  OpenSearch title-plus-authors query, and the Open Library `/resolve` service as a fourth
-  candidate source); see [Import finder](./import-finder.md) for what each one does.
+  OpenSearch title-plus-authors query, and the Open Library `/resolve` service); see
+  [Import finder](./import-finder.md) for what each one does.
 - **Provider** calls the service's `/resolve` endpoint with the *book's* current state (not just
   the query) and, on an accept verdict, applies fills only to blank fields (`title`, `subtitle`,
   `description`, `first_published_year`); for a new book it reuses the resolution the finder
@@ -171,13 +171,13 @@ section for the full contract).
   Authors and subjects are never applied from this provider -- creating authors or categories from
   them belongs to a separate reconciliation effort.
 - **Idempotency:** re-running `Importer.call` with any identifier is idempotent (the finder's
-  identifier and exact sources find it; the provider persists the query's identifiers on accept); a
-  title+author-only import is NOT idempotent yet because the provider creates no author rows (that
-  is the reconciliation spec's), so the finder's identifier and exact sources cannot see an
-  importer-created book. This holds for
-  `isbn13`/`isbn10`/`asin`/`goodreads_id` and for a CURRENT Open Library work key, but not for a
-  query keyed by an OLD (redirected) OL key: the provider stores the canonical key the service
-  returns, while the finder looks up the key the caller supplied.
+  identifier and exact sources find it; the provider persists the query's identifiers on accept),
+  including a query keyed by an OLD (redirected) OL key: `OpenLibrarySource#local_holders` treats
+  a local book holding the canonical key, or any key the work's `redirected_from` list carries, as
+  a holder of that work, so the redirect still resolves to the same book (rule 2, external accept
+  on a locally held key). A title+author-only import is NOT idempotent yet because the provider
+  creates no author rows (that is the reconciliation spec's), so the finder's identifier and exact
+  sources cannot see an importer-created book.
 
 ## Usage Examples
 
