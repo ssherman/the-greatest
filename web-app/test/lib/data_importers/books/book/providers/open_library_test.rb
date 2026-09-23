@@ -331,6 +331,46 @@ module DataImporters
             assert_empty result.data_populated
             assert_empty book.authors
           end
+
+          # ------------------------------------------------------- match reuse
+
+          test "a new book reuses the match's resolution and makes no request" do
+            book = ::Books::Book.new(title: "The Great Gatsby")
+            resolution = ::Books::OpenLibrary::Resolution.from_response(resolve_response(verdict: "accept", key: "OL468431W", diff: [
+              diff_entry(field: "first_published_year", ours: nil, theirs: 1925, kind: "fill")
+            ]))
+            match = DataImporters::Match.new(outcome: :unmatched, external_resolution: resolution)
+
+            result = @provider.populate(book, query: nil, match: match)
+
+            assert result.success?
+            assert_equal 1925, book.first_published_year
+            assert_equal "OL468431W", book.identifiers.find { |i| i.identifier_type == "books_work_openlibrary_id" }&.value
+            assert_not_requested(:post, "#{BASE_URL}/resolve")
+          end
+
+          test "a persisted book resolves from its own state even when the match carries a resolution" do
+            book = books_books(:war_and_peace)
+            stub_resolve(resolve_response(verdict: "abstain", reason: "own state"))
+            match = DataImporters::Match.new(outcome: :matched, record: book,
+              external_resolution: ::Books::OpenLibrary::Resolution.from_response(resolve_response(verdict: "accept")))
+
+            result = @provider.populate(book, query: nil, match: match)
+
+            refute result.success?
+            assert_includes result.errors.join, "own state"
+            assert_requested(:post, "#{BASE_URL}/resolve")
+          end
+
+          test "a new book whose match carries no resolution calls the service" do
+            book = ::Books::Book.new(title: "The Great Gatsby")
+            stub_resolve(resolve_response(verdict: "abstain", reason: "no resolution on the match"))
+
+            result = @provider.populate(book, query: nil, match: DataImporters::Match.new(outcome: :unmatched))
+
+            refute result.success?
+            assert_requested(:post, "#{BASE_URL}/resolve")
+          end
         end
       end
     end

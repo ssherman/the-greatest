@@ -4,8 +4,10 @@ module DataImporters
   module Books
     module Book
       module Providers
-        # Calls the Open Library /resolve service and applies only what it marks
-        # as a "fill" -- a populated local field is never overwritten, even when
+        # Calls the Open Library /resolve service -- or, for a new book whose
+        # match already carries the finder's resolution, reuses that answer
+        # instead of asking again -- and applies only what it marks as a
+        # "fill" -- a populated local field is never overwritten, even when
         # the service disagrees with it. Conflicting and enriching fields are
         # left alone and reported in data_populated as "skipped:<field>" so a
         # human can see them; deciding a conflict belongs to the reconciliation
@@ -38,7 +40,7 @@ module DataImporters
           # or nil (item-based / force_providers import, where the book alone
           # must carry everything the request needs).
           def populate(book, query: nil, match: nil)
-            resolution = client.resolve(**resolve_args(book, query))
+            resolution = reusable_resolution(book, match) || client.resolve(**resolve_args(book, query))
 
             if resolution.accept?
               apply_accept(book, resolution, query)
@@ -52,6 +54,18 @@ module DataImporters
           end
 
           private
+
+          # The finder already asked the service about this query. For a book
+          # that does not exist yet, the request the provider would build is
+          # the same one (title and year seeded from the query; no authors or
+          # identifiers of its own yet), so the answer is reused instead of a
+          # second five-second call. A persisted book under force_providers
+          # resolves from its own state, as before.
+          def reusable_resolution(book, match)
+            return nil if book.persisted? || match.nil?
+
+            match.external_resolution
+          end
 
           # The service guarantees an accept decision names a candidate with
           # that key, but this is defensive rather than trusted blindly.
