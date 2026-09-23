@@ -60,9 +60,12 @@ module Services
 
       test "caps identifiers per type: a book with five ISBN-13 rows sends the finder the first three in sorted order" do
         fixture_isbn = identifiers(:war_and_peace_isbn13).value
-        4.times { |i| @book.identifiers.create!(identifier_type: :books_work_isbn13, value: "isbn-cap-#{i}") }
+        # Inserted in reverse so insertion order and sorted order differ: a
+        # dropped sort would send the last-inserted rows instead.
+        3.downto(0) { |i| @book.identifiers.create!(identifier_type: :books_work_isbn13, value: "0-cap-#{i}") }
         assert_equal 5, @book.identifiers.where(identifier_type: :books_work_isbn13).count
-        expected = ([fixture_isbn] + %w[isbn-cap-0 isbn-cap-1 isbn-cap-2 isbn-cap-3]).sort.first(3)
+        expected = %w[0-cap-0 0-cap-1 0-cap-2]
+        assert_equal expected, ([fixture_isbn] + %w[0-cap-0 0-cap-1 0-cap-2 0-cap-3]).sort.first(3)
         @finder.expects(:call).with { |args| args[:query].isbn13 == expected }
           .returns(DataImporters::Match.new(outcome: :unmatched))
 

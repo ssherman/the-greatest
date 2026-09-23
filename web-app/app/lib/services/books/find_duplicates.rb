@@ -11,7 +11,9 @@ module Services
     # Callable from a console for one book:
     #   Services::Books::FindDuplicates.call(book: Books::Book.find_by(slug: "dune"))
     # `data[:match]` is the finder's Match (candidates, reason, decision);
-    # `data[:pair]` is the DuplicateCandidate row, or nil when unmatched.
+    # `data[:pair]` is the DuplicateCandidate row (new, re-raised, or the
+    # existing dismissed/merged one, which Flag never reopens), or nil when
+    # unmatched.
     #
     # Re-running is safe for pairs (a pending pair gains an occurrence, a
     # dismissed one is never re-raised); it does write a fresh
