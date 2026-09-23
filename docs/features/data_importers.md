@@ -172,12 +172,15 @@ section for the full contract).
   them belongs to a separate reconciliation effort.
 - **Idempotency:** re-running `Importer.call` with any identifier is idempotent (the finder's
   identifier and exact sources find it; the provider persists the query's identifiers on accept),
-  including a query keyed by an OLD (redirected) OL key: `OpenLibrarySource#local_holders` treats
-  a local book holding the canonical key, or any key the work's `redirected_from` list carries, as
-  a holder of that work, so the redirect still resolves to the same book (rule 2, external accept
-  on a locally held key). A title+author-only import is NOT idempotent yet because the provider
-  creates no author rows (that is the reconciliation spec's), so the finder's identifier and exact
-  sources cannot see an importer-created book.
+  including a query keyed by an OLD (redirected) OL key as long as it still carries the title the
+  service can accept on: the service resolves the old key to its terminal work,
+  `OpenLibrarySource#local_holders` finds the book holding that canonical key (it also counts any
+  key in the work's `redirected_from` list, which `/resolve` does not populate), and rule 2 matches
+  on the external accept. A key-only re-run earns no accept, because the service has no title or
+  identifier evidence for it, so that one reaches the AI. A title+author-only import is NOT
+  idempotent by rule yet because the provider creates no author rows (that is increment 4's), so
+  the exact rule cannot match an importer-created book; OpenSearch still surfaces it and the AI
+  decides.
 
 ## Usage Examples
 
