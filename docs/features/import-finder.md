@@ -35,14 +35,21 @@ and points the decision at a record it creates.
 
 1. **Gather.** Each source in `candidate_sources(query)` is called; results are unioned by
    `CandidateSet` (merged by local record or by external key). A source that raises adds
-   nothing and is named in `sources_failed`. Gathering stops early at a decisive candidate
-   (a `:legacy` hit, or a corroborated identifier hit or external accept) unless `verify`.
+   nothing and is named in `sources_failed`; an `ActiveRecord::ActiveRecordError` propagates
+   instead, because our own database failing is not a missing candidate. Gathering stops early
+   at a decisive candidate (a `:legacy` hit, or a corroborated identifier hit or external
+   accept) unless `verify`. `Search::Shared::Utils.normalize_search_text`, which every
+   OpenSearch source builds its query text through, now keeps non-ASCII letters instead of
+   stripping them (Ruby's `\w` is ASCII-only, so an accented query used to match nothing);
+   every domain's search gained this fix on this branch.
 2. **Rules** (`Decider`): 0 legacy hit → matched certain; 1 corroborated identifier hit →
    matched certain (several: ranked, then most lists, then oldest; the rest flagged as
    `identifier_collision` pairs); 2 external accept on a locally held key, corroborated →
    matched certain; 3 no candidates → unmatched high; 4 exactly one local candidate that
-   matches exactly (other, non-exact locals do not block it) → matched high; 5 no local
-   candidates and an accepted external → unmatched high with `external`; else the AI. Rule 2
+   matches exactly, and no other local candidate carrying an identifier hit → matched high
+   (other, non-exact locals do not block it; an identifier hit on another record sends the
+   case to the AI); 5 no local candidates and an accepted external → unmatched high with
+   `external`; else the AI. Rule 2
    also picks among several local candidates holding the accepted key with the same
    ranked/most-lists/oldest preference and flags the rest as
    `external_key_collision` pairs. Rules 0–2 never fire under `verify`.
@@ -92,18 +99,47 @@ pending one gains an occurrence and evidence. Every merger calls
 merged, other pending pairs naming the source re-key onto the target, and decisions that
 named the source now name the target.
 
-## State after increment 1
+## State by increment
 
-Every finder wraps its pre-redesign lookup as the `Legacy` source, so what matches today is
-exactly what matched before; the difference is the return type and the decision row.
-Increment 2 (books), 5 (games) and 6 (music) replace `candidate_sources` with the real
-sources and delete each `legacy_lookup`. The audit UI is increment 3; the authors importer
-is increment 4.
+Increment 1 wrapped every legacy lookup; **increment 2 (books)** replaced the books finder's
+sources with `Sources::Identifiers` (Open Library key, ISBN-13, ISBN-10, ASIN, Goodreads),
+`Sources::Exact` (normalized title, joined to an author's name or alternate name when the
+query has authors), `Sources::OpenSearch` over `Search::Books::Search::BookByTitleAndAuthors`
+(title or alternate title required; authors and a year within one as boosts; a higher minimum
+score without authors), and `DataImporters::Books::Book::OpenLibrarySource` (`POST /resolve`,
+limit 5; one candidate per local holder of the work key or a key it redirects from; the whole
+`Resolution` on `match.external_resolution`, which the provider reuses for a new book). Music
+and games still run their legacy lookups until increments 5 and 6.
+
+## The duplicate sweep
+
+`Books::FindDuplicatesJob` resolves one ranked book against the rest of the catalog: it builds
+a query from the book's own title, authors, year and identifiers, then calls the finder with
+`verify: true, subject: book, exclude: book` so no early exit applies. A match raises the pair
+as a `bulk_verify` `DuplicateCandidate`; nothing is merged and no provider runs. One job per
+book on the `serial` queue, which the Amazon enrichment jobs also share, so start with
+`bin/rails books:find_duplicates[100]` and widen the limit once the first pairs look right;
+`Books::FindDuplicatesJob.enqueue_ranked` walks the primary ranking configuration
+best-rank-first.
+
+## Stored-name normalization
+
+`Services::Books::NormalizeStoredNames` rewrites every stored book title and author name the
+save-time normalizer (`QuoteNormalizer` then `NameNormalizer`) would still change, so the exact
+source's `lower(title)`/`lower(name)` comparison can see rows written before that normalizer
+existed. `bin/rails books:normalize_names:report` is read-only; `bin/rails
+books:normalize_names:apply` saves the changed rows through the model callbacks and flags a
+`bulk_verify` pair for any title or name that collides once normalized. The report's
+"whitespace only" bucket also holds the handful of rows whose only change is a quote fold (the
+`U+00B4` rows), because the report classifies each row as NFKC-or-not and `QuoteNormalizer`
+folds `U+00B4` before the NFKC step runs. See `docs/data-quality/books-normalizer-effect.md`
+for the measured counts.
 
 ## Adding a domain
 
 Subclass `FinderBase`, implement `model_class` and `candidate_sources(query)`, and override
 the hooks the rules and the prompt need: `ranking_configuration_class`, `creators_required?`,
 `query_title`, `query_creators`, `query_year`, `record_creators`,
-`record_creator_alternate_names`, `record_year`, and `domain_guidance` (prompt text).
-`describe_query` and `describe_candidate` have sensible defaults built from those hooks.
+`record_creator_alternate_names`, `record_year`, `record_extra_evidence`, and
+`domain_guidance` (prompt text). `describe_query` and `describe_candidate` have sensible
+defaults built from those hooks.
