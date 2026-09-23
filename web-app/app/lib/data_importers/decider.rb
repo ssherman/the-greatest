@@ -72,12 +72,19 @@ module DataImporters
         reason: "no candidates from #{@sources_run} sources")
     end
 
-    # Rule 4.
+    # Rule 4: exactly one local candidate matches exactly (equal normalized
+    # title, agreeing creators where the domain has them, no year conflict).
+    # Other, non-exact locals do not block it; two exact locals do, because
+    # that is the duplicate case and the AI flags the pair. So does an
+    # identifier hit on some other local record: a wrong identifier must
+    # reach the AI, never be settled by a rule (spec §15).
     def exact_decision
-      locals = @candidates.select(&:local?)
-      return nil unless locals.size == 1 && @finder.exact_match?(@query, locals.first)
+      exact = @candidates.select { |c| c.local? && @finder.exact_match?(@query, c) }
+      return nil unless exact.size == 1
 
-      candidate = locals.first
+      candidate = exact.first
+      return nil if @candidates.any? { |c| c.local? && c.sources.include?(:identifier) && !c.equal?(candidate) }
+
       matched(candidate.record, :high, :rule, "exact title and creator match on #{label(candidate)}",
         external: (candidate.external? ? candidate : nil))
     end

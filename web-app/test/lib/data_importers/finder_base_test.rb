@@ -237,7 +237,9 @@ module DataImporters
       end.returns(@task)
       @task.stubs(:call).returns(::Services::Ai::Result.new(success: true, data: {selected_index: 2, confidence: "medium", reasoning: "Closest.", same_entity_groups: []}, ai_chat: ai_chats(:general_chat)))
 
-      match = @finder.call(query: @query)
+      # A year conflict keeps rule 4 from resolving @book outright (its title
+      # and creator otherwise match @query exactly), so this genuinely reaches the AI.
+      match = @finder.call(query: @query.merge(year: 1990))
 
       assert match.matched?
       assert_equal @other, match.record
@@ -287,7 +289,8 @@ module DataImporters
       ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new).with { |args| args[:parent] == subject }.returns(@task)
       @task.stubs(:call).returns(::Services::Ai::Result.new(success: true, data: {selected_index: 0, confidence: "low", reasoning: "", same_entity_groups: []}))
 
-      match = @finder.call(query: @query, subject: subject)
+      # A year conflict keeps rule 4 from resolving @book outright.
+      match = @finder.call(query: @query.merge(year: 1990), subject: subject)
 
       assert_equal subject, match.decision.subject
     end
@@ -296,7 +299,8 @@ module DataImporters
       @finder.sources = [FakeSource.new(:opensearch, candidates: [Candidate.new(record: @book, sources: [:opensearch]), Candidate.new(record: @other, sources: [:opensearch])])]
       stub_ai({selected_index: 1, confidence: "high", reasoning: "Both the same.", same_entity_groups: [[1, 2]]})
 
-      match = @finder.call(query: @query)
+      # A year conflict keeps rule 4 from resolving @book outright.
+      match = @finder.call(query: @query.merge(year: 1990))
 
       pair = DuplicateCandidate.find_by(item_type: "Books::Book", item_a_id: [@book.id, @other.id].min, item_b_id: [@book.id, @other.id].max)
       assert pair.pending?
@@ -310,7 +314,8 @@ module DataImporters
       @finder.sources = [FakeSource.new(:opensearch, candidates: [Candidate.new(record: @book, sources: [:opensearch]), Candidate.new(record: @other, sources: [:opensearch])])]
       stub_ai({selected_index: 1, confidence: "high", reasoning: "Picked one.", same_entity_groups: [[1, 2]]})
 
-      match = @finder.call(query: @query)
+      # A year conflict keeps rule 4 from resolving @book outright.
+      match = @finder.call(query: @query.merge(year: 1990))
 
       assert_equal @other, match.record
       assert_match(/Preferred ranked #2/, match.reason)
@@ -320,7 +325,8 @@ module DataImporters
       @finder.sources = [FakeSource.new(:opensearch, candidates: [Candidate.new(record: @book, sources: [:opensearch]), Candidate.new(record: @other, sources: [:opensearch])])]
       stub_ai(nil, success: false, error: "boom")
 
-      match = @finder.call(query: @query)
+      # A year conflict keeps rule 4 from resolving @book outright.
+      match = @finder.call(query: @query.merge(year: 1990))
 
       assert match.unmatched?
       assert_equal [:low, :fallback], [match.confidence, match.decided_by]
@@ -333,7 +339,8 @@ module DataImporters
       @finder.sources = [FakeSource.new(:opensearch, candidates: [Candidate.new(record: @book, sources: [:opensearch]), Candidate.new(record: @other, sources: [:opensearch])])]
       ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).raises(ArgumentError, "Unknown provider")
 
-      match = @finder.call(query: @query)
+      # A year conflict keeps rule 4 from resolving @book outright.
+      match = @finder.call(query: @query.merge(year: 1990))
 
       assert match.decision.decided_by_fallback?
       assert_includes match.reason, "Unknown provider"

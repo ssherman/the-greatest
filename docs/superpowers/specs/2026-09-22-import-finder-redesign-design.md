@@ -562,3 +562,4 @@ Each gets its own plan under `docs/superpowers/plans/`.
 - **Performance is not a constraint.** The finder mostly runs inside slow admin list imports.
 - **Three names changed at implementation:** outcome `unmatched` (not `new`), pair status `pending` (not `open`), and sources take no argument on `call`. Increment 1's plan explains each.
 - **The failed-source cap spares `certain` decisions** (declared at implementation; see §14).
+- **Rule 4 counts exact-matching locals** (declared in increment 2): the rule fires when exactly one local candidate passes the exact test, whatever else the fuzzy sources returned; two exact locals go to the AI. Increment 1 had read it as "exactly one local candidate, and it is exact", which would have sent nearly every import with an OpenSearch neighbour to the AI.

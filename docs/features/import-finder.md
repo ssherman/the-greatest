@@ -40,10 +40,11 @@ and points the decision at a record it creates.
 2. **Rules** (`Decider`): 0 legacy hit → matched certain; 1 corroborated identifier hit →
    matched certain (several: ranked, then most lists, then oldest; the rest flagged as
    `identifier_collision` pairs); 2 external accept on a locally held key, corroborated →
-   matched certain; 3 no candidates → unmatched high; 4 one local candidate that matches
-   exactly → matched high; 5 no local candidates and an accepted external → unmatched high
-   with `external`; else the AI. Rule 2 also picks among several local candidates holding the
-   accepted key with the same ranked/most-lists/oldest preference and flags the rest as
+   matched certain; 3 no candidates → unmatched high; 4 exactly one local candidate that
+   matches exactly (other, non-exact locals do not block it) → matched high; 5 no local
+   candidates and an accepted external → unmatched high with `external`; else the AI. Rule 2
+   also picks among several local candidates holding the accepted key with the same
+   ranked/most-lists/oldest preference and flags the rest as
    `external_key_collision` pairs. Rules 0–2 never fire under `verify`.
 3. **AI** (`Services::Ai::Tasks::Matching::SelectCandidateTask`, one gpt-5-mini call): the
    incoming item and at most six candidate lines, select one or 0, with confidence,

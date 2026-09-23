@@ -127,9 +127,23 @@ module DataImporters
       assert_equal [:matched, @book, :high, :rule], [decision.outcome, decision.record, decision.confidence, decision.decided_by]
     end
 
-    test "rule 4 does not fire for two local candidates, or for one that is not exact" do
+    test "rule 4 fires when exactly one of several local candidates matches exactly" do
+      finder = FakeFinder.new(exact: ->(candidate) { candidate.record == @book })
+
+      decision = decide([Candidate.new(record: @other, sources: [:opensearch]), Candidate.new(record: @book, sources: [:exact])], finder: finder)
+
+      assert_equal [:matched, @book, :high, :rule], [decision.outcome, decision.record, decision.confidence, decision.decided_by]
+    end
+
+    test "rule 4 does not fire for two exact local candidates, or for one that is not exact" do
       assert_nil decide([Candidate.new(record: @book, sources: [:exact]), Candidate.new(record: @other, sources: [:exact])], finder: FakeFinder.new(exact: true))
       assert_nil decide([Candidate.new(record: @book, sources: [:opensearch])], finder: FakeFinder.new(exact: false))
+    end
+
+    test "rule 4 does not fire while another local candidate carries an uncorroborated identifier hit: the AI decides" do
+      finder = FakeFinder.new(corroborated: false, exact: ->(candidate) { candidate.record == @book })
+
+      assert_nil decide([identifier_candidate(@other), Candidate.new(record: @book, sources: [:exact])], finder: finder)
     end
 
     test "rule 4 still fires under verify" do
