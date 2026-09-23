@@ -104,6 +104,17 @@ module DataImporters
           assert result.item.identifiers.exists?(identifier_type: :books_work_openlibrary_id, value: "OL468431W")
         end
 
+        test "importing a new title resolves once: the finder's resolution feeds the provider" do
+          stub_open_library_client
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: accept_response(diff: []).to_json)
+
+          result = Importer.call(title: "The Great Gatsby", author_names: ["F. Scott Fitzgerald"])
+
+          assert result.success?
+          assert result.match.unmatched?
+          assert_requested(:post, "#{BASE_URL}/resolve", times: 1)
+        end
+
         test "force_providers runs providers against an existing book" do
           stub_open_library_client
           # war_and_peace already carries a primary description via fixtures
