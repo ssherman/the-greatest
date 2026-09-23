@@ -59,8 +59,10 @@ module DataImporters
           # that does not exist yet, the request the provider would build is
           # the same one (title and year seeded from the query; no authors or
           # identifiers of its own yet), so the answer is reused instead of a
-          # second five-second call. A persisted book under force_providers
-          # resolves from its own state, as before.
+          # second call to a slow service. A persisted book under force_providers
+          # resolves from its own state, as before. The finder's request also
+          # carries `limit: 5`, which only truncates the returned candidate
+          # list, never the verdict.
           def reusable_resolution(book, match)
             return nil if book.persisted? || match.nil?
 

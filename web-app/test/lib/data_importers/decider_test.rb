@@ -146,6 +146,14 @@ module DataImporters
       assert_nil decide([identifier_candidate(@other), Candidate.new(record: @book, sources: [:exact])], finder: finder)
     end
 
+    test "rule 4 still fires when the one exact local candidate is itself an uncorroborated identifier hit (verify skips rule 1)" do
+      finder = FakeFinder.new(corroborated: false, exact: true)
+
+      decision = decide([identifier_candidate(@book)], finder: finder, verify: true)
+
+      assert_equal [:matched, @book, :high, :rule], [decision.outcome, decision.record, decision.confidence, decision.decided_by]
+    end
+
     test "rule 4 still fires under verify" do
       decision = decide([Candidate.new(record: @book, sources: [:exact])], finder: FakeFinder.new(exact: true), verify: true)
 

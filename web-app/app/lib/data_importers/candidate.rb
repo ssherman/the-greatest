@@ -51,7 +51,9 @@ module DataImporters
       self.external_source ||= other.external_source
       self.external_record ||= other.external_record
       self.sources = sources | other.sources
-      self.scores = scores.merge(other.scores)
+      # Two halves of one candidate from the same source (a book holding keys
+      # for two works both returned by one resolve) keep the better score.
+      self.scores = scores.merge(other.scores) { |_source, mine, theirs| [mine, theirs].compact.max }
       self.evidence = evidence.merge(other.evidence) { |_key, mine, theirs| mine.nil? ? theirs : mine }
       self.decisive = decisive? || other.decisive?
       self

@@ -55,7 +55,7 @@ module DataImporters
     # assigned to a local variable is never named, and MatchDecision
     # validates `finder` (the class name) present.
     class ExtraEvidenceFinder < TestFinder
-      def record_extra_evidence(record) = {kind: "extra-#{record.id}"}
+      def record_extra_evidence(record) = {kind: "extra-#{record.id}", title: "hook title"}
     end
 
     def setup
@@ -178,7 +178,6 @@ module DataImporters
       @finder.call(query: @query)
       assert_equal 0, second.calls
 
-      stub_ai({selected_index: 1, confidence: "high", reasoning: "", same_entity_groups: []})
       match = @finder.call(query: @query, verify: true)
 
       assert_equal 1, second.calls
@@ -383,13 +382,14 @@ module DataImporters
       match = finder.call(query: @query)
 
       assert_equal "extra-#{@book.id}", match.candidates.first.evidence[:kind]
+      # the hook merges after the shared keys
+      assert_equal "hook title", match.candidates.first.evidence[:title]
     end
 
     test "two local candidates sharing an external key are flagged as an external key collision whatever the rules decide" do
       first = Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:opensearch, :open_library])
       second = Candidate.new(record: @other, external_key: "OL1W", external_source: :open_library, sources: [:opensearch, :open_library])
       @finder.sources = [FakeSource.new(:opensearch, candidates: [first, second])]
-      stub_ai({selected_index: 1, confidence: "high", reasoning: "", same_entity_groups: []})
 
       match = @finder.call(query: @query)
 

@@ -99,6 +99,18 @@ module Services
         assert_equal existing, result.data
         assert_equal 2, existing.reload.occurrences
       end
+
+      test "a second failure on the retry propagates" do
+        fresh = ::DuplicateCandidate.new(item_type: @type, item_a_id: [@a.id, @b.id].min, item_b_id: [@a.id, @b.id].max)
+        fresh.stubs(:save!).raises(ActiveRecord::RecordNotUnique, "duplicate key")
+        ::DuplicateCandidate.expects(:find_or_initialize_by).twice.returns(fresh, fresh)
+
+        assert_raises(ActiveRecord::RecordNotUnique) { Flag.call(item_type: @type, ids: [@a.id, @b.id], source: :ai) }
+      end
+
+      test "a validation failure that the retry cannot cure still raises" do
+        assert_raises(ActiveRecord::RecordInvalid) { Flag.call(item_type: "", ids: [@a.id, @b.id], source: :ai) }
+      end
     end
   end
 end

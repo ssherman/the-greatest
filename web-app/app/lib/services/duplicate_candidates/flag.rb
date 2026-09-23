@@ -32,9 +32,12 @@ module Services
         begin
           attempts += 1
           Result.new(success?: true, data: upsert(a, b), errors: [])
-        rescue ActiveRecord::RecordNotUnique
+        rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
           # Two finders raised the same pair at once; the second insert lost
-          # the race, and the row it wanted now exists.
+          # the race, and the row it wanted now exists. The uniqueness
+          # validation's own SELECT can lose the same race and raise
+          # RecordInvalid instead; either way the second pass finds the row.
+          # Anything still failing on the second pass is a real error and raises.
           raise if attempts > 1
 
           retry

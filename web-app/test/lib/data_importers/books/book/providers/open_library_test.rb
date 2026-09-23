@@ -359,7 +359,7 @@ module DataImporters
 
             refute result.success?
             assert_includes result.errors.join, "own state"
-            assert_requested(:post, "#{BASE_URL}/resolve")
+            assert_requested(:post, "#{BASE_URL}/resolve", body: hash_including("title" => book.title))
           end
 
           test "a new book whose match carries no resolution calls the service" do

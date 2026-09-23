@@ -20,7 +20,8 @@ class Books::FindDuplicatesJob
     isbn13: "books_work_isbn13",
     isbn10: "books_work_isbn10",
     asin: "books_work_asin",
-    goodreads_id: "books_work_goodreads_id"
+    goodreads_id: "books_work_goodreads_id",
+    open_library_work_key: "books_work_openlibrary_id"
   }.freeze
 
   # Enqueues one job per book in the primary ranking, best rank first.
@@ -66,7 +67,7 @@ class Books::FindDuplicatesJob
       isbn10: values.call(QUERY_IDENTIFIERS[:isbn10]),
       asin: values.call(QUERY_IDENTIFIERS[:asin]),
       goodreads_id: values.call(QUERY_IDENTIFIERS[:goodreads_id]),
-      open_library_work_key: values.call("books_work_openlibrary_id").first
+      open_library_work_key: values.call(QUERY_IDENTIFIERS[:open_library_work_key]).first
     )
   end
 end

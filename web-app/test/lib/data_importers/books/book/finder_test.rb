@@ -183,6 +183,7 @@ module DataImporters
 
           assert match.unmatched?
           assert_equal [@war_and_peace], match.candidates.map(&:record)
+          assert_equal [[:opensearch]], match.candidates.map(&:sources), "the exact source must not match a different author"
           assert_equal :ai, match.decided_by
         end
 

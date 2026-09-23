@@ -78,6 +78,13 @@ module DataImporters
           assert_equal [], candidates
         end
 
+        test "limit is passed through to the service" do
+          stub_resolve(resolve_response(verdict: "abstain")) { |request| JSON.parse(request.body)["limit"] == 2 }
+
+          assert_equal [], source(query, limit: 2).call
+          assert_requested(:post, "#{BASE_URL}/resolve")
+        end
+
         test "a blank title is sent as an empty string for an identifier-only query" do
           stub_resolve(resolve_response(verdict: "abstain")) { |request| JSON.parse(request.body)["title"] == "" }
 
@@ -141,6 +148,16 @@ module DataImporters
 
           assert_equal [books_books(:crime_and_punishment)], candidates.map(&:record)
           assert_equal ["OL1000W"], candidates.map(&:external_key)
+        end
+
+        test "a book holding both the work's key and a key it redirects from is one holder, not two" do
+          books_books(:crime_and_punishment).identifiers.create!(identifier_type: :books_work_openlibrary_id, value: "OL1000W")
+          record = work_record(key: "OL1000W", title: "Crime and Punishment", redirected_from: [@held_key])
+          stub_resolve(resolve_response(verdict: "abstain", candidates: [candidate_hash(key: "OL1000W", verdict: "abstain", score: 0.6, record: record)]))
+
+          candidates = source(query).call
+
+          assert_equal [books_books(:crime_and_punishment)], candidates.map(&:record)
         end
 
         test "keeps the whole resolution for the provider" do
