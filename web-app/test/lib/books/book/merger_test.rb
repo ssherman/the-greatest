@@ -802,6 +802,20 @@ module Books
         assert_equal "favorites redis is down", merger.stats[:post_commit_error]
       end
 
+      test "records the merge on duplicate_candidates and repoints match decisions to the target" do
+        third = books_books(:combo_steinbeck)
+        pair = DuplicateCandidate.flag!(item_type: "Books::Book", ids: [@source.id, @target.id], source: :ai)
+        other_pair = DuplicateCandidate.flag!(item_type: "Books::Book", ids: [@source.id, third.id], source: :ai)
+        decision = MatchDecision.create!(finder: "F", record: @source, outcome: :matched, confidence: :high, decided_by: :ai)
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert pair.reload.merged?
+        assert_equal [@target.id, third.id].minmax, [other_pair.reload.item_a_id, other_pair.item_b_id]
+        assert_equal [@target.id, "Books::Book"], [decision.reload.record_id, decision.record_type]
+      end
+
       private
 
       def create_reading_goal(completed_on:, **attributes)

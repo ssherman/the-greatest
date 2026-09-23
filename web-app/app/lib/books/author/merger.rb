@@ -55,6 +55,7 @@ module Books
           merge_all_associations
           reconcile_scalars
           target_author.save! if target_author.changed?
+          resolve_duplicate_candidates
           destroy_source_author
           @transaction_body_completed = true
         end
@@ -420,6 +421,14 @@ module Books
       # post-commit, never inside the transaction.
       def schedule_ranking_recalculation
         ::Books::CalculateAuthorRankingsJob.perform_async
+      end
+
+      # The (source, target) pair on duplicate_candidates becomes merged, other
+      # pending pairs naming the source re-key onto the target, and
+      # match_decisions that named the source now name the target. Inside the
+      # transaction so a rollback undoes it with the rest.
+      def resolve_duplicate_candidates
+        ::DuplicateCandidate.record_merge(item_type: "Books::Author", source_id: @source_author_id, target_id: target_author.id)
       end
 
       def destroy_source_author

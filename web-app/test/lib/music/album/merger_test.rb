@@ -573,6 +573,20 @@ module Music
           "both rows must be locked FOR UPDATE in ascending id order, or two merges " \
           "with swapped source and target can deadlock each other"
       end
+
+      test "records the merge on duplicate_candidates and repoints match decisions to the target" do
+        third = music_albums(:animals)
+        pair = DuplicateCandidate.flag!(item_type: "Music::Album", ids: [@source_album.id, @target_album.id], source: :ai)
+        other_pair = DuplicateCandidate.flag!(item_type: "Music::Album", ids: [@source_album.id, third.id], source: :ai)
+        decision = MatchDecision.create!(finder: "F", record: @source_album, outcome: :matched, confidence: :high, decided_by: :ai)
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?, result.errors.inspect
+        assert pair.reload.merged?
+        assert_equal [@target_album.id, third.id].minmax, [other_pair.reload.item_a_id, other_pair.item_b_id]
+        assert_equal @target_album.id, decision.reload.record_id
+      end
     end
   end
 end

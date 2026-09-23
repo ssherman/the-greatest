@@ -31,6 +31,7 @@ module Music
           lock_songs
           collect_affected_ranking_configurations
           merge_all_associations
+          resolve_duplicate_candidates
           destroy_source_song
           @transaction_body_completed = true
         end
@@ -263,6 +264,14 @@ module Music
       # read that short list and bake the wrong result into the rankings.
       def regenerate_user_favorites_list
         GenerateUserFavoritesListsJob.perform_async("Music::Songs::UserList")
+      end
+
+      # The (source, target) pair on duplicate_candidates becomes merged, other
+      # pending pairs naming the source re-key onto the target, and
+      # match_decisions that named the source now name the target. Inside the
+      # transaction so a rollback undoes it with the rest.
+      def resolve_duplicate_candidates
+        ::DuplicateCandidate.record_merge(item_type: "Music::Song", source_id: @source_song_id, target_id: target_song.id)
       end
 
       def destroy_source_song
