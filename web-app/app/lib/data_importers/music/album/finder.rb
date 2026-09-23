@@ -3,9 +3,25 @@
 module DataImporters
   module Music
     module Album
-      # Finds existing Music::Album records before import
+      # Finds an existing Music::Album before import and answers with a Match.
+      # Increment 1: the pre-redesign lookup (release-group MBID, else an
+      # artist-scoped MusicBrainz search resolved to a local MBID, else exact
+      # title within the artist) runs as the single decisive source.
+      # Increment 6 replaces it with the real sources.
       class Finder < DataImporters::FinderBase
-        def call(query:)
+        protected
+
+        def model_class = ::Music::Album
+
+        def ranking_configuration_class = ::Music::Albums::RankingConfiguration
+
+        def candidate_sources(query)
+          [DataImporters::Sources::Legacy.new { legacy_lookup(query) }]
+        end
+
+        private
+
+        def legacy_lookup(query)
           # Handle direct release group MBID lookup
           if query.release_group_musicbrainz_id.present?
             return find_by_musicbrainz_id_only(query.release_group_musicbrainz_id)
@@ -37,8 +53,6 @@ module DataImporters
 
           nil
         end
-
-        private
 
         def get_artist_musicbrainz_id(artist)
           artist.identifiers

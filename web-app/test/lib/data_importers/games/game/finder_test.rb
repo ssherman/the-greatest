@@ -21,14 +21,14 @@ module DataImporters
           query = ImportQuery.new(igdb_id: 7346)
           result = @finder.call(query: query)
 
-          assert_equal @zelda, result
+          assert_equal @zelda, result.record
         end
 
         test "call returns nil when no identifier matches" do
           query = ImportQuery.new(igdb_id: 99999)
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call returns nil when igdb_id is blank" do
@@ -39,7 +39,15 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
+        end
+
+        test "records a decision on every call" do
+          query = ImportQuery.new(igdb_id: 999999)
+          query.stubs(:valid?).returns(true)
+
+          assert_difference("MatchDecision.count", 1) { @finder.call(query: query) }
+          assert_equal "DataImporters::Games::Game::Finder", MatchDecision.last.finder
         end
       end
     end

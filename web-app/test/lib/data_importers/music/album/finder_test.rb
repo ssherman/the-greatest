@@ -36,7 +36,7 @@ module DataImporters
 
           result = @finder.call(query: @query)
 
-          assert_equal music_albums(:dark_side_of_the_moon), result
+          assert_equal music_albums(:dark_side_of_the_moon), result.record
         end
 
         test "call returns existing album when found by exact title match" do
@@ -54,7 +54,7 @@ module DataImporters
           query = ImportQuery.new(artist: @artist, title: "The Dark Side of the Moon")
           result = @finder.call(query: query)
 
-          assert_equal music_albums(:dark_side_of_the_moon), result
+          assert_equal music_albums(:dark_side_of_the_moon), result.record
         end
 
         test "call returns nil when no album found by any method" do
@@ -71,7 +71,7 @@ module DataImporters
           unknown_query = ImportQuery.new(artist: @artist, title: "Unknown Album")
           result = @finder.call(query: unknown_query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call handles MusicBrainz search errors gracefully" do
@@ -87,7 +87,7 @@ module DataImporters
           # Should still fall back to title matching
           result = @finder.call(query: @query)
 
-          assert_nil result # The Wall doesn't exist in fixtures
+          assert_nil result.record # The Wall doesn't exist in fixtures
         end
 
         test "call returns nil when artist has no MusicBrainz ID" do
@@ -96,7 +96,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call searches primary albums only when specified" do
@@ -122,7 +122,7 @@ module DataImporters
           query = ImportQuery.new(artist: @artist, title: "The Wall", primary_albums_only: true)
           result = @finder.call(query: query)
 
-          assert_nil result # No matching album found
+          assert_nil result.record # No matching album found
         end
 
         test "call searches all albums when primary_albums_only is false" do
@@ -139,7 +139,7 @@ module DataImporters
           query = ImportQuery.new(artist: @artist, title: "The Wall", primary_albums_only: false)
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call searches for all albums when no title specified" do
@@ -156,7 +156,7 @@ module DataImporters
           query = ImportQuery.new(artist: @artist) # No title
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call prioritizes MusicBrainz ID over title matching" do
@@ -184,7 +184,7 @@ module DataImporters
           result = @finder.call(query: query)
 
           # Should return Wish You Were Here (found by MBID) not Animals (found by title)
-          assert_equal music_albums(:wish_you_were_here), result
+          assert_equal music_albums(:wish_you_were_here), result.record
         end
 
         # Tests for new MusicBrainz Release Group ID functionality
@@ -197,7 +197,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_equal music_albums(:dark_side_of_the_moon), result
+          assert_equal music_albums(:dark_side_of_the_moon), result.record
         end
 
         test "call returns nil when release_group_musicbrainz_id not found" do
@@ -209,7 +209,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call prioritizes release_group_musicbrainz_id over artist when both present" do
@@ -221,7 +221,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_equal music_albums(:wish_you_were_here), result
+          assert_equal music_albums(:wish_you_were_here), result.record
         end
 
         test "call falls back to artist search when release_group_musicbrainz_id is blank" do
@@ -240,7 +240,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call returns nil when artist is nil and no release_group_musicbrainz_id" do
@@ -248,7 +248,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
       end
     end

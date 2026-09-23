@@ -3,22 +3,32 @@
 module DataImporters
   module Books
     module Book
-      # Finds an existing ::Books::Book before import. Identifier lookup comes
-      # first (Open Library work key, then ISBN-13, ISBN-10, ASIN, Goodreads
-      # id, in that order), with a title+author fallback used only when the
-      # query carries both. A title alone never matches -- the local data has
-      # many same-title works, and disambiguating them is the matcher's job,
-      # not the finder's.
+      # Finds an existing ::Books::Book before import and answers with a
+      # Match (see FinderBase).
       #
-      # Never calls the Open Library service (or any other external API): a
-      # finder that made an HTTP call would put the import on a path that has
-      # to succeed just to look up a record that might already exist locally.
+      # Increment 1: the pre-redesign lookup -- identifiers first (Open
+      # Library work key, ISBN-13, ISBN-10, ASIN, Goodreads id), then an exact
+      # title+author match -- runs as the single decisive source, so behaviour
+      # is unchanged. Increment 2 replaces it with the identifier, exact,
+      # OpenSearch and Open Library sources.
+      #
+      # Never calls the Open Library service (or any other external API).
       class Finder < DataImporters::FinderBase
-        def call(query:)
-          find_by_identifiers(query) || find_by_title_and_author(query)
+        protected
+
+        def model_class = ::Books::Book
+
+        def ranking_configuration_class = ::Books::RankingConfiguration
+
+        def candidate_sources(query)
+          [DataImporters::Sources::Legacy.new { legacy_lookup(query) }]
         end
 
         private
+
+        def legacy_lookup(query)
+          find_by_identifiers(query) || find_by_title_and_author(query)
+        end
 
         def find_by_identifiers(query)
           if query.open_library_work_key.present?
