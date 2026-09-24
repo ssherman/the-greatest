@@ -313,6 +313,22 @@ module DataImporters
 
           assert_equal subject, match.decision.subject
         end
+
+        # ---- summarize ----------------------------------------------------------
+
+        test "summarize returns the evidence the audit pages show for a local book" do
+          book = books_books(:war_and_peace)
+          summary = Finder.new.summarize(book)
+
+          assert_equal "War and Peace", summary[:title]
+          assert_equal ["Leo Tolstoy"], summary[:creators]
+          assert_equal 1869, summary[:year]
+          assert_equal book.list_items.count, summary[:list_count]
+          assert_includes summary[:identifiers], {type: "books_work_isbn13", value: identifiers(:war_and_peace_isbn13).value}
+          assert_equal "standalone", summary[:book_kind]
+          assert_equal ["Voyna i mir"], summary[:alternate_titles]
+          assert summary.key?(:ranked_position)
+        end
       end
     end
   end

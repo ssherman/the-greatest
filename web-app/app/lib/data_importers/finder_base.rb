@@ -105,6 +105,14 @@ module DataImporters
       parts.join(" | ")
     end
 
+    # The facts the audit pages show for a local record: the same evidence
+    # hash every local candidate carries on a decision (title, creators,
+    # year, ranked_position, list_count, identifiers, plus the domain's
+    # extras), built live for a record the finder never saw.
+    def summarize(record)
+      evidence_for(record)
+    end
+
     protected
 
     # ---- hooks a domain subclass overrides ------------------------------------

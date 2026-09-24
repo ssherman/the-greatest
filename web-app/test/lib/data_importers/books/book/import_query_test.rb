@@ -150,6 +150,25 @@ module DataImporters
 
           assert_equal 1869, query.year
         end
+
+        # ------------------------------------------------------- from_snapshot
+
+        test "from_snapshot rebuilds a query from a stored match_decisions.query hash" do
+          query = ImportQuery.from_snapshot(match_decisions(:low_confidence_book_match).query)
+
+          assert_equal "War & Peace", query.title
+          assert_equal ["Tolstoy"], query.author_names
+          assert_nil query.year
+          assert_empty query.isbn13
+        end
+
+        test "from_snapshot ignores keys the query does not know and keeps identifiers" do
+          query = ImportQuery.from_snapshot({"title" => "Dune", "isbn13" => ["9780441013593"], "bogus" => 1, "year" => 1965})
+
+          assert_equal ["9780441013593"], query.isbn13
+          assert_equal 1965, query.year
+          assert query.valid?
+        end
       end
     end
   end
