@@ -33,7 +33,7 @@ module Services
 
         RecordMerge.call(item_type: @type, source_id: @a.id, target_id: @b.id)
 
-        assert_equal [survivor_pair], DuplicateCandidate.pending.to_a
+        assert_equal [survivor_pair], DuplicateCandidate.where(item_type: @type).pending.to_a
       end
 
       test "leaves a not_duplicate pair that named the source alone" do
