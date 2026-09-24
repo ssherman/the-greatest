@@ -110,16 +110,18 @@ class Services::Ai::Providers::OpenaiStrategy < Services::Ai::Providers::BaseStr
       .uniq
   end
 
+  # String-level, not URI-parsed: URI.parse rejects a non-ASCII path (raising
+  # on the same URLs it's supposed to clean), and a decode/re-encode round
+  # trip mangles bytes it shouldn't touch (escapes "/", turns "%20" into "+",
+  # turns a bare flag into "flag="). Splitting on literal "#", "?" and "&" and
+  # rejoining leaves every other byte exactly as it was.
   def strip_tracking(url)
-    uri = URI.parse(url)
-    return url if uri.query.blank?
+    before_fragment, fragment_marker, fragment = url.partition("#")
+    path, query_marker, query = before_fragment.partition("?")
+    return url if query_marker.empty?
 
-    # decode_www_form returns an Array of [key, value] pairs, not a Hash, so
-    # Hash#except isn't available here despite what Style/HashExcept assumes.
-    params = URI.decode_www_form(uri.query).reject { |key, _| key == "utm_source" } # standard:disable Style/HashExcept
-    uri.query = params.empty? ? nil : URI.encode_www_form(params)
-    uri.to_s
-  rescue URI::InvalidURIError
-    url
+    kept = query.split("&").reject { |segment| segment.split("=", 2).first == "utm_source" }
+    rebuilt = kept.empty? ? path : "#{path}?#{kept.join("&")}"
+    fragment_marker.empty? ? rebuilt : "#{rebuilt}#{fragment_marker}#{fragment}"
   end
 end

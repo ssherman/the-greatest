@@ -236,9 +236,10 @@ class Services::Ai::Providers::OpenaiStrategyTest < ActiveSupport::TestCase
   test "an unknown tool raises before any request is made" do
     @mock_responses.expects(:create).never
 
-    assert_raises(ArgumentError) do
+    error = assert_raises(ArgumentError) do
       @strategy.send_message!(ai_chat: @ai_chat, content: @content, response_format: nil, schema: nil, tools: [:teleport])
     end
+    assert_match(/Unknown AI tool/, error.message)
   end
 
   test "returns no citations and zero web search calls for a plain response" do
@@ -253,23 +254,59 @@ class Services::Ai::Providers::OpenaiStrategyTest < ActiveSupport::TestCase
   test "extracts url citations, strips utm_source and de-duplicates" do
     annotation_a = mock
     annotation_a.stubs(:type).returns(:url_citation)
-    annotation_a.stubs(:url).returns("https://example.org/book?utm_source=openai")
+    annotation_a.stubs(:url).returns("https://example.org/book")
     annotation_b = mock
     annotation_b.stubs(:type).returns(:url_citation)
     annotation_b.stubs(:url).returns("https://example.org/book?utm_source=openai")
     annotation_c = mock
     annotation_c.stubs(:type).returns(:url_citation)
     annotation_c.stubs(:url).returns("https://example.org/other?page=2&utm_source=openai")
+    annotation_string_type = mock
+    annotation_string_type.stubs(:type).returns("url_citation")
+    annotation_string_type.stubs(:url).returns("https://example.org/string-type")
     file_annotation = mock
     file_annotation.stubs(:type).returns(:file_citation)
 
-    mock_response = create_mock_response({ok: true}, annotations: [annotation_a, annotation_b, annotation_c, file_annotation], web_search_calls: 2)
+    mock_response = create_mock_response(
+      {ok: true},
+      annotations: [annotation_a, annotation_b, annotation_c, annotation_string_type, file_annotation],
+      web_search_calls: 2
+    )
     @mock_responses.stubs(:create).returns(mock_response)
 
     result = @strategy.send_message!(ai_chat: @ai_chat, content: @content, response_format: nil, schema: nil, tools: [:web_search])
 
-    assert_equal ["https://example.org/book", "https://example.org/other?page=2"], result[:citations]
+    assert_equal(
+      ["https://example.org/book", "https://example.org/other?page=2", "https://example.org/string-type"],
+      result[:citations]
+    )
     assert_equal 2, result[:web_search_calls]
+  end
+
+  test "strips utm_source from a non-ASCII URL without raising" do
+    annotation = mock
+    annotation.stubs(:type).returns(:url_citation)
+    annotation.stubs(:url).returns("https://en.wikipedia.org/wiki/Café?utm_source=openai")
+
+    mock_response = create_mock_response({ok: true}, annotations: [annotation])
+    @mock_responses.stubs(:create).returns(mock_response)
+
+    result = @strategy.send_message!(ai_chat: @ai_chat, content: @content, response_format: nil, schema: nil, tools: [:web_search])
+
+    assert_equal ["https://en.wikipedia.org/wiki/Café"], result[:citations]
+  end
+
+  test "strips only utm_source, preserving other query params and the fragment" do
+    annotation = mock
+    annotation.stubs(:type).returns(:url_citation)
+    annotation.stubs(:url).returns("https://example.org/a?path=/a/b&utm_source=openai#frag")
+
+    mock_response = create_mock_response({ok: true}, annotations: [annotation])
+    @mock_responses.stubs(:create).returns(mock_response)
+
+    result = @strategy.send_message!(ai_chat: @ai_chat, content: @content, response_format: nil, schema: nil, tools: [:web_search])
+
+    assert_equal ["https://example.org/a?path=/a/b#frag"], result[:citations]
   end
 
   private
