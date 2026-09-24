@@ -29,6 +29,27 @@ module Services
           assert_equal 1.0, @task.send(:temperature)
         end
 
+        test "model comes from the task role when none is given" do
+          assert_equal "gpt-6-sol", @task.instance_variable_get(:@model)
+        end
+
+        test "an explicit model beats the role" do
+          task = Music::ArtistDescriptionTask.new(parent: @artist, model: "gpt-4o")
+          assert_equal "gpt-4o", task.instance_variable_get(:@model)
+        end
+
+        class UnknownRoleTask < BaseTask
+          private
+
+          def task_role = :nope
+
+          def user_prompt = "irrelevant"
+        end
+
+        test "an unknown role raises at construction" do
+          assert_raises(Services::Ai::Roles::UnknownRole) { UnknownRoleTask.new(parent: @artist) }
+        end
+
         test "should_create_provider_strategy_correctly" do
           # Test that the correct provider strategy is created
           Services::Ai::Providers::OpenaiStrategy.expects(:new).returns(@mock_strategy)

@@ -21,9 +21,9 @@ module Services
             assert_nothing_raised { SelectCandidateTask.new(parent: nil, entity_noun: "book", query_line: "x", candidate_lines: []) }
           end
 
-          test "uses gpt-5-mini on openai with json mode" do
+          test "uses the fast role on openai with json mode" do
             assert_equal :openai, @task.send(:task_provider)
-            assert_equal "gpt-5-mini", @task.send(:task_model)
+            assert_equal :fast, @task.send(:task_role)
             assert_equal({type: "json_object"}, @task.send(:response_format))
           end
 

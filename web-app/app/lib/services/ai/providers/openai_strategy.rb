@@ -1,7 +1,9 @@
 class Services::Ai::Providers::OpenaiStrategy < Services::Ai::Providers::BaseStrategy
   def capabilities = %i[json_mode json_schema function_calls]
 
-  def default_model = "gpt-5-mini"
+  # Only reached when a caller passes a provider without going through a task
+  # role; tasks always resolve their model from Services::Ai::Roles.
+  def default_model = Services::Ai::Roles.resolve(:fast).model
 
   def provider_key = :openai
 

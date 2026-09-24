@@ -113,8 +113,8 @@ module Services
             assert match_result_schema.respond_to?(:new)
           end
 
-          test "uses gpt-5-mini model" do
-            assert_equal "gpt-5-mini", @task.send(:task_model)
+          test "uses the fast role" do
+            assert_equal :fast, @task.send(:task_role)
           end
 
           test "uses openai provider" do

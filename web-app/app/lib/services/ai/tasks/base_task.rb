@@ -7,8 +7,9 @@ module Services
         def initialize(parent:, provider: nil, model: nil)
           @parent = parent
           validate_parent!
-          @provider = provider || create_provider_from_task
-          @model = model || task_model || @provider.default_model
+          @role = Services::Ai::Roles.resolve(task_role)
+          @provider = provider || create_provider(task_provider || @role.provider)
+          @model = model || task_model || @role.model
         end
 
         def call
@@ -39,15 +40,18 @@ module Services
 
         private
 
-        attr_reader :parent, :provider, :chat
+        attr_reader :parent, :provider, :chat, :role
 
-        # Override in subclasses
-        # e.g., :openai
-        def task_provider
+        # Which entry of config.x.ai.roles this task runs on. Override in
+        # subclasses; see config/initializers/ai.rb for what each role means.
+        def task_role = :fast
+
+        # Escape hatches: an explicit provider or model here beats the role.
+        # No task in app/ overrides task_model any more.
+        def task_provider  # e.g., :openai
           nil
         end
 
-        # e.g., "gpt-4"
         def task_model
           nil
         end
@@ -80,8 +84,8 @@ module Services
 
         def process_and_persist(raw) = raw
 
-        def create_provider_from_task
-          case task_provider
+        def create_provider(key)
+          case key&.to_sym
           when :openai
             Services::Ai::Providers::OpenaiStrategy.new
           # when :anthropic
@@ -89,7 +93,7 @@ module Services
           # when :gemini
           #   Services::Ai::Providers::GeminiStrategy.new
           else
-            raise ArgumentError, "Unknown provider: #{task_provider}"
+            raise ArgumentError, "Unknown provider: #{key.inspect}"
           end
         end
 
