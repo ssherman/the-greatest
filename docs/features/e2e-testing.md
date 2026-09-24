@@ -105,6 +105,10 @@ Create a dedicated test account:
    bin/rails e2e:admin
    ```
    The task reads `PLAYWRIGHT_ADMIN_EMAIL` from `e2e/.env` and promotes that user.
+
+   `e2e/tests/books/admin/import-finder-audit.spec.ts` seeds its own rows by shelling out to
+   `bin/rails e2e:import_finder_seed` and removes them with `e2e:import_finder_cleanup`; both are
+   idempotent and safe to re-run after an interrupted run.
 4. Verify you can manually log in at `https://dev.thegreatestmusic.org` with these credentials
 
 A music-only `DomainRole` is **not** enough. The same account drives both the music and games
@@ -243,6 +247,11 @@ Fix:
 ```bash
 bin/rails e2e:admin
 ```
+
+`e2e/tests/books/admin/import-finder-audit.spec.ts` seeds its own rows by shelling out to
+`bin/rails e2e:import_finder_seed` and removes them with `e2e:import_finder_cleanup`; both are
+idempotent and safe to re-run after an interrupted run.
+
 This happens whenever the dev database is reseeded: the Firebase account still exists, so sign-in
 works and Rails auto-creates a fresh `User` with the default `user` role — no admin, no domain roles.
 
