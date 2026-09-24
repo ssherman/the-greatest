@@ -284,7 +284,9 @@ Rails.application.routes.draw do
 
       resources :song_artists, only: [:update, :destroy]
 
-      resources :ai_chats, only: [:index, :show]
+      # Shared controller, routed per domain -- same shape as corrections. The
+      # domain comes from the host, so the index scopes to this domain's parents.
+      resources :ai_chats, only: [:index, :show], controller: "/admin/ai_chats"
 
       resources :categories do
         collection do
@@ -733,6 +735,10 @@ Rails.application.routes.draw do
       resources :lists
 
       resources :reviews, only: [:index, :show, :destroy]
+
+      # Shared controller, routed per domain -- same shape as corrections. The
+      # domain comes from the host, so the index scopes to this domain's parents.
+      resources :ai_chats, only: [:index, :show], controller: "/admin/ai_chats"
 
       # Shared controller, routed per domain -- same shape as descriptions and
       # category items. The domain comes from the route, so the index can scope to
@@ -1191,6 +1197,10 @@ Rails.application.routes.draw do
           post :index_action
         end
       end
+
+      # Shared controller, routed per domain -- same shape as corrections. The
+      # domain comes from the host, so the index scopes to this domain's parents.
+      resources :ai_chats, only: [:index, :show], controller: "/admin/ai_chats"
 
       # Shared controller, routed per domain -- same shape as descriptions and
       # category items. The domain comes from the route, so the index can scope to
