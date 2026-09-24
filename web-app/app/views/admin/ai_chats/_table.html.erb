@@ -16,7 +16,7 @@
         <% ai_chats.each do |ai_chat| %>
           <tr>
             <td class="font-mono text-sm">
-              <%= link_to ai_chat.id, admin_ai_chat_path(ai_chat),
+              <%= link_to ai_chat.id, ai_chat_path_for(ai_chat),
                   class: "link link-hover",
                   data: { turbo_frame: "_top" } %>
             </td>
@@ -64,7 +64,7 @@
             </td>
             <td>
               <div class="flex justify-end">
-                <%= link_to admin_ai_chat_path(ai_chat),
+                <%= link_to ai_chat_path_for(ai_chat),
                     class: "btn btn-ghost btn-xs",
                     data: { turbo_frame: "_top" },
                     title: "View" do %>
