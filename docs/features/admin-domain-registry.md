@@ -213,7 +213,7 @@ Enabling the reviews admin surface for a domain (e.g. music) means:
 ### Import finder audit
 
 The match decisions and duplicate candidates pages (`docs/features/import-finder.md`, "Audit
-UI") are driven by a third registry, `DataImporters::FinderRegistry`. A domain that gains a
+UI") are driven by a fourth registry, `DataImporters::FinderRegistry`. A domain that gains a
 finder needs:
 
 12. **A `DataImporters::FinderRegistry::ENTRIES` entry** for the finder: domain, model, label,

@@ -248,10 +248,6 @@ Fix:
 bin/rails e2e:admin
 ```
 
-`e2e/tests/books/admin/import-finder-audit.spec.ts` seeds its own rows by shelling out to
-`bin/rails e2e:import_finder_seed` and removes them with `e2e:import_finder_cleanup`; both are
-idempotent and safe to re-run after an interrupted run.
-
 This happens whenever the dev database is reseeded: the Firebase account still exists, so sign-in
 works and Rails auto-creates a fresh `User` with the default `user` role — no admin, no domain roles.
 
