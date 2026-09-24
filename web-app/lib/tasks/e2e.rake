@@ -195,13 +195,13 @@ namespace :e2e do
       record: book_a, subject: nil, outcome: :unmatched, confidence: :low, decided_by: :ai, verify: false,
       query: {"title" => book_a.title, "author_names" => book_a.authors.map(&:name), "year" => book_a.first_published_year},
       candidates: [candidate.snapshot], selected_index: nil, sources_failed: [],
-      needs_review: true, reviewed_at: nil, reviewed_by: nil, review_note: nil
+      needs_review: true, reviewed_at: nil, reviewed_by: nil, review_note: nil, created_at: Time.current
     )
     decision.save!
 
     pair.assign_attributes(
       source: :bulk_verify, status: :pending, evidence: {"reason" => IMPORT_FINDER_MARKER}, occurrences: 1,
-      match_decision: decision, resolved_at: nil, resolved_by: nil, resolution_note: nil
+      match_decision: decision, resolved_at: nil, resolved_by: nil, resolution_note: nil, created_at: Time.current
     )
     pair.save!
 

@@ -17,7 +17,7 @@
             form: {data: {testid: "recheck-form", turbo_confirm: "Run the finder again now, with every source and verify on? This may take several seconds."}} %>
     <% end %>
 
-    <% if decision.unmatched? && decision.record && entry&.mergeable? %>
+    <% if current_user_can_delete? && decision.unmatched? && decision.record && entry&.mergeable? %>
       <% decision.candidates.each_with_index do |candidate, i| %>
         <% target = candidate_records[[candidate["record_type"], candidate["record_id"]]] %>
         <% next unless target && candidate["record_type"] == entry.model && target.id != decision.record_id %>

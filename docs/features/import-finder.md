@@ -141,7 +141,9 @@ the finder's real sources have landed (books today); **Merge into candidate N**,
 decision was unmatched, carries the record the importer created, and candidate N is a local
 record of the same model. Re-check excludes the decision's subject when the subject is a record
 of the finder's model (a sweep decision re-resolves that book against the rest), else the created
-record of an unmatched import (or it would match itself), else nothing.
+record of an unmatched import (or it would match itself), else nothing. A re-check's own row is
+written with `verify: true`, so it appears in the queue only under `verify=include`; the admin is
+redirected to it, and the original stays in the queue until reviewed.
 
 **Duplicates** opens on pending pairs, newest first, each record summarized live through
 `FinderBase#summarize` (title, creators, year, ranked position, list count, identifiers) with
@@ -159,7 +161,8 @@ surviving record with the result as flash. `Games::Company` has no merge action 
 dismissal and review only.
 
 Reading needs domain access; review, re-check and dismiss need write access
-(`require_domain_write!`).
+(`require_domain_write!`); the merge forms render only for users with delete permission, which
+is what the `execute_action` endpoint requires (`authorize :destroy?`).
 
 E2E: `e2e/tests/books/admin/import-finder-audit.spec.ts` seeds one decision and one pair with
 `bin/rails e2e:import_finder_seed` (idempotent; `E2E_BOOK_A` / `E2E_BOOK_B` override the

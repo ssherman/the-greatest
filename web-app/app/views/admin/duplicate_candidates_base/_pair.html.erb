@@ -29,7 +29,7 @@
           <%= form.text_field :resolution_note, placeholder: "Why not a duplicate (optional)", class: "input input-sm w-64", id: nil %>
           <%= form.submit "Not a duplicate", class: "btn btn-sm" %>
         <% end %>
-        <% if entry&.mergeable? && a && b %>
+        <% if current_user_can_delete? && entry&.mergeable? && a && b %>
           <details class="collapse collapse-arrow bg-base-200 w-auto" data-testid="merge-a-into-b">
             <summary class="collapse-title text-sm font-semibold">Merge A into B</summary>
             <div class="collapse-content">

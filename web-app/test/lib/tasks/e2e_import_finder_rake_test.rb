@@ -63,6 +63,7 @@ class E2eImportFinderRakeTest < ActiveSupport::TestCase
     capture_io { @seed.invoke }
     decision = MatchDecision.find_by!(reason: MARKER)
     decision.review!(by: users(:admin_user), note: "done")
+    decision.update_column(:created_at, 3.days.ago)
     seeded_pair.update!(status: :not_duplicate, resolved_at: Time.current, resolution_note: "no")
     @seed.reenable
 
@@ -73,6 +74,7 @@ class E2eImportFinderRakeTest < ActiveSupport::TestCase
     assert_nil decision.reload.reviewed_at
     assert seeded_pair.pending?
     assert_nil seeded_pair.resolution_note
+    assert_operator decision.reload.created_at, :>, 1.minute.ago
   end
 
   test "seed refuses to clobber a real pair between the two books" do

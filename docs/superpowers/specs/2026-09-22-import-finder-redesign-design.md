@@ -434,8 +434,8 @@ idempotent. The AI validate step stays.
 
 Two admin pages per domain under each domain's admin namespace, sharing
 `Admin::MatchDecisionsBaseController` and `Admin::DuplicateCandidatesBaseController`, scoped by
-the `finder` prefix, with the existing domain-scoped authorization: read needs the domain admin
-role, review and merge need write.
+the `finder` prefix, with the existing domain-scoped authorization: read needs domain access,
+review and dismiss need write, merge needs delete (the existing `execute_action` gate).
 
 **Match decisions.** Index opens on needs-review and unreviewed; filters for entity, outcome,
 confidence, decided-by, reviewed; `?page=N` pagination as on every admin index. Row: when, the query in one line,

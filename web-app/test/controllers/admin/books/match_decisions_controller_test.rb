@@ -306,6 +306,36 @@ module Admin
 
         assert_select "form[data-testid=recheck-form][action=?]", recheck_admin_books_match_decision_path(@pending)
       end
+
+      test "an editor with write but no delete permission sees the review form but no merge form" do
+        @regular.domain_roles.create!(domain: :books, permission_level: :editor)
+        sign_in_as(@regular, stub_auth: true)
+
+        get admin_books_match_decision_path(@created)
+
+        assert_response :success
+        assert_select "form[data-testid=review-form]"
+        assert_select "[data-testid=merge-into-candidate]", count: 0
+      end
+
+      test "show offers no merge when the decision has no record" do
+        @created.update!(record: nil)
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_match_decision_path(@created)
+
+        assert_response :success
+        assert_select "[data-testid=merge-into-candidate]", count: 0
+      end
+
+      test "verify=include still hides a row that is not flagged needing review" do
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_match_decisions_path(verify: "include")
+
+        ids = row_ids
+        assert_not_includes ids, @sweep.id, "war_and_peace_sweep has needs_review: false"
+        assert_includes ids, @pending.id
+      end
     end
   end
 end
