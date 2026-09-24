@@ -171,4 +171,8 @@
       <% end %>
     </div>
   </div>
+
+  <% if current_user_can_write? %>
+    <%= render "admin/match_decisions_base/actions", decision: @decision, entry: @entry, candidate_records: @candidate_records %>
+  <% end %>
 </div>

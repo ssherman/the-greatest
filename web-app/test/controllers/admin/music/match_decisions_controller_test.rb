@@ -20,6 +20,18 @@ module Admin
         get admin_match_decision_path(match_decisions(:dark_side_album_match))
         assert_response :success
       end
+
+      test "recheck is refused for a finder whose real sources have not landed, and no Re-check form renders" do
+        decision = match_decisions(:dark_side_album_match)
+        DataImporters::Music::Album::Finder.any_instance.expects(:call).never
+
+        get admin_match_decision_path(decision)
+        assert_select "form[data-testid=recheck-form]", count: 0
+
+        post recheck_admin_match_decision_path(decision)
+        assert_redirected_to admin_match_decision_path(decision)
+        assert_equal 1, MatchDecision.where(finder: "DataImporters::Music::Album::Finder").count
+      end
     end
   end
 end

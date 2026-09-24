@@ -151,6 +151,126 @@ module Admin
         get admin_books_match_decision_path(@music)
         assert_response :not_found
       end
+
+      # ---- review ------------------------------------------------------------
+
+      test "review marks the decision reviewed by the current user with the note" do
+        sign_in_as(@admin, stub_auth: true)
+        post review_admin_books_match_decision_path(@pending), params: {review_note: "Checked by hand."}
+
+        assert_redirected_to admin_books_match_decision_path(@pending)
+        @pending.reload
+        assert_equal @admin, @pending.reviewed_by
+        assert_equal "Checked by hand.", @pending.review_note
+        assert_not_nil @pending.reviewed_at
+      end
+
+      test "review of an already reviewed decision changes nothing" do
+        sign_in_as(@admin, stub_auth: true)
+        before = [@reviewed.reviewed_at, @reviewed.reviewed_by_id, @reviewed.review_note]
+
+        post review_admin_books_match_decision_path(@reviewed), params: {review_note: "again"}
+
+        assert_redirected_to admin_books_match_decision_path(@reviewed)
+        assert_equal before, [@reviewed.reload.reviewed_at, @reviewed.reviewed_by_id, @reviewed.review_note]
+      end
+
+      test "a viewer cannot review and sees no action forms" do
+        sign_in_as(@viewer, stub_auth: true)
+
+        get admin_books_match_decision_path(@pending)
+        assert_select "[data-testid=decision-actions]", count: 0
+
+        post review_admin_books_match_decision_path(@pending), params: {review_note: "nope"}
+        assert_redirected_to books_root_path
+        assert_nil @pending.reload.reviewed_at
+      end
+
+      test "review of another domain's decision 404s" do
+        sign_in_as(@admin, stub_auth: true)
+        post review_admin_books_match_decision_path(@music)
+        assert_response :not_found
+      end
+
+      # ---- recheck -----------------------------------------------------------
+
+      test "recheck runs the finder with verify on, excluding a sweep decision's subject, and shows the new decision beside the old" do
+        sign_in_as(@admin, stub_auth: true)
+        book = books_books(:war_and_peace)
+        new_decision = @pending
+        DataImporters::Books::Book::Finder.any_instance.expects(:call).with do |args|
+          args[:query].is_a?(DataImporters::Books::Book::ImportQuery) &&
+            args[:query].title == "War and Peace" && args[:query].author_names == ["Leo Tolstoy"] &&
+            args[:verify] == true && args[:subject] == book && args[:exclude] == book
+        end.returns(DataImporters::Match.new(outcome: :unmatched, confidence: :high, decided_by: :rule, reason: "No candidates.", decision: new_decision))
+
+        post recheck_admin_books_match_decision_path(@sweep)
+
+        assert_redirected_to admin_books_match_decision_path(new_decision, compare: @sweep.id)
+      end
+
+      test "recheck of an unmatched import excludes the record it created" do
+        sign_in_as(@admin, stub_auth: true)
+        DataImporters::Books::Book::Finder.any_instance.expects(:call)
+          .with { |args| args[:exclude] == books_books(:got) && args[:subject].nil? && args[:query].isbn13 == ["9780553103540"] }
+          .returns(DataImporters::Match.new(outcome: :matched, record: books_books(:war_and_peace), confidence: :high, decided_by: :ai, decision: @pending))
+
+        post recheck_admin_books_match_decision_path(@created)
+
+        assert_redirected_to admin_books_match_decision_path(@pending, compare: @created.id)
+      end
+
+      test "recheck of a matched import excludes nothing" do
+        sign_in_as(@admin, stub_auth: true)
+        DataImporters::Books::Book::Finder.any_instance.expects(:call)
+          .with { |args| args[:exclude].nil? && args[:verify] == true }
+          .returns(DataImporters::Match.new(outcome: :matched, record: books_books(:war_and_peace), confidence: :certain, decided_by: :identifier, decision: @sweep))
+
+        post recheck_admin_books_match_decision_path(@pending)
+
+        assert_redirected_to admin_books_match_decision_path(@sweep, compare: @pending.id)
+      end
+
+      test "a viewer cannot recheck" do
+        sign_in_as(@viewer, stub_auth: true)
+        DataImporters::Books::Book::Finder.any_instance.expects(:call).never
+
+        post recheck_admin_books_match_decision_path(@pending)
+        assert_redirected_to books_root_path
+      end
+
+      # ---- merge into candidate N -------------------------------------------
+
+      test "show offers Merge into candidate N for an unmatched decision with a created record, posting to the candidate's execute_action with the created record as source" do
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_match_decision_path(@created)
+
+        target = books_books(:war_and_peace)
+        assert_select "[data-testid=merge-into-candidate][data-candidate-index='1']" do
+          assert_select "form[data-testid=merge-form][action=?][data-turbo=false]", execute_action_admin_books_book_path(target) do
+            assert_select "input[name=action_name][value=MergeBook]"
+            assert_select "input[name=source_book_id][value=?]", books_books(:got).id.to_s
+            assert_select "input[type=checkbox][name=confirm_merge][required]"
+          end
+        end
+      end
+
+      test "show offers no merge for a matched decision or a sweep decision" do
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_match_decision_path(@pending)
+        assert_select "[data-testid=merge-into-candidate]", count: 0
+
+        get admin_books_match_decision_path(@sweep)
+        assert_select "[data-testid=merge-into-candidate]", count: 0
+      end
+
+      test "show offers Re-check for a books decision" do
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_match_decision_path(@pending)
+
+        assert_select "form[data-testid=recheck-form][action=?]", recheck_admin_books_match_decision_path(@pending)
+      end
     end
   end
 end

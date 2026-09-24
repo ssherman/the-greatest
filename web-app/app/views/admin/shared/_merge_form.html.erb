@@ -1,0 +1,26 @@
+<%# web-app/app/views/admin/shared/_merge_form.html.erb
+    Locals: entry (DataImporters::FinderRegistry::Entry), source, target (records of
+    entry.model), label (submit text).
+
+    Posts to the domain's existing execute_action endpoint, which enforces the
+    delete gate (authorize :destroy? for a destructive action) and runs the
+    merger; nothing here merges. The same required confirm checkbox as the
+    record pages' merge modal. turbo: false so the endpoint's HTML branch
+    answers -- a redirect to the surviving record with the result as flash --
+    instead of a turbo-stream flash replace that would leave this page showing
+    a pair or candidate that no longer exists. %>
+<%= form_with url: entry.execute_action_path.call(target), method: :post, class: "space-y-2",
+      data: {turbo: false, testid: "merge-form"} do |form| %>
+  <%= form.hidden_field :action_name, value: entry.merge_action, id: nil %>
+  <%= hidden_field_tag entry.source_field, source.id, id: nil %>
+  <p class="text-sm [overflow-wrap:anywhere]">
+    Merge <strong><%= audit_record_label(source) %></strong> (#<%= source.id %>)
+    into <strong><%= audit_record_label(target) %></strong> (#<%= target.id %>).
+    The first is permanently deleted; its associations move to the second.
+  </p>
+  <label class="label cursor-pointer justify-start gap-2">
+    <%= check_box_tag :confirm_merge, "1", false, class: "checkbox checkbox-sm", required: true, id: nil %>
+    <span>I understand this action cannot be undone</span>
+  </label>
+  <%= form.submit label, class: "btn btn-warning btn-sm" %>
+<% end %>

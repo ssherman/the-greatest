@@ -11,7 +11,8 @@
 class Admin::MatchDecisionsBaseController < Admin::BaseController
   include Admin::DomainScopedAuth
 
-  before_action :set_decision, only: [:show]
+  before_action :set_decision, only: [:show, :review, :recheck]
+  before_action :require_domain_write!, only: [:review, :recheck]
 
   OUTCOMES = ::MatchDecision.outcomes.keys.freeze
   CONFIDENCES = ::MatchDecision.confidences.keys.freeze
@@ -21,7 +22,8 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
   FILTER_KEYS = %w[entity outcome confidence decided_by reviewed verify].freeze
   PER_PAGE = 50
 
-  helper_method :filter_params, :decisions_index_path, :decision_path, :entries, :entry_for
+  helper_method :filter_params, :decisions_index_path, :decision_path, :entries, :entry_for,
+    :review_decision_path, :recheck_decision_path
 
   def index
     @reviewed = REVIEWED.include?(params[:reviewed]) ? params[:reviewed] : "pending"
@@ -33,6 +35,39 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
     @entry = entry_for(@decision)
     @candidate_records = candidate_records(@decision)
     @compare = domain_scope.find_by(id: params[:compare]) if params[:compare].present?
+  end
+
+  def review
+    if @decision.reviewed_at.present?
+      redirect_to decision_path(@decision), alert: "Already reviewed."
+      return
+    end
+
+    @decision.review!(by: current_user, note: params[:review_note].presence)
+    redirect_to decision_path(@decision), notice: "Marked reviewed."
+  end
+
+  # Runs the finder again, synchronously, with verify on: no early exit, every
+  # source, the AI when the rules cannot decide. The finder records the new
+  # decision itself; the show page renders it beside the old one. Offered
+  # only where FinderRegistry says the finder's real sources have landed --
+  # on a legacy-only finder verify would send one candidate to the AI for
+  # nothing. Books this takes roughly the Open Library resolve plus the AI
+  # call, within a request, which spec §13 accepts.
+  def recheck
+    entry = entry_for(@decision)
+    unless entry&.recheck?
+      redirect_to decision_path(@decision), alert: "Re-check is not available for #{entry&.label&.downcase || @decision.finder} decisions yet."
+      return
+    end
+
+    query = entry.query_class.from_snapshot(@decision.query)
+    match = entry.finder_class.new.call(
+      query: query, verify: true, subject: @decision.subject, exclude: recheck_exclusion(@decision, entry)
+    )
+
+    redirect_to decision_path(match.decision, compare: @decision.id),
+      notice: "Re-checked: #{match.outcome}, #{match.confidence} confidence, decided by #{match.decided_by}."
   end
 
   private
@@ -108,5 +143,25 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
 
   def decision_path(decision, params = {})
     public_send(:"#{route_prefix}match_decision_path", decision, params)
+  end
+
+  # What the re-run must not consider. A decision made for a record of this
+  # finder's own type (the sweep's subject) re-resolves that record against
+  # the rest of the catalog, so the record is excluded. An unmatched import
+  # created its record from this very query, so that record is excluded or
+  # the re-check would match itself. A matched import excludes nothing: the
+  # question is whether the match still holds.
+  def recheck_exclusion(decision, entry)
+    return decision.subject if decision.subject.instance_of?(entry.model_class)
+
+    decision.record if decision.unmatched?
+  end
+
+  def review_decision_path(decision)
+    public_send(:"review_#{route_prefix}match_decision_path", decision)
+  end
+
+  def recheck_decision_path(decision)
+    public_send(:"recheck_#{route_prefix}match_decision_path", decision)
   end
 end
