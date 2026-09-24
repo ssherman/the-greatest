@@ -194,7 +194,8 @@ Enrichment`.
 Reasons: `filled`, `already_set`, `null` (the model returned null), `not_applied_yet` (recorded
 for a later spec), `no_match` (a lookup such as language or country found nothing), `rejected`
 (failed the deterministic description check), `review_failed` (the review call errored, so the
-description was not written).
+description was not written), `human_cleared` (an applied correction blanked this field, so it is
+never refilled).
 
 Model: `Enrichment` with `belongs_to :enrichable, polymorphic: true`, `belongs_to :ai_chat,
 optional: true`, the three enums, validation of `kind` format (`/\A[a-z_]+\.[a-z_]+\z/`), and
@@ -250,8 +251,13 @@ Schema fields (each a `Fact` unless noted):
 | `description` | string, nullable | §5 |
 
 Every fill goes through the model's writer so `before_validation :derive_book_length` and the
-correctable hooks keep working. Nothing overwrites a non-blank value, which is what protects a
-human correction: `Correctable` only ever writes non-blank values.
+correctable hooks keep working. Nothing overwrites a non-blank value, which protects most human
+corrections. It does not protect a correction that *cleared* a field: the column target accepts
+blanks on purpose ("blanking a subtitle or a page range is a real correction"), and the dev
+database holds a dozen such corrections, mostly subtitles that earlier AI output got wrong. So the
+applier also checks the book's applied `correction_fields`: a field whose accepted `new_value`
+was blank is recorded with `reason: "human_cleared"` and never refilled, since the AI would make
+the same mistake again.
 
 `Services::Books::ApplyBookFacts.call(book:, facts:, citations:)` returns the ledger `facts` hash
 and the list of applied names. It is the only class that writes `Books::Book` columns from AI
