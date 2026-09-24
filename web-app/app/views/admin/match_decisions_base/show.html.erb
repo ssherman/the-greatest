@@ -164,7 +164,8 @@
       <% if @decision.ai_chat %>
         <details class="collapse collapse-arrow bg-base-200" data-testid="ai-chat">
           <summary class="collapse-title text-sm font-semibold">AI chat #<%= @decision.ai_chat.id %> (<%= @decision.ai_chat.model %>)</summary>
-          <div class="collapse-content">
+          <div class="collapse-content space-y-2">
+            <%= link_to "Open in AI Chats", ai_chat_path_for(@decision.ai_chat), class: "link text-sm" %>
             <pre class="bg-base-100 p-3 rounded-lg text-xs whitespace-pre-wrap break-words max-h-96 overflow-y-auto"><code><%= JSON.pretty_generate(@decision.ai_chat.messages || []) %></code></pre>
           </div>
         </details>

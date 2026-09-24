@@ -130,6 +130,16 @@ module Admin
         assert_select "a[href=?]", admin_books_book_path(books_books(:got))
       end
 
+      test "show renders the AI chat inline with a link to this domain's AI Chats page" do
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_match_decision_path(@pending)
+
+        assert_select "[data-testid=ai-chat] a[href=?]", admin_books_ai_chat_path(ai_chats(:general_chat))
+
+        get admin_books_match_decision_path(@sweep)
+        assert_select "[data-testid=ai-chat]", count: 0
+      end
+
       test "show renders a compare panel for a re-check" do
         sign_in_as(@admin, stub_auth: true)
         get admin_books_match_decision_path(@sweep, compare: @pending.id)

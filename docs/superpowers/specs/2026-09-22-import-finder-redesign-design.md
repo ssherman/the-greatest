@@ -441,7 +441,7 @@ review and dismiss need write, merge needs delete (the existing `execute_action`
 confidence, decided-by, reviewed; `?page=N` pagination as on every admin index. Row: when, the query in one line,
 outcome, chosen record, confidence, decided-by. Show: the query, the candidate table with the
 selected row highlighted (local or external, title or name, creators, year, ranked position,
-sources, scores, shared identifiers), the reasoning, the AI chat's messages inline, the record and the
+sources, scores, shared identifiers), the reasoning, the AI chat's messages inline with a link to the domain's AI Chats page, the record and the
 subject. Actions: **Mark reviewed** with a note; **Re-check**, which runs the finder again with
 `verify: true` synchronously and shows the new decision beside the old; **Merge into candidate
 N**, offered only when the outcome was new and candidate N is local, posting to the domain's
@@ -569,7 +569,7 @@ Each gets its own plan under `docs/superpowers/plans/`.
   pages (path-based paging serves edge-cached public pages; the admin is never cached); Re-check
   offered only where `DataImporters::FinderRegistry` says the finder's real sources have landed
   (books), because `verify: true` on a legacy-only finder sends one candidate to the AI for
-  nothing; the AI chat renders inline (the books admin has no AI chats page); Re-check excludes
+  nothing; the AI chat renders inline and links to the domain's AI Chats page (added to every domain by PR #326, merged during this increment); Re-check excludes
   the subject when it is a record of the finder's own model, else the created record of an
   unmatched import, else nothing; merge forms submit without Turbo so the browser lands on the
   surviving record; "Merge into candidate N" needs the decision to carry a record (a sweep

@@ -14,6 +14,7 @@ low_confidence_book_match:
   candidates: [{"record_type": "Books::Book", "record_id": <%= ActiveRecord::FixtureSet.identify(:war_and_peace) %>, "sources": ["opensearch"], "scores": {"opensearch": 7.2}, "evidence": {"title": "War and Peace", "creators": ["Leo Tolstoy"], "year": 1869, "identifiers": [{"type": "books_work_isbn13", "value": "9780140447934"}]}}]
   selected_index: 1
   reason: "Same title and author; year missing on the incoming item."
+  ai_chat: general_chat
   needs_review: true
 
 # A sweep row (Services::Books::FindDuplicates): verify on, the swept book as

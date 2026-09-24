@@ -12,6 +12,14 @@ module DataImporters
           @query = ImportQuery.new(artist: @artist, title: "The Wall")
         end
 
+        test "summarize carries the album's artists and release year for the audit pages" do
+          summary = @finder.summarize(music_albums(:dark_side_of_the_moon))
+
+          assert_equal "The Dark Side of the Moon", summary[:title]
+          assert_equal ["Pink Floyd"], summary[:creators]
+          assert_equal 1973, summary[:year]
+        end
+
         test "call returns existing album when found by MusicBrainz release group ID" do
           # Mock the search service to return The Wall's data
           search_service = mock

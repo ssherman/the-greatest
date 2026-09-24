@@ -13,6 +13,12 @@ module DataImporters
 
         def ranking_configuration_class = ::Games::RankingConfiguration
 
+        # Evidence for the audit pages and the AI prompt. The legacy source
+        # decides on its own, so these do not change any decision yet.
+        def record_creators(record) = record.companies.map(&:name)
+
+        def record_year(record) = record.release_year
+
         def candidate_sources(query)
           [DataImporters::Sources::Legacy.new { legacy_lookup(query) }]
         end

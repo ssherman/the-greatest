@@ -23,7 +23,7 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
   PER_PAGE = 50
 
   helper_method :filter_params, :decisions_index_path, :decision_path, :entries, :entry_for,
-    :review_decision_path, :recheck_decision_path
+    :review_decision_path, :recheck_decision_path, :ai_chat_path_for
 
   def index
     @reviewed = REVIEWED.include?(params[:reviewed]) ? params[:reviewed] : "pending"
@@ -143,6 +143,13 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
 
   def decision_path(decision, params = {})
     public_send(:"#{route_prefix}match_decision_path", decision, params)
+  end
+
+  # This domain's AI Chats page for the chat behind an AI decision; every
+  # domain's admin namespace routes `resources :ai_chats` with the same prefix
+  # as its match decisions.
+  def ai_chat_path_for(ai_chat)
+    public_send(:"#{route_prefix}ai_chat_path", ai_chat)
   end
 
   # What the re-run must not consider. A decision made for a record of this

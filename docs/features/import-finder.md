@@ -134,7 +134,7 @@ registry rather than the current domain, so a valid label from another domain (s
 on the books host) yields an empty page, while an unknown value is ignored. The show page lists
 the stored query, every candidate (local or external, creators, year, ranked position, sources,
 scores, identifiers shared with the query) with the selected row marked, the reasoning, and the
-AI chat's messages inline. Actions for writers: **Mark reviewed** with a note; **Re-check**, which
+AI chat's messages inline, linked to the domain's AI Chats page. Actions for writers: **Mark reviewed** with a note; **Re-check**, which
 runs the finder again synchronously with `verify: true` (every source, no early exit) and
 redirects to the new decision with the original beside it -- offered only where the registry says
 the finder's real sources have landed (books today); **Merge into candidate N**, offered when the
