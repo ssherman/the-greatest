@@ -1,5 +1,8 @@
-# One low-confidence decision, so later increments' audit pages have a row to
-# render. The finders in test create their own rows.
+# The finders in test create their own rows; these give the audit pages
+# rows to render, filter and scope. Candidate record ids go through
+# FixtureSet.identify because fixture ids are hashes.
+
+# Needs review, matched by the AI at low confidence. The default queue shows it.
 low_confidence_book_match:
   finder: DataImporters::Books::Book::Finder
   record: war_and_peace (Books::Book)
@@ -8,7 +11,66 @@ low_confidence_book_match:
   decided_by: 2
   verify: false
   query: {"title": "War & Peace", "author_names": ["Tolstoy"]}
-  candidates: [{"record_type": "Books::Book", "record_id": 1, "sources": ["opensearch"], "scores": {"opensearch": 7.2}, "evidence": {"title": "War and Peace"}}]
+  candidates: [{"record_type": "Books::Book", "record_id": <%= ActiveRecord::FixtureSet.identify(:war_and_peace) %>, "sources": ["opensearch"], "scores": {"opensearch": 7.2}, "evidence": {"title": "War and Peace", "creators": ["Leo Tolstoy"], "year": 1869, "identifiers": [{"type": "books_work_isbn13", "value": "9780140447934"}]}}]
   selected_index: 1
   reason: "Same title and author; year missing on the incoming item."
+  needs_review: true
+
+# A sweep row (Services::Books::FindDuplicates): verify on, the swept book as
+# subject, nothing found. Hidden by default -- the sweep writes one per ranked book.
+war_and_peace_sweep:
+  finder: DataImporters::Books::Book::Finder
+  subject: war_and_peace (Books::Book)
+  outcome: 1
+  confidence: 1
+  decided_by: 1
+  verify: true
+  query: {"title": "War and Peace", "author_names": ["Leo Tolstoy"], "year": 1869, "isbn13": [], "isbn10": [], "asin": [], "goodreads_id": []}
+  candidates: []
+  reason: "No candidates."
+  needs_review: false
+
+# An import that created a new book (got) although a local candidate existed,
+# sharing an ISBN with the query: the show page offers "Merge into candidate 1"
+# (source got, target war_and_peace) and lists the shared identifier.
+new_book_created:
+  finder: DataImporters::Books::Book::Finder
+  record: got (Books::Book)
+  outcome: 1
+  confidence: 3
+  decided_by: 2
+  verify: false
+  query: {"title": "Game of Thrones", "author_names": ["George R. R. Martin"], "isbn13": ["9780553103540"]}
+  candidates: [{"record_type": "Books::Book", "record_id": <%= ActiveRecord::FixtureSet.identify(:war_and_peace) %>, "sources": ["identifier", "opensearch"], "scores": {"opensearch": 4.1}, "evidence": {"title": "War and Peace", "creators": ["Leo Tolstoy"], "year": 1869, "identifiers": [{"type": "books_work_isbn13", "value": "9780553103540"}], "matched_identifier": {"type": "books_work_isbn13", "value": "9780553103540"}}}]
+  reason: "The only candidate is a different work despite the shared ISBN."
+  needs_review: true
+
+# Reviewed already: absent from the default queue, present under reviewed=reviewed.
+reviewed_book_match:
+  finder: DataImporters::Books::Book::Finder
+  record: crime_and_punishment (Books::Book)
+  outcome: 0
+  confidence: 2
+  decided_by: 1
+  verify: false
+  query: {"title": "Crime & Punishment", "author_names": ["Dostoevsky"]}
+  candidates: []
+  reason: "Exact title match; one source failed."
+  sources_failed: ["open_library"]
+  needs_review: true
+  reviewed_at: <%= 2.days.ago.to_fs(:db) %>
+  reviewed_by: admin_user
+  review_note: "Looks right."
+
+# Another domain's decision, also needing review: never on the books pages.
+dark_side_album_match:
+  finder: DataImporters::Music::Album::Finder
+  record: dark_side_of_the_moon (Music::Album)
+  outcome: 0
+  confidence: 2
+  decided_by: 1
+  verify: false
+  query: {"title": "The Dark Side of the Moon", "artist": "Music::Artist#1"}
+  candidates: []
+  reason: "Title matched the artist's album."
   needs_review: true
