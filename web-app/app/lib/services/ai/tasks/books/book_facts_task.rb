@@ -71,6 +71,8 @@ module Services
           def identifier_lines
             parent.identifiers
               .where(identifier_type: IDENTIFIER_LABELS.keys)
+              .order(:identifier_type, :value)
+              .limit(5)
               .pluck(:identifier_type, :value)
               .map { |type, value| "#{IDENTIFIER_LABELS.fetch(type)}: #{value}" }
           end

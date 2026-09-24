@@ -53,9 +53,17 @@ module Services
         def process_and_persist(provider_response)
           Services::Ai::Result.new(
             success: true,
-            data: {facts: provider_response[:parsed], citations: Array(provider_response[:citations])},
+            data: {facts: normalize(provider_response[:parsed]), citations: Array(provider_response[:citations])},
             ai_chat: chat
           )
+        end
+
+        # The SDK's coerced schema is a BaseModel whose #to_h is shallow: nested
+        # facts stay model objects. A JSON round trip flattens every level.
+        def normalize(parsed)
+          return {} if parsed.nil?
+
+          JSON.parse(parsed.to_json, symbolize_names: true)
         end
       end
     end

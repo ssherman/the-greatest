@@ -70,6 +70,31 @@ module Services
           assert_equal [], result.data[:citations]
         end
 
+        test "process_and_persist normalizes the SDK's coerced schema, not just plain hashes" do
+          task = ProbeTask.new(parent: @book)
+          task.stubs(:chat).returns(ai_chats(:general_chat))
+
+          # Reproduces exactly what Services::Ai::Providers::OpenaiStrategy#format_response
+          # hands to process_and_persist on the real OpenAI path:
+          # OpenAI::Helpers::StructuredOutput::ResponseParser.parse! does
+          # `JSON.parse(text, symbolize_names: true)` then
+          # `OpenAI::Internal::Type::Converter.coerce(model, parsed)`, and format_response
+          # then calls `.to_h.deep_symbolize_keys` on the result. #to_h is documented as
+          # "not recursive", so the nested "year" field stays an
+          # EnrichmentTask::IntegerFact instance, not a Hash, and deep_symbolize_keys
+          # (which only recurses into Hash/Array) does not fix that.
+          raw_json = JSON.parse(%({"recognized": true, "confidence": "high", "year": {"value": 1869, "confidence": "high"}}), symbolize_names: true)
+          coerced = OpenAI::Internal::Type::Converter.coerce(ProbeTask::Schema, raw_json)
+          sdk_parsed = coerced.to_h.deep_symbolize_keys
+          assert_kind_of EnrichmentTask::IntegerFact, sdk_parsed[:year] # sanity: this is the real SDK shape, not a Hash
+
+          result = task.send(:process_and_persist, {parsed: sdk_parsed, citations: ["https://example.org"]})
+
+          assert_equal({recognized: true, confidence: "high", year: {value: 1869, confidence: "high"}}, result.data[:facts])
+          assert_kind_of Hash, result.data[:facts][:year]
+          assert_equal 1869, result.data[:facts].dig(:year, :value)
+        end
+
         test "fact schemas expose value and confidence" do
           schema = EnrichmentTask::IntegerFact.to_json_schema
           assert_equal %w[value confidence], schema[:properties].keys.map(&:to_s)

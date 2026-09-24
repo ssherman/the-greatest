@@ -47,7 +47,7 @@ module Services
             @book.identifiers.create!(identifier_type: :books_work_openlibrary_id, value: "OL262758W")
             prompt = BookFactsTask.new(parent: @book).send(:user_prompt)
 
-            assert_includes prompt, "OL262758W"
+            assert_includes prompt, "Open Library work key: OL262758W"
           end
 
           test "user prompt marks an existing description as context only" do
