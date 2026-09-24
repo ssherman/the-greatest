@@ -223,9 +223,13 @@ Music and games models add the association when they get a consumer, not before.
 `Services::Ai::Tasks::Books::BookFactsTask < EnrichmentTask`, `chat_type :analysis`, parent a
 `Books::Book`.
 
-Inputs to the prompt: title, subtitle, author names with `credited_as` when present, existing
-`first_published_year` if any, the existing primary description if any (as context, marked as
-such), and identifiers when present (ISBN-13, Open Library work key) because they disambiguate.
+Inputs to the prompt: title, subtitle, author names, existing `first_published_year` if any, the
+existing primary description if any (as context, marked as such), and identifiers when present
+(ISBN-13, Open Library work key) because they disambiguate. Author names come from
+`book.authors` when the book has any, otherwise from the import query: the importer creates a
+new book with no `book_authors` rows (the Open Library provider deliberately does not create
+authors), so the provider passes `query.author_names` through the job to the task. A book with
+neither is `missing_inputs`.
 
 Schema fields (each a `Fact` unless noted):
 
@@ -234,7 +238,7 @@ Schema fields (each a `Fact` unless noted):
 | `recognized` | boolean, top level | governs the fallback (§6) |
 | `confidence` | enum, top level | governs the fallback |
 | `first_published_year` | integer, nullable | fill if blank |
-| `first_published_year_estimated` | boolean | recorded; applied only alongside the year |
+| `first_published_year_estimated` | boolean | recorded, `not_applied_yet`; `books_books` has no column for it |
 | `original_language` | string, nullable, ISO 639-1 code preferred, name accepted | fill `original_language_id` if blank, via `Language.find_by(iso_639_1:)` then `find_by(name:)` (case-insensitive); no match → `no_match` |
 | `word_count` | integer, nullable | fill if blank and positive |
 | `page_range` | string, nullable, `"300"` or `"250-350"` | fill if blank; must match `/\A\d+(-\d+)?\z/` |
@@ -304,15 +308,18 @@ reviewer rewrote for spoilers" is one query.
 
 `Services::Books::EnrichBook.call(book:, force_research: false)`:
 
-1. Inputs check: title present and at least one author. Otherwise write a `skipped` row with
+1. Inputs check: title present and at least one author name (from `book.authors`, or the
+   `author_names` the caller passed). Otherwise write a `skipped` row with
    `reason: "missing_inputs"` and return.
 2. Decide the first mode. Research if `force_research`, or if `book.first_published_year` is at or
    past `knowledge_cutoff_year`. Otherwise knowledge.
 3. Run `BookFactsTask` in that mode. On a task failure write a `failed` row and return a failure
    Result.
 4. If a description came back, run `DescriptionReviewTask` and the deterministic check.
-5. `ApplyBookFacts`. Write the ledger row: `outcome` is `unrecognized` when `recognized` is false,
-   `applied` when at least one fact was filled, else `nothing_to_apply`.
+5. If `recognized` is false, apply nothing: every fact is recorded with `reason: "unrecognized"`
+   and the row's `outcome` is `unrecognized`. A model that does not know the book is guessing at
+   whatever it did return. Otherwise `ApplyBookFacts`, and the `outcome` is `applied` when at
+   least one fact was filled, else `nothing_to_apply`.
 6. Fallback decision, only after a knowledge run: research if `recognized` is false, or
    `recognized` is true and overall `confidence` is `low`. If the daily cap is reached
    (`Enrichment.research.today.count >= research_daily_cap`) and not `force_research`, write a
@@ -324,7 +331,7 @@ The count-based budget has a small race at the boundary under concurrent jobs. O
 cap by a handful of 15-cent calls is acceptable; a lock is not worth it.
 
 `Books::EnrichBookJob` (`bin/rails generate sidekiq:job books/enrich_book`): `queue: :default`,
-`retry: 3`, `perform(book_id, force_research = false)`. It looks the book up with `find_by(id:)`
+`retry: 3`, `perform(book_id, force_research = false, author_names = [])`. It looks the book up with `find_by(id:)`
 and returns quietly when there is none, because a book deleted between enqueue and run is not an
 error worth three retries. It calls the runner and re-raises on a failed Result so Sidekiq retries
 transient API errors. Fill-blanks makes a retry, a re-run, and two concurrent runs on one book
@@ -334,7 +341,8 @@ Entry points:
 
 - `DataImporters::Books::Book::Providers::AiEnrichment`, appended to the importer's `providers`
   after `OpenLibrary` so the Open Library fills happen first and the AI fills fewer blanks.
-  Mirrors music's `AiDescription`: validate title, authors, `persisted?`, then `perform_async`,
+  Mirrors music's `AiDescription`: validate title, `persisted?`, and that either the book has
+  authors or the query carries `author_names`, then `perform_async(book.id, false, author_names)`,
   return `success_result(data_populated: [:ai_enrichment_queued])`.
 - `Actions::Admin::Books::EnrichBook` (visible on show, not destructive) with a checkbox field
   "Search the web even if the model knows this book" that maps to `force_research`. Enqueues the
