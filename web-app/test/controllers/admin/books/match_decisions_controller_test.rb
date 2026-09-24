@@ -212,7 +212,11 @@ module Admin
       test "recheck of an unmatched import excludes the record it created" do
         sign_in_as(@admin, stub_auth: true)
         DataImporters::Books::Book::Finder.any_instance.expects(:call)
-          .with { |args| args[:exclude] == books_books(:got) && args[:subject].nil? && args[:query].isbn13 == ["9780553103540"] }
+          .with { |args|
+            args[:query].is_a?(DataImporters::Books::Book::ImportQuery) && args[:query].title == "Game of Thrones" &&
+              args[:query].isbn13 == ["9780553103540"] && args[:verify] == true &&
+              args[:subject].nil? && args[:exclude] == books_books(:got)
+          }
           .returns(DataImporters::Match.new(outcome: :matched, record: books_books(:war_and_peace), confidence: :high, decided_by: :ai, decision: @pending))
 
         post recheck_admin_books_match_decision_path(@created)
@@ -223,7 +227,10 @@ module Admin
       test "recheck of a matched import excludes nothing" do
         sign_in_as(@admin, stub_auth: true)
         DataImporters::Books::Book::Finder.any_instance.expects(:call)
-          .with { |args| args[:exclude].nil? && args[:verify] == true }
+          .with { |args|
+            args[:query].is_a?(DataImporters::Books::Book::ImportQuery) && args[:query].title == "War & Peace" &&
+              args[:verify] == true && args[:subject].nil? && args[:exclude].nil?
+          }
           .returns(DataImporters::Match.new(outcome: :matched, record: books_books(:war_and_peace), confidence: :certain, decided_by: :identifier, decision: @sweep))
 
         post recheck_admin_books_match_decision_path(@pending)
@@ -263,6 +270,34 @@ module Admin
 
         get admin_books_match_decision_path(@sweep)
         assert_select "[data-testid=merge-into-candidate]", count: 0
+
+        # @created's candidate (war_and_peace) differs from its record (got), so
+        # only decision.unmatched? turning false hides it here -- pins that guard
+        # on its own, unlike @pending above where self-exclusion would hide the
+        # candidate regardless.
+        @created.update!(outcome: :matched)
+        get admin_books_match_decision_path(@created)
+        assert_select "[data-testid=merge-into-candidate]", count: 0
+      end
+
+      test "show excludes a candidate that is the decision's own record but keeps a different one" do
+        sign_in_as(@admin, stub_auth: true)
+        got = books_books(:got)
+        self_candidate = {
+          "record_type" => "Books::Book", "record_id" => got.id,
+          "sources" => ["opensearch"], "scores" => {}, "evidence" => {}
+        }
+        @created.update!(candidates: [self_candidate] + @created.candidates)
+
+        get admin_books_match_decision_path(@created)
+
+        # Index 1 is the self-referencing candidate (record_id == got.id ==
+        # decision.record_id): the self-exclusion clause (target.id !=
+        # decision.record_id) hides it. Index 2 is war_and_peace, which still
+        # renders -- proving the guard excludes only the self match, not every
+        # candidate.
+        assert_select "[data-testid=merge-into-candidate][data-candidate-index='1']", count: 0
+        assert_select "[data-testid=merge-into-candidate][data-candidate-index='2']"
       end
 
       test "show offers Re-check for a books decision" do
