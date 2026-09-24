@@ -1,0 +1,179 @@
+<%# web-app/app/views/admin/match_decisions_base/show.html.erb %>
+<% content_for :title, "Match Decision ##{@decision.id}" %>
+
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <%= link_to "← Match Decisions", decisions_index_path, class: "btn btn-ghost btn-sm" %>
+  </div>
+
+  <% if @compare %>
+    <div class="card bg-base-100 shadow" data-testid="recheck-comparison">
+      <div class="card-body">
+        <h2 class="card-title">Re-check of decision #<%= @compare.id %></h2>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead><tr><th></th><th>Original #<%= @compare.id %></th><th>Re-check #<%= @decision.id %></th></tr></thead>
+            <tbody>
+              <% [["Outcome", :outcome], ["Confidence", :confidence], ["Decided by", :decided_by]].each do |label, attribute| %>
+                <tr><th><%= label %></th><td><%= @compare.public_send(attribute) %></td><td><%= @decision.public_send(attribute) %></td></tr>
+              <% end %>
+              <tr>
+                <th>Record</th>
+                <td><%= @compare.record ? audit_record_label(@compare.record) : "—" %></td>
+                <td><%= @decision.record ? audit_record_label(@decision.record) : "—" %></td>
+              </tr>
+              <tr>
+                <th>Reason</th>
+                <td class="[overflow-wrap:anywhere]"><%= @compare.reason %></td>
+                <td class="[overflow-wrap:anywhere]"><%= @decision.reason %></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <%= link_to "Back to the original decision", decision_path(@compare), class: "link" %>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h1 class="card-title text-2xl">Match Decision #<%= @decision.id %></h1>
+      <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+        <div><dt class="font-semibold">Finder</dt><dd><%= @entry&.label || @decision.finder %> <span class="text-base-content/60 [overflow-wrap:anywhere]"><%= @decision.finder %></span></dd></div>
+        <div><dt class="font-semibold">When</dt><dd><%= @decision.created_at.strftime("%Y-%m-%d %H:%M:%S") %></dd></div>
+        <div><dt class="font-semibold">Outcome</dt><dd><span class="badge <%= @decision.matched? ? "badge-info" : "badge-ghost" %>"><%= @decision.outcome %></span></dd></div>
+        <div><dt class="font-semibold">Confidence</dt><dd><%= @decision.confidence %></dd></div>
+        <div><dt class="font-semibold">Decided by</dt><dd><%= @decision.decided_by %></dd></div>
+        <div><dt class="font-semibold">Verify</dt><dd><%= @decision.verify? ? "on (no early exit)" : "off" %></dd></div>
+        <div><dt class="font-semibold">Sources failed</dt><dd><%= @decision.sources_failed.presence&.join(", ") || "—" %></dd></div>
+        <div>
+          <dt class="font-semibold">Record</dt>
+          <dd class="[overflow-wrap:anywhere]">
+            <% if @decision.record %>
+              <% path = Admin::DomainRouting.path_for(@decision.record) %>
+              <%= path ? link_to(audit_record_label(@decision.record), path, class: "link") : audit_record_label(@decision.record) %>
+              <span class="text-base-content/60">#<%= @decision.record_id %></span>
+            <% elsif @decision.record_id %>
+              <%= @decision.record_type %> #<%= @decision.record_id %> <span class="badge badge-error badge-sm">missing</span>
+            <% else %>
+              —
+            <% end %>
+          </dd>
+        </div>
+        <div>
+          <dt class="font-semibold">Subject</dt>
+          <dd class="[overflow-wrap:anywhere]">
+            <% if @decision.subject %>
+              <% path = Admin::DomainRouting.path_for(@decision.subject) %>
+              <% label = "#{@decision.subject_type} ##{@decision.subject_id}" %>
+              <%= path ? link_to(label, path, class: "link") : label %>
+            <% else %>
+              —
+            <% end %>
+          </dd>
+        </div>
+        <div>
+          <dt class="font-semibold">Review</dt>
+          <dd>
+            <% if @decision.reviewed_at %>
+              reviewed <%= @decision.reviewed_at.strftime("%Y-%m-%d") %><%= " by #{@decision.reviewed_by.email}" if @decision.reviewed_by %>
+              <% if @decision.review_note.present? %><p class="[overflow-wrap:anywhere]"><%= @decision.review_note %></p><% end %>
+            <% elsif @decision.needs_review? %>
+              <span class="badge badge-warning badge-sm">needs review</span>
+            <% else %>
+              not flagged
+            <% end %>
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title">Query</h2>
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+        <% @decision.query.to_h.each do |key, value| %>
+          <div>
+            <dt class="font-semibold"><%= key.to_s.humanize %></dt>
+            <dd class="[overflow-wrap:anywhere]"><%= value.is_a?(Array) ? (value.join(", ").presence || "—") : (value.to_s.presence || "—") %></dd>
+          </div>
+        <% end %>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title">Candidates <span class="badge badge-ghost"><%= @decision.candidates.size %></span></h2>
+      <% if @decision.candidates.any? %>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr><th>#</th><th>Where</th><th>Title</th><th>Creators</th><th>Year</th><th>Ranked</th><th>Sources</th><th>Scores</th><th>Shared identifiers</th></tr>
+            </thead>
+            <tbody>
+              <% @decision.candidates.each_with_index do |candidate, i| %>
+                <% index = i + 1 %>
+                <% evidence = candidate["evidence"].to_h %>
+                <% record = @candidate_records[[candidate["record_type"], candidate["record_id"]]] %>
+                <% selected = (index == @decision.selected_index) %>
+                <tr class="<%= "bg-primary/10 font-semibold" if selected %>" data-testid="candidate-row" data-candidate-index="<%= index %>" data-selected="<%= selected %>">
+                  <td><%= index %></td>
+                  <td>
+                    <%= candidate["record_id"] ? "local" : "external" %>
+                    <% if candidate["external_key"].present? %>
+                      <span class="badge badge-ghost badge-sm"><%= candidate["external_source"] %> <%= candidate["external_key"] %></span>
+                    <% end %>
+                  </td>
+                  <td class="[overflow-wrap:anywhere]">
+                    <% title = evidence["title"].presence || evidence["external_title"].presence || candidate["external_key"] %>
+                    <% path = Admin::DomainRouting.path_for(record) %>
+                    <%= path ? link_to(title, path, class: "link") : title %>
+                    <% if candidate["record_id"] && record.nil? %><span class="badge badge-error badge-sm">missing</span><% end %>
+                  </td>
+                  <td class="[overflow-wrap:anywhere]"><%= Array(evidence["creators"].presence || evidence["external_creators"]).join(", ") %></td>
+                  <td><%= evidence["year"] || evidence["external_year"] %></td>
+                  <td><%= evidence["ranked_position"] ? "##{evidence["ranked_position"]}" : "—" %></td>
+                  <td><%= Array(candidate["sources"]).join(", ") %></td>
+                  <td class="tabular-nums whitespace-nowrap">
+                    <%= candidate["scores"].to_h.map { |source, score| "#{source} #{score.is_a?(Numeric) ? score.round(2) : score}" }.join(", ") %>
+                  </td>
+                  <td data-testid="shared-identifiers" class="[overflow-wrap:anywhere]">
+                    <% shared = audit_shared_identifiers(@decision, candidate) %>
+                    <%= shared.any? ? shared.join(", ") : "—" %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <p class="text-base-content/70">No candidates were found.</p>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title">Reasoning</h2>
+      <p class="[overflow-wrap:anywhere]"><%= @decision.reason.presence || "—" %></p>
+      <% if @decision.selected_index %>
+        <p class="text-sm text-base-content/70">Selected candidate #<%= @decision.selected_index %>.</p>
+      <% end %>
+      <% if @decision.ai_chat %>
+        <details class="collapse collapse-arrow bg-base-200" data-testid="ai-chat">
+          <summary class="collapse-title text-sm font-semibold">AI chat #<%= @decision.ai_chat.id %> (<%= @decision.ai_chat.model %>)</summary>
+          <div class="collapse-content space-y-2">
+            <%= link_to "Open in AI Chats", ai_chat_path_for(@decision.ai_chat), class: "link text-sm" %>
+            <pre class="bg-base-100 p-3 rounded-lg text-xs whitespace-pre-wrap break-words max-h-96 overflow-y-auto"><code><%= JSON.pretty_generate(@decision.ai_chat.messages || []) %></code></pre>
+          </div>
+        </details>
+      <% end %>
+    </div>
+  </div>
+
+  <% if current_user_can_write? %>
+    <%= render "admin/match_decisions_base/actions", decision: @decision, entry: @entry, candidate_records: @candidate_records %>
+  <% end %>
+</div>

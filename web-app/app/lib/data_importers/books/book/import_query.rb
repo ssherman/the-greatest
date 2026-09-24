@@ -9,6 +9,17 @@ module DataImporters
       class ImportQuery < DataImporters::ImportQuery
         attr_reader :title, :author_names, :year, :isbn13, :isbn10, :asin, :goodreads_id, :open_library_work_key
 
+        SNAPSHOT_KEYS = %i[title author_names year isbn13 isbn10 asin goodreads_id open_library_work_key].freeze
+
+        # Rebuilds a query from the hash FinderBase#query_snapshot stored on
+        # match_decisions.query: one key per attribute above, string keys.
+        # Unknown keys are dropped so an older row still loads. The audit
+        # page's Re-check is the caller.
+        def self.from_snapshot(snapshot)
+          attributes = snapshot.to_h.symbolize_keys.slice(*SNAPSHOT_KEYS)
+          new(title: attributes[:title], **attributes.except(:title))
+        end
+
         def initialize(title:, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [], open_library_work_key: nil)
           @title = title
           @author_names = Array(author_names)

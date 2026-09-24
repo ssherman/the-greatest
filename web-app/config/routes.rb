@@ -308,6 +308,20 @@ Rails.application.routes.draw do
         end
       end
 
+      # Import finder audit (docs/features/import-finder.md): shared base
+      # controllers subclassed per domain, like reviews.
+      resources :match_decisions, only: [:index, :show] do
+        member do
+          post :review
+          post :recheck
+        end
+      end
+      resources :duplicate_candidates, only: [:index] do
+        member do
+          post :dismiss
+        end
+      end
+
       resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
         member do
           post :resolve
@@ -737,6 +751,20 @@ Rails.application.routes.draw do
         end
         collection do
           post :bulk_reject
+        end
+      end
+
+      # Import finder audit (docs/features/import-finder.md): shared base
+      # controllers subclassed per domain, like reviews.
+      resources :match_decisions, only: [:index, :show] do
+        member do
+          post :review
+          post :recheck
+        end
+      end
+      resources :duplicate_candidates, only: [:index] do
+        member do
+          post :dismiss
         end
       end
 
@@ -1185,6 +1213,20 @@ Rails.application.routes.draw do
         end
         collection do
           post :bulk_reject
+        end
+      end
+
+      # Import finder audit (docs/features/import-finder.md): shared base
+      # controllers subclassed per domain, like reviews.
+      resources :match_decisions, only: [:index, :show] do
+        member do
+          post :review
+          post :recheck
+        end
+      end
+      resources :duplicate_candidates, only: [:index] do
+        member do
+          post :dismiss
         end
       end
 

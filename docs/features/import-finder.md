@@ -109,9 +109,69 @@ query has authors), `Sources::OpenSearch` over `Search::Books::Search::BookByTit
 score without authors), and `DataImporters::Books::Book::OpenLibrarySource` (`POST /resolve`,
 limit 5; one candidate per local holder of the work key or a key it redirects from; the whole
 `Resolution` on `match.external_resolution`, which the provider reuses for a new book). Music
-and games still run their legacy lookups until increments 5 and 6. The audit UI is increment 3,
-the authors importer and the book provider's author step are increment 4, games is increment 5
-and music is increment 6.
+and games still run their legacy lookups until increments 5 and 6. The audit UI (increment 3) is
+described below; the authors importer and the book provider's author step are increment 4, games
+is increment 5 and music is increment 6.
+
+## Audit UI (increment 3)
+
+Two pages per admin domain, under **Match Decisions** and **Duplicates** in the sidebar:
+`/admin/match_decisions` and `/admin/duplicate_candidates` on each admin host. Both are shared
+base controllers (`Admin::MatchDecisionsBaseController`, `Admin::DuplicateCandidatesBaseController`)
+subclassed per domain in three lines (`domain`, `route_prefix`), the same shape as reviews.
+Everything they show is scoped by `DataImporters::FinderRegistry`, which names, for every
+finder class stored in `match_decisions.finder`: its admin domain, its model, its ImportQuery,
+what to preload for a summary, how the model is merged (the `Actions::Admin::*` merge action,
+the field it reads the source id from, the record's `execute_action` route) and whether
+Re-check is offered. A finder with no entry is on no page; the registry test fails if a
+`finder.rb` exists without one.
+
+**Match decisions** opens on decisions needing review and not yet reviewed, with `verify: true`
+rows hidden -- the sweep writes one per ranked book. Filters: entity, outcome, confidence,
+decided by, review state (`pending` / `reviewed` / `all`), verify runs (`hide` / `include`);
+`?page=N` pagination like every admin index. The entity filter resolves against the whole
+registry rather than the current domain, so a valid label from another domain (say `entity=album`
+on the books host) yields an empty page, while an unknown value is ignored. The show page lists
+the stored query, every candidate (local or external, creators, year, ranked position, sources,
+scores, identifiers shared with the query) with the selected row marked, the reasoning, and the
+AI chat's messages inline, linked to the domain's AI Chats page. Actions for writers: **Mark reviewed** with a note; **Re-check**, which
+runs the finder again synchronously with `verify: true` (every source, no early exit) and
+redirects to the new decision with the original beside it -- offered only where the registry says
+the finder's real sources have landed (books today); **Merge into candidate N**, offered when the
+decision was unmatched, carries the record the importer created, and candidate N is a local
+record of the same model. Re-check excludes the decision's subject when the subject is a record
+of the finder's model (a sweep decision re-resolves that book against the rest), else the created
+record of an unmatched import (or it would match itself), else nothing. A re-check's own row is
+written with `verify: true`, so it appears in the queue only under `verify=include`; the admin is
+redirected to it, and the original stays in the queue until reviewed.
+
+**Duplicates** opens on pending pairs, newest first, each record summarized live through
+`FinderBase#summarize` (title, creators, year, ranked position, list count, identifiers) with
+the evidence reason, source, occurrence count and a link to the raising decision. Tabs for
+merged and dismissed pairs. Actions for writers: **Not a duplicate** with a note (the pair
+becomes `not_duplicate`, which `Flag` never reopens and the rules never merge); **Merge A into
+B** and **Merge B into A**. A record that no longer exists shows as missing and the pair offers
+dismissal only.
+
+Merges are never performed by these controllers. Every merge form posts to the domain's
+existing `execute_action` endpoint with the same required confirm checkbox as the record
+pages' merge modal, so the endpoint's delete gate (`authorize :destroy?`) and the merger's
+`RecordMerge` hook apply unchanged; the form submits without Turbo, so the browser lands on the
+surviving record with the result as flash. `Games::Company` has no merge action and offers
+dismissal and review only.
+
+Reading needs domain access; review, re-check and dismiss need write access
+(`require_domain_write!`); the merge forms render only for users with delete permission, which
+is what the `execute_action` endpoint requires (`authorize :destroy?`).
+
+E2E: `e2e/tests/books/admin/import-finder-audit.spec.ts` seeds one decision and one pair with
+`bin/rails e2e:import_finder_seed` (idempotent; `E2E_BOOK_A` / `E2E_BOOK_B` override the
+default `nightmare-abbey` + `war-and-peace`), drives filters, review, both merge forms to the
+confirm gate, and dismissal, then runs `e2e:import_finder_cleanup`. It never merges. Both rake
+tasks share one marker, `IMPORT_FINDER_MARKER = "E2E import finder audit seed"` in
+`lib/tasks/e2e.rake`; cleanup deletes only rows whose `match_decisions.reason` or
+`duplicate_candidates.evidence->>'reason'` equals that marker, so a run never touches decisions
+or pairs the sweep or a real reviewer produced.
 
 ## The duplicate sweep
 

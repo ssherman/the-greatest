@@ -210,6 +210,26 @@ Enabling the reviews admin surface for a domain (e.g. music) means:
     spoiler passage on that domain's admin review pages fully legible — silently, no error, no test
     failure.
 
+### Import finder audit
+
+The match decisions and duplicate candidates pages (`docs/features/import-finder.md`, "Audit
+UI") are driven by a fourth registry, `DataImporters::FinderRegistry`. A domain that gains a
+finder needs:
+
+12. **A `DataImporters::FinderRegistry::ENTRIES` entry** for the finder: domain, model, label,
+    ImportQuery class, preloads, and -- when the model has a merge action -- the
+    `Actions::Admin::<Domain>::Merge*` name, the `source_<model>_id` field it reads, and the
+    record's `execute_action` route. `test/lib/data_importers/finder_registry_test.rb` fails
+    when a `finder.rb` has no entry.
+13. **`Admin::<Domain>::MatchDecisionsController < Admin::MatchDecisionsBaseController`** and
+    **`Admin::<Domain>::DuplicateCandidatesController < Admin::DuplicateCandidatesBaseController`**,
+    each filling in `domain` and `route_prefix` (see `app/controllers/admin/books/`).
+14. **Routes** inside the domain's admin namespace: `resources :match_decisions, only: [:index,
+    :show]` with member `post :review` and `post :recheck`; `resources :duplicate_candidates,
+    only: [:index]` with member `post :dismiss`.
+15. **Sidebar items** "Match Decisions" and "Duplicates" in `Admin::DomainNav::CONFIGS[domain][:items]`;
+    `test/lib/admin/domain_nav_test.rb` asserts every domain has both.
+
 ## Related Documentation
 
 - `docs/features/domain-scoped-authorization.md` — the permission model these registries feed

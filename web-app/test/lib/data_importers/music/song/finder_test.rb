@@ -10,6 +10,14 @@ module DataImporters
           @finder = Finder.new
         end
 
+        test "summarize carries the song's artists and release year for the audit pages" do
+          summary = @finder.summarize(music_songs(:time))
+
+          assert_equal "Time", summary[:title]
+          assert_equal ["Pink Floyd"], summary[:creators]
+          assert_equal 1973, summary[:year]
+        end
+
         test "call returns existing song when found by MusicBrainz recording ID" do
           song = music_songs(:time)
           mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"

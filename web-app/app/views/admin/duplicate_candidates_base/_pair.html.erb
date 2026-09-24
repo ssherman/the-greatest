@@ -1,0 +1,53 @@
+<%# web-app/app/views/admin/duplicate_candidates_base/_pair.html.erb  Local: pair %>
+<% entry = entry_for_pair(pair) %>
+<% a = record_for(pair, pair.item_a_id) %>
+<% b = record_for(pair, pair.item_b_id) %>
+<div class="card bg-base-100 shadow" data-testid="pair-row" data-pair-id="<%= pair.id %>"
+     data-item-type="<%= pair.item_type %>" data-status="<%= pair.status %>">
+  <div class="card-body space-y-3">
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+      <span class="badge badge-ghost"><%= entry&.label || pair.item_type %></span>
+      <span class="badge badge-outline"><%= pair.source.humanize %></span>
+      <span>seen <%= pair.occurrences %> <%= "time".pluralize(pair.occurrences) %></span>
+      <span class="text-base-content/70"><%= pair.created_at.to_date.iso8601 %></span>
+      <% if pair.match_decision %>
+        <%= link_to "decision ##{pair.match_decision_id}", decision_path_for(pair.match_decision), class: "link" %>
+      <% end %>
+    </div>
+    <% if pair.evidence.to_h["reason"].present? %>
+      <p class="text-sm [overflow-wrap:anywhere]"><%= pair.evidence["reason"] %></p>
+    <% end %>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <%= render "admin/duplicate_candidates_base/side", pair: pair, record: a, id: pair.item_a_id, side: "A" %>
+      <%= render "admin/duplicate_candidates_base/side", pair: pair, record: b, id: pair.item_b_id, side: "B" %>
+    </div>
+
+    <% if pair.pending? && current_user_can_write? %>
+      <div class="flex flex-wrap gap-4 items-start" data-testid="pair-actions">
+        <%= form_with url: dismiss_duplicate_path(pair), method: :post, class: "flex gap-2 items-end", data: {testid: "dismiss-form"} do |form| %>
+          <%= form.text_field :resolution_note, placeholder: "Why not a duplicate (optional)", class: "input input-sm w-64", id: nil %>
+          <%= form.submit "Not a duplicate", class: "btn btn-sm" %>
+        <% end %>
+        <% if current_user_can_delete? && entry&.mergeable? && a && b %>
+          <details class="collapse collapse-arrow bg-base-200 w-auto" data-testid="merge-a-into-b">
+            <summary class="collapse-title text-sm font-semibold">Merge A into B</summary>
+            <div class="collapse-content">
+              <%= render "admin/shared/merge_form", entry: entry, source: a, target: b, label: "Merge A into B" %>
+            </div>
+          </details>
+          <details class="collapse collapse-arrow bg-base-200 w-auto" data-testid="merge-b-into-a">
+            <summary class="collapse-title text-sm font-semibold">Merge B into A</summary>
+            <div class="collapse-content">
+              <%= render "admin/shared/merge_form", entry: entry, source: b, target: a, label: "Merge B into A" %>
+            </div>
+          </details>
+        <% end %>
+      </div>
+    <% elsif pair.resolved_at %>
+      <p class="text-sm text-base-content/70">
+        <%= pair.status.humanize %> <%= pair.resolved_at.to_date.iso8601 %><%= " by #{pair.resolved_by.email}" if pair.resolved_by %><%= " — #{pair.resolution_note}" if pair.resolution_note.present? %>
+      </p>
+    <% end %>
+  </div>
+</div>

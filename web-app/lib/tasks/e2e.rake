@@ -1,3 +1,8 @@
+# Marker on every row e2e:import_finder_seed/e2e:import_finder_cleanup own. The
+# spec finds its rows by id (printed by the seed) and the cleanup finds them
+# by this marker.
+IMPORT_FINDER_MARKER = "E2E import finder audit seed"
+
 namespace :e2e do
   # One value from e2e/.env. Read from the file rather than ENV because these
   # tasks run from a shell that has not loaded that file, and dotenv only loads
@@ -162,5 +167,53 @@ namespace :e2e do
 
     total = scope.count
     puts "#{email} (id #{user.id}) has #{total} Books::Book reviews (target #{target_count})."
+  end
+
+  desc "Seed one match decision and one duplicate pair for e2e/tests/books/admin/import-finder-audit.spec.ts (E2E_BOOK_A, E2E_BOOK_B override the slugs)"
+  task import_finder_seed: :environment do
+    # Exactly what the spec drives: one needs-review decision (unmatched, with
+    # the created record set and one local candidate, so the show page offers
+    # "Merge into candidate 1") and one pending pair between the same two
+    # books. Idempotent: a second run resets the rows the spec reviewed and
+    # dismissed instead of adding more. Prints one JSON line with the ids.
+    book_a = Books::Book.find_by!(slug: ENV.fetch("E2E_BOOK_A", "nightmare-abbey"))
+    book_b = Books::Book.find_by!(slug: ENV.fetch("E2E_BOOK_B", "war-and-peace"))
+    a, b = [book_a.id, book_b.id].minmax
+
+    pair = DuplicateCandidate.find_or_initialize_by(item_type: "Books::Book", item_a_id: a, item_b_id: b)
+    if pair.persisted? && pair.evidence.to_h["reason"] != IMPORT_FINDER_MARKER
+      abort "A real duplicate_candidates row already exists for #{book_a.slug} + #{book_b.slug} (##{pair.id}); " \
+        "pick other books with E2E_BOOK_A / E2E_BOOK_B."
+    end
+
+    decision = MatchDecision.find_or_initialize_by(finder: "DataImporters::Books::Book::Finder", reason: IMPORT_FINDER_MARKER)
+    candidate = DataImporters::Candidate.new(
+      record: book_b, sources: [:opensearch], scores: {opensearch: 7.5},
+      evidence: {title: book_b.title, creators: book_b.authors.map(&:name), year: book_b.first_published_year}
+    )
+    decision.assign_attributes(
+      record: book_a, subject: nil, outcome: :unmatched, confidence: :low, decided_by: :ai, verify: false,
+      query: {"title" => book_a.title, "author_names" => book_a.authors.map(&:name), "year" => book_a.first_published_year},
+      candidates: [candidate.snapshot], selected_index: nil, sources_failed: [],
+      needs_review: true, reviewed_at: nil, reviewed_by: nil, review_note: nil, created_at: Time.current
+    )
+    decision.save!
+
+    pair.assign_attributes(
+      source: :bulk_verify, status: :pending, evidence: {"reason" => IMPORT_FINDER_MARKER}, occurrences: 1,
+      match_decision: decision, resolved_at: nil, resolved_by: nil, resolution_note: nil, created_at: Time.current
+    )
+    pair.save!
+
+    puts({decision_id: decision.id, pair_id: pair.id}.to_json)
+  end
+
+  desc "Remove the rows e2e:import_finder_seed created"
+  task import_finder_cleanup: :environment do
+    pairs = DuplicateCandidate.where("evidence->>'reason' = ?", IMPORT_FINDER_MARKER).to_a
+    decisions = MatchDecision.where(reason: IMPORT_FINDER_MARKER).to_a
+    pairs.each(&:destroy!)
+    decisions.each(&:destroy!)
+    puts "removed #{pairs.size} pair(s) and #{decisions.size} decision(s)"
   end
 end

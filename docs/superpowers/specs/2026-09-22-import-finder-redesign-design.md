@@ -434,14 +434,14 @@ idempotent. The AI validate step stays.
 
 Two admin pages per domain under each domain's admin namespace, sharing
 `Admin::MatchDecisionsBaseController` and `Admin::DuplicateCandidatesBaseController`, scoped by
-the `finder` prefix, with the existing domain-scoped authorization: read needs the domain admin
-role, review and merge need write.
+the `finder` prefix, with the existing domain-scoped authorization: read needs domain access,
+review and dismiss need write, merge needs delete (the existing `execute_action` gate).
 
 **Match decisions.** Index opens on needs-review and unreviewed; filters for entity, outcome,
-confidence, decided-by, reviewed; path-based pagination. Row: when, the query in one line,
+confidence, decided-by, reviewed; `?page=N` pagination as on every admin index. Row: when, the query in one line,
 outcome, chosen record, confidence, decided-by. Show: the query, the candidate table with the
 selected row highlighted (local or external, title or name, creators, year, ranked position,
-sources, scores, shared identifiers), the reasoning, links to the AI chat, the record and the
+sources, scores, shared identifiers), the reasoning, the AI chat's messages inline with a link to the domain's AI Chats page, the record and the
 subject. Actions: **Mark reviewed** with a note; **Re-check**, which runs the finder again with
 `verify: true` synchronously and shows the new decision beside the old; **Merge into candidate
 N**, offered only when the outcome was new and candidate N is local, posting to the domain's
@@ -565,3 +565,14 @@ Each gets its own plan under `docs/superpowers/plans/`.
 - **The failed-source cap spares `certain` decisions** (declared at implementation; see §14).
 - **Rule 4 counts exact-matching locals** (declared in increment 2): the rule fires when exactly one local candidate passes the exact test, whatever else the fuzzy sources returned; two exact locals go to the AI. Increment 1 had read it as "exactly one local candidate, and it is exact", which would have sent nearly every import with an OpenSearch neighbour to the AI.
 - **Increment 2 readings** (declared at implementation): `alternate_titles` sits inside the required title group of `BookByTitleAndAuthors`, so a merged-away title satisfies the search; the Open Library source treats a local book holding a key in the work's `redirected_from` list as a holder of that work; the one-off normalization covers every row the save-time normalizer would change (1,965 titles, 3,436 author names measured 2026-09-23), not only the 365 with exotic spaces; `U+00B4` joins `QuoteNormalizer`; the sweep is one job per ranked book rather than one looping job; the one-off's collision pairs use source `bulk_verify`.
+- **Increment 3 readings** (declared at implementation): `?page=N` pagination on the admin
+  pages (path-based paging serves edge-cached public pages; the admin is never cached); Re-check
+  offered only where `DataImporters::FinderRegistry` says the finder's real sources have landed
+  (books), because `verify: true` on a legacy-only finder sends one candidate to the AI for
+  nothing; the AI chat renders inline and links to the domain's AI Chats page (added to every domain by PR #326, merged during this increment); Re-check excludes
+  the subject when it is a record of the finder's own model, else the created record of an
+  unmatched import, else nothing; merge forms submit without Turbo so the browser lands on the
+  surviving record; "Merge into candidate N" needs the decision to carry a record (a sweep
+  decision has none -- its pair is on the duplicates page); `Games::Company` has no merge
+  action and offers dismissal and review only; the E2E spec seeds and cleans through
+  `e2e:import_finder_seed` / `e2e:import_finder_cleanup` and is run by hand.

@@ -11,6 +11,14 @@ module DataImporters
           @zelda = games_games(:breath_of_the_wild)
         end
 
+        test "summarize carries the game's companies and release year for the audit pages" do
+          summary = @finder.summarize(@zelda)
+
+          assert_equal "The Legend of Zelda: Breath of the Wild", summary[:title]
+          assert_equal ["Nintendo"], summary[:creators]
+          assert_equal 2017, summary[:year]
+        end
+
         test "call finds existing game by IGDB identifier" do
           # Create IGDB identifier for Zelda
           @zelda.identifiers.create!(
