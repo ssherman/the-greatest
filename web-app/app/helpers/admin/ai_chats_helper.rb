@@ -4,65 +4,34 @@ module Admin::AiChatsHelper
     parent = ai_chat.parent
     return nil unless parent
 
-    case parent
-    when Music::Artist
-      admin_artist_path(parent)
-    when Music::Album
-      admin_album_path(parent)
-    when Music::Song
-      admin_song_path(parent)
-    when Music::Albums::List
-      admin_albums_list_path(parent)
-    when Music::Songs::List
-      admin_songs_list_path(parent)
+    if parent.is_a?(List)
+      Admin::DomainRouting.list_config(parent)&.dig(:path)
+    else
+      Admin::DomainRouting.path_for(parent)
     end
   end
 
-  # Returns a display name for the parent
+  # Returns a display name for the parent. Every registered parent model has
+  # exactly one of a name or a title column.
   def ai_chat_parent_display_name(ai_chat)
     parent = ai_chat.parent
     return nil unless parent
 
-    case parent
-    when Music::Artist
-      parent.name
-    when Music::Album, Music::Song
-      parent.title
-    when List
-      parent.name
-    else
-      "#{parent.class.name} ##{parent.id}"
-    end
+    parent.try(:name).presence || parent.try(:title).presence || "#{parent.class.name} ##{parent.id}"
   end
 
-  # Returns the human-readable parent type
-  # For STI models (like List), uses the actual parent class rather than parent_type
-  # since Rails stores the base class name in polymorphic parent_type
+  # Returns the human-readable parent type.
+  # Lists are STI and Rails stores the base class ("List") in parent_type, so a
+  # list's label comes from the loaded record's own class.
   def ai_chat_parent_type_label(ai_chat)
-    return nil unless ai_chat.parent_type.present?
+    return nil if ai_chat.parent_type.blank?
 
-    # For List parents, use the actual STI class from the parent object
-    if ai_chat.parent_type == "List" && ai_chat.parent.present?
-      case ai_chat.parent
-      when Music::Albums::List
-        "Albums List"
-      when Music::Songs::List
-        "Songs List"
-      else
-        "List"
-      end
-    else
-      case ai_chat.parent_type
-      when "Music::Artist"
-        "Artist"
-      when "Music::Album"
-        "Album"
-      when "Music::Song"
-        "Song"
-      else
-        ai_chat.parent_type.demodulize
-      end
-    end
+    parent = ai_chat.parent
+    return ai_chat.parent_type.demodulize if parent.nil?
+    return parent.class.name.demodulize unless parent.is_a?(List)
+
+    item_label = Admin::DomainRouting::LISTS.dig(parent.class.name, :item_label)
+    item_label ? "#{item_label} List" : "List"
   end
 
   # Returns badge class for chat type

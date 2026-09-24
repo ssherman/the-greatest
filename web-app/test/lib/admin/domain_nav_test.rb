@@ -134,5 +134,13 @@ module Admin
       assert_equal "/admin/news_topics", item[:path]
       assert item[:icon].present?
     end
+
+    test "every domain's nav links to its AI Chats page" do
+      %i[music books games].each do |domain|
+        item = Admin::DomainNav.config_for(domain)[:items].find { |i| i[:label] == "AI Chats" }
+        assert item, "#{domain} nav is missing an AI Chats item"
+        assert_equal "/admin/ai_chats", item[:path]
+      end
+    end
   end
 end

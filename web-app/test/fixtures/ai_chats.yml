@@ -43,7 +43,8 @@ ranking_chat:
   temperature: 0.1
   json_mode: true
   messages: [{ role: "system", content: "Rank these items", timestamp: "2024-01-01T11:00:00Z" }]
-  parent: books_list (Books::List)
+  parent_type: "List"
+  parent_id: <%= ActiveRecord::FixtureSet.identify(:books_list) %>
 
 recommendation_chat:
   chat_type: recommendation
@@ -108,7 +109,7 @@ games_list_chat:
   parent_type: "List"
   parent_id: <%= ActiveRecord::FixtureSet.identify(:games_list) %>
 
-# AiChat with no parent (should be included in music admin)
+# AiChat with no parent (shown on every domain's admin)
 no_parent_chat:
   chat_type: general
   model: "gpt-4"
@@ -117,3 +118,23 @@ no_parent_chat:
   json_mode: false
   messages: [{ role: "user", content: "General question", timestamp: "2024-01-03T13:00:00Z" }]
   user: regular_user
+
+# Direct (non-STI) parents for books and games, so every domain has both an
+# entity parent and a list parent to scope.
+books_book_chat:
+  chat_type: analysis
+  model: "gpt-5-mini"
+  provider: openai
+  temperature: 0.2
+  json_mode: true
+  messages: [{ role: "system", content: "Pick the matching book", timestamp: "2024-01-04T10:00:00Z" }]
+  parent: war_and_peace (Books::Book)
+
+games_game_chat:
+  chat_type: analysis
+  model: "gpt-5-mini"
+  provider: openai
+  temperature: 0.2
+  json_mode: true
+  messages: [{ role: "system", content: "Pick the matching IGDB game", timestamp: "2024-01-04T11:00:00Z" }]
+  parent: breath_of_the_wild (Games::Game)

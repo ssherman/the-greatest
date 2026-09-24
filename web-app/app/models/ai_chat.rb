@@ -62,4 +62,14 @@ class AiChat < ApplicationRecord
     joins("INNER JOIN lists ON lists.id = ai_chats.parent_id AND ai_chats.parent_type = 'List'")
       .where(lists: {type: sti_types})
   }
+
+  # A domain's AI chats: direct parents of its entity types, List parents of its
+  # list STI types, and chats with no parent at all (which cannot be attributed
+  # to any domain, so every domain shows them). The list branch is a subquery so
+  # no ids are loaded into memory.
+  scope :for_parent_types, ->(entity_types, list_types) {
+    where(parent_type: entity_types)
+      .or(where(parent_type: nil))
+      .or(where(id: AiChat.with_list_parent_types(list_types).select(:id)))
+  }
 end
