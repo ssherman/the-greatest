@@ -185,4 +185,34 @@ class AiChatTest < ActiveSupport::TestCase
 
     assert_equal AiChat.where(parent_type: nil).pluck(:id).sort, result.pluck(:id).sort
   end
+
+  test "for_parent_types builds its list-parent subquery independently of the caller's chain" do
+    books_list_id = lists(:books_list).id
+
+    # Two more genuine Books::List-parent chats, both with ids well below
+    # ranking_chat's, so there are three real candidates for the list
+    # branch: ids 1, 2, and ranking_chat's (211844387-ish, always the
+    # largest of the three).
+    AiChat.create!(id: 1, chat_type: :ranking, model: "m", provider: :openai,
+      temperature: 0.2, parent_type: "List", parent_id: books_list_id)
+    AiChat.create!(id: 2, chat_type: :ranking, model: "m", provider: :openai,
+      temperature: 0.2, parent_type: "List", parent_id: books_list_id)
+
+    # .where.not(parent_type: nil) removes the "parentless chats" branch, so
+    # the only surviving candidates are List-parent chats: exactly the three
+    # rows above. Skipping the first two (by id) and taking the next one
+    # should land on ranking_chat.
+    #
+    # If with_list_parent_types is called unqualified inside the scope, this
+    # offset/limit leaks into the "id IN (subquery)" branch: the subquery
+    # picks ranking_chat's id via its own internal offset/limit, but then the
+    # SAME offset/limit is applied again to the (now single-row) outer
+    # result, offsetting past it and returning nothing. Building the
+    # subquery from AiChat directly keeps it independent, so the offset/limit
+    # is only ever applied once, and ranking_chat is returned.
+    result = AiChat.where.not(parent_type: nil).order(:id).offset(2).limit(1)
+      .for_parent_types([], %w[Books::List])
+
+    assert_includes result, ai_chats(:ranking_chat)
+  end
 end

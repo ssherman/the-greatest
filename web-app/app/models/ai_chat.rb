@@ -70,6 +70,6 @@ class AiChat < ApplicationRecord
   scope :for_parent_types, ->(entity_types, list_types) {
     where(parent_type: entity_types)
       .or(where(parent_type: nil))
-      .or(where(id: with_list_parent_types(list_types).select(:id)))
+      .or(where(id: AiChat.with_list_parent_types(list_types).select(:id)))
   }
 end

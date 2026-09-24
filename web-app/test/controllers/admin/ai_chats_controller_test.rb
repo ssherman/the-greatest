@@ -58,6 +58,12 @@ class Admin::AiChatsControllerTest < ActionDispatch::IntegrationTest
       assert_response :success
     end
 
+    test "#{domain}: shows a chat with a user and no parent" do
+      visit_domain(domain)
+      get show_url_for(domain, ai_chats(:general_chat))
+      assert_response :success
+    end
+
     test "#{domain}: another domain's chat is not found" do
       visit_domain(domain)
       DOMAIN_CHATS.except(domain).values.flatten.each do |name|
