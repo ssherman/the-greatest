@@ -26,7 +26,9 @@ module Services
             content: user_content,
             response_format: supports?(:json_mode) ? response_format : nil,
             schema: supports?(:json_schema) ? response_schema : nil,
-            reasoning: reasoning
+            reasoning: reasoning,
+            tools: tools,
+            force_tool: force_tool?
           )
 
           # Update chat with response data
@@ -45,6 +47,13 @@ module Services
         # Which entry of config.x.ai.roles this task runs on. Override in
         # subclasses; see config/initializers/ai.rb for what each role means.
         def task_role = :fast
+
+        # Tools the provider should offer the model. The role supplies them
+        # (research carries :web_search); a task may override to add its own.
+        def tools = role.tools
+
+        # When true the provider requires the first tool to be used.
+        def force_tool? = false
 
         # Escape hatches: an explicit provider or model here beats the role.
         # No task in app/ overrides task_model any more.

@@ -74,7 +74,9 @@ module Services
             content: kind_of(String),
             response_format: {type: "json_object"},
             schema: Music::ArtistDescriptionTask::ResponseSchema,
-            reasoning: nil
+            reasoning: nil,
+            tools: [],
+            force_tool: false
           ).returns(mock_provider_response)
 
           @task.call

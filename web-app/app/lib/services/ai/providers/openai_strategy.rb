@@ -1,8 +1,13 @@
 class Services::Ai::Providers::OpenaiStrategy < Services::Ai::Providers::BaseStrategy
+  # Responses API tool definitions by the symbol a task uses. `low` context is
+  # the cheapest search tier; the enrichment probe got two citations from it.
+  TOOL_DEFINITIONS = {
+    web_search: {type: "web_search", search_context_size: "low"}
+  }.freeze
+
   def capabilities = %i[json_mode json_schema function_calls]
 
-  # Only reached when a caller passes a provider without going through a task
-  # role; tasks always resolve their model from Services::Ai::Roles.
+  # Unused by tasks (they resolve models via Services::Ai::Roles); kept to satisfy ProviderStrategy.
   def default_model = Services::Ai::Roles.resolve(:fast).model
 
   def provider_key = :openai
@@ -18,98 +23,103 @@ class Services::Ai::Providers::OpenaiStrategy < Services::Ai::Providers::BaseStr
   end
 
   def format_response(response, schema)
-    # Extract from Responses API structure
-    # output is an array that may contain reasoning, message, and tool_call items
-    # Find the message item (type: :message)
+    # output is an array that may contain reasoning, message, web_search_call and tool_call items
+    web_search_calls = response.output.count { |item| item.type.to_s == "web_search_call" }
     message_item = response.output.find { |item| item.type == :message }
 
-    # Handle cases where there's no message (e.g., tool calls only)
     unless message_item
-      # Look for tool_call items
       tool_calls = response.output.select { |item| item.type == :tool_call }
-
       if tool_calls.any?
-        # Return structured response for tool calls
         return {
           content: nil,
           parsed: nil,
           tool_calls: tool_calls.map { |tc| {id: tc.id, name: tc.name, arguments: tc.arguments} },
+          citations: [],
+          web_search_calls: web_search_calls,
           id: response.id,
           model: response.model,
           usage: response.usage
         }
       else
-        # No message and no tool calls - this shouldn't happen, but handle gracefully
         raise "OpenAI response contains neither message nor tool_call items"
       end
     end
 
-    # Get the first content item from the message
     content_item = message_item.content.first
-
-    # For typed responses (with text: parameter), OpenAI provides parsed data
-    # For regular responses, we need to manually parse the JSON
     parsed_data = if content_item.respond_to?(:parsed) && !content_item.parsed.nil?
-      # Typed response with schema validation - OpenAI returns a schema instance
-      # Convert to hash to maintain consistent interface for tasks
       content_item.parsed.to_h.deep_symbolize_keys
     else
-      # Regular response - manually parse JSON
       parse_response(content_item.text, schema)
     end
 
     {
-      content: content_item.text,  # Raw text from API
-      parsed: parsed_data,  # Parsed data as hash (from OpenAI or manual parsing)
+      content: content_item.text,
+      parsed: parsed_data,
+      citations: extract_citations(content_item),
+      web_search_calls: web_search_calls,
       id: response.id,
       model: response.model,
       usage: response.usage
     }
   end
 
-  def build_parameters(model:, messages:, temperature:, response_format:, schema:, reasoning: nil)
-    # Separate system messages from conversation messages
+  def build_parameters(model:, messages:, temperature:, response_format:, schema:, reasoning: nil, tools: [], force_tool: false)
     system_messages = messages.select { |m| (m[:role] || m["role"]) == "system" }
     conversation_messages = messages.reject { |m| (m[:role] || m["role"]) == "system" }
+    clean_messages = conversation_messages.map { |msg| {role: msg[:role] || msg["role"], content: msg[:content] || msg["content"]} }
 
-    # Clean messages: strip timestamps and other non-standard fields
-    clean_messages = conversation_messages.map do |msg|
-      {
-        role: msg[:role] || msg["role"],
-        content: msg[:content] || msg["content"]
-      }
-    end
+    parameters = {model: model, temperature: temperature, service_tier: "flex"}
 
-    parameters = {
-      model: model,
-      temperature: temperature,
-      service_tier: "flex"
-    }
-
-    # Add instructions if there's a system message
     if system_messages.any?
-      system_content = system_messages.first[:content] || system_messages.first["content"]
-      parameters[:instructions] = system_content
+      parameters[:instructions] = system_messages.first[:content] || system_messages.first["content"]
     end
 
-    # Add input (just the conversation messages)
-    # Use string for single message, array for multiple
-    parameters[:input] = if clean_messages.length == 1 && clean_messages.first[:role] == "user"
-      clean_messages.first[:content]
-    else
-      clean_messages
-    end
-
-    # Add reasoning parameter if provided (OpenAI-specific)
+    parameters[:input] = (clean_messages.length == 1 && clean_messages.first[:role] == "user") ? clean_messages.first[:content] : clean_messages
     parameters[:reasoning] = reasoning if reasoning
 
-    # Use OpenAI::BaseModel with Responses API 'text' parameter
     if schema && schema < OpenAI::BaseModel
       parameters[:text] = schema
     elsif response_format
       parameters[:response_format] = response_format
     end
 
+    definitions = tools.map { |tool| tool_definition(tool) }
+    if definitions.any?
+      parameters[:tools] = definitions
+      parameters[:tool_choice] = {type: definitions.first[:type]} if force_tool
+    end
+
     parameters
+  end
+
+  private
+
+  def tool_definition(tool)
+    TOOL_DEFINITIONS.fetch(tool.to_sym) { raise ArgumentError, "Unknown AI tool: #{tool.inspect}" }
+  end
+
+  # url_citation annotations from the message, in order, de-duplicated, with
+  # the tracking parameter OpenAI appends removed. A content item with no
+  # annotations method (a mock, an older SDK shape) yields [].
+  def extract_citations(content_item)
+    return [] unless content_item.respond_to?(:annotations)
+
+    Array(content_item.annotations)
+      .select { |annotation| annotation.type.to_s == "url_citation" && annotation.respond_to?(:url) }
+      .map { |annotation| strip_tracking(annotation.url.to_s) }
+      .uniq
+  end
+
+  def strip_tracking(url)
+    uri = URI.parse(url)
+    return url if uri.query.blank?
+
+    # decode_www_form returns an Array of [key, value] pairs, not a Hash, so
+    # Hash#except isn't available here despite what Style/HashExcept assumes.
+    params = URI.decode_www_form(uri.query).reject { |key, _| key == "utm_source" } # standard:disable Style/HashExcept
+    uri.query = params.empty? ? nil : URI.encode_www_form(params)
+    uri.to_s
+  rescue URI::InvalidURIError
+    url
   end
 end
