@@ -3,8 +3,11 @@
 module Services
   module Books
     # The only class that writes Books::Book columns from AI output. Policy:
-    # fill a blank, union an array, never overwrite. Every fact gets a ledger
-    # entry saying what happened and why, applied or not.
+    # fill a blank, union an array, never overwrite -- and never refill a
+    # field a human deliberately cleared through the corrections flow
+    # (reason "human_cleared"; Services::Corrections::Targets::Column#accepts_blank?
+    # allows a correction to blank a field on purpose). Every fact gets a
+    # ledger entry saying what happened and why, applied or not.
     #
     # Spec: docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md §4-5.
     class ApplyBookFacts
@@ -55,16 +58,45 @@ module Services
       def fill_scalar(name, column:, present: -> { book.public_send(column).present? }, valid: ->(_) { true }, cast: ->(v) { v })
         f = fact(name)
         value = f[:value]
-        if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+        if blank_fact_value?(value)
           record(name, f, applied: false, reason: "null")
         elsif !valid.call(value)
           record(name, f, applied: false, reason: "invalid")
+        elsif human_cleared?(column)
+          record(name, f, applied: false, reason: "human_cleared")
         elsif present.call
           record(name, f, applied: false, reason: "already_set")
         else
           book.public_send(:"#{column}=", cast.call(value))
           record(name, f, applied: true, reason: "filled")
         end
+      end
+
+      # A String is blank when it is empty or whitespace-only after stripping
+      # ("   " is not a real value, and storing "" would look identical to a
+      # deliberate human clear -- see human_cleared? -- while meaning nothing).
+      # Anything else falls back to nil?/empty? (covers Integer, Array).
+      def blank_fact_value?(value)
+        return true if value.nil?
+        return value.strip.blank? if value.is_a?(String)
+
+        value.respond_to?(:empty?) && value.empty?
+      end
+
+      # Fields a human deliberately blanked through the corrections flow. The
+      # column target accepts blanks on purpose, and an AI refill would repeat
+      # the mistake the correction removed.
+      def human_cleared?(column)
+        human_cleared_fields.include?(column.to_s)
+      end
+
+      def human_cleared_fields
+        @human_cleared_fields ||= CorrectionField.applied
+          .joins(:correction)
+          .where(corrections: {correctable_type: "Books::Book", correctable_id: book.id})
+          .pluck(:field_name, :new_value)
+          .select { |_name, value| value.blank? }
+          .map(&:first)
       end
 
       def apply_first_published_year
@@ -112,6 +144,7 @@ module Services
         f = fact(:alternate_titles)
         incoming = Array(f[:value]).map { |t| t.to_s.strip }.reject(&:blank?)
         return record(:alternate_titles, f, applied: false, reason: "null", value: []) if incoming.empty?
+        return record(:alternate_titles, f, applied: false, reason: "human_cleared", value: []) if human_cleared?(:alternate_titles)
 
         existing = Array(book.alternate_titles)
         taken = (existing + [book.title]).map(&:downcase)
@@ -124,7 +157,7 @@ module Services
 
       def apply_origin_countries
         f = fact(:origin_countries)
-        names = Array(f[:value]).map { |n| n.to_s.strip }.reject(&:blank?)
+        names = Array(f[:value]).map { |n| n.to_s.strip }.reject(&:blank?).uniq(&:downcase)
         return record(:origin_countries, f, applied: false, reason: "null", value: [], unmatched: []) if names.empty?
         return record(:origin_countries, f, applied: false, reason: "already_set", unmatched: []) if book.book_countries.exists?
 
@@ -164,8 +197,12 @@ module Services
           return record(:description, f, applied: false, reason: "already_set", value: description[:text], review: review)
         end
 
-        book.assign_description(source: :ai_generated, content: description[:text], source_url: citations.first)
-        record(:description, f, applied: true, reason: "filled", value: description[:text], review: review)
+        row = book.assign_description(source: :ai_generated, content: description[:text], source_url: citations.first)
+        if row.nil?
+          record(:description, f, applied: false, reason: "null", value: description[:text], review: review)
+        else
+          record(:description, f, applied: true, reason: "filled", value: description[:text], review: review)
+        end
       end
     end
   end

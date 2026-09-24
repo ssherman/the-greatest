@@ -31,6 +31,11 @@ module Services
         ApplyBookFacts.call(book: @book, facts: facts(overrides.merge(fact_overrides)), citations: citations, description: description)
       end
 
+      def human_clear!(field_name, new_value)
+        correction = ::Correction.create!(correctable: @book, status: :resolved, notes: "Cleared #{field_name}.")
+        correction.correction_fields.create!(field_name: field_name, status: :applied, new_value: new_value, applied_at: Time.current)
+      end
+
       test "fills every blank scalar and records filled" do
         result = apply
 
@@ -62,11 +67,29 @@ module Services
         end
       end
 
+      test "a human-cleared subtitle is never refilled" do
+        human_clear!("subtitle", "")
+
+        result = apply
+
+        assert_nil @book.reload.subtitle
+        assert_equal "human_cleared", result.data[:facts]["subtitle"]["reason"]
+        refute result.data[:facts]["subtitle"]["applied"]
+      end
+
       test "a null value is recorded as null and not applied" do
         result = apply(first_published_year: {value: nil, confidence: "low"})
 
         assert_nil @book.reload.first_published_year
         assert_equal "null", result.data[:facts]["first_published_year"]["reason"]
+      end
+
+      test "a whitespace-only subtitle is treated as null, not filled" do
+        result = apply(subtitle: {value: "   ", confidence: "high"})
+
+        assert_nil @book.reload.subtitle
+        assert_equal "null", result.data[:facts]["subtitle"]["reason"]
+        refute result.data[:facts]["subtitle"]["applied"]
       end
 
       test "carries each fact's confidence into the ledger" do
@@ -128,6 +151,16 @@ module Services
         assert_equal "already_set", result.data[:facts]["alternate_titles"]["reason"]
       end
 
+      test "human-cleared alternate_titles are never refilled" do
+        human_clear!("alternate_titles", [])
+
+        result = apply
+
+        assert_equal [], @book.reload.alternate_titles
+        assert_equal "human_cleared", result.data[:facts]["alternate_titles"]["reason"]
+        refute result.data[:facts]["alternate_titles"]["applied"]
+      end
+
       test "origin countries are added when the book has none" do
         result = apply
 
@@ -143,6 +176,15 @@ module Services
 
         assert_equal [books_countries(:japanese)], @book.reload.countries.to_a
         assert_equal "already_set", result.data[:facts]["origin_countries"]["reason"]
+      end
+
+      test "origin countries de-duplicate case-insensitively before matching" do
+        result = apply(origin_countries: {value: ["French", "french", "FRENCH"], confidence: "high"})
+
+        assert_equal [books_countries(:french)], @book.reload.countries.to_a
+        assert_equal 1, @book.book_countries.count
+        assert_equal "filled", result.data[:facts]["origin_countries"]["reason"]
+        assert_equal ["French"], result.data[:facts]["origin_countries"]["value"]
       end
 
       test "origin countries with no match record the unmatched names and create nothing" do
@@ -208,6 +250,14 @@ module Services
         assert_equal "rejected", result.data[:facts]["description"]["reason"]
         refute result.data[:facts]["description"]["applied"]
         assert_equal({"spoilers" => true}, result.data[:facts]["description"]["review"])
+      end
+
+      test "a blank description text is recorded as null, not filled" do
+        result = apply(description: {text: "   ", review: nil, reason: nil})
+
+        assert_empty @book.descriptions.reload
+        assert_equal "null", result.data[:facts]["description"]["reason"]
+        refute result.data[:facts]["description"]["applied"]
       end
 
       test "no description at all is recorded as null" do
