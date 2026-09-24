@@ -134,5 +134,24 @@ module Admin
       assert_equal "/admin/news_topics", item[:path]
       assert item[:icon].present?
     end
+
+    test "every domain's sidebar links the import finder audit pages" do
+      expected = {
+        books: ["/admin/match_decisions", "/admin/duplicate_candidates"],
+        music: ["/admin/match_decisions", "/admin/duplicate_candidates"],
+        games: ["/admin/match_decisions", "/admin/duplicate_candidates"]
+      }
+
+      expected.each do |domain, (decisions_path, duplicates_path)|
+        items = Admin::DomainNav.config_for(domain)[:items]
+        decisions = items.find { |item| item[:label] == "Match Decisions" }
+        duplicates = items.find { |item| item[:label] == "Duplicates" }
+
+        assert decisions, "#{domain} has no Match Decisions item"
+        assert duplicates, "#{domain} has no Duplicates item"
+        assert_equal decisions_path, decisions[:path]
+        assert_equal duplicates_path, duplicates[:path]
+      end
+    end
   end
 end
