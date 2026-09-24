@@ -244,5 +244,26 @@ module Admin
       resolved = Admin::DomainRouting.parent_from_params({series_id: series.id}, domain: :books)
       assert_equal series, resolved
     end
+
+    test "entity_types_for returns the entity types registered to a domain" do
+      assert_equal %w[Music::Artist Music::Album Music::Song].sort,
+        Admin::DomainRouting.entity_types_for(:music).sort
+      assert_equal %w[Books::Book Books::Edition Books::Author Books::Series].sort,
+        Admin::DomainRouting.entity_types_for(:books).sort
+      assert_equal %w[Games::Game Games::Company Games::Series].sort,
+        Admin::DomainRouting.entity_types_for("games").sort
+    end
+
+    test "list_types_for returns the list STI types registered to a domain" do
+      assert_equal %w[Music::Albums::List Music::Songs::List].sort,
+        Admin::DomainRouting.list_types_for(:music).sort
+      assert_equal %w[Books::List], Admin::DomainRouting.list_types_for(:books)
+      assert_equal %w[Games::List], Admin::DomainRouting.list_types_for("games")
+    end
+
+    test "entity_types_for and list_types_for are empty for a domain with nothing registered" do
+      assert_empty Admin::DomainRouting.entity_types_for(:movies)
+      assert_empty Admin::DomainRouting.list_types_for(:movies)
+    end
   end
 end

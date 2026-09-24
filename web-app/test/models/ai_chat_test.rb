@@ -155,4 +155,34 @@ class AiChatTest < ActiveSupport::TestCase
     assert_includes result, ai_chats(:music_albums_list_chat)
     assert_not_includes result, ai_chats(:music_songs_list_chat) # uses anthropic provider
   end
+
+  # Tests for for_parent_types scope
+  test "for_parent_types returns a domain's entity chats, list chats and parentless chats only" do
+    result = AiChat.for_parent_types(%w[Books::Book Books::Author], %w[Books::List])
+
+    assert_includes result, ai_chats(:books_book_chat)
+    assert_includes result, ai_chats(:ranking_chat) # Books::List
+    assert_includes result, ai_chats(:no_parent_chat)
+    assert_includes result, ai_chats(:general_chat)
+
+    assert_not_includes result, ai_chats(:music_artist_chat)
+    assert_not_includes result, ai_chats(:music_albums_list_chat)
+    assert_not_includes result, ai_chats(:games_game_chat)
+    assert_not_includes result, ai_chats(:games_list_chat)
+  end
+
+  test "for_parent_types with no list types still returns entity and parentless chats" do
+    result = AiChat.for_parent_types(%w[Games::Game], [])
+
+    assert_includes result, ai_chats(:games_game_chat)
+    assert_includes result, ai_chats(:no_parent_chat)
+    assert_not_includes result, ai_chats(:games_list_chat)
+    assert_not_includes result, ai_chats(:ranking_chat)
+  end
+
+  test "for_parent_types with nothing registered returns only parentless chats" do
+    result = AiChat.for_parent_types([], [])
+
+    assert_equal AiChat.where(parent_type: nil).pluck(:id).sort, result.pluck(:id).sort
+  end
 end
