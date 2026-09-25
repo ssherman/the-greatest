@@ -26,7 +26,9 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    applier would record `already_set` regardless, so the review call is skipped), then
    `DescriptionReviewTask` (`fast` role) checks it for spoilers and style and rewrites it if
    needed; `Services::Books::DescriptionCheck` then strips pasted citations and rejects em
-   dashes, URLs, the title, and runaway lengths. The reviewer's verdict is binding: a spoiler
+   dashes, URLs, and runaway lengths. Whether the text names the title or author is left to the
+   reviewer's judgment: a string match cannot tell the title *Emma* from the character Emma, and
+   17k books have one-word titles. The reviewer's verdict is binding: a spoiler
    flag with no rewrite to fall back on is a `rejected` description, not a pass-through of the
    unreviewed text, and an empty review reply (no spoilers verdict at all) is `review_failed`,
    the same as a call that errored outright.

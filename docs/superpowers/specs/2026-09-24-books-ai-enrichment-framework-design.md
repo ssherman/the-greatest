@@ -301,7 +301,9 @@ The reviewer receives the author names the runner already holds, since a book cr
 importer has no `book_authors` rows yet. Cost is under a tenth of a cent per book.
 
 **Deterministic check**, `Services::Books::DescriptionCheck.call(text, book:)`: fails on `—`,
-`--`, `http`, `[`…`](`, `utm_source`, or the book's title as a case-insensitive substring;
+`--`, `http`, `[`…`](`, `utm_source`; it deliberately does not check for the title or author,
+because a string match cannot tell the title *Emma* from the character Emma (17k books have
+one-word titles), so that judgment stays with the review task's `names_title`/`names_author`;
 fails on fewer than 40 or more than 140 words, deliberately looser than the prompt's 60 to 110 so
 the check catches runaways rather than policing the target. Runs on the reviewed text. Markdown citations of
 the form `([label](url))` are stripped before the check because the probe showed the model adds

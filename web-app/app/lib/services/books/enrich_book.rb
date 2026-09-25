@@ -179,12 +179,12 @@ module Services
         return {text: text, review: nil, reason: "review_failed"} if data[:spoilers].nil?
 
         if data[:spoilers] == true && data[:rewritten].blank?
-          check = DescriptionCheck.call(text, book: book)
+          check = DescriptionCheck.call(text)
           return {text: check.data[:text], review: review_verdict(data, check), reason: "rejected"}
         end
 
         reviewed = data[:rewritten].presence || text
-        check = DescriptionCheck.call(reviewed, book: book)
+        check = DescriptionCheck.call(reviewed)
 
         {
           text: check.data[:text],
