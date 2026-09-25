@@ -13,13 +13,14 @@ namespace :books do
     end
 
     puts "Enriching #{book.title} (##{book.id})..."
-    Books::EnrichBookJob.new.perform(book.id)
-    book.enrichments.order(:id).last(2).each do |row|
+    result = ::Services::Books::EnrichBook.call(book: book)
+    result.data[:enrichments].each do |row|
       puts "  #{row.mode}: #{row.outcome}#{" (#{row.reason})" if row.reason}#{" -- #{row.error}" if row.error}"
       row.facts.each do |name, entry|
         puts "    #{name}: #{entry["reason"]}#{" -> #{entry["value"].inspect}" if entry["applied"]}"
       end
     end
+    abort "Enrichment failed: #{result.errors.join("; ")}" unless result.success?
   end
 
   desc "Enqueue enrichment for books with no ledger row and no description: bin/rails books:enrich_missing[100]"
