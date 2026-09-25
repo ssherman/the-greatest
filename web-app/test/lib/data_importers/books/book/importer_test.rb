@@ -10,6 +10,8 @@ module DataImporters
 
         def setup
           ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([])
+          # Sidekiq runs inline in tests; a real enqueue would run the AI task.
+          ::Books::EnrichBookJob.stubs(:perform_async)
         end
 
         def stub_open_library_client
@@ -264,6 +266,12 @@ module DataImporters
           assert result.success?
           assert_equal book, result.item
           assert_equal "A Novel", result.item.reload.subtitle
+        end
+
+        test "providers run Open Library first, then AI enrichment" do
+          providers = Importer.new.send(:providers)
+
+          assert_equal [Providers::OpenLibrary, Providers::AiEnrichment], providers.map(&:class)
         end
       end
     end
