@@ -8,7 +8,8 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 
 ## How a book gets enriched
 
-1. **Trigger.** One of three entry points enqueues `Books::EnrichBookJob`:
+1. **Trigger.** One of three entry points runs `Services::Books::EnrichBook`, two of them
+   through `Books::EnrichBookJob`:
    - `DataImporters::Books::Book::Providers::AiEnrichment`, last in the importer's provider
      chain, passing the query's author names because a new book has no `book_authors` yet.
    - The **Enrich With AI** button on the admin book page (`Actions::Admin::Books::EnrichBook`),
@@ -28,10 +29,13 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    reply (no spoilers verdict at all) is `review_failed`, the same as a call that errored
    outright.
 4. **Apply.** `Services::Books::ApplyBookFacts` fills blanks only: year, original language,
-   word count, page range, subtitle, alternate titles (union), origin countries (only when the
-   book has none), and the description as an `ai_generated` row. Book type and series are
-   recorded but not applied. Nothing overwrites a value that is set, which is what protects
-   human corrections. If `recognized` was false nothing is applied at all.
+   word count, page range, subtitle, alternate titles (union), and origin countries (only when
+   the book has none). Book type and series are recorded but not applied. Nothing overwrites a
+   value that is set, which is what protects human corrections. If `recognized` was false
+   nothing is applied at all. The description is written as an `ai_generated` row when the book
+   has none from that source. That row outranks Goodreads, Wikipedia and Open Library text in
+   the display resolver, so it becomes the displayed description unless a `manual` or preferred
+   row exists.
 5. **Research fallback.** When `recognized` is false, or the overall confidence is `low`, or
    the book's year is at or past `config.x.ai.knowledge_cutoff_year` (in which case the
    knowledge call is skipped), the same task runs in `research` mode on the `research` role
@@ -45,15 +49,17 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 `Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`), `mode`
 (knowledge/research), `outcome` (applied, nothing_to_apply, unrecognized, skipped, failed),
 `recognized`, `confidence`, `facts` JSON, `citations`, `provider`, `model`, `ai_chat_id`,
-`error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}`; reasons are
-`filled`, `already_set`, `null`, `invalid`, `no_match`, `not_applied_yet`, `human_cleared`,
-`unrecognized`, `rejected`, `review_failed`. `human_cleared` means the field was deliberately
-blanked by an applied correction (the corrections flow accepts blanks on purpose) and the AI
-value is never used to refill it. Useful queries:
+`error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (`origin_countries`
+also carries `unmatched`, and `description` carries `review`); reasons are `filled`,
+`already_set`, `null`, `invalid`, `no_match`, `not_applied_yet`, `human_cleared`, `unrecognized`,
+`rejected`, `review_failed`. `human_cleared` means the field was deliberately blanked by an
+applied correction (the corrections flow accepts blanks on purpose) and the AI value is never
+used to refill it. Useful queries:
 
 ```ruby
 Enrichment.for_kind("books.book_facts").low_confidence_on(:word_count)
-Enrichment.research.today.count                       # today's research spend, in runs
+Enrichment.research.today.count  # research rows today, including budget skips; this is what the cap checks
+Enrichment.research.today.where.not(outcome: :skipped).count  # research calls actually made today
 Enrichment.skipped.where(reason: "budget_exhausted")  # the research backlog
 ```
 
