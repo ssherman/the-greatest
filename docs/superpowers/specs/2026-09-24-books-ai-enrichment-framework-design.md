@@ -306,6 +306,9 @@ them despite instructions; the strip is idempotent and the URLs are already in `
 
 **Write.** `assign_description(source: :ai_generated, content:, source_url: citations.first)`
 only when the book has no `ai_generated` description yet; the resolver keeps `manual` above it.
+The reviewer's verdict is binding: a description flagged `spoilers: true` with no `rewritten`
+text is recorded `rejected` and not written, and a review reply with no `spoilers` verdict at all
+(an empty response) is `review_failed`. The rewrite is the only way past a spoiler flag.
 A description that fails the deterministic check is recorded with `reason: "rejected"` and not
 written. The ledger's `description` fact carries the review verdict, so "descriptions the
 reviewer rewrote for spoilers" is one query.
@@ -318,7 +321,9 @@ reviewer rewrote for spoilers" is one query.
    `author_names` the caller passed). Otherwise write a `skipped` row with
    `reason: "missing_inputs"` and return.
 2. Decide the first mode. Research if `force_research`, or if `book.first_published_year` is at or
-   past `knowledge_cutoff_year`. Otherwise knowledge.
+   past `knowledge_cutoff_year`. Otherwise knowledge. The daily cap applies to every research run,
+   direct or fallback: a past-cutoff book with the cap exhausted gets a `skipped` row
+   (`reason: "budget_exhausted"`) and no call. Only `force_research` bypasses the cap.
 3. Run `BookFactsTask` in that mode. On a task failure write a `failed` row and return a failure
    Result.
 4. If a description came back, run `DescriptionReviewTask` and the deterministic check.
