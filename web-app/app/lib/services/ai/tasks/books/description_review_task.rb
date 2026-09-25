@@ -8,14 +8,19 @@ module Services
         class DescriptionReviewTask < BaseTask
           VIOLATIONS = %w[em_dash semicolon names_title names_author marketing meta_narration banned_word not_but triad too_long too_short citation].freeze
 
-          def initialize(parent:, description:, provider: nil, model: nil)
+          def initialize(parent:, description:, author_names: nil, provider: nil, model: nil)
             @description = description.to_s
+            @author_names = Array(author_names).map(&:to_s).reject(&:blank?)
             super(parent: parent, provider: provider, model: model)
           end
 
           private
 
           attr_reader :description
+
+          def author_names
+            @author_names.presence || parent.authors.map(&:name)
+          end
 
           def task_provider = :openai
 
@@ -54,7 +59,7 @@ module Services
           def user_prompt
             <<~PROMPT
               Book title: #{parent.title}
-              Author(s): #{parent.authors.map(&:name).join(", ")}
+              Author(s): #{author_names.join(", ")}
 
               Description to review:
               #{description}

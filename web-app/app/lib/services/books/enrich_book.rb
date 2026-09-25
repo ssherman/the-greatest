@@ -163,7 +163,7 @@ module Services
       def review_description(text)
         return nil if text.blank?
 
-        review = Services::Ai::Tasks::Books::DescriptionReviewTask.new(parent: book, description: text).call
+        review = Services::Ai::Tasks::Books::DescriptionReviewTask.new(parent: book, description: text, author_names: author_names).call
         return {text: text, review: nil, reason: "review_failed"} unless review.success?
 
         data = review.data.deep_symbolize_keys

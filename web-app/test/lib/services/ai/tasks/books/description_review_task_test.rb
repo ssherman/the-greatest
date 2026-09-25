@@ -26,6 +26,15 @@ module Services
             assert_includes prompt, "Leo Tolstoy"
           end
 
+          test "user prompt uses passed author names when the book has none" do
+            book = ::Books::Book.create!(title: "An Unattributed Work")
+            task = DescriptionReviewTask.new(parent: book, description: "Some text.", author_names: ["Someone Obscure"])
+
+            prompt = task.send(:user_prompt)
+
+            assert_includes prompt, "Someone Obscure"
+          end
+
           test "system message lists the violation codes" do
             message = @task.send(:system_message)
 

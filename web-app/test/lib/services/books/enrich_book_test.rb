@@ -246,6 +246,15 @@ module Services
         assert_equal "gpt-6-astra", result.data[:enrichments].last.model
       end
 
+      test "the reviewer is called with the description and the runner's author names" do
+        Services::Ai::Tasks::Books::DescriptionReviewTask.expects(:new)
+          .with { |args| args[:description] == CLEAN_DESCRIPTION && args[:author_names] == ["Leo Tolstoy"] }
+          .returns(mock(call: Services::Ai::Result.new(success: true, data: {spoilers: false, spoiler_notes: nil, style_violations: [], rewritten: nil}, ai_chat: @chat)))
+        expect_facts_runs([:knowledge, success_result(facts)])
+
+        EnrichBook.call(book: @book)
+      end
+
       test "the reviewer's rewrite is what gets written, and the ledger says so" do
         rewritten = ("A young man in a small town cares for a widow who is losing her memory. " * 4).strip
         stub_review(spoilers: true, style_violations: ["em_dash"], rewritten: rewritten)
