@@ -283,7 +283,7 @@ Both Music and Games use AI to validate Amazon search results.
 **Base Class:** `Services::Ai::Tasks::AmazonProductMatchTask`
 - Shared prompt structure and response handling
 - Abstract methods: `domain_name`, `item_description`, `match_criteria`, `non_match_criteria`
-- Uses `gpt-5-mini` model with structured outputs
+- Runs on the `fast` role (see `ai_agents.md`) with structured outputs
 
 **Music Implementation:** `AmazonAlbumMatchTask`
 - Matches: vinyl, CD, cassette, digital, box sets, special editions

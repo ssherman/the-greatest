@@ -53,7 +53,7 @@ and points the decision at a record it creates.
    also picks among several local candidates holding the accepted key with the same
    ranked/most-lists/oldest preference and flags the rest as
    `external_key_collision` pairs. Rules 0–2 never fire under `verify`.
-3. **AI** (`Services::Ai::Tasks::Matching::SelectCandidateTask`, one gpt-5-mini call): the
+3. **AI** (`Services::Ai::Tasks::Matching::SelectCandidateTask`, one call on the `fast` role): the
    incoming item and at most six candidate lines, select one or 0, with confidence,
    reasoning and `same_entity_groups`. `AiSelection` turns that into a decision: a ranked
    record wins a same-entity group over an unranked pick; every group of two local records
