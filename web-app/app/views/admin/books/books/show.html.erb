@@ -326,8 +326,9 @@
       Looks up the first published year, original language, word count, page range,
       subtitle, alternate titles, origin country and a spoiler-free description for
       <strong><%= @book.title %></strong> in the background. Values already set are
-      never overwritten. If the model does not know the book, a web search follows,
-      within the daily budget.
+      never overwritten. If the model does not know the book, is unsure, or the
+      book is newer than its knowledge, a web search follows, within the daily
+      budget.
     </p>
 
     <%= form_with url: execute_action_admin_books_book_path(@book),

@@ -405,6 +405,19 @@ module Admin
         assert_redirected_to admin_books_book_path(@book)
       end
 
+      # EnrichBook is gated by BookPolicy#execute_action? alone (no destroy?
+      # gate, since it is non-destructive) -- and a force_research run spends
+      # real money. A viewer (read-only) must still be refused.
+      test "a books domain viewer cannot queue enrichment" do
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(@regular_user, stub_auth: true)
+        ::Books::EnrichBookJob.expects(:perform_async).never
+
+        post execute_action_admin_books_book_path(@book), params: {action_name: "EnrichBook"}
+
+        assert_redirected_to books_root_path
+      end
+
       test "execute_action rejects an action name outside the allowlist" do
         sign_in_as(@admin_user, stub_auth: true)
 
