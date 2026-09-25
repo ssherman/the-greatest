@@ -6,8 +6,8 @@ class Books::EnrichBookJobTest < ActiveSupport::TestCase
     @job = Books::EnrichBookJob.new
   end
 
-  test "runs on the default queue with three retries" do
-    assert_equal "default", Books::EnrichBookJob.get_sidekiq_options["queue"].to_s
+  test "runs on the low queue with three retries" do
+    assert_equal "low", Books::EnrichBookJob.get_sidekiq_options["queue"].to_s
     assert_equal 3, Books::EnrichBookJob.get_sidekiq_options["retry"]
   end
 

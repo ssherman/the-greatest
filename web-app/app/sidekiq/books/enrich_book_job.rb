@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
 # One book through Services::Books::EnrichBook. Fill-blanks makes a retry,
-# a re-run, and two concurrent runs on one book all safe, so this stays on
-# the default queue rather than serial.
+# a re-run, and two concurrent runs on one book all safe, so this does not
+# need the serial queue. It runs on :low rather than :default because
+# :default is shared with Stripe webhook processing, cache purges and
+# search indexing under a strict queue order (critical, default, low), and
+# an AI enrichment call has no latency requirement those do.
 class Books::EnrichBookJob
   include Sidekiq::Job
 
-  sidekiq_options queue: :default, retry: 3
+  sidekiq_options queue: :low, retry: 3
 
   # author_names lets the importer enrich a brand-new book before it has
   # book_authors rows; the runner falls back to book.authors when empty.
