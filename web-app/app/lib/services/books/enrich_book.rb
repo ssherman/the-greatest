@@ -100,7 +100,7 @@ module Services
           )
         end
 
-        description = review_description(facts.dig(:description, :value))
+        description = description_for(facts.dig(:description, :value))
         applied = ApplyBookFacts.call(book: book, facts: facts, citations: citations, description: description)
 
         book.enrichments.create!(
@@ -154,15 +154,24 @@ module Services
         end
       end
 
-      # nil when there is no description to review. Otherwise
+      # nil when there is no description to review or apply. When the book
+      # already has an ai_generated description, the applier would record
+      # already_set regardless, so the review call (123k of 158k production
+      # books carry a legacy AI description) is skipped and that reason is
+      # reported directly.
+      def description_for(text)
+        return nil if text.blank?
+        return {text: text, review: nil, reason: "already_set"} if book.descriptions.any? { |d| d.source == "ai_generated" }
+
+        review_description(text)
+      end
+
       # {text:, review:, reason:}; a reason means "do not write". The
       # reviewer's verdict is binding: a reply with no spoilers verdict at
       # all (an empty response) is review_failed, same as a call that
       # errored outright; a spoiler flag with no rewrite to fall back on is
       # a rejection, not a pass-through of the unreviewed text.
       def review_description(text)
-        return nil if text.blank?
-
         review = Services::Ai::Tasks::Books::DescriptionReviewTask.new(parent: book, description: text, author_names: author_names).call
         return {text: text, review: nil, reason: "review_failed"} unless review.success?
 

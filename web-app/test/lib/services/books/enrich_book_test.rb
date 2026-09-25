@@ -331,6 +331,19 @@ module Services
         assert_equal "null", result.data[:enrichments].first.facts["description"]["reason"]
       end
 
+      test "an existing ai_generated description skips the review call and is recorded already_set" do
+        @book.assign_description(source: :ai_generated, content: "Legacy description.").save!
+        Services::Ai::Tasks::Books::DescriptionReviewTask.expects(:new).never
+        expect_facts_runs([:knowledge, success_result(facts)])
+
+        result = EnrichBook.call(book: @book)
+
+        row = result.data[:enrichments].first
+        assert_equal "already_set", row.facts["description"]["reason"]
+        refute row.facts["description"]["applied"]
+        assert_equal "Legacy description.", @book.reload.primary_description.content
+      end
+
       test "nothing_to_apply when every fact was already set" do
         @book.update!(first_published_year: 1950, original_language: languages(:english))
         @book.assign_description(source: :ai_generated, content: "Here.").save!

@@ -21,13 +21,15 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    `Services::Ai::Tasks::Books::BookFactsTask` in `knowledge` mode on the `standard` role. One
    call returns `recognized`, an overall confidence, the description, and every fact with its
    own confidence.
-3. **Review.** If a description came back, `DescriptionReviewTask` (`fast` role) checks it for
-   spoilers and style and rewrites it if needed; `Services::Books::DescriptionCheck` then
-   strips pasted citations and rejects em dashes, URLs, the title, and runaway lengths. The
-   reviewer's verdict is binding: a spoiler flag with no rewrite to fall back on is a
-   `rejected` description, not a pass-through of the unreviewed text, and an empty review
-   reply (no spoilers verdict at all) is `review_failed`, the same as a call that errored
-   outright.
+3. **Review.** If a description came back, and the book does not already have an
+   `ai_generated` description (123k of 158k production books carry a legacy one, and the
+   applier would record `already_set` regardless, so the review call is skipped), then
+   `DescriptionReviewTask` (`fast` role) checks it for spoilers and style and rewrites it if
+   needed; `Services::Books::DescriptionCheck` then strips pasted citations and rejects em
+   dashes, URLs, the title, and runaway lengths. The reviewer's verdict is binding: a spoiler
+   flag with no rewrite to fall back on is a `rejected` description, not a pass-through of the
+   unreviewed text, and an empty review reply (no spoilers verdict at all) is `review_failed`,
+   the same as a call that errored outright.
 4. **Apply.** `Services::Books::ApplyBookFacts` fills blanks only: year, original language,
    word count, page range, subtitle, alternate titles (union), and origin countries (only when
    the book has none). Book type and series are recorded but not applied. Nothing overwrites a
