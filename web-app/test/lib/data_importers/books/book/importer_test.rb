@@ -74,6 +74,7 @@ module DataImporters
 
         test "returns the existing book without calling any provider when the finder finds one" do
           Providers::OpenLibrary.any_instance.expects(:populate).never
+          ::Books::EnrichBookJob.expects(:perform_async).never
           isbn = identifiers(:war_and_peace_isbn13).value
 
           result = Importer.call(isbn13: [isbn])
@@ -91,6 +92,11 @@ module DataImporters
               {"field" => "description", "ours" => nil, "theirs" => "A novel set in the Jazz Age", "kind" => "fill"}
             ]).to_json
           )
+          # Newest expectation wins in Mocha, so this overrides the setup
+          # stub -- pins that the chain enqueues AI enrichment AFTER Open
+          # Library ran, with the query's author name (the new book has no
+          # book_authors rows yet).
+          ::Books::EnrichBookJob.expects(:perform_async).with(instance_of(Integer), false, ["F. Scott Fitzgerald"])
 
           result = Importer.call(title: "The Great Gatsby", author_names: ["F. Scott Fitzgerald"], year: 1925)
 

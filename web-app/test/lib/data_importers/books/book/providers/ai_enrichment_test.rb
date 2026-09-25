@@ -10,7 +10,10 @@ module DataImporters
           def setup
             @provider = AiEnrichment.new
             @book = books_books(:war_and_peace)
-            @query = ImportQuery.new(title: "War and Peace", author_names: ["Leo Tolstoy"])
+            # Deliberately NOT the fixture's author name: this pins that
+            # book.authors wins over the query when the book already has
+            # authors (see the first test below).
+            @query = ImportQuery.new(title: "War and Peace", author_names: ["Someone Else"])
           end
 
           test "queues the job with the book's own authors and reports success" do
@@ -47,6 +50,17 @@ module DataImporters
             ::Books::EnrichBookJob.expects(:perform_async).never
 
             result = @provider.populate(book, query: ImportQuery.new(title: "Nobody's Book"))
+
+            refute result.success?
+            assert_includes result.errors, "Book must have an author for AI enrichment"
+          end
+
+          test "fails when the query's author names are blank" do
+            book = ::Books::Book.create!(title: "Blank Author Book")
+            query = ImportQuery.new(title: "Blank Author Book", author_names: [""])
+            ::Books::EnrichBookJob.expects(:perform_async).never
+
+            result = @provider.populate(book, query: query)
 
             refute result.success?
             assert_includes result.errors, "Book must have an author for AI enrichment"
