@@ -106,15 +106,49 @@ module Services
         assert_equal "https://example.org/src", @book.descriptions.find_by(source: :ai_generated).source_url
       end
 
-      test "a recognized but low-confidence run falls back to research" do
+      test "a recognized but low-confidence run defers its facts and lets research fill them" do
+        expect_facts_runs(
+          [:knowledge, success_result(facts(confidence: "low", first_published_year: {value: 1999, confidence: "low"}))],
+          [:research, success_result(facts(confidence: "high", first_published_year: {value: 2001, confidence: "high"}))]
+        )
+
+        result = EnrichBook.call(book: @book)
+
+        knowledge, research = result.data[:enrichments]
+        assert_equal %w[knowledge research], [knowledge.mode, research.mode]
+        assert knowledge.nothing_to_apply?
+        assert knowledge.confidence_low?
+        assert_equal "deferred", knowledge.facts["first_published_year"]["reason"]
+        refute knowledge.facts["first_published_year"]["applied"]
+        assert_equal "deferred", knowledge.facts["description"]["reason"]
+        assert research.applied?
+        assert_equal 2001, @book.reload.first_published_year
+        assert_equal CLEAN_DESCRIPTION, @book.primary_description.content
+      end
+
+      test "a low-confidence run does not spend a review call on a description research will replace" do
+        Services::Ai::Tasks::Books::DescriptionReviewTask.expects(:new).once.returns(mock.tap { |m|
+          m.stubs(:call).returns(Services::Ai::Result.new(success: true, data: {spoilers: false, spoiler_notes: nil, style_violations: [], rewritten: nil}, ai_chat: @chat))
+        })
         expect_facts_runs(
           [:knowledge, success_result(facts(confidence: "low"))],
           [:research, success_result(facts(confidence: "high"))]
         )
 
+        EnrichBook.call(book: @book)
+      end
+
+      test "a low-confidence run with the budget exhausted applies its facts rather than losing them" do
+        Rails.application.config.x.ai.stubs(:research_daily_cap).returns(0)
+        expect_facts_runs([:knowledge, success_result(facts(confidence: "low"))])
+
         result = EnrichBook.call(book: @book)
 
-        assert_equal %w[knowledge research], result.data[:enrichments].map(&:mode)
+        knowledge, skipped = result.data[:enrichments]
+        assert knowledge.applied?
+        assert_equal 1999, @book.reload.first_published_year
+        assert skipped.skipped?
+        assert_equal "budget_exhausted", skipped.reason
       end
 
       test "medium confidence does not trigger research" do
@@ -280,6 +314,20 @@ module Services
         assert_equal "rejected", row.facts["description"]["reason"]
         assert_equal true, row.facts["description"]["review"]["spoilers"]
         assert_empty @book.reload.descriptions
+      end
+
+      test "a review that flags style violations with no rewrite rejects the description" do
+        stub_review(spoilers: false, style_violations: ["marketing", "names_author"], rewritten: nil)
+        expect_facts_runs([:knowledge, success_result(facts)])
+
+        result = EnrichBook.call(book: @book)
+
+        row = result.data[:enrichments].first
+        assert_equal "rejected", row.facts["description"]["reason"]
+        assert_equal ["marketing", "names_author"], row.facts["description"]["review"]["style_violations"]
+        assert_empty @book.reload.descriptions
+        assert row.applied?
+        assert_equal 1999, @book.first_published_year
       end
 
       test "an empty review reply is review_failed, other facts still apply" do

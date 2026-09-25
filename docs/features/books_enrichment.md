@@ -28,15 +28,19 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    needed; `Services::Books::DescriptionCheck` then strips pasted citations and rejects em
    dashes, URLs, and runaway lengths. Whether the text names the title or author is left to the
    reviewer's judgment: a string match cannot tell the title *Emma* from the character Emma, and
-   17k books have one-word titles. The reviewer's verdict is binding: a spoiler
-   flag with no rewrite to fall back on is a `rejected` description, not a pass-through of the
-   unreviewed text, and an empty review reply (no spoilers verdict at all) is `review_failed`,
-   the same as a call that errored outright.
+   17k books have one-word titles. The reviewer's verdict is binding: a spoiler flag, or any
+   style violation, with no rewrite to fall back on is a `rejected` description, not a
+   pass-through of the text the reviewer objected to; an empty review reply (no spoilers
+   verdict at all) is `review_failed`, the same as a call that errored outright.
 4. **Apply.** `Services::Books::ApplyBookFacts` fills blanks only: year, original language,
    word count, page range, subtitle, alternate titles (union), and origin countries (only when
    the book has none). Book type and series are recorded but not applied. Nothing overwrites a
    value that is set, which is what protects human corrections. If `recognized` was false
-   nothing is applied at all. The description is written as an `ai_generated` row when the book
+   nothing is applied at all. If the knowledge run was recognized but `low` confidence and the
+   research run is about to follow, nothing is applied either (facts recorded as `deferred`,
+   no review call spent): applying the guess first would leave research able only to fill
+   blanks. With the budget exhausted, the low-confidence facts are applied as the best
+   available. The description is written as an `ai_generated` row when the book
    has none from that source. That row outranks Goodreads, Wikipedia and Open Library text in
    the display resolver, so it becomes the displayed description unless a `manual` or preferred
    row exists.
@@ -56,7 +60,8 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 `error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (`origin_countries`
 also carries `unmatched`, and `description` carries `review`); reasons are `filled`,
 `already_set`, `null`, `invalid`, `no_match`, `not_applied_yet`, `human_cleared`, `unrecognized`,
-`rejected`, `review_failed`. `human_cleared` means the field was deliberately blanked by an
+`rejected`, `review_failed`, `deferred`. `deferred` means a low-confidence knowledge answer was
+recorded but left for the research run to verify. `human_cleared` means the field was deliberately blanked by an
 applied correction (the corrections flow accepts blanks on purpose) and the AI value is never
 used to refill it. Useful queries:
 

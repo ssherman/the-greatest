@@ -195,7 +195,8 @@ Reasons: `filled`, `already_set`, `null` (the model returned null), `not_applied
 for a later spec), `no_match` (a lookup such as language or country found nothing), `rejected`
 (failed the deterministic description check), `review_failed` (the review call errored, so the
 description was not written), `human_cleared` (an applied correction blanked this field, so it is
-never refilled).
+never refilled), `deferred` (a low-confidence knowledge answer left for the research run to
+verify).
 
 Model: `Enrichment` with `belongs_to :enrichable, polymorphic: true`, `belongs_to :ai_chat,
 optional: true`, the three enums, validation of `kind` format (`/\A[a-z_]+\.[a-z_]+\z/`), and
@@ -311,9 +312,11 @@ them despite instructions; the strip is idempotent and the URLs are already in `
 
 **Write.** `assign_description(source: :ai_generated, content:, source_url: citations.first)`
 only when the book has no `ai_generated` description yet; the resolver keeps `manual` above it.
-The reviewer's verdict is binding: a description flagged `spoilers: true` with no `rewritten`
-text is recorded `rejected` and not written, and a review reply with no `spoilers` verdict at all
-(an empty response) is `review_failed`. The rewrite is the only way past a spoiler flag.
+The reviewer's verdict is binding: a description flagged `spoilers: true`, or with any
+`style_violations`, and no `rewritten` text is recorded `rejected` and not written, and a review
+reply with no `spoilers` verdict at all (an empty response) is `review_failed`. The rewrite is
+the only way past a flag. The deterministic check covers only what a regex can see, so it
+cannot stand in for a reviewer that flagged `marketing` or `names_author`.
 A description that fails the deterministic check is recorded with `reason: "rejected"` and not
 written. The ledger's `description` fact carries the review verdict, so "descriptions the
 reviewer rewrote for spoilers" is one query.
@@ -334,7 +337,12 @@ reviewer rewrote for spoilers" is one query.
 4. If a description came back, run `DescriptionReviewTask` and the deterministic check.
 5. If `recognized` is false, apply nothing: every fact is recorded with `reason: "unrecognized"`
    and the row's `outcome` is `unrecognized`. A model that does not know the book is guessing at
-   whatever it did return. Otherwise `ApplyBookFacts`, and the `outcome` is `applied` when at
+   whatever it did return. If `recognized` is true but the overall confidence is `low` and the
+   research run will follow (budget remaining), apply nothing either: the facts are recorded
+   with `reason: "deferred"`, `outcome: nothing_to_apply`, no review call is spent, and the
+   research run applies what it verifies. Applying the guess first would leave research able
+   only to fill blanks. When the budget is exhausted the low-confidence facts are applied as
+   the best available. Otherwise `ApplyBookFacts`, and the `outcome` is `applied` when at
    least one fact was filled, else `nothing_to_apply`.
 6. Fallback decision, only after a knowledge run: research if `recognized` is false, or
    `recognized` is true and overall `confidence` is `low`. If the daily cap is reached
