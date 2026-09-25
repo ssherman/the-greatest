@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_22_230839) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_24_225925) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -432,6 +432,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_230839) do
     t.index ["resolved_by_id"], name: "index_duplicate_candidates_on_resolved_by_id"
     t.index ["status", "created_at"], name: "index_duplicate_candidates_on_status_and_created_at"
     t.check_constraint "item_a_id < item_b_id", name: "duplicate_candidates_a_before_b"
+  end
+
+  create_table "enrichments", force: :cascade do |t|
+    t.bigint "ai_chat_id"
+    t.jsonb "citations", default: [], null: false
+    t.integer "confidence"
+    t.datetime "created_at", null: false
+    t.bigint "enrichable_id", null: false
+    t.string "enrichable_type", null: false
+    t.text "error"
+    t.jsonb "facts", default: {}, null: false
+    t.string "kind", null: false
+    t.integer "mode", default: 0, null: false
+    t.string "model"
+    t.integer "outcome", null: false
+    t.string "provider"
+    t.string "reason"
+    t.boolean "recognized"
+    t.datetime "updated_at", null: false
+    t.index ["ai_chat_id"], name: "index_enrichments_on_ai_chat_id"
+    t.index ["enrichable_type", "enrichable_id"], name: "index_enrichments_on_enrichable"
+    t.index ["kind"], name: "index_enrichments_on_kind"
+    t.index ["mode", "created_at"], name: "index_enrichments_on_mode_and_created_at"
+    t.index ["outcome"], name: "index_enrichments_on_outcome"
   end
 
   create_table "external_links", force: :cascade do |t|
@@ -1227,6 +1251,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_230839) do
   add_foreign_key "donations", "users"
   add_foreign_key "duplicate_candidates", "match_decisions", on_delete: :nullify
   add_foreign_key "duplicate_candidates", "users", column: "resolved_by_id", on_delete: :nullify
+  add_foreign_key "enrichments", "ai_chats", on_delete: :nullify
   add_foreign_key "external_links", "users", column: "submitted_by_id"
   add_foreign_key "games_game_companies", "games_companies", column: "company_id"
   add_foreign_key "games_game_companies", "games_games", column: "game_id"

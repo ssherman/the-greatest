@@ -29,6 +29,27 @@ module Services
           assert_equal 1.0, @task.send(:temperature)
         end
 
+        test "model comes from the task role when none is given" do
+          assert_equal "gpt-6-sol", @task.instance_variable_get(:@model)
+        end
+
+        test "an explicit model beats the role" do
+          task = Music::ArtistDescriptionTask.new(parent: @artist, model: "gpt-4o")
+          assert_equal "gpt-4o", task.instance_variable_get(:@model)
+        end
+
+        class UnknownRoleTask < BaseTask
+          private
+
+          def task_role = :nope
+
+          def user_prompt = "irrelevant"
+        end
+
+        test "an unknown role raises at construction" do
+          assert_raises(Services::Ai::Roles::UnknownRole) { UnknownRoleTask.new(parent: @artist) }
+        end
+
         test "should_create_provider_strategy_correctly" do
           # Test that the correct provider strategy is created
           Services::Ai::Providers::OpenaiStrategy.expects(:new).returns(@mock_strategy)
@@ -53,7 +74,9 @@ module Services
             content: kind_of(String),
             response_format: {type: "json_object"},
             schema: Music::ArtistDescriptionTask::ResponseSchema,
-            reasoning: nil
+            reasoning: nil,
+            tools: [],
+            force_tool: false
           ).returns(mock_provider_response)
 
           @task.call
@@ -67,6 +90,25 @@ module Services
 
           refute result.success?
           assert_includes result.error, "Validation failed"
+        end
+
+        test "a provider failure after the chat is created still returns that chat on the result" do
+          mock_chat = mock
+          mock_chat.stubs(:save!).returns(true)
+          mock_chat.stubs(:messages).returns([])
+          mock_chat.stubs(:model).returns("gpt-4o")
+          mock_chat.stubs(:provider_key).returns("openai")
+          mock_chat.stubs(:temperature).returns(0.2)
+          mock_chat.stubs(:raw_responses).returns([])
+          mock_chat.stubs(:parameters=)
+          AiChat.stubs(:create!).returns(mock_chat)
+          @mock_strategy.stubs(:send_message!).raises(StandardError, "provider down")
+
+          result = @task.call
+
+          refute result.success?
+          assert_equal "provider down", result.error
+          assert_equal mock_chat, result.ai_chat
         end
 
         test "should_build_messages_correctly" do

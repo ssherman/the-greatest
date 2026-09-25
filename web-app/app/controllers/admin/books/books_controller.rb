@@ -94,7 +94,7 @@ class Admin::Books::BooksController < Admin::Books::BaseController
   private
 
   def allowed_action_names
-    %w[MergeBook]
+    %w[MergeBook EnrichBook]
   end
 
   def set_book

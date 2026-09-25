@@ -4,25 +4,17 @@ module Services
       class BaseStrategy
         include Services::Ai::ProviderStrategy
 
-        def send_message!(ai_chat:, content:, response_format:, schema:, reasoning: nil)
+        def send_message!(ai_chat:, content:, response_format:, schema:, reasoning: nil, tools: [], force_tool: false)
           messages = ai_chat.messages + [{role: "user", content: content}]
-
           parameters = build_parameters(
-            model: ai_chat.model,
-            messages: messages,
-            temperature: ai_chat.temperature.to_f,
-            response_format: response_format,
-            schema: schema,
-            reasoning: reasoning
+            model: ai_chat.model, messages: messages, temperature: ai_chat.temperature.to_f,
+            response_format: response_format, schema: schema, reasoning: reasoning,
+            tools: tools, force_tool: force_tool
           )
-
           # Save parameters to ai_chat BEFORE making API call
           ai_chat.parameters = parameters
           ai_chat.save!
-
           response = make_api_call(parameters)
-
-          # Return structured response wrapper
           format_response(response, schema)
         end
 
@@ -44,12 +36,8 @@ module Services
         end
 
         # Can be overridden by subclasses for provider-specific parameter building
-        def build_parameters(model:, messages:, temperature:, response_format:, schema:, reasoning: nil)
-          {
-            model: model,
-            messages: messages,
-            temperature: temperature
-          }
+        def build_parameters(model:, messages:, temperature:, response_format:, schema:, reasoning: nil, tools: [], force_tool: false)
+          {model: model, messages: messages, temperature: temperature}
         end
 
         # Common response parsing logic

@@ -73,7 +73,8 @@ Different providers support different features. The system handles this graceful
 
 #### Cost Optimization
 - **Flex Processing**: OpenAI requests use "flex" service tier for ~50% cost reduction
-- **Model Selection**: Tasks can specify optimal model per use case
+- **Model Selection**: Tasks declare a role (`fast`, `standard`, `premium`, `research`);
+  `config/initializers/ai.rb` maps each role to a model
 - **Temperature Control**: Fine-tuned randomness settings per task type
 - **Reasoning Levels**: Optional reasoning parameter for complex tasks
 
@@ -81,9 +82,14 @@ Different providers support different features. The system handles this graceful
 
 ### Supported Providers
 - **OpenAI** (Complete) - Using Responses API with flex processing
-  - Models: gpt-5-mini (default), gpt-4o, gpt-4-turbo
-  - Capabilities: json_mode, json_schema, function_calls, reasoning
-  - Special Features: Native structured outputs, flex tier pricing
+  - Models are chosen per **role**, not per task: `config/initializers/ai.rb` maps `fast`,
+    `standard`, `premium` and `research` to model IDs (currently `gpt-6-luna`, `gpt-6-sol`,
+    `gpt-6-astra`, and `gpt-6-astra` with the `web_search` tool). A task declares
+    `def task_role = :fast`; nothing in `app/` names a model ID.
+  - Capabilities: json_mode, json_schema, function_calls (tools such as web_search come from the
+    task's role; see Parameter Building)
+  - Special Features: Native structured outputs, flex tier pricing, url citations returned
+    as `citations:` on the provider response
 
 - **Anthropic** (Planned) - Claude models
 - **Gemini** (Planned) - Google's AI models
@@ -107,6 +113,14 @@ Different providers support different features. The system handles this graceful
 - **Lists::Music::AlbumsRawParserTask** - Extract album data from text
 - **Lists::Music::SongsRawParserTask** - Extract song data from text
 
+#### Enrichment
+- **EnrichmentTask** - base for tasks that report facts with per-field confidence and never
+  write to their parent; `mode: :knowledge` (standard role) or `mode: :research` (research
+  role, web search forced)
+- **Books::BookFactsTask** - metadata and a spoiler-free description for a book in one call
+- **Books::DescriptionReviewTask** - spoiler and style review of a description (fast role)
+- Runs are recorded in the `enrichments` table; see `docs/features/books_enrichment.md`
+
 ## Usage Examples
 
 ### Basic Task Execution
@@ -124,11 +138,12 @@ end
 
 ### With Custom Provider/Model
 ```ruby
-# Use specific provider and model
+# Escape hatch: an explicit provider/model here beats the task's role.
+# No task in app/ does this today.
 result = Services::Ai::Tasks::Music::AlbumDescriptionTask.new(
   parent: album,
   provider: :openai,
-  model: "gpt-4o"
+  model: "gpt-6-sol"
 ).call
 ```
 
@@ -169,13 +184,15 @@ OpenAI example:
 ```ruby
 # Input: Messages, schema, temperature, reasoning
 # Output: {
-#   model: "gpt-5-mini",
+#   model: "gpt-6-sol",   # resolved from the task's role
 #   temperature: 1.0,
 #   service_tier: "flex",
 #   instructions: "System message content",
 #   input: "User message content",
 #   text: SchemaClass,
-#   reasoning: { effort: "low" }
+#   reasoning: { effort: "low" },
+#   tools: [{type: "web_search", search_context_size: "low"}],  # when the role or task asks
+#   tool_choice: {type: "web_search"}                           # when force_tool? is true
 # }
 ```
 
@@ -186,7 +203,7 @@ All providers return standardized format:
   content: "Raw text response...",
   parsed: { field1: "value1", field2: 123 },  # If using schema
   id: "chatcmpl-abc123",
-  model: "gpt-4o",
+  model: "gpt-6-sol",
   usage: {
     prompt_tokens: 150,
     completion_tokens: 85,
@@ -278,7 +295,9 @@ end
 ### Adding New Tasks
 1. Create task class inheriting from `BaseTask`
 2. Implement required method: `user_prompt`
-3. Override optional methods: `task_provider`, `task_model`, `system_message`, `response_schema`
+3. Override optional methods: `task_role` (which entry of `config.x.ai.roles` this task runs
+   on), `task_provider`, `task_model` (escape hatches: an explicit provider/model beats the
+   role; no task in app/ overrides `task_model` today), `system_message`, `response_schema`
 4. Implement `process_and_persist` to handle results
 
 Example:
@@ -287,7 +306,7 @@ class MyAnalysisTask < BaseTask
   private
 
   def task_provider = :openai
-  def task_model = "gpt-4o"
+  def task_role = :fast  # or :standard for recall-heavy prose
   def chat_type = :analysis
 
   def system_message
@@ -323,8 +342,8 @@ end
 - **Temperature Tuning**: Lower randomness for structured tasks
 
 ### Cost Management
-- **Default Model**: gpt-5-mini for most tasks
-- **Upgrade When Needed**: Tasks specify gpt-4o for complex operations
+- **Role-Based Models**: Tasks declare a role (`fast`, `standard`, `premium`, `research`);
+  `config/initializers/ai.rb` maps each role to a model. No task names a model ID.
 - **Reasoning Budget**: Low/medium/high reasoning levels per task
 - **Usage Tracking**: Complete token usage logged per request
 
@@ -341,7 +360,7 @@ Stores complete AI interaction history:
 - **parent**: Polymorphic association to any entity
 - **chat_type**: Enum (general, ranking, recommendation, analysis)
 - **provider**: Enum (openai, anthropic, gemini, local)
-- **model**: String (e.g., "gpt-4o")
+- **model**: String (e.g., "gpt-6-sol"), resolved from the task's role
 - **temperature**: Decimal (0.0-2.0)
 - **json_mode**: Boolean (JSON response requested)
 - **parameters**: JSONB (request params saved before API call)

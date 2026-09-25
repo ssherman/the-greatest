@@ -86,6 +86,15 @@ module Books
         assert_equal @target.id, chat.reload.parent_id
       end
 
+      test "moves enrichments to the target" do
+        row = Enrichment.create!(enrichable: @source, kind: "books.book_facts", outcome: :nothing_to_apply)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, row.reload.enrichable_id
+        assert_equal "Books::Book", row.enrichable_type
+      end
+
       test "moves images to the target" do
         image = attach_image(@source, primary: false)
 

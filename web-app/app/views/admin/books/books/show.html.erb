@@ -13,6 +13,14 @@
       <% if current_user_can_write? %>
         <%= link_to "Edit", edit_admin_books_book_path(@book), class: "btn btn-primary" %>
       <% end %>
+      <% if current_user_can_write? %>
+        <button type="button"
+                class="btn btn-outline"
+                data-testid="enrich-book-button"
+                onclick="document.getElementById('enrich-book-modal').showModal()">
+          <span>Enrich With AI</span>
+        </button>
+      <% end %>
       <% if current_user_can_delete? %>
         <button type="button"
                 class="btn btn-warning btn-outline"
@@ -302,6 +310,49 @@
       <div class="modal-action">
         <button type="button" class="btn" onclick="document.getElementById('merge-book-modal').close()">Cancel</button>
         <%= f.submit "Merge Book", class: "btn btn-warning" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<!-- Enrich Book Modal -->
+<dialog id="enrich-book-modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">Enrich With AI</h3>
+    <p class="py-4">
+      Looks up the first published year, original language, word count, page range,
+      subtitle, alternate titles, origin country and a spoiler-free description for
+      <strong><%= @book.title %></strong> in the background. Values already set are
+      never overwritten. If the model does not know the book, is unsure, or the
+      book is newer than its knowledge, a web search follows, within the daily
+      budget.
+    </p>
+
+    <%= form_with url: execute_action_admin_books_book_path(@book),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "enrich-book-modal"
+                  } do |f| %>
+      <%= f.hidden_field :action_name, value: "EnrichBook" %>
+
+      <div>
+        <label class="label cursor-pointer justify-start gap-2">
+          <%= f.check_box :force_research, class: "checkbox" %>
+          <span>Search the web even if the model knows this book</span>
+        </label>
+        <label class="label">
+          <span>A web search run costs about 15 cents and ignores the daily budget.</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="document.getElementById('enrich-book-modal').close()">Cancel</button>
+        <%= f.submit "Enrich Book", class: "btn btn-primary" %>
       </div>
     <% end %>
   </div>

@@ -364,6 +364,60 @@ module Admin
         assert_not ::Books::Book.exists?(source.id)
       end
 
+      # execute_action / enrich
+
+      test "an admin can queue enrichment via execute_action" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Books::EnrichBookJob.expects(:perform_async).with(@book.id, false)
+
+        post execute_action_admin_books_book_path(@book), params: {action_name: "EnrichBook"}
+
+        assert_redirected_to admin_books_book_path(@book)
+      end
+
+      test "the force_research checkbox queues a web search run" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Books::EnrichBookJob.expects(:perform_async).with(@book.id, true)
+
+        post execute_action_admin_books_book_path(@book), params: {action_name: "EnrichBook", force_research: "1"}, as: :turbo_stream
+
+        assert_response :success
+        assert_includes response.body, 'target="flash"'
+      end
+
+      test "an unchecked force_research box is a knowledge run" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Books::EnrichBookJob.expects(:perform_async).with(@book.id, false)
+
+        post execute_action_admin_books_book_path(@book), params: {action_name: "EnrichBook", force_research: "0"}
+
+        assert_redirected_to admin_books_book_path(@book)
+      end
+
+      # Enrichment is not destructive, so write access is enough.
+      test "a books domain editor can queue enrichment" do
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :editor)
+        sign_in_as(@regular_user, stub_auth: true)
+        ::Books::EnrichBookJob.expects(:perform_async).with(@book.id, false)
+
+        post execute_action_admin_books_book_path(@book), params: {action_name: "EnrichBook"}
+
+        assert_redirected_to admin_books_book_path(@book)
+      end
+
+      # EnrichBook is gated by BookPolicy#execute_action? alone (no destroy?
+      # gate, since it is non-destructive) -- and a force_research run spends
+      # real money. A viewer (read-only) must still be refused.
+      test "a books domain viewer cannot queue enrichment" do
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(@regular_user, stub_auth: true)
+        ::Books::EnrichBookJob.expects(:perform_async).never
+
+        post execute_action_admin_books_book_path(@book), params: {action_name: "EnrichBook"}
+
+        assert_redirected_to books_root_path
+      end
+
       test "execute_action rejects an action name outside the allowlist" do
         sign_in_as(@admin_user, stub_auth: true)
 
