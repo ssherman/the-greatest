@@ -82,7 +82,7 @@ end
 | Music | Release | MusicBrainz | Complete |
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
-| Books | Book | OpenLibrary | Complete |
+| Books | Book | OpenLibrary, AiEnrichment | Complete |
 
 ### Music Providers
 
@@ -95,7 +95,7 @@ end
 
 #### AI Description (Async)
 - Queues `AiDescriptionJob` for AI-generated descriptions
-- Uses Claude for natural language descriptions
+- Uses OpenAI (the `standard` role, see `ai_agents.md`) for natural language descriptions
 
 #### Amazon Product (Async)
 - Searches Amazon for related products
@@ -181,6 +181,12 @@ section for the full contract).
   idempotent by rule yet because the provider creates no author rows (that is increment 4's), so
   the exact rule cannot match an importer-created book; OpenSearch still surfaces it and the AI
   decides.
+
+#### AI Enrichment (Async)
+Queues `Books::EnrichBookJob` and returns `[:ai_enrichment_queued]`. Runs after Open Library so
+the AI fills fewer blanks. Requires a title and either `book.authors` or the query's
+`author_names` (a new book has no `book_authors` rows yet, so the names ride along to the job).
+The job runs `Services::Books::EnrichBook`; see `docs/features/books_enrichment.md`.
 
 ## Usage Examples
 
