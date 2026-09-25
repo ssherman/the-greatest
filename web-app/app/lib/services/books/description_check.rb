@@ -10,20 +10,22 @@ module Services
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
       # "([label](https://url))", the shape the model pastes in despite the
-      # rules. The URLs are already in the run's citations.
-      MARKDOWN_CITATION = /\s*\(\[[^\]]*\]\([^)]*\)\)/
+      # rules. The URLs are already in the run's citations. The URL segment
+      # allows one level of balanced parens, since a Wikipedia disambiguation
+      # URL such as .../Foo_(novel) is a likely citation target.
+      MARKDOWN_CITATION = /\s*\(\[[^\]]*\]\((?:[^()\s]|\([^()\s]*\))*\)\)/
       MIN_WORDS = 40
       MAX_WORDS = 140
 
       def self.call(text, book:)
         cleaned = text.to_s.gsub(MARKDOWN_CITATION, "").strip
         errors = []
-        errors << "em_dash" if cleaned.include?("—")
+        errors << "em_dash" if cleaned.match?(/[—–]/)
         errors << "double_hyphen" if cleaned.include?("--")
         errors << "url" if cleaned.match?(%r{https?://})
         errors << "markdown_link" if cleaned.include?("](")
         errors << "names_title" if names_title?(cleaned, book.title)
-        words = cleaned.split(/\s+/).size
+        words = cleaned.split(/[[:space:]]+/).size
         errors << "too_short" if words < MIN_WORDS
         errors << "too_long" if words > MAX_WORDS
 
