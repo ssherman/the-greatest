@@ -92,6 +92,25 @@ module Services
           assert_includes result.error, "Validation failed"
         end
 
+        test "a provider failure after the chat is created still returns that chat on the result" do
+          mock_chat = mock
+          mock_chat.stubs(:save!).returns(true)
+          mock_chat.stubs(:messages).returns([])
+          mock_chat.stubs(:model).returns("gpt-4o")
+          mock_chat.stubs(:provider_key).returns("openai")
+          mock_chat.stubs(:temperature).returns(0.2)
+          mock_chat.stubs(:raw_responses).returns([])
+          mock_chat.stubs(:parameters=)
+          AiChat.stubs(:create!).returns(mock_chat)
+          @mock_strategy.stubs(:send_message!).raises(StandardError, "provider down")
+
+          result = @task.call
+
+          refute result.success?
+          assert_equal "provider down", result.error
+          assert_equal mock_chat, result.ai_chat
+        end
+
         test "should_build_messages_correctly" do
           # Mock the provider response
           mock_response = mock_provider_response

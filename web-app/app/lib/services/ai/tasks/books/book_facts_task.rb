@@ -18,8 +18,6 @@ module Services
 
           private
 
-          def task_provider = :openai
-
           def author_names
             @author_names.presence || parent.authors.map(&:name)
           end

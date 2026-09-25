@@ -22,8 +22,6 @@ module Services
             @author_names.presence || parent.authors.map(&:name)
           end
 
-          def task_provider = :openai
-
           def task_role = :fast
 
           def response_format = {type: "json_object"}

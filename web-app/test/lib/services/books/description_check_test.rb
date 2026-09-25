@@ -42,10 +42,17 @@ module Services
         assert_equal once, DescriptionCheck.call(once, book: @book).data[:text]
       end
 
-      test "flags em dashes and double hyphens" do
+      test "flags em dashes, a spaced en dash, and double hyphens" do
         assert_includes DescriptionCheck.call("#{CLEAN} A man — a widow.", book: @book).errors, "em_dash"
         assert_includes DescriptionCheck.call("#{CLEAN} A man – a widow.", book: @book).errors, "em_dash"
         assert_includes DescriptionCheck.call("#{CLEAN} A man -- a widow.", book: @book).errors, "double_hyphen"
+      end
+
+      test "an unspaced en dash in a year range is not flagged" do
+        result = DescriptionCheck.call("#{CLEAN} The war lasted 1939–1945.", book: @book)
+
+        refute_includes result.errors, "em_dash"
+        assert result.success?
       end
 
       test "flags a bare url and a markdown link that survived stripping" do

@@ -20,7 +20,10 @@ module Services
       def self.call(text, book:)
         cleaned = text.to_s.gsub(MARKDOWN_CITATION, "").strip
         errors = []
-        errors << "em_dash" if cleaned.match?(/[—–]/)
+        # An em dash is always flagged. An en dash only counts as the same
+        # violation when it is being used as a dash (spaced on at least one
+        # side) rather than as a hyphen in a year range like "1939-1945".
+        errors << "em_dash" if cleaned.include?("—") || cleaned.match?(/ – | –|– /)
         errors << "double_hyphen" if cleaned.include?("--")
         errors << "url" if cleaned.match?(%r{https?://})
         errors << "markdown_link" if cleaned.include?("](")

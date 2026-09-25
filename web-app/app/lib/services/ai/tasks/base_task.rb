@@ -37,7 +37,11 @@ module Services
           # Process and persist the result
           process_and_persist(provider_response)
         rescue => e
-          Services::Ai::Result.new(success: false, error: e.message)
+          # @chat may already hold a saved AiChat with the request (a failure
+          # in send_message! or later), or still be nil (create_chat! itself
+          # raised) -- either way, pass along whatever there is so a failed
+          # run's ledger row is not stripped of a chat that does exist.
+          Services::Ai::Result.new(success: false, error: e.message, ai_chat: @chat)
         end
 
         private
