@@ -30,6 +30,12 @@ module Services
         end
 
         first_mode = (force_research || past_cutoff?) ? :research : :knowledge
+
+        if first_mode == :research && !force_research && budget_exhausted?
+          rows << skip("budget_exhausted", mode: :research)
+          return result
+        end
+
         rows << run(first_mode)
         return result if rows.last.failed?
 
@@ -79,8 +85,8 @@ module Services
         # with every fact null.
         return failed_row(mode, task_result, error: "empty response") unless facts.key?(:recognized)
 
-        citations = Array(task_result.data[:citations])
         chat = task_result.ai_chat
+        citations = Array(task_result.data[:citations])
 
         if facts[:recognized] == false
           return book.enrichments.create!(
@@ -106,6 +112,11 @@ module Services
             citations: citations
           )
         )
+      rescue => e
+        # Anything past this point that raises (a unique-index race between
+        # concurrent jobs, a bug in ApplyBookFacts) must still leave exactly
+        # one ledger row, and the job needs to see a failure to retry.
+        book.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message))
       end
 
       def failed_row(mode, task_result, error: task_result.error)
@@ -130,7 +141,8 @@ module Services
       end
 
       def confidence_for(value)
-        Enrichment.confidences.key?(value.to_s) ? value.to_s : nil
+        normalized = value.to_s.strip.downcase
+        Enrichment.confidences.key?(normalized) ? normalized : nil
       end
 
       # A model that does not know the book is guessing at whatever it did
@@ -143,7 +155,11 @@ module Services
       end
 
       # nil when there is no description to review. Otherwise
-      # {text:, review:, reason:}; a reason means "do not write".
+      # {text:, review:, reason:}; a reason means "do not write". The
+      # reviewer's verdict is binding: a reply with no spoilers verdict at
+      # all (an empty response) is review_failed, same as a call that
+      # errored outright; a spoiler flag with no rewrite to fall back on is
+      # a rejection, not a pass-through of the unreviewed text.
       def review_description(text)
         return nil if text.blank?
 
@@ -151,19 +167,30 @@ module Services
         return {text: text, review: nil, reason: "review_failed"} unless review.success?
 
         data = review.data.deep_symbolize_keys
+        return {text: text, review: nil, reason: "review_failed"} if data[:spoilers].nil?
+
+        if data[:spoilers] == true && data[:rewritten].blank?
+          check = DescriptionCheck.call(text, book: book)
+          return {text: check.data[:text], review: review_verdict(data, check), reason: "rejected"}
+        end
+
         reviewed = data[:rewritten].presence || text
         check = DescriptionCheck.call(reviewed, book: book)
 
         {
           text: check.data[:text],
-          review: {
-            "spoilers" => data[:spoilers],
-            "spoiler_notes" => data[:spoiler_notes],
-            "style_violations" => Array(data[:style_violations]),
-            "rewritten" => data[:rewritten].present?,
-            "check_errors" => check.errors
-          },
+          review: review_verdict(data, check),
           reason: check.success? ? nil : "rejected"
+        }
+      end
+
+      def review_verdict(data, check)
+        {
+          "spoilers" => data[:spoilers],
+          "spoiler_notes" => data[:spoiler_notes],
+          "style_violations" => Array(data[:style_violations]),
+          "rewritten" => data[:rewritten].present?,
+          "check_errors" => check.errors
         }
       end
 

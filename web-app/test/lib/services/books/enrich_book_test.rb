@@ -165,7 +165,23 @@ module Services
         assert_equal %w[research], result.data[:enrichments].map(&:mode)
       end
 
-      test "a book with no title or author names is skipped as missing_inputs" do
+      test "a book at or past the cutoff skips research entirely when the daily budget is exhausted" do
+        @book.update!(first_published_year: Rails.application.config.x.ai.knowledge_cutoff_year)
+        Rails.application.config.x.ai.stubs(:research_daily_cap).returns(0)
+        Services::Ai::Tasks::Books::BookFactsTask.expects(:new).never
+
+        result = EnrichBook.call(book: @book)
+
+        assert result.success?
+        rows = result.data[:enrichments]
+        assert_equal 1, rows.size
+        row = rows.first
+        assert row.skipped?
+        assert row.research?
+        assert_equal "budget_exhausted", row.reason
+      end
+
+      test "a book with no author names is skipped as missing_inputs" do
         bare = ::Books::Book.create!(title: "Bare")
         Services::Ai::Tasks::Books::BookFactsTask.expects(:new).never
 
@@ -174,6 +190,7 @@ module Services
         assert result.success?
         row = result.data[:enrichments].first
         assert row.skipped?
+        assert row.knowledge?
         assert_equal "missing_inputs", row.reason
       end
 
@@ -244,6 +261,33 @@ module Services
         assert_equal [], review["check_errors"]
       end
 
+      test "a review that flags spoilers with no rewrite rejects the description" do
+        stub_review(spoilers: true, style_violations: [], rewritten: nil)
+        expect_facts_runs([:knowledge, success_result(facts)])
+
+        result = EnrichBook.call(book: @book)
+
+        row = result.data[:enrichments].first
+        assert_equal "rejected", row.facts["description"]["reason"]
+        assert_equal true, row.facts["description"]["review"]["spoilers"]
+        assert_empty @book.reload.descriptions
+      end
+
+      test "an empty review reply is review_failed, other facts still apply" do
+        review = mock
+        review.stubs(:call).returns(Services::Ai::Result.new(success: true, data: {}, ai_chat: @chat))
+        Services::Ai::Tasks::Books::DescriptionReviewTask.stubs(:new).returns(review)
+        expect_facts_runs([:knowledge, success_result(facts)])
+
+        result = EnrichBook.call(book: @book)
+
+        row = result.data[:enrichments].first
+        assert_equal "review_failed", row.facts["description"]["reason"]
+        assert_empty @book.reload.descriptions
+        assert row.applied?
+        assert_equal 1999, @book.reload.first_published_year
+      end
+
       test "a description that fails the deterministic check is rejected, other facts still apply" do
         expect_facts_runs([:knowledge, success_result(facts(description: {value: "Short — bad.", confidence: "high"}))])
 
@@ -296,6 +340,32 @@ module Services
         row = result.data[:enrichments].first
         assert_nil row.confidence
         assert row.applied?
+      end
+
+      test "a mixed-case confidence string is normalized and triggers the research fallback" do
+        expect_facts_runs(
+          [:knowledge, success_result(facts(confidence: "Low"))],
+          [:research, success_result(facts(confidence: "high"))]
+        )
+
+        result = EnrichBook.call(book: @book)
+
+        knowledge, research = result.data[:enrichments]
+        assert knowledge.confidence_low?
+        assert research.research?
+      end
+
+      test "an exception after a successful task write still leaves exactly one ledger row" do
+        expect_facts_runs([:knowledge, success_result(facts)])
+        ApplyBookFacts.stubs(:call).raises(ActiveRecord::RecordNotUnique.new("dup"))
+
+        result = EnrichBook.call(book: @book)
+
+        refute result.success?
+        assert_equal ["dup"], result.errors
+        row = result.data[:enrichments].first
+        assert row.failed?
+        assert_equal "dup", row.error
       end
     end
   end
