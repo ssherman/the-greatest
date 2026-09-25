@@ -240,7 +240,7 @@ Schema fields (each a `Fact` unless noted):
 | `confidence` | enum, top level | governs the fallback |
 | `first_published_year` | integer, nullable | fill if blank |
 | `first_published_year_estimated` | boolean | recorded, `not_applied_yet`; `books_books` has no column for it |
-| `original_language` | string, nullable, ISO 639-1 code preferred, name accepted | fill `original_language_id` if blank, via `Language.find_by(iso_639_1:)` then `find_by(name:)` (case-insensitive); no match → `no_match` |
+| `original_language` | string, nullable, the English language name ("English", "Ancient Greek") | fill `original_language_id` if blank, matched case-insensitively on `languages.name`; no match → `no_match`. The production `languages` table has 214 rows and **no ISO codes at all**, so the prompt asks for names, not codes |
 | `word_count` | integer, nullable | fill if blank and positive |
 | `page_range` | string, nullable, `"300"` or `"250-350"` | fill if blank; must match `/\A\d+(-\d+)?\z/` |
 | `subtitle` | string, nullable | fill if blank |
@@ -294,8 +294,11 @@ detect them), and the rules above. Schema: `spoilers: boolean`, `spoiler_notes: 
 `style_violations: [string]` (from a fixed enum: `em_dash`, `semicolon`, `names_title`,
 `names_author`, `marketing`, `meta_narration`, `banned_word`, `not_but`, `triad`, `too_long`,
 `too_short`, `citation`), `rewritten: string?` (null when nothing needed changing). The runner
-calls it after every facts call that returned a description, in both modes. Cost is under a tenth
-of a cent per book.
+calls it after every facts call that returned a description, in both modes, **unless the book
+already has an `ai_generated` description**, in which case the applier would record `already_set`
+and the review call would be wasted (123k of 158k production books carry a legacy AI description).
+The reviewer receives the author names the runner already holds, since a book created by the
+importer has no `book_authors` rows yet. Cost is under a tenth of a cent per book.
 
 **Deterministic check**, `Services::Books::DescriptionCheck.call(text, book:)`: fails on `—`,
 `--`, `http`, `[`…`](`, `utm_source`, or the book's title as a case-insensitive substring;
@@ -341,8 +344,11 @@ reviewer rewrote for spoilers" is one query.
 The count-based budget has a small race at the boundary under concurrent jobs. Overshooting the
 cap by a handful of 15-cent calls is acceptable; a lock is not worth it.
 
-`Books::EnrichBookJob` (`bin/rails generate sidekiq:job books/enrich_book`): `queue: :default`,
-`retry: 3`, `perform(book_id, force_research = false, author_names = [])`. It looks the book up with `find_by(id:)`
+`Books::EnrichBookJob` (`bin/rails generate sidekiq:job books/enrich_book`): `queue: :low`,
+`retry: 3`, `perform(book_id, force_research = false, author_names = [])`. Production runs one
+Sidekiq process with strict queue order `critical, default, low`, and Stripe webhook processing,
+cache purges and search indexing all run on `default`; a batch of slow enrichment jobs must never
+sit in front of them, so enrichment takes `low`. It looks the book up with `find_by(id:)`
 and returns quietly when there is none, because a book deleted between enqueue and run is not an
 error worth three retries. It calls the runner and re-raises on a failed Result so Sidekiq retries
 transient API errors. Fill-blanks makes a retry, a re-run, and two concurrent runs on one book
