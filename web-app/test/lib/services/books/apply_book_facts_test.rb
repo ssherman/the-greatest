@@ -105,6 +105,15 @@ module Services
         assert_equal languages(:english), @book.reload.original_language
       end
 
+      test "original language matches by name when the language has no ISO codes at all" do
+        language = Language.create!(name: "Ancient Greek")
+
+        result = apply(original_language: {value: "ancient greek", confidence: "high"})
+
+        assert_equal language, @book.reload.original_language
+        assert_equal({"value" => "ancient greek", "confidence" => "high", "applied" => true, "reason" => "filled"}, result.data[:facts]["original_language"])
+      end
+
       test "original language with no match is recorded as no_match and not applied" do
         result = apply(original_language: {value: "Englisch", confidence: "high"})
 

@@ -28,7 +28,7 @@ module Services
             <<~SYSTEM_MESSAGE
               You are a bibliographic researcher for a book catalog. You report facts about one book and write one short description of it.#{research_instruction}
 
-              Facts. For every fact give a value and a confidence of high, medium or low. Use null (or an empty list) when you do not know; never guess. Set "recognized" to false if you do not know this specific book, and give an overall "confidence" for how well you know it. first_published_year is the year the work was first published in any language; set first_published_year_estimated when the year is approximate. original_language is the language the work was written in, as an ISO 639-1 code such as "en" or "ru". word_count is the approximate length of the full text. page_range is a typical page count for a standard edition, as "300" or "250-350". alternate_titles are other titles the same work has been published under, including translated titles. origin_countries are the nationalities of the work or its author, as English nationality adjectives such as "French" or "Japanese". book_type is one of fiction, nonfiction, poetry, religious. series_name and series_number are set only when the book is part of a series.
+              Facts. For every fact give a value and a confidence of high, medium or low. Use null (or an empty list) when you do not know; never guess. Set "recognized" to false if you do not know this specific book, and give an overall "confidence" for how well you know it. first_published_year is the year the work was first published in any language; set first_published_year_estimated when the year is approximate. original_language is the language the work was written in, as its English name such as "English", "Russian", or "Ancient Greek". word_count is the approximate length of the full text. page_range is a typical page count for a standard edition, as "300" or "250-350". alternate_titles are other titles the same work has been published under, including translated titles. origin_countries are the nationalities of the work or its author, as English nationality adjectives such as "French" or "Japanese". book_type is one of fiction, nonfiction, poetry, religious. series_name and series_number are set only when the book is part of a series.
 
               Description rules.
               - Spoiler-free. Describe the premise, the setting, and the situation the book opens on. Never reveal twists, deaths, endings, or how the central question resolves. For nonfiction, describe the subject and the argument, not the conclusions.
@@ -84,7 +84,7 @@ module Services
             required :confidence, String, doc: "high, medium or low: how well you know this specific book"
             required :first_published_year, EnrichmentTask::IntegerFact
             required :first_published_year_estimated, OpenAI::Boolean, doc: "true when the year is approximate"
-            required :original_language, EnrichmentTask::StringFact, doc: "ISO 639-1 code"
+            required :original_language, EnrichmentTask::StringFact, doc: "The language's English name, such as \"English\" or \"Ancient Greek\""
             required :word_count, EnrichmentTask::IntegerFact
             required :page_range, EnrichmentTask::StringFact, doc: "\"300\" or \"250-350\""
             required :subtitle, EnrichmentTask::StringFact

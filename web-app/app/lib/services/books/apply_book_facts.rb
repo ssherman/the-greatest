@@ -122,10 +122,14 @@ module Services
         record(:original_language, f, applied: true, reason: "filled")
       end
 
+      # Matched by name first: production's languages table has 214 rows and
+      # no ISO codes at all, so a name match is the only path that works
+      # there. The 2-letter code lookup stays as a fallback in case a model
+      # returns a code despite the prompt asking for a name.
       def find_language(value)
         downcased = value.downcase
-        (Language.find_by(iso_639_1: downcased) if downcased.length == 2) ||
-          Language.where("lower(name) = ?", downcased).first
+        Language.where("lower(name) = ?", downcased).first ||
+          (Language.find_by(iso_639_1: downcased) if downcased.length == 2)
       end
 
       def apply_word_count

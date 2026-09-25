@@ -66,6 +66,13 @@ module Services
             assert_includes message, "No citations, URLs"
           end
 
+          test "system message asks for the language's name, not an ISO code" do
+            message = BookFactsTask.new(parent: @book).send(:system_message)
+
+            assert_includes message, "English name such as"
+            refute_includes message, "ISO 639-1"
+          end
+
           test "research mode tells the model to verify with web search" do
             knowledge = BookFactsTask.new(parent: @book).send(:system_message)
             research = BookFactsTask.new(parent: @book, mode: :research).send(:system_message)
