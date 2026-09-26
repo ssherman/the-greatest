@@ -254,8 +254,10 @@ across restarts.
 **Failure handling.**
 
 - A launch that fails returns `503 browser_unavailable` for that request; the next request tries
-  again. A launch that runs out the budget is a `navigation_timeout` for the caller but counts as
-  a failed launch below, since a hung launch is the likeliest sign of a dead driver.
+  again. A launch that runs out the budget is a `navigation_timeout` for the caller, and counts as
+  a failed launch below only when the launch was given at least 10 seconds of budget: launch plus
+  page takes about a second, so a launch given less was starved of budget, not hung, while one
+  given 10 seconds or more and still not back is the likeliest sign of a dead driver.
 - After `FETCHER_MAX_LAUNCH_FAILURES` (default 3) failed launches in a row, the process exits
   non-zero. That covers a dead Playwright driver or Xvfb, which retrying cannot fix. Compose's
   restart policy then brings the container back with a new driver, display and fingerprint. A

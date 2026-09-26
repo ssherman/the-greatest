@@ -13,7 +13,7 @@ from fetcher.browser import (
     NavigationTimeout,
     UpstreamUnreachable,
 )
-from fetcher.fetcher import Fetcher, FetchError, FetchRequest
+from fetcher.fetcher import LAUNCH_HANG_S, Fetcher, FetchError, FetchRequest
 from fetcher.settings import Settings
 from tests.fetcher.fakes import PAGE_HTML, PAGE_URL, FakeBrowser, Script, resolver
 
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.anyio
 DNS = {"intranet.example": ["10.0.0.7"], "gone.example": OSError("Name or service not known")}
 
 
-def build(*scripts, settings=None, default=None, close_limit_s=0.2):
+def build(*scripts, settings=None, default=None, close_limit_s=0.2, launch_hang_s=LAUNCH_HANG_S):
     fatal: list[str] = []
     browser = FakeBrowser(*scripts, default=default)
     fetcher = Fetcher(
@@ -31,6 +31,7 @@ def build(*scripts, settings=None, default=None, close_limit_s=0.2):
         resolver=resolver(DNS),
         on_fatal=fatal.append,
         close_limit_s=close_limit_s,
+        launch_hang_s=launch_hang_s,
     )
     return fetcher, browser, fatal
 
@@ -232,6 +233,18 @@ async def test_the_html_cap_counts_bytes_not_characters():
     assert "12 bytes" in error.detail
 
 
+async def test_a_lone_surrogate_in_html_or_title_is_replaced_not_a_crash():
+    # A JS slice() cutting an emoji in half, or Playwright's own JSON transport
+    # restoring one -- either way this must not reach `.encode("utf-8")` raw.
+    fetcher, _, _ = build(Script(html="<p>\ud83d</p>", title="\ud83d"))
+
+    result = await fetcher.fetch(FetchRequest(url=PAGE_URL))
+
+    assert "�" in result.html
+    assert "�" in result.title
+    result.html.encode("utf-8")  # must not raise
+
+
 # ------------------------------------------------------------- the budget
 
 
@@ -317,10 +330,22 @@ async def test_a_successful_launch_resets_the_count():
 
 
 async def test_a_launch_that_runs_the_budget_out_counts_as_a_failed_launch():
-    fetcher, _, fatal = build(*[Script(launch_delay_s=1) for _ in range(3)])
+    # A launch given at least LAUNCH_HANG_S and still not back is a dead
+    # driver; lower the floor so these 50ms launches count as hung.
+    fetcher, _, fatal = build(*[Script(launch_delay_s=1) for _ in range(3)], launch_hang_s=0.01)
     for _ in range(3):
         assert (await fetch_error(fetcher, timeout_ms=50)).code == "navigation_timeout"
     assert len(fatal) == 1
+
+
+async def test_a_launch_starved_of_budget_does_not_count():
+    # Launch + page takes about a second; a launch given only 50ms was
+    # starved of budget, not hung, and must not count toward the fatal limit.
+    fetcher, _, fatal = build(Script(launch_delay_s=1))
+    error = await fetch_error(fetcher, timeout_ms=50)
+    assert error.code == "navigation_timeout"
+    assert fetcher.health()["launch_failures_in_a_row"] == 0
+    assert fatal == []
 
 
 # ------------------------------------------------------------------ closing
@@ -348,6 +373,41 @@ async def test_the_browser_is_closed_on_every_failure_path(script):
     fetcher, browser, _ = build(script, settings=Settings(host_interval_ms=0, max_html_bytes=10))
     await fetch_error(fetcher, wait_for_selector="h1")
     assert browser.sessions[0].closed
+
+
+async def test_the_browser_is_closed_when_the_budget_expires_mid_read():
+    fetcher, browser, _ = build(Script(goto_delay_s=1))
+    error = await fetch_error(fetcher, timeout_ms=100)
+    assert error.code == "navigation_timeout"
+    assert browser.sessions[0].closed
+    assert fetcher.health()["fetches"]["in_flight"] == 0
+
+
+async def test_the_browser_is_closed_when_the_fetch_is_cancelled_mid_goto():
+    fetcher, browser, _ = build(Script(goto_delay_s=1))
+    task = asyncio.create_task(fetcher.fetch(FetchRequest(url=PAGE_URL)))
+    await asyncio.sleep(0.05)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert browser.sessions[0].closed
+    assert fetcher.health()["fetches"]["in_flight"] == 0
+
+
+async def test_a_cancelled_fetch_counts_as_failed_and_logs_cancelled(caplog):
+    fetcher, _, _ = build(Script(goto_delay_s=1))
+    with caplog.at_level(logging.INFO, logger="fetcher"):
+        task = asyncio.create_task(fetcher.fetch(FetchRequest(url=PAGE_URL)))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert fetcher.health()["fetches"] == {"ok": 0, "failed": 1, "in_flight": 0}
+    lines = [json.loads(r.getMessage()) for r in caplog.records if r.name == "fetcher"]
+    assert lines[-1]["outcome"] == "cancelled"
 
 
 # ------------------------------------------------------- health and logging

@@ -43,6 +43,10 @@ CLOSE_LIMIT_S = 5.0
 # The redirect backstop's own limit, outside the budget: a page already read
 # must not become a timeout because its redirect hops needed a DNS lookup.
 REDIRECT_CHECK_LIMIT_S = 2.0
+# A launch given at least this much budget that still times out is hung, not
+# starved: launch + page takes about a second, so only a launch given this
+# much room and still failing to finish points at a dead driver (spec §3).
+LAUNCH_HANG_S = 10.0
 
 
 @dataclass(frozen=True)
@@ -100,6 +104,13 @@ def _ms_since(started: float) -> int:
     return int((time.monotonic() - started) * 1000)
 
 
+def _drop_lone_surrogates(text: str) -> str:
+    """A lone surrogate -- half of an emoji a JS `slice()` cut in two, restored
+    that way by Playwright's own JSON transport -- cannot be UTF-8 encoded.
+    Replace it with U+FFFD before anything downstream tries (spec §2)."""
+    return text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+
+
 class Fetcher:
     def __init__(
         self,
@@ -109,12 +120,14 @@ class Fetcher:
         resolver: Resolver = system_resolver,
         on_fatal: Callable[[str], None] = exit_process,
         close_limit_s: float = CLOSE_LIMIT_S,
+        launch_hang_s: float = LAUNCH_HANG_S,
     ) -> None:
         self.settings = settings
         self._browser = browser
         self._resolver = resolver
         self._on_fatal = on_fatal
         self._close_limit_s = close_limit_s
+        self._launch_hang_s = launch_hang_s
         self._limiter = Limiter(settings.max_concurrency, settings.host_interval_ms / 1000)
         self._launch_failures = 0
         self._started_at = time.monotonic()
@@ -143,6 +156,10 @@ class Fetcher:
         except FetchError as exc:
             self._counts["failed"] += 1
             line.outcome = exc.code
+            raise
+        except asyncio.CancelledError:
+            self._counts["failed"] += 1
+            line.outcome = "cancelled"
             raise
         except Exception:
             self._counts["failed"] += 1
@@ -186,12 +203,16 @@ class Fetcher:
     ) -> FetchResult:
         request_filter = RequestFilter(hosts)
         launch_started = time.monotonic()
+        launch_budget_s = budget.remaining()
         try:
             session = await budget.run(
-                self._browser.launch(request_filter, budget.remaining()), "launching the browser"
+                self._browser.launch(request_filter, launch_budget_s), "launching the browser"
             )
         except StageTimeout:
-            self._launch_failed()
+            # A launch given at least LAUNCH_HANG_S and still not back is a dead
+            # driver; one given less was starved of budget, not hung (spec §3).
+            if launch_budget_s >= self._launch_hang_s:
+                self._launch_failed()
             raise
         except LaunchFailed as exc:
             self._launch_failed()
@@ -199,7 +220,7 @@ class Fetcher:
         self._launch_failures = 0
         line.launch_ms = _ms_since(launch_started)
         try:
-            return await self._read(session, request, budget, hosts, request_filter, started)
+            return await self._read(session, request, budget, request_filter, started)
         finally:
             await self._close(session)
 
@@ -208,7 +229,6 @@ class Fetcher:
         session: BrowserSession,
         request: FetchRequest,
         budget: Budget,
-        hosts: HostChecker,
         request_filter: RequestFilter,
         started: float,
     ) -> FetchResult:
@@ -227,6 +247,8 @@ class Fetcher:
         with self._mapped("reading the HTML", request_filter):
             html = await budget.run(session.content(), "reading the HTML")
             title = await budget.run(session.title(), "reading the HTML")
+        html = _drop_lone_surrogates(html)
+        title = _drop_lone_surrogates(title)
 
         responses = session.document_responses()
         try:
