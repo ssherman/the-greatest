@@ -25,12 +25,43 @@ a book page or a bot wall.
   brings it back. A launch that runs out of budget counts toward the three
   only if it was given at least 10 s: one given less was starved of budget,
   not hung. The health check restarts nothing: Docker only restarts on exit.
+- **The concurrency cap is soft for a second or two.** A launch cancelled
+  because its fetch's budget ran out keeps running in the background and is
+  closed there once it lands, after its limiter slot has already been
+  released -- so briefly, one extra Firefox can run alongside the fetch that
+  took the freed slot. Bounded by the launch timeout (budget + 1 s) plus the
+  5 s close limit.
+
+## What the address checks do not cover
+
+The pre-flight and in-page address checks (design spec §6) narrow SSRF risk;
+they do not close it:
+
+- **A subresource redirected to a private address is not caught** -- only the
+  main-frame document's own redirect chain is re-checked after navigation.
+- **DNS rebinding is narrowed, not closed** -- a host that resolves publicly
+  at check time and privately moments later can still get through.
+- **WebSockets, WebRTC and popups are invisible to the request route
+  entirely.** A WebSocket has no CORS, so a hostile page's script can open one
+  to a private service, read its replies, and forward them out. WebRTC can
+  reach a private address outside the page's HTTP stack altogether. Popups
+  are unchecked too: the route is scoped to one page, and it is unverified
+  whether the profile even allows a popup to open. No in-page fix was taken
+  for any of these -- a `window.WebSocket` wrapper, for instance, cannot be
+  verified against Camoufox's isolated worlds, and installing one would
+  itself be a fingerprinting signal.
+
+The fix that actually closes all of the above is a network-level egress
+block on the fetcher's container network: drop destinations in RFC 1918,
+loopback, link-local and CGNAT ranges, and allow DNS. See "Where it runs".
 
 ## Where it runs
 
 On the development machine today. Neither this nor the Open Library service is
 deployed: both go to the headless home server behind a Cloudflare Tunnel, and
-**both hostnames need Cloudflare Access in front before they go live**. Neither
+**both hostnames need Cloudflare Access in front before they go live**. The
+fetcher also needs a network-level egress block on its container network
+first -- the address checks above narrow SSRF, they do not close it. Neither
 service authenticates, and an open fetcher would be a proxy on a home IP.
 
 ## Running it
@@ -52,10 +83,10 @@ returns `url`, `final_url`, `status` (the site's status), `title`, `html`,
 
 | HTTP | `error` | When |
 |---|---|---|
-| 400 | `invalid_url` | Bad scheme, embedded credentials, or a non-public address anywhere on the way |
+| 400 | `invalid_url` | Bad scheme, embedded credentials, or a non-public address the checks catch (see "What the address checks do not cover") |
 | 400 | `invalid_selector` | `wait_for_selector` does not parse |
 | 422 | FastAPI's body | Unknown field, bad `wait_until`, `timeout_ms` outside 1000–`FETCHER_MAX_TIMEOUT_MS` (default 60000) |
-| 502 | `upstream_unreachable` | DNS, a refused or reset connection, TLS |
+| 502 | `upstream_unreachable` | DNS, a refused/reset connection, TLS or its security level, a redirect loop, an empty/partial/corrupted response, or a redirect hop that no longer resolves or could not be checked in time |
 | 502 | `html_too_large` | Over 5 MB of HTML |
 | 502 | `browser_error` | Anything else the browser raised |
 | 503 | `browser_unavailable` | The browser failed to launch |

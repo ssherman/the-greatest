@@ -174,7 +174,7 @@ Errors are JSON `{"error": "<code>", "detail": "<human text>"}` with a stable co
 | 400 | `invalid_url` | Syntax, scheme or credentials fail, or an address rule in §6 fails |
 | 400 | `invalid_selector` | `wait_for_selector` is not a selector Playwright can parse. A caller bug, so it must not count against the breaker the way a `browser_error` would. |
 | 422 | (FastAPI's validation body) | Unknown field, bad enum, `timeout_ms` out of range |
-| 502 | `upstream_unreachable` | The site could not be reached: the DNS lookup failed, the connection was refused or reset, or TLS failed |
+| 502 | `upstream_unreachable` | The site could not be reached: the DNS lookup failed, the connection was refused or reset, TLS or its security level failed, the site redirected in a loop, or its response was empty, partial or corrupted. Also the redirect backstop's own failures (§6): a hop that no longer resolves, or that could not be checked within its 2-second limit |
 | 502 | `html_too_large` | The document's HTML is over the cap (5MB) |
 | 502 | `browser_error` | Playwright raised anything else, or navigation produced no document response |
 | 503 | `browser_unavailable` | The browser failed to launch |
@@ -250,6 +250,13 @@ Slot acquisition uses `asyncio.wait_for` against the remaining budget, so a burs
 queues politely and every caller still gets a bounded answer. Host spacing is keyed on the
 request URL's host (not the final URL) and tracked in memory; it is a courtesy, not a guarantee
 across restarts.
+
+`FETCHER_MAX_CONCURRENCY` is a soft cap for a second or two: a launch cancelled because its
+fetch's budget ran out keeps running in the background (shielded) rather than being torn down
+mid-launch, and is closed there once it lands -- but its limiter slot is released as soon as the
+cancellation happens, not when that background close finishes. So briefly, one extra Firefox can
+be running alongside the next fetch that took the freed slot, bounded by the launch timeout
+(budget + 1s) plus the 5-second close limit.
 
 **Failure handling.**
 
@@ -354,7 +361,7 @@ the service is not book-specific:
   is not deployed yet. `deployment/ENV.md` is untouched: neither service is in production.
 - `Exceptions`: `Error`, `ConfigurationError`, `NetworkError`, `TimeoutError`, `HttpError`,
   `ClientError`, `ServerError`, `ParseError`, mirroring the Open Library module, plus
-  `UpstreamError < Error` (carrying the service's `error` code) and `CircuitOpenError < Error`.
+  `UpstreamError < HttpError` (carrying the service's `error` code) and `CircuitOpenError < Error`.
   The breaker raises `Books::OpenLibrary::Exceptions::CircuitOpenError`; the client rescues it and
   raises `PageFetcher::Exceptions::CircuitOpenError` instead, so `rescue
   PageFetcher::Exceptions::Error` catches every failure the client produces. A constant alias
@@ -404,6 +411,17 @@ Camoufox exists. Swapping the container for another fetcher changes no Ruby.
   comes back to the caller as the page. A subresource redirected to a private address is not
   caught. Both gaps are acceptable for a loopback service whose URLs come from our own jobs; a
   fetcher that will hit anything it is told to is still a footgun worth narrowing.
+- **Channels the route never sees at all.** `page.route` only ever sees HTTP(S) requests the page
+  makes through the normal fetch/XHR/navigation paths. It never sees WebSocket connections
+  (`ws://`/`wss://`) -- and a WebSocket has no CORS, so a hostile page's script can open one to a
+  private service, read its replies, and forward them out; WebRTC, which can reach a private
+  address entirely outside the page's HTTP stack; or popups, since the route is scoped to one page
+  and it is unverified whether the profile even allows popups to open. No in-page fix was taken:
+  wrapping `window.WebSocket` cannot be verified against Camoufox's isolated worlds (the page script
+  and the wrapper may not share the same object), and installing one would itself be a
+  fingerprinting signal on every page fetched. These gaps, like the two above, are why a
+  network-level egress block on the fetcher's container network is the fix that actually closes
+  them (see the feature doc's "What the address checks do not cover" and "Where it runs").
 - **No authentication.** Same posture as the Open Library API: a private backend, never on a
   public request path. On one machine the compose bind address enforces that; behind a tunnel,
   Cloudflare Access must (Context).
