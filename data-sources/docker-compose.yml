@@ -38,3 +38,41 @@ services:
       - /data
       - --memory-limit
       - 12GB
+
+  # The page fetcher (docs/features/page-fetcher-service.md). Its own image, so
+  # the Open Library image never carries Firefox; a fresh browser per fetch.
+  fetcher:
+    build:
+      context: .
+      dockerfile: fetcher.Dockerfile
+    image: the-greatest/page-fetcher:latest
+    restart: unless-stopped
+    ports:
+      # Loopback by default, the same rule as `api`: set FETCHER_BIND=0.0.0.0
+      # only where Rails is not on this host, and never on a public request path.
+      - "${FETCHER_BIND:-127.0.0.1}:8081:8081"
+    shm_size: 1g
+    mem_limit: 2g
+    environment:
+      # Every variable the service reads, forwarded with its default. Compose
+      # does not pass through a host variable that is not listed here.
+      FETCHER_MAX_CONCURRENCY: "${FETCHER_MAX_CONCURRENCY:-2}"
+      FETCHER_HOST_INTERVAL_MS: "${FETCHER_HOST_INTERVAL_MS:-2000}"
+      FETCHER_MAX_LAUNCH_FAILURES: "${FETCHER_MAX_LAUNCH_FAILURES:-3}"
+      FETCHER_MAX_HTML_BYTES: "${FETCHER_MAX_HTML_BYTES:-5242880}"
+      FETCHER_DEFAULT_TIMEOUT_MS: "${FETCHER_DEFAULT_TIMEOUT_MS:-30000}"
+      FETCHER_MAX_TIMEOUT_MS: "${FETCHER_MAX_TIMEOUT_MS:-60000}"
+      FETCHER_LOCALE: "${FETCHER_LOCALE:-en-US}"
+      # Firefox takes its timezone from TZ. Without it the container is UTC,
+      # which does not match a US residential IP with an en-US locale.
+      # America/Chicago is the development machine's zone; set FETCHER_TZ to
+      # the home server's zone if it differs.
+      TZ: "${FETCHER_TZ:-America/Chicago}"
+    healthcheck:
+      # Marks a process that stops answering as unhealthy in `docker ps`.
+      # Docker restarts only on exit, so this restarts nothing (spec §3).
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8081/health').status == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

@@ -17,8 +17,8 @@ dependencies = [
 # calibration (Task 27) and must never be installed into the API image.
 [project.optional-dependencies]
 calibration = ["splink>=4.0,<5"]
-# Camoufox pulls Playwright. Only the fetcher image and CI install it; the
-# Open Library image never does.
+# Camoufox pulls Playwright. Every install uses it except the Open Library
+# image, which never does.
 fetcher = ["camoufox>=0.5.6,<0.6"]
 
 [dependency-groups]
