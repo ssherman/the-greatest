@@ -12,8 +12,13 @@ module PageFetcher
       ].each { |error_class| assert_operator error_class, :<, Exceptions::Error }
     end
 
-    test "the circuit-open error is not the Open Library one" do
-      assert_not_equal Books::OpenLibrary::Exceptions::CircuitOpenError, Exceptions::CircuitOpenError
+    test "client, server and upstream errors are siblings, not parent/child" do
+      assert_not_operator Exceptions::UpstreamError, :<, Exceptions::ServerError
+      assert_not_operator Exceptions::UpstreamError, :<, Exceptions::ClientError
+    end
+
+    test "the circuit-open error is not catchable as an Open Library error" do
+      assert_not_operator Exceptions::CircuitOpenError, :<, Books::OpenLibrary::Exceptions::Error
     end
 
     test "an HTTP error carries the status, the body and the service's error code" do

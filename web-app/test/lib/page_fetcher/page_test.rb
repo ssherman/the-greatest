@@ -36,10 +36,18 @@ module PageFetcher
       assert_raises(ArgumentError) { PageFetcher::Page.from_response(BODY.merge("fetched_at" => "yesterday")) }
     end
 
-    test "inspect and to_s never include the html" do
+    test "a non-string fetched_at raises ArgumentError" do
+      assert_raises(ArgumentError) { PageFetcher::Page.from_response(BODY.merge("fetched_at" => 1758909731)) }
+    end
+
+    test "a null html raises ArgumentError" do
+      assert_raises(ArgumentError) { PageFetcher::Page.from_response(BODY.merge("html" => nil)) }
+    end
+
+    test "inspect, to_s and pretty_inspect never include the html" do
       page = PageFetcher::Page.from_response(BODY)
 
-      [page.inspect, page.to_s].each do |text|
+      [page.inspect, page.to_s, page.pretty_inspect].each do |text|
         assert_no_match(/xxxxx/, text)
         assert_includes text, "bytes"
         assert_includes text, "403"
