@@ -26,7 +26,9 @@ module PageFetcher
     end
 
     # @return [PageFetcher::Page]
-    # @raise [PageFetcher::Exceptions::Error] or a subclass, and nothing else
+    # @raise [PageFetcher::Exceptions::Error] or a subclass for every failure
+    #   this client recognizes. A Redis error from the breaker itself is not
+    #   wrapped and escapes as-is (same as the Open Library client).
     def fetch(url, wait_until: "load", wait_for_selector: nil, timeout_ms: 30_000)
       body = {url: url, wait_until: wait_until, timeout_ms: timeout_ms}
       body[:wait_for_selector] = wait_for_selector if wait_for_selector.present?

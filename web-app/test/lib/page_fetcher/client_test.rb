@@ -2,6 +2,8 @@
 
 require "test_helper"
 require "ostruct"
+require "logger"
+require "stringio"
 
 module PageFetcher
   class ClientTest < ActiveSupport::TestCase
@@ -169,10 +171,12 @@ module PageFetcher
       assert @breaker.open?
     end
 
-    test "a connection failure raises NetworkError" do
+    test "a connection failure raises NetworkError and counts against the breaker" do
       stub_request(:post, FETCH_URL).to_raise(Faraday::ConnectionFailed)
 
-      assert_raises(PageFetcher::Exceptions::NetworkError) { @client.fetch(PAGE_URL) }
+      5.times { assert_raises(PageFetcher::Exceptions::NetworkError) { @client.fetch(PAGE_URL) } }
+
+      assert @breaker.open?
     end
 
     test "an unparseable 200 raises ParseError and counts against the breaker" do
@@ -197,7 +201,10 @@ module PageFetcher
     end
 
     test "the connection uses the configured open timeout" do
-      assert_equal 3, @client.connection.options.open_timeout
+      config = PageFetcher::Configuration.new(base_url: BASE_URL, open_timeout: 7)
+      client = PageFetcher::Client.new(config: config, breaker: @breaker)
+
+      assert_equal 7, client.connection.options.open_timeout
     end
 
     test "builds a default configuration and breaker when none is given" do
@@ -207,22 +214,33 @@ module PageFetcher
       assert_instance_of Books::OpenLibrary::CircuitBreaker, client.breaker
     end
 
-    test "a 200 missing a required key is a ParseError with no response body and no HTML in the message" do
+    test "a 200 missing a required key is a ParseError with no response body and the KeyError message" do
       stub_request(:post, FETCH_URL).to_return(status: 200, body: page_body.sub('"final_url"', '"other_url"'))
 
       error = assert_raises(PageFetcher::Exceptions::ParseError) { @client.fetch(PAGE_URL) }
 
       assert_nil error.response_body
-      assert_no_match(/<html>Gatsby<\/html>/, error.message)
+      assert_equal 'Failed to parse the fetch response: key not found: "final_url"', error.message
     end
 
-    test "a non-JSON 200 body is a ParseError with no response body and no body text in the message" do
+    test "a non-JSON 200 body is a ParseError with no response body and a fixed message, never the body" do
       stub_request(:post, FETCH_URL).to_return(status: 200, body: "<html>not json at all</html>")
 
       error = assert_raises(PageFetcher::Exceptions::ParseError) { @client.fetch(PAGE_URL) }
 
       assert_nil error.response_body
-      assert_no_match(/<html>not json at all<\/html>/, error.message)
+      assert_equal "The fetch response is not JSON", error.message
+    end
+
+    test "the page HTML never reaches the Faraday logger" do
+      io = StringIO.new
+      config = PageFetcher::Configuration.new(base_url: BASE_URL, logger: Logger.new(io))
+      client = PageFetcher::Client.new(config: config, breaker: @breaker)
+      stub_request(:post, FETCH_URL).to_return(status: 200, body: page_body)
+
+      client.fetch(PAGE_URL)
+
+      refute_includes io.string, "<html>Gatsby</html>"
     end
   end
 end

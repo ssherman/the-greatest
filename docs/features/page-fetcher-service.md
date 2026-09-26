@@ -117,9 +117,10 @@ Every failure is a `PageFetcher::Exceptions::Error`:
 
 | Raised | When | Counts against the breaker |
 |---|---|---|
-| `ClientError` | 400 or 422: a bad URL, selector or body (`error_code` says which) | no |
+| `ClientError` | any 4xx: a bad URL, selector or body (`error_code` says which) | no |
 | `UpstreamError` | `upstream_unreachable`, `html_too_large` | no |
 | `ServerError` | `browser_error`, `browser_unavailable`, `navigation_timeout`, any other 5xx | yes |
+| `HttpError` | any other status (e.g. a 3xx -- Faraday does not follow redirects) | yes |
 | `TimeoutError`, `NetworkError` | the service did not answer | yes |
 | `ParseError` | a 200 that is not a fetch response | yes |
 | `CircuitOpenError` | five counted failures in a row; 60 s cooldown | — |
