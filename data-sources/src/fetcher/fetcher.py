@@ -259,7 +259,14 @@ class Fetcher:
             hop = ("the page's redirect hops", "could not be checked in time")
         if hop is not None:
             host, reason = hop
-            raise FetchError("invalid_url", 400, f"the page went through {host}, which {reason}")
+            detail = f"the page went through {host}, which {reason}"
+            # The backstop failed closed rather than found a non-public address:
+            # that is this service's own DNS coming up empty or too slow, not
+            # something wrong with the request, so it is retryable (502) rather
+            # than the caller's fault (400).
+            if reason in ("no longer resolves", "could not be checked in time"):
+                raise FetchError("upstream_unreachable", 502, detail)
+            raise FetchError("invalid_url", 400, detail)
         if not responses:
             raise FetchError("browser_error", 502, "navigation produced no document response")
 

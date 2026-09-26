@@ -81,6 +81,39 @@ async def test_a_slot_wait_longer_than_the_budget_times_out_and_leaks_no_slot():
         pass
 
 
+async def test_a_spacing_timeout_does_not_leak_the_host_lock():
+    limiter = Limiter(max_concurrency=2, host_interval_s=0.2)
+    async with limiter.slot("a.example", Budget(5)):
+        pass
+    with pytest.raises(StageTimeout) as caught:
+        async with limiter.slot("a.example", Budget(0.05)):
+            pass
+    assert caught.value.stage == "waiting for host spacing"
+    await asyncio.sleep(0.25)  # let the interval pass
+    async with limiter.slot("a.example", Budget(0.5)):
+        pass  # would time out on "waiting for host spacing" if the lock leaked
+
+
+async def test_a_slot_timeout_does_not_leak_the_host_lock():
+    limiter = Limiter(max_concurrency=1, host_interval_s=0)
+    release = asyncio.Event()
+
+    async def holder():
+        async with limiter.slot("a.example", Budget(5)):
+            await release.wait()
+
+    task = asyncio.create_task(holder())
+    await asyncio.sleep(0.01)
+    with pytest.raises(StageTimeout) as caught:
+        async with limiter.slot("b.example", Budget(0.1)):
+            pass
+    assert caught.value.stage == "waiting for a slot"
+    release.set()
+    await task
+    async with limiter.slot("b.example", Budget(0.5)):
+        pass  # would time out on "waiting for host spacing" if b.example's own lock leaked
+
+
 async def test_yields_whether_the_fetch_had_to_wait():
     limiter = Limiter(max_concurrency=2, host_interval_s=0.05)
     async with limiter.slot("a.example", Budget(5)) as waited:

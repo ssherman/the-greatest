@@ -40,15 +40,14 @@ RUN useradd --create-home --uid 10001 fetcher
 USER fetcher
 
 # One named browser build (spec §4). `camoufox fetch <version>` with an
-# explicit version installs exactly that build and marks it active
-# (multiversion.py's install_versioned calls set_active() then touches its
-# install-completion flag). `camoufox set` followed by a bare `camoufox
-# fetch` is NOT equivalent and must not be used: `set` never touches that
-# flag, so the bare `fetch` that follows sees a non-empty, flag-less install
-# dir, deletes it, and falls through to "newest stable in the channel" --
-# silently discarding the pin the day a newer build ships. install_check
-# verifies the install, because fetch exits 0 on failure. The browser lands
-# in ~fetcher/.cache/camoufox.
+# explicit version installs exactly that build and marks it active. Do NOT
+# use `camoufox set` followed by a bare `camoufox fetch`: on a fresh cache
+# `set` refuses to pin at all ("No repo cache found. Run 'camoufox sync'
+# first."), so the bare `fetch` that follows installs whatever is newest in
+# the channel; and even after a `sync`, a bare `fetch` wipes the flag-less
+# install directory -- and the pin with it. install_check verifies the
+# install, because fetch exits 0 on failure. The browser lands in
+# ~fetcher/.cache/camoufox.
 ARG CAMOUFOX_BROWSER=official/stable/152.0.4-beta.31
 ENV CAMOUFOX_BROWSER=${CAMOUFOX_BROWSER}
 RUN camoufox fetch "$CAMOUFOX_BROWSER" \

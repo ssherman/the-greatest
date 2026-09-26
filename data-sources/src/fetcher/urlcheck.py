@@ -17,6 +17,15 @@ from urllib.parse import urlsplit
 
 Resolver = Callable[[str], Awaitable[list[str]]]
 
+# WHATWG "forbidden host code point" set, plus the ASCII range this service also
+# refuses: C0 controls (U+0000-U+001F) and space (U+0020) truncate or confuse
+# getaddrinfo; DEL (U+007F); backslash, which Firefox treats as `/` but Python's
+# urlsplit does not, so a host like `127.0.0.1\.x.attacker.com` is one hostname
+# to Python's resolver and a different one (`127.0.0.1`) to Firefox's navigation.
+# `:` is forbidden only in a non-IP host -- checked separately, since a bracketed
+# IPv6 literal's bracket-stripped form needs its colons.
+_OTHER_FORBIDDEN_HOST_CHARS = frozenset("#/<>?@[]^|\\%:")
+
 
 class InvalidUrl(ValueError):
     """Not a URL the service will fetch. Maps to 400 invalid_url."""
@@ -50,7 +59,26 @@ def parse(url: str) -> Target:
         raise InvalidUrl("the URL must not embed credentials")
     if not parts.hostname:
         raise InvalidUrl("the URL has no host")
-    return Target(url=url, host=parts.hostname)
+    host = parts.hostname
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        # Not an IP literal: colons are forbidden here too (a bracketed IPv6
+        # literal's colons are exempted above, by parsing successfully).
+        bad_char = _forbidden_host_char(host)
+        if bad_char is not None:
+            raise InvalidUrl(
+                f"the host {host!r} contains a forbidden character: {bad_char!r}"
+            ) from None
+    return Target(url=url, host=host)
+
+
+def _forbidden_host_char(host: str) -> str | None:
+    """The first WHATWG forbidden host code point in `host`, or None."""
+    for ch in host:
+        if ord(ch) <= 0x20 or ord(ch) == 0x7F or ch in _OTHER_FORBIDDEN_HOST_CHARS:
+            return ch
+    return None
 
 
 def is_public(address: str) -> bool:
@@ -61,7 +89,12 @@ def is_public(address: str) -> bool:
             if embedded is not None and not is_public(str(embedded)):
                 return False
     return ip.is_global and not (
-        ip.is_multicast or ip.is_reserved or ip.is_loopback or ip.is_link_local or ip.is_unspecified
+        ip.is_multicast
+        or ip.is_reserved
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_unspecified
+        or getattr(ip, "is_site_local", False)  # IPv6 fec0::/10; IPv4 has no such attribute
     )
 
 
@@ -69,6 +102,9 @@ class HostChecker:
     def __init__(self, resolver: Resolver = system_resolver) -> None:
         self._resolver = resolver
         self._answers: dict[str, str | None] = {}
+        # A failed lookup is cached too, so a dead or unencodable host is not
+        # re-resolved for every subresource on the page.
+        self._errors: dict[str, InvalidUrl | Unresolvable] = {}
 
     async def non_public_address(self, host: str) -> str | None:
         """The first address `host` resolves to that is not public, or None when
@@ -76,16 +112,24 @@ class HostChecker:
         host cannot be a hostname at all."""
         if host in self._answers:
             return self._answers[host]
+        if host in self._errors:
+            raise self._errors[host]
         try:
             addresses = await self._resolver(host)
         except UnicodeError:
             # getaddrinfo IDNA-encodes the host first; a label over 63
             # characters fails here, before any lookup.
-            raise InvalidUrl(f"{host!r} is not a valid hostname") from None
+            error: InvalidUrl | Unresolvable = InvalidUrl(f"{host!r} is not a valid hostname")
+            self._errors[host] = error
+            raise error from None
         except OSError as exc:  # socket.gaierror is an OSError
-            raise Unresolvable(f"{host} did not resolve: {exc}") from None
+            error = Unresolvable(f"{host} did not resolve: {exc}")
+            self._errors[host] = error
+            raise error from None
         if not addresses:
-            raise Unresolvable(f"{host} resolved to no addresses")
+            error = Unresolvable(f"{host} resolved to no addresses")
+            self._errors[host] = error
+            raise error
         answer = next((address for address in addresses if not is_public(address)), None)
         self._answers[host] = answer
         return answer

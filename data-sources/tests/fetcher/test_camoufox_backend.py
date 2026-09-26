@@ -8,6 +8,7 @@ import pytest
 
 from fetcher.api.main import create_app
 from fetcher.browser import CamoufoxBrowser, LaunchFailed
+from fetcher.fetcher import exit_process
 
 
 def test_create_app_without_a_fetcher_uses_camoufox_and_the_environment(monkeypatch):
@@ -21,6 +22,9 @@ def test_create_app_without_a_fetcher_uses_camoufox_and_the_environment(monkeypa
     health = service.health()
     assert health["camoufox_version"] == importlib.metadata.version("camoufox")
     assert health["browser_build"] == "official/stable/152.0.4-beta.31"
+    # A background close that hangs must exit the process the same way a
+    # foreground one would (browser.py's `_close_with_limit`).
+    assert service._browser._on_close_hang is exit_process
 
 
 def test_describe_says_unknown_when_the_build_is_not_set(monkeypatch):
@@ -104,6 +108,7 @@ async def test_cancelling_during_new_page_closes_the_browser_in_the_background(m
     `launch(...)` during it; the fake browser must end up closed."""
 
     entered = asyncio.Event()
+    closed = asyncio.Event()
 
     class _FakeBrowser:
         def __init__(self) -> None:
@@ -116,6 +121,7 @@ async def test_cancelling_during_new_page_closes_the_browser_in_the_background(m
 
         async def close(self) -> None:
             self.closed = True
+            closed.set()
 
     fake_browser = _FakeBrowser()
 
@@ -131,7 +137,10 @@ async def test_cancelling_during_new_page_closes_the_browser_in_the_background(m
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    await asyncio.sleep(0.3)
+    # The launch task keeps running in the background (it was shielded); wait
+    # for its done-callback to close the fake browser (a fixed sleep here can
+    # flake under load, as test 1 above already fixed).
+    await asyncio.wait_for(closed.wait(), 5)
     assert fake_browser.closed
 
 

@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def expected_build(spec: str) -> str:
-    """`official/stable/152.0.4-beta.30` -> `152.0.4-beta.30`."""
+    """`official/stable/152.0.4-beta.31` -> `152.0.4-beta.31`."""
     return spec.rstrip("/").rsplit("/", 1)[-1].removeprefix("v")
 
 

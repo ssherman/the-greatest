@@ -47,6 +47,8 @@ services:
       dockerfile: fetcher.Dockerfile
     image: the-greatest/page-fetcher:latest
     restart: unless-stopped
+    # Uvicorn is PID 1 and never reaps the Firefox children Playwright kills.
+    init: true
     ports:
       # Loopback by default, the same rule as `api`: set FETCHER_BIND=0.0.0.0
       # only where Rails is not on this host, and never on a public request path.

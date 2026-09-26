@@ -5,6 +5,7 @@ import re
 
 import pytest
 
+from fetcher import fetcher as fetcher_module
 from fetcher.browser import (
     BrowserError,
     DocumentResponse,
@@ -22,13 +23,20 @@ pytestmark = pytest.mark.anyio
 DNS = {"intranet.example": ["10.0.0.7"], "gone.example": OSError("Name or service not known")}
 
 
-def build(*scripts, settings=None, default=None, close_limit_s=0.2, launch_hang_s=LAUNCH_HANG_S):
+def build(
+    *scripts,
+    settings=None,
+    default=None,
+    close_limit_s=0.2,
+    launch_hang_s=LAUNCH_HANG_S,
+    resolver_fn=None,
+):
     fatal: list[str] = []
     browser = FakeBrowser(*scripts, default=default)
     fetcher = Fetcher(
         settings or Settings(host_interval_ms=0),
         browser,
-        resolver=resolver(DNS),
+        resolver=resolver_fn or resolver(DNS),
         on_fatal=fatal.append,
         close_limit_s=close_limit_s,
         launch_hang_s=launch_hang_s,
@@ -192,6 +200,33 @@ async def test_a_redirect_through_a_private_address_returns_no_page():
     error = await fetch_error(fetcher)
     assert (error.code, error.http_status) == ("invalid_url", 400)
     assert "intranet.example" in error.detail
+    assert browser.sessions[0].closed
+
+
+async def test_a_redirect_hop_that_no_longer_resolves_is_upstream_unreachable():
+    # Unlike a hop that resolves to a private address, this is the backstop's
+    # own DNS failing, not something wrong with the request -- retryable (502).
+    hops = ("https://books.example/go", "http://gone.example/")
+    fetcher, browser, _ = build(
+        Script(responses=[DocumentResponse(PAGE_URL, 200, redirect_chain=hops)])
+    )
+    error = await fetch_error(fetcher)
+    assert (error.code, error.http_status) == ("upstream_unreachable", 502)
+    assert "gone.example" in error.detail
+    assert browser.sessions[0].closed
+
+
+async def test_the_redirect_check_timing_out_is_upstream_unreachable(monkeypatch):
+    monkeypatch.setattr(fetcher_module, "REDIRECT_CHECK_LIMIT_S", 0.05)
+
+    async def slow_resolver(host):
+        await asyncio.sleep(1)
+        return ["93.184.215.14"]
+
+    fetcher, browser, _ = build(resolver_fn=slow_resolver)
+    error = await fetch_error(fetcher)
+    assert (error.code, error.http_status) == ("upstream_unreachable", 502)
+    assert "checked in time" in error.detail
     assert browser.sessions[0].closed
 
 

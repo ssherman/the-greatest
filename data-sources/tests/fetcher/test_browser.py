@@ -32,6 +32,11 @@ def test_a_playwright_timeout_is_a_navigation_timeout_reported_by_its_first_line
         "page.goto: NS_ERROR_NET_INTERRUPT",
         "page.goto: NS_ERROR_NET_TIMEOUT",
         "page.goto: NS_ERROR_OFFLINE",
+        "page.goto: NS_ERROR_REDIRECT_LOOP",
+        "page.goto: NS_ERROR_NET_EMPTY_RESPONSE",
+        "page.goto: NS_ERROR_NET_PARTIAL_TRANSFER",
+        "page.goto: NS_ERROR_NET_INADEQUATE_SECURITY",
+        "page.goto: NS_ERROR_CORRUPTED_CONTENT",
         "page.goto: SSL_ERROR_BAD_CERT_DOMAIN",
         "page.goto: SEC_ERROR_UNKNOWN_ISSUER",
         "page.goto: MOZILLA_PKIX_ERROR_SELF_SIGNED_CERT",
@@ -55,6 +60,11 @@ def test_a_network_failure_is_upstream_unreachable(first_line):
         "page.wait_for_selector: SyntaxError: Document.querySelectorAll: "
         "'div:first' is not a valid selector",
         "page.wait_for_selector: SyntaxError: The expression is not a legal expression.",
+        'page.wait_for_selector: "has-text" engine expects a single string',  # h1:has-text(Price)
+        "page.wait_for_selector: Only one of the selectors can capture using * modifier",
+        "page.wait_for_selector: Selector cannot start with entering frame, "
+        "select the iframe first",
+        'page.wait_for_selector: Invalid frame in aria-ref selector "aria-ref=e1"',
     ],
 )
 def test_an_unparseable_selector_is_invalid_selector(message):
@@ -89,5 +99,7 @@ def test_no_fetcher_module_imports_camoufox_or_playwright_at_import_time():
         "leaked = sorted(n for n in sys.modules if n.split('.')[0] in ('camoufox', 'playwright'))\n"
         "assert not leaked, leaked\n"
     )
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=60
+    )
     assert result.returncode == 0, result.stderr

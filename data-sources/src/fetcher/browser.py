@@ -2,9 +2,10 @@
 
 `Fetcher` depends on the thin `Browser` and `BrowserSession` protocols below and
 makes every decision itself. This module only drives a browser and reports what
-happened in the service's own exception types. It is the only module that
-imports camoufox or playwright, and only inside functions, so every other module
-imports without the `fetcher` extra installed.
+happened in the service's own exception types. It is the only runtime module
+that imports camoufox or playwright, and only inside functions, so every other
+module imports without the `fetcher` extra installed. (`install_check.py` also
+imports camoufox, but only at build time, not while the service is running.)
 """
 
 from __future__ import annotations
@@ -97,6 +98,10 @@ INVALID_SELECTOR_MARKERS = (
     "selector cannot be first",
     "is not a valid selector",
     "is not a legal expression",
+    " engine expects ",
+    "Only one of the selectors can capture using * modifier",
+    "Selector cannot start with entering frame",
+    "Invalid frame in aria-ref selector",
 )
 
 # Firefox error names that mean the site could not be reached, as opposed to
@@ -108,9 +113,17 @@ UPSTREAM_ERROR_MARKERS = (
     "NS_ERROR_NET_INTERRUPT",
     "NS_ERROR_NET_TIMEOUT",
     "NS_ERROR_OFFLINE",
+    "NS_ERROR_REDIRECT_LOOP",
+    "NS_ERROR_NET_EMPTY_RESPONSE",
+    "NS_ERROR_NET_PARTIAL_TRANSFER",
+    "NS_ERROR_NET_INADEQUATE_SECURITY",
+    "NS_ERROR_CORRUPTED_CONTENT",
     "SSL_ERROR_",
     "SEC_ERROR_",
     "MOZILLA_PKIX_ERROR_",
+    # NS_ERROR_FAILURE and NS_BINDING_ABORTED are NOT upstream markers: a
+    # blocked navigation surfaces as one of these and must stay a BrowserError
+    # so the Fetcher can map it through blocked_navigations.
 )
 
 

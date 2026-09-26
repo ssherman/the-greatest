@@ -23,6 +23,7 @@ from tests.fetcher.fakes import PUBLIC_ADDRESS, resolver
         ("HTTPS://Example.COM./path", "example.com."),
         ("https://books.example:8443/x#reviews", "books.example"),
         ("http://bücher.example/", "bücher.example"),
+        ("http://[2606:4700:4700::1111]/", "2606:4700:4700::1111"),
     ],
 )
 def test_parse_accepts_http_and_https(url, host):
@@ -42,6 +43,10 @@ def test_parse_accepts_http_and_https(url, host):
         "http://user@books.example/",
         "http://books.example:99999/",
         "http://[::1/",
+        "http://exa\x00mple.com/",  # NUL: getaddrinfo truncates at it, Python does not
+        "http://127.0.0.1\\.x.attacker.com/",  # backslash: `/` to Firefox, not to Python
+        "http://books.example%2e/",  # percent-encoded, unresolved by urlsplit
+        "http://books example.com/",  # a literal space
     ],
 )
 def test_parse_rejects_what_the_service_will_not_fetch(url):
@@ -70,6 +75,7 @@ def test_parse_rejects_what_the_service_will_not_fetch(url):
         "fc00::1",
         "::ffff:127.0.0.1",
         "2002:7f00:1::",  # 6to4 wrapping 127.0.0.1
+        "fec0::1",  # deprecated IPv6 site-local
     ],
 )
 def test_non_public_addresses(address):
@@ -132,6 +138,26 @@ async def test_each_host_is_resolved_once_per_checker():
 
 
 @pytest.mark.anyio
+async def test_a_failed_lookup_is_cached_too():
+    dns = resolver({"gone.example": OSError("boom")})
+    checker = HostChecker(dns)
+    with pytest.raises(Unresolvable):
+        await checker.non_public_address("gone.example")
+    with pytest.raises(Unresolvable):
+        await checker.non_public_address("gone.example")
+    assert dns.calls == ["gone.example"]
+
+
+@pytest.mark.anyio
+async def test_a_non_public_answer_is_cached_too():
+    dns = resolver({"intranet.example": ["10.0.0.7"]})
+    checker = HostChecker(dns)
+    assert await checker.non_public_address("intranet.example") == "10.0.0.7"
+    assert await checker.non_public_address("intranet.example") == "10.0.0.7"
+    assert dns.calls == ["intranet.example"]
+
+
+@pytest.mark.anyio
 async def test_separate_checkers_do_not_share_answers():
     dns = resolver({})
     await HostChecker(dns).check("https://books.example/")
@@ -153,6 +179,7 @@ async def test_separate_checkers_do_not_share_answers():
         "http://[::ffff:127.0.0.1]/",
         "http://169.254.169.254/latest/meta-data/",
         "http://10.0.0.1:6379/",
+        "http://[2002:7f00:1::]/",  # 6to4 wrapping 127.0.0.1
     ],
 )
 async def test_ip_literals_in_any_encoding_are_refused(url):
