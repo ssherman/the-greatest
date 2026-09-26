@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 
 from fetcher import __version__
 from fetcher.api.routes import build_router
-from fetcher.fetcher import Fetcher, FetchError
+from fetcher.fetcher import Fetcher, FetchError, exit_process
 from fetcher.settings import Settings
 
 
@@ -24,7 +24,12 @@ def create_app(fetcher: Fetcher | None = None) -> FastAPI:
         from fetcher.browser import CamoufoxBrowser
 
         settings = Settings.from_env()
-        fetcher = Fetcher(settings, CamoufoxBrowser(locale=settings.locale))
+        # The same fatal hook the Fetcher's own foreground close uses, so a
+        # background close that hangs (browser.py's `_close_with_limit`) exits
+        # the process exactly like one caught in the foreground would.
+        fetcher = Fetcher(
+            settings, CamoufoxBrowser(locale=settings.locale, on_close_hang=exit_process)
+        )
     service = fetcher
 
     @asynccontextmanager

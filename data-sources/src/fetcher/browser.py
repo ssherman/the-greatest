@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import functools
 import importlib.metadata
+import json
 import logging
 import os
 from collections.abc import Awaitable, Callable
@@ -148,15 +149,26 @@ class CamoufoxBrowser:
     one set of launch options, and so one fingerprint, for the life of the
     process; a fresh Firefox for every fetch."""
 
-    def __init__(self, locale: str) -> None:
+    def __init__(
+        self,
+        locale: str,
+        *,
+        on_close_hang: Callable[[str], None] | None = None,
+        close_limit_s: float = 5.0,
+    ) -> None:
         self._locale = locale
         self._playwright: Any = None
         self._display: Any = None
         self._options: dict[str, Any] | None = None
+        self._on_close_hang = on_close_hang
+        self._close_limit_s = close_limit_s
         # Background browser closes started on cancellation (Addendum B): kept
         # here so the task is not garbage-collected mid-flight, discarded once
         # it is done.
         self._background_closes: set[asyncio.Task[None]] = set()
+        # Launch tasks, held the same way (fix round 1, Minor 6): a task with
+        # no other strong reference can be garbage collected mid-flight.
+        self._launch_tasks: set[asyncio.Task[Any]] = set()
 
     async def start(self) -> None:
         from camoufox.pkgman import camoufox_path, launch_path
@@ -183,26 +195,42 @@ class CamoufoxBrowser:
         self._playwright = await async_playwright().start()
 
     async def stop(self) -> None:
-        if self._playwright is not None:
-            await self._playwright.stop()
-            self._playwright = None
-        if self._display is not None:
-            self._display.kill()
-            self._display = None
+        if self._background_closes:
+            # Give any background close (Addendum B) a chance to finish before
+            # tearing down the driver and display it may still be using.
+            await asyncio.wait(self._background_closes, timeout=self._close_limit_s)
+        try:
+            if self._playwright is not None:
+                await self._playwright.stop()
+                self._playwright = None
+        finally:
+            # Exception-safe (fix round 1, Minor 5): a `playwright.stop()`
+            # failure must not leak the Xvfb display.
+            if self._display is not None:
+                self._display.kill()
+                self._display = None
 
     async def launch(self, request_filter: RequestFilter, timeout_s: float) -> BrowserSession:
         if self._playwright is None or self._options is None:
             raise LaunchFailed("the browser backend has not been started")
         from camoufox.async_api import AsyncNewBrowser
 
-        options = {**self._options, "timeout": playwright_ms(timeout_s)}
+        # 1s of headroom behind the Fetcher's own budget (fix round 1, Minor
+        # 1): the Fetcher's deadline must fire first, so Playwright's own
+        # launch timeout is a backstop, not a race that could turn a starved
+        # launch into a counted LaunchFailed.
+        options = {**self._options, "timeout": playwright_ms(timeout_s + 1.0)}
         # Started as its own task and awaited through shield (Addendum B): a
         # cancellation landing here must not leave a Firefox nobody holds. The
         # shield keeps the task itself running so it can still be closed once
-        # it lands; the done-callback does that closing.
+        # it lands; the done-callback does that closing. Held in a set until
+        # done, like the background closes, so it is never garbage collected
+        # mid-flight (Minor 6).
         launch_task: asyncio.Task[Any] = asyncio.ensure_future(
             AsyncNewBrowser(self._playwright, from_options=options)
         )
+        self._launch_tasks.add(launch_task)
+        launch_task.add_done_callback(self._launch_tasks.discard)
         try:
             browser = await asyncio.shield(launch_task)
         except asyncio.CancelledError:
@@ -238,9 +266,22 @@ class CamoufoxBrowser:
         self._close_in_background(task.result())
 
     def _close_in_background(self, browser: Any) -> None:
-        close_task = asyncio.ensure_future(_close_quietly(browser))
+        close_task = asyncio.ensure_future(self._close_with_limit(browser))
         self._background_closes.add(close_task)
         close_task.add_done_callback(self._background_closes.discard)
+
+    async def _close_with_limit(self, browser: Any) -> None:
+        """A background close still obeys the Fetcher's own close limit (spec
+        §3): a Firefox that will not close is a leaked process outside the
+        concurrency cap, so this logs it (never the HTML) and calls the same
+        fatal hook a foreground close uses."""
+        try:
+            await asyncio.wait_for(_close_quietly(browser), self._close_limit_s)
+        except TimeoutError:
+            reason = f"a background browser close did not finish within {self._close_limit_s:g}s"
+            log.critical(json.dumps({"event": "close_hung", "limit_s": self._close_limit_s}))
+            if self._on_close_hang is not None:
+                self._on_close_hang(reason)
 
     def describe(self) -> dict[str, str]:
         try:

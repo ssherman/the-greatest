@@ -54,7 +54,7 @@ returns `url`, `final_url`, `status` (the site's status), `title`, `html`,
 |---|---|---|
 | 400 | `invalid_url` | Bad scheme, embedded credentials, or a non-public address anywhere on the way |
 | 400 | `invalid_selector` | `wait_for_selector` does not parse |
-| 422 | FastAPI's body | Unknown field, bad `wait_until`, `timeout_ms` outside 1000–60000 |
+| 422 | FastAPI's body | Unknown field, bad `wait_until`, `timeout_ms` outside 1000–`FETCHER_MAX_TIMEOUT_MS` (default 60000) |
 | 502 | `upstream_unreachable` | DNS, a refused or reset connection, TLS |
 | 502 | `html_too_large` | Over 5 MB of HTML |
 | 502 | `browser_error` | Anything else the browser raised |
