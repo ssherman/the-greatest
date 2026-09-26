@@ -39,14 +39,19 @@ ENV PATH="/app/.venv/bin:$PATH"
 RUN useradd --create-home --uid 10001 fetcher
 USER fetcher
 
-# One named browser build (spec §4). The package does not pin the browser: a
-# bare `camoufox fetch` takes the newest build on GitHub. `camoufox set` pins,
-# `camoufox fetch` installs the pin, and install_check verifies, because fetch
-# exits 0 when a download fails. The browser lands in ~fetcher/.cache/camoufox.
+# One named browser build (spec §4). `camoufox fetch <version>` with an
+# explicit version installs exactly that build and marks it active
+# (multiversion.py's install_versioned calls set_active() then touches its
+# install-completion flag). `camoufox set` followed by a bare `camoufox
+# fetch` is NOT equivalent and must not be used: `set` never touches that
+# flag, so the bare `fetch` that follows sees a non-empty, flag-less install
+# dir, deletes it, and falls through to "newest stable in the channel" --
+# silently discarding the pin the day a newer build ships. install_check
+# verifies the install, because fetch exits 0 on failure. The browser lands
+# in ~fetcher/.cache/camoufox.
 ARG CAMOUFOX_BROWSER=official/stable/152.0.4-beta.31
 ENV CAMOUFOX_BROWSER=${CAMOUFOX_BROWSER}
-RUN camoufox set "$CAMOUFOX_BROWSER" \
- && camoufox fetch \
+RUN camoufox fetch "$CAMOUFOX_BROWSER" \
  && python -m fetcher.install_check
 
 EXPOSE 8081

@@ -53,17 +53,31 @@ def main() -> int:
     # ldd needs LD_LIBRARY_PATH pointing at the browser's own directory:
     # libxul.so's sibling libraries (bundled NSS/NSPR, and Mozilla's private
     # codec/sqlite/sandbox/GTK-glue builds, which ship under names no Debian
-    # package provides) live there, not on a system library path. The real
-    # launch always sets this — it is exactly what Playwright's Firefox
-    # launcher does before it execs the binary — so leaving it unset here
-    # would make every one of those sibling libraries read as "not found"
-    # even on a correctly installed browser.
-    ldd_env = {**os.environ, "LD_LIBRARY_PATH": str(executable.parent)}
+    # package provides) live there, not on a system library path. ldd only
+    # consults the system search path plus LD_LIBRARY_PATH -- it knows
+    # nothing of `dependentlibs.list`, which lists exactly these names and is
+    # what Firefox's own XPCOM glue uses to preload them by absolute path at
+    # real launch time, which is why the browser runs fine with no
+    # LD_LIBRARY_PATH set. Camoufox never references LD_LIBRARY_PATH at all;
+    # Playwright's own dependency validator (missingFileDependencies) sets it
+    # the same way we do here -- appended to whatever is already set, never
+    # replacing it -- for the same reason: so ITS ldd call can resolve these
+    # siblings too.
+    existing_ld_path = os.environ.get("LD_LIBRARY_PATH")
+    ld_library_path = (
+        f"{existing_ld_path}{os.pathsep}{executable.parent}"
+        if existing_ld_path
+        else str(executable.parent)
+    )
+    ldd_env = {**os.environ, "LD_LIBRARY_PATH": ld_library_path}
     missing: list[str] = []
     for binary in (executable, executable.parent / "libxul.so"):
         result = subprocess.run(
             ["ldd", str(binary)], capture_output=True, text=True, check=False, env=ldd_env
         )
+        if result.returncode != 0:
+            print(f"ldd failed on {binary}: {result.stderr.strip()}", file=sys.stderr)
+            return 1
         missing += missing_libraries(result.stdout)
     if missing:
         print(
