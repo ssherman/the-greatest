@@ -172,6 +172,7 @@ Errors are JSON `{"error": "<code>", "detail": "<human text>"}` with a stable co
 | HTTP | `error` | When |
 |---|---|---|
 | 400 | `invalid_url` | Syntax, scheme or credentials fail, or an address rule in §6 fails |
+| 400 | `invalid_selector` | `wait_for_selector` is not a selector Playwright can parse. A caller bug, so it must not count against the breaker the way a `browser_error` would. |
 | 422 | (FastAPI's validation body) | Unknown field, bad enum, `timeout_ms` out of range |
 | 502 | `upstream_unreachable` | The site could not be reached: the DNS lookup failed, the connection was refused or reset, or TLS failed |
 | 502 | `html_too_large` | The document's HTML is over the cap (5MB) |
@@ -454,7 +455,7 @@ private, and what a failure maps to.
 
 `browser.py` is the only module that imports `camoufox` or `playwright`, and it imports them
 lazily inside `CamoufoxBrowser`. It also translates Playwright's exceptions into the service's own
-(`NavigationTimeout`, `UpstreamUnreachable`, `LaunchFailed`, `BrowserError`), so `fetcher.py`
+(`NavigationTimeout`, `UpstreamUnreachable`, `InvalidSelector`, `LaunchFailed`, `BrowserError`), so `fetcher.py`
 never sees a Playwright type. Together these let every other module import without the extra
 installed. `Fetcher` depends on the protocol, not the concrete class; that is what makes the
 service testable without a browser and what would let a plain-HTTP or hosted backend slot in
