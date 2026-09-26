@@ -82,6 +82,16 @@ class Browser(Protocol):
     def describe(self) -> dict[str, str]: ...
 
 
+# Substrings that mean Playwright (or the browser it forwarded the selector to)
+# could not parse the selector at all, as opposed to the browser failing.
+INVALID_SELECTOR_MARKERS = (
+    "while parsing",
+    "Malformed selector",
+    "selector cannot be first",
+    "is not a valid selector",
+    "is not a legal expression",
+)
+
 # Firefox error names that mean the site could not be reached, as opposed to
 # the browser failing.
 UPSTREAM_ERROR_MARKERS = (
@@ -117,7 +127,7 @@ def translate_playwright_error(exc: BaseException) -> BrowserFailure:
     if isinstance(exc, PlaywrightTimeoutError):
         return NavigationTimeout(_first_line(exc))
     if isinstance(exc, PlaywrightError):
-        if "while parsing" in text and "selector" in text:
+        if any(marker in text for marker in INVALID_SELECTOR_MARKERS):
             return InvalidSelector(_first_line(exc))
         if any(marker in text for marker in UPSTREAM_ERROR_MARKERS):
             return UpstreamUnreachable(_first_line(exc))

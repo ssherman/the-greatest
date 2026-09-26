@@ -29,7 +29,9 @@ def test_a_playwright_timeout_is_a_navigation_timeout_reported_by_its_first_line
         "page.goto: NS_ERROR_UNKNOWN_HOST",
         "page.goto: NS_ERROR_CONNECTION_REFUSED",
         "page.goto: NS_ERROR_NET_RESET",
+        "page.goto: NS_ERROR_NET_INTERRUPT",
         "page.goto: NS_ERROR_NET_TIMEOUT",
+        "page.goto: NS_ERROR_OFFLINE",
         "page.goto: SSL_ERROR_BAD_CERT_DOMAIN",
         "page.goto: SEC_ERROR_UNKNOWN_ISSUER",
         "page.goto: MOZILLA_PKIX_ERROR_SELF_SIGNED_CERT",
@@ -45,9 +47,14 @@ def test_a_network_failure_is_upstream_unreachable(first_line):
 @pytest.mark.parametrize(
     "message",
     [
-        'page.wait_for_selector: Unexpected token "[" while parsing css selector "div[[". '
+        'page.wait_for_selector: Unexpected token "" while parsing css selector "div[[". '
         "Did you mean to CSS.escape it?",
         'page.wait_for_selector: Unknown engine "nope" while parsing selector nope=x',
+        "page.wait_for_selector: Malformed selector: near=foo",
+        'page.wait_for_selector: "nth" selector cannot be first',
+        "page.wait_for_selector: SyntaxError: Document.querySelectorAll: "
+        "'div:first' is not a valid selector",
+        "page.wait_for_selector: SyntaxError: The expression is not a legal expression.",
     ],
 )
 def test_an_unparseable_selector_is_invalid_selector(message):
