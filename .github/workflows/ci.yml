@@ -114,8 +114,11 @@ jobs:
           version: "0.11.17"
           enable-cache: true
 
+      # The fetcher extra brings Playwright's Python package so the browser
+      # layer's error translation is tested against its real exception
+      # classes. No browser is ever downloaded.
       - name: Install dependencies (fails on lockfile drift)
-        run: uv sync --locked
+        run: uv sync --locked --extra fetcher
 
       - name: Lint
         run: uv run ruff check .
