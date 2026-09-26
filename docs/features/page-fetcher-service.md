@@ -95,6 +95,39 @@ real-browser test. Run it after any browser or package bump:
 Also fetch a bookshop.org page with `"wait_until":"networkidle"` and read the
 `title`: "Just a moment…" with `status` 403 means Cloudflare's challenge did not clear.
 
+## Rails client
+
+`PageFetcher::Client` (`web-app/app/lib/page_fetcher/`) posts to `/fetch` and
+returns a `PageFetcher::Page`. Configure it with `PAGE_FETCHER_SERVICE_URL`
+(default `http://127.0.0.1:8081`).
+
+```ruby
+page = PageFetcher::Client.new.fetch(
+  "https://bookshop.org/book/9780743273565",
+  wait_until: "networkidle",
+  wait_for_selector: "h1",
+  timeout_ms: 45_000
+)
+page.status          # the SITE's status: a 403 is still a successful fetch
+page.selector_found  # false when the selector never appeared
+page.html            # never logged, and never stored -- store what you parse
+```
+
+Every failure is a `PageFetcher::Exceptions::Error`:
+
+| Raised | When | Counts against the breaker |
+|---|---|---|
+| `ClientError` | 400 or 422: a bad URL, selector or body (`error_code` says which) | no |
+| `UpstreamError` | `upstream_unreachable`, `html_too_large` | no |
+| `ServerError` | `browser_error`, `browser_unavailable`, `navigation_timeout`, any other 5xx | yes |
+| `TimeoutError`, `NetworkError` | the service did not answer | yes |
+| `ParseError` | a 200 that is not a fetch response | yes |
+| `CircuitOpenError` | five counted failures in a row; 60 s cooldown | — |
+
+The read timeout is `timeout_ms / 1000 + 10`, so the service always answers
+first. The breaker is `Books::OpenLibrary::CircuitBreaker` under the key
+`page_fetcher`.
+
 ## Measured
 
 Launch cost in the built image (`CAMOUFOX_BROWSER=official/stable/152.0.4-beta.31`,
