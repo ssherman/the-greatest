@@ -4,7 +4,9 @@
 makes, whether it goes out. `first_non_public_hop` is the backstop for what the
 filter cannot see: Playwright calls a route handler only for the first URL of a
 redirect chain, and Firefox repeats the DNS lookup after the filter's check, so
-every main-frame hop is checked again after navigation.
+every main-frame hop is checked again after navigation with a fresh lookup of
+its own -- which narrows DNS rebinding rather than closing it, since a server
+that alternates answers can still look public at the moment the backstop asks.
 """
 
 from __future__ import annotations
@@ -12,7 +14,7 @@ from __future__ import annotations
 from urllib.parse import urlsplit
 
 from fetcher.browser import DocumentResponse
-from fetcher.urlcheck import HostChecker, InvalidUrl, Unresolvable
+from fetcher.urlcheck import HostChecker, InvalidUrl, Resolver, Unresolvable
 
 # Only the HTML matters; blocking these roughly halves page time (spec §2).
 BLOCKED_RESOURCE_TYPES = frozenset({"image", "font", "media", "stylesheet"})
@@ -45,11 +47,17 @@ class RequestFilter:
 
 
 async def first_non_public_hop(
-    responses: list[DocumentResponse], hosts: HostChecker
+    responses: list[DocumentResponse], resolver: Resolver
 ) -> tuple[str, str] | None:
     """`(host, reason)` for the first hop, across every main-frame response and
     its redirect chain, whose host is not public; None when all are. A hop
-    whose host no longer resolves counts: this check fails closed."""
+    whose host no longer resolves counts: this check fails closed.
+
+    Builds its own `HostChecker` from `resolver` so every hop gets a fresh
+    lookup rather than reusing the pre-flight check's cached answer -- the
+    whole reason this backstop exists is that a host can resolve differently
+    the second time."""
+    hosts = HostChecker(resolver)
     for response in responses:
         for hop in (*response.redirect_chain, response.url):
             host = urlsplit(hop).hostname

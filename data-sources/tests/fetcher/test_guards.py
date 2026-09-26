@@ -18,7 +18,11 @@ def a_filter():
     return RequestFilter(HostChecker(resolver(DNS)))
 
 
-@pytest.mark.parametrize("resource_type", sorted(BLOCKED_RESOURCE_TYPES))
+def test_blocked_resource_types_is_exactly_these_four():
+    assert frozenset({"image", "font", "media", "stylesheet"}) == BLOCKED_RESOURCE_TYPES
+
+
+@pytest.mark.parametrize("resource_type", ["font", "image", "media", "stylesheet"])
 async def test_assets_are_blocked_even_from_a_public_host(resource_type):
     assert await a_filter()("https://books.example/x", resource_type, False) is False
 
@@ -43,11 +47,19 @@ async def test_hosts_that_do_not_resolve_or_cannot_be_hostnames_are_refused():
     assert await request_filter("https://bad.example/", "script", False) is False
 
 
+async def test_a_url_with_no_hostname_is_refused():
+    assert await a_filter()("https:///no-host", "script", False) is False
+
+
 @pytest.mark.parametrize(
     "url", ["data:text/html,hi", "blob:https://books.example/1", "about:blank"]
 )
 async def test_urls_that_never_touch_the_network_are_allowed(url):
-    assert await a_filter()(url, "document", True) is True
+    dns = resolver(DNS)
+    request_filter = RequestFilter(HostChecker(dns))
+    assert await request_filter(url, "document", True) is True
+    assert dns.calls == []
+    assert request_filter.blocked_navigations == []
 
 
 async def test_each_host_is_resolved_once_per_filter():
@@ -64,13 +76,13 @@ async def test_a_clean_redirect_chain_has_no_non_public_hop():
             "https://books.example/b", 200, redirect_chain=("https://books.example/a",)
         )
     ]
-    assert await first_non_public_hop(responses, HostChecker(resolver(DNS))) is None
+    assert await first_non_public_hop(responses, resolver(DNS)) is None
 
 
 async def test_a_private_hop_inside_a_redirect_chain_is_found():
     chain = ("https://books.example/a", "http://intranet.example/x")
     responses = [DocumentResponse("https://books.example/b", 200, redirect_chain=chain)]
-    assert await first_non_public_hop(responses, HostChecker(resolver(DNS))) == (
+    assert await first_non_public_hop(responses, resolver(DNS)) == (
         "intranet.example",
         "resolves to non-public address 10.0.0.7",
     )
@@ -81,16 +93,35 @@ async def test_a_private_final_url_is_found():
         DocumentResponse("https://books.example/", 403),
         DocumentResponse("http://intranet.example/", 200),
     ]
-    hop = await first_non_public_hop(responses, HostChecker(resolver(DNS)))
+    hop = await first_non_public_hop(responses, resolver(DNS))
     assert hop == ("intranet.example", "resolves to non-public address 10.0.0.7")
 
 
 async def test_a_hop_that_no_longer_resolves_fails_closed():
     responses = [DocumentResponse("https://gone.example/", 200)]
-    hop = await first_non_public_hop(responses, HostChecker(resolver(DNS)))
+    hop = await first_non_public_hop(responses, resolver(DNS))
     assert hop == ("gone.example", "no longer resolves")
 
 
 async def test_hops_without_a_host_are_skipped():
     responses = [DocumentResponse("about:blank", 200)]
-    assert await first_non_public_hop(responses, HostChecker(resolver(DNS))) is None
+    assert await first_non_public_hop(responses, resolver(DNS)) is None
+
+
+async def test_a_fresh_lookup_narrows_dns_rebinding():
+    """The pre-flight check resolves `rebind.example` once and sees a public
+    address; the backstop must not reuse that cached answer, so a second
+    lookup that comes back private is still caught. Against the old design --
+    `first_non_public_hop` taking the SAME `HostChecker` the pre-flight check
+    already used -- this would return None instead."""
+    answers = iter([["93.184.216.34"], ["10.0.0.7"]])
+
+    async def rebinding_resolver(host: str) -> list[str]:
+        return next(answers)
+
+    preflight = HostChecker(rebinding_resolver)
+    assert await preflight.non_public_address("rebind.example") is None
+
+    responses = [DocumentResponse("http://rebind.example/", 200)]
+    hop = await first_non_public_hop(responses, rebinding_resolver)
+    assert hop == ("rebind.example", "resolves to non-public address 10.0.0.7")
