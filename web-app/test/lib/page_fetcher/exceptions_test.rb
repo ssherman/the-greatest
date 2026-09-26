@@ -15,6 +15,7 @@ module PageFetcher
     test "client, server and upstream errors are siblings, not parent/child" do
       assert_not_operator Exceptions::UpstreamError, :<, Exceptions::ServerError
       assert_not_operator Exceptions::UpstreamError, :<, Exceptions::ClientError
+      assert_not_operator Exceptions::ClientError, :<, Exceptions::ServerError
     end
 
     test "the circuit-open error is not catchable as an Open Library error" do

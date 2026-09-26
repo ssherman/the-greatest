@@ -233,14 +233,20 @@ module PageFetcher
     end
 
     test "the page HTML never reaches the Faraday logger" do
+      # page_body serializes with ActiveSupport's to_json, which escapes < and
+      # >, so a literal "<...>" substring would never appear in the log even
+      # if the whole body were logged. The sentinel below has no characters
+      # to_json escapes, so it stays intact through JSON encoding and would
+      # show up verbatim if the body reached the logger.
       io = StringIO.new
       config = PageFetcher::Configuration.new(base_url: BASE_URL, logger: Logger.new(io))
       client = PageFetcher::Client.new(config: config, breaker: @breaker)
-      stub_request(:post, FETCH_URL).to_return(status: 200, body: page_body)
+      stub_request(:post, FETCH_URL).to_return(status: 200, body: page_body(html: "<p>HTML_SENTINEL</p>"))
 
       client.fetch(PAGE_URL)
 
-      refute_includes io.string, "<html>Gatsby</html>"
+      assert_includes io.string, "Status 200" # positive control: the logger did write something
+      refute_includes io.string, "HTML_SENTINEL"
     end
   end
 end
