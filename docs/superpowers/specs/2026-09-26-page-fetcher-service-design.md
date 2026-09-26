@@ -33,9 +33,11 @@ The books AI enrichment framework (`2026-09-24-books-ai-enrichment-framework-des
 unknown books through a `research` run that uses OpenAI web search at about 15 cents a book. Most
 books already carry Goodreads and bookshop.org identifiers, and those pages hold genres,
 descriptions and edition data directly. Reading them costs nothing per page but both sites reject
-plain HTTP clients: the enrichment spec records that bookshop.org blocked the legacy scraper
-outright. Camoufox spoofs a consistent browser fingerprint at the C++ level, which is the
-standard answer to that class of blocking without paying for a hosted scraping API.
+plain HTTP clients. bookshop.org sits behind aggressive Cloudflare bot protection, and the legacy
+scraper failed there because it drove plain Puppeteer with stealth plugins that had stopped being
+updated, not because the site singled it out. Camoufox spoofs a consistent browser fingerprint at
+the C++ level, which is the standard answer to that class of protection without paying for a
+hosted scraping API.
 
 ### Volume
 
@@ -124,10 +126,18 @@ Response, `200`, on any completed navigation regardless of what the site answere
 }
 ```
 
-`status` is the HTTP status of the main document response. A Goodreads 403 or a captcha
-interstitial is still a `200` from the service with `status: 403` (or `200`) and whatever HTML
-the browser rendered. The service reports what it saw and never judges content: deciding "this is
-a bot wall, not a book page" belongs to the caller's parser, which knows what a real page holds.
+`status` is the HTTP status of the main document response. A Goodreads 403 or a Cloudflare
+challenge interstitial is still a `200` from the service with `status: 403` (or `200`) and
+whatever HTML the browser rendered. The service reports what it saw and never judges content:
+deciding "this is a bot wall, not a book page" belongs to the caller's parser, which knows what a
+real page holds.
+
+A Cloudflare managed challenge, which bookshop.org uses, loads a "Just a moment" page, runs its
+JavaScript for a few seconds and then navigates to the real page on its own. `wait_until` alone
+returns the interstitial. `wait_for_selector` is the tool for that case: Playwright's selector
+wait spans navigations, so a caller that names an element only the real page has (a product
+title, say) gets the real page or a timeout, never the interstitial. The bookshop.org parser spec
+should pick that selector; this service has no site-specific defaults.
 
 Errors are JSON `{"error": "<code>", "detail": "<human text>"}` with a stable code:
 
@@ -412,9 +422,11 @@ stack exists to feed, so nothing more.
   regression test for a bump. If Camoufox stops working against Goodreads, the next candidates are
   another anti-detection browser behind the same protocol or a hosted fetching API behind the
   same Rails client.
-- **bookshop.org may still block.** It blocked the legacy scraper. Camoufox plus a residential
-  egress IP is the best available shot; if it fails, the caller sees the blocked page's HTML and
-  status and the parser reports "no data", nothing more.
+- **bookshop.org's Cloudflare protection may still hold.** It defeated the legacy scraper's
+  outdated Puppeteer stealth setup. An up-to-date Camoufox plus a residential egress IP is the
+  best available shot, and `wait_for_selector` covers the managed-challenge redirect (§2); if a
+  challenge still fails to clear, the caller sees the interstitial's HTML and status and the
+  parser reports "no data", nothing more.
 - **Memory on a shared host.** One browser with two pages is typically 400 to 700MB. The 2GB
   compose limit and the recycle counter bound it; the Open Library API's own 8GB DuckDB budget is
   unaffected because they are separate containers.
