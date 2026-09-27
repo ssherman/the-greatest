@@ -206,7 +206,9 @@ normalized name with no birth- or death-year conflict. Stored names and alternat
 save (quotes, exotic spaces), so the exact source can compare them directly. The importer saves the new
 author before providers run (`save_before_providers?`), so a name alone always persists;
 `ImportResult#created?` says whether it made the author. The Open Library provider fills blank years,
-unions alternate names, stamps `books_author_openlibrary_id`, and writes `name` only when blank. Wikidata,
+unions alternate names, stamps `books_author_openlibrary_id`, and writes `name` only when blank. When another
+author already holds the key (or a key it redirects from), it applies nothing, flags the two authors as an
+`external_key_collision` pair on the duplicates page, and reports a failure. Wikidata,
 VIAF and AI providers follow in later increments
 (`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`).
 
