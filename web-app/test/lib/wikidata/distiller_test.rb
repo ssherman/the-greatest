@@ -13,14 +13,18 @@ module Wikidata
 
       assert_equal "Q7243", payload["id"]
       assert_equal "Leo Tolstoy", payload["label"]
+      assert_equal "Russian author (1828–1910)", payload["description"]
+      assert_includes payload["aliases"], "Leo Tolstoi"
       assert_includes payload["instance_of"], "Q5"
       assert_includes payload["gender"], "Q6581097"
       # Wikidata may carry both a Gregorian and a Julian date for 1828; both are day precision.
       assert_equal [1828], payload["birth"].map { |date| date["year"] }.uniq
       assert payload["birth"].all? { |date| date["precision"] == 11 }
       assert_equal [1910], payload["death"].map { |date| date["year"] }.uniq
-      assert_not_empty payload["citizenships"]
-      assert_not_empty payload["native_names"]
+      assert_equal ["Q34266"], payload["citizenships"]
+      assert_includes payload["occupations"], "Q36180"
+      assert_equal ["Лев Никола́евич Толсто́й"], payload["native_names"]
+      assert_equal ["Л. Н. Т.", "Л. Н."], payload["pseudonyms"]
       assert_equal ["96987389"], payload["identifiers"]["viaf"]
       assert_equal ["0000000122424494"], payload["identifiers"]["isni"]
       assert_equal ["n79068416"], payload["identifiers"]["lcnaf"]

@@ -19,6 +19,27 @@ module Wikidata
       assert_equal ["Leo Tolstoy", "Lev Tolstoy"], entity(aliases: ["Lev Tolstoy", "Leo Tolstoy"]).names
     end
 
+    test "every scalar and list reader surfaces its distilled field" do
+      subject = entity(
+        aliases: ["Lev Tolstoy"], description: "Russian author", gender: ["Q6581097"],
+        citizenships: ["Q34266"], occupations: ["Q36180"], native_names: ["Лев Никола́евич Толсто́й"],
+        pseudonyms: ["Л. Н."], enwiki: "Leo Tolstoy", sitelinks: 3, died: {year: 1910, precision: 8}
+      )
+
+      assert_equal "Q1", subject.id
+      assert_equal "Leo Tolstoy", subject.label
+      assert_equal "Russian author", subject.description
+      assert_equal ["Lev Tolstoy"], subject.aliases
+      assert_equal ["Q6581097"], subject.gender_ids
+      assert_equal ["Q34266"], subject.citizenship_ids
+      assert_equal ["Q36180"], subject.occupation_ids
+      assert_equal ["Лев Никола́евич Толсто́й"], subject.native_names
+      assert_equal ["Л. Н."], subject.pseudonyms
+      assert_equal "Leo Tolstoy", subject.enwiki_title
+      assert_equal 3, subject.sitelink_count
+      assert_equal "imprecise", subject.death.reason
+    end
+
     test "a year at year precision or finer is usable" do
       subject = entity(born: {year: 1828, precision: 11}, died: 1910)
 
