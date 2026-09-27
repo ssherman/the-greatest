@@ -180,16 +180,41 @@ async def test_navigation_failures_map_to_their_error_codes(failure, code, statu
     assert browser.sessions[0].closed
 
 
-async def test_a_navigation_the_filter_refused_for_a_private_host_is_invalid_url():
+# In Firefox a navigation the filter refuses does not fail `goto`: the page never
+# loads and `goto` times out, usually on the budget's own deadline (StageTimeout)
+# and sometimes on Playwright's (NavigationTimeout). The error codes must come
+# from the refusal either way.
+REFUSED_NAVIGATION_OUTCOMES = [
+    pytest.param({"goto_delay_s": 1}, {"timeout_ms": 100}, id="budget-timeout"),
+    pytest.param(
+        {"goto_error": NavigationTimeout("Page.goto: Timeout 30000ms exceeded.")},
+        {},
+        id="playwright-timeout",
+    ),
+    pytest.param({"goto_error": BrowserError("page.goto: NS_BINDING_ABORTED")}, {}, id="aborted"),
+]
+
+
+@pytest.mark.parametrize(("script", "request_kwargs"), REFUSED_NAVIGATION_OUTCOMES)
+async def test_a_navigation_the_filter_refused_for_a_private_host_is_invalid_url(
+    script, request_kwargs
+):
     fetcher, _, _ = build(
-        Script(
-            requests=[("http://intranet.example/", "document", True)],
-            goto_error=BrowserError("page.goto: NS_BINDING_ABORTED"),
-        )
+        Script(requests=[("http://intranet.example/", "document", True)], **script)
     )
-    error = await fetch_error(fetcher)
+    error = await fetch_error(fetcher, **request_kwargs)
     assert (error.code, error.http_status) == ("invalid_url", 400)
     assert "intranet.example" in error.detail
+
+
+@pytest.mark.parametrize(("script", "request_kwargs"), REFUSED_NAVIGATION_OUTCOMES)
+async def test_a_navigation_the_filter_refused_for_a_dead_host_is_upstream_unreachable(
+    script, request_kwargs
+):
+    fetcher, _, _ = build(Script(requests=[("http://gone.example/", "document", True)], **script))
+    error = await fetch_error(fetcher, **request_kwargs)
+    assert (error.code, error.http_status) == ("upstream_unreachable", 502)
+    assert "gone.example" in error.detail
 
 
 async def test_a_redirect_through_a_private_address_returns_no_page():

@@ -104,6 +104,22 @@ def _ms_since(started: float) -> int:
     return int((time.monotonic() - started) * 1000)
 
 
+def _raise_for_refused_navigation(request_filter: RequestFilter) -> None:
+    """A main-frame navigation the filter refused is why the page never loaded:
+    in Firefox the refusal does not fail `goto`, which times out instead. Answer
+    with the refusal's reason, so a caller sees a bad address as `invalid_url`
+    and a dead host as `upstream_unreachable`, neither of which counts against
+    the Rails breaker."""
+    if request_filter.blocked_navigations:
+        host = request_filter.blocked_navigations[0]
+        detail = f"navigation to {host} was blocked: it resolves to a non-public address"
+        raise FetchError("invalid_url", 400, detail) from None
+    if request_filter.unresolved_navigations:
+        host = request_filter.unresolved_navigations[0]
+        detail = f"navigation to {host} failed: the host does not resolve"
+        raise FetchError("upstream_unreachable", 502, detail) from None
+
+
 def _drop_lone_surrogates(text: str) -> str:
     """A lone surrogate -- half of an emoji a JS `slice()` cut in two, restored
     that way by Playwright's own JSON transport -- cannot be UTF-8 encoded.
@@ -309,17 +325,18 @@ class Fetcher:
         """Translate a browser failure during `stage` into the caller's answer (spec §2)."""
         try:
             yield
+        except StageTimeout:
+            _raise_for_refused_navigation(request_filter)
+            raise
         except NavigationTimeout:
+            _raise_for_refused_navigation(request_filter)
             raise StageTimeout(stage) from None
         except UpstreamUnreachable as exc:
             raise FetchError("upstream_unreachable", 502, str(exc)) from None
         except InvalidSelector as exc:
             raise FetchError("invalid_selector", 400, str(exc)) from None
         except BrowserError as exc:
-            if request_filter.blocked_navigations:
-                host = request_filter.blocked_navigations[0]
-                detail = f"navigation to {host} was blocked: it resolves to a non-public address"
-                raise FetchError("invalid_url", 400, detail) from None
+            _raise_for_refused_navigation(request_filter)
             raise FetchError("browser_error", 502, str(exc)) from None
         except BrowserFailure as exc:
             raise FetchError("browser_error", 502, str(exc)) from None

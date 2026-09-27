@@ -174,7 +174,7 @@ Errors are JSON `{"error": "<code>", "detail": "<human text>"}` with a stable co
 | 400 | `invalid_url` | Syntax, scheme or credentials fail, or an address rule in §6 fails |
 | 400 | `invalid_selector` | `wait_for_selector` is not a selector Playwright can parse. A caller bug, so it must not count against the breaker the way a `browser_error` would. |
 | 422 | (FastAPI's validation body) | Unknown field, bad enum, `timeout_ms` out of range |
-| 502 | `upstream_unreachable` | The site could not be reached: the DNS lookup failed, the connection was refused or reset, TLS or its security level failed, the site redirected in a loop, or its response was empty, partial or corrupted. Also the redirect backstop's own failures (§6): a hop that no longer resolves, or that could not be checked within its 2-second limit |
+| 502 | `upstream_unreachable` | The site could not be reached: the DNS lookup failed, the connection was refused or reset, TLS or its security level failed, the site redirected in a loop, or its response was empty, partial or corrupted. Also the redirect backstop's own failures (§6): a hop that no longer resolves, or that could not be checked within its 2-second limit. And a main-frame navigation the route refused because its host does not resolve (a script or meta refresh sending the page to a dead domain); a refused navigation to a non-public host is `invalid_url`. In Firefox such a refusal does not fail `goto`, which times out, so the fetch answers from the refusal's reason instead |
 | 502 | `html_too_large` | The document's HTML is over the cap (5MB) |
 | 502 | `browser_error` | Playwright raised anything else, or navigation produced no document response |
 | 503 | `browser_unavailable` | The browser failed to launch |

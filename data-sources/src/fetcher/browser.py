@@ -25,7 +25,8 @@ from typing import Any, Literal, Protocol
 WaitUntil = Literal["domcontentloaded", "load", "networkidle"]
 
 # Called for every request the page makes, as (url, resource_type,
-# is_navigation); returns whether it may go out. Built per fetch by
+# is_navigation); returns whether it may go out. `is_navigation` is true only for
+# a navigation of the page's main frame, not an iframe's. Built per fetch by
 # `fetcher.guards.RequestFilter`.
 RequestFilter = Callable[[str, str, bool], Awaitable[bool]]
 
@@ -392,7 +393,7 @@ def _route_handler(request_filter: RequestFilter) -> Callable[[Any, Any], Awaita
     async def handle(route: Any, request: Any) -> None:
         try:
             allowed = await request_filter(
-                request.url, request.resource_type, request.is_navigation_request()
+                request.url, request.resource_type, _is_main_frame_navigation(request)
             )
         except Exception:
             allowed = False
@@ -404,6 +405,16 @@ def _route_handler(request_filter: RequestFilter) -> Callable[[Any, Any], Awaita
                 await route.abort("blockedbyclient")
 
     return handle
+
+
+def _is_main_frame_navigation(request: Any) -> bool:
+    """Only the page's own navigations decide the fetch's error code; an iframe
+    refused for its host (an ad on a sinkholed domain, say) must not. This only
+    labels the request: it never changes whether the request goes out."""
+    try:
+        return bool(request.is_navigation_request()) and request.frame.parent_frame is None
+    except Exception:  # a service worker's request has no frame
+        return False
 
 
 async def _close_quietly(browser: Any) -> None:

@@ -7,7 +7,7 @@ import logging
 import pytest
 
 from fetcher.api.main import create_app
-from fetcher.browser import CamoufoxBrowser, CamoufoxSession, LaunchFailed
+from fetcher.browser import CamoufoxBrowser, CamoufoxSession, LaunchFailed, _route_handler
 from fetcher.fetcher import exit_process
 
 
@@ -274,3 +274,66 @@ async def test_networkidle_never_returns_a_half_parsed_page():
     assert page.reached["load"].is_set()
     # Every wait draws on the one navigation budget.
     assert all(1 <= t <= 5000 for t in page.timeouts)
+
+
+class _Route:
+    def __init__(self) -> None:
+        self.outcome = None
+
+    async def continue_(self):
+        self.outcome = "continued"
+
+    async def abort(self, reason):
+        self.outcome = "aborted"
+
+
+class _Frame:
+    def __init__(self, parent_frame) -> None:
+        self.parent_frame = parent_frame
+
+
+class _Request:
+    url = "https://books.example/"
+    resource_type = "document"
+
+    def __init__(self, navigation: bool, frame) -> None:
+        self._navigation = navigation
+        self._frame = frame
+
+    def is_navigation_request(self) -> bool:
+        return self._navigation
+
+    @property
+    def frame(self):
+        if isinstance(self._frame, BaseException):
+            raise self._frame
+        return self._frame
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("navigation", "frame", "main_frame_navigation"),
+    [
+        pytest.param(True, _Frame(parent_frame=None), True, id="main-frame navigation"),
+        pytest.param(True, _Frame(parent_frame=object()), False, id="iframe navigation"),
+        pytest.param(False, _Frame(parent_frame=None), False, id="subresource"),
+        pytest.param(True, RuntimeError("service worker request"), False, id="no frame"),
+    ],
+)
+async def test_the_filter_hears_only_main_frame_navigations_as_navigations(
+    navigation, frame, main_frame_navigation
+):
+    """Only the page's own navigations decide the fetch's error code; an ad
+    iframe refused for its host must not. Working out which is which must never
+    change whether the request goes out."""
+    heard = []
+
+    async def request_filter(url, resource_type, is_navigation):
+        heard.append(is_navigation)
+        return True
+
+    route = _Route()
+    await _route_handler(request_filter)(route, _Request(navigation, frame))
+
+    assert heard == [main_frame_navigation]
+    assert route.outcome == "continued"

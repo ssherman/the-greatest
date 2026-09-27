@@ -23,9 +23,12 @@ BLOCKED_RESOURCE_TYPES = frozenset({"image", "font", "media", "stylesheet"})
 class RequestFilter:
     def __init__(self, hosts: HostChecker) -> None:
         self._hosts = hosts
-        # Hosts of navigations refused for being non-public, so a navigation
-        # failure they caused reads as invalid_url rather than browser_error.
+        # Hosts of main-frame navigations the filter refused, so the failure they
+        # cause (in Firefox, `goto` times out) reads as invalid_url for a
+        # non-public host and upstream_unreachable for one that does not
+        # resolve, rather than navigation_timeout or browser_error.
         self.blocked_navigations: list[str] = []
+        self.unresolved_navigations: list[str] = []
 
     async def __call__(self, url: str, resource_type: str, is_navigation: bool) -> bool:
         if resource_type in BLOCKED_RESOURCE_TYPES:
@@ -37,7 +40,11 @@ class RequestFilter:
             return False
         try:
             bad = await self._hosts.non_public_address(parts.hostname)
-        except (InvalidUrl, Unresolvable):
+        except Unresolvable:
+            if is_navigation:
+                self.unresolved_navigations.append(parts.hostname)
+            return False
+        except InvalidUrl:
             return False
         if bad is None:
             return True

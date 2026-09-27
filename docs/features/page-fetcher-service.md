@@ -97,7 +97,7 @@ waiting for `load` first.
 | 400 | `invalid_url` | Bad scheme, embedded credentials, or a non-public address the checks catch (see "What the address checks do not cover") |
 | 400 | `invalid_selector` | `wait_for_selector` does not parse |
 | 422 | FastAPI's body | Unknown field, bad `wait_until`, `timeout_ms` outside 1000–`FETCHER_MAX_TIMEOUT_MS` (default 60000) |
-| 502 | `upstream_unreachable` | DNS, a refused/reset connection, TLS or its security level, a redirect loop, an empty/partial/corrupted response, or a redirect hop that no longer resolves or could not be checked in time |
+| 502 | `upstream_unreachable` | DNS, a refused/reset connection, TLS or its security level, a redirect loop, an empty/partial/corrupted response, a redirect hop that no longer resolves or could not be checked in time, or the page navigating itself (script or meta refresh) to a host that does not resolve |
 | 502 | `html_too_large` | Over 5 MB of HTML |
 | 502 | `browser_error` | Anything else the browser raised |
 | 503 | `browser_unavailable` | The browser failed to launch |

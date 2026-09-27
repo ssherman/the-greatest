@@ -41,6 +41,15 @@ async def test_a_private_host_is_refused_and_only_a_refused_navigation_is_rememb
     assert request_filter.blocked_navigations == ["intranet.example"]
 
 
+async def test_an_unresolvable_navigation_is_refused_and_remembered_separately():
+    request_filter = a_filter()
+    assert await request_filter("http://gone.example/api", "xhr", False) is False
+    assert request_filter.unresolved_navigations == []
+    assert await request_filter("http://gone.example/", "document", True) is False
+    assert request_filter.unresolved_navigations == ["gone.example"]
+    assert request_filter.blocked_navigations == []
+
+
 async def test_hosts_that_do_not_resolve_or_cannot_be_hostnames_are_refused():
     request_filter = a_filter()
     assert await request_filter("https://gone.example/", "script", False) is False
