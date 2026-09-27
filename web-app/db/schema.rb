@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_27_220503) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_27_230402) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -90,6 +90,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_220503) do
     t.datetime "updated_at", null: false
     t.index ["key"], name: "index_billing_plans_on_key", unique: true
     t.index ["stripe_price_id"], name: "index_billing_plans_on_stripe_price_id", unique: true
+  end
+
+  create_table "books_author_countries", force: :cascade do |t|
+    t.bigint "author_id", null: false
+    t.bigint "country_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["author_id", "country_id"], name: "index_books_author_countries_on_author_id_and_country_id", unique: true
+    t.index ["author_id"], name: "index_books_author_countries_on_author_id"
+    t.index ["country_id"], name: "index_books_author_countries_on_country_id"
   end
 
   create_table "books_author_relationships", force: :cascade do |t|
@@ -1224,6 +1234,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_27_220503) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_chats", "users"
   add_foreign_key "api_tokens", "users"
+  add_foreign_key "books_author_countries", "books_authors", column: "author_id"
+  add_foreign_key "books_author_countries", "books_countries", column: "country_id"
   add_foreign_key "books_author_relationships", "books_authors", column: "from_author_id"
   add_foreign_key "books_author_relationships", "books_authors", column: "to_author_id"
   add_foreign_key "books_book_authors", "books_authors", column: "author_id"

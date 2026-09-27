@@ -151,6 +151,26 @@ module Books
         assert_equal 1, CategoryItem.where(category: category, item: @target).count
       end
 
+      test "carries the source's countries to the target" do
+        country = ::Books::Country.create!(name: "Merger Test Nation")
+        ::Books::AuthorCountry.create!(author: @source, country: country)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?
+        assert_equal [country.id], @target.reload.author_countries.pluck(:country_id)
+      end
+
+      test "does not duplicate a country both authors share" do
+        country = ::Books::Country.create!(name: "Shared Test Nation")
+        ::Books::AuthorCountry.create!(author: @source, country: country)
+        ::Books::AuthorCountry.create!(author: @target, country: country)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal 1, @target.reload.author_countries.count
+      end
+
       test "moves a description the target does not have" do
         description = Description.create!(
           describable: @source, kind: :summary, locale: "en",

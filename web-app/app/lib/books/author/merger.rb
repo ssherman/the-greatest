@@ -122,6 +122,7 @@ module Books
         merge_ai_chats
         merge_images
         merge_category_items
+        merge_author_countries
         merge_descriptions
         merge_book_authors
         merge_credits
@@ -177,6 +178,15 @@ module Books
           count += 1
         end
         @stats[:category_items] = count
+      end
+
+      def merge_author_countries
+        count = 0
+        source_author.author_countries.find_each do |author_country|
+          target_author.author_countries.find_or_create_by!(country_id: author_country.country_id)
+          count += 1
+        end
+        @stats[:author_countries] = count
       end
 
       # Two unique indexes apply: one on

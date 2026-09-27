@@ -41,6 +41,8 @@ class Books::Author < ApplicationRecord
   has_many :credits, class_name: "Books::Credit", dependent: :destroy
   has_many :book_authors, class_name: "Books::BookAuthor", dependent: :destroy
   has_many :books, through: :book_authors, class_name: "Books::Book"
+  has_many :author_countries, class_name: "Books::AuthorCountry", dependent: :destroy
+  has_many :countries, through: :author_countries, class_name: "Books::Country"
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
   has_many :match_decisions, as: :record, dependent: :nullify
