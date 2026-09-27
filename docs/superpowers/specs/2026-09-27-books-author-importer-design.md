@@ -177,11 +177,20 @@ Additions to that section:
 - **`FinderRegistry` entry** for the authors finder (label, `MergeAuthor`, `source_author_id`,
   `execute_action_admin_books_author_path`, preloads), or the finder appears on no audit page and
   the registry test fails.
-- **A second provider, `Providers::Enrichment`** (async): enqueues `WikidataJob` and returns
-  `[:author_enrichment_queued]`. It runs for a newly created author, and for an existing one only
-  under `force_providers`.
+- **A second provider, `Providers::Enrichment`** (async), enqueues `WikidataJob` and returns
+  `[:author_enrichment_queued]`. It lands in increment 2 with `WikidataJob`; a provider enqueuing a job
+  that does not exist yet would be dead code.
 - **The importer reports whether it created the author** (the finder's outcome was `unmatched`),
   so the book provider knows which of a book's authors are new (§10).
+- **Declared while planning increment 1:** the author importer saves a new author before providers run
+  (`ImporterBase#save_before_providers?`), and the book importer's name path is its own provider
+  (`DataImporters::Books::Book::Providers::Authors`, after Open Library). Both exist because the Open
+  Library service is not deployed to production: without them a production author import would persist
+  nothing, and a production book import would link no authors (the redesign's §8 only reached the name
+  path on an abstain or reject, not on an unreachable service). Implementation added a third:
+  `Books::Author` normalizes `alternate_names` on save the way it normalizes `name`, since the authors
+  finder's exact source compares against stored alternate names; rows stored before that change are
+  covered by the pending `books:normalize_names:apply` one-off.
 
 ### 3. `external_records`: new sources and the raw response
 
@@ -596,9 +605,9 @@ preserved, before launch. Everything here is therefore a repeating step:
 
 Each gets its own plan under `docs/superpowers/plans/`.
 
-1. **Core importer.** §2: the approved finder-redesign §9 plus the registry entry, the `Enrichment`
-   provider stub, the created-author signal, and the book provider's author step. This alone unblocks
-   the book importer.
+1. **Core importer.** §2: the approved finder-redesign §9 plus the registry entry, the created-author
+   signal (`ImportResult#created?`), save-before-providers, and the book provider's author step. This
+   alone unblocks the book importer.
 2. **Wikidata and Wikipedia.** §3, §4, §5, §6, §7:
    - `external_records` changes, both clients, `ResolveWikidata`, `SelectExternalRecordTask`,
      `ApplyWikidata`

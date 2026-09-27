@@ -82,7 +82,8 @@ end
 | Music | Release | MusicBrainz | Complete |
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
-| Books | Book | OpenLibrary, AiEnrichment | Complete |
+| Books | Book | OpenLibrary, Authors, AiEnrichment | Complete |
+| Books | Author | OpenLibrary | Increment 1 (Wikidata, VIAF, AI follow) |
 
 ### Music Providers
 
@@ -168,8 +169,8 @@ section for the full contract).
   `Describable#assign_description`, never the legacy `books_books.description` column, and "ours"
   sent to the service is the book's primary description. A populated field the service calls a
   conflict or an enrichment is left alone and reported in `data_populated` as `"skipped:<field>"`.
-  Authors and subjects are never applied from this provider -- creating authors or categories from
-  them belongs to a separate reconciliation effort.
+  On accept, a book with no authors gets the accepted work's authors through the author importer, by
+  key and name, in Open Library's order. Subjects are never applied.
 - **Idempotency:** re-running `Importer.call` with any identifier is idempotent (the finder's
   identifier and exact sources find it; the provider persists the query's identifiers on accept),
   including a query keyed by an OLD (redirected) OL key as long as it still carries the title the
@@ -177,16 +178,34 @@ section for the full contract).
   `OpenLibrarySource#local_holders` finds the book holding that canonical key (it also counts any
   key in the work's `redirected_from` list, which `/resolve` does not populate), and rule 2 matches
   on the external accept. A key-only re-run earns no accept, because the service has no title or
-  identifier evidence for it, so that one reaches the AI. A title+author-only import is NOT
-  idempotent by rule yet because the provider creates no author rows (that is increment 4's), so
-  the exact rule cannot match an importer-created book; OpenSearch still surfaces it and the AI
-  decides.
+  identifier evidence for it, so that one reaches the AI. A title+author import is idempotent: the
+  author step links the authors, so the exact source finds the book by title joined to an author
+  name on the next run.
 
 #### AI Enrichment (Async)
 Queues `Books::EnrichBookJob` and returns `[:ai_enrichment_queued]`. Runs after Open Library so
 the AI fills fewer blanks. Requires a title and either `book.authors` or the query's
 `author_names` (a new book has no `book_authors` rows yet, so the names ride along to the job).
 The job runs `Services::Books::EnrichBook`; see `docs/features/books_enrichment.md`.
+
+#### Authors (Sync)
+`Providers::Authors` runs after Open Library. When the book still has no authors (Open Library abstained,
+rejected, or was unreachable -- the service is not deployed to production), each of the query's
+`author_names` goes through `DataImporters::Books::Author::Importer` by name and is linked in the query's
+order. A book that already has authors is left alone.
+
+### Books Author importer
+`DataImporters::Books::Author::Importer.call(name:, open_library_author_key:, birth_year:, death_year:,
+alternate_names:, work_titles:)`. `name` is required unless a key is given. The finder's sources are the
+Open Library author key, an exact normalized name-or-alternate-name lookup, OpenSearch
+`Search::Books::Search::AuthorByName`, and the Open Library author record for the key; rule 4 is an equal
+normalized name with no birth- or death-year conflict. Stored names and alternate names are normalized on
+save (quotes, exotic spaces), so the exact source can compare them directly. The importer saves the new
+author before providers run (`save_before_providers?`), so a name alone always persists;
+`ImportResult#created?` says whether it made the author. The Open Library provider fills blank years,
+unions alternate names, stamps `books_author_openlibrary_id`, and writes `name` only when blank. Wikidata,
+VIAF and AI providers follow in later increments
+(`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`).
 
 ## Usage Examples
 
