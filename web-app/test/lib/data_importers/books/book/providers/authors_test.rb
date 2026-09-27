@@ -44,6 +44,14 @@ module DataImporters
             assert_equal [@tolstoy], book.book_authors.map(&:author)
           end
 
+          test "a book with no title never reaches the author importer, and fails" do
+            IMPORTER.expects(:call).never
+
+            result = @provider.populate(::Books::Book.new(title: nil), query: query(["Zed Orphanmaker"]))
+
+            assert_not result.success?
+          end
+
           test "a book that already has authors is left alone" do
             book = books_books(:war_and_peace)
             IMPORTER.expects(:call).never

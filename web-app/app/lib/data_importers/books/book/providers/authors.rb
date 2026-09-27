@@ -14,6 +14,7 @@ module DataImporters
         class Authors < DataImporters::ProviderBase
           def populate(book, query:, match: nil)
             return success_result(data_populated: []) if book.book_authors.any?
+            return failure_result(errors: ["Book title required to link authors"]) if book.title.blank?
 
             names = Array(query&.author_names).map(&:to_s).compact_blank
             return failure_result(errors: ["No author names to import"]) if names.empty?
@@ -29,6 +30,7 @@ module DataImporters
 
             return failure_result(errors: ["No author could be imported"]) if linked.zero?
 
+            book.authors.reset
             success_result(data_populated: [:authors])
           rescue => e
             failure_result(errors: ["Author step error: #{e.message}"])

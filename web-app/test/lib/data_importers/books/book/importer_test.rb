@@ -202,6 +202,20 @@ module DataImporters
           assert_empty ::Identifier.where(identifiable_type: "Books::Book", value: new_isbn)
         end
 
+        test "with Open Library unreachable, an identifier-only import links no orphan author and is not a success" do
+          stub_resolve_down
+          new_isbn = "9780000000001"
+
+          result = nil
+          assert_no_difference ["::Books::Book.count", "::Books::Author.count"] do
+            result = Importer.call(isbn13: [new_isbn], author_names: ["Zed Orphanmaker"])
+          end
+
+          assert_not result.success?
+          assert_not result.item.persisted?
+          assert_not ::Books::Author.exists?(name: "Zed Orphanmaker")
+        end
+
         test "R115: a blank isbn13 alongside a real one persists exactly one identifier row" do
           stub_open_library_client
           new_isbn = "9780061120084"
@@ -288,6 +302,15 @@ module DataImporters
           book = result.item.reload
           assert book.persisted?
           assert_equal [books_authors(:tolstoy)], book.authors.to_a
+        end
+
+        test "with Open Library unreachable, book.authors is fresh on the returned item and AI enrichment gets the linked author's name" do
+          stub_resolve_down
+          ::Books::EnrichBookJob.expects(:perform_async).with(anything, false, ["Leo Tolstoy"])
+
+          result = Importer.call(title: "Hadji Murat", author_names: ["Lev Tolstoy"])
+
+          assert_equal [books_authors(:tolstoy)], result.item.authors.to_a
         end
 
         test "with Open Library unreachable, a new author name becomes a new author" do

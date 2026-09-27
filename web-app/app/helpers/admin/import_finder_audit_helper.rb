@@ -8,7 +8,7 @@ module Admin
 
     # Identifier keys a stored query may carry, across every domain's ImportQuery.
     IDENTIFIER_QUERY_KEYS = %w[
-      isbn13 isbn10 asin goodreads_id open_library_work_key
+      isbn13 isbn10 asin goodreads_id open_library_work_key open_library_author_key
       musicbrainz_id release_group_musicbrainz_id musicbrainz_recording_id igdb_id
     ].freeze
 

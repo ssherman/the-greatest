@@ -139,6 +139,7 @@ module DataImporters
               book.book_authors.build(author: author, position: index + 1)
               linked = true
             end
+            book.authors.reset if linked
             linked
           end
 
@@ -205,7 +206,7 @@ module DataImporters
           end
 
           def author_names_for(book, query)
-            names = book.authors.map(&:name)
+            names = book.book_authors.map { |link| link.author.name }
             names.presence || query&.author_names || []
           end
 

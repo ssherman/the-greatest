@@ -164,6 +164,13 @@ module DataImporters
           assert DuplicateCandidate.exists?(item_type: "Books::Author", item_a_id: [@tolstoy.id, twin.id].min, item_b_id: [@tolstoy.id, twin.id].max)
         end
 
+        test "the OpenSearch source is called with the query's name and alternate names as keywords" do
+          SEARCH.expects(:call).with(name: "Leo Tolstoy", alternate_names: [], size: 5).returns([])
+          expect_no_ai
+
+          @finder.call(query: ImportQuery.new(name: "Leo Tolstoy"))
+        end
+
         test "a surname-only OpenSearch neighbour never matches by rule" do
           SEARCH.stubs(:call).returns([hit(@tolstoy)])
           stub_ai(selected_index: 0, confidence: "high", reasoning: "A different Tolstoy.", same_entity_groups: [])
