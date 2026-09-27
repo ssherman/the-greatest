@@ -166,8 +166,9 @@ module Books
         ::Books::AuthorCountry.create!(author: @source, country: country)
         ::Books::AuthorCountry.create!(author: @target, country: country)
 
-        ::Books::Author::Merger.call(source: @source, target: @target)
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
 
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
         assert_equal 1, @target.reload.author_countries.count
       end
 
