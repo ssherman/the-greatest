@@ -168,6 +168,11 @@ Do not add a `FIREBASE_PROJECT_ID` entry back here or to any `.env` file.
 - **Security**: A real credential, unlike `FIREBASE_API_KEY`. Never commit it;
   manage via SOPS — see `deployment/SECRETS.md`.
 
+#### WIKIMEDIA_CONTACT
+- **Description**: Contact in the User-Agent the app sends to Wikidata and Wikipedia (author enrichment). The Wikimedia User-Agent policy requires one; a URL or an email address both qualify.
+- **Default**: `https://thegreatestbooks.org`
+- **Required**: No
+
 ### Stripe Billing
 
 For the full production setup sequence these variables are part of — registering webhook
