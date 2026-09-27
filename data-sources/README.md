@@ -6,10 +6,11 @@ Nothing here writes to the Rails database.
 
 - `src/common/` — shared, versioned normalizer, schemas, comparators, build gates.
 - `src/openlibrary/` — the Open Library source: pipeline, matcher, API, evaluation set.
+- `src/fetcher/` — the page fetcher: URL in, rendered HTML out, one Camoufox browser per fetch.
 
 ## Commands
 
-    uv sync --locked          # install; FAILS if uv.lock does not match pyproject.toml
+    uv sync --locked --extra fetcher   # install; FAILS if uv.lock does not match pyproject.toml
     uv run pytest             # tests (fixture data only, never the real artifact)
     uv run ruff check .
     uv run ruff format --check .
@@ -65,3 +66,15 @@ the same host, and never put the service on a public request path.
 
 Request bodies are strict: an unknown field (`"author"`, `"isbn"`) is a 422
 naming it, never a 200 that silently ignored it.
+
+## Running the page fetcher
+
+Its own image (`fetcher.Dockerfile`) and compose service, so the Open Library
+image never carries Firefox. Full doc: `docs/features/page-fetcher-service.md`.
+
+    docker compose up -d --build fetcher        # serves 127.0.0.1:8081
+    curl -s localhost:8081/health
+
+Tests need the extra (`uv sync --locked --extra fetcher`) but never a browser.
+The port binds to loopback by default (`FETCHER_BIND`): the same rule as the
+API above.
