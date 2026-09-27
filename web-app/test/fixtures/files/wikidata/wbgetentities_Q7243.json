@@ -1,0 +1,551 @@
+{
+  "entities": {
+    "Q7243": {
+      "type": "item",
+      "id": "Q7243",
+      "labels": {
+        "en": {
+          "language": "en",
+          "value": "Leo Tolstoy"
+        },
+        "ru": {
+          "language": "ru",
+          "value": "Лев Николаевич Толстой"
+        }
+      },
+      "descriptions": {
+        "en": {
+          "language": "en",
+          "value": "Russian author (1828–1910)"
+        }
+      },
+      "aliases": {
+        "en": [
+          {
+            "language": "en",
+            "value": "Tolstoĭ, Lev Nikolaevich, graf"
+          },
+          {
+            "language": "en",
+            "value": "Tolstoy, Leo, graf"
+          },
+          {
+            "language": "en",
+            "value": "Leo Tolstoi"
+          },
+          {
+            "language": "en",
+            "value": "Lev Nikolayevich Tolstoĭ"
+          },
+          {
+            "language": "en",
+            "value": "Count Lev Nikolayevich Tolstoy"
+          }
+        ]
+      },
+      "claims": {
+        "P31": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P31",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 5,
+                  "id": "Q5"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P21": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P21",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 6581097,
+                  "id": "Q6581097"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P27": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P27",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 34266,
+                  "id": "Q34266"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P106": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 36180,
+                  "id": "Q36180"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 214917,
+                  "id": "Q214917"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 4964182,
+                  "id": "Q4964182"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 6625963,
+                  "id": "Q6625963"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 1231865,
+                  "id": "Q1231865"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 11774202,
+                  "id": "Q11774202"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 4853732,
+                  "id": "Q4853732"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 18939491,
+                  "id": "Q18939491"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 12144794,
+                  "id": "Q12144794"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 6051619,
+                  "id": "Q6051619"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 860918,
+                  "id": "Q860918"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 16003550,
+                  "id": "Q16003550"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 49757,
+                  "id": "Q49757"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P106",
+              "datavalue": {
+                "value": {
+                  "entity-type": "item",
+                  "numeric-id": 15949613,
+                  "id": "Q15949613"
+                },
+                "type": "wikibase-entityid"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P569": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P569",
+              "datavalue": {
+                "value": {
+                  "time": "+1828-08-28T00:00:00Z",
+                  "timezone": 0,
+                  "before": 0,
+                  "after": 0,
+                  "precision": 11,
+                  "calendarmodel": "http://www.wikidata.org/entity/Q1985786"
+                },
+                "type": "time"
+              }
+            },
+            "rank": "preferred"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P569",
+              "datavalue": {
+                "value": {
+                  "time": "+1828-09-09T00:00:00Z",
+                  "timezone": 0,
+                  "before": 0,
+                  "after": 0,
+                  "precision": 11,
+                  "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+                },
+                "type": "time"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P570": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P570",
+              "datavalue": {
+                "value": {
+                  "time": "+1910-11-07T00:00:00Z",
+                  "timezone": 0,
+                  "before": 0,
+                  "after": 0,
+                  "precision": 11,
+                  "calendarmodel": "http://www.wikidata.org/entity/Q1985786"
+                },
+                "type": "time"
+              }
+            },
+            "rank": "preferred"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P570",
+              "datavalue": {
+                "value": {
+                  "time": "+1910-11-10T00:00:00Z",
+                  "timezone": 0,
+                  "before": 0,
+                  "after": 0,
+                  "precision": 11,
+                  "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+                },
+                "type": "time"
+              }
+            },
+            "rank": "deprecated"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P570",
+              "datavalue": {
+                "value": {
+                  "time": "+1910-11-20T00:00:00Z",
+                  "timezone": 0,
+                  "before": 0,
+                  "after": 0,
+                  "precision": 11,
+                  "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+                },
+                "type": "time"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P1559": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P1559",
+              "datavalue": {
+                "value": {
+                  "text": "Лев Никола́евич Толсто́й",
+                  "language": "ru"
+                },
+                "type": "monolingualtext"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P742": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P742",
+              "datavalue": {
+                "value": "Л. Н. Т.",
+                "type": "string"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P742",
+              "datavalue": {
+                "value": "Л. Н.",
+                "type": "string"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P214": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P214",
+              "datavalue": {
+                "value": "96987389",
+                "type": "string"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P213": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P213",
+              "datavalue": {
+                "value": "0000000122424494",
+                "type": "string"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P244": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P244",
+              "datavalue": {
+                "value": "n79068416",
+                "type": "string"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P648": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P648",
+              "datavalue": {
+                "value": "OL26783A",
+                "type": "string"
+              }
+            },
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P648",
+              "datavalue": {
+                "value": "OL7555476A",
+                "type": "string"
+              }
+            },
+            "rank": "deprecated"
+          }
+        ],
+        "P2963": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P2963",
+              "datavalue": {
+                "value": "128382",
+                "type": "string"
+              }
+            },
+            "rank": "normal"
+          }
+        ],
+        "P7400": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P7400",
+              "datavalue": {
+                "value": "tolstoyleo",
+                "type": "string"
+              }
+            },
+            "rank": "normal"
+          }
+        ]
+      },
+      "sitelinks": {
+        "enwiki": {
+          "site": "enwiki",
+          "title": "Leo Tolstoy"
+        },
+        "ruwiki": {
+          "site": "ruwiki",
+          "title": "Толстой, Лев Николаевич"
+        },
+        "frwiki": {
+          "site": "frwiki",
+          "title": "Léon Tolstoï"
+        }
+      }
+    }
+  },
+  "success": 1
+}
