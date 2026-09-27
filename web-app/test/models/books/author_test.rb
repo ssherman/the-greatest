@@ -157,5 +157,11 @@ module Books
 
       assert_equal "Kathleen Alcott", author.reload.name
     end
+
+    test "normalizes, drops blanks from, and dedupes alternate_names on save" do
+      author = ::Books::Author.create!(name: "Brian O'Nolan", alternate_names: ["Flann O\u2019Brien", "Flann O'Brien", "", "Flann O'Brien"])
+
+      assert_equal ["Flann O'Brien"], author.reload.alternate_names
+    end
   end
 end

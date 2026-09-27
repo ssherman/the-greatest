@@ -100,11 +100,39 @@ module DataImporters
           assert_equal [@tolstoy, :rule], @finder.call(query: ImportQuery.new(name: "Lev Tolstoy")).then { |m| [m.record, m.decided_by] }
         end
 
+        test "the query's alternate name matching a stored primary name reaches the exact source, but is not itself a rule match" do
+          stub_ai(selected_index: 0, confidence: "medium", reasoning: "A different transliteration is not decisive.", same_entity_groups: [])
+
+          match = @finder.call(query: ImportQuery.new(name: "Graf Lev Tolstoi", alternate_names: ["Leo Tolstoy"]))
+
+          candidate = match.candidates.find { |c| c.local? && c.record == @tolstoy }
+          assert candidate, "expected @tolstoy among the candidates"
+          assert_includes candidate.sources, :exact
+          assert_equal :ai, match.decided_by
+        end
+
+        test "a stored alternate name with a curly apostrophe still matches a straight-apostrophe query by rule" do
+          # Books::Author normalizes alternate_names on save (the same
+          # NameNormalizer/QuoteNormalizer pair the finder applies to the
+          # query), so the column holds the straight form the finder's SQL
+          # compares against.
+          author = ::Books::Author.create!(name: "Brian O'Nolan", alternate_names: ["Flann O\u2019Brien"])
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(name: "Flann O'Brien"))
+
+          assert_equal [author, :rule], [match.record, match.decided_by]
+        end
+
         test "curly quotes, exotic spaces and case are normalized the way the model stores names" do
           author = ::Books::Author.create!(name: "Flann O'Brien")
           expect_no_ai
 
-          match = @finder.call(query: ImportQuery.new(name: "FLANN O’BRIEN"))
+          # U+202F NARROW NO-BREAK SPACE between the names and U+2019 RIGHT
+          # SINGLE QUOTATION MARK in the apostrophe, written as explicit Ruby
+          # escapes so the bytes are unambiguous (NameNormalizer.rb's own
+          # reason to exist -- see its comment).
+          match = @finder.call(query: ImportQuery.new(name: "FLANN\u202FO\u2019BRIEN"))
 
           assert_equal [author, :rule], [match.record, match.decided_by]
         end
