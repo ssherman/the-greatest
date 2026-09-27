@@ -7,7 +7,7 @@ import logging
 import pytest
 
 from fetcher.api.main import create_app
-from fetcher.browser import CamoufoxBrowser, LaunchFailed
+from fetcher.browser import CamoufoxBrowser, CamoufoxSession, LaunchFailed
 from fetcher.fetcher import exit_process
 
 
@@ -233,3 +233,44 @@ async def test_a_launch_that_fails_after_a_cancel_never_logs_an_unretrieved_exce
         loop.set_exception_handler(previous_handler)
 
     assert reports == []
+
+
+class _StreamingPage:
+    """Replays the lifecycle order Firefox showed on a bookshop.org product page
+    (2026-09-26): Playwright marks the main document finished when its headers
+    arrive, so `networkidle` fires while the rest of the HTML is still
+    streaming, before `domcontentloaded` and `load`."""
+
+    ORDER = (("networkidle", 0.05), ("domcontentloaded", 0.2), ("load", 0.25))
+
+    def __init__(self) -> None:
+        self.reached = {state: asyncio.Event() for state, _ in self.ORDER}
+        self.timeouts: list[float] = []
+        self._clock: asyncio.Task | None = None
+
+    async def _run_clock(self) -> None:
+        started = asyncio.get_running_loop().time()
+        for state, at in self.ORDER:
+            await asyncio.sleep(max(0.0, started + at - asyncio.get_running_loop().time()))
+            self.reached[state].set()
+
+    async def goto(self, url, wait_until, timeout):
+        self.timeouts.append(timeout)
+        self._clock = asyncio.create_task(self._run_clock())
+        await self.reached[wait_until].wait()
+
+    async def wait_for_load_state(self, state, timeout):
+        self.timeouts.append(timeout)
+        await self.reached[state].wait()
+
+
+@pytest.mark.anyio
+async def test_networkidle_never_returns_a_half_parsed_page():
+    page = _StreamingPage()
+    session = CamoufoxSession(object(), page)
+
+    await session.goto("https://bookshop.org/p/books/x/1", "networkidle", 5.0)
+
+    assert page.reached["load"].is_set()
+    # Every wait draws on the one navigation budget.
+    assert all(1 <= t <= 5000 for t in page.timeouts)

@@ -81,6 +81,17 @@ returns `url`, `final_url`, `status` (the site's status), `title`, `html`,
 `selector_found` (null when no selector was asked for), `elapsed_ms` and
 `fetched_at`. A 403 bot wall is a 200 from the service with `status: 403`.
 
+**Which wait to use.** Use the default `load`, and add `wait_for_selector` for
+the element you are going to parse. Selectors need no ids: Playwright's
+`td:has-text("EAN/UPC")`, `h1` or `xpath=//table` all work. Avoid
+`networkidle`: it waits for `load` and then for 500 ms with nothing in flight,
+and on ad-supported pages some blocked ad and analytics scripts never settle in
+Playwright's view (bookshop.org: `gpt.js`, `gtm.js`), so it usually never
+arrives and the fetch times out. Playwright's raw `networkidle` is worse: under
+Firefox it can fire while a slowly streamed page is still arriving, which
+returned half a bookshop.org page (`<head>` only) before the service started
+waiting for `load` first.
+
 | HTTP | `error` | When |
 |---|---|---|
 | 400 | `invalid_url` | Bad scheme, embedded credentials, or a non-public address the checks catch (see "What the address checks do not cover") |
@@ -123,8 +134,9 @@ real-browser test. Run it after any browser or package bump:
     curl -s -X POST localhost:8081/fetch -H 'content-type: application/json' \
       -d '{"url":"https://www.goodreads.com/book/show/4671.The_Great_Gatsby"}' | head -c 400
 
-Also fetch a bookshop.org page with `"wait_until":"networkidle"` and read the
-`title`: "Just a moment…" with `status` 403 means Cloudflare's challenge did not clear.
+Also fetch a bookshop.org page with `"wait_for_selector":"td:has-text(\"EAN/UPC\")"`
+and read the `title` and `selector_found`: "Just a moment…" with `status` 403
+means Cloudflare's challenge did not clear.
 
 ## Rails client
 
@@ -135,9 +147,7 @@ returns a `PageFetcher::Page`. Configure it with `PAGE_FETCHER_SERVICE_URL`
 ```ruby
 page = PageFetcher::Client.new.fetch(
   "https://bookshop.org/book/9780743273565",
-  wait_until: "networkidle",
-  wait_for_selector: "h1",
-  timeout_ms: 45_000
+  wait_for_selector: 'td:has-text("EAN/UPC")'  # an element on the real page
 )
 page.status          # the SITE's status: a 403 is still a successful fetch
 page.selector_found  # false when the selector never appeared

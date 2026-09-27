@@ -17,6 +17,7 @@ import importlib.metadata
 import json
 import logging
 import os
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
@@ -335,8 +336,21 @@ class CamoufoxSession:
             log.debug("response skipped", exc_info=True)
 
     async def goto(self, url: str, wait_until: WaitUntil, timeout_s: float) -> None:
+        deadline = time.monotonic() + timeout_s
         try:
-            await self._page.goto(url, wait_until=wait_until, timeout=playwright_ms(timeout_s))
+            if wait_until == "networkidle":
+                # Firefox marks the main document's request finished when its
+                # headers arrive, so Playwright's networkidle can fire while a
+                # slowly streamed body is still being parsed (seen on
+                # bookshop.org: networkidle at 1.3 s, domcontentloaded at 4.9 s).
+                # Wait for load first; the networkidle wait then returns at once
+                # if it has already fired.
+                await self._page.goto(url, wait_until="load", timeout=playwright_ms(timeout_s))
+                await self._page.wait_for_load_state(
+                    "networkidle", timeout=playwright_ms(deadline - time.monotonic())
+                )
+            else:
+                await self._page.goto(url, wait_until=wait_until, timeout=playwright_ms(timeout_s))
         except Exception as exc:
             raise translate_playwright_error(exc) from exc
 

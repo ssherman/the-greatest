@@ -131,7 +131,7 @@ Request:
 | Field | Rules |
 |---|---|
 | `url` | Required. `http` or `https`, no embedded credentials, host must resolve only to public addresses (see §6). |
-| `wait_until` | `domcontentloaded`, `load` (default) or `networkidle`. Passed straight to Playwright. |
+| `wait_until` | `domcontentloaded`, `load` (default) or `networkidle`. The first two are passed straight to Playwright. `networkidle` waits for `load` first and then for Playwright's network-idle state: under Firefox, Playwright marks the main document finished when its headers arrive, so its raw network-idle can fire while a slowly streamed body is still being parsed, and the fetch would return half a page (seen on bookshop.org). On ad-supported pages `networkidle` usually never arrives, because some blocked ad and analytics scripts never settle in Playwright's view; use `load` with `wait_for_selector` there. |
 | `wait_for_selector` | Optional CSS selector waited for after `wait_until`, for pages that render client-side or sit behind a challenge. The wait is for the element to be in the DOM (Playwright's `state="attached"`), not visible: the service returns HTML, and visibility depends on the stylesheets it blocks. If it never appears, the fetch still returns what the page holds, with `selector_found: false`. |
 | `timeout_ms` | Default 30000, maximum 60000. The whole budget: waiting for a slot and for host spacing, launching the browser, navigation, the selector wait and reading the HTML all draw on it. The selector wait stops 2 seconds before the budget ends so the HTML can still be read. |
 
@@ -520,7 +520,7 @@ curl -s -X POST localhost:8081/fetch -H 'content-type: application/json' \
   -d '{"url":"https://www.goodreads.com/book/show/4671.The_Great_Gatsby"}' | head -c 400
 ```
 
-It also fetches one bookshop.org product page with `wait_until: "networkidle"` and reads `status`
+It also fetches one bookshop.org product page with the default `wait_until` and reads `status`
 and `title`: a cleared challenge shows the book's title, an uncleared one "Just a moment". This
 is the only place the real browser is exercised. There is deliberately no automated
 real-browser test.
