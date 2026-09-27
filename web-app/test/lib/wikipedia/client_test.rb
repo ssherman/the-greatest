@@ -18,20 +18,22 @@ module Wikipedia
     end
 
     test "reads the lead, page id, canonical URL and Wikidata item of one exact title" do
+      fixture_body = file_fixture("wikipedia/lead_leo_tolstoy.json").read
       stub = stub_request(:get, API)
         .with(query: hash_including(action: "query", prop: "extracts|pageprops|info", inprop: "url", exintro: "1",
           explaintext: "1", redirects: "1", titles: "Leo Tolstoy"))
-        .to_return(status: 200, body: file_fixture("wikipedia/lead_leo_tolstoy.json").read)
+        .to_return(status: 200, body: fixture_body)
 
       lead = @client.lead(language: "en", title: "Leo Tolstoy")
 
       assert_requested stub
+      assert_equal "en", lead.language
       assert_equal [18622119, "Leo Tolstoy", "https://en.wikipedia.org/wiki/Leo_Tolstoy", "Q7243"],
         [lead.page_id, lead.title, lead.url, lead.wikibase_item]
       assert_not lead.disambiguation?
-      assert_match(/Tolstoy/, lead.extract)
+      assert lead.extract.start_with?("Count Lev Nikolayevich Tolstoy")
       assert_equal "en:18622119", lead.source_id
-      assert_includes lead.raw, "Leo_Tolstoy"
+      assert_equal fixture_body, lead.raw
     end
 
     test "flags a disambiguation page" do
