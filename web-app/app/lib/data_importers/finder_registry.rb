@@ -37,6 +37,13 @@ module DataImporters
         recheck: true
       ),
       Entry.new(
+        finder: "DataImporters::Books::Author::Finder", domain: :books, model: "Books::Author", label: "Author",
+        query: "DataImporters::Books::Author::ImportQuery", preloads: [],
+        merge_action: "MergeAuthor", source_field: "source_author_id",
+        execute_action_path: ->(record) { URL_HELPERS.execute_action_admin_books_author_path(record) },
+        recheck: true
+      ),
+      Entry.new(
         finder: "DataImporters::Games::Game::Finder", domain: :games, model: "Games::Game", label: "Game",
         query: "DataImporters::Games::Game::ImportQuery", preloads: [:companies],
         merge_action: "MergeGame", source_field: "source_game_id",
