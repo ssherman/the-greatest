@@ -14,8 +14,9 @@ module DataImporters
         # spec, not to this provider.
         class OpenLibrary < DataImporters::ProviderBase
           # The Books::Book scalar columns the service's work-level diff covers.
-          # authors/subjects also appear in the diff, but creating authors or
-          # categories from them belongs to the reconciliation spec.
+          # Authors are not a diff fill: on accept, a book with no authors gets
+          # the accepted work's authors through the author importer
+          # (link_open_library_authors). Subjects stay the categories spec's.
           FILLABLE_FIELDS = %w[title subtitle description first_published_year].freeze
 
           IDENTIFIER_TYPE_BY_QUERY_FIELD = {
@@ -96,6 +97,8 @@ module DataImporters
 
             persist_query_identifiers(book, query)
 
+            data_populated << "authors" if link_open_library_authors(book, candidate)
+
             success_result(data_populated: data_populated)
           end
 
@@ -113,6 +116,31 @@ module DataImporters
                 book.identifiers.find_or_initialize_by(identifier_type: identifier_type, value: value)
               end
             end
+          end
+
+          # Import-finder redesign §8: on accept, a book with no authors gets
+          # the accepted work's authors, each through the author importer by
+          # key and name, linked in Open Library's order. A book that already
+          # has authors is left alone (the merger's ruling).
+          def link_open_library_authors(book, candidate)
+            return false if book.book_authors.any?
+
+            work = candidate.record
+            return false if work.nil? || work.author_keys.empty?
+
+            linked = false
+            work.author_keys.zip(work.author_names).each_with_index do |(key, name), index|
+              author = ::DataImporters::Books::Author::Importer.call(
+                name: name, open_library_author_key: key, work_titles: [book.title].compact_blank
+              ).item
+              next unless author&.persisted?
+              next if book.book_authors.any? { |existing| existing.author_id == author.id }
+
+              book.book_authors.build(author: author, position: index + 1)
+              linked = true
+            end
+            book.authors.reset if linked
+            linked
           end
 
           # Only a fill on a field that is actually blank locally gets
@@ -178,7 +206,7 @@ module DataImporters
           end
 
           def author_names_for(book, query)
-            names = book.authors.map(&:name)
+            names = book.book_authors.map { |link| link.author.name }
             names.presence || query&.author_names || []
           end
 

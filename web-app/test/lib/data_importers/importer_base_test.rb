@@ -53,6 +53,31 @@ module DataImporters
       def initialize_item(query) = ::Books::Book.new(title: query.title)
     end
 
+    class FailingProvider < DataImporters::ProviderBase
+      def populate(item, query:, match: nil)
+        failure_result(errors: ["service down"])
+      end
+    end
+
+    class FailingImporter < TestImporter
+      def initialize(match:)
+        super
+        @provider = FailingProvider.new
+      end
+    end
+
+    class SaveFirstImporter < FailingImporter
+      protected
+
+      def save_before_providers? = true
+    end
+
+    def unmatched_match
+      match = Match.new(outcome: :unmatched, record: nil, confidence: :high, decided_by: :rule)
+      match.decision = decision_for(match)
+      match
+    end
+
     def setup
       @existing = books_books(:war_and_peace)
       @query = FakeQuery.new
@@ -141,6 +166,47 @@ module DataImporters
       assert_equal :matched, result.summary[:match_outcome]
       assert_equal :high, result.summary[:match_confidence]
       assert_nil ImportResult.new(item: nil, provider_results: [], success: false).summary[:match_outcome]
+    end
+
+    test "a save-first importer keeps a new record when every provider fails, and points the decision at it" do
+      match = unmatched_match
+
+      result = SaveFirstImporter.new(match: match).call(query: FakeQuery.new("Kept"))
+
+      assert result.item.persisted?
+      assert result.created?
+      assert_not result.success?
+      assert_equal result.item, match.decision.reload.record
+    end
+
+    test "a default importer does not save a new record when its only provider fails" do
+      result = FailingImporter.new(match: unmatched_match).call(query: FakeQuery.new("Dropped"))
+
+      assert_not result.item.persisted?
+      assert_not result.created?
+    end
+
+    test "a save-first importer does not save an invalid new item" do
+      result = SaveFirstImporter.new(match: unmatched_match).call(query: FakeQuery.new(nil))
+
+      assert_not result.item.persisted?
+      assert_not result.created?
+    end
+
+    test "created? is true for a new record a provider saved and false for a matched one" do
+      created = TestImporter.new(match: unmatched_match).call(query: @query)
+      matched = TestImporter.new(match: Match.new(outcome: :matched, record: @existing, confidence: :certain, decided_by: :identifier)).call(query: @query)
+      forced = TestImporter.new(match: Match.new(outcome: :matched, record: @existing, confidence: :certain, decided_by: :identifier)).call(query: @query, force_providers: true)
+
+      assert created.created?
+      assert_not matched.created?
+      assert_not forced.created?
+    end
+
+    test "an item-based import is never created" do
+      result = TestImporter.new(match: nil).call(item: @existing)
+
+      assert_not result.created?
     end
   end
 end

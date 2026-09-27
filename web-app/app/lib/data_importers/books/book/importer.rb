@@ -31,10 +31,12 @@ module DataImporters
           @finder ||= Finder.new
         end
 
-        # OpenLibrary first: its fills are free and licensed, so the AI run
-        # that follows has fewer blanks to fill.
+        # OpenLibrary first: its fills are free and licensed, and on accept it
+        # links the work's authors. Authors next: the query's author names
+        # when the book still has none (an abstain, a reject, or the service
+        # unreachable). AiEnrichment last, so the AI fills fewer blanks.
         def providers
-          @providers ||= [Providers::OpenLibrary.new, Providers::AiEnrichment.new]
+          @providers ||= [Providers::OpenLibrary.new, Providers::Authors.new, Providers::AiEnrichment.new]
         end
 
         # Seeds first_published_year alongside title, not title alone -- the

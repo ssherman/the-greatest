@@ -61,6 +61,7 @@ module DataImporters
           # Use existing item or create new one
           target_item = existing || initialize_item(query)
           is_existing_item = existing.present?
+          save_new_item(target_item) unless is_existing_item
         end
 
         # Run providers to populate data, saving after each successful provider
@@ -79,7 +80,8 @@ module DataImporters
           item: target_item,
           provider_results: provider_results,
           success: success,
-          match: match
+          match: match,
+          created: match.present? && !is_existing_item && target_item.persisted?
         )
       end
     end
@@ -108,6 +110,19 @@ module DataImporters
     # Default is false for single-item imports (artists, albums)
     def multi_item_import?
       false
+    end
+
+    # Override to persist a new record before any provider runs. For a model
+    # whose query alone is a complete record (an author's name), the record
+    # then survives every provider failing -- the Open Library service is
+    # not deployed to production -- and an async provider has an id to
+    # enqueue with.
+    def save_before_providers?
+      false
+    end
+
+    def save_new_item(item)
+      item.save! if save_before_providers? && item.valid?
     end
 
     def run_providers(item, query, selected_providers = nil, match: nil)

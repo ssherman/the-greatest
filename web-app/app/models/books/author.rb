@@ -62,6 +62,7 @@ class Books::Author < ApplicationRecord
   validates :kind, presence: true
 
   before_validation :normalize_name
+  before_validation :normalize_alternate_names
 
   def as_indexed_json
     {
@@ -77,6 +78,12 @@ class Books::Author < ApplicationRecord
     return if name.blank?
 
     self.name = Services::Text::NameNormalizer.call(Services::Text::QuoteNormalizer.call(name))
+  end
+
+  def normalize_alternate_names
+    self.alternate_names = Array(alternate_names)
+      .map { |value| Services::Text::NameNormalizer.call(Services::Text::QuoteNormalizer.call(value)) }
+      .compact_blank.uniq
   end
 
   def queue_books_for_reindexing

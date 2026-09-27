@@ -110,8 +110,17 @@ score without authors), and `DataImporters::Books::Book::OpenLibrarySource` (`PO
 limit 5; one candidate per local holder of the work key or a key it redirects from; the whole
 `Resolution` on `match.external_resolution`, which the provider reuses for a new book). Music
 and games still run their legacy lookups until increments 5 and 6. The audit UI (increment 3) is
-described below; the authors importer and the book provider's author step are increment 4, games
-is increment 5 and music is increment 6.
+described below.
+
+**Increment 4 (authors)** added `DataImporters::Books::Author::Finder`: `Sources::Identifiers` (the
+query's Open Library author key), `Sources::Exact` (normalized name or alternate name against stored
+names and alternate names), `Sources::OpenSearch` over `Search::Books::Search::AuthorByName` (name or
+alternate name required; the query's alternate names as boosts), and
+`DataImporters::Books::Author::OpenLibrarySource` (`GET /authors/{key}`, treated as an accept; one
+candidate per local holder of the key or a key it redirects from; a 404 is no candidates). Rule 4 adds
+a death-year conflict check to the birth-year one. The book importer's author step links authors on an
+Open Library accept and otherwise imports the query's names (`Providers::Authors`). Games is increment
+5 and music is increment 6.
 
 ## Audit UI (increment 3)
 

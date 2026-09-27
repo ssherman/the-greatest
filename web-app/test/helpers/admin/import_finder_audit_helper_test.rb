@@ -27,5 +27,12 @@ module Admin
       assert_equal %w[222 B1], audit_shared_identifiers(decision, candidate)
       assert_empty audit_shared_identifiers(MatchDecision.new(query: {}), {"evidence" => {}})
     end
+
+    test "audit_shared_identifiers highlights a shared Open Library author key" do
+      decision = MatchDecision.new(query: {"open_library_author_key" => "OL26783A"})
+      candidate = {"evidence" => {"identifiers" => [{"type" => "books_author_openlibrary_id", "value" => "OL26783A"}]}}
+
+      assert_equal %w[OL26783A], audit_shared_identifiers(decision, candidate)
+    end
   end
 end

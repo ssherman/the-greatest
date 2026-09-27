@@ -33,7 +33,7 @@ module DataImporters
             {"field" => field.to_s, "ours" => ours, "theirs" => theirs, "kind" => kind}
           end
 
-          def candidate_hash(key:, diff:, verdict: "accept")
+          def candidate_hash(key:, diff:, verdict: "accept", record: nil)
             {
               "key" => {"source" => "openlibrary", "key" => key},
               "score" => 0.9,
@@ -43,11 +43,11 @@ module DataImporters
               "evidence" => {},
               "conflicts" => [],
               "diff" => diff,
-              "record" => nil
+              "record" => record
             }
           end
 
-          def resolve_response(verdict:, key: "OL468431W", reason: "identifier match", diff: [])
+          def resolve_response(verdict:, key: "OL468431W", reason: "identifier match", diff: [], record: nil)
             {
               "source_version" => source_version_hash,
               "data" => {
@@ -60,7 +60,7 @@ module DataImporters
                 },
                 "guards_tripped" => [],
                 "volume_guards_tripped" => [],
-                "candidates" => (verdict == "accept") ? [candidate_hash(key: key, diff: diff)] : []
+                "candidates" => (verdict == "accept") ? [candidate_hash(key: key, diff: diff, record: record)] : []
               }
             }
           end
@@ -330,6 +330,62 @@ module DataImporters
             assert result.success?
             assert_empty result.data_populated
             assert_empty book.authors
+          end
+
+          # ---------------------------------------------------- authors: accept path
+
+          def work_with_authors(authors)
+            {
+              "key" => {"source" => "openlibrary", "key" => "OL468431W"}, "redirected_from" => [], "title" => "Hadji Murat",
+              "subtitle" => nil, "description" => nil, "subjects" => [], "year_evidence" => nil, "popularity" => nil,
+              "authors" => authors.map { |key, name| {"key" => {"source" => "openlibrary", "key" => key}, "name" => name} }
+            }
+          end
+
+          def author_result(author)
+            DataImporters::ImportResult.new(item: author, provider_results: [], success: true)
+          end
+
+          test "an accept links the work's authors through the author importer, by key and name, in Open Library's order" do
+            book = ::Books::Book.new(title: "Hadji Murat")
+            stub_resolve(resolve_response(verdict: "accept", record: work_with_authors([["OL2A", "Stephen King"], ["OL1A", "Leo Tolstoy"]])))
+            ::DataImporters::Books::Author::Importer.expects(:call)
+              .with(name: "Stephen King", open_library_author_key: "OL2A", work_titles: ["Hadji Murat"]).returns(author_result(books_authors(:king)))
+            ::DataImporters::Books::Author::Importer.expects(:call)
+              .with(name: "Leo Tolstoy", open_library_author_key: "OL1A", work_titles: ["Hadji Murat"]).returns(author_result(books_authors(:tolstoy)))
+
+            result = @provider.populate(book, query: nil)
+
+            assert_includes result.data_populated, "authors"
+            assert_equal [[books_authors(:king), 1], [books_authors(:tolstoy), 2]], book.book_authors.map { |l| [l.author, l.position] }
+          end
+
+          test "a work author with a key but no name is imported by key" do
+            book = ::Books::Book.new(title: "Hadji Murat")
+            stub_resolve(resolve_response(verdict: "accept", record: work_with_authors([["OL1A", nil]])))
+            ::DataImporters::Books::Author::Importer.expects(:call)
+              .with(name: nil, open_library_author_key: "OL1A", work_titles: ["Hadji Murat"]).returns(author_result(books_authors(:tolstoy)))
+
+            @provider.populate(book, query: nil)
+
+            assert_equal [books_authors(:tolstoy)], book.book_authors.map(&:author)
+          end
+
+          test "an accept for a book that already has authors leaves them alone" do
+            book = books_books(:war_and_peace)
+            stub_resolve(resolve_response(verdict: "accept", record: work_with_authors([["OL2A", "Stephen King"]])))
+            ::DataImporters::Books::Author::Importer.expects(:call).never
+
+            result = @provider.populate(book, query: nil)
+
+            assert_not_includes result.data_populated, "authors"
+          end
+
+          test "an accept whose candidate carries no work record links nothing and still succeeds" do
+            ::DataImporters::Books::Author::Importer.expects(:call).never
+            stub_resolve(resolve_response(verdict: "accept"))
+
+            assert @provider.populate(::Books::Book.new(title: "Hadji Murat"), query: nil).success?
           end
 
           # ------------------------------------------------------- match reuse

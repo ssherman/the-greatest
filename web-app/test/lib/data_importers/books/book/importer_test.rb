@@ -10,6 +10,7 @@ module DataImporters
 
         def setup
           ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([])
+          ::Search::Books::Search::AuthorByName.stubs(:call).returns([])
           # Sidekiq runs inline in tests; a real enqueue would run the AI task.
           ::Books::EnrichBookJob.stubs(:perform_async)
         end
@@ -201,6 +202,20 @@ module DataImporters
           assert_empty ::Identifier.where(identifiable_type: "Books::Book", value: new_isbn)
         end
 
+        test "with Open Library unreachable, an identifier-only import links no orphan author and is not a success" do
+          stub_resolve_down
+          new_isbn = "9780000000001"
+
+          result = nil
+          assert_no_difference ["::Books::Book.count", "::Books::Author.count"] do
+            result = Importer.call(isbn13: [new_isbn], author_names: ["Zed Orphanmaker"])
+          end
+
+          assert_not result.success?
+          assert_not result.item.persisted?
+          assert_not ::Books::Author.exists?(name: "Zed Orphanmaker")
+        end
+
         test "R115: a blank isbn13 alongside a real one persists exactly one identifier row" do
           stub_open_library_client
           new_isbn = "9780061120084"
@@ -274,10 +289,95 @@ module DataImporters
           assert_equal "A Novel", result.item.reload.subtitle
         end
 
-        test "providers run Open Library first, then AI enrichment" do
+        def stub_resolve_down
+          stub_open_library_client
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 500, body: "{}")
+        end
+
+        test "with Open Library unreachable, a title-and-author import creates the book and links an existing author" do
+          stub_resolve_down
+
+          result = Importer.call(title: "Hadji Murat", author_names: ["Leo Tolstoy"])
+
+          book = result.item.reload
+          assert book.persisted?
+          assert_equal [books_authors(:tolstoy)], book.authors.to_a
+        end
+
+        test "with Open Library unreachable, book.authors is fresh on the returned item and AI enrichment gets the linked author's name" do
+          stub_resolve_down
+          ::Books::EnrichBookJob.expects(:perform_async).with(anything, false, ["Leo Tolstoy"])
+
+          result = Importer.call(title: "Hadji Murat", author_names: ["Lev Tolstoy"])
+
+          assert_equal [books_authors(:tolstoy)], result.item.authors.to_a
+        end
+
+        test "with Open Library unreachable, a new author name becomes a new author" do
+          stub_resolve_down
+
+          book = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"]).item.reload
+
+          assert_equal ["Anna Brenner"], book.authors.map(&:name)
+        end
+
+        test "a title-and-author re-import is idempotent" do
+          stub_resolve_down
+          first = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"]).item
+
+          second = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"])
+
+          assert_equal first, second.item
+          assert_equal 1, ::Books::Book.where(title: "The Quiet Year").count
+          assert_equal 1, ::Books::Author.where(name: "Anna Brenner").count
+        end
+
+        test "an Open Library accept links the work's authors, creating one by its key" do
+          stub_open_library_client
+          record = work_record_hash(title: "The Quiet Year").merge(
+            "authors" => [{"key" => {"source" => "openlibrary", "key" => "OL77A"}, "name" => "Anna Brenner"}]
+          )
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: accept_response(diff: [], record: record).to_json)
+          stub_request(:get, "#{BASE_URL}/authors/OL77A").to_return(status: 200, body: {
+            "source_version" => nil,
+            "data" => {"key" => {"source" => "openlibrary", "key" => "OL77A"}, "redirected_from" => [], "name" => "Anna Brenner",
+                       "alternate_names" => [], "birth_year" => 1901, "death_year" => nil}
+          }.to_json)
+
+          book = Importer.call(title: "The Quiet Year", author_names: ["A. Brenner"]).item.reload
+
+          author = book.authors.sole
+          assert_equal ["Anna Brenner", 1901], [author.name, author.birth_year]
+          assert author.identifiers.exists?(identifier_type: :books_author_openlibrary_id, value: "OL77A")
+        end
+
+        test "a forced re-import of a book that has authors touches neither author step" do
+          stub_open_library_client
+          record = work_record_hash(title: "War and Peace").merge(
+            "authors" => [{"key" => {"source" => "openlibrary", "key" => "OL2A"}, "name" => "Stephen King"}]
+          )
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: accept_response(diff: [], record: record).to_json)
+          ::DataImporters::Books::Author::Importer.expects(:call).never
+
+          # The ISBN identifier plus the agreeing title corroborates, so the
+          # finder matches war_and_peace by rule and stops before its own
+          # Open Library source; the forced providers then run with the
+          # query, so the Open Library provider (a persisted book) still
+          # calls /resolve and reaches link_open_library_authors, and the
+          # Authors provider still sees the query's author name.
+          result = Importer.call(
+            title: "War and Peace", isbn13: [identifiers(:war_and_peace_isbn13).value],
+            author_names: ["Stephen King"], force_providers: true
+          )
+
+          assert_equal books_books(:war_and_peace), result.item
+          assert_equal [books_authors(:tolstoy)], books_books(:war_and_peace).reload.authors.to_a
+        end
+
+        test "providers run Open Library first, then Authors, then AI enrichment" do
           providers = Importer.new.send(:providers)
 
-          assert_equal [Providers::OpenLibrary, Providers::AiEnrichment], providers.map(&:class)
+          assert_equal [Providers::OpenLibrary, Providers::Authors, Providers::AiEnrichment], providers.map(&:class)
         end
       end
     end

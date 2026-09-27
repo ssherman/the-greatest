@@ -22,6 +22,7 @@ module DataImporters
 
     test "a mergeable entry names a destructive admin action, a source field and an execute_action path" do
       records = {
+        "Books::Author" => books_authors(:tolstoy),
         "Books::Book" => books_books(:war_and_peace),
         "Games::Game" => games_games(:half_life_2),
         "Music::Artist" => music_artists(:david_bowie),
@@ -30,7 +31,7 @@ module DataImporters
       }
 
       mergeable = FinderRegistry::ENTRIES.select(&:mergeable?)
-      assert_equal %w[Books::Book Games::Game Music::Album Music::Artist Music::Song], mergeable.map(&:model).sort
+      assert_equal %w[Books::Author Books::Book Games::Game Music::Album Music::Artist Music::Song], mergeable.map(&:model).sort
 
       mergeable.each do |entry|
         action = "Actions::Admin::#{entry.domain.to_s.camelize}::#{entry.merge_action}".constantize
@@ -49,20 +50,21 @@ module DataImporters
     end
 
     test "for_domain groups entries by admin domain" do
-      assert_equal ["Books::Book"], FinderRegistry.models_for(:books)
+      assert_equal %w[Books::Author Books::Book], FinderRegistry.models_for(:books).sort
       assert_equal %w[Games::Company Games::Game], FinderRegistry.models_for(:games).sort
       assert_equal %w[Music::Album Music::Artist Music::Song], FinderRegistry.models_for("music").sort
-      assert_equal ["DataImporters::Books::Book::Finder"], FinderRegistry.finders_for(:books)
+      assert_equal %w[DataImporters::Books::Author::Finder DataImporters::Books::Book::Finder], FinderRegistry.finders_for(:books).sort
       assert_empty FinderRegistry.for_domain(:movies)
     end
 
-    test "only the books finder offers re-check" do
-      assert_equal ["DataImporters::Books::Book::Finder"], FinderRegistry::ENTRIES.select(&:recheck?).map(&:finder)
+    test "only the books and authors finders offer re-check" do
+      assert_equal %w[DataImporters::Books::Author::Finder DataImporters::Books::Book::Finder],
+        FinderRegistry::ENTRIES.select(&:recheck?).map(&:finder).sort
     end
 
     test "entry lookups return nil for unknown names" do
       assert_nil FinderRegistry.entry("DataImporters::Nope::Finder")
-      assert_nil FinderRegistry.entry_for_model("Books::Author")
+      assert_nil FinderRegistry.entry_for_model("Books::Nope")
     end
   end
 end
