@@ -5,11 +5,11 @@ module DataImporters
     module Book
       module Providers
         # Async provider: queues Books::EnrichBookJob and returns at once.
-        # Runs after OpenLibrary in the importer so the AI fills fewer blanks.
+        # Runs after OpenLibrary and Authors in the importer so the AI fills fewer blanks.
         #
-        # A brand-new book has no book_authors rows (the OpenLibrary provider
-        # deliberately creates no authors), so the query's author names ride
-        # along to the job; the runner uses book.authors when they exist.
+        # The author step runs first, so book.authors is normally present by
+        # now; the query's author names are only the fallback, used when that
+        # step linked none.
         class AiEnrichment < DataImporters::ProviderBase
           def populate(book, query:, match: nil)
             return failure_result(errors: ["Book title required for AI enrichment"]) if book.title.blank?

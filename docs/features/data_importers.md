@@ -178,15 +178,18 @@ section for the full contract).
   `OpenLibrarySource#local_holders` finds the book holding that canonical key (it also counts any
   key in the work's `redirected_from` list, which `/resolve` does not populate), and rule 2 matches
   on the external accept. A key-only re-run earns no accept, because the service has no title or
-  identifier evidence for it, so that one reaches the AI. A title+author import is idempotent: the
-  author step links the authors, so the exact source finds the book by title joined to an author
-  name on the next run.
+  identifier evidence for it, so that one reaches the AI. A title+author import is idempotent when
+  the linked author carries the query's author name (a newly created author, or a match on that
+  name): the exact source finds the book by title joined to that name on the next run. An author
+  matched under a variant name leaves the re-run to OpenSearch and the AI, and a book linked
+  through an Open Library accept is found again by the service's accept on the same key.
 
 #### AI Enrichment (Async)
-Queues `Books::EnrichBookJob` and returns `[:ai_enrichment_queued]`. Runs after Open Library so
-the AI fills fewer blanks. Requires a title and either `book.authors` or the query's
-`author_names` (a new book has no `book_authors` rows yet, so the names ride along to the job).
-The job runs `Services::Books::EnrichBook`; see `docs/features/books_enrichment.md`.
+Queues `Books::EnrichBookJob` and returns `[:ai_enrichment_queued]`. Runs after Open Library and
+Authors, so the AI fills fewer blanks. Requires a title and either `book.authors` names (the usual
+case, since the author step runs first) or the query's `author_names` when the book still has no
+authors (the author step imported none). The job runs `Services::Books::EnrichBook`; see
+`docs/features/books_enrichment.md`.
 
 #### Authors (Sync)
 `Providers::Authors` runs after Open Library. When the book still has no authors (Open Library abstained,

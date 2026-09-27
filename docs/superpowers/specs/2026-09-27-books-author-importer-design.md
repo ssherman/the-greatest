@@ -185,9 +185,11 @@ Additions to that section:
 - **Declared while planning increment 1:** the author importer saves a new author before providers run
   (`ImporterBase#save_before_providers?`), and the book importer's name path is its own provider
   (`DataImporters::Books::Book::Providers::Authors`, after Open Library). Both exist because the Open
-  Library service is not deployed to production: without them a production author import would persist
-  nothing, and a production book import would link no authors (the redesign's §8 only reached the name
-  path on an abstain or reject, not on an unreachable service). Implementation added a third:
+  Library service is not deployed to production: without them an author import by Open Library key
+  would persist nothing while the service is unreachable, a later async provider would have no id
+  to enqueue with, and a production book import would link no authors (the redesign's §8 only
+  reached the name path on an abstain or reject, not on an unreachable service). Implementation
+  added a third:
   `Books::Author` normalizes `alternate_names` on save the way it normalizes `name`, since the authors
   finder's exact source compares against stored alternate names; rows stored before that change are
   covered by the pending `books:normalize_names:apply` one-off.
