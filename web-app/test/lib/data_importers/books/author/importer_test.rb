@@ -87,6 +87,26 @@ module DataImporters
           assert_equal 1, ::Books::Author.where(name: "Anna Brenner").count
         end
 
+        test "when the AI rejects the author holding the key, the new author is created without it and the pair is flagged" do
+          holder = books_authors(:king)
+          holder.identifiers.create!(identifier_type: :books_author_openlibrary_id, value: "OL77A")
+          stub_author("OL77A")
+          task = stub("select_candidate_task")
+          ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).returns(task)
+          task.stubs(:call).returns(::Services::Ai::Result.new(success: true, ai_chat: ai_chats(:general_chat),
+            data: {selected_index: 0, confidence: "medium", reasoning: "Stephen King is not Anna Brenner.", same_entity_groups: []}))
+
+          result = Importer.call(name: "Anna Brenner", open_library_author_key: "OL77A")
+
+          author = result.item
+          assert author.persisted?
+          assert result.created?
+          assert_equal [holder.id], ::Identifier.where(identifier_type: :books_author_openlibrary_id, value: "OL77A").pluck(:identifiable_id)
+          assert ::DuplicateCandidate.raised_by_external_key_collision.exists?(
+            item_type: "Books::Author", item_a_id: [author.id, holder.id].min, item_b_id: [author.id, holder.id].max
+          )
+        end
+
         test "the query's alternate names seed a new author, without its own name" do
           result = Importer.call(name: "Anna Brenner", alternate_names: ["Anna Brenner", "Anya Brenner"])
 

@@ -32,6 +32,9 @@ module DataImporters
             record = reusable_record(match) || fetch(author, query)
             return success_result(data_populated: []) if record.nil?
 
+            holder = other_holder(author, record)
+            return key_conflict(author, holder, record, match) if holder
+
             success_result(data_populated: apply(author, record))
           rescue => e
             failure_result(errors: ["Open Library #{e.class.name.demodulize}: #{e.message}"])
@@ -51,6 +54,33 @@ module DataImporters
             return nil if key.blank?
 
             client.author(key)
+          end
+
+          # Another author already holding the record's key, or a key it
+          # redirects from. The finder can decide against that holder (an AI
+          # "none", say, when a legacy key sits on the wrong author), and a
+          # second holder would never surface as a pair later: an identifier
+          # hit carries no external key, so the next lookup just picks one.
+          def other_holder(author, record)
+            keys = ([record.key] + Array(record.redirected_from)).compact_blank.uniq
+            holders = ::Books::Author
+              .joins(:identifiers)
+              .where(identifiers: {identifier_type: ::Identifier.identifier_types[:books_author_openlibrary_id], value: keys})
+            holders = holders.where.not(id: author.id) if author.id
+            holders.order(:id).first
+          end
+
+          # Nothing from the record is applied: it describes the holder as much
+          # as this author. The pair goes to the duplicates queue instead.
+          def key_conflict(author, holder, record, match)
+            if author.persisted?
+              ::Services::DuplicateCandidates::Flag.call(
+                item_type: "Books::Author", ids: [author.id, holder.id], source: :external_key_collision,
+                evidence: {open_library_key: record.key, reason: "Open Library key #{record.key} is held by Books::Author##{holder.id}"},
+                match_decision: match&.decision
+              )
+            end
+            failure_result(errors: ["Open Library key #{record.key} is already held by Books::Author##{holder.id}; flagged as a suspected duplicate, nothing applied"])
           end
 
           def held_key(author)

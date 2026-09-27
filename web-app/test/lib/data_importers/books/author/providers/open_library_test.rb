@@ -20,9 +20,19 @@ module DataImporters
             @provider = Providers::OpenLibrary.new(client: @client)
           end
 
-          def ol_author(key: "OL26783A", name: "Leo Tolstoy", alternate_names: ["Lev Nikolayevich Tolstoy", "Leo Tolstoï"], birth_year: 1828, death_year: 1910)
+          def ol_author(key: "OL26783A", name: "Leo Tolstoy", alternate_names: ["Lev Nikolayevich Tolstoy", "Leo Tolstoï"], birth_year: 1828, death_year: 1910, redirected_from: [])
             ::Books::OpenLibrary::Author.new(key: key, source: "openlibrary", name: name, alternate_names: alternate_names,
-              birth_year: birth_year, death_year: death_year, redirected_from: [], source_version: nil)
+              birth_year: birth_year, death_year: death_year, redirected_from: redirected_from, source_version: nil)
+          end
+
+          def openlibrary_keys(author)
+            ::Identifier.where(identifiable: author, identifier_type: :books_author_openlibrary_id).pluck(:value)
+          end
+
+          def collision_pair?(author_a, author_b)
+            ::DuplicateCandidate.raised_by_external_key_collision.exists?(
+              item_type: "Books::Author", item_a_id: [author_a.id, author_b.id].min, item_b_id: [author_a.id, author_b.id].max
+            )
           end
 
           def stub_author(key, status: 200)
@@ -91,6 +101,32 @@ module DataImporters
             assert result.success?
             assert_equal [], result.data_populated
             assert_not_requested(:get, %r{#{BASE_URL}/authors/}o)
+          end
+
+          test "a canonical key another author already holds is not stamped: nothing is applied and the pair is flagged" do
+            holder = books_authors(:king)
+            holder.identifiers.create!(identifier_type: :books_author_openlibrary_id, value: "OL26783A")
+            author = ::Books::Author.create!(name: "Lev Tolstoy")
+
+            result = @provider.populate(author, query: ImportQuery.new(name: "Lev Tolstoy", open_library_author_key: "OL26783A"), match: match_with(ol_author))
+
+            assert_not result.success?
+            assert_match(/OL26783A is already held by Books::Author##{holder.id}/, result.errors.first)
+            assert_equal [[], nil, []], [author.identifiers.map(&:value), author.birth_year, author.alternate_names]
+            assert_equal ["OL26783A"], openlibrary_keys(holder)
+            assert collision_pair?(author, holder)
+          end
+
+          test "a key another author holds under an old key the record redirects from is the same conflict" do
+            holder = books_authors(:king)
+            holder.identifiers.create!(identifier_type: :books_author_openlibrary_id, value: "OL1A")
+            author = ::Books::Author.create!(name: "Lev Tolstoy")
+
+            result = @provider.populate(author, query: nil, match: match_with(ol_author(key: "OL2A", redirected_from: ["OL1A"])))
+
+            assert_not result.success?
+            assert_empty author.identifiers.map(&:value)
+            assert collision_pair?(author, holder)
           end
 
           test "a service error is a failure result, never an exception" do
