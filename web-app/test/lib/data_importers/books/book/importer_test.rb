@@ -10,6 +10,7 @@ module DataImporters
 
         def setup
           ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([])
+          ::Search::Books::Search::AuthorByName.stubs(:call).returns([])
           # Sidekiq runs inline in tests; a real enqueue would run the AI task.
           ::Books::EnrichBookJob.stubs(:perform_async)
         end
@@ -274,10 +275,72 @@ module DataImporters
           assert_equal "A Novel", result.item.reload.subtitle
         end
 
-        test "providers run Open Library first, then AI enrichment" do
+        def stub_resolve_down
+          stub_open_library_client
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 500, body: "{}")
+        end
+
+        test "with Open Library unreachable, a title-and-author import creates the book and links an existing author" do
+          stub_resolve_down
+
+          result = Importer.call(title: "Hadji Murat", author_names: ["Leo Tolstoy"])
+
+          book = result.item.reload
+          assert book.persisted?
+          assert_equal [books_authors(:tolstoy)], book.authors.to_a
+        end
+
+        test "with Open Library unreachable, a new author name becomes a new author" do
+          stub_resolve_down
+
+          book = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"]).item.reload
+
+          assert_equal ["Anna Brenner"], book.authors.map(&:name)
+        end
+
+        test "a title-and-author re-import is idempotent" do
+          stub_resolve_down
+          first = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"]).item
+
+          second = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"])
+
+          assert_equal first, second.item
+          assert_equal 1, ::Books::Book.where(title: "The Quiet Year").count
+          assert_equal 1, ::Books::Author.where(name: "Anna Brenner").count
+        end
+
+        test "an Open Library accept links the work's authors, creating one by its key" do
+          stub_open_library_client
+          record = work_record_hash(title: "The Quiet Year").merge(
+            "authors" => [{"key" => {"source" => "openlibrary", "key" => "OL77A"}, "name" => "Anna Brenner"}]
+          )
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: accept_response(diff: [], record: record).to_json)
+          stub_request(:get, "#{BASE_URL}/authors/OL77A").to_return(status: 200, body: {
+            "source_version" => nil,
+            "data" => {"key" => {"source" => "openlibrary", "key" => "OL77A"}, "redirected_from" => [], "name" => "Anna Brenner",
+                       "alternate_names" => [], "birth_year" => 1901, "death_year" => nil}
+          }.to_json)
+
+          book = Importer.call(title: "The Quiet Year", author_names: ["A. Brenner"]).item.reload
+
+          author = book.authors.sole
+          assert_equal ["Anna Brenner", 1901], [author.name, author.birth_year]
+          assert author.identifiers.exists?(identifier_type: :books_author_openlibrary_id, value: "OL77A")
+        end
+
+        test "a forced re-import of a book that has authors touches neither author step" do
+          stub_resolve_down
+          ::DataImporters::Books::Author::Importer.expects(:call).never
+
+          Importer.call(item: books_books(:war_and_peace), force_providers: true)
+
+          assert_equal [books_authors(:tolstoy)], books_books(:war_and_peace).reload.authors.to_a
+        end
+
+        test "providers run Open Library first, then Authors, then AI enrichment" do
           providers = Importer.new.send(:providers)
 
-          assert_equal [Providers::OpenLibrary, Providers::AiEnrichment], providers.map(&:class)
+          assert_equal [Providers::OpenLibrary, Providers::Authors, Providers::AiEnrichment], providers.map(&:class)
         end
       end
     end
