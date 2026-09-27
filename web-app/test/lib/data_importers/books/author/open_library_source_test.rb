@@ -62,9 +62,25 @@ module DataImporters
           candidates = source("OL2A").call
 
           assert_equal [@tolstoy], candidates.map(&:record)
-          assert_equal "OL2A", candidates.first.external_key
-          assert_nil candidates.first.evidence[:title]
-          assert_equal ["Leo Tolstoy", 1828], candidates.first.evidence.values_at(:external_title, :external_birth_year)
+          candidate = candidates.first
+          assert_equal "OL2A", candidate.external_key
+          assert_equal :open_library, candidate.external_source
+          assert_instance_of ::Books::OpenLibrary::Author, candidate.external_record
+          assert candidate.external_accepted?
+          assert_nil candidate.evidence[:title]
+          assert_equal ["Leo Tolstoy", 1828], candidate.evidence.values_at(:external_title, :external_birth_year)
+        end
+
+        test "a local author holding the canonical key directly is a holder candidate" do
+          @tolstoy.identifiers.create!(identifier_type: :books_author_openlibrary_id, value: "OL26783A")
+          stub_author("OL26783A")
+
+          candidates = source("OL26783A").call
+
+          assert_equal [@tolstoy], candidates.map(&:record)
+          candidate = candidates.first
+          assert_equal "OL26783A", candidate.external_key
+          assert candidate.external_accepted?
         end
 
         test "a 404 is no candidates, not a failure" do
