@@ -165,19 +165,15 @@ module Services
         return record(:origin_countries, f, applied: false, reason: "null", value: [], unmatched: []) if names.empty?
         return record(:origin_countries, f, applied: false, reason: "already_set", unmatched: []) if book.book_countries.exists?
 
-        matched, unmatched = names.partition { |name| find_country(name) }
-        matched.each { |name| book.book_countries.build(country: find_country(name)) }
+        lookup = CountryLookup.from_text(names)
+        lookup.countries.each { |country| book.book_countries.build(country: country) }
+        matched = names - lookup.unmatched
 
-        if matched.any?
-          record(:origin_countries, f, applied: true, reason: "filled", value: matched, unmatched: unmatched)
+        if lookup.countries.any?
+          record(:origin_countries, f, applied: true, reason: "filled", value: matched, unmatched: lookup.unmatched)
         else
-          record(:origin_countries, f, applied: false, reason: "no_match", unmatched: unmatched)
+          record(:origin_countries, f, applied: false, reason: "no_match", unmatched: lookup.unmatched)
         end
-      end
-
-      def find_country(name)
-        @countries ||= {}
-        @countries[name.downcase] ||= ::Books::Country.where("lower(name) = ?", name.downcase).first
       end
 
       def record_only_facts
