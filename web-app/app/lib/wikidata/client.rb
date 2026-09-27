@@ -35,6 +35,8 @@ module Wikidata
     end
 
     def search(name)
+      return [] if name.to_s.strip.empty?
+
       data = @http.action_api(API_URL, action: "wbsearchentities", search: name.to_s, language: "en", uselang: "en",
         type: "item", limit: SEARCH_LIMIT).data
       Array(data["search"]).map { |hit| {"id" => hit["id"], "label" => hit["label"], "description" => hit["description"]} }

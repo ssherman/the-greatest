@@ -65,6 +65,15 @@ module Wikidata
       assert hits.all? { |hit| hit.keys.sort == %w[description id label] }
     end
 
+    test "search returns nothing, without a request, for a blank name" do
+      stub = stub_request(:get, API).with(query: hash_including(action: "wbsearchentities"))
+
+      assert_equal [], @client.search(nil)
+      assert_equal [], @client.search("")
+      assert_equal [], @client.search("  ")
+      assert_not_requested stub
+    end
+
     test "by_statements ORs every pair into one haswbstatement search and returns item ids" do
       stub = stub_request(:get, API)
         .with(query: hash_including(action: "query", list: "search", srsearch: "haswbstatement:P648=OL26783A|P214=96987389", srnamespace: "0"))
