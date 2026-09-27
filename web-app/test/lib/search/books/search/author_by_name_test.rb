@@ -39,6 +39,12 @@ module Search
           assert_equal [], SEARCH.call(name: "***")
         end
 
+        test "sends the default MIN_SCORE to search when no min_score is given" do
+          SEARCH.expects(:search).with { |definition| definition[:min_score] == SEARCH::MIN_SCORE }.returns({"hits" => {"hits" => []}})
+
+          assert_equal [], SEARCH.call(name: "Leo Tolstoy")
+        end
+
         test "finds an author by name and not an unrelated one" do
           tolstoy = books_authors(:tolstoy)
           index(tolstoy, books_authors(:king))
@@ -53,14 +59,18 @@ module Search
           tolstoy = books_authors(:tolstoy)
           index(tolstoy)
 
-          assert_equal [tolstoy.id.to_s], SEARCH.call(name: "Lev Tolstoy").map { |hit| hit[:id] }
+          # A one-document test index gives near-zero IDF, so this checks which
+          # clauses match, not score calibration (MIN_SCORE is exercised below).
+          assert_equal [tolstoy.id.to_s], SEARCH.call(name: "Lev Tolstoy", min_score: 0.1).map { |hit| hit[:id] }
         end
 
         test "finds an author from an inverted name" do
           tolstoy = books_authors(:tolstoy)
           index(tolstoy)
 
-          assert_equal [tolstoy.id.to_s], SEARCH.call(name: "Tolstoy, Leo").map { |hit| hit[:id] }
+          # A one-document test index gives near-zero IDF, so this checks which
+          # clauses match, not score calibration (MIN_SCORE is exercised below).
+          assert_equal [tolstoy.id.to_s], SEARCH.call(name: "Tolstoy, Leo", min_score: 0.1).map { |hit| hit[:id] }
         end
 
         test "an ASCII spelling finds the accented name" do
