@@ -329,11 +329,25 @@ module DataImporters
         end
 
         test "a forced re-import of a book that has authors touches neither author step" do
-          stub_resolve_down
+          stub_open_library_client
+          record = work_record_hash(title: "War and Peace").merge(
+            "authors" => [{"key" => {"source" => "openlibrary", "key" => "OL2A"}, "name" => "Stephen King"}]
+          )
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: accept_response(diff: [], record: record).to_json)
           ::DataImporters::Books::Author::Importer.expects(:call).never
 
-          Importer.call(item: books_books(:war_and_peace), force_providers: true)
+          # The ISBN identifier plus the agreeing title corroborates, so the
+          # finder matches war_and_peace by rule and stops before its own
+          # Open Library source; the forced providers then run with the
+          # query, so the Open Library provider (a persisted book) still
+          # calls /resolve and reaches link_open_library_authors, and the
+          # Authors provider still sees the query's author name.
+          result = Importer.call(
+            title: "War and Peace", isbn13: [identifiers(:war_and_peace_isbn13).value],
+            author_names: ["Stephen King"], force_providers: true
+          )
 
+          assert_equal books_books(:war_and_peace), result.item
           assert_equal [books_authors(:tolstoy)], books_books(:war_and_peace).reload.authors.to_a
         end
 
