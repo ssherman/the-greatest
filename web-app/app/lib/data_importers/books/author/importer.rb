@@ -30,7 +30,7 @@ module DataImporters
         end
 
         def providers
-          @providers ||= [Providers::OpenLibrary.new]
+          @providers ||= [Providers::OpenLibrary.new, Providers::Enrichment.new]
         end
 
         # A name alone is a complete author: keep it even when Open Library is

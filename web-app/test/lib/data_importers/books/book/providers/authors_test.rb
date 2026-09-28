@@ -13,6 +13,9 @@ module DataImporters
             @provider = Providers::Authors.new
             @tolstoy = books_authors(:tolstoy)
             @king = books_authors(:king)
+            # Sidekiq runs inline in tests; a real author import would
+            # enqueue the Wikidata step.
+            ::Books::Authors::WikidataJob.stubs(:perform_async)
           end
 
           def result_for(author)
