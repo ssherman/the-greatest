@@ -346,6 +346,30 @@ module Admin
         assert_not_includes ids, @sweep.id, "war_and_peace_sweep has needs_review: false"
         assert_includes ids, @pending.id
       end
+
+      test "a Wikidata link decision, with no local record and only external candidates, shows, filters and refuses re-check" do
+        decision = ::MatchDecision.create!(
+          finder: "Services::Books::Authors::ResolveWikidata", subject: books_authors(:tolstoy), record: nil,
+          outcome: :matched, confidence: :medium, decided_by: :ai, needs_review: true,
+          query: {"name" => "Leo Tolstoy", "open_library_author_key" => ["OL26783A"]},
+          candidates: [{
+            "record_type" => nil, "record_id" => nil, "external_source" => "wikidata", "external_key" => "Q7243",
+            "sources" => ["name_search"], "scores" => {},
+            "evidence" => {"external_title" => "Leo Tolstoy", "external_year" => 1828, "matched_identifier" => {"type" => "books_author_openlibrary_id", "value" => "OL26783A"}}
+          }],
+          selected_index: 1, reason: "Works and years match."
+        )
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_match_decision_path(decision)
+        assert_response :success
+
+        get admin_books_match_decisions_path(entity: "wikidata-link")
+        assert_equal [decision.id], row_ids
+
+        post recheck_admin_books_match_decision_path(decision)
+        assert_redirected_to admin_books_match_decision_path(decision)
+      end
     end
   end
 end
