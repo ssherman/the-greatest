@@ -112,12 +112,29 @@ ledger and left alone.
 
 | From Wikidata | Written to | Notes |
 |---|---|---|
-| Item id, P214 (VIAF), P213 (ISNI), P244 (LC), P648 (Open Library), P2963 (Goodreads), P7400 (LibraryThing) | `identifiers` | Every Open Library value is stamped, since Wikidata often carries several for one person and each helps the import finder. The other identifier types are single-valued: a stored value that disagrees with Wikidata's is recorded as a conflict, not overwritten. |
+| Item id, P214 (VIAF), P213 (ISNI), P244 (LC), P648 (Open Library), P2963 (Goodreads), P7400 (LibraryThing) | `identifiers` | Every best-rank Open Library value is stamped, since Wikidata often carries several for one person and each helps the import finder. The other identifier types are single-valued: a stored value that disagrees with Wikidata's is recorded as a conflict, not overwritten. |
 | P569 / P570 | `birth_year` / `death_year` | Only at year precision (9) or finer; decade/century precision, disagreeing best-rank values, `somevalue`, and BCE dates are recorded but not applied. |
 | P21 | `gender` | male, female, trans woman -> female, trans man -> male, non-binary; anything else recorded, not applied. The legacy AI's `unspecified` counts as blank, so Wikidata can fill it. |
-| English label, English aliases, P1559 (native name), P742 (pseudonym) | `alternate_names` | Union after normalization (case- and diacritic-folded comparison; the stored spelling keeps its accents), author's own name excluded, capped at 20 *added* per run. |
+| English label, English aliases, P1559 (native name), P742 (pseudonym) | `alternate_names` | Union after normalization, author's own name excluded, capped at 20 *added* per run. |
 | P27 (citizenship) | `books_author_countries` | Through `CountryLookup` (below); fills only when the author has no countries at all yet -- it is an all-or-nothing gate, not per-country. |
 | English sitelink | `external_links` | See "Wikipedia" below. |
+
+**Only best-rank statements count**, everywhere a fact comes from Wikidata: the preferred-rank
+statement when the item has one, otherwise the normal-rank ones, never a deprecated one. This is
+`Wikidata::Distiller#best`, applied before any of the rows above are even considered. A deprecated
+Open Library key never reaches `ApplyWikidata` at all, so it is neither stamped on an author nor
+usable as evidence that a candidate shares an identifier with ours (§Resolution) -- Tolstoy's
+`OL7555476A` is a real example of a deprecated-rank Open Library key on Wikidata that this
+filtering excludes on both sides.
+
+**Alternate names are compared case-folded only, not diacritic-folded.** `ApplyWikidata` runs each
+candidate name through the same normalizer the app uses when saving any name (NFKC, then quote
+folding) and then folds case for the *comparison* against names already stored -- so "García" and
+"Garcia" are treated as different spellings and both can end up in `alternate_names`. Diacritic
+folding only happens in the resolver's own name matching (`ResolveWikidata`'s `name_key`, used to
+decide whether a Wikidata label *is* the author's name), never here. Whatever a run actually adds
+to `alternate_names` is recorded in the ledger's `alternate_names` fact in that same
+normalized-but-accented form -- the ledger and the column never disagree about what was written.
 
 **Identifier collisions become duplicate pairs.** If a value Wikidata offers is already held by a
 *different* author, nothing is stamped on the current author; instead
@@ -173,7 +190,10 @@ displayed today (every one of those authors has a higher-priority description al
 **`books_author_countries`** is a plain join table: `author_id`, `country_id`, a unique pair, two
 foreign keys. `Books::Author has_many :author_countries` and `:countries` (through). A merge
 carries the source author's rows onto the target (`Books::Author::Merger#merge_author_countries`,
-find-or-create so a shared country never raises a uniqueness error mid-merge).
+find-or-create so a shared country never raises a uniqueness error mid-merge). The same merger
+also carries the enrichment ledger (`#merge_enrichments`, repointing every row's `enrichable_id`),
+so a survivor that absorbed an already-enriched duplicate counts as processed too -- see "The
+ledger" below.
 
 **`Services::Books::CountryLookup`** is shared by books and authors (it replaced the old
 `find_country` inline in `ApplyBookFacts`):
@@ -218,18 +238,32 @@ the ledger, the same as every other `SelectCandidateTask`-style finder).
 `applied`, `nothing_to_apply`, or `unrecognized`. A `skipped` or `failed` row does not count, so
 the author is tried again next time. This definition is deliberate: after the pre-launch
 production re-migration truncates and re-creates the books tables (author ids preserved), every
-old ledger row becomes older than the freshly created author row, so a re-run of the chain
-processes everyone again rather than treating stale history as done.
+old ledger row becomes older than the freshly created author row it now points at, so "processed"
+compares against that re-created row and a re-run of the chain processes everyone again rather
+than treating stale history as done. A merged author counts too: `Books::Author::Merger` carries
+the source author's ledger rows onto the survivor (`#merge_enrichments`), so a survivor that
+absorbed an already-processed duplicate is processed without a run of its own.
 
 **A run that fails after already applying some Wikidata facts still records those facts** on its
-`failed` row (the facts hash captured before the exception, not lost). `Wikidata::Exceptions::Error`
-(network, HTTP, parse) is caught and written as a `failed` row with `reason: "wikimedia_error"`;
-`Wikimedia::Exceptions::RateLimited` propagates uncaught, so `WikidataJob` can reschedule the
-whole run rather than recording a false failure.
+`failed` row (the facts hash captured before the exception, not lost). `Wikimedia::Exceptions::Error`
+(`app/lib/wikimedia/exceptions.rb`: network, timeout, HTTP, parse, and API-error responses) is
+caught and written as a `failed` row with `reason: "wikimedia_error"`. `RateLimited` is
+deliberately defined *outside* `Error` -- it is not a failure but a request to wait -- so it
+propagates uncaught through this rescue, and `WikidataJob` catches it separately to reschedule
+the whole run with `perform_in(retry_after + jitter)` rather than recording a false failure.
 
-`external_records` is what makes a re-run cheap: a Wikidata entity or Wikipedia lead already held
-at the current schema version costs no network call at all on a re-run, only the search/bridge
-queries and (when the case reaches it) the AI selection repeat.
+**A re-run is only cheap in the cases that decide early.** `ResolveWikidata` stores just the
+*chosen* item in `external_records` (spec §3); a candidate that was fetched and considered but not
+selected is never written there, so it is fetched fresh again on every later run that meets it.
+That means a held-id run, or a run that resolves at the id-bridge stage, stays cheap on a re-run
+-- the one entity it needs was the one a previous run chose and stored, so `entities` costs no
+network call, even though the bridge search itself (`by_statements`) still runs live every time.
+A run that falls through to the name-search stage is not cheap to repeat: every candidate the
+search turns up is fetched again regardless of whether it was seen before, and the `works` SPARQL
+query (`attach_titles`) is never cached at all, so it re-runs in full for every person-candidate
+each time that stage is reached. This is worth sizing correctly before the increment-6 backfill:
+authors who resolve by identifier stay cheap to re-touch, but the long tail that reaches AI
+selection costs close to a fresh run every time.
 
 ## Operating
 
@@ -256,3 +290,16 @@ Where to look:
 
 There is no backfill rake task and no admin button yet -- both are increment 6. Today the only
 way an author reaches this chain is through the author importer's async provider.
+
+**Launch sequence.** Production's books data is a rehearsal copy: it gets truncated and
+re-migrated more than once before launch (spec §14). The pre-launch truncate has to include
+`books_author_countries` -- it carries foreign keys to both `books_authors` and
+`books_countries`, so a truncate that forgets it either fails outright on the constraint or, if
+run with `CASCADE`, silently drops rows that were never in the truncate list to begin with. `data_migration:author_countries` then runs inside `data_migration:all` immediately
+after `:countries`. `external_records` and the enrichment/`MatchDecision` history are left alone
+by the truncate and survive a re-migration **by design** (spec §14): they are keyed by external
+ids and author ids, not by anything the truncate touches, so nothing here has to be re-fetched or
+re-decided just because the author row underneath it was re-created. What does have to happen
+again is the enrichment run itself -- "processed" (above) compares a ledger row's timestamp
+against the *re-created* author row, so every author is picked up and run through the chain again
+after each re-migration, even though most of its Wikidata/Wikipedia network cost was already paid.

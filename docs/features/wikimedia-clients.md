@@ -86,11 +86,17 @@ that turns a name into a Wikipedia page directly.
 
 ## Caching
 
-Country codes and labels are cached in `Rails.cache` for 30 days, keyed per item
-(`wikidata:country:<id>`, `wikidata:label:<id>`). These repeat across nearly every author, and a
-country's own Wikidata entity is fetched whole only if `country_codes` did not already have it
-cached; a country entity such as the United States is megabytes on its own, so it is never
-fetched.
+`country_codes` and `labels` are cached in `Rails.cache` for 30 days, keyed per item
+(`wikidata:country:<id>`, `wikidata:label:<id>`). These repeat across nearly every author. On a
+cache miss, `country_codes` runs one SPARQL query for the item's ISO code (P297) and English
+label, and `labels` runs one `wbgetentities` call scoped to `props=labels`. Neither ever fetches a
+country's whole entity -- a country such as the United States is megabytes of statements on its
+own, and this codebase only ever wants its code and its label.
+
+Production sets no `config.cache_store` (`config/environments/production.rb` has the line
+commented out), so `Rails.cache` falls back to a per-container file store. That store is wiped on
+every deploy, so in practice these 30-day entries last only until the next deploy, not the full 30
+days.
 
 A chosen Wikidata entity or Wikipedia lead is stored in `external_records`: the complete response
 body gzipped in `raw`, and the small view the code actually reads in `payload`
