@@ -24,6 +24,7 @@ require_relative "support/api_token_secrets"
 require_relative "support/api_conformance"
 require_relative "support/sql_capture"
 require_relative "support/wikidata_entity_builder"
+require_relative "support/fake_wikidata_client"
 require_relative "support/books/open_library/fake_redis"
 
 # Configure Sidekiq to run jobs inline during tests
