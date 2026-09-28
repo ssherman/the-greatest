@@ -121,6 +121,7 @@ module Books
         merge_external_links
         merge_ai_chats
         merge_enrichments
+        merge_decision_subjects
         merge_images
         merge_category_items
         merge_author_countries
@@ -159,6 +160,16 @@ module Books
 
       def merge_enrichments
         @stats[:enrichments] = source_author.enrichments.update_all(enrichable_id: target_author.id)
+      end
+
+      # Wikidata decisions name the author as their subject (record is nil), so
+      # RecordMerge#repoint_decisions, which follows record_id, never reaches
+      # them. Left behind they would point at a deleted author, or, after a
+      # re-migration re-creates preserved ids, at the wrong one.
+      def merge_decision_subjects
+        @stats[:decision_subjects] = ::MatchDecision
+          .where(subject_type: "Books::Author", subject_id: source_author.id)
+          .update_all(subject_id: target_author.id, updated_at: Time.current)
       end
 
       def merge_images

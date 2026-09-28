@@ -120,6 +120,28 @@ module Books
         assert_equal @target.id, Enrichment.find(row.id).enrichable_id
       end
 
+      test "repoints decisions about the source author to the target, and leaves other decisions alone" do
+        about_source = ::MatchDecision.create!(
+          finder: "Services::Books::Authors::ResolveWikidata", subject: @source, record: nil,
+          outcome: :matched, confidence: :high, decided_by: :rule
+        )
+        about_other_author = ::MatchDecision.create!(
+          finder: "Services::Books::Authors::ResolveWikidata", subject: books_authors(:tolstoy), record: nil,
+          outcome: :unmatched, confidence: :high, decided_by: :rule
+        )
+        about_a_book = ::MatchDecision.create!(
+          finder: "DataImporters::Books::Book::Finder", subject: books_books(:war_and_peace), record: nil,
+          outcome: :unmatched, confidence: :high, decided_by: :rule
+        )
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal ["Books::Author", @target.id], about_source.reload.values_at(:subject_type, :subject_id)
+        assert_equal books_authors(:tolstoy).id, about_other_author.reload.subject_id
+        assert_equal ["Books::Book", books_books(:war_and_peace).id], about_a_book.reload.values_at(:subject_type, :subject_id)
+      end
+
       test "demotes a moved image when the target already has a primary" do
         attach_image(@target, primary: true)
         source_image = attach_image(@source, primary: true)

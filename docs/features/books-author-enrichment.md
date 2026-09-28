@@ -195,7 +195,9 @@ carries the source author's rows onto the target (`Books::Author::Merger#merge_a
 find-or-create so a shared country never raises a uniqueness error mid-merge). The same merger
 also carries the enrichment ledger (`#merge_enrichments`, repointing every row's `enrichable_id`),
 so a survivor that absorbed an already-enriched duplicate counts as processed too -- see "The
-ledger" below.
+ledger" below. Wikidata decisions move with it (`#merge_decision_subjects`): they name the author
+as their `subject` with no `record`, which the shared `RecordMerge` step (it follows `record_id`)
+never reaches, so the merger repoints `subject_id` itself.
 
 **`Services::Books::CountryLookup`** is shared by books and authors (it replaced the old
 `find_country` inline in `ApplyBookFacts`):
