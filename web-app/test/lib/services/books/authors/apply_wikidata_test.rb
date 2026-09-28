@@ -127,6 +127,13 @@ module Services
           assert_equal ["Gabriel García Márquez"], author.reload.alternate_names
         end
 
+        test "records an alternate name in the form it is stored, not the form Wikidata offered" do
+          fact = apply(entity(aliases: ["Flannery O’Connor"])).data[:facts]["alternate_names"]
+
+          assert_equal fact["value"], @author.reload.alternate_names
+          assert_equal ["Flannery O'Connor"], @author.alternate_names
+        end
+
         test "adds at most 20 alternate names per run" do
           fact = apply(entity(aliases: (1..25).map { |n| "Alias Number #{n}" })).data[:facts]["alternate_names"]
 

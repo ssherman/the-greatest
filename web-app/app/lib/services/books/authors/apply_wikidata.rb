@@ -173,11 +173,11 @@ module Services
         # "Garcia" are both kept, since each is a spelling someone searches.
         def apply_alternate_names
           offered = ([entity.label] + entity.aliases + entity.native_names + entity.pseudonyms)
-            .map { |name| name.to_s.squish }.reject(&:blank?)
-          taken = ([author.name] + Array(author.alternate_names)).map { |name| name_key(name) }.to_set
+            .map { |name| normalize(name.to_s.squish) }.reject(&:blank?)
+          taken = ([author.name] + Array(author.alternate_names)).map { |name| normalize(name).downcase }.to_set
           added = []
           offered.each do |name|
-            key = name_key(name)
+            key = name.downcase
             next if taken.include?(key)
 
             taken << key
@@ -214,8 +214,8 @@ module Services
           end
         end
 
-        def name_key(text)
-          ::Services::Text::NameNormalizer.call(::Services::Text::QuoteNormalizer.call(text.to_s)).to_s.downcase
+        def normalize(text)
+          ::Services::Text::NameNormalizer.call(::Services::Text::QuoteNormalizer.call(text.to_s)).to_s
         end
       end
     end
