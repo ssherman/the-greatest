@@ -29,6 +29,7 @@ module Services
           @client = client || ::Wikidata::Client.new
           @wikipedia_client = wikipedia_client
           @decision = nil
+          @facts = nil
         end
 
         def call
@@ -43,7 +44,8 @@ module Services
           else finish(:failed, write(outcome: :failed, reason: "resolve_failed", error: resolved[:reason]))
           end
         rescue ::Wikimedia::Exceptions::Error => e
-          finish(:failed, write(outcome: :failed, reason: "wikimedia_error", error: "#{e.class.name.demodulize}: #{e.message}"))
+          finish(:failed, write(outcome: :failed, reason: "wikimedia_error", error: "#{e.class.name.demodulize}: #{e.message}",
+            facts: @facts || {}))
         end
 
         private
@@ -60,20 +62,20 @@ module Services
         def matched(entity, redirected_ids)
           applied = ApplyWikidata.call(author: author, entity: entity, decision: @decision, client: @client,
             redirected_ids: redirected_ids)
-          facts = applied.data[:facts]
+          @facts = applied.data[:facts]
           if applied.data[:conflict]
             @decision.update!(needs_review: true)
-            return finish(:matched, write(outcome: :nothing_to_apply, reason: "held_qid_conflict", recognized: true, facts: facts))
+            return finish(:matched, write(outcome: :nothing_to_apply, reason: "held_qid_conflict", recognized: true, facts: @facts))
           end
 
           wikipedia = LinkWikipedia.call(author: author, entity: entity, refresh: refresh, client: @wikipedia_client)
-          facts["wikipedia"] = wikipedia.data[:fact]
+          @facts["wikipedia"] = wikipedia.data[:fact]
           legacy = CleanLegacyWikipedia.call(author: author, entity: entity, refresh: refresh, client: @wikipedia_client)
-          facts["legacy_wikipedia"] = legacy if legacy
+          @facts["legacy_wikipedia"] = legacy if legacy
           changed = applied.data[:applied].any? || wikipedia.data[:fact]["applied"] || legacy&.dig("applied")
           citations = ["https://www.wikidata.org/wiki/#{entity.id}", wikipedia.data[:lead]&.url].compact
           finish(:matched, write(outcome: changed ? :applied : :nothing_to_apply, reason: "matched #{entity.id}",
-            recognized: true, facts: facts, citations: citations))
+            recognized: true, facts: @facts, citations: citations))
         end
 
         def unmatched

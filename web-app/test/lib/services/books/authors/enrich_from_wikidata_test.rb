@@ -74,6 +74,17 @@ module Services
           assert_not result.success?
         end
 
+        test "a failure after applying keeps the applied facts in the ledger" do
+          limited = FakeWikipediaClient.new({["en", "Leo Tolstoy"] => ::Wikimedia::Exceptions::HttpError.new("Wikimedia returned HTTP 503", 503)})
+
+          result = enrich(wikipedia: limited)
+
+          row = rows.sole
+          assert_equal "failed", row.outcome
+          assert_equal "filled", row.facts.dig("viaf", "reason")
+          assert_equal result.data[:decision], row.match_decision
+        end
+
         test "a rate limit propagates and writes no row" do
           wikidata = FakeWikidataClient.new
           wikidata.stubs(:entities).raises(::Wikimedia::Exceptions::RateLimited.new("wait", retry_after: 30))
