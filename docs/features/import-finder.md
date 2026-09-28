@@ -135,6 +135,14 @@ the field it reads the source id from, the record's `execute_action` route) and 
 Re-check is offered. A finder with no entry is on no page; the registry test fails if a
 `finder.rb` exists without one.
 
+Not every registry entry is an import finder. An **external-link entry** (`kind: :external_link`)
+puts a *linking* service's decisions on the same audit pages without any of a finder's other
+machinery -- no `ImportQuery`, no merge action, and no Re-check -- because it is not answering "is
+this already in our catalog" but "which outside record describes this one." Its `MatchDecision`
+rows still show up under **Match Decisions**, filterable by entity like any other. The first is
+`Services::Books::Authors::ResolveWikidata` (registered under the label "Wikidata link"), which
+links a `Books::Author` to a Wikidata person; see `docs/features/books-author-enrichment.md`.
+
 **Match decisions** opens on decisions needing review and not yet reviewed, with `verify: true`
 rows hidden -- the sweep writes one per ranked book. Filters: entity, outcome, confidence,
 decided by, review state (`pending` / `reviewed` / `all`), verify runs (`hide` / `include`);

@@ -13,6 +13,8 @@ module DataImporters
           ::Search::Books::Search::AuthorByName.stubs(:call).returns([])
           # Sidekiq runs inline in tests; a real enqueue would run the AI task.
           ::Books::EnrichBookJob.stubs(:perform_async)
+          # ...and a real author import would enqueue the Wikidata step.
+          ::Books::Authors::WikidataJob.stubs(:perform_async)
         end
 
         def stub_open_library_client

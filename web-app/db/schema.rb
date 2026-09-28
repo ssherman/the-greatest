@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_24_225925) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_28_022921) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -90,6 +90,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_225925) do
     t.datetime "updated_at", null: false
     t.index ["key"], name: "index_billing_plans_on_key", unique: true
     t.index ["stripe_price_id"], name: "index_billing_plans_on_stripe_price_id", unique: true
+  end
+
+  create_table "books_author_countries", force: :cascade do |t|
+    t.bigint "author_id", null: false
+    t.bigint "country_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["author_id", "country_id"], name: "index_books_author_countries_on_author_id_and_country_id", unique: true
+    t.index ["author_id"], name: "index_books_author_countries_on_author_id"
+    t.index ["country_id"], name: "index_books_author_countries_on_country_id"
   end
 
   create_table "books_author_relationships", force: :cascade do |t|
@@ -444,6 +454,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_225925) do
     t.text "error"
     t.jsonb "facts", default: {}, null: false
     t.string "kind", null: false
+    t.bigint "match_decision_id"
     t.integer "mode", default: 0, null: false
     t.string "model"
     t.integer "outcome", null: false
@@ -454,6 +465,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_225925) do
     t.index ["ai_chat_id"], name: "index_enrichments_on_ai_chat_id"
     t.index ["enrichable_type", "enrichable_id"], name: "index_enrichments_on_enrichable"
     t.index ["kind"], name: "index_enrichments_on_kind"
+    t.index ["match_decision_id"], name: "index_enrichments_on_match_decision_id"
     t.index ["mode", "created_at"], name: "index_enrichments_on_mode_and_created_at"
     t.index ["outcome"], name: "index_enrichments_on_outcome"
   end
@@ -486,6 +498,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_225925) do
     t.datetime "created_at", null: false
     t.datetime "fetched_at", null: false
     t.jsonb "payload", null: false
+    t.binary "raw"
     t.integer "schema_version", default: 1, null: false
     t.integer "source", null: false
     t.string "source_id", null: false
@@ -1223,6 +1236,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_225925) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_chats", "users"
   add_foreign_key "api_tokens", "users"
+  add_foreign_key "books_author_countries", "books_authors", column: "author_id"
+  add_foreign_key "books_author_countries", "books_countries", column: "country_id"
   add_foreign_key "books_author_relationships", "books_authors", column: "from_author_id"
   add_foreign_key "books_author_relationships", "books_authors", column: "to_author_id"
   add_foreign_key "books_book_authors", "books_authors", column: "author_id"
@@ -1252,6 +1267,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_225925) do
   add_foreign_key "duplicate_candidates", "match_decisions", on_delete: :nullify
   add_foreign_key "duplicate_candidates", "users", column: "resolved_by_id", on_delete: :nullify
   add_foreign_key "enrichments", "ai_chats", on_delete: :nullify
+  add_foreign_key "enrichments", "match_decisions", on_delete: :nullify
   add_foreign_key "external_links", "users", column: "submitted_by_id"
   add_foreign_key "games_game_companies", "games_companies", column: "company_id"
   add_foreign_key "games_game_companies", "games_games", column: "game_id"

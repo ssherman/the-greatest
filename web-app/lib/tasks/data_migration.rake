@@ -64,6 +64,11 @@ namespace :data_migration do
     pp Services::BooksMigration::CountryMigrator.call
   end
 
+  desc "Map legacy author nationality_text onto books_author_countries (prints unmapped strings)"
+  task author_countries: :environment do
+    pp Services::BooksMigration::AuthorCountryMigrator.call
+  end
+
   desc "Migrate legacy book_countries into books_book_countries (bulk upsert; recomputes book_count)"
   task book_countries: :environment do
     pp Services::BooksMigration::BookCountryMigrator.call
@@ -318,7 +323,7 @@ namespace :data_migration do
   # an admin runs by hand.
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :edition_amazon_identifiers,
-    :categories, :category_items, :book_attributes, :book_type_categories, :countries,
+    :categories, :category_items, :book_attributes, :book_type_categories, :countries, :author_countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
     :ranked_lists, :penalties, :list_penalties, "penalties:reconcile", :user_lists, :user_list_items,
     :reading_goals, :saved_searches, :reviews, :corrections, :news_posts,

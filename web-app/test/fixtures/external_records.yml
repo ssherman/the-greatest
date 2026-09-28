@@ -7,6 +7,7 @@
 #  id             :bigint           not null, primary key
 #  fetched_at     :datetime         not null
 #  payload        :jsonb            not null
+#  raw            :binary
 #  schema_version :integer          default(1), not null
 #  source         :integer          not null
 #  created_at     :datetime         not null

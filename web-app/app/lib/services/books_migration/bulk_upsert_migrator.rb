@@ -30,7 +30,7 @@ module Services
           flush(buffer) if buffer.any?
         end
         finalize
-        {success: true, data: {model: model_key, count: @count}}
+        {success: true, data: {model: model_key, count: @count}.merge(extra_result_data)}
       rescue => e
         {success: false, error: e.message, data: {model: model_key, count: @count}}
       end

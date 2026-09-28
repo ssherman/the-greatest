@@ -1,0 +1,15 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "searchinfo": {
+      "totalhits": 1
+    },
+    "search": [
+      {
+        "ns": 0,
+        "title": "Q7243",
+        "pageid": 8446
+      }
+    ]
+  }
+}

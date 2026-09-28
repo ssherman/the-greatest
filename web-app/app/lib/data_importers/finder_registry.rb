@@ -9,12 +9,14 @@ module DataImporters
   # the finder's real sources have landed (recheck). A finder with no entry
   # never reaches an audit page: the decisions index filters by the domain's
   # registered finder names and the duplicates index by its registered models.
+  # External-link entries (kind :external_link) audit a service that links a
+  # record to an external source; see Entry#external_link?.
   module FinderRegistry
     URL_HELPERS = Rails.application.routes.url_helpers
 
     Entry = Struct.new(
       :finder, :domain, :model, :label, :query, :preloads,
-      :merge_action, :source_field, :execute_action_path, :recheck,
+      :merge_action, :source_field, :execute_action_path, :recheck, :kind,
       keyword_init: true
     ) do
       def finder_class = finder.constantize
@@ -26,6 +28,15 @@ module DataImporters
       def mergeable? = merge_action.present?
 
       def recheck? = recheck == true
+
+      # A FinderBase finder answers "is this already in our catalog?". An
+      # external-link entry is a service that links a record to an external
+      # source (spec §5.3): its decisions are audited here too, but it has no
+      # ImportQuery, merge action or re-check, and it never stands for its
+      # model in entry_for_model.
+      def external_link? = kind == :external_link
+
+      def finder? = !external_link?
     end
 
     ENTRIES = [
@@ -76,11 +87,16 @@ module DataImporters
         merge_action: "MergeSong", source_field: "source_song_id",
         execute_action_path: ->(record) { URL_HELPERS.execute_action_admin_song_path(record) },
         recheck: false
+      ),
+      Entry.new(
+        finder: "Services::Books::Authors::ResolveWikidata", domain: :books, model: "Books::Author", label: "Wikidata link",
+        query: nil, preloads: [], merge_action: nil, source_field: nil, execute_action_path: nil,
+        recheck: false, kind: :external_link
       )
     ].freeze
 
     BY_FINDER = ENTRIES.index_by(&:finder).freeze
-    BY_MODEL = ENTRIES.index_by(&:model).freeze
+    BY_MODEL = ENTRIES.select(&:finder?).index_by(&:model).freeze
 
     class << self
       def entry(finder_name) = BY_FINDER[finder_name.to_s]
@@ -89,9 +105,9 @@ module DataImporters
 
       def for_domain(domain) = ENTRIES.select { |entry| entry.domain == domain.to_sym }
 
-      def finders_for(domain) = for_domain(domain).map(&:finder)
+      def finders_for(domain) = for_domain(domain).select(&:finder?).map(&:finder)
 
-      def models_for(domain) = for_domain(domain).map(&:model)
+      def models_for(domain) = for_domain(domain).select(&:finder?).map(&:model)
     end
   end
 end

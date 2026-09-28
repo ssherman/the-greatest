@@ -10,6 +10,9 @@ module DataImporters
           BASE_URL = "http://open-library.test:8080"
 
           def setup
+            # Sidekiq runs inline in tests; a real author import would
+            # enqueue the Wikidata step.
+            ::Books::Authors::WikidataJob.stubs(:perform_async)
             @client = ::Books::OpenLibrary::Client.new(
               config: ::Books::OpenLibrary::Configuration.new(base_url: BASE_URL),
               breaker: ::Books::OpenLibrary::CircuitBreaker.new(

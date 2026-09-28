@@ -6,6 +6,7 @@ class Enrichment < ApplicationRecord
 
   belongs_to :enrichable, polymorphic: true
   belongs_to :ai_chat, optional: true
+  belongs_to :match_decision, optional: true
 
   enum :mode, {knowledge: 0, research: 1}
   enum :outcome, {applied: 0, nothing_to_apply: 1, unrecognized: 2, skipped: 3, failed: 4}

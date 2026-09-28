@@ -204,6 +204,17 @@ module Services
         assert_equal ["USA", "Martian"], result.data[:facts]["origin_countries"]["unmatched"]
       end
 
+      test "origin countries map through the country lookup's aliases" do
+        argentinian = ::Books::Country.create!(name: "Argentinian")
+        book = ::Books::Book.create!(title: "Alias Country Book")
+
+        result = Services::Books::ApplyBookFacts.call(book: book, facts: {origin_countries: {value: ["Argentine"], confidence: "high"}})
+
+        assert_equal [argentinian], book.reload.countries.to_a
+        assert_equal({"value" => ["Argentine"], "applied" => true, "reason" => "filled", "unmatched" => []},
+          result.data[:facts]["origin_countries"].except("confidence"))
+      end
+
       test "book type and series are recorded but not applied" do
         result = apply(series_name: {value: "The Fresh Cycle", confidence: "medium"}, series_number: {value: 2, confidence: "medium"})
 

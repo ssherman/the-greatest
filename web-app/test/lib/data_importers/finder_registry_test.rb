@@ -9,11 +9,11 @@ module DataImporters
       names = files.map { |file| file.sub(%r{.*app/lib/}, "").delete_suffix(".rb").camelize }
 
       assert names.any?, "no finder.rb files found -- did the layout change?"
-      assert_equal names.sort, FinderRegistry::ENTRIES.map(&:finder).sort
+      assert_equal names.sort, FinderRegistry::ENTRIES.select(&:finder?).map(&:finder).sort
     end
 
     test "each entry's finder is a FinderBase for the entry's model and its query class exists" do
-      FinderRegistry::ENTRIES.each do |entry|
+      FinderRegistry::ENTRIES.select(&:finder?).each do |entry|
         assert_operator entry.finder_class, :<, FinderBase, entry.finder
         assert_equal entry.model_class, entry.finder_class.new.send(:model_class), entry.finder
         assert_operator entry.query_class, :<, DataImporters::ImportQuery, entry.finder
@@ -65,6 +65,23 @@ module DataImporters
     test "entry lookups return nil for unknown names" do
       assert_nil FinderRegistry.entry("DataImporters::Nope::Finder")
       assert_nil FinderRegistry.entry_for_model("Books::Nope")
+    end
+
+    test "the Wikidata link entry is an external-link kind: no query, merge or re-check" do
+      entry = FinderRegistry.entry("Services::Books::Authors::ResolveWikidata")
+
+      assert entry.external_link?
+      assert_not entry.finder?
+      assert_equal [:books, "Books::Author", "Wikidata link"], [entry.domain, entry.model, entry.label]
+      assert_respond_to entry.finder_class, :call
+      assert_not entry.mergeable?
+      assert_not entry.recheck?
+      assert_nil entry.query
+    end
+
+    test "an external-link entry never shadows the finder for its model" do
+      assert_equal "DataImporters::Books::Author::Finder", FinderRegistry.entry_for_model("Books::Author").finder
+      assert_includes FinderRegistry.for_domain(:books).map(&:finder), "Services::Books::Authors::ResolveWikidata"
     end
   end
 end

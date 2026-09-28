@@ -10,6 +10,10 @@ module DataImporters
 
         def setup
           ::Search::Books::Search::AuthorByName.stubs(:call).returns([])
+          # Sidekiq runs inline in tests; a real enqueue would run the whole
+          # Wikidata step. Tests that care about the enqueue set their own
+          # expectation, which takes precedence over this stub.
+          ::Books::Authors::WikidataJob.stubs(:perform_async)
           client = ::Books::OpenLibrary::Client.new(
             config: ::Books::OpenLibrary::Configuration.new(base_url: BASE_URL),
             breaker: ::Books::OpenLibrary::CircuitBreaker.new(
@@ -73,7 +77,10 @@ module DataImporters
 
           assert result.item.persisted?
           assert result.created?
-          assert_not result.success?
+          # Enrichment still queues and succeeds, so the import overall
+          # succeeds; the outage shows up as OpenLibrary's own failure.
+          assert result.success?
+          assert_equal ["DataImporters::Books::Author::Providers::OpenLibrary"], result.failed_providers.map(&:provider_name)
         end
 
         test "re-importing by name or by key is idempotent" do
@@ -111,6 +118,20 @@ module DataImporters
           result = Importer.call(name: "Anna Brenner", alternate_names: ["Anna Brenner", "Anya Brenner"])
 
           assert_equal ["Anya Brenner"], result.item.alternate_names
+        end
+
+        test "a new author gets the Wikidata step queued; a matched author does not" do
+          # Replace setup's catch-all stub: a plain `stubs` alongside this
+          # `expects(:once)` would silently absorb a second, illegitimate
+          # call instead of failing the test.
+          ::Books::Authors::WikidataJob.unstub(:perform_async)
+          ::Books::Authors::WikidataJob.expects(:perform_async).once
+
+          created = Importer.call(name: "A Brand New Author Name")
+          matched = Importer.call(name: created.item.name)
+
+          assert created.created?
+          assert_not matched.created?
         end
       end
     end

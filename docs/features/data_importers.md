@@ -208,7 +208,14 @@ author before providers run (`save_before_providers?`), so a name alone always p
 `ImportResult#created?` says whether it made the author. The Open Library provider fills blank years,
 unions alternate names, stamps `books_author_openlibrary_id`, and writes `name` only when blank. When another
 author already holds the key (or a key it redirects from), it applies nothing, flags the two authors as an
-`external_key_collision` pair on the duplicates page, and reports a failure. Wikidata,
+`external_key_collision` pair on the duplicates page, and reports a failure.
+
+**Enrichment (async).** Queues `Books::Authors::WikidataJob` for the new author and returns
+`[:author_enrichment_queued]`. The job resolves the author to a Wikidata person or to none,
+fills blanks from the item, and links the English Wikipedia article only through that item. See
+`docs/features/books-author-enrichment.md`. Providers run only for a new author, so a matched
+author is never re-enriched from an import.
+
 VIAF and AI providers follow in later increments
 (`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`).
 

@@ -111,6 +111,37 @@ module Books
         assert_equal @target.id, chat.reload.parent_id
       end
 
+      test "moves enrichments" do
+        row = @source.enrichments.create!(kind: "books.author_wikidata", outcome: :applied)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal @target.id, Enrichment.find(row.id).enrichable_id
+      end
+
+      test "repoints decisions about the source author to the target, and leaves other decisions alone" do
+        about_source = ::MatchDecision.create!(
+          finder: "Services::Books::Authors::ResolveWikidata", subject: @source, record: nil,
+          outcome: :matched, confidence: :high, decided_by: :rule
+        )
+        about_other_author = ::MatchDecision.create!(
+          finder: "Services::Books::Authors::ResolveWikidata", subject: books_authors(:tolstoy), record: nil,
+          outcome: :unmatched, confidence: :high, decided_by: :rule
+        )
+        about_a_book = ::MatchDecision.create!(
+          finder: "DataImporters::Books::Book::Finder", subject: books_books(:war_and_peace), record: nil,
+          outcome: :unmatched, confidence: :high, decided_by: :rule
+        )
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal ["Books::Author", @target.id], about_source.reload.values_at(:subject_type, :subject_id)
+        assert_equal books_authors(:tolstoy).id, about_other_author.reload.subject_id
+        assert_equal ["Books::Book", books_books(:war_and_peace).id], about_a_book.reload.values_at(:subject_type, :subject_id)
+      end
+
       test "demotes a moved image when the target already has a primary" do
         attach_image(@target, primary: true)
         source_image = attach_image(@source, primary: true)
@@ -149,6 +180,27 @@ module Books
 
         assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
         assert_equal 1, CategoryItem.where(category: category, item: @target).count
+      end
+
+      test "carries the source's countries to the target" do
+        country = ::Books::Country.create!(name: "Merger Test Nation")
+        ::Books::AuthorCountry.create!(author: @source, country: country)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?
+        assert_equal [country.id], @target.reload.author_countries.pluck(:country_id)
+      end
+
+      test "does not duplicate a country both authors share" do
+        country = ::Books::Country.create!(name: "Shared Test Nation")
+        ::Books::AuthorCountry.create!(author: @source, country: country)
+        ::Books::AuthorCountry.create!(author: @target, country: country)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 1, @target.reload.author_countries.count
       end
 
       test "moves a description the target does not have" do
