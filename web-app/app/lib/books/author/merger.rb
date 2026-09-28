@@ -120,6 +120,7 @@ module Books
         merge_identifiers
         merge_external_links
         merge_ai_chats
+        merge_enrichments
         merge_images
         merge_category_items
         merge_author_countries
@@ -154,6 +155,10 @@ module Books
 
       def merge_ai_chats
         @stats[:ai_chats] = source_author.ai_chats.update_all(parent_id: target_author.id)
+      end
+
+      def merge_enrichments
+        @stats[:enrichments] = source_author.enrichments.update_all(enrichable_id: target_author.id)
       end
 
       def merge_images

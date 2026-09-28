@@ -111,6 +111,15 @@ module Books
         assert_equal @target.id, chat.reload.parent_id
       end
 
+      test "moves enrichments" do
+        row = @source.enrichments.create!(kind: "books.author_wikidata", outcome: :applied)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal @target.id, Enrichment.find(row.id).enrichable_id
+      end
+
       test "demotes a moved image when the target already has a primary" do
         attach_image(@target, primary: true)
         source_image = attach_image(@source, primary: true)
