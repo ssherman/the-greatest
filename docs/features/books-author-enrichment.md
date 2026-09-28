@@ -128,8 +128,10 @@ usable as evidence that a candidate shares an identifier with ours (§Resolution
 filtering excludes on both sides.
 
 **Alternate names are compared case-folded only, not diacritic-folded.** `ApplyWikidata` runs each
-candidate name through the same normalizer the app uses when saving any name (NFKC, then quote
-folding) and then folds case for the *comparison* against names already stored -- so "García" and
+candidate name through the same normalizer the app uses when saving any name (quote folding first,
+then NFKC -- quote folding has to come first because NFKC turns a stray U+00B4 acute accent into a
+space plus a combining accent) and then folds case for the *comparison* against names already
+stored -- so "García" and
 "Garcia" are treated as different spellings and both can end up in `alternate_names`. Diacritic
 folding only happens in the resolver's own name matching (`ResolveWikidata`'s `name_key`, used to
 decide whether a Wikidata label *is* the author's name), never here. Whatever a run actually adds
@@ -240,9 +242,12 @@ the author is tried again next time. This definition is deliberate: after the pr
 production re-migration truncates and re-creates the books tables (author ids preserved), every
 old ledger row becomes older than the freshly created author row it now points at, so "processed"
 compares against that re-created row and a re-run of the chain processes everyone again rather
-than treating stale history as done. A merged author counts too: `Books::Author::Merger` carries
-the source author's ledger rows onto the survivor (`#merge_enrichments`), so a survivor that
-absorbed an already-processed duplicate is processed without a run of its own.
+than treating stale history as done. A merge can count too: `Books::Author::Merger` carries the
+source author's ledger rows onto the survivor (`#merge_enrichments`), so a survivor that absorbed
+an already-processed duplicate is processed without a run of its own *provided* the carried row is
+newer than the survivor's own `created_at` -- the same "newer than the author row" check applies
+here, and it is not guaranteed: a survivor created after the absorbed author's Wikidata run is not
+covered by it and still gets picked up.
 
 **A run that fails after already applying some Wikidata facts still records those facts** on its
 `failed` row (the facts hash captured before the exception, not lost). `Wikimedia::Exceptions::Error`
@@ -295,11 +300,24 @@ way an author reaches this chain is through the author importer's async provider
 re-migrated more than once before launch (spec §14). The pre-launch truncate has to include
 `books_author_countries` -- it carries foreign keys to both `books_authors` and
 `books_countries`, so a truncate that forgets it either fails outright on the constraint or, if
-run with `CASCADE`, silently drops rows that were never in the truncate list to begin with. `data_migration:author_countries` then runs inside `data_migration:all` immediately
-after `:countries`. `external_records` and the enrichment/`MatchDecision` history are left alone
-by the truncate and survive a re-migration **by design** (spec §14): they are keyed by external
-ids and author ids, not by anything the truncate touches, so nothing here has to be re-fetched or
-re-decided just because the author row underneath it was re-created. What does have to happen
-again is the enrichment run itself -- "processed" (above) compares a ledger row's timestamp
-against the *re-created* author row, so every author is picked up and run through the chain again
-after each re-migration, even though most of its Wikidata/Wikipedia network cost was already paid.
+run with `CASCADE`, silently drops rows that were never in the truncate list to begin with.
+`data_migration:author_countries` then runs inside `data_migration:all` immediately after
+`:countries`.
+
+`external_records`, the enrichment ledger, and `MatchDecision` history all survive a re-migration
+**by design** (spec §14): none of those tables are truncated, and they are keyed by external ids
+and by author id rather than by anything the truncate reaches. What does *not* survive is
+everything a previous run stamped onto the author row itself. `AuthorIdentifierMigrator` only
+re-creates `books_author_openlibrary_id` from the legacy data, so if the truncate clears the
+authors' identifiers along with the author rows, `books_author_wikidata_qid`, VIAF, ISNI, LC,
+Goodreads and LibraryThing -- plus any alternate names, years, gender, or countries a Wikidata run
+had filled in -- go with them. That means the held-id stage (§Resolution) cannot fire on the first
+pass after a re-migration, since there is no held QID left to check; more authors than before fall
+through to the id-bridge or name-search stage. The Open Library key does survive, so the bridge
+stage can still fire for the authors it reaches.
+
+Every author runs again regardless: "processed" (above) compares a ledger row's timestamp against
+the *re-created* author row, and every pre-migration row is now older than it, so nothing counts as
+done. What that re-run actually costs is the story told above under "a re-run is only cheap in the
+cases that decide early" -- not "already paid": losing the held QIDs, if anything, pushes *more*
+authors into the name-search path that costs close to a fresh run.
