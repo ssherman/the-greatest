@@ -132,6 +132,24 @@ module Services
           assert_equal ["War and Peace"], decision.candidates.first["evidence"]["matching_titles"]
         end
 
+        test "rule 3 does not fire while another person carries the author's identifier" do
+          hold(:books_author_openlibrary_id, "OL26783A")
+          client = FakeWikidataClient.new(
+            statements: ["Q999"],
+            searches: {"Leo Tolstoy" => ["Q999", "Q7243"]},
+            entities: {
+              "Q999" => wikidata_entity("Q999", label: "Leo Tolstoy", born: 1650, identifiers: {openlibrary: ["OL26783A"]}),
+              "Q7243" => wikidata_entity("Q7243", **TOLSTOY)
+            },
+            works: {"Q7243" => ["War and Peace"]}
+          )
+          ai_selects(2)
+
+          result = resolve(client)
+
+          assert_equal ["ai", "Q7243"], [result.data[:decision].decided_by, result.data[:entity].id]
+        end
+
         test "a same-name person with no shared title goes to the AI" do
           client = FakeWikidataClient.new(searches: {"Leo Tolstoy" => ["Q7243"]}, entities: {"Q7243" => wikidata_entity("Q7243", **TOLSTOY)})
           ai_selects(1, confidence: "medium")

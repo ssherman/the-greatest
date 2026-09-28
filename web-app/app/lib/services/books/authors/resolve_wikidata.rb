@@ -101,8 +101,10 @@ module Services
           named = persons.select { |candidate| names_agree?(candidate) && !year_conflict?(candidate) }
           if named.size == 1 && named.first.matching_titles.any?
             only = named.first
-            return Verdict.new(outcome: :matched, candidate: only, decided_by: :rule, confidence: :high,
-              reason: "The only person named #{author.name} with agreeing years, sharing #{only.matching_titles.size} title(s) with our books.")
+            if persons.none? { |candidate| !candidate.equal?(only) && id_hit?(candidate) }
+              return Verdict.new(outcome: :matched, candidate: only, decided_by: :rule, confidence: :high,
+                reason: "The only person named #{author.name} with agreeing years, sharing #{only.matching_titles.size} title(s) with our books.")
+            end
           end
 
           ask_ai
