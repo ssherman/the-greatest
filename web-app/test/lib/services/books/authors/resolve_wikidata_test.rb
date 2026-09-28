@@ -57,6 +57,17 @@ module Services
           assert_equal ["Q999"], result.data[:redirected_ids]
         end
 
+        test "a held id whose person disagrees on years goes to the AI, not identifier" do
+          hold(:books_author_wikidata_qid, "Q7243")
+          client = FakeWikidataClient.new(entities: {"Q7243" => wikidata_entity("Q7243", label: "Leo Tolstoy", born: 1650)})
+          ai_selects(0)
+
+          result = resolve(client)
+
+          assert_equal "ai", result.data[:decision].decided_by
+          assert @ai_options[:candidate_lines].first.include?("year conflict")
+        end
+
         test "one person reached through the author's other ids matches by identifier" do
           hold(:books_author_openlibrary_id, "OL26783A")
           client = FakeWikidataClient.new(
@@ -71,6 +82,19 @@ module Services
           assert_not client.called?(:search)
           evidence = result.data[:decision].candidates.first["evidence"]
           assert_equal({"type" => "books_author_openlibrary_id", "value" => "OL26783A"}, evidence["matched_identifier"])
+        end
+
+        test "a single bridge hit whose label disagrees goes to the AI" do
+          hold(:books_author_openlibrary_id, "OL26783A")
+          client = FakeWikidataClient.new(
+            statements: ["Q7243"],
+            entities: {"Q7243" => wikidata_entity("Q7243", label: "Someone Else", born: 1828, died: 1910, identifiers: {openlibrary: ["OL26783A"]})}
+          )
+          ai_selects(0)
+
+          result = resolve(client)
+
+          assert_equal "ai", result.data[:decision].decided_by
         end
 
         test "two persons reached through the ids go to the AI" do
@@ -155,9 +179,12 @@ module Services
 
         test "a TV chef whose name differs by one letter is left to the AI, which may reject him" do
           author = ::Books::Author.create!(name: "Michael Harriot")
+          book = ::Books::Book.create!(title: "Harriott's Kitchen")
+          author.book_authors.create!(book: book, position: 1)
           client = FakeWikidataClient.new(
             searches: {"Michael Harriot" => ["Q2"]},
-            entities: {"Q2" => wikidata_entity("Q2", label: "Ainsley Harriott", description: "British celebrity chef", born: 1957)}
+            entities: {"Q2" => wikidata_entity("Q2", label: "Ainsley Harriott", description: "British celebrity chef", born: 1957)},
+            works: {"Q2" => ["Harriott's Kitchen"]}
           )
           ai_selects(0)
 
