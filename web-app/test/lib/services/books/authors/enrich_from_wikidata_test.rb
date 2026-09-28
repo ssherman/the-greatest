@@ -104,6 +104,16 @@ module Services
           assert_equal "already_processed", rows.last.reason
         end
 
+        test "an unrecognized row newer than the author row counts as processed, guarding against re-running the AI" do
+          @author.enrichments.create!(kind: EnrichFromWikidata::KIND, outcome: :unrecognized, reason: "no_match")
+          ResolveWikidata.expects(:call).never
+
+          result = enrich
+
+          assert_equal :skipped, result.data[:outcome]
+          assert_equal "already_processed", rows.last.reason
+        end
+
         test "a failed or skipped run does not count as processed" do
           @author.enrichments.create!(kind: EnrichFromWikidata::KIND, outcome: :failed, error: "boom")
           @author.enrichments.create!(kind: EnrichFromWikidata::KIND, outcome: :skipped, reason: "placeholder")
