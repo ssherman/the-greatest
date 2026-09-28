@@ -6,8 +6,8 @@ module Services
     # "/" ("Russian-American" -> Russian + American) except the names in
     # KEEP_WHOLE; each part goes through CountryLookup.from_text, which never
     # creates a country. Unmapped parts are reported with their author
-    # counts (375 authors, 1.1%, measured 2026-09-27). Authors ids are
-    # preserved by AuthorMigrator; one missing here (merged away in this
+    # counts (288 authors, 0.86%, 185 distinct parts; measured 2026-09-27).
+    # Author ids are preserved by AuthorMigrator; one missing here (merged away in this
     # database) is skipped and counted. A repeating step: production books
     # data is truncated and migrated again before launch.
     class AuthorCountryMigrator < BulkUpsertMigrator
