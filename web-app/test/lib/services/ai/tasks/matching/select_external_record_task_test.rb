@@ -26,6 +26,7 @@ module Services
             assert_includes message, "Wikidata"
             assert_includes message, "No link is better than a wrong link"
             assert_includes message, "A shared name alone is not enough"
+            assert_includes message, "neither are matching dates alone"
             assert_includes message, "year conflict"
             assert_includes message, "Our author wrote the books listed."
             assert_not_includes message, "already exists in a catalog"

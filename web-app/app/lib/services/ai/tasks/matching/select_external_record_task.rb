@@ -24,7 +24,7 @@ module Services
               You are given our #{entity_noun} and a numbered list of #{source_name} records.
 
               Select the one record that describes our #{entity_noun}, or 0 if none does.
-              - Select 0 unless the evidence ties the record to ours: matching works, matching life dates, or a shared identifier. A shared name alone is not enough.
+              - Select 0 unless the evidence ties the record to ours: a matching work, a shared identifier, or matching life dates together with a description or occupation that fits. A shared name alone is not enough, and neither are matching dates alone.
               - No link is better than a wrong link. When two records fit equally well, select 0.
               - A record marked "shares <identifier>" carries the same identifier as our #{entity_noun}. Treat that as strong evidence, not proof.
               - A record marked "year conflict" has a birth or death year more than one year away from ours.
