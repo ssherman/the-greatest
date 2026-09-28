@@ -6,10 +6,13 @@ module Services
       # One Wikidata run for one author (spec §5, §6, §13). Resolve; on a
       # match, apply the item, link its Wikipedia article and check any
       # legacy Wikipedia description; on a miss, deprecate those
-      # descriptions. Exactly one books.author_wikidata ledger row per run,
+      # descriptions. At most one books.author_wikidata ledger row per run,
       # skips and failures included, tied to the run's decision. A Wikimedia
-      # failure writes a failed row and returns; a rate limit propagates so
-      # the job can reschedule.
+      # failure writes a failed row and returns. A rate limit propagates so
+      # the job can reschedule -- it still writes a failed row first if a
+      # decision was already recorded this run (facts applied before the
+      # wait are not lost); a rate limit hit during resolution, before any
+      # decision exists, writes nothing.
       class EnrichFromWikidata
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -43,6 +46,15 @@ module Services
           when :unmatched then unmatched
           else finish(:failed, write(outcome: :failed, reason: "resolve_failed", error: resolved[:reason]))
           end
+        rescue ::Wikimedia::Exceptions::RateLimited => e
+          # A decision was already recorded (a match or non-match this run
+          # chose): leave a failed row carrying whatever facts were applied
+          # before the wait, so the run isn't invisible to the audit pages.
+          # No decision yet (rate limited during resolution) means nothing
+          # was decided or applied, so nothing is written. Either way the
+          # exception still propagates so the job reschedules.
+          write(outcome: :failed, reason: "rate_limited", error: "#{e.class.name.demodulize}: #{e.message}", facts: @facts || {}) if @decision
+          raise
         rescue ::Wikimedia::Exceptions::Error => e
           finish(:failed, write(outcome: :failed, reason: "wikimedia_error", error: "#{e.class.name.demodulize}: #{e.message}",
             facts: @facts || {}))

@@ -154,16 +154,23 @@ module Services
           limited = FakeWikipediaClient.new({["en", "Leo Tolstoy"] => ::Wikimedia::Exceptions::RateLimited.new("wait", retry_after: 30)})
 
           assert_raises(::Wikimedia::Exceptions::RateLimited) { enrich(wikipedia: limited) }
+
+          first = rows.sole
+          assert_equal ["failed", "rate_limited"], [first.outcome, first.reason]
+          assert_equal "filled", first.facts.dig("viaf", "reason")
+          assert_not_nil first.match_decision
+
           identifiers = @author.identifiers.count
           enrich
 
           assert_equal identifiers, @author.identifiers.count
           assert_equal 1, @author.author_countries.count
           assert_equal 1, @author.external_links.where(source: :wikipedia).count
-          # Only the second run wrote a row (the first raised before writing):
-          # it found everything already set except the link.
-          assert_equal "linked", rows.sole.facts.dig("wikipedia", "reason")
-          assert_equal "already_set", rows.sole.facts.dig("viaf", "reason")
+          # The second run wrote its own row: it found everything already
+          # set except the link.
+          second = rows.order(:id).last
+          assert_equal "linked", second.facts.dig("wikipedia", "reason")
+          assert_equal "already_set", second.facts.dig("viaf", "reason")
         end
 
         test "a held id Wikidata has merged into the matched item applies normally" do

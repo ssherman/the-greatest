@@ -230,9 +230,10 @@ once before launch, and this task has to run every time, right after `:countries
 
 ## The ledger
 
-Every Wikidata run writes exactly one `Enrichment` row, kind `books.author_wikidata`, provider
+Every Wikidata run writes at most one `Enrichment` row, kind `books.author_wikidata`, provider
 `wikidata`, linked to the `MatchDecision` it produced via `enrichments.match_decision_id` --
-skips and failures included. `mode` stays at its default and `model` is blank; this step makes no
+skips and failures included, once a decision exists (see the rate-limit case below, which can
+write none). `mode` stays at its default and `model` is blank; this step makes no
 AI-facts call of its own (the AI selection inside `ResolveWikidata` writes to the decision, not
 the ledger, the same as every other `SelectCandidateTask`-style finder).
 
@@ -253,9 +254,15 @@ covered by it and still gets picked up.
 `failed` row (the facts hash captured before the exception, not lost). `Wikimedia::Exceptions::Error`
 (`app/lib/wikimedia/exceptions.rb`: network, timeout, HTTP, parse, and API-error responses) is
 caught and written as a `failed` row with `reason: "wikimedia_error"`. `RateLimited` is
-deliberately defined *outside* `Error` -- it is not a failure but a request to wait -- so it
-propagates uncaught through this rescue, and `WikidataJob` catches it separately to reschedule
-the whole run with `perform_in(retry_after + jitter)` rather than recording a false failure.
+deliberately defined *outside* `Error` -- it is not a failure but a request to wait.
+`EnrichFromWikidata` rescues it too: if a decision was already recorded this run (`ResolveWikidata`
+had already decided a match or non-match before the wait hit -- from `CountryLookup` inside
+`ApplyWikidata`, from `LinkWikipedia`, or from `CleanLegacyWikipedia`), it writes a `failed` row
+with `reason: "rate_limited"` carrying whatever facts were applied before the wait, then re-raises;
+a rate limit hit during resolution itself, before any decision exists, writes nothing -- there is
+no decision yet to tie a row to. Either way the exception still propagates, and `WikidataJob`
+catches it separately to reschedule the whole run with `perform_in(retry_after + jitter)`. A
+`rate_limited` row does not count as processed (see above), so the rescheduled run still runs.
 
 **A re-run is only cheap in the cases that decide early.** `ResolveWikidata` stores just the
 *chosen* item in `external_records` (spec §3); a candidate that was fetched and considered but not

@@ -84,6 +84,25 @@ module Services
           assert_nil clean(nil)
           assert ai.reload.normal?
         end
+
+        test "a RateLimited fetch leaves the description untouched" do
+          row = legacy("https://en.wikipedia.org/wiki/Ainsley_Harriott")
+          client = FakeWikipediaClient.new({["en", "Ainsley Harriott"] => ::Wikimedia::Exceptions::RateLimited.new("wait", retry_after: 30)})
+
+          assert_raises(::Wikimedia::Exceptions::RateLimited) { clean(@entity, client) }
+
+          assert row.reload.normal?
+        end
+
+        test "a language the Wikipedia client rejects is treated as unreadable_url, not raised" do
+          row = legacy("https://simple.wikipedia.org/wiki/Michael_Harriot")
+          client = FakeWikipediaClient.new({["simple", "Michael Harriot"] => ArgumentError.new("Invalid Wikipedia language \"simple\"")})
+
+          fact = clean(@entity, client)
+
+          assert_equal ["deprecated", "unreadable_url"], fact["value"].first.values_at("verdict", "why")
+          assert row.reload.deprecated?
+        end
       end
     end
   end

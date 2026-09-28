@@ -29,7 +29,13 @@ module Services
           rows = @author.descriptions.select { |description| description.source == "wikipedia" && !description.deprecated? }
           return nil if rows.empty?
 
-          verdicts = rows.map { |description| verdict_for(description) }
+          # Two phases: every verdict is decided (including any WikipediaLead
+          # fetches) before any row is deprecated, so a raise partway through
+          # (a rate limit) leaves no untraced deprecation.
+          judged = rows.map { |description| [description, verdict_for(description)] }
+          judged.each { |description, verdict| description.update!(rank: :deprecated) if verdict["verdict"] == "deprecated" }
+
+          verdicts = judged.map { |_description, verdict| verdict }
           deprecated = verdicts.any? { |verdict| verdict["verdict"] == "deprecated" }
           {"value" => verdicts, "applied" => deprecated, "reason" => deprecated ? "deprecated" : "kept"}
         end
@@ -37,27 +43,30 @@ module Services
         private
 
         def verdict_for(description)
-          return deprecate(description, "author_unmatched") if @entity.nil?
+          return entry(description, "deprecated", "author_unmatched") if @entity.nil?
 
           language, title = parse(description.source_url)
-          return deprecate(description, "unreadable_url") if title.nil?
-          return keep(description, "sitelink") if language == "en" && title == @entity.enwiki_title
+          return entry(description, "deprecated", "unreadable_url") if title.nil?
+          return entry(description, "kept", "sitelink") if language == "en" && title == @entity.enwiki_title
 
-          lead = WikipediaLead.fetch(language: language, title: title, refresh: @refresh, client: @client)
-          return deprecate(description, "page_missing") if lead.nil?
-          return keep(description, "same_item") if lead.wikibase_item == @entity.id
+          lead = fetch_lead(language, title)
+          return entry(description, "deprecated", "unreadable_url") if lead == :unreadable
+          return entry(description, "deprecated", "page_missing") if lead.nil?
+          return entry(description, "kept", "same_item") if lead.wikibase_item == @entity.id
 
-          deprecate(description, "different_item", page_item: lead.wikibase_item)
+          entry(description, "deprecated", "different_item", page_item: lead.wikibase_item)
         end
 
-        def keep(description, why, **extra) = entry(description, "kept", why, extra)
-
-        def deprecate(description, why, **extra)
-          description.update!(rank: :deprecated)
-          entry(description, "deprecated", why, extra)
+        # A language the Wikipedia client's own guard rejects (a "simple." or
+        # "www." host is not a real Wikipedia language edition) is unreadable,
+        # not a failure.
+        def fetch_lead(language, title)
+          WikipediaLead.fetch(language: language, title: title, refresh: @refresh, client: @client)
+        rescue ArgumentError
+          :unreadable
         end
 
-        def entry(description, verdict, why, extra)
+        def entry(description, verdict, why, **extra)
           {"description_id" => description.id, "url" => description.source_url, "verdict" => verdict, "why" => why}
             .merge(extra.stringify_keys)
         end
