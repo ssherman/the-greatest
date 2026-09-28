@@ -169,9 +169,10 @@ Do not add a `FIREBASE_PROJECT_ID` entry back here or to any `.env` file.
   manage via SOPS — see `deployment/SECRETS.md`.
 
 #### WIKIMEDIA_CONTACT
-- **Description**: Contact in the User-Agent the app sends to Wikidata and Wikipedia (author enrichment). The Wikimedia User-Agent policy requires one; a URL or an email address both qualify.
+- **Description**: Contact in the User-Agent the app sends to Wikidata and Wikipedia (author enrichment). The Wikimedia User-Agent policy requires one; use the site URL -- this project never sends an email address to Wikimedia.
 - **Default**: `https://thegreatestbooks.org`
 - **Required**: No
+- **Used By**: Sidekiq (the author enrichment jobs)
 
 ### Stripe Billing
 
