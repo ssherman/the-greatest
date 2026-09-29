@@ -10,10 +10,11 @@ module Viaf
   class Person
     GENDER_CODES = {"a" => :female, "b" => :male, "u" => :unspecified}.freeze
     NAME_TYPE_KINDS = {"personal" => :person, "corporate" => :organization}.freeze
+    ISO_CODE = /\A[A-Za-z]{2}\z/
 
     attr_reader :viaf_id, :name_type, :birth_date, :death_date, :gender_code,
       :source_ids, :main_headings, :names, :nationality, :language,
-      :occupation, :field_of_activity
+      :occupation, :field_of_activity, :date_type, :titles
 
     def self.from_payload(payload)
       new(payload)
@@ -32,6 +33,8 @@ module Viaf
       @language = payload["language"] || []
       @occupation = payload["occupation"] || []
       @field_of_activity = payload["field_of_activity"] || []
+      @date_type = payload["date_type"]
+      @titles = payload["titles"] || []
     end
 
     def birth_year = year_from(birth_date)
@@ -51,6 +54,16 @@ module Viaf
 
     def wikidata_qid = source_ids["WKP"]
 
+    # The dates are life dates, not a "flourished" span.
+    def lived? = date_type.to_s.casecmp?("lived")
+
+    # Nationality values that are ISO 3166 alpha-2 codes. The rest is free
+    # text in the cataloguing library's language ("Stany Zjednoczone").
+    def country_codes = nationality.map(&:to_s).select { |value| value.match?(ISO_CODE) }.map(&:upcase).uniq
+
+    # Contributing sources other than Wikidata: how widely catalogued the person is.
+    def agency_count = source_ids.keys.count { |code| code != "WKP" }
+
     def preferred_name
       main_headings.first&.fetch("name", nil) || names.first
     end
@@ -58,13 +71,15 @@ module Viaf
     private
 
     # Dates are strings at day precision ("1828-09-09") and integers at year
-    # precision (1473). Negative years occur.
+    # precision (1473). Negative years occur. VIAF sends 0 for an unknown
+    # date (a living person's death), and a partial date ("18XX") carries no
+    # year, so both are nil.
     def year_from(value)
       return nil if value.nil?
-      return value if value.is_a?(Integer)
+      return value.nonzero? if value.is_a?(Integer)
 
-      match = value.to_s.match(/\A(-?\d+)/)
-      match && match[1].to_i
+      match = value.to_s.match(/\A(-?\d{3,4})(?!\d)/)
+      match && match[1].to_i.nonzero?
     end
   end
 end

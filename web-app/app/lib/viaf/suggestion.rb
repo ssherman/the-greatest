@@ -48,13 +48,14 @@ module Viaf
     # surname ("Smith-Jones") has a dash with no digits on either side, and
     # a naive "both sides optional" regex would zero-width match there
     # before ever reaching the real date later in the string.
+    # Newer AutoSuggest rows write the range with an en dash ("Stacy Willingham 1991–").
     def date_range
       @date_range ||= begin
         text = term.to_s
 
-        if (match = text.match(/(\d{3,4})\s*-\s*(\d{3,4})?/))
+        if (match = text.match(/(\d{3,4})\s*[-–]\s*(\d{3,4})?/))
           [match[1].to_i, match[2]&.to_i]
-        elsif (match = text.match(/-\s*(\d{3,4})/))
+        elsif (match = text.match(/[-–]\s*(\d{3,4})/))
           [nil, match[1].to_i]
         else
           [nil, nil]

@@ -292,4 +292,26 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
       )
     end
   end
+
+  # Shape observed 2026-09-28: titles.work[] with per-work sources.
+  test "keeps work titles, most-catalogued first, without authority-id titles" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:titles" => {"ns1:work" => [
+      {"ns1:sources" => {"ns1:s" => "NDL"}, "ns1:title" => "n2021040535"},
+      {"ns1:sources" => {"ns1:s" => "BNF"}, "ns1:title" => "Forget me not : a novel"},
+      {"ns1:sources" => {"ns1:s" => ["LC", "BNF", "DNB"]}, "ns1:title" => "A Flicker in the Dark"},
+      {"ns1:sources" => {"ns1:s" => ["LC", "BNF"]}, "ns1:title" => 1984}
+    ]}}})
+
+    assert_equal ["A Flicker in the Dark", "1984", "Forget me not : a novel"], result["titles"]
+  end
+
+  test "keeps at most 200 titles" do
+    works = (1..205).map { |n| {"ns1:sources" => {"ns1:s" => "LC"}, "ns1:title" => "Work #{n}"} }
+
+    assert_equal 200, distill({"ns1:VIAFCluster" => {"ns1:titles" => {"ns1:work" => works}}})["titles"].size
+  end
+
+  test "a cluster without titles distills an empty list" do
+    assert_equal [], distill["titles"]
+  end
 end

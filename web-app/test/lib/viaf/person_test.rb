@@ -108,4 +108,38 @@ class Viaf::PersonTest < ActiveSupport::TestCase
   test "preferred_name is nil when there are no names at all" do
     assert_nil person("main_headings" => [], "names" => []).preferred_name
   end
+
+  # Observed 2026-09-28: a living author's cluster sends deathDate 0.
+  test "an unknown date is no year" do
+    living = person("birth_date" => "1991-01-30", "death_date" => 0)
+
+    assert_equal [1991, nil], [living.birth_year, living.death_year]
+    assert_nil person("birth_date" => "0").birth_year
+  end
+
+  test "a partial date is no year" do
+    assert_nil person("birth_date" => "18XX").birth_year
+  end
+
+  test "only dates VIAF types as lived are life dates" do
+    assert person("date_type" => "lived").lived?
+    assert_not person("date_type" => "flourished").lived?
+    assert_not person("date_type" => nil).lived?
+  end
+
+  test "exposes titles, two-letter country codes, and how many sources other than Wikidata contribute" do
+    subject = person(
+      "titles" => ["War and Peace"],
+      "nationality" => ["RU", "ru", "Rusko", "XX"],
+      "source_ids" => {"LC" => "n1", "WKP" => "Q7243", "DNB" => "1"}
+    )
+
+    assert_equal ["War and Peace"], subject.titles
+    assert_equal ["RU", "XX"], subject.country_codes
+    assert_equal 2, subject.agency_count
+  end
+
+  test "a payload without titles has none" do
+    assert_equal [], person.titles
+  end
 end
