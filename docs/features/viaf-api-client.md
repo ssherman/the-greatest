@@ -8,6 +8,21 @@ Design and research notes: `docs/superpowers/specs/2026-08-30-viaf-api-client-de
 
 ## Usage
 
+**`Viaf::Client`** is what the background jobs call through
+(`Services::Books::Authors::ResolveViaf`, via `Books::Authors::ViafJob` -- see
+`docs/features/books-author-enrichment.md`): `suggest(query)` (AutoSuggest, cached a day in
+`Rails.cache`), `cluster(viaf_id, refresh: false)` (the distilled `Viaf::Person`, cached in
+`external_records` regardless), and `last_rate_limit` (the last response's budget headers). Its
+transport paces at `:immediate` -- a request made while the pace is busy raises rather than
+blocking a worker thread -- and every request checks `Viaf::Gate` first (see "Rate limits"
+below). A closed gate, a busy pace, or a Cloudflare block all surface the same way:
+`Viaf::Exceptions::RateLimited`, carrying `retry_after`, which the calling job turns into a
+reschedule.
+
+For console use, `Viaf::Search::AutoSuggest` and `Viaf::Cluster` below still talk to
+`Viaf::BaseClient` directly, in its default `:blocking` mode: a call simply waits its turn --
+`Viaf::RateLimiter` paces at 2 requests a minute, so about 30 s apart -- rather than raising.
+
 Resolve a name to candidates (cheap, ~3 KB):
 
 ```ruby
@@ -46,11 +61,27 @@ Viaf::Search::PersonSearch.new.call("leo tolstoy", limit: 5)
    for minutes. This is the binding constraint. `Viaf::RateLimiter` paces requests at 2 per minute
    to stay under it.
 
+**`Viaf::Gate`** (a Redis hash, `viaf:pause`) is what makes both limits binding for the background
+jobs, on top of `Viaf::RateLimiter`'s pacing: every `Viaf::Client` request checks it first, and a
+closed gate raises `RateLimited` without the request ever being attempted.
+
+- A block (below) closes the gate for an hour, doubling on each repeat up to a day. A real VIAF
+  answer -- one carrying the `ratelimit-*` budget headers -- resets that doubling; a Cloudflare
+  interstitial carries no such headers, so it does not.
+- Falling under 50 of the day's remaining budget (the smaller of `ratelimit-remaining` and
+  `x-ratelimit-remaining-day`) closes the gate for an hour too, on the same clock -- a low budget
+  never shortens an active block, since both share the one hash.
+
+Console use through `Viaf::BaseClient` directly does not check the gate at all; it is a
+`Viaf::Client`/background-job concern.
+
 **Never retry a `Viaf::Exceptions::BlockedError`.** Evidence suggests retrying refreshes the ban;
 polling every 30s failed to recover within 9.5 minutes. Back off and try later. `BaseClient` raises
 it both for an HTTP 403 and for Cloudflare's interstitial served with a 200 status (a managed
 challenge page) — either way, the request never reaches VIAF, so both must be treated as blocked
-rather than as a real response.
+rather than as a real response. `Viaf::Client#get` turns a caught `BlockedError` into exactly this
+gate pause, via `Viaf::Gate#blocked!`, before re-raising it as `RateLimited` — nothing downstream
+of the client ever sees the 403 itself, or gets a chance to retry it before the pause clears.
 
 ## Caching
 
@@ -66,6 +97,13 @@ recorded for reference: `Viaf::Cluster#find` compares a cached row's `schema_ver
 rather than returning the stale payload. This means bumping `SCHEMA_VERSION` invalidates every
 cached row at once — against a ~1,000/day budget, a large cache takes a while to warm back up.
 
+**As of `SCHEMA_VERSION` 2**, the distilled payload also keeps up to 200 work titles per cluster
+(most-catalogued first; a title that is only an authority id — NDL files LC's own record number,
+`n2021040535`, as one of its "works" — is dropped), and `Viaf::Cluster#find` stores the complete
+raw response too: gzipped, in `external_records.raw` (`ExternalRecord#raw_text`/`#raw_text=`),
+beside the distilled `payload`, so a later feature can use more of a response without a second
+network call.
+
 Force a refresh with `Viaf::Cluster.new.find(id, refresh: true)`.
 
 `Viaf::Search::PersonSearch` deliberately does **not** cache its results, even though it returns
@@ -74,15 +112,57 @@ in-body `viafID`, and VIAF has been observed emitting it in lossy scientific not
 want a cached record fetch the chosen ID through `Viaf::Cluster` instead.
 
 **Known deviation: merged clusters cache under the superseded ID.** A merged VIAF cluster answers
-HTTP 301, and `BaseClient` follows the redirect (see `conn.response :follow_redirects` in
-`BaseClient`), so the *data* `Viaf::Cluster#find` returns is correct — it is the surviving cluster's
-data. But the canonical ID that the redirect points at is never recorded: `find` still caches the
+HTTP 301. `BaseClient` follows it itself — recursing into its own request method — rather than
+through Faraday's `follow_redirects` middleware, which resolves every hop *inside* the connection
+and so would spend only one rate-limiter slot on a multi-hop chain instead of one per hop; against
+a WAF that trips on roughly 5-8 rapid requests, that amplification is enough on its own to cause a
+block. Each hop pays for its own slot instead: the first request paces through the caller's
+limiter, and every redirect hop through a second limiter that always waits for its turn rather
+than ever raising — rescheduling an already-spent redirect would just repeat it forever, and a
+caller pacing that first request in `:immediate` mode (`Viaf::Client`, above) can safely pass a
+blocking limiter for the hops that follow it. Either way, the *data* `Viaf::Cluster#find` returns
+is correct — it is the surviving cluster's data. But the canonical ID that the redirect points at
+is never recorded: `find` still caches the
 row under the superseded ID it was asked for, and the `Person` built from it reports that superseded
 ID as `viaf_id`. Consequences: fetching both the superseded and canonical IDs produces two
 `external_records` rows for what is really one cluster, and an author could end up linked by a
 stale-but-still-resolvable VIAF ID rather than the canonical one. Re-keying the cache to the
 canonical ID (by reading it back out of the redirected response) is deferred to the `AuthorImport`
 provider work rather than solved here.
+
+## AutoSuggest's 2026 shape
+
+Observed live 2026-09-28, against what the client's examples above show:
+
+- **Terms can come in natural order** ("Stacy Willingham"), not only the older inverted heading
+  order ("Tolstoy, Leo, graf, 1828-1910"). Both shapes occur, so a caller comparing a term against
+  a name compares sorted word sets, never literal order or position of the comma.
+- **One cluster answers with several rows, not one**: a plain heading, one carrying dates ("Stacy
+  Willingham 1991–"), one carrying a description ("Stacy Willingham American writer"), and
+  translated forms. A caller resolving to one candidate per person groups rows by `viafid` first.
+- **Dates can be written with an en dash, not only a hyphen.** `Viaf::Suggestion#birth_year` and
+  `#death_year` read both.
+- **Rows of other name types are mixed in** — a `nametype` of `uniformtitleexpression` is a work,
+  not a person, returned alongside the personal-name rows for the same query.
+- **VIAF can hold duplicate clusters for one person.** A live probe for "Stacy Willingham" returned
+  two: one with 20 contributing sources, one with none. Both carry a heading equal to the name, so
+  a caller relying on "exactly one candidate named X" to decide by rule cannot assume that rule
+  fires. See `docs/features/books-author-enrichment.md`'s VIAF section for how the author importer
+  handles it — the most-catalogued cluster wins, decided by AI, never treated as a tie.
+
+## Unknown dates
+
+VIAF marks a date unknown several ways, none of which is a real year:
+
+- `deathDate: 0`, observed for a living person.
+- `birthDate`/`deathDate` as the string `"0"`.
+- A partial date such as `"18XX"` or `"196X"`.
+- A `dateType` other than `"lived"` (`"flourished"`, for example) — those dates describe when the
+  person was active, not born or died, so they are not birth or death years at all even when they
+  parse as one.
+
+`Viaf::Person#year_from` returns `nil` for the first three; `#lived?` is how a caller filters the
+fourth before ever reading `birth_year`/`death_year` as a life date.
 
 ## What VIAF does and does not provide
 
@@ -100,8 +180,12 @@ gender, no birth date and no ISNI.
 
 ## Not built
 
-This client does not write to `Books::Author`. The `AuthorImport` provider that consumes it is a
-separate piece of work.
+`Services::Books::Authors::ResolveViaf` and `ApplyViaf` now consume this client and write to
+`Books::Author` — see `docs/features/books-author-enrichment.md`'s VIAF section for how they
+decide and what they fill.
+
+Merged clusters still cache under the superseded ID ("Known deviation" above), and re-keying to
+the canonical ID is still deferred.
 
 Bulk dumps are not used: OCLC froze them at 2024-08-04 and withdrew the cheap cross-reference
 files. If dumps resume, `Viaf::Distiller` is directly reusable since the dump contains the same
