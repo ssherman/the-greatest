@@ -104,12 +104,38 @@ module Viaf
         name = heading_name(entry)
         next if name.blank?
 
-        {"source" => Normalizer.array(entry.dig("sources", "s")).first, "name" => name}
+        {
+          "source" => Normalizer.array(entry.dig("sources", "s")).first,
+          "name" => name,
+          "surname_first" => surname_first(entry)
+        }
       end
     end
 
     def alternate_names(cluster)
       Normalizer.array(cluster.dig("x400s", "x400")).filter_map { |entry| heading_name(entry).presence }.uniq
+    end
+
+    # MARC21's ind1 (1 = surname entry, 3 = family-name entry) and UNIMARC's
+    # ind2 (1 = surname entry) mark a heading as entered under a surname; a 0
+    # marks a forename entry, and anything else (a different dtype, a missing
+    # indicator, or a blank/"|" value) leaves it unknown.
+    def surname_first(entry)
+      datafield = entry["datafield"]
+      return nil unless datafield.is_a?(Hash)
+
+      case datafield["dtype"]
+      when "MARC21"
+        case datafield["ind1"].to_s.strip
+        when "1", "3" then true
+        when "0" then false
+        end
+      when "UNIMARC"
+        case datafield["ind2"].to_s.strip
+        when "1" then true
+        when "0" then false
+        end
+      end
     end
 
     def heading_name(entry)
@@ -150,6 +176,6 @@ module Viaf
     # These have no caller outside this module (grepped: Tasks 7/9/10 use only
     # `.call` and SCHEMA_VERSION). Kept private rather than tested directly.
     private_class_method :guard_withdrawn!, :withdrawn_marker, :source_ids,
-      :main_headings, :alternate_names, :heading_name, :text_values, :titles
+      :main_headings, :alternate_names, :surname_first, :heading_name, :text_values, :titles
   end
 end

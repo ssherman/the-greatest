@@ -133,7 +133,7 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
   end
 
   test "keeps main headings with their contributing source" do
-    assert_equal [{"source" => "LC", "name" => "Tolstoy, Leo"}], distill["main_headings"]
+    assert_equal [{"source" => "LC", "name" => "Tolstoy, Leo", "surname_first" => nil}], distill["main_headings"]
   end
 
   # MARC21 tag 100 and UNIMARC tag 200 assign different meanings to the same
@@ -152,7 +152,7 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
       ]}
     }]}}})
 
-    assert_equal [{"source" => "NLR", "name" => "Austen J."}], result["main_headings"]
+    assert_equal [{"source" => "NLR", "name" => "Austen J.", "surname_first" => nil}], result["main_headings"]
   end
 
   test "takes the first source when a heading lists several" do
@@ -176,7 +176,7 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
       }
     ]}}})
 
-    assert_equal [{"source" => "WKP", "name" => "Tolstoy"}], result["main_headings"]
+    assert_equal [{"source" => "WKP", "name" => "Tolstoy", "surname_first" => nil}], result["main_headings"]
   end
 
   # A bare String subfield element is a vacuous fixture: String#["code"] is a
@@ -193,7 +193,7 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
       ]}
     }]}}})
 
-    assert_equal [{"source" => "LC", "name" => "Austen Jane"}], result["main_headings"]
+    assert_equal [{"source" => "LC", "name" => "Austen Jane", "surname_first" => nil}], result["main_headings"]
   end
 
   # MARC subfield content routinely carries leading/internal double spaces;
@@ -204,7 +204,65 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
       "ns1:datafield" => {"ns1:subfield" => [{"code" => "a", "content" => "  Austen,   Jane"}]}
     }]}}})
 
-    assert_equal [{"source" => "LC", "name" => "Austen, Jane"}], result["main_headings"]
+    assert_equal [{"source" => "LC", "name" => "Austen, Jane", "surname_first" => nil}], result["main_headings"]
+  end
+
+  # MARC21 ind1: 1 = personal name entered under surname, 3 = entered under
+  # family name. Both mark the heading as surname-first.
+  test "MARC21 ind1 1 marks a heading entered under a surname" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:mainHeadings" => {"ns1:mainHeadingEl" => [{
+      "ns1:sources" => {"ns1:s" => "LC"},
+      "ns1:datafield" => {
+        "dtype" => "MARC21", "tag" => 100, "ind1" => 1, "ind2" => " ",
+        "ns1:subfield" => [{"code" => "a", "content" => "Willingham, Stacy"}]
+      }
+    }]}}})
+
+    assert result["main_headings"].first["surname_first"]
+  end
+
+  # MARC21 ind1 0 is entered under a forename ("Marcus Aurelius, Emperor of
+  # Rome"): natural() must never be applied to this heading.
+  test "MARC21 ind1 0 marks a heading entered under a forename" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:mainHeadings" => {"ns1:mainHeadingEl" => [{
+      "ns1:sources" => {"ns1:s" => "LC"},
+      "ns1:datafield" => {
+        "dtype" => "MARC21", "tag" => 100, "ind1" => 0, "ind2" => " ",
+        "ns1:subfield" => [{"code" => "a", "content" => "Marcus Aurelius, Emperor of Rome"}]
+      }
+    }]}}})
+
+    assert_not result["main_headings"].first["surname_first"]
+  end
+
+  # UNIMARC ind2 1 is a surname (inverted) entry; the indicator can arrive as
+  # a String.
+  test "UNIMARC ind2 1 marks a heading entered under a surname" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:mainHeadings" => {"ns1:mainHeadingEl" => [{
+      "ns1:sources" => {"ns1:s" => "BNF"},
+      "ns1:datafield" => {
+        "dtype" => "UNIMARC", "tag" => 200, "ind1" => " ", "ind2" => "1",
+        "ns1:subfield" => [
+          {"code" => "a", "content" => "Willingham"},
+          {"code" => "b", "content" => "Stacy"}
+        ]
+      }
+    }]}}})
+
+    assert result["main_headings"].first["surname_first"]
+  end
+
+  # BnF emits "|" (no indicator supplied) rather than "0"/"1": unknown, not false.
+  test "UNIMARC ind2 pipe leaves surname_first unknown" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:mainHeadings" => {"ns1:mainHeadingEl" => [{
+      "ns1:sources" => {"ns1:s" => "BNF"},
+      "ns1:datafield" => {
+        "dtype" => "UNIMARC", "tag" => 200, "ind1" => "|", "ind2" => "|",
+        "ns1:subfield" => [{"code" => "a", "content" => "Willingham Stacy"}]
+      }
+    }]}}})
+
+    assert_nil result["main_headings"].first["surname_first"]
   end
 
   test "collects deduplicated alternate names from x400s" do

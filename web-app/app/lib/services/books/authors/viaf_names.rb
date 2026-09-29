@@ -35,6 +35,13 @@ module Services
         # "Tolstoy, Leo, graf" is "Leo Tolstoy". Titles and anything after the
         # second comma are dropped, as are parenthesised fuller forms and
         # dates. Without a comma the order is unknowable: nil.
+        #
+        # This only undoes an inversion, so it must only be called on a
+        # heading entered under a surname (Viaf::Distiller's "surname_first"
+        # is true). A heading entered under a forename, such as "Marcus
+        # Aurelius, Emperor of Rome" or "Hildegard, of Bingen, Saint", is not
+        # inverted — the comma there introduces an epithet or title, not a
+        # surname — and has no inversion to undo. Callers must not pass one.
         def natural(heading)
           text = heading.to_s.gsub(PARENTHESISED, " ").gsub(/\d[\d\s\-–?.]*/, " ")
           surname, forenames = text.split(",").map(&:squish)
