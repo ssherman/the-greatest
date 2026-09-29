@@ -77,13 +77,15 @@ module Services
         end
 
         # Exactly one person with a heading equal to our name and a birth year
-        # agreeing with ours. Its cluster is then read and must still agree.
+        # agreeing with ours. Its cluster is then read and must still agree on
+        # name and years: the match so far rests on an AutoSuggest row, and a
+        # stale suggestion or a redirected id can land on someone else.
         def rule_verdict(pool)
           named = pool.select { |candidate| heading_matches?(candidate) }
           return nil unless named.size == 1 && suggested_birth_agrees?(named.first)
 
           only = fetch(named.first)
-          return nil unless person?(only) && !year_conflict?(only)
+          return nil unless person?(only) && corroborated?(only)
 
           Verdict.new(outcome: :matched, candidate: only, decided_by: :rule, confidence: :high,
             reason: "The only VIAF person named #{author.name}, born #{author.birth_year} as ours.")

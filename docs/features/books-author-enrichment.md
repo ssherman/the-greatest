@@ -220,7 +220,9 @@ author, or none.
 
 **The rule**: exactly one candidate has a heading equal to the author's name (or an alternate
 name) *and* a birth year within one year of the author's own. Its cluster is then fetched and must
-still be a person with no year conflict -- `matched`, `rule`, `high`. No person at all among the
+still be a person carrying one of the author's names, with no year conflict -- `matched`, `rule`,
+`high`. The name is checked again because the match so far rests on an AutoSuggest row, and a stale
+suggestion or a redirected id can lead to someone else. No person at all among the
 candidates is `unmatched`, `rule`, `high` -- whether because none of the AutoSuggest rows names a
 person to begin with, or because every one of the (up to three) fetched clusters turns out not to
 be one. Anything else fetches up to three clusters (`MAX_FETCHED`), ordered by held id first, then

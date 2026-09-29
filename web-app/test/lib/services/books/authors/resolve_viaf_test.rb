@@ -135,6 +135,20 @@ module Services
           assert_equal "ai", result.data[:decision].decided_by
         end
 
+        # A stale suggestion or a redirected id: the row carried our name, the
+        # cluster it leads to is someone else born the same year.
+        test "the rule's cluster carries none of our names after the fetch, so the AI decides" do
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => willingham(headings: ["Harriott, Ainsley"])}
+          )
+          ai_selects(0)
+
+          result = resolve(client)
+
+          assert_equal ["unmatched", "ai"], [result.data[:decision].outcome, result.data[:decision].decided_by]
+        end
+
         test "two clusters named as ours (a VIAF duplicate) go to the AI, which sees both and is told about duplicates" do
           client = FakeViafClient.new(
             suggestions: {"Stacy Willingham" => [
