@@ -24,6 +24,13 @@ module Services
           assert_equal "Q115493575", result.data[:wikidata_qid]
         end
 
+        test "a malformed Wikidata id is not stamped" do
+          result = apply(viaf_person("1", wikidata: "Q7243x"))
+
+          assert_empty held("books_author_wikidata_qid")
+          assert_nil result.data[:wikidata_qid]
+        end
+
         test "a Wikidata id already held, held by another author, or conflicting is not reported as new" do
           @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q1")
           assert_nil apply(viaf_person("1", wikidata: "Q1")).data[:wikidata_qid]
@@ -32,7 +39,10 @@ module Services
           other = ::Books::Author.create!(name: "Other Author")
           other.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q3")
           fresh = ::Books::Author.create!(name: "Fresh Author")
-          assert_nil apply(viaf_person("2", wikidata: "Q3"), author: fresh).data[:wikidata_qid]
+          result = assert_difference(-> { ::DuplicateCandidate.count }, 1) { apply(viaf_person("2", wikidata: "Q3"), author: fresh) }
+
+          assert_nil result.data[:wikidata_qid]
+          assert_equal "external_key_collision", ::DuplicateCandidate.last.source
         end
 
         test "an author holding a different VIAF id gets nothing applied" do
@@ -86,7 +96,7 @@ module Services
           author = ::Books::Author.create!(name: "Leo Tolstoy")
           apply(viaf_person("1", headings: [
             "Tolstoy, Leo", "Tolstoï, Léon", "Tolstoi, Lev Nikolaevich, graf", "Толстой, Лев", "Tolstoy Leo",
-            {"source" => "WKP", "name" => "Tolstoy, Russian writer"}
+            {"source" => "WKP", "name" => "Tolstoy, Russian writer", "surname_first" => true}
           ]), author: author)
 
           assert_equal ["Léon Tolstoï", "Lev Nikolaevich Tolstoi"], author.reload.alternate_names
@@ -104,7 +114,7 @@ module Services
           author = ::Books::Author.create!(name: "Hildegard von Bingen")
           apply(viaf_person("1", headings: [
             {"source" => "LC", "name" => "Hildegard, of Bingen, Saint", "surname_first" => false},
-            {"source" => "BNF", "name" => "Hildegard, von Bingen", "surname_first" => nil}
+            {"source" => "BNF", "name" => "Hildegard, Saint", "surname_first" => nil}
           ]), author: author)
 
           assert_empty Array(author.reload.alternate_names)
