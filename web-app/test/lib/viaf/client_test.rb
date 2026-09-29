@@ -84,4 +84,21 @@ class Viaf::ClientTest < ActiveSupport::TestCase
 
     assert_raises(Viaf::Exceptions::RateLimited) { @client.cluster("2") }
   end
+
+  test "a forced refresh reads a cluster fetched within the window instead of refetching it" do
+    ExternalRecord.create!(source: :viaf, source_id: "1", payload: {"viaf_id" => "1", "name_type" => "Personal"},
+      schema_version: Viaf::Distiller::SCHEMA_VERSION, fetched_at: 1.hour.ago)
+    @gate.stubs(:wait_seconds).returns(600)
+    @base.expects(:get).never
+
+    assert_equal "1", @client.cluster("1", refresh: true).viaf_id
+  end
+
+  test "a forced refresh does refetch a cluster last fetched outside the window" do
+    ExternalRecord.create!(source: :viaf, source_id: "1", payload: {"viaf_id" => "1", "name_type" => "Personal"},
+      schema_version: Viaf::Distiller::SCHEMA_VERSION, fetched_at: 2.days.ago)
+    @gate.stubs(:wait_seconds).returns(600)
+
+    assert_raises(Viaf::Exceptions::RateLimited) { @client.cluster("1", refresh: true) }
+  end
 end

@@ -18,7 +18,7 @@ module Viaf
     # bypassing `@rate_limiter.wait!` for every hop after the first. Against
     # a Cloudflare WAF that blocks on ~5-8 rapid requests, that amplification
     # (1 limiter slot for up to 4 upstream requests) is enough on its own to
-    # trip the ban. Looping through the public `#get` path instead means
+    # trip the ban. Recursing into `fetch_with_redirects` instead means
     # every hop pays for its own slot. A redirect hop paces through
     # `@redirect_rate_limiter` rather than `@rate_limiter`: a caller pacing
     # the first request in `:immediate` mode can pass a blocking limiter for

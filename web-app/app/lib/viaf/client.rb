@@ -14,8 +14,18 @@ module Viaf
   # job instead. A redirect hop is different — it waits for its slot, at
   # most about a minute and only for a merged cluster, because rescheduling
   # it would repeat the already-spent 301 forever.
+  #
+  # A forced (refresh: true) fetch is paced the same way, and the pace allows
+  # only 2 requests a minute: a run that needs three fresh clusters cannot
+  # get them all in one attempt and is rescheduled. Without REFRESH_WINDOW
+  # that reschedule would ask `refresh: true` again and refetch the same
+  # clusters it already has, forever refusing the one it hasn't reached yet.
+  # `cluster` downgrades `refresh` to false for a cluster fetched within the
+  # window, so a rescheduled attempt of the same run reads what an earlier
+  # attempt already fetched instead of spending a request on it again.
   class Client
     SUGGEST_TTL = 1.day
+    REFRESH_WINDOW = 1.day
 
     def initialize(base_client: nil, gate: nil, cache: Rails.cache)
       @base_client = base_client || BaseClient.new(
@@ -32,7 +42,13 @@ module Viaf
       end
     end
 
-    def cluster(viaf_id, refresh: false) = Cluster.new(self).find(viaf_id, refresh: refresh)
+    # A forced re-run refetches a cluster at most once a day, so a
+    # rescheduled attempt of the same run reads what the earlier attempt
+    # fetched instead of refetching it every time.
+    def cluster(viaf_id, refresh: false)
+      refresh &&= !recently_fetched?(viaf_id)
+      Cluster.new(self).find(viaf_id, refresh: refresh)
+    end
 
     def last_rate_limit = @base_client.last_rate_limit
 
@@ -51,6 +67,13 @@ module Viaf
     rescue Exceptions::BlockedError
       seconds = @gate.blocked!
       raise Exceptions::RateLimited.new("Cloudflare blocked VIAF; every VIAF call is paused for #{seconds}s", retry_after: seconds)
+    end
+
+    private
+
+    def recently_fetched?(viaf_id)
+      ::ExternalRecord.where(source: :viaf, source_id: viaf_id.to_s, schema_version: Distiller::SCHEMA_VERSION)
+        .where("fetched_at > ?", REFRESH_WINDOW.ago).exists?
     end
   end
 end
