@@ -370,6 +370,32 @@ module Admin
         post recheck_admin_books_match_decision_path(decision)
         assert_redirected_to admin_books_match_decision_path(decision)
       end
+
+      test "a VIAF link decision shows, filters and refuses re-check" do
+        decision = ::MatchDecision.create!(
+          finder: "Services::Books::Authors::ResolveViaf", subject: books_authors(:tolstoy), record: nil,
+          outcome: :matched, confidence: :high, decided_by: :rule, needs_review: false,
+          query: {"name" => "Leo Tolstoy", "viaf" => []},
+          candidates: [{
+            "record_type" => nil, "record_id" => nil, "external_source" => "viaf", "external_key" => "96987389",
+            "sources" => ["name_search"], "scores" => {},
+            "evidence" => {"external_title" => "Leo Tolstoy", "external_year" => 1828, "agency_count" => 44}
+          }],
+          selected_index: 1, reason: "The only VIAF person named Leo Tolstoy, born 1828 as ours."
+        )
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_match_decision_path(decision)
+        assert_response :success
+
+        # needs_review is false, so the index's default reviewed: "pending" scope would hide
+        # this row regardless of the entity filter; reviewed: "all" lists every decision.
+        get admin_books_match_decisions_path(entity: "viaf-link", reviewed: "all")
+        assert_equal [decision.id], row_ids
+
+        post recheck_admin_books_match_decision_path(decision)
+        assert_redirected_to admin_books_match_decision_path(decision)
+      end
     end
   end
 end

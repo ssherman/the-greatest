@@ -92,6 +92,11 @@ module DataImporters
         finder: "Services::Books::Authors::ResolveWikidata", domain: :books, model: "Books::Author", label: "Wikidata link",
         query: nil, preloads: [], merge_action: nil, source_field: nil, execute_action_path: nil,
         recheck: false, kind: :external_link
+      ),
+      Entry.new(
+        finder: "Services::Books::Authors::ResolveViaf", domain: :books, model: "Books::Author", label: "VIAF link",
+        query: nil, preloads: [], merge_action: nil, source_field: nil, execute_action_path: nil,
+        recheck: false, kind: :external_link
       )
     ].freeze
 
