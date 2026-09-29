@@ -24,7 +24,8 @@ Books::Authors::WikidataJob     Services::Books::Authors::EnrichFromWikidata
   on a miss (not via_viaf) ->   Books::Authors::ViafJob
 Books::Authors::ViafJob         Services::Books::Authors::EnrichFromViaf
                                    ResolveViaf -> ApplyViaf
-  new Wikidata id stamped ->    WikidataJob(author_id, refresh = true, via_viaf = true)
+  new Wikidata id, decision
+  doesn't need review ->        WikidataJob(author_id, refresh = true, via_viaf = true)
 ```
 
 `Providers::Enrichment` runs only when the importer created or force-re-imported the author (an
@@ -36,8 +37,11 @@ import never blocks on a Wikimedia round trip. The job runs on the `low` queue w
 The AI facts step (the house-style description and gap-filling) and the hand-off into book
 enrichment are increment 4 of the same spec -- not built yet. A Wikidata match, failure, or skip
 ends the chain right there at `WikidataJob`. Only a genuine miss (outcome `unmatched`) goes on to
-`ViafJob`, which itself ends the chain -- unless it newly stamped a Wikidata id, in which case one
-more `via_viaf` Wikidata run follows.
+`ViafJob`, which itself ends the chain -- unless it newly stamped a Wikidata id *and* the VIAF
+decision itself does not need review, in which case one more `via_viaf` Wikidata run follows. A
+VIAF match flagged `needs_review` (medium or low AI confidence) never triggers that extra run: the
+stamped id stays as VIAF's own, flagged fact rather than being treated as independent evidence for
+a certain Wikidata match.
 
 An author an admin has flagged `exclude_from_rankings` (the "Exclude from author rankings"
 checkbox on the admin author form) is skipped without a Wikimedia call at all -- a `skipped`
@@ -252,11 +256,15 @@ stops after recording that one conflict (reason `held_viaf_conflict`) -- no iden
 gender, alternate names or countries are written for that run -- and the decision is flagged
 `needs_review`, mirroring Wikidata's `held_qid_conflict`.
 
-**When the cluster names a Wikidata item `ApplyViaf` newly stamps**, `ViafJob` enqueues
-`WikidataJob.perform_async(author_id, true, true)` -- `refresh: true` because the earlier Wikidata
-miss already counts as processed, `via_viaf: true` so a second miss cannot send the author back to
-VIAF. An id the author already held, one another author holds, or one that conflicts sends
-nothing.
+**When the cluster names a Wikidata item `ApplyViaf` newly stamps, and the VIAF decision itself
+does not need review**, `ViafJob` enqueues `WikidataJob.perform_async(author_id, true, true)` --
+`refresh: true` because the earlier Wikidata miss already counts as processed, `via_viaf: true` so
+a second miss cannot send the author back to VIAF. An id the author already held, one another
+author holds, or one that conflicts sends nothing. A VIAF match `needs_review` (the AI decided at
+medium or low confidence, or the AI step itself failed) also sends nothing: a Wikidata run at that
+id's held-id stage would treat the stamped id as independent evidence and record a `certain`
+match, turning an uncertain VIAF pick into a certain Wikidata one. The stamped id stays as VIAF's
+own, flagged fact.
 
 **Pacing.** `Viaf::Client` is what `ResolveViaf` calls through: `suggest` (AutoSuggest, cached a
 day) and `cluster` (the VIAF cluster fetch, itself cached in `external_records` regardless of

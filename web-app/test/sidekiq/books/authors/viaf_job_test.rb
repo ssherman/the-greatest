@@ -3,8 +3,10 @@
 require "test_helper"
 
 class Books::Authors::ViafJobTest < ActiveSupport::TestCase
-  def outcome(wikidata_qid: nil)
-    ::Services::Books::Authors::EnrichFromViaf::Result.new(success?: true, data: {outcome: :matched, wikidata_qid: wikidata_qid}, errors: [])
+  def outcome(wikidata_qid: nil, needs_review: false)
+    decision = stub(needs_review: needs_review)
+    ::Services::Books::Authors::EnrichFromViaf::Result.new(success?: true,
+      data: {outcome: :matched, wikidata_qid: wikidata_qid, decision: decision}, errors: [])
   end
 
   test "runs on the low queue with three retries" do
@@ -25,6 +27,14 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
     author = books_authors(:tolstoy)
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).returns(outcome(wikidata_qid: "Q7243"))
     Books::Authors::WikidataJob.expects(:perform_async).with(author.id, true, true)
+
+    Books::Authors::ViafJob.new.perform(author.id)
+  end
+
+  test "a newly found Wikidata id from a decision that needs review does not send the author back" do
+    author = books_authors(:tolstoy)
+    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).returns(outcome(wikidata_qid: "Q7243", needs_review: true))
+    Books::Authors::WikidataJob.expects(:perform_async).never
 
     Books::Authors::ViafJob.new.perform(author.id)
   end
