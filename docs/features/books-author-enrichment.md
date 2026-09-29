@@ -34,8 +34,10 @@ import never blocks on a Wikimedia round trip. The job runs on the `low` queue w
 (`low` is last in strict priority order, so it never delays anything else).
 
 The AI facts step (the house-style description and gap-filling) and the hand-off into book
-enrichment are increment 4 of the same spec -- not built yet. Today the chain ends at `ViafJob`,
-or at the `via_viaf` Wikidata run when the VIAF cluster named a Wikidata item.
+enrichment are increment 4 of the same spec -- not built yet. A Wikidata match, failure, or skip
+ends the chain right there at `WikidataJob`. Only a genuine miss (outcome `unmatched`) goes on to
+`ViafJob`, which itself ends the chain -- unless it newly stamped a Wikidata id, in which case one
+more `via_viaf` Wikidata run follows.
 
 An author an admin has flagged `exclude_from_rankings` (the "Exclude from author rankings"
 checkbox on the admin author form) is skipped without a Wikimedia call at all -- a `skipped`
@@ -43,9 +45,11 @@ ledger row with reason `placeholder`.
 
 **Known gap:** when a book import creates a new author, that author's `WikidataJob` can run
 before the book and its `book_authors` row are saved, so `ResolveWikidata`'s title-matching step
-may see none of the author's actual books yet. The book importer has no production caller today,
-so this has not mattered in practice; it is a real ordering issue for the next increment to
-address once book enrichment feeds back into resolution.
+may see none of the author's actual books yet. `ResolveViaf` shares the same gap on a Wikidata
+miss: it builds its own title evidence (`AuthorProfile#titles`, shown to `SelectExternalRecordTask`
+as `matching_titles`/`other works`) from the same `author.books` association. The book importer has
+no production caller today, so this has not mattered in practice; it is a real ordering issue for
+the next increment to address once book enrichment feeds back into resolution.
 
 ## Resolution
 
@@ -213,11 +217,19 @@ author, or none.
 **The rule**: exactly one candidate has a heading equal to the author's name (or an alternate
 name) *and* a birth year within one year of the author's own. Its cluster is then fetched and must
 still be a person with no year conflict -- `matched`, `rule`, `high`. No person at all among the
-candidates is `unmatched`, `rule`, `high`. Anything else fetches up to three clusters (`MAX_FETCHED`),
-ordered by held id first, then a matching heading, then no year conflict, then the most
-contributing libraries, and hands them to `SelectExternalRecordTask`. Its guidance names the reason
-this step exists: VIAF often holds the same person as two clusters (one heavily catalogued, one
-nearly empty), and the AI is told to pick the more-catalogued one rather than treat that as a tie.
+candidates is `unmatched`, `rule`, `high` -- whether because none of the AutoSuggest rows names a
+person to begin with, or because every one of the (up to three) fetched clusters turns out not to
+be one. Anything else fetches up to three clusters (`MAX_FETCHED`), ordered by held id first, then
+a matching heading, then no year conflict, then the most contributing libraries, and hands them to
+`SelectExternalRecordTask`, whose guidance also covers VIAF's duplicate-cluster problem: VIAF often
+holds the same person as two clusters (one heavily catalogued, one nearly empty), and the AI is
+told to prefer the more-catalogued one rather than treat that as a tie.
+
+**A cluster VIAF no longer serves** (a 404, or a withdrawn/abandoned record) is dropped as a
+candidate rather than ending the run; it is recorded on the candidate and in `sources_failed`,
+which caps what would otherwise be a `high`-confidence verdict (matched or unmatched) at `medium`
+-- and so flags the decision `needs_review` -- the same downgrade Wikidata applies when a source
+it depended on fails partway through a run.
 
 Every run, whatever it decides, writes one `MatchDecision` (`finder` =
 `Services::Books::Authors::ResolveViaf`), visible on the audit pages as a **VIAF link** decision,
@@ -232,8 +244,8 @@ Wikidata step uses:
 | VIAF id, ISNI, LC, a Wikidata id (a bare `Q`-number) from the cluster's sources | `identifiers` | |
 | Birth/death date | `birth_year` / `death_year` | Only when `dateType` is `lived` (a "flourished" span is not a birth or death) and the year is not BCE. VIAF's unknown markers -- `deathDate: 0`, the string `"0"`, and a partial date such as `"18XX"` -- are read as no year at all by `Viaf::Person#year_from`, so they are recorded `null`, never as a conflicting `0`. |
 | Gender code `a`/`b` | `gender` | `u` (unspecified) is left unmapped, so it fills nothing -- the same "record, don't apply" treatment as any code `ApplyViaf` does not recognise. |
-| Nationality codes | `books_author_countries` | Through `CountryLookup.from_iso`, the same all-or-nothing gate Wikidata's `from_wikidata` uses. |
-| Main headings, inverted to natural order at the comma | `alternate_names` | Only a heading entered under a surname (`surname_first == true`) is inverted -- "Willingham, Stacy" becomes "Stacy Willingham". A forename heading ("Marcus Aurelius, Emperor of Rome") is never inverted; it is shown, and kept, exactly as written. A heading with no entry-order indicator (nil -- BnF's UNIMARC style, for example) yields no alternate name at all. The Wikidata-built heading (source `WKP`) is skipped, and so is any heading that only reorders a name the author already has ("Mo, Yan" is Mo Yan, not "Yan Mo"). Latin script only, at most 10 added per run. |
+| Nationality codes | `books_author_countries` | Through `CountryLookup#from_iso` (an instance method). Fills only when the author has no countries at all yet -- the same all-or-nothing `FactSheet#countries` gate every source shares, not a rule specific to this one. |
+| Main headings, inverted to natural order at the comma | `alternate_names` | Only a heading entered under a surname (`surname_first == true`, see `docs/features/viaf-api-client.md` for where that flag comes from) is turned into an alternate name at all -- "Willingham, Stacy" becomes "Stacy Willingham". A forename heading ("Marcus Aurelius, Emperor of Rome") is skipped here entirely, since inverting it would be wrong -- `ResolveViaf` shows it to the AI as written, but `ApplyViaf` never adds it as an alternate name. A heading with no entry-order indicator at all (nil -- BnF's UNIMARC style, for example) is skipped the same way, and so is a surname-entered heading with no comma in it ("Willingham Stacy"): there is no inversion to perform, so `ViafNames.natural` returns nil and it is dropped too. The Wikidata-built heading (source `WKP`) is skipped, and so is any heading that only reorders a name the author already has ("Mo, Yan" is Mo Yan, not "Yan Mo"). Latin script only, at most 10 added per run. |
 
 **A held VIAF id that differs from the matched cluster applies nothing.** The whole apply step
 stops after recording that one conflict (reason `held_viaf_conflict`) -- no identifiers, years,
@@ -253,17 +265,26 @@ for one hour after a Cloudflare block, doubling on each repeat up to a day; a re
 (one carrying budget headers) resets that doubling. It also closes for an hour whenever fewer than
 50 of the day's requests are left. Either way `Viaf::Client#get` raises
 `Viaf::Exceptions::RateLimited`, and `Books::Authors::ViafJob` reschedules itself for the wait plus
-jitter rather than blocking a worker thread.
+jitter rather than blocking a worker thread. A redirect hop is the one exception: resolving a
+merged cluster, it waits for its own pace slot instead of raising, for up to about a minute,
+since a hop that has already spent its 301 cannot be rescheduled without just repeating it.
 
-**A rescheduled run repeats nothing already paid for.** AutoSuggest answers are cached a day, and
-`Viaf::Cluster` keeps *every* cluster it reads, chosen or not -- unlike Wikidata's resolver, which
-stores only the item it ends up selecting. So a run interrupted partway through resumes from where
-it left off: the suggestions and clusters it already fetched are served from the cache and
-`external_records`, and only the requests it had not yet made are spent again.
+**A rescheduled run repeats nothing it does not have to.** AutoSuggest answers are cached a day,
+so a re-run's `suggest` call is free the same day. An ordinary (`refresh: false`) run also reads
+every cluster it already stored from `external_records` -- `Viaf::Cluster` keeps *every* cluster
+it reads, chosen or not, unlike Wikidata's resolver, which stores only the item it ends up
+selecting -- so a run interrupted partway through resumes from where it left off, spending a
+request only on the cluster it had not yet fetched. A forced (`refresh: true`) run would otherwise
+refetch a cluster on every attempt regardless of whether it already has it: `Viaf::Client#cluster`
+downgrades `refresh` to `false` for any cluster fetched within the last day (`REFRESH_WINDOW`), so
+its rescheduled attempts read what an earlier attempt of the same run already fetched and spend
+their share of the pace on the cluster still missing, rather than refetching the same one or two
+clusters forever (see `docs/features/viaf-api-client.md`'s Caching section).
 
-At 1-4 requests for a held id (the cluster plus any redirect hops) and 3-5 for a search, the
-roughly-1,000-a-day budget covers about 200-300 authors a day -- ample for imports, with the
-backfill's VIAF share running in the background over months.
+At 1-4 requests for a held id (the cluster plus any redirect hops) and, for a search, 1 `suggest`
+plus 0-3 cluster fetches (each with its own possible redirect hops) -- about 3-5 requests on
+average -- the roughly-1,000-a-day budget covers about 200-300 authors a day -- ample for imports,
+with the backfill's VIAF share running in the background over months.
 
 ## Countries
 
@@ -273,9 +294,11 @@ carries the source author's rows onto the target (`Books::Author::Merger#merge_a
 find-or-create so a shared country never raises a uniqueness error mid-merge). The same merger
 also carries the enrichment ledger (`#merge_enrichments`, repointing every row's `enrichable_id`),
 so a survivor that absorbed an already-enriched duplicate counts as processed too -- see "The
-ledger" below. Wikidata decisions move with it (`#merge_decision_subjects`): they name the author
-as their `subject` with no `record`, which the shared `RecordMerge` step (it follows `record_id`)
-never reaches, so the merger repoints `subject_id` itself.
+ledger" below, for the Wikidata and VIAF ledgers alike. Every `MatchDecision` naming the author
+moves with it too (`#merge_decision_subjects`) -- Wikidata's and VIAF's both, since neither names a
+`record`, only the author as `subject`, which the shared `RecordMerge` step (it follows
+`record_id`) never reaches, so the merger repoints `subject_id` itself directly
+(`app/lib/books/author/merger.rb`).
 
 **`Services::Books::CountryLookup`** is shared by books and authors (it replaced the old
 `find_country` inline in `ApplyBookFacts`):
@@ -358,8 +381,12 @@ authors who resolve by identifier stay cheap to re-touch, but the long tail that
 selection costs close to a fresh run every time.
 
 **VIAF writes the same way.** Every VIAF run, matched or not, writes at most one `Enrichment` row,
-kind `books.author_viaf`, provider `viaf`, linked to its own `MatchDecision`. The same "processed"
-rule applies -- a `books.author_viaf` row newer than the author row, with outcome `applied`,
+kind `books.author_viaf`, provider `viaf`, linked to its own `MatchDecision` *once a decision
+exists* -- a `placeholder` or `already_processed` skip writes before `ResolveViaf` ever runs, and a
+`viaf_error` raised while resolving (before `ResolveViaf` reaches its own `record` step) writes
+before a decision exists either, so both leave their row with no `MatchDecision` at all. The same
+"processed" rule applies -- a `books.author_viaf` row newer than the author row, with outcome
+`applied`,
 `nothing_to_apply` or `unrecognized`, counts as done. Its own reasons: `resolve_failed` (the
 resolver itself could not decide -- the AI selection call errored), `viaf_error` (a
 `Viaf::Exceptions::Error`: network, timeout, HTTP, or parse), and `held_viaf_conflict` (a held
@@ -396,8 +423,11 @@ Books::Authors::ViafJob.new.perform(author_id)
 Check whether VIAF is currently paused, and what the last call reported for budget:
 
 ```ruby
-Viaf::Gate.new.wait_seconds       # seconds until VIAF may be called again, or nil if it may now
-Viaf::Client.new.last_rate_limit  # nil until a call has been made through this instance
+Viaf::Gate.new.wait_seconds  # seconds until VIAF may be called again, or nil if it may now
+
+c = Viaf::Client.new
+c.suggest("Stacy Willingham")
+c.last_rate_limit  # nil on a fresh instance, and nil above too if that suggest was cached today
 ```
 
 Where to look:
@@ -426,9 +456,10 @@ and by author id rather than by anything the truncate reaches. What does *not* s
 everything a previous run stamped onto the author row itself. `AuthorIdentifierMigrator` only
 re-creates `books_author_openlibrary_id` from the legacy data, so if the truncate clears the
 authors' identifiers along with the author rows, `books_author_wikidata_qid`, VIAF, ISNI, LC,
-Goodreads and LibraryThing -- plus any alternate names, years, gender, or countries a Wikidata run
-had filled in -- go with them. That means the held-id stage (§Resolution) cannot fire on the first
-pass after a re-migration, since there is no held QID left to check; more authors than before fall
+Goodreads and LibraryThing -- plus any alternate names, years, gender, or countries either a
+Wikidata run or a VIAF run had filled in -- go with them. That means the held-id stage
+(§Resolution) cannot fire on the first pass after a re-migration, since there is no held QID left
+to check; more authors than before fall
 through to the id-bridge or name-search stage. The Open Library key does survive, so the bridge
 stage can still fire for the authors it reaches.
 

@@ -216,7 +216,8 @@ fills blanks from the item, and links the English Wikipedia article only through
 `docs/features/books-author-enrichment.md`. Providers run only for a new author, so a matched
 author is never re-enriched from an import.
 
-VIAF and AI providers follow in later increments
+On a Wikidata miss, `WikidataJob` chains into `Books::Authors::ViafJob` — VIAF is not a provider of
+its own, but a job the Wikidata step can lead to. The AI facts step follows in a later increment
 (`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`).
 
 ## Usage Examples
