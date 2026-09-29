@@ -39,6 +39,11 @@ module Services
           assert_equal "Stacy Willingham", ViafNames.natural("Willingham, Stacy, 1991-")
         end
 
+        test "a peerage heading that repeats the surname inside the forenames is not duplicated" do
+          assert_equal "George Gordon Byron", ViafNames.natural("Byron, George Gordon Byron, Baron")
+          assert_equal "Thomas Babington Macaulay", ViafNames.natural("Macaulay, Thomas Babington Macaulay, Baron")
+        end
+
         test "a heading without a comma has no reliable order" do
           assert_nil ViafNames.natural("Willingham Stacy")
           assert_nil ViafNames.natural("Homer")

@@ -47,6 +47,14 @@ module Services
           surname, forenames = text.split(",").map(&:squish)
           return nil if surname.blank? || forenames.blank?
 
+          # A peerage heading repeats the surname inside the forenames
+          # ("Byron, George Gordon Byron, Baron"): the surname is already
+          # there, so appending it again would duplicate it ("George Gordon
+          # Byron Byron"). When every one of the surname's (folded) words is
+          # already among the forenames' words, the forenames alone are the
+          # natural form.
+          return forenames if (words(surname) - words(forenames)).empty?
+
           "#{forenames} #{surname}"
         end
 
