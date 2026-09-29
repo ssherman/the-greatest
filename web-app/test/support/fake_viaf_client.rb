@@ -23,7 +23,7 @@ class FakeViafClient
   end
 
   def cluster(viaf_id, refresh: false)
-    @calls << [:cluster, viaf_id.to_s]
+    @calls << [:cluster, viaf_id.to_s, refresh]
     value = @people[viaf_id.to_s]
     raise value if value.is_a?(Exception)
     raise ::Viaf::Exceptions::NotFoundError.new("Not found", 404) if value.nil?
@@ -33,5 +33,11 @@ class FakeViafClient
 
   def called?(method) = calls.any? { |call| call.first == method }
 
-  def clusters = calls.select { |call| call.first == :cluster }.map(&:last)
+  def clusters = cluster_calls.map { |call| call[1] }
+
+  def refreshes = cluster_calls.map { |call| call[2] }
+
+  private
+
+  def cluster_calls = calls.select { |call| call.first == :cluster }
 end

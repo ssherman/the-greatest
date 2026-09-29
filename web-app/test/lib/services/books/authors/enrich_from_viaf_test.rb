@@ -102,6 +102,18 @@ module Services
           assert_not result.success?
         end
 
+        test "a forced run reads every cluster with refresh true" do
+          run_viaf(refresh: true)
+
+          assert_equal [true], @client.refreshes
+        end
+
+        test "an ordinary run reads every cluster with refresh false" do
+          run_viaf
+
+          assert_equal [false], @client.refreshes
+        end
+
         test "a rate limit propagates and writes nothing, so the rescheduled run starts clean" do
           client = FakeViafClient.new(suggestions: {"Stacy Willingham" => ::Viaf::Exceptions::RateLimited.new("wait", retry_after: 60)})
 
