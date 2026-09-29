@@ -271,9 +271,12 @@ day) and `cluster` (the VIAF cluster fetch, itself cached in `external_records` 
 outcome), both behind `Viaf::Gate`. The gate closes every VIAF call -- held-id fetches included --
 for one hour after a Cloudflare block, doubling on each repeat up to a day; a real VIAF answer
 (one carrying budget headers) resets that doubling. It also closes for an hour whenever fewer than
-50 of the day's requests are left. Either way `Viaf::Client#get` raises
+50 of the day's requests are left, and for an hour on an HTTP 429 (VIAF's own rate limit, distinct
+from the Cloudflare block), on the same clock as the low-budget pause so a 429 never shortens a
+longer block already running. Either way `Viaf::Client#get` raises
 `Viaf::Exceptions::RateLimited`, and `Books::Authors::ViafJob` reschedules itself for the wait plus
-jitter rather than blocking a worker thread. A redirect hop is the one exception: resolving a
+jitter rather than blocking a worker thread -- a 429 reschedules the same way rather than being
+recorded as a `viaf_error` failure. A redirect hop is the one exception: resolving a
 merged cluster, it waits for its own pace slot instead of raising, for up to about a minute,
 since a hop that has already spent its 301 cannot be rescheduled without just repeating it.
 

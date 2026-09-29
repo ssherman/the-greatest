@@ -58,6 +58,22 @@ class Viaf::ClientTest < ActiveSupport::TestCase
     assert_equal 7200, error.retry_after
   end
 
+  test "a 429 pauses every VIAF call through the gate and becomes RateLimited for that pause" do
+    @base.stubs(:get).raises(Viaf::Exceptions::ClientError.new("Client error: 429", 429))
+    @gate.expects(:rate_limited!).returns(3600)
+
+    error = assert_raises(Viaf::Exceptions::RateLimited) { @client.get("viaf/1") }
+
+    assert_equal 3600, error.retry_after
+  end
+
+  test "a 400-class error other than 429 still propagates as ClientError" do
+    @base.stubs(:get).raises(Viaf::Exceptions::ClientError.new("Client error: 410", 410))
+    @gate.expects(:rate_limited!).never
+
+    assert_raises(Viaf::Exceptions::ClientError) { @client.get("viaf/1") }
+  end
+
   test "RateLimited is not a VIAF error, so a rescue of Error never swallows it" do
     assert_not_kind_of Viaf::Exceptions::Error, Viaf::Exceptions::RateLimited.new("wait", retry_after: 1)
   end

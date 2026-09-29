@@ -74,6 +74,12 @@ closed gate raises `RateLimited` without the request ever being attempted.
 - Falling under 50 of the day's remaining budget (the smaller of `ratelimit-remaining` and
   `x-ratelimit-remaining-day`) closes the gate for an hour too, on the same clock -- a low budget
   never shortens an active block, since both share the one hash.
+- **An HTTP 429** -- VIAF's own rate limit, distinct from the Cloudflare block below -- closes the
+  gate for an hour too, via `Viaf::Gate#rate_limited!`, the same one-hour pause as a low budget and
+  on the same shared clock, so it never shortens a longer block already running. `Viaf::Client#get`
+  turns a 429 (`Viaf::Exceptions::ClientError` with `status_code == 429`) into this gate pause and
+  re-raises it as `RateLimited`, the same shape a block or a busy pace produces, so the calling job
+  reschedules rather than recording the run as a failure.
 
 Console use through `Viaf::BaseClient` directly does not check the gate at all; it is a
 `Viaf::Client`/background-job concern. That cuts both ways: a block a console call triggers never

@@ -38,6 +38,14 @@ module Viaf
       seconds
     end
 
+    # Records a 429 (VIAF's own rate limit, not Cloudflare's block): the
+    # day's budget is spent, or an edge rate limit tripped. Returns the pause
+    # in seconds; never shortens a longer block already in effect.
+    def rate_limited!
+      pause_for(LOW_BUDGET_PAUSE)
+      LOW_BUDGET_PAUSE
+    end
+
     # Reads the budget headers of the last response
     # (Viaf::BaseClient#last_rate_limit). A response without them came from
     # Cloudflare, not VIAF, and changes nothing.

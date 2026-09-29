@@ -67,6 +67,11 @@ module Viaf
     rescue Exceptions::BlockedError
       seconds = @gate.blocked!
       raise Exceptions::RateLimited.new("Cloudflare blocked VIAF; every VIAF call is paused for #{seconds}s", retry_after: seconds)
+    rescue Exceptions::ClientError => e
+      raise unless e.status_code == 429
+
+      seconds = @gate.rate_limited!
+      raise Exceptions::RateLimited.new("VIAF answered 429; every VIAF call is paused for #{seconds}s", retry_after: seconds)
     end
 
     private

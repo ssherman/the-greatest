@@ -69,4 +69,18 @@ class Viaf::GateTest < ActiveSupport::TestCase
 
     assert_in_delta 7200, @gate.wait_seconds, 2
   end
+
+  test "a 429 pauses every call for an hour" do
+    assert_equal 3600, @gate.rate_limited!
+    assert_in_delta 3600, @gate.wait_seconds, 1
+  end
+
+  test "a 429 never shortens a longer block already in effect" do
+    @gate.blocked!
+    @gate.blocked!
+
+    @gate.rate_limited!
+
+    assert_in_delta 7200, @gate.wait_seconds, 2
+  end
 end
