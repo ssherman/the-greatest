@@ -112,6 +112,29 @@ module Services
           assert_equal ["matched", "ai"], [result.data[:decision].outcome, result.data[:decision].decided_by]
         end
 
+        test "the rule's cluster is unavailable, and so no read cluster is a person" do
+          client = FakeViafClient.new(suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]})
+          Services::Ai::Tasks::Matching::SelectExternalRecordTask.expects(:new).never
+
+          result = resolve(client)
+
+          decision = result.data[:decision]
+          assert_equal ["unmatched", "rule", "medium"], [decision.outcome, decision.decided_by, decision.confidence]
+          assert_equal ["viaf_cluster"], decision.sources_failed
+        end
+
+        test "the rule's cluster disagrees on years after the fetch, so the AI decides" do
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => willingham(born: "1950")}
+          )
+          ai_selects(0)
+
+          result = resolve(client)
+
+          assert_equal "ai", result.data[:decision].decided_by
+        end
+
         test "two clusters named as ours (a VIAF duplicate) go to the AI, which sees both and is told about duplicates" do
           client = FakeViafClient.new(
             suggestions: {"Stacy Willingham" => [
@@ -189,6 +212,17 @@ module Services
 
           assert_no_difference -> { ::MatchDecision.count } do
             assert_raises(::Viaf::Exceptions::RateLimited) { resolve(client) }
+          end
+        end
+
+        test "a VIAF error other than a rate limit propagates and records nothing" do
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => ::Viaf::Exceptions::ServerError.new("Server error: 500", 500)}
+          )
+
+          assert_no_difference -> { ::MatchDecision.count } do
+            assert_raises(::Viaf::Exceptions::ServerError) { resolve(client) }
           end
         end
 
