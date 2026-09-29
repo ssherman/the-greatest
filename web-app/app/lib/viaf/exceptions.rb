@@ -51,5 +51,18 @@ module Viaf
 
     # The cluster exists but VIAF has withdrawn it (abandoned / scavenged / redirect).
     class AbandonedRecordError < Error; end
+
+    # Not a failure: VIAF is paused (a Cloudflare block, or the day's budget
+    # running low) or our own pace is busy. Deliberately outside Error, so a
+    # rescue of Error never swallows it; the job reschedules itself for
+    # retry_after seconds.
+    class RateLimited < StandardError
+      attr_reader :retry_after
+
+      def initialize(message, retry_after:)
+        super(message)
+        @retry_after = retry_after
+      end
+    end
   end
 end

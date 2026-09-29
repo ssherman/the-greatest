@@ -79,9 +79,21 @@ module DataImporters
       assert_nil entry.query
     end
 
+    test "the VIAF link entry is an external-link kind: no query, merge or re-check" do
+      entry = FinderRegistry.entry("Services::Books::Authors::ResolveViaf")
+
+      assert entry.external_link?
+      assert_equal [:books, "Books::Author", "VIAF link"], [entry.domain, entry.model, entry.label]
+      assert_respond_to entry.finder_class, :call
+      assert_not entry.mergeable?
+      assert_not entry.recheck?
+      assert_nil entry.query
+    end
+
     test "an external-link entry never shadows the finder for its model" do
       assert_equal "DataImporters::Books::Author::Finder", FinderRegistry.entry_for_model("Books::Author").finder
       assert_includes FinderRegistry.for_domain(:books).map(&:finder), "Services::Books::Authors::ResolveWikidata"
+      assert_includes FinderRegistry.for_domain(:books).map(&:finder), "Services::Books::Authors::ResolveViaf"
     end
   end
 end

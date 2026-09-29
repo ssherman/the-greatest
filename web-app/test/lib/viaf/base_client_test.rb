@@ -165,6 +165,31 @@ class Viaf::BaseClientTest < ActiveSupport::TestCase
     assert_equal({"ns1:viafID" => 222}, result[:data])
   end
 
+  # A merged cluster's redirect hop must not compete with the main pace: a
+  # caller in :immediate mode (background jobs) passes a blocking limiter
+  # here specifically so a hop that already spent the 301 waits for a slot
+  # instead of being refused and rescheduled, which would just repeat the
+  # 301 forever. "an N-hop redirect chain acquires N+1 rate limit slots"
+  # above already covers the default (no redirect_rate_limiter: given):
+  # every hop, first request included, waits on the single @limiter mock.
+  test "the first request paces through rate_limiter and a redirect hop through redirect_rate_limiter" do
+    redirect_limiter = mock("redirect_rate_limiter")
+    redirect_limiter.stubs(:wait!)
+    client = Viaf::BaseClient.new(@config, rate_limiter: @limiter, redirect_rate_limiter: redirect_limiter)
+
+    stub_request(:get, "https://viaf.test/viaf/1")
+      .to_return(status: 301, headers: {"Location" => "https://viaf.test/viaf/2"})
+    stub_request(:get, "https://viaf.test/viaf/2")
+      .to_return(status: 200, body: '{"ns1:viafID":2}', headers: {"Content-Type" => "application/json"})
+
+    @limiter.expects(:wait!).once
+    redirect_limiter.expects(:wait!).once
+
+    result = client.get("viaf/1")
+
+    assert_equal({"ns1:viafID" => 2}, result[:data])
+  end
+
   # This is the test that proves the pacing defect is fixed. Faraday's
   # follow_redirects middleware resolves every hop *inside* the connection,
   # so pacing code that only wraps the top-level call sees one request and

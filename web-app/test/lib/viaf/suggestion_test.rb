@@ -123,4 +123,17 @@ class Viaf::SuggestionTest < ActiveSupport::TestCase
   test "raises ParseError when the result is not a Hash" do
     assert_raises(Viaf::Exceptions::ParseError) { Viaf::Suggestion.from_result("tolstoy") }
   end
+
+  # Observed 2026-09-28: newer rows write the open range with an en dash.
+  test "reads a birth year before an en dash" do
+    subject = Viaf::Suggestion.from_result(result("term" => "Stacy Willingham 1991–"))
+
+    assert_equal [1991, nil], [subject.birth_year, subject.death_year]
+  end
+
+  test "reads a closed range written with an en dash" do
+    subject = Viaf::Suggestion.from_result(result("term" => "Tolstoy, Leo, 1828–1910"))
+
+    assert_equal [1828, 1910], [subject.birth_year, subject.death_year]
+  end
 end
