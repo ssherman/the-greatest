@@ -72,13 +72,13 @@ module Viaf
 
     # Dates are strings at day precision ("1828-09-09") and integers at year
     # precision (1473). Negative years occur. VIAF sends 0 for an unknown
-    # date (a living person's death), and a partial date ("18XX") carries no
-    # year, so both are nil.
+    # date (a living person's death), and a partial date ("18XX", "196X")
+    # carries no year, so both are nil.
     def year_from(value)
       return nil if value.nil?
       return value.nonzero? if value.is_a?(Integer)
 
-      match = value.to_s.match(/\A(-?\d{3,4})(?!\d)/)
+      match = value.to_s.match(/\A(-?\d+)(?=-|\z)/)
       match && match[1].to_i.nonzero?
     end
   end

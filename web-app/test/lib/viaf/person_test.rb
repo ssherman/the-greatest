@@ -119,6 +119,8 @@ class Viaf::PersonTest < ActiveSupport::TestCase
 
   test "a partial date is no year" do
     assert_nil person("birth_date" => "18XX").birth_year
+    assert_nil person("birth_date" => "196X").birth_year
+    assert_nil person("birth_date" => "185u").birth_year
   end
 
   test "only dates VIAF types as lived are life dates" do
