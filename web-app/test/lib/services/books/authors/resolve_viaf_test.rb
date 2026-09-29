@@ -241,6 +241,30 @@ module Services
           assert_equal "Stacy Willingham", decision.query["name"]
         end
 
+        test "stored candidates start in the order the AI was shown, even when the post-fetch sort disagrees" do
+          # A has more agency keys in its AutoSuggest rows (3) than B (1), so
+          # the AI is shown [A, B]. Once fetched, A's cluster turns out to
+          # have no agencies while B's has five, so a plain post-fetch sort
+          # would give [B, A]. The stored candidates must still start A, B.
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [
+              viaf_suggestion("111", "Candidate A", agencies: {"lc" => "n1", "bnf" => "n2", "dnb" => "n3"}),
+              viaf_suggestion("222", "Candidate B", agencies: {"lc" => "n4"})
+            ]},
+            people: {
+              "111" => viaf_person("111", headings: ["A, Candidate"], agencies: []),
+              "222" => viaf_person("222", headings: ["B, Candidate"], agencies: %w[DNB BNF DLC NUKAT SUDOC])
+            }
+          )
+          ai_selects(1)
+
+          result = resolve(client)
+
+          decision = result.data[:decision]
+          assert_equal ["111", "222"], decision.candidates.first(2).map { |candidate| candidate["external_key"] }
+          assert_equal "111", decision.candidates[decision.selected_index - 1]["external_key"]
+        end
+
         test "a forename heading is shown as written, never inverted" do
           author = ::Books::Author.create!(name: "Marcus Aurelius")
           person = viaf_person("7", headings: [{"source" => "LC", "name" => "Marcus Aurelius, Emperor of Rome", "surname_first" => false}])

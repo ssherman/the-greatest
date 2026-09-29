@@ -40,6 +40,7 @@ module Services
           @profile = AuthorProfile.new(author)
           @candidates = {}
           @sources_failed = []
+          @shown = nil
         end
 
         def call
@@ -100,6 +101,14 @@ module Services
         end
 
         def select_with_ai(shown)
+          # Remembered so `record` can number stored candidates the same way
+          # the AI saw them: `shown` is ordered from AutoSuggest-only evidence
+          # (agency counts, headings) before any cluster is fetched, while a
+          # plain `ordered(persons)` re-sorts afterward using the fetched
+          # clusters' own agency counts. Without this, "record 1" in the AI's
+          # reasoning or `same_entity_groups` could name a different row than
+          # candidate 1 on the audit page.
+          @shown = shown
           result = ::Services::Ai::Tasks::Matching::SelectExternalRecordTask.new(
             parent: author, source_name: "VIAF", entity_noun: "author",
             query_line: @profile.line, candidate_lines: shown.map { |candidate| describe(candidate) }, guidance: GUIDANCE
@@ -215,6 +224,16 @@ module Services
           end.map(&:first)
         end
 
+        # The AI's own order first (see `select_with_ai`), then any other
+        # persons in `ordered`'s usual order, so the stored candidate numbers
+        # match what the AI was shown. When the AI was never asked, `@shown`
+        # is nil and this is plain `ordered(persons)`.
+        def ordered_persons(persons)
+          return ordered(persons) unless @shown
+
+          @shown + (ordered(persons) - @shown)
+        end
+
         # ---- our side -------------------------------------------------------
 
         def identifier_values(type)
@@ -272,7 +291,7 @@ module Services
         # ---- recording ------------------------------------------------------
 
         def record(verdict)
-          ordered_all = ordered(persons) + (@candidates.values - persons)
+          ordered_all = ordered_persons(persons) + (@candidates.values - persons)
           confidence = verdict.confidence
           confidence = :medium if confidence == :high && @sources_failed.any?
           decision = ::MatchDecision.create!(
