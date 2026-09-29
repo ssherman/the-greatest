@@ -19,15 +19,20 @@ module Viaf
     # a Cloudflare WAF that blocks on ~5-8 rapid requests, that amplification
     # (1 limiter slot for up to 4 upstream requests) is enough on its own to
     # trip the ban. Looping through the public `#get` path instead means
-    # every hop pays for its own slot.
+    # every hop pays for its own slot. A redirect hop paces through
+    # `@redirect_rate_limiter` rather than `@rate_limiter`: a caller pacing
+    # the first request in `:immediate` mode can pass a blocking limiter for
+    # hops, because a hop refused a slot has already spent the 301 and
+    # cannot be resumed — rescheduling would just repeat the 301 forever.
     REDIRECT_STATUSES = [301, 302, 303, 307, 308].freeze
     MAX_REDIRECTS = 3
 
     attr_reader :config, :connection, :last_rate_limit
 
-    def initialize(config = nil, rate_limiter: nil)
+    def initialize(config = nil, rate_limiter: nil, redirect_rate_limiter: nil)
       @config = config || Configuration.new
       @rate_limiter = rate_limiter || RateLimiter.new
+      @redirect_rate_limiter = redirect_rate_limiter || @rate_limiter
       @connection = build_connection
       @last_rate_limit = nil
     end
@@ -47,12 +52,13 @@ module Viaf
     private
 
     # Performs the request, then follows any 301/302/303/307/308 by
-    # recursing into itself with the redirected URL. Each recursive call
-    # goes through the same `@rate_limiter.wait!` this method starts with,
-    # so an N-hop redirect chain acquires N+1 limiter slots — one per
-    # upstream request, matching the connection's actual request count.
+    # recursing into itself with the redirected URL. The first request paces
+    # through `@rate_limiter`; every later hop paces through
+    # `@redirect_rate_limiter` (the same object by default), so an N-hop
+    # redirect chain acquires N+1 limiter slots — one per upstream request,
+    # matching the connection's actual request count.
     def fetch_with_redirects(url, params, redirect_count: 0)
-      @rate_limiter.wait!
+      (redirect_count.zero? ? @rate_limiter : @redirect_rate_limiter).wait!
 
       response = connection.get(url) do |req|
         req.params.update(params)

@@ -9,11 +9,19 @@ module Viaf
   # external_records by Viaf::Cluster, AutoSuggest answers in the cache for a
   # day), so a rescheduled run resumes without repeating a request, and a
   # stored cluster is read even while VIAF is paused.
+  #
+  # The first request of a fetch never waits: a busy pace reschedules the
+  # job instead. A redirect hop is different — it waits for its slot, at
+  # most about a minute and only for a merged cluster, because rescheduling
+  # it would repeat the already-spent 301 forever.
   class Client
     SUGGEST_TTL = 1.day
 
     def initialize(base_client: nil, gate: nil, cache: Rails.cache)
-      @base_client = base_client || BaseClient.new(rate_limiter: RateLimiter.new(mode: :immediate))
+      @base_client = base_client || BaseClient.new(
+        rate_limiter: RateLimiter.new(mode: :immediate),
+        redirect_rate_limiter: RateLimiter.new(mode: :blocking)
+      )
       @gate = gate || Gate.new
       @cache = cache
     end

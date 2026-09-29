@@ -18,8 +18,9 @@ class Viaf::ClientTest < ActiveSupport::TestCase
     {data: {"result" => [{"viafid" => "1", "term" => "Stacy Willingham", "displayForm" => "Stacy Willingham", "nametype" => "personal"}]}}
   end
 
-  test "the default transport paces in immediate mode, so no worker thread sleeps" do
+  test "the default transport paces the first request in immediate mode and a redirect hop in blocking mode" do
     Viaf::RateLimiter.expects(:new).with(mode: :immediate).returns(stub(wait!: nil))
+    Viaf::RateLimiter.expects(:new).with(mode: :blocking).returns(stub(wait!: nil))
 
     Viaf::Client.new(gate: @gate)
   end
