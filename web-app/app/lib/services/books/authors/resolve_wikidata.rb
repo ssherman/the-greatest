@@ -19,7 +19,6 @@ module Services
         Verdict = Struct.new(:outcome, :candidate, :decided_by, :confidence, :reason, :ai_chat, keyword_init: true)
 
         ALTERNATE_SEARCHES = 2
-        TITLE_LIMIT = 50
         MAX_AI_CANDIDATES = 6
         YEAR_TOLERANCE = 1
         QID = "books_author_wikidata_qid"
@@ -48,6 +47,7 @@ module Services
           @author = author
           @refresh = refresh
           @client = client || ::Wikidata::Client.new
+          @profile = AuthorProfile.new(author)
           @candidates = {}
           @loaded = {}
           @raw = {}
@@ -115,7 +115,7 @@ module Services
           lines = shown.map { |candidate| describe(candidate) }
           result = ::Services::Ai::Tasks::Matching::SelectExternalRecordTask.new(
             parent: author, source_name: "Wikidata", entity_noun: "author",
-            query_line: describe_author, candidate_lines: lines, guidance: GUIDANCE
+            query_line: @profile.line, candidate_lines: lines, guidance: GUIDANCE
           ).call
           return ai_failed(result.error, result.ai_chat) unless result.success?
 
@@ -172,7 +172,7 @@ module Services
             @sources_failed << "wikidata_works"
             {}
           end
-          ours = our_titles.map { |title| title_key(title) }.to_set
+          ours = @profile.titles.map { |title| title_key(title) }.to_set
           persons.each do |candidate|
             candidate.titles = works.fetch(candidate.entity.id, [])
             candidate.matching_titles = candidate.titles.select { |title| ours.include?(title_key(title)) }.uniq { |title| title_key(title) }
@@ -251,27 +251,6 @@ module Services
           @author_name_keys ||= ([author.name] + Array(author.alternate_names)).map { |name| name_key(name) }.compact_blank.to_set
         end
 
-        # Up to 50: the author's books, ranked first, each with its alternate titles.
-        def our_titles
-          @our_titles ||= begin
-            configuration = ::Books::RankingConfiguration.default_primary
-            scope = author.books
-            scope = if configuration
-              join = ActiveRecord::Base.sanitize_sql_array([
-                "LEFT JOIN ranked_items ON ranked_items.item_type = 'Books::Book' " \
-                "AND ranked_items.item_id = books_books.id AND ranked_items.ranking_configuration_id = ?",
-                configuration.id
-              ])
-              scope.joins(join).order(Arel.sql("ranked_items.rank ASC NULLS LAST"), "books_books.id")
-            else
-              scope.order("books_books.id")
-            end
-            scope.limit(TITLE_LIMIT).pluck(:title, :alternate_titles)
-              .flat_map { |title, alternates| [title, *Array(alternates)] }
-              .compact_blank.uniq.first(TITLE_LIMIT)
-          end
-        end
-
         # Case and diacritics folded: "Gabriel Garcia Marquez" meets "Gabriel García Márquez".
         def name_key(text)
           normalized(text).unicode_normalize(:nfd).gsub(/\p{Mn}/, "").downcase
@@ -285,23 +264,11 @@ module Services
 
         # ---- describing -----------------------------------------------------
 
-        def describe_author
-          parts = [author.name]
-          alternates = Array(author.alternate_names).first(5)
-          parts << "also known as #{alternates.join(", ")}" if alternates.any?
-          span = lifespan(author.birth_year, author.death_year)
-          parts << span if span
-          parts << "wrote: #{our_titles.first(10).join("; ")}" if our_titles.any?
-          countries = author.countries.map(&:name)
-          parts << "countries: #{countries.join(", ")}" if countries.any?
-          parts.join(" | ")
-        end
-
         def describe(candidate)
           entity = candidate.entity
           parts = [entity.label || entity.id]
           parts << entity.description if entity.description.present?
-          span = lifespan(entity.birth_year, entity.death_year)
+          span = AuthorProfile.lifespan(entity.birth_year, entity.death_year)
           parts << span if span
           parts << "also known as #{entity.aliases.first(5).join(", ")}" if entity.aliases.any?
           occupations = label_list(entity.occupation_ids)
@@ -318,12 +285,6 @@ module Services
           parts << "year conflict" if year_conflict?(candidate)
           parts << "wikidata #{entity.id}"
           parts.join(" | ")
-        end
-
-        def lifespan(birth, death)
-          return nil if birth.nil? && death.nil?
-
-          "#{birth || "?"}–#{death}"
         end
 
         def label_list(ids) = ids.filter_map { |id| labels[id] }
@@ -378,7 +339,7 @@ module Services
             "open_library_author_key" => identifier_values("books_author_openlibrary_id"),
             "wikidata_qid" => identifier_values(QID),
             "viaf" => identifier_values("books_author_viaf"),
-            "titles" => our_titles.first(10)
+            "titles" => @profile.titles.first(10)
           }
         end
 
