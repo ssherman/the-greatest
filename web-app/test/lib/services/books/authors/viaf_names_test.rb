@@ -44,6 +44,14 @@ module Services
           assert_equal "Thomas Babington Macaulay", ViafNames.natural("Macaulay, Thomas Babington Macaulay, Baron")
         end
 
+        # Only a forename part that already ENDS with the surname is a peerage
+        # form. A forename that merely equals the surname is a real name.
+        test "a forename that is the same word as the surname is kept" do
+          assert_equal "Ford Madox Ford", ViafNames.natural("Ford, Ford Madox, 1873-1939")
+          assert_equal "Jerome K. Jerome", ViafNames.natural("Jerome, Jerome K. (Jerome Klapka), 1859-1927")
+          assert_equal "Li Li", ViafNames.natural("Li, Li")
+        end
+
         test "a heading without a comma has no reliable order" do
           assert_nil ViafNames.natural("Willingham Stacy")
           assert_nil ViafNames.natural("Homer")
