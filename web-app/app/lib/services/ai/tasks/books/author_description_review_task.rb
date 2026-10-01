@@ -13,7 +13,7 @@ module Services
             not_but triad too_long too_short citation].freeze
           CHECK_NOTES = {
             "copied" => "repeats eight or more consecutive words of the source text",
-            "em_dash" => "contains an em dash",
+            "em_dash" => "contains an em dash or a spaced en dash (–)",
             "double_hyphen" => "contains a double hyphen",
             "url" => "contains a URL",
             "markdown_link" => "contains a markdown link",
@@ -45,7 +45,7 @@ module Services
               Violations, reported as codes in "style_violations" (empty list when clean):
               - copied_phrasing: reuses a phrase or a sentence structure from the source text instead of saying it in new words
               - names_author_at_start: opens with the author's name
-              - em_dash: an em dash (—) or double hyphen (--)
+              - em_dash: an em dash (—), a spaced en dash ( – ), or a double hyphen (--)
               - semicolon: a semicolon
               - marketing: praise or sales language such as acclaimed, bestselling, masterpiece, beloved, celebrated, legendary, "one of the greatest", sales figures, or more than one award
               - meta_narration: "This author", "Readers will", or similar

@@ -115,6 +115,7 @@ module Services
             assert_includes message, "At most one major prize"
             assert_includes message, "never a death year"
             assert_includes message, "never reuse its phrases"
+            assert_includes message, "a year before the Common Era is reported as null"
           end
 
           test "research mode tells the model to verify with web search" do

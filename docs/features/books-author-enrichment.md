@@ -385,9 +385,11 @@ chain can strand a book. A book left behind this way is still found by `books:en
 which counts a deferral-only book as missing whatever descriptions it already has (the Open
 Library provider can write one onto a brand-new book before `AiEnrichment` ever defers it), and
 which also picks up any book a chain never reached at all. An exhausted job is also visible in
-Sidekiq's Dead set. Run `books:enrich_missing` only once the `low` queue is drained: it cannot
-tell a genuinely stranded book from one whose author chain is still legitimately running, and
-running it early enriches a book before its new authors have countries.
+Sidekiq's Dead set. Run `books:enrich_missing` only once no author-chain jobs (`Books::Authors::*`)
+are in the `low` queue or in Sidekiq's Scheduled or Retry sets -- a rate-limited `WikidataJob` or a
+paused `ViafJob` waits in Scheduled, not in `low`. It cannot tell a genuinely stranded book from one
+whose author chain is still legitimately running, and running it early enriches a book before its
+new authors have countries.
 
 ## Countries
 
@@ -557,6 +559,9 @@ Where to look:
   every run, its outcome, and its facts.
 - `author.enrichments.for_kind("books.author_wikidata")` (or `"books.author_viaf"`) for one
   author's history.
+
+Before running `books:enrich_missing`, check the queue and Sidekiq's Scheduled and Retry sets for
+any `Books::Authors::*` job -- see "A stuck chain" above.
 
 There is no backfill rake task and no admin button yet -- both are increment 6. Today an author
 reaches this chain through a book import (`Providers::AuthorEnrichment`) or a direct author import

@@ -180,6 +180,26 @@ module Services
           assert_nil @author.birth_year
         end
 
+        test "a low-confidence answer is applied when research is not allowed" do
+          expect_runs([:knowledge, success_result(facts(confidence: "low"))])
+
+          EnrichAuthor.call(author: @author, allow_research: false)
+
+          assert_equal [%w[knowledge applied]], rows.pluck(:mode, :outcome)
+          assert_equal 1901, @author.reload.birth_year
+        end
+
+        test "a low-confidence answer is applied when the research budget is gone" do
+          Rails.application.config.x.ai.stubs(:research_daily_cap).returns(0)
+          expect_runs([:knowledge, success_result(facts(confidence: "low"))])
+
+          EnrichAuthor.call(author: @author)
+
+          assert_equal [%w[knowledge applied], %w[research skipped]], rows.pluck(:mode, :outcome)
+          assert_equal "budget_exhausted", rows.last.reason
+          assert_equal 1901, @author.reload.birth_year
+        end
+
         test "a failed task writes a failed row on the standard role and does not research" do
           expect_runs([:knowledge, failure_result("timeout")])
 

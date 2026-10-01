@@ -71,6 +71,12 @@ module Services
           assert_equal "Q1", MatchedRecords.new(@author).wikidata.source_id
         end
 
+        test "a matched run that applied nothing still counts" do
+          wikidata_match(outcome: :nothing_to_apply, reason: "matched Q1")
+
+          assert_equal "Q1", MatchedRecords.new(@author).wikidata.source_id
+        end
+
         test "a held id that conflicted with the match contributes nothing" do
           wikidata_match(outcome: :nothing_to_apply, reason: "held_qid_conflict")
 

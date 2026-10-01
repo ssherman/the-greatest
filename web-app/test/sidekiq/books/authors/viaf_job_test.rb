@@ -94,4 +94,19 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
 
     Books::Authors::ViafJob.new.perform(@author.id, false, true)
   end
+
+  test "a busy pace after a pause keeps enrich_queued" do
+    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
+    Books::Authors::EnrichJob.expects(:perform_async).never
+    Books::Authors::ViafJob.expects(:perform_in).with(37, @author.id, false, true)
+
+    job_with_jitter(7).perform(@author.id, false, true)
+  end
+
+  test "a pause keeps refresh" do
+    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::Paused.new("paused", retry_after: 3600))
+    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, true, true)
+
+    job_with_jitter(7).perform(@author.id, true)
+  end
 end

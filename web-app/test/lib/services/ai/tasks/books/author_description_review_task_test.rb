@@ -47,6 +47,16 @@ module Services
               "words of the source text; is over 140 words."
           end
 
+          test "an em dash flag names the spaced en dash too" do
+            prompt = task(flagged: %w[em_dash]).send(:user_prompt)
+
+            assert_includes prompt, "spaced en dash"
+          end
+
+          test "the rules tell the reviewer to catch a spaced en dash" do
+            assert_includes task.send(:system_message), "spaced en dash"
+          end
+
           test "a parsed reply becomes a symbol-keyed hash, and an empty one an empty hash" do
             parsed = task.send(:process_and_persist, {parsed: {"style_violations" => ["semicolon"], "rewritten" => "Fixed."}})
             empty = task.send(:process_and_persist, {parsed: nil})

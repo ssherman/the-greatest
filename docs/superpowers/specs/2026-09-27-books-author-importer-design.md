@@ -497,10 +497,12 @@ moment the book's enrichment would run.
   exhausts its own Sidekiq retries never reaches `EnrichJob` either (a `ViafJob` that already
   paused has queued `EnrichJob` itself, so a pause alone strands nothing). *(Amended in increment
   4.)*
-- A book with two new authors is normally enriched once: the first author's hand-off queues it, and
-  the second finds the book's newer `books.book_facts` row and queues nothing, so the book may be
-  enriched before its second new author has countries. At 1.004 authors per book this is rare and
-  accepted. *(Amended in increment 4.)*
+- A book with two new authors can be enqueued twice, when both chains finish close together: the
+  second hand-off runs before the first book run has written its row. The second run only fills
+  blanks, and concurrent runs are safe (the unique description index). When the chains finish far
+  apart, the second hand-off finds the newer row and queues nothing, and the book may then be
+  enriched before its second new author has countries. At 1.004 authors per book this is rare, and
+  it is accepted. *(Amended in increment 4.)*
 - `books:enrich_missing` catches any book the chain never reached; a deferral row does not count as
   a ledger row there.
 
