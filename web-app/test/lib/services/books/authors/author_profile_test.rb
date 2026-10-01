@@ -34,6 +34,19 @@ module Services
           assert_equal ["?–1910", "1991–"], [AuthorProfile.lifespan(nil, 1910), AuthorProfile.lifespan(1991, nil)]
           assert_nil AuthorProfile.lifespan(nil, nil)
         end
+
+        test "ranked books are title and first published year, ranked first, up to the limit" do
+          author = ::Books::Author.create!(name: "Profile Author")
+          unranked = ::Books::Book.create!(title: "Unranked Book", first_published_year: 2001)
+          ranked = ::Books::Book.create!(title: "Ranked Book")
+          author.book_authors.create!(book: unranked, position: 1)
+          author.book_authors.create!(book: ranked, position: 2)
+          RankedItem.create!(item: ranked, ranking_configuration: ranking_configurations(:books_global), rank: 1)
+          profile = AuthorProfile.new(author)
+
+          assert_equal [["Ranked Book", nil], ["Unranked Book", 2001]], profile.ranked_books(10)
+          assert_equal [["Ranked Book", nil]], profile.ranked_books(1)
+        end
       end
     end
   end
