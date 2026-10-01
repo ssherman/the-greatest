@@ -23,13 +23,19 @@ namespace :books do
     abort "Enrichment failed: #{result.errors.join("; ")}" unless result.success?
   end
 
-  desc "Enqueue enrichment for books with no ledger row and no description: bin/rails books:enrich_missing[100]"
+  desc "Enqueue enrichment for books with no ledger row (a deferral to new authors does not count) and no description: bin/rails books:enrich_missing[100]"
   task :enrich_missing, [:limit] => :environment do |_task, args|
     limit = args[:limit].to_i
     abort "Usage: bin/rails books:enrich_missing[limit] -- a limit is required; running wide is a decision" unless limit.positive?
 
+    # A book whose only rows defer to its new authors (spec §10) is still
+    # missing: its author chain may never have reached it. The reason test
+    # is NULL-safe on purpose -- where.not(reason:) would also drop every row
+    # with no reason, which is most applied runs, and queue those books again.
+    ledgered = Enrichment.where(enrichable_type: "Books::Book")
+      .where("enrichments.reason IS DISTINCT FROM ?", ::Services::Books::DeferredEnrichment::REASON)
     scope = ::Books::Book
-      .where.not(id: Enrichment.where(enrichable_type: "Books::Book").select(:enrichable_id))
+      .where.not(id: ledgered.select(:enrichable_id))
       .where.not(id: Description.where(describable_type: "Books::Book").select(:describable_id))
       .order(:id)
       .limit(limit)
