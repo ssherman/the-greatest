@@ -14,7 +14,8 @@ module Services
     # names_author codes.
     #
     # With source_text (an author's Wikipedia lead), a draft that repeats
-    # COPY_RUN consecutive words of it fails as "copied".
+    # COPY_RUN consecutive words of it fails as "copied". Work titles passed
+    # as exempt_phrases may appear in both: naming a book is not copying.
     class DescriptionCheck
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -30,7 +31,7 @@ module Services
       # description in our own words.
       COPY_RUN = 8
 
-      def self.call(text, source_text: nil)
+      def self.call(text, source_text: nil, exempt_phrases: [])
         cleaned = text.to_s.gsub(MARKDOWN_CITATION, "").strip
         errors = []
         # An em dash is always flagged. An en dash only counts as the same
@@ -43,24 +44,30 @@ module Services
         words = cleaned.split(/[[:space:]]+/).size
         errors << "too_short" if words < MIN_WORDS
         errors << "too_long" if words > MAX_WORDS
-        errors << "copied" if copied?(cleaned, source_text)
+        errors << "copied" if copied?(cleaned, source_text, exempt_phrases)
 
         Result.new(success?: errors.empty?, data: {text: cleaned}, errors: errors)
       end
 
-      def self.copied?(text, source_text)
+      def self.copied?(text, source_text, exempt_phrases)
         return false if source_text.blank?
 
-        word_runs(text).intersect?(word_runs(source_text))
+        exempt = Array(exempt_phrases).map { |phrase| words(phrase).join(" ") }.reject(&:blank?).uniq.sort_by { |phrase| -phrase.length }
+        word_runs(text, exempt).intersect?(word_runs(source_text, exempt))
       end
 
-      # Every run of COPY_RUN consecutive words, compared on letters and
-      # digits only, so case, punctuation and quote styles cannot hide a copy.
-      def self.word_runs(text)
-        text.to_s.unicode_normalize(:nfkc).downcase.scan(/[\p{L}\p{N}]+/)
-          .each_cons(COPY_RUN).map { |run| run.join(" ") }.to_set
+      def self.words(text) = text.to_s.unicode_normalize(:nfkc).downcase.scan(/[\p{L}\p{M}\p{N}]+/)
+
+      # Every run of COPY_RUN consecutive words, compared on letters, marks
+      # and digits only, so case, punctuation and quote styles cannot hide a
+      # copy. An exempt phrase (a work title both texts may name) breaks the
+      # text where it stands, so no run spans it.
+      def self.word_runs(text, exempt)
+        joined = words(text).join(" ")
+        exempt.each { |phrase| joined = joined.gsub(/(?<!\S)#{Regexp.escape(phrase)}(?!\S)/, "|") }
+        joined.split("|").flat_map { |segment| segment.split.each_cons(COPY_RUN).map { |run| run.join(" ") } }.to_set
       end
-      private_class_method :copied?, :word_runs
+      private_class_method :copied?, :words, :word_runs
     end
   end
 end

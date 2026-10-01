@@ -104,7 +104,7 @@ module Services
         "Known for an economical, understated style, he influenced later twentieth-century fiction."
 
       test "a draft sharing eight consecutive words with its source fails as copied" do
-        draft = "#{CLEAN} He was an American novelist, short-story writer and journalist from Illinois."
+        draft = "#{CLEAN} He was an American novelist, short-story writer and editor from Illinois."
 
         result = DescriptionCheck.call(draft, source_text: SOURCE)
 
@@ -126,6 +126,31 @@ module Services
 
       test "without source text there is no copy check" do
         assert_not_includes DescriptionCheck.call("#{CLEAN} #{SOURCE}").errors, "copied"
+      end
+
+      SOURCE2 = "Rabindranath Tagore (রবীন্দ্রনাথ ঠাকুর) was a Bengali poet and composer."
+
+      test "a native-script name split by combining marks is not mistaken for a copy" do
+        draft = "#{CLEAN} Tagore, রবীন্দ্রনাথ ঠাকুর in Bengali, wrote many songs."
+
+        assert_not_includes DescriptionCheck.call(draft, source_text: SOURCE2).errors, "copied"
+      end
+
+      SOURCE3 = "Sacks is best known for The Man Who Mistook His Wife for a Hat, a collection of case studies."
+
+      test "a shared work title fails as copied unless exempted" do
+        draft = "#{CLEAN} His book The Man Who Mistook His Wife for a Hat gathers case histories."
+
+        assert_includes DescriptionCheck.call(draft, source_text: SOURCE3).errors, "copied"
+        refute_includes DescriptionCheck.call(draft, source_text: SOURCE3, exempt_phrases: ["The Man Who Mistook His Wife for a Hat"]).errors, "copied"
+      end
+
+      test "an exempt title does not hide copying elsewhere" do
+        draft = "#{CLEAN} He was an American novelist, short-story writer and editor from Illinois."
+
+        result = DescriptionCheck.call(draft, source_text: SOURCE, exempt_phrases: ["Hemingway"])
+
+        assert_includes result.errors, "copied"
       end
     end
   end
