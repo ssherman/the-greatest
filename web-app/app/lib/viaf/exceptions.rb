@@ -64,5 +64,12 @@ module Viaf
         @retry_after = retry_after
       end
     end
+
+    # VIAF itself is paused, for every caller: a Cloudflare block, VIAF's
+    # own 429, or the day's budget running low (Viaf::Gate). An hour or
+    # more, unlike a busy pace (a plain RateLimited), which clears in
+    # seconds. The author chain hands off to the AI step on a pause rather
+    # than wait for it.
+    class Paused < RateLimited; end
   end
 end

@@ -90,6 +90,24 @@ module DataImporters
             refute result.success?
             assert_match(/AI enrichment provider error: down/, result.errors.first)
           end
+
+          test "defers to a new author this import linked, and records the wait" do
+            provider = AiEnrichment.new(new_author_ids: [books_authors(:tolstoy).id])
+            ::Books::EnrichBookJob.expects(:perform_async).never
+
+            result = provider.populate(@book, query: @query)
+
+            assert result.success?
+            assert_equal [:ai_enrichment_deferred_to_authors], result.data_populated
+            assert_equal ["skipped"], @book.enrichments.where(reason: "deferred_to_authors").pluck(:outcome)
+          end
+
+          test "a new author not linked to this book does not hold it back" do
+            provider = AiEnrichment.new(new_author_ids: [books_authors(:king).id])
+            ::Books::EnrichBookJob.expects(:perform_async).with(@book.id, false, ["Leo Tolstoy"])
+
+            assert_equal [:ai_enrichment_queued], provider.populate(@book, query: @query).data_populated
+          end
         end
       end
     end

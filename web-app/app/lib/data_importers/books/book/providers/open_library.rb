@@ -26,8 +26,9 @@ module DataImporters
             goodreads_id: :books_work_goodreads_id
           }.freeze
 
-          def initialize(client: nil)
+          def initialize(client: nil, new_author_ids: [])
             @client = client
+            @new_author_ids = new_author_ids
           end
 
           # Lazy: building the default client constructs a CircuitBreaker
@@ -121,7 +122,10 @@ module DataImporters
           # Import-finder redesign §8: on accept, a book with no authors gets
           # the accepted work's authors, each through the author importer by
           # key and name, linked in Open Library's order. A book that already
-          # has authors is left alone (the merger's ruling).
+          # has authors is left alone (the merger's ruling). Each author is
+          # imported without its async enrichment; one this import created is
+          # remembered in new_author_ids for the providers after this one
+          # (spec §10).
           def link_open_library_authors(book, candidate)
             return false if book.book_authors.any?
 
@@ -130,10 +134,14 @@ module DataImporters
 
             linked = false
             work.author_keys.zip(work.author_names).each_with_index do |(key, name), index|
-              author = ::DataImporters::Books::Author::Importer.call(
-                name: name, open_library_author_key: key, work_titles: [book.title].compact_blank
-              ).item
+              imported = ::DataImporters::Books::Author::Importer.call(
+                name: name, open_library_author_key: key, work_titles: [book.title].compact_blank,
+                providers: ::DataImporters::Books::Author::Importer::BOOK_STEP_PROVIDERS
+              )
+              author = imported.item
               next unless author&.persisted?
+
+              @new_author_ids << author.id if imported.created?
               next if book.book_authors.any? { |existing| existing.author_id == author.id }
 
               book.book_authors.build(author: author, position: index + 1)

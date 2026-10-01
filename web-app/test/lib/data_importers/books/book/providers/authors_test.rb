@@ -18,8 +18,8 @@ module DataImporters
             ::Books::Authors::WikidataJob.stubs(:perform_async)
           end
 
-          def result_for(author)
-            DataImporters::ImportResult.new(item: author, provider_results: [], success: true)
+          def result_for(author, created: false)
+            DataImporters::ImportResult.new(item: author, provider_results: [], success: true, created: created)
           end
 
           def query(names)
@@ -28,8 +28,8 @@ module DataImporters
 
           test "imports each query name by name and links the authors in the query's order" do
             book = ::Books::Book.new(title: "Hadji Murat")
-            IMPORTER.expects(:call).with(name: "Stephen King", work_titles: ["Hadji Murat"]).returns(result_for(@king))
-            IMPORTER.expects(:call).with(name: "Leo Tolstoy", work_titles: ["Hadji Murat"]).returns(result_for(@tolstoy))
+            IMPORTER.expects(:call).with(name: "Stephen King", work_titles: ["Hadji Murat"], providers: [:open_library]).returns(result_for(@king))
+            IMPORTER.expects(:call).with(name: "Leo Tolstoy", work_titles: ["Hadji Murat"], providers: [:open_library]).returns(result_for(@tolstoy))
 
             result = @provider.populate(book, query: query(["Stephen King", "Leo Tolstoy"]))
 
@@ -87,6 +87,19 @@ module DataImporters
 
             assert_not result.success?
             assert_match(/boom/, result.errors.first)
+          end
+
+          test "imports without the author's async step and remembers the authors it created, not the ones it matched" do
+            ids = []
+            created = ::Books::Author.create!(name: "Anna Brenner")
+            IMPORTER.expects(:call).with(name: "Anna Brenner", work_titles: ["Hadji Murat"], providers: [:open_library])
+              .returns(result_for(created, created: true))
+            IMPORTER.expects(:call).with(name: "Leo Tolstoy", work_titles: ["Hadji Murat"], providers: [:open_library])
+              .returns(result_for(@tolstoy))
+
+            Providers::Authors.new(new_author_ids: ids).populate(::Books::Book.new(title: "Hadji Murat"), query: query(["Anna Brenner", "Leo Tolstoy"]))
+
+            assert_equal [created.id], ids
           end
         end
       end

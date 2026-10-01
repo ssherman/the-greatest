@@ -34,9 +34,25 @@ module DataImporters
         # OpenLibrary first: its fills are free and licensed, and on accept it
         # links the work's authors. Authors next: the query's author names
         # when the book still has none (an abstain, a reject, or the service
-        # unreachable). AiEnrichment last, so the AI fills fewer blanks.
+        # unreachable). AiEnrichment then runs, so the AI fills fewer blanks;
+        # it defers the book to its new authors' chain when one is linked.
+        # AuthorEnrichment runs last, after the deferral row is written, so it
+        # starts that chain for the authors this import created -- both it
+        # and AiEnrichment run after the save that follows Authors, so the
+        # chain sees this book among their titles (spec §10).
         def providers
-          @providers ||= [Providers::OpenLibrary.new, Providers::Authors.new, Providers::AiEnrichment.new]
+          @providers ||= [
+            Providers::OpenLibrary.new(new_author_ids: new_author_ids),
+            Providers::Authors.new(new_author_ids: new_author_ids),
+            Providers::AiEnrichment.new(new_author_ids: new_author_ids),
+            Providers::AuthorEnrichment.new(new_author_ids: new_author_ids)
+          ]
+        end
+
+        # The authors this import created: the author steps add to it, and
+        # the providers after them read it.
+        def new_author_ids
+          @new_author_ids ||= []
         end
 
         # Seeds first_published_year alongside title, not title alone -- the
