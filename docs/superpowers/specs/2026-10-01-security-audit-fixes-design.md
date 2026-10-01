@@ -178,8 +178,13 @@ ssh deploy@<server> 'for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$f
 gh secret set SERVER_SSH_HOST_FINGERPRINT --body 'SHA256:...'
 ```
 
-The plan determines which key type drone-ssh negotiates (likely ED25519) and therefore which
-line to use. Failure modes are safe: an absent secret skips verification (today's behaviour); a
+**Use the ECDSA line** (resolved 2026-10-01: `SHA256:N21xW1UBEL1ah+TNfjk/YdtN105gUidJwjMHxxwJUYk`).
+The pinned action runs drone-ssh 1.8.4 → easyssh-proxy v1.5.2, which sets no
+`HostKeyAlgorithms` and compares `ssh.FingerprintSHA256` of the negotiated key. Go x/crypto
+v0.49.0's `defaultHostKeyAlgos` lists `ecdsa-sha2-nistp256` first among plain keys and
+`ssh-ed25519` last, and the server has an ECDSA-256 host key, so ECDSA is what the action sees.
+A drone-ssh upgrade that reorders this fails the connect, and the fix is the other line.
+Failure modes are safe: an absent secret skips verification (today's behaviour); a
 wrong one fails the connect and deploys nothing. A rebuilt server has a new host key, so
 `SERVER-UPGRADE-GUIDE.md` gains an "update the fingerprint secret" step.
 
