@@ -83,7 +83,7 @@ end
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
 | Books | Book | OpenLibrary, Authors, AiEnrichment, AuthorEnrichment | Complete |
-| Books | Author | OpenLibrary | Complete (Wikidata, VIAF, AI step; Reject link and backfill still to come) |
+| Books | Author | OpenLibrary, Enrichment | Complete (Wikidata, VIAF, AI step; Reject link and backfill still to come) |
 
 ### Music Providers
 
@@ -232,9 +232,10 @@ fills blanks from the item, and links the English Wikipedia article only through
 author is never re-enriched from an import.
 
 On a Wikidata miss, `WikidataJob` chains into `Books::Authors::ViafJob` — VIAF is not a provider of
-its own, but a job the Wikidata step can lead to. Every chain ends in `Books::Authors::EnrichJob`,
-the AI facts step, which also hands the author's waiting books on to book enrichment. See
-`docs/features/books-author-enrichment.md`, "The AI step", and
+its own, but a job the Wikidata step can lead to. Every chain is meant to end in
+`Books::Authors::EnrichJob`, the AI facts step, which also hands the author's waiting books on to
+book enrichment -- see `docs/features/books-author-enrichment.md`'s "The AI step" and "A stuck
+chain" for what the AI step does and the gaps that can keep a chain from reaching it. Spec:
 `docs/superpowers/specs/2026-09-27-books-author-importer-design.md`. The Reject link action
 (increment 5) and the backfill rake task (increment 6) are still to come.
 

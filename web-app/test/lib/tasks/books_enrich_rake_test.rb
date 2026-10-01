@@ -49,4 +49,22 @@ class BooksEnrichRakeTest < ActiveSupport::TestCase
 
     assert_output(/Enqueued/) { @task.invoke("100000") }
   end
+
+  test "a book deferred and since enriched is not re-enqueued, even with a description" do
+    # Pins the `.or`'s second branch to `missing.where(id: waiting)`, not a bare
+    # `::Books::Book.where(id: waiting)`: `waiting` only checks that SOME row has
+    # the deferral reason, not that it is the book's latest row, so dropping the
+    # `missing` scope here would re-enqueue a book whose old deferral row was
+    # superseded by a real, applied run.
+    deferred_then_enriched = ::Books::Book.create!(title: "Deferred Then Enriched")
+    ::Services::Books::DeferredEnrichment.defer!(deferred_then_enriched)
+    deferred_then_enriched.enrichments.create!(kind: "books.book_facts", outcome: :applied)
+    deferred_then_enriched.assign_description(source: :openlibrary, content: "Already enriched.")
+    deferred_then_enriched.save!
+
+    ::Books::EnrichBookJob.stubs(:perform_async)
+    ::Books::EnrichBookJob.expects(:perform_async).with(deferred_then_enriched.id).never
+
+    assert_output(/Enqueued/) { @task.invoke("100000") }
+  end
 end

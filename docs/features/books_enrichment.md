@@ -21,8 +21,8 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    - The **Enrich With AI** button on the admin book page (`Actions::Admin::Books::EnrichBook`),
      with a checkbox that forces the web-search run.
    - `bin/rails books:enrich[id]` (runs inline and prints the ledger) and
-     `bin/rails books:enrich_missing[limit]` (enqueues books with no ledger row and no description;
-     a `deferred_to_authors` row does not count as a row).
+     `bin/rails books:enrich_missing[limit]` (enqueues books with no ledger row and no description,
+     plus any book whose only rows are `deferred_to_authors` deferrals, described or not).
    There is deliberately no model callback: `data_migration:all` creates 157k books.
 2. **Knowledge run.** `Services::Books::EnrichBook` runs
    `Services::Ai::Tasks::Books::BookFactsTask` in `knowledge` mode on the `standard` role. One

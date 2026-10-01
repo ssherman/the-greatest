@@ -385,7 +385,9 @@ chain can strand a book. A book left behind this way is still found by `books:en
 which counts a deferral-only book as missing whatever descriptions it already has (the Open
 Library provider can write one onto a brand-new book before `AiEnrichment` ever defers it), and
 which also picks up any book a chain never reached at all. An exhausted job is also visible in
-Sidekiq's Dead set.
+Sidekiq's Dead set. Run `books:enrich_missing` only once the `low` queue is drained: it cannot
+tell a genuinely stranded book from one whose author chain is still legitimately running, and
+running it early enriches a book before its new authors have countries.
 
 ## Countries
 
