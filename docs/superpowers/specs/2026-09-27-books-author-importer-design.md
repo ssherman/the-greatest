@@ -451,7 +451,9 @@ excluded because living authors have none.
 **Checks.**
 
 - `Services::Books::DescriptionCheck` gains an overlap check: a draft sharing any run of 8 or more
-  consecutive words (normalized) with the Wikipedia lead fails as `copied`.
+  consecutive words (normalized) with the Wikipedia lead fails as `copied`. *(Amended in increment
+  4: words are letters, marks and digits; a work title of 4 or more words that both texts name is
+  exempt from the count, since naming a book is not copying.)*
 - `Services::Ai::Tasks::Books::AuthorDescriptionReviewTask` (the `fast` role) replaces the book
   reviewer's spoiler judgment with `copied_phrasing` and `names_author_at_start`, keeping `marketing`,
   `meta_narration` and the style flags.
@@ -489,12 +491,16 @@ moment the book's enrichment would run.
 - `EnrichJob` ends, after a successful run or once its retries are exhausted, by enqueuing
   `EnrichBookJob` for each of the author's books whose latest `books.book_facts` row is that
   deferral. Only books that waited are handed on, never the author's other books (Shane,
-  2026-09-30: an author is created because a book is being added). Every chain reaches `EnrichJob`,
-  including after Wikidata or VIAF failures. *(Amended in increment 4.)*
+  2026-09-30: an author is created because a book is being added). Every chain is meant to reach
+  `EnrichJob`, including after Wikidata or VIAF failures -- not guaranteed: an author deleted or
+  merged away mid-chain makes every job return early, and a `WikidataJob` or `ViafJob` that
+  exhausts its own Sidekiq retries never reaches `EnrichJob` either (a `ViafJob` that already
+  paused has queued `EnrichJob` itself, so a pause alone strands nothing). *(Amended in increment
+  4.)*
 - A book with two new authors is normally enriched once: the first author's hand-off queues it, and
   the second finds the book's newer `books.book_facts` row and queues nothing, so the book may be
   enriched before its second new author has countries. At 1.004 authors per book this is rare and
-  accepted.
+  accepted. *(Amended in increment 4.)*
 - `books:enrich_missing` catches any book the chain never reached; a deferral row does not count as
   a ledger row there.
 
@@ -503,7 +509,7 @@ moment the book's enrichment would run.
 | Job | Queue | Retry | Enqueues |
 |---|---|---|---|
 | `Books::Authors::WikidataJob` `(author_id, refresh = false, via_viaf = false)` | `low` | 3 | `ViafJob` on a miss (unless `via_viaf`), else `EnrichJob` |
-| `Books::Authors::ViafJob` `(author_id, refresh = false, enrich_queued = false)` | `low` | 3 | `EnrichJob` (immediately, once, when paused), or `WikidataJob(author_id, true, true)` for a new Wikidata id |
+| `Books::Authors::ViafJob` `(author_id, refresh = false, enrich_queued = false)` | `low` | 3 | `EnrichJob` after a normal run; immediately, once, on a pause; or `WikidataJob(author_id, true, true)` instead, when the run newly stamped a Wikidata id and the decision does not need review |
 | `Books::Authors::EnrichJob` `(author_id, allow_research = true)` | `low` | 3 | `EnrichBookJob` for the author's books that waited for it |
 
 `low` is the last queue in strict priority, so these jobs never delay anything else.

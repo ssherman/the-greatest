@@ -83,7 +83,7 @@ end
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
 | Books | Book | OpenLibrary, Authors, AiEnrichment, AuthorEnrichment | Complete |
-| Books | Author | OpenLibrary | Increment 1 (Wikidata, VIAF, AI follow) |
+| Books | Author | OpenLibrary | Complete (Wikidata, VIAF, AI step; Reject link and backfill still to come) |
 
 ### Music Providers
 
@@ -186,7 +186,7 @@ section for the full contract).
 
 #### AI Enrichment (Async)
 Queues `Books::EnrichBookJob` and returns `[:ai_enrichment_queued]`. Runs after OpenLibrary and
-Authors, and before AuthorEnrichment, so the AI fills fewer blanks. Requires a title and either
+Authors, so the AI fills fewer blanks, and before AuthorEnrichment. Requires a title and either
 `book.authors` names (the usual case, since the author steps run first) or the query's
 `author_names` when the book still has no authors. When the import created one of the book's
 linked authors, it queues nothing: it writes a skipped `deferred_to_authors` ledger row and
@@ -232,8 +232,11 @@ fills blanks from the item, and links the English Wikipedia article only through
 author is never re-enriched from an import.
 
 On a Wikidata miss, `WikidataJob` chains into `Books::Authors::ViafJob` — VIAF is not a provider of
-its own, but a job the Wikidata step can lead to. The AI facts step follows in a later increment
-(`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`).
+its own, but a job the Wikidata step can lead to. Every chain ends in `Books::Authors::EnrichJob`,
+the AI facts step, which also hands the author's waiting books on to book enrichment. See
+`docs/features/books-author-enrichment.md`, "The AI step", and
+`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`. The Reject link action
+(increment 5) and the backfill rake task (increment 6) are still to come.
 
 ## Usage Examples
 

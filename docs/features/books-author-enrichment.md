@@ -38,8 +38,14 @@ Books::Authors::ViafJob         EnrichFromViaf
 Books::Authors::EnrichJob       EnrichAuthor, then EnrichBookJob for each book that waited
 ```
 
-Every chain ends at `EnrichJob`, whatever the Wikidata or VIAF outcome, so a book waiting on its
-new author is always handed on. All three jobs run on the `low` queue with `retry: 3`.
+Every chain is meant to end at `EnrichJob`, whatever the Wikidata or VIAF outcome, so a book
+waiting on its new author is normally handed on -- not guaranteed. An author deleted or merged
+away mid-chain makes every job return early, doing nothing. A `WikidataJob` or `ViafJob` that
+exhausts its own Sidekiq retries never reaches `EnrichJob` either (a `ViafJob` that has already
+paused has queued `EnrichJob` itself, so a pause strands nothing). Either gap leaves the book to
+`books:enrich_missing`, which counts it whatever descriptions it already has (see "Handing books
+on" below); an exhausted job is also visible in Sidekiq's Dead set. All three jobs run on the
+`low` queue with `retry: 3`.
 
 **The book importer starts the chain itself.** A book import runs the author importer without its
 async provider, collects the authors it created (`ImportResult#created?`), and queues their
@@ -344,17 +350,18 @@ about to be researched is recorded as `deferred`, not applied.
 - any other fact the model gave `low` confidence is recorded as `low_confidence`, not applied
 
 **The description.** One paragraph of 60 to 110 words in the house style, not opening with the
-author's name, at most one major prize. `Services::Books::DescriptionCheck` checks the draft
-against the Wikipedia lead: words are letters, combining marks and digits (so case, punctuation and
-quote styles cannot hide a copy), and a run of 8 consecutive words shared with the lead fails as
-`copied`. A work title of at least 4 words (`MIN_EXEMPT_WORDS`) may appear in both the draft and
-the lead without counting as copying (`exempt_phrases:`) -- `EnrichAuthor` passes the author's own
-titles and the matched records' works as exempt phrases, since naming a book is not copying. A
-description the model gave `low` confidence skips the review entirely and is recorded as
-`low_confidence`, not reviewed. Otherwise, `AuthorDescriptionReviewTask` (the `fast` role) reviews
-it for copied phrasing, an opening name, marketing and the style flags, is told what the code check
-found, and rewrites it once. The rewrite is checked again; a second failure is recorded as
-`rejected` and not written.
+author's name, at most one major prize. `Services::Books::DescriptionCheck` runs the same em-dash,
+double-hyphen, URL, markdown-citation and word-count checks it runs for a book, and, on top of
+those, a copy check against the Wikipedia lead: words are letters, combining marks and digits (so
+case, punctuation and quote styles cannot hide a copy), and a run of 8 consecutive words shared
+with the lead fails as `copied`. A work title of at least 4 words (`MIN_EXEMPT_WORDS`) may appear
+in both the draft and the lead without counting as copying (`exempt_phrases:`) -- `EnrichAuthor`
+passes the author's own titles and the matched records' works as exempt phrases, since naming a
+book is not copying. A description the model gave `low` confidence skips the review entirely and
+is recorded as `low_confidence`, not reviewed. Otherwise, `AuthorDescriptionReviewTask` (the
+`fast` role) reviews it for copied phrasing, an opening name, marketing and the style flags, is
+told what the code check found, and rewrites it once. The rewrite is checked again; a second
+failure is recorded as `rejected` and not written.
 
 ## Handing books on
 
@@ -365,16 +372,20 @@ the book's origin country can come from its author's stored nationality.
 
 `EnrichJob` ends by queuing `EnrichBookJob` for each of the author's books whose latest
 `books.book_facts` row is that deferral, after a successful run or once its retries are exhausted.
-Only books that waited are handed on; the author's other books never are (Shane, 2026-09-30), so a
-bulk author run does not become a catalogue-wide book enrichment. `books:enrich_missing` counts a
-book whose only rows are deferrals as missing, and picks up any book a chain never reached.
+Only books that waited are handed on this way; the author's other books never are (Shane,
+2026-09-30), so a bulk author run does not become a catalogue-wide book enrichment.
 
-**A stuck chain.** If `WikidataJob` or `ViafJob` exhausts its own Sidekiq retries, the chain never
-reaches `EnrichJob` at all, and the book waiting on that author is then picked up only by
-`books:enrich_missing` (which, as above, counts a deferral-only book as missing) -- not by the
-author chain itself. `EnrichJob` is built to not have this problem: it hands off even once its own
-retries are exhausted, via `sidekiq_retries_exhausted`, so only a break earlier in the chain can
-strand a book.
+**A stuck chain.** The hand-off above is not guaranteed. Every job in the chain returns early,
+doing nothing, for an author deleted or merged away between enqueue and run. A `WikidataJob` or
+`ViafJob` that exhausts its own Sidekiq retries never reaches `EnrichJob` either -- except a
+`ViafJob` that has already paused, which has queued `EnrichJob` itself before rescheduling, so a
+pause alone strands nothing. `EnrichJob` is built not to have this problem: it hands off even once
+its own retries are exhausted, via `sidekiq_retries_exhausted`, so only a break earlier in the
+chain can strand a book. A book left behind this way is still found by `books:enrich_missing`,
+which counts a deferral-only book as missing whatever descriptions it already has (the Open
+Library provider can write one onto a brand-new book before `AiEnrichment` ever defers it), and
+which also picks up any book a chain never reached at all. An exhausted job is also visible in
+Sidekiq's Dead set.
 
 ## Countries
 

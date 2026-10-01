@@ -28,4 +28,25 @@ class BooksEnrichRakeTest < ActiveSupport::TestCase
 
     assert_output(/Enqueued/) { @task.invoke("100000") }
   end
+
+  test "a deferred book counts as missing even with a description; a non-deferred described book does not" do
+    # The Open Library provider can write a description onto a brand-new book
+    # before AiEnrichment defers it to its new authors' chain. If that chain
+    # breaks, the book must still be pickable here -- the no-description rule
+    # only protects books that were never deferred.
+    deferred_with_description = ::Books::Book.create!(title: "Deferred With Description")
+    ::Services::Books::DeferredEnrichment.defer!(deferred_with_description)
+    deferred_with_description.assign_description(source: :openlibrary, content: "An Open Library blurb.")
+    deferred_with_description.save!
+
+    described = ::Books::Book.create!(title: "Described Book")
+    described.assign_description(source: :openlibrary, content: "Already has a description.")
+    described.save!
+
+    ::Books::EnrichBookJob.stubs(:perform_async)
+    ::Books::EnrichBookJob.expects(:perform_async).with(deferred_with_description.id).once
+    ::Books::EnrichBookJob.expects(:perform_async).with(described.id).never
+
+    assert_output(/Enqueued/) { @task.invoke("100000") }
+  end
 end

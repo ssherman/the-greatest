@@ -11,9 +11,9 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 1. **Trigger.** One of three entry points runs `Services::Books::EnrichBook`, two of them
    through `Books::EnrichBookJob`:
    - `DataImporters::Books::Book::Providers::AiEnrichment`, third in the importer's provider
-     chain (after `OpenLibrary` and `Authors`, before `AuthorEnrichment`), passing the query's
-     author names because a new book has no `book_authors` yet if the author step found none.
-     When the import created one of the book's linked authors, it queues nothing instead: it
+     chain (after `OpenLibrary` and `Authors`, before `AuthorEnrichment`), passing the linked
+     authors' names, and falling back to the query's author names only when the book still has
+     none. When the import created one of the book's linked authors, it queues nothing instead: it
      writes a skipped `deferred_to_authors` row -- before `AuthorEnrichment` queues that author's
      chain -- and the author chain's last step (`Books::Authors::EnrichJob`) queues the book once
      the author is enriched, so the book's origin country can come from the author's stored
