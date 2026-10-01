@@ -45,7 +45,9 @@ class Admin::Music::Albums::ListImportPermissionTest < ActionDispatch::Integrati
     assert_redirected_to music_root_path
   end
 
-  test "viewer cannot bulk delete" do
+  # The route currently resolves to #destroy (shadowed by the member route
+  # DELETE .../items/:id), so this pins the request's refusal, not bulk_delete's own gate.
+  test "viewer cannot DELETE the bulk_delete path" do
     sign_in_as(@viewer, stub_auth: true)
 
     assert_no_difference "ListItem.count" do

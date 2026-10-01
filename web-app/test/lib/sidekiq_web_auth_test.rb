@@ -26,7 +26,7 @@ class SidekiqWebAuthTest < ActiveSupport::TestCase
   test "rejects everything when only one credential is configured" do
     refute auth("admin", "", expected_username: "admin", expected_password: nil)
     refute auth("", "s3cret", expected_username: nil, expected_password: "s3cret")
-    refute auth("admin", "anything", expected_username: "admin", expected_password: "  ")
+    refute auth("admin", "  ", expected_username: "admin", expected_password: "  ")
   end
 
   test "tolerates a nil submitted credential" do

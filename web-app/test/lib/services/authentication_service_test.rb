@@ -9,9 +9,8 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   # AuthenticationService now builds a real ProviderEmailResolver on every
-  # call, which -- on an auth_uid miss -- reaches Identity Toolkit. Every
-  # pre-existing test in this file predates that and expects the token's own
-  # `email` claim to win, so the default here makes the provider-record lookup
+  # call, which -- on an auth_uid miss -- reaches Identity Toolkit. The default
+  # here makes the provider-record lookup
   # find nothing, which makes the resolver fall back to the token's own
   # `email` claim -- and AuthenticationService offers that claim only when
   # email_verified is exactly true, which FirebaseTokenHelper's default token

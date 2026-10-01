@@ -70,9 +70,13 @@ module Services
           # token. Passing it through unverified let the provider's trust vouch
           # for an address the provider never asserted -- H1 of the 2026-09-30
           # security audit. No legitimate sign-in needs it: Google and password
-          # resolve from the provider record, and Facebook and Apple tokens
-          # carry no email claim at all. Strict `== true`, as for email_verified
-          # below: a missing or non-boolean claim is not verification.
+          # resolve from the provider record; Facebook and Apple tokens carry no
+          # email claim; X tokens carry an unverified one, so for X the address
+          # must come from the twitter.com provider record (an X user whose
+          # record has no address is treated as having none: a new row or an
+          # auth_uid match, never a link by email). Strict `== true`, as for
+          # email_verified below: a missing or non-boolean claim is not
+          # verification.
           fallback_email: (payload["email"] if payload["email_verified"] == true)
         )
       )

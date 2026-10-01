@@ -67,7 +67,9 @@ class Admin::Games::ListImportPermissionTest < ActionDispatch::IntegrationTest
     assert_redirected_to games_root_path
   end
 
-  test "viewer cannot bulk delete" do
+  # The route currently resolves to #destroy (shadowed by the member route
+  # DELETE .../items/:id), so this pins the request's refusal, not bulk_delete's own gate.
+  test "viewer cannot DELETE the bulk_delete path" do
     sign_in_as(@viewer, stub_auth: true)
 
     assert_no_difference "ListItem.count" do
@@ -99,6 +101,15 @@ class Admin::Games::ListImportPermissionTest < ActionDispatch::IntegrationTest
 
     assert_no_difference "ListItem.count" do
       delete admin_games_list_item_path(list_id: @list.id, id: @item.id)
+    end
+    assert_redirected_to games_root_path
+  end
+
+  test "editor cannot restart the wizard" do
+    sign_in_as(@editor, stub_auth: true)
+
+    assert_no_difference "ListItem.count" do
+      post restart_admin_games_list_wizard_path(list_id: @list.id)
     end
     assert_redirected_to games_root_path
   end
