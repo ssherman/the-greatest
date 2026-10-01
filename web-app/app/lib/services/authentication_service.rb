@@ -33,11 +33,11 @@ module Services
     #
     # That is weaker than it sounds, though: the token's `email` claim is the
     # Firebase account RECORD's email, not necessarily the address the
-    # provider asserted at signup, and Firebase lets an account holder change
-    # their own Firebase-record email afterward. So this list trusts the
-    # provider's identity -- that Google, Apple, X, or Facebook vouches this
-    # is a real, controlled account -- not the provenance of whatever address
-    # happens to be on today's token.
+    # provider asserted at signup, and its holder can set it. So this list is
+    # only ever applied to an address that came from the provider record, or
+    # from a claim Firebase marked verified -- `.call` refuses to hand an
+    # unverified claim to ProviderEmailResolver at all. The list trusts the
+    # provider's identity, never the provenance of an arbitrary address.
     #
     # "password" is deliberately absent and MUST stay absent: a Firebase
     # password account can be created for any address without proving control,
@@ -62,7 +62,18 @@ module Services
           uid: payload["sub"],
           sign_in_provider: payload.dig("firebase", "sign_in_provider"),
           project_id: project_id,
-          fallback_email: payload["email"]
+          # Only a VERIFIED claim may stand in for the provider record. The
+          # claim is the Firebase account record's email, which its holder
+          # sets: a password account can be created for any address without
+          # proof, and an email-less X or Facebook identity linked to it then
+          # signs in with a trusted sign_in_provider and that address on the
+          # token. Passing it through unverified let the provider's trust vouch
+          # for an address the provider never asserted -- H1 of the 2026-09-30
+          # security audit. No legitimate sign-in needs it: Google and password
+          # resolve from the provider record, and Facebook and Apple tokens
+          # carry no email claim at all. Strict `== true`, as for email_verified
+          # below: a missing or non-boolean claim is not verification.
+          fallback_email: (payload["email"] if payload["email_verified"] == true)
         )
       )
 

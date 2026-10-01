@@ -11,6 +11,11 @@ module Services
   # provider record holds what the provider vouched for and is not writable by
   # the account holder.
   #
+  # fallback_email is that same mutable claim, so the caller must pass it only
+  # when Firebase marked it verified. AuthenticationService does; an
+  # unverified claim reaching here would let a trusted provider vouch for an
+  # address it never asserted (H1, 2026-09-30 security audit).
+  #
   # Errors propagate on purpose. See the failure test in
   # test/lib/services/provider_email_resolver_test.rb.
   class ProviderEmailResolver
