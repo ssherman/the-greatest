@@ -396,8 +396,10 @@ VIAF id comes from Wikidata (P214) and VIAF itself is not called.
 - A 403 sets a Redis pause key (`viaf:paused_until`) for one hour, doubling on each repeat up to 24
   hours. Every `ViafJob` checks it before calling. A 403 is never retried directly: the firewall
   behind it has not recovered within 9.5 minutes in testing, and retries may extend the ban.
-- **The chain never waits on VIAF.** A paused or out-of-budget `ViafJob` enqueues `EnrichJob` at once
-  and reschedules itself. Facts it finds later land as fills only.
+- **The chain never waits on VIAF.** A paused `ViafJob` (`Viaf::Exceptions::Paused`: a Cloudflare
+  block, a 429, or the day's budget running low) enqueues `EnrichJob` at once, once, and
+  reschedules itself. A busy pace only reschedules: it clears in seconds. Facts it finds later land
+  as fills only. *(Amended in increment 4.)*
 
 At 1–2 requests for a held id and 3–5 for a search, the ~1,000/day budget covers about 200–300
 authors a day. That is ample for imports; the backfill's VIAF share takes months, in the background.
@@ -475,24 +477,34 @@ the `low` queue with `retry: 3`, then does §10's hand-off.
 **Ordering.** When a book import creates an author, that author's countries do not exist yet at the
 moment the book's enrichment would run.
 
-- The book's `Providers::AiEnrichment` checks the author step's result. If any of the book's authors
-  were created by this import, it does not enqueue `EnrichBookJob` and reports
-  `[:ai_enrichment_deferred_to_authors]`.
-- `EnrichJob` ends, whatever its outcome, by enqueuing `EnrichBookJob` for each of the author's books
-  that has no `books.book_facts` ledger row. Every chain reaches `EnrichJob`, including after Wikidata
-  or VIAF failures, so the hand-off always happens unless Sidekiq exhausts its retries.
-- A book with two new authors can be enqueued twice. `EnrichBook` already records a second run
-  harmlessly (fills only). At 1.004 authors per book this is rare, and it is accepted rather than
-  coordinated.
-- `books:enrich_missing` catches any book the chain never reached.
+- The book importer runs the author importer without its async provider, collects the authors
+  this import created, and enqueues their `WikidataJob`s from `Providers::AuthorEnrichment` after
+  the book and its `book_authors` rows are saved, so the chain sees the book's title.
+  `Providers::AuthorEnrichment` runs after `Providers::AiEnrichment`, so the book's deferral row
+  (next bullet) is already written before any author chain is queued -- a chain that finishes fast
+  cannot reach its hand-off before the book's wait is recorded.
+- The book's `Providers::AiEnrichment` checks whether any of the book's linked authors were created
+  by this import. If so, it does not enqueue `EnrichBookJob`: it writes a skipped `books.book_facts`
+  row with reason `deferred_to_authors` and reports `[:ai_enrichment_deferred_to_authors]`.
+- `EnrichJob` ends, after a successful run or once its retries are exhausted, by enqueuing
+  `EnrichBookJob` for each of the author's books whose latest `books.book_facts` row is that
+  deferral. Only books that waited are handed on, never the author's other books (Shane,
+  2026-09-30: an author is created because a book is being added). Every chain reaches `EnrichJob`,
+  including after Wikidata or VIAF failures. *(Amended in increment 4.)*
+- A book with two new authors is normally enriched once: the first author's hand-off queues it, and
+  the second finds the book's newer `books.book_facts` row and queues nothing, so the book may be
+  enriched before its second new author has countries. At 1.004 authors per book this is rare and
+  accepted.
+- `books:enrich_missing` catches any book the chain never reached; a deferral row does not count as
+  a ledger row there.
 
 ### 11. Jobs and queues
 
 | Job | Queue | Retry | Enqueues |
 |---|---|---|---|
 | `Books::Authors::WikidataJob` `(author_id, refresh = false, via_viaf = false)` | `low` | 3 | `ViafJob` on a miss (unless `via_viaf`), else `EnrichJob` |
-| `Books::Authors::ViafJob` `(author_id)` | `low` | 3 | `EnrichJob` (immediately when paused or out of budget) |
-| `Books::Authors::EnrichJob` `(author_id, allow_research = true)` | `low` | 3 | `EnrichBookJob` for the author's unenriched books |
+| `Books::Authors::ViafJob` `(author_id, refresh = false, enrich_queued = false)` | `low` | 3 | `EnrichJob` (immediately, once, when paused), or `WikidataJob(author_id, true, true)` for a new Wikidata id |
+| `Books::Authors::EnrichJob` `(author_id, allow_research = true)` | `low` | 3 | `EnrichBookJob` for the author's books that waited for it |
 
 `low` is the last queue in strict priority, so these jobs never delay anything else.
 

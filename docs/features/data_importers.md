@@ -82,7 +82,7 @@ end
 | Music | Release | MusicBrainz | Complete |
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
-| Books | Book | OpenLibrary, Authors, AiEnrichment | Complete |
+| Books | Book | OpenLibrary, Authors, AiEnrichment, AuthorEnrichment | Complete |
 | Books | Author | OpenLibrary | Increment 1 (Wikidata, VIAF, AI follow) |
 
 ### Music Providers
@@ -185,17 +185,32 @@ section for the full contract).
   through an Open Library accept is found again by the service's accept on the same key.
 
 #### AI Enrichment (Async)
-Queues `Books::EnrichBookJob` and returns `[:ai_enrichment_queued]`. Runs after Open Library and
-Authors, so the AI fills fewer blanks. Requires a title and either `book.authors` names (the usual
-case, since the author step runs first) or the query's `author_names` when the book still has no
-authors (the author step imported none). The job runs `Services::Books::EnrichBook`; see
-`docs/features/books_enrichment.md`.
+Queues `Books::EnrichBookJob` and returns `[:ai_enrichment_queued]`. Runs after OpenLibrary and
+Authors, and before AuthorEnrichment, so the AI fills fewer blanks. Requires a title and either
+`book.authors` names (the usual case, since the author steps run first) or the query's
+`author_names` when the book still has no authors. When the import created one of the book's
+linked authors, it queues nothing: it writes a skipped `deferred_to_authors` ledger row and
+returns `[:ai_enrichment_deferred_to_authors]`, and the author chain hands the book on when the
+author is enriched. See `docs/features/books_enrichment.md` and
+`docs/features/books-author-enrichment.md`.
+
+#### Author Enrichment (Async)
+`Providers::AuthorEnrichment` runs last, after AiEnrichment, and queues
+`Books::Authors::WikidataJob` for each author this import created, returning
+`[:author_enrichment_queued]`. It runs after the importer has saved the book and its
+`book_authors` rows, so the author chain sees the book among the author's titles -- and after
+AiEnrichment has already written the book's `deferred_to_authors` row, so a chain that finishes
+fast cannot reach its hand-off before the book's wait is even recorded. It does nothing, and
+reports failure, for a book that was never persisted.
 
 #### Authors (Sync)
 `Providers::Authors` runs after Open Library. When the book still has no authors (Open Library abstained,
 rejected, or was unreachable -- the service is not deployed to production), each of the query's
 `author_names` goes through `DataImporters::Books::Author::Importer` by name and is linked in the query's
-order. A book that already has authors is left alone.
+order. A book that already has authors is left alone. Both author steps call the author importer with
+`providers: Author::Importer::BOOK_STEP_PROVIDERS` (`[:open_library]`), leaving out its async
+`Providers::Enrichment`, and collect the ids of the authors the import created for the providers after
+them.
 
 ### Books Author importer
 `DataImporters::Books::Author::Importer.call(name:, open_library_author_key:, birth_year:, death_year:,

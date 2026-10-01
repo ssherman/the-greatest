@@ -1,12 +1,12 @@
 # Books author enrichment
 
 Gives a `Books::Author` the data a person would look up by hand: identifiers, birth and death
-years, gender, nationality, alternate names, and a Wikipedia link, resolved through Wikidata
-first, then through VIAF when Wikidata finds no person, and never by searching Wikipedia. Every
-choice of an external record is a recorded decision, visible on the books admin audit pages, and
-every value it writes is traceable to the run that wrote it.
+years, gender, nationality, alternate names, a Wikipedia link, and a house-style AI description,
+resolved through Wikidata first, then through VIAF when Wikidata finds no person, and never by
+searching Wikipedia. Every choice of an external record is a recorded decision, visible on the
+books admin audit pages, and every value it writes is traceable to the run that wrote it.
 
-Spec: `docs/superpowers/specs/2026-09-27-books-author-importer-design.md` §3-§8, §13, §14. See
+Spec: `docs/superpowers/specs/2026-09-27-books-author-importer-design.md` §3-§10, §13, §14. See
 also `docs/features/wikimedia-clients.md` for the Wikidata/Wikipedia clients themselves,
 `docs/features/viaf-api-client.md` for the VIAF client the VIAF step below consumes, and
 `docs/features/import-finder.md` for the audit pages and the `MatchDecision` machinery this
@@ -15,45 +15,52 @@ reuses.
 ## The chain today
 
 ```
-DataImporters::Books::Author::Importer
-  Providers::OpenLibrary        by key, fills blanks
-  Providers::Enrichment         enqueues WikidataJob, returns at once
-Books::Authors::WikidataJob     Services::Books::Authors::EnrichFromWikidata
-                                   ResolveWikidata -> ApplyWikidata
-                                     -> LinkWikipedia, CleanLegacyWikipedia
-  on a miss (not via_viaf) ->   Books::Authors::ViafJob
-Books::Authors::ViafJob         Services::Books::Authors::EnrichFromViaf
-                                   ResolveViaf -> ApplyViaf
+Book import (DataImporters::Books::Book::Importer)
+  Providers::OpenLibrary, Providers::Authors
+      each author through the author importer with BOOK_STEP_PROVIDERS ([:open_library]);
+      the ids of authors this import created are collected
+  (the book and its book_authors rows are saved)
+  Providers::AiEnrichment       a created author is linked? -> a deferral row, no EnrichBookJob
+                                otherwise                 -> EnrichBookJob now
+  Providers::AuthorEnrichment   WikidataJob for each author this import created
+Direct author import (DataImporters::Books::Author::Importer)
+  Providers::OpenLibrary, then Providers::Enrichment (enqueues WikidataJob)
+
+Books::Authors::WikidataJob     EnrichFromWikidata
+  unmatched, not via_viaf ->    ViafJob
+  anything else ->              EnrichJob
+Books::Authors::ViafJob         EnrichFromViaf
   new Wikidata id, decision
-  doesn't need review ->        WikidataJob(author_id, refresh = true, via_viaf = true)
+  doesn't need review ->        WikidataJob(author_id, true, true), which ends in EnrichJob
+  otherwise ->                  EnrichJob (unless a pause already queued it)
+  VIAF paused ->                EnrichJob at once (once), then reschedule
+  VIAF pace busy ->             reschedule only
+Books::Authors::EnrichJob       EnrichAuthor, then EnrichBookJob for each book that waited
 ```
 
-`Providers::Enrichment` runs only when the importer created or force-re-imported the author (an
-already-matched author is never re-enriched from the provider chain). It queues
-`Books::Authors::WikidataJob.perform_async(author.id)` and returns immediately, so an author
-import never blocks on a Wikimedia round trip. The job runs on the `low` queue with `retry: 3`
-(`low` is last in strict priority order, so it never delays anything else).
+Every chain ends at `EnrichJob`, whatever the Wikidata or VIAF outcome, so a book waiting on its
+new author is always handed on. All three jobs run on the `low` queue with `retry: 3`.
 
-The AI facts step (the house-style description and gap-filling) and the hand-off into book
-enrichment are increment 4 of the same spec -- not built yet. A Wikidata match, failure, or skip
-ends the chain right there at `WikidataJob`. Only a genuine miss (outcome `unmatched`) goes on to
-`ViafJob`, which itself ends the chain -- unless it newly stamped a Wikidata id *and* the VIAF
-decision itself does not need review, in which case one more `via_viaf` Wikidata run follows. A
-VIAF match flagged `needs_review` (medium or low AI confidence) never triggers that extra run: the
-stamped id stays as VIAF's own, flagged fact rather than being treated as independent evidence for
-a certain Wikidata match.
+**The book importer starts the chain itself.** A book import runs the author importer without its
+async provider, collects the authors it created (`ImportResult#created?`), and queues their
+`WikidataJob`s from `Providers::AuthorEnrichment`, which runs after the importer has saved the book
+and its `book_authors` rows. The Wikidata and VIAF steps therefore always see the book among the
+author's titles. `Providers::AiEnrichment` runs just before `Providers::AuthorEnrichment` and
+writes the book's `deferred_to_authors` row first, so a chain that finishes fast cannot reach its
+hand-off before the book's wait is even recorded. `Providers::AuthorEnrichment` does nothing, and
+reports failure, for a book that was never persisted (every earlier provider failed). (Before
+increment 4 the author importer's own provider queued the job mid-import, before that save.) A
+direct author import still queues `WikidataJob` from `Providers::Enrichment`.
 
-An author an admin has flagged `exclude_from_rankings` (the "Exclude from author rankings"
-checkbox on the admin author form) is skipped without a Wikimedia call at all -- a `skipped`
-ledger row with reason `placeholder`.
+A VIAF match flagged `needs_review` never sends the author back to Wikidata: the stamped id stays
+as VIAF's own, flagged fact rather than evidence for a certain Wikidata match. A VIAF *pause* (a
+Cloudflare block, VIAF's 429, or the day's budget running low: `Viaf::Exceptions::Paused`) sends
+the author to the AI step at once and reschedules the VIAF job; a busy pace (seconds) only
+reschedules. If VIAF answers later with a new Wikidata id, the `via_viaf` Wikidata run ends in a
+second `EnrichJob`, which fills only what the first left blank.
 
-**Known gap:** when a book import creates a new author, that author's `WikidataJob` can run
-before the book and its `book_authors` row are saved, so `ResolveWikidata`'s title-matching step
-may see none of the author's actual books yet. `ResolveViaf` shares the same gap on a Wikidata
-miss: it builds its own title evidence (`AuthorProfile#titles`, shown to `SelectExternalRecordTask`
-as `matching_titles`/`other works`) from the same `author.books` association. The book importer has
-no production caller today, so this has not mattered in practice; it is a real ordering issue for
-the next increment to address once book enrichment feeds back into resolution.
+An author an admin has flagged `exclude_from_rankings` is skipped by every step without an
+external or model call: a `skipped` ledger row with reason `placeholder`.
 
 ## Resolution
 
@@ -299,6 +306,76 @@ plus 0-3 cluster fetches (each with its own possible redirect hops) -- about 3-5
 average -- the roughly-1,000-a-day budget covers about 200-300 authors a day -- ample for imports,
 with the backfill's VIAF share running in the background over months.
 
+## The AI step
+
+`Services::Books::Authors::EnrichAuthor.call(author:, allow_research: true)` (spec §9), run by
+`Books::Authors::EnrichJob`.
+
+**Skips.** A placeholder author, and an author with nothing left to fill: an AI or manual
+description, a birth year, a gender other than `unspecified`, and at least one country. There is
+no "already processed" check; the data rule already stops a run that could fill nothing.
+
+**Input.** `Services::Ai::Tasks::Books::AuthorFactsTask` (the `standard` role) gets the name,
+alternate names, what we already hold, up to 10 of our books (ranked first, with years), and the
+records the author steps matched, read by `MatchedRecords` from the latest processed ledger row of
+each step and its decision's selected candidate:
+- Wikidata: description line, years, occupations, citizenships, works
+- VIAF: headings, years (marked "active" when not a life span), nationality codes, occupations,
+  works, contributing libraries
+- the matched item's English Wikipedia lead (up to 8,000 characters), for facts only
+
+A held identifier alone is never evidence; only a decision is. An author nothing matched gets a
+line saying so, telling the model not to assume a better-known namesake.
+
+**Research.** Web search (the `research` role) runs only when neither Wikidata nor VIAF matched,
+`allow_research` is true, and the model did not recognize the author or knew them poorly. It
+counts against the shared `config.x.ai.research_daily_cap`. A low-confidence knowledge answer
+about to be researched is recorded as `deferred`, not applied.
+
+**Applying** (`ApplyAuthorFacts`, fills blanks only through `FactSheet`):
+- `birth_year`, `death_year`: Common Era, no later than this year, and checked against the *other*
+  year -- the one already stored, or else the one the model itself reported -- so death cannot
+  land before birth; a self-contradictory pair leaves both years out. A `low`-confidence year is
+  caught before that check runs, so `low_confidence` takes precedence over `invalid`.
+- `gender`: male, female or non_binary; `unspecified` counts as blank
+- countries, from the reported nationalities through `CountryLookup.from_text`, only when the
+  author has none
+- the description, as `ai_generated`, only when the author has no AI description yet
+- any other fact the model gave `low` confidence is recorded as `low_confidence`, not applied
+
+**The description.** One paragraph of 60 to 110 words in the house style, not opening with the
+author's name, at most one major prize. `Services::Books::DescriptionCheck` checks the draft
+against the Wikipedia lead: words are letters, combining marks and digits (so case, punctuation and
+quote styles cannot hide a copy), and a run of 8 consecutive words shared with the lead fails as
+`copied`. A work title of at least 4 words (`MIN_EXEMPT_WORDS`) may appear in both the draft and
+the lead without counting as copying (`exempt_phrases:`) -- `EnrichAuthor` passes the author's own
+titles and the matched records' works as exempt phrases, since naming a book is not copying. A
+description the model gave `low` confidence skips the review entirely and is recorded as
+`low_confidence`, not reviewed. Otherwise, `AuthorDescriptionReviewTask` (the `fast` role) reviews
+it for copied phrasing, an opening name, marketing and the style flags, is told what the code check
+found, and rewrites it once. The rewrite is checked again; a second failure is recorded as
+`rejected` and not written.
+
+## Handing books on
+
+When a book import creates an author and links it, `Providers::AiEnrichment` does not queue
+`EnrichBookJob`. It writes a skipped `books.book_facts` row with reason `deferred_to_authors`
+(`Services::Books::DeferredEnrichment`) and reports `[:ai_enrichment_deferred_to_authors]`, so
+the book's origin country can come from its author's stored nationality.
+
+`EnrichJob` ends by queuing `EnrichBookJob` for each of the author's books whose latest
+`books.book_facts` row is that deferral, after a successful run or once its retries are exhausted.
+Only books that waited are handed on; the author's other books never are (Shane, 2026-09-30), so a
+bulk author run does not become a catalogue-wide book enrichment. `books:enrich_missing` counts a
+book whose only rows are deferrals as missing, and picks up any book a chain never reached.
+
+**A stuck chain.** If `WikidataJob` or `ViafJob` exhausts its own Sidekiq retries, the chain never
+reaches `EnrichJob` at all, and the book waiting on that author is then picked up only by
+`books:enrich_missing` (which, as above, counts a deferral-only book as missing) -- not by the
+author chain itself. `EnrichJob` is built to not have this problem: it hands off even once its own
+retries are exhausted, via `sidekiq_retries_exhausted`, so only a break earlier in the chain can
+strand a book.
+
 ## Countries
 
 **`books_author_countries`** is a plain join table: `author_id`, `country_id`, a unique pair, two
@@ -408,6 +485,14 @@ VIAF id disagreed with the matched cluster; recorded as `nothing_to_apply`, not 
 all: every VIAF call happens before `EnrichFromViaf` records anything, so an interrupted run
 leaves nothing behind for the reschedule to un-see.
 
+**The AI step writes `books.author_facts`.** One row per task run (knowledge, then research when it
+runs), skips included, with `mode`, `model`, `provider` and `ai_chat` from the chat, as
+`books.book_facts` does. Each fact records its value, confidence, whether it was applied and why.
+Every row that called the model carries a `sources` fact listing the records in its input
+(`[{"source" => "wikidata", "source_id" => "Q7243"}, {"source" => "wikipedia", "source_id" =>
+"en:12345"}, {"source" => "viaf", "source_id" => "…"}]`), so a rejected link can find the
+descriptions it influenced.
+
 ## Operating
 
 Run one author by hand:
@@ -443,6 +528,14 @@ c.suggest("Stacy Willingham")
 c.last_rate_limit  # nil on a fresh instance, and nil above too if that suggest was cached today
 ```
 
+Run the AI step by hand (writes a ledger row; a real model call):
+
+```ruby
+Services::Books::Authors::EnrichAuthor.call(author: Books::Author.find(id))
+# or, through the job, which also hands on any books waiting for this author:
+Books::Authors::EnrichJob.new.perform(author_id)
+```
+
 Where to look:
 
 - The books admin **Match Decisions** audit page, filtered to the "Wikidata link" entity, or to
@@ -452,8 +545,9 @@ Where to look:
 - `author.enrichments.for_kind("books.author_wikidata")` (or `"books.author_viaf"`) for one
   author's history.
 
-There is no backfill rake task and no admin button yet -- both are increment 6. Today the only
-way an author reaches this chain is through the author importer's async provider.
+There is no backfill rake task and no admin button yet -- both are increment 6. Today an author
+reaches this chain through a book import (`Providers::AuthorEnrichment`) or a direct author import
+(`Providers::Enrichment`).
 
 **Launch sequence.** Production's books data is a rehearsal copy: it gets truncated and
 re-migrated more than once before launch (spec §14). The pre-launch truncate has to include
