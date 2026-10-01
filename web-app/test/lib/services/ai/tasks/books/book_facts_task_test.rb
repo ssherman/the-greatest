@@ -43,6 +43,33 @@ module Services
             assert_includes prompt, "Someone Obscure"
           end
 
+          test "each stored author gets a line with the years and countries we hold" do
+            books_authors(:tolstoy).author_countries.create!(country: books_countries(:french))
+
+            prompt = BookFactsTask.new(parent: @book).send(:user_prompt)
+
+            assert_includes prompt, "Author: Leo Tolstoy (1828–1910; French)"
+            refute_includes prompt, "Author(s):"
+          end
+
+          test "authors come in position order, with only the years we know" do
+            book = ::Books::Book.create!(title: "Three Hands")
+            book.book_authors.create!(author: books_authors(:garnett), position: 2)
+            book.book_authors.create!(author: books_authors(:king), position: 1)
+            book.book_authors.create!(author: ::Books::Author.create!(name: "Old Anon", death_year: 1500), position: 3)
+
+            prompt = BookFactsTask.new(parent: book).send(:user_prompt)
+
+            assert_includes prompt, "Author: Stephen King (born 1947)\nAuthor: Constance Garnett\nAuthor: Old Anon (died 1500)"
+          end
+
+          test "stored authors win over the names the importer passed" do
+            prompt = BookFactsTask.new(parent: @book, author_names: ["Someone Else"]).send(:user_prompt)
+
+            assert_includes prompt, "Author: Leo Tolstoy (1828–1910)"
+            refute_includes prompt, "Someone Else"
+          end
+
           test "user prompt includes identifiers when present" do
             @book.identifiers.create!(identifier_type: :books_work_openlibrary_id, value: "OL262758W")
             prompt = BookFactsTask.new(parent: @book).send(:user_prompt)

@@ -52,7 +52,7 @@ module Services
           def user_prompt
             lines = ["Book: \"#{parent.title}\""]
             lines << "Subtitle: #{parent.subtitle}" if parent.subtitle.present?
-            lines << "Author(s): #{author_names.join(", ")}" if author_names.any?
+            lines.concat(author_lines)
             lines << "First published (our record): #{parent.first_published_year}" if parent.first_published_year.present?
             identifier_lines.each { |line| lines << line }
 
@@ -64,6 +64,35 @@ module Services
             lines << ""
             lines << "Report the facts and write the description as JSON matching the schema."
             lines.join("\n")
+          end
+
+          # One line per stored author, from what we hold about them (spec
+          # §10), so the book's origin countries can follow its authors':
+          # "Author: Ernest Hemingway (1899–1961; American)". A book with no
+          # authors yet falls back to the names the importer passed.
+          def author_lines
+            links = parent.book_authors.includes(author: :countries).order(:position, :id).to_a
+            return links.map { |link| "Author: #{author_line(link.author)}" } if links.any?
+            return ["Author(s): #{author_names.join(", ")}"] if author_names.any?
+
+            []
+          end
+
+          def author_line(author)
+            details = [life_years(author), author.countries.map(&:name).sort.join(", ").presence].compact
+            details.any? ? "#{author.name} (#{details.join("; ")})" : author.name
+          end
+
+          def life_years(author)
+            birth = author.birth_year
+            death = author.death_year
+            if birth && death
+              "#{birth}–#{death}"
+            elsif birth
+              "born #{birth}"
+            elsif death
+              "died #{death}"
+            end
           end
 
           def identifier_lines
