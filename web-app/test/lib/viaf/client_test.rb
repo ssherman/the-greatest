@@ -29,7 +29,7 @@ class Viaf::ClientTest < ActiveSupport::TestCase
     @gate.stubs(:wait_seconds).returns(600)
     @base.expects(:get).never
 
-    error = assert_raises(Viaf::Exceptions::RateLimited) { @client.get("viaf/1") }
+    error = assert_raises(Viaf::Exceptions::Paused) { @client.get("viaf/1") }
 
     assert_equal 600, error.retry_after
   end
@@ -47,22 +47,23 @@ class Viaf::ClientTest < ActiveSupport::TestCase
     error = assert_raises(Viaf::Exceptions::RateLimited) { @client.get("viaf/1") }
 
     assert_equal 13, error.retry_after
+    assert_not_kind_of Viaf::Exceptions::Paused, error
   end
 
-  test "a Cloudflare block closes the gate and becomes RateLimited for the whole pause" do
+  test "a Cloudflare block closes the gate and becomes Paused for the whole pause" do
     @base.stubs(:get).raises(Viaf::Exceptions::BlockedError.new("blocked", 403))
     @gate.expects(:blocked!).returns(7200)
 
-    error = assert_raises(Viaf::Exceptions::RateLimited) { @client.get("viaf/1") }
+    error = assert_raises(Viaf::Exceptions::Paused) { @client.get("viaf/1") }
 
     assert_equal 7200, error.retry_after
   end
 
-  test "a 429 pauses every VIAF call through the gate and becomes RateLimited for that pause" do
+  test "a 429 pauses every VIAF call through the gate and becomes Paused for that pause" do
     @base.stubs(:get).raises(Viaf::Exceptions::ClientError.new("Client error: 429", 429))
     @gate.expects(:rate_limited!).returns(3600)
 
-    error = assert_raises(Viaf::Exceptions::RateLimited) { @client.get("viaf/1") }
+    error = assert_raises(Viaf::Exceptions::Paused) { @client.get("viaf/1") }
 
     assert_equal 3600, error.retry_after
   end
@@ -76,6 +77,10 @@ class Viaf::ClientTest < ActiveSupport::TestCase
 
   test "RateLimited is not a VIAF error, so a rescue of Error never swallows it" do
     assert_not_kind_of Viaf::Exceptions::Error, Viaf::Exceptions::RateLimited.new("wait", retry_after: 1)
+  end
+
+  test "a pause is a RateLimited, so every rescue of RateLimited still catches it" do
+    assert_kind_of Viaf::Exceptions::RateLimited, Viaf::Exceptions::Paused.new("paused", retry_after: 1)
   end
 
   test "an AutoSuggest answer is cached for a day, so a rescheduled run asks once" do

@@ -5,7 +5,9 @@ module Viaf
   # fetches go through BaseClient behind the Gate and an :immediate pace, so
   # no worker thread sleeps and nothing calls VIAF while it is paused. A
   # closed gate, a busy pace or a Cloudflare block raises RateLimited, which
-  # the job turns into a reschedule. Every answer is kept (clusters in
+  # the job turns into a reschedule. A closed gate, a Cloudflare block or a
+  # 429 raises Paused, a RateLimited that tells the job VIAF is out for an
+  # hour or more; a busy pace raises plain RateLimited. Every answer is kept (clusters in
   # external_records by Viaf::Cluster, AutoSuggest answers in the cache for a
   # day), so a rescheduled run resumes without repeating a request, and a
   # stored cluster is read even while VIAF is paused.
@@ -55,7 +57,7 @@ module Viaf
     # BaseClient#get behind the gate: the transport AutoSuggest and Cluster call.
     def get(path, params = {})
       wait = @gate.wait_seconds
-      raise Exceptions::RateLimited.new("VIAF is paused for #{wait}s", retry_after: wait) if wait
+      raise Exceptions::Paused.new("VIAF is paused for #{wait}s", retry_after: wait) if wait
 
       begin
         @base_client.get(path, params)
@@ -66,12 +68,12 @@ module Viaf
       raise Exceptions::RateLimited.new("VIAF pace busy", retry_after: [e.retry_after.to_f.ceil, 1].max)
     rescue Exceptions::BlockedError
       seconds = @gate.blocked!
-      raise Exceptions::RateLimited.new("Cloudflare blocked VIAF; every VIAF call is paused for #{seconds}s", retry_after: seconds)
+      raise Exceptions::Paused.new("Cloudflare blocked VIAF; every VIAF call is paused for #{seconds}s", retry_after: seconds)
     rescue Exceptions::ClientError => e
       raise unless e.status_code == 429
 
       seconds = @gate.rate_limited!
-      raise Exceptions::RateLimited.new("VIAF answered 429; every VIAF call is paused for #{seconds}s", retry_after: seconds)
+      raise Exceptions::Paused.new("VIAF answered 429; every VIAF call is paused for #{seconds}s", retry_after: seconds)
     end
 
     private

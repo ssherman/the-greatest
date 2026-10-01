@@ -6,8 +6,9 @@
 # runner and do not raise. A rate limit (a 429, maxlag, or our own pace busy
 # for longer than the inline wait) reschedules this job rather than holding
 # a worker thread. A miss goes on to Books::Authors::ViafJob, unless VIAF sent
-# this author here (via_viaf), which would loop. The chain ends at VIAF until
-# the AI step lands.
+# this author here (via_viaf), which would loop. Every other outcome --
+# matched, failed, skipped, or a via_viaf miss -- goes on to the AI step,
+# Books::Authors::EnrichJob, so every chain ends there.
 class Books::Authors::WikidataJob
   include Sidekiq::Job
 
@@ -21,9 +22,11 @@ class Books::Authors::WikidataJob
     return if author.nil?
 
     result = ::Services::Books::Authors::EnrichFromWikidata.call(author: author, refresh: refresh)
-    return unless result.data[:outcome] == :unmatched && !via_viaf
-
-    ::Books::Authors::ViafJob.perform_async(author_id, refresh)
+    if result.data[:outcome] == :unmatched && !via_viaf
+      ::Books::Authors::ViafJob.perform_async(author_id, refresh)
+    else
+      ::Books::Authors::EnrichJob.perform_async(author_id)
+    end
   rescue ::Wikimedia::Exceptions::RateLimited => e
     self.class.perform_in(e.retry_after.to_i + rand(RESCHEDULE_JITTER), author_id, refresh, via_viaf)
   end
