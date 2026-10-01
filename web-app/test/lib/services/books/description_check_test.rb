@@ -146,9 +146,18 @@ module Services
       end
 
       test "an exempt title does not hide copying elsewhere" do
+        draft = "#{CLEAN} Hemingway was an American novelist, short-story writer and editor from Illinois. " \
+          "His story \"Notes From a Small Island\" is often overlooked."
+
+        result = DescriptionCheck.call(draft, source_text: SOURCE, exempt_phrases: ["Notes From a Small Island"])
+
+        assert_includes result.errors, "copied"
+      end
+
+      test "an exempt phrase shorter than four words does not hide a copy" do
         draft = "#{CLEAN} He was an American novelist, short-story writer and editor from Illinois."
 
-        result = DescriptionCheck.call(draft, source_text: SOURCE, exempt_phrases: ["Hemingway"])
+        result = DescriptionCheck.call(draft, source_text: SOURCE, exempt_phrases: ["A", "an"])
 
         assert_includes result.errors, "copied"
       end

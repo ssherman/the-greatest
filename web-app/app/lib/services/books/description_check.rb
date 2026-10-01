@@ -30,6 +30,10 @@ module Services
       # written from is a close paraphrase of CC BY-SA text (spec §9), not a
       # description in our own words.
       COPY_RUN = 8
+      # A title shorter than this can only reach COPY_RUN shared words by
+      # picking up five more identical words around it, and that is real
+      # copying, not a shared title.
+      MIN_EXEMPT_WORDS = 4
 
       def self.call(text, source_text: nil, exempt_phrases: [])
         cleaned = text.to_s.gsub(MARKDOWN_CITATION, "").strip
@@ -41,9 +45,9 @@ module Services
         errors << "double_hyphen" if cleaned.include?("--")
         errors << "url" if cleaned.match?(%r{https?://})
         errors << "markdown_link" if cleaned.include?("](")
-        words = cleaned.split(/[[:space:]]+/).size
-        errors << "too_short" if words < MIN_WORDS
-        errors << "too_long" if words > MAX_WORDS
+        word_count = cleaned.split(/[[:space:]]+/).size
+        errors << "too_short" if word_count < MIN_WORDS
+        errors << "too_long" if word_count > MAX_WORDS
         errors << "copied" if copied?(cleaned, source_text, exempt_phrases)
 
         Result.new(success?: errors.empty?, data: {text: cleaned}, errors: errors)
@@ -52,7 +56,10 @@ module Services
       def self.copied?(text, source_text, exempt_phrases)
         return false if source_text.blank?
 
-        exempt = Array(exempt_phrases).map { |phrase| words(phrase).join(" ") }.reject(&:blank?).uniq.sort_by { |phrase| -phrase.length }
+        exempt = Array(exempt_phrases).map { |phrase| words(phrase) }
+          .select { |tokens| tokens.size >= MIN_EXEMPT_WORDS }
+          .map { |tokens| tokens.join(" ") }
+          .uniq.sort_by { |phrase| -phrase.length }
         word_runs(text, exempt).intersect?(word_runs(source_text, exempt))
       end
 
