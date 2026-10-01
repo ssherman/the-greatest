@@ -12,6 +12,10 @@ class MatchDecision < ApplicationRecord
   enum :confidence, {certain: 0, high: 1, medium: 2, low: 3}
   enum :decided_by, {identifier: 0, rule: 1, ai: 2, fallback: 3}, prefix: true
 
+  # A person's verdict, set from the audit page. Only `rejected` is set today
+  # (Services::Books::Authors::RejectExternalLink, spec §12).
+  enum :verdict, {confirmed: 0, rejected: 1}, prefix: true
+
   # Validations
   validates :finder, presence: true
 
@@ -22,5 +26,13 @@ class MatchDecision < ApplicationRecord
 
   def review!(by:, note: nil)
     update!(reviewed_at: Time.current, reviewed_by: by, review_note: note)
+  end
+
+  # The candidate snapshot this decision chose (selected_index counts from
+  # one), or nil.
+  def selected_candidate
+    return nil unless selected_index&.positive?
+
+    Array(candidates)[selected_index - 1]
   end
 end

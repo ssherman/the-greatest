@@ -79,4 +79,24 @@ class MatchDecisionTest < ActiveSupport::TestCase
 
     assert_nil decision.reload.reviewed_by_id
   end
+
+  test "selected_candidate is the candidate selected_index names, counting from one" do
+    decision = MatchDecision.new(finder: "X", candidates: [{"external_key" => "a"}, {"external_key" => "b"}], selected_index: 2)
+    assert_equal "b", decision.selected_candidate["external_key"]
+
+    decision.selected_index = nil
+    assert_nil decision.selected_candidate
+
+    decision.selected_index = 0
+    assert_nil decision.selected_candidate
+  end
+
+  test "verdict is unset until a person rejects the decision" do
+    decision = MatchDecision.create!(finder: "X", outcome: :matched, confidence: :high, decided_by: :rule)
+    assert_nil decision.verdict
+
+    decision.update!(verdict: :rejected)
+    assert decision.reload.verdict_rejected?
+    assert_includes MatchDecision.verdict_rejected, decision
+  end
 end
