@@ -38,7 +38,7 @@ module Services
           apply_gender
           apply_countries
           apply_description
-          LEDGER_NAMES.each { |name, key| sheet.facts[key]&.merge!("confidence" => fact(name)[:confidence]) }
+          LEDGER_NAMES.each { |name, key| sheet.facts.fetch(key).merge!("confidence" => fact(name)[:confidence]) }
 
           author.save!
           Result.new(success?: true, data: {facts: sheet.facts, applied: sheet.applied}, errors: [])
@@ -57,29 +57,32 @@ module Services
           value = entry[:value]
           key = LEDGER_NAMES.fetch(name)
           return sheet.record(key, nil, applied: false, reason: "null") if value.nil?
-          return sheet.record(key, value, applied: false, reason: "invalid") unless valid_year?(name, value)
           return sheet.record(key, value, applied: false, reason: "low_confidence") if low?(entry)
+          return sheet.record(key, value, applied: false, reason: "invalid") unless valid_year?(name, value)
 
           sheet.year(key, value)
         end
 
-        # A Common Era year no later than this one; a death no earlier than
-        # the birth we hold, or, failing that, the birth the model reported.
+        # A Common Era year no later than this one, on the right side of the
+        # other year: the one we hold, or, failing that, the one the model
+        # reported. A self-contradictory answer leaves both years out.
         def valid_year?(name, value)
           return false unless value.is_a?(Integer) && value.positive? && value <= Date.current.year
-          return true unless name == :death_year
 
-          reported = fact(:birth_year)[:value]
-          birth = author.birth_year || (reported if reported.is_a?(Integer))
-          birth.nil? || value >= birth
+          other = (name == :birth_year) ? :death_year : :birth_year
+          reported = fact(other)[:value]
+          bound = author.public_send(other) || (reported if reported.is_a?(Integer))
+          return true if bound.nil?
+
+          (name == :birth_year) ? value <= bound : value >= bound
         end
 
         def apply_gender
           entry = fact(:gender)
           value = entry[:value].to_s.strip.downcase.tr(" -", "__").presence
           return sheet.record("gender", nil, applied: false, reason: "null") if value.nil?
-          return sheet.record("gender", value, applied: false, reason: "invalid") unless GENDERS.include?(value)
           return sheet.record("gender", value, applied: false, reason: "low_confidence") if low?(entry)
+          return sheet.record("gender", value, applied: false, reason: "invalid") unless GENDERS.include?(value)
 
           sheet.gender(value)
         end
@@ -99,10 +102,10 @@ module Services
 
           text = description[:text]
           review = {review: description[:review]}.compact
+          return sheet.record("description", text, applied: false, reason: "low_confidence", **review) if low?(fact(:description))
           if description[:reason].present?
             return sheet.record("description", text, applied: false, reason: description[:reason], **review)
           end
-          return sheet.record("description", text, applied: false, reason: "low_confidence", **review) if low?(fact(:description))
           if author.descriptions.any? { |row| row.source == "ai_generated" }
             return sheet.record("description", text, applied: false, reason: "already_set", **review)
           end

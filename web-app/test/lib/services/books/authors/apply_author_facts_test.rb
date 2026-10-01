@@ -63,14 +63,28 @@ module Services
         end
 
         test "a fact the model gave low confidence is recorded, not applied" do
-          result = apply(birth_year: {confidence: "low"}, description: {confidence: "low"})
+          result = apply(
+            birth_year: {confidence: "low"}, description: {confidence: "low"},
+            gender: {confidence: "low"}, nationalities: {confidence: "low"}
+          )
 
           @author.reload
           assert_nil @author.birth_year
           assert_equal 1980, @author.death_year
+          assert_nil @author.gender
+          assert_empty @author.countries
           assert_equal ["low_confidence", "low"], result.data[:facts]["birth_year"].values_at("reason", "confidence")
           assert_equal ["low_confidence", false], result.data[:facts]["description"].values_at("reason", "applied")
+          assert_equal "low_confidence", result.data[:facts]["gender"]["reason"]
+          assert_equal "low_confidence", result.data[:facts]["countries"]["reason"]
           assert_equal 0, @author.descriptions.count
+        end
+
+        test "low confidence on the description wins over the runner's rejection" do
+          result = apply(description: {confidence: "low"}, reviewed: {text: DESCRIPTION, review: nil, reason: "rejected"})
+
+          assert_equal "low_confidence", result.data[:facts]["description"]["reason"]
+          assert_equal 0, @author.reload.descriptions.count
         end
 
         test "years are Common Era, no later than this year, and a death is no earlier than the birth" do
@@ -80,6 +94,34 @@ module Services
           ]
 
           assert_equal %w[invalid invalid invalid invalid invalid], reasons
+        end
+
+        test "a birth year later than a stored death year is invalid, and nothing is written" do
+          @author.update!(death_year: 1950)
+
+          result = apply(birth_year: {value: 1960})
+
+          assert_nil @author.reload.birth_year
+          assert_equal "invalid", result.data[:facts]["birth_year"]["reason"]
+        end
+
+        test "a self-contradictory reported birth and death leaves both years out" do
+          result = apply(birth_year: {value: 1960}, death_year: {value: 1950})
+
+          @author.reload
+          assert_nil @author.birth_year
+          assert_nil @author.death_year
+          assert_equal ["invalid", "invalid"], result.data[:facts].values_at("birth_year", "death_year").map { |fact| fact["reason"] }
+        end
+
+        test "an invalid death year falls back to the model's own reported birth year" do
+          result = apply(birth_year: {value: 1901, confidence: "low"}, death_year: {value: 1850})
+
+          @author.reload
+          assert_nil @author.birth_year
+          assert_nil @author.death_year
+          assert_equal "low_confidence", result.data[:facts]["birth_year"]["reason"]
+          assert_equal "invalid", result.data[:facts]["death_year"]["reason"]
         end
 
         test "gender is male, female or non_binary, in any spelling; anything else is invalid" do
