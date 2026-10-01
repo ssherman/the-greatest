@@ -130,18 +130,20 @@ ones get 401. Add both variables to `deployment/ENV.md` and `.env.example`.
 `ListItemsActions` and `BaseListWizardController` (shared by the music albums, music songs and
 games includers) gain fail-closed filters, using the existing `DomainScopedAuth` helpers:
 
-- `before_action :require_domain_write!, except: <read actions>`
-  - wizard reads: `show`, `show_step`, `step_status`
-  - list-item reads: `modal` and the three `*_search` lookups
+- `before_action :require_domain_write!` on every request that is not a GET or HEAD. The routes
+  table confirms that across all five controllers every read is a GET (wizard `show`,
+  `show_step`, `step_status`; list-item `modal` and the three `*_search` lookups) and every change
+  is POST, PATCH or DELETE.
 - `before_action :require_domain_delete!, only:` `destroy`, `bulk_delete` (list items) and
   `restart`, `reparse` (wizard — both delete rows)
 
-The read actions are enumerated rather than the writes, so a future action is gated by default.
-The plan confirms the exact action names per controller.
+Gating on the verb rather than a list of action names means a future non-GET action is gated by
+default, with no per-controller list to keep in sync.
 
-Tests (in the style of the existing `viewer_permission_test.rb`): a `viewer` domain role reaches
-the reads and is redirected from a representative write (`advance_step`, `queue_import`) and
-delete (`destroy`, `bulk_delete`); an `editor` domain role can write but is redirected from
+Tests (in the style of the existing `viewer_permission_test.rb`), for games and music albums: a
+`viewer` domain role reaches the reads and is redirected from representative writes (`verify`,
+`metadata`, `save_html`) and deletes (`destroy`, `bulk_delete`, `restart`), with the data
+unchanged; an `editor` domain role can write but is redirected from delete; a `moderator` can
 delete.
 
 ## PR 2 — deploy workflow and image hygiene
