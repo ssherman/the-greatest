@@ -12,6 +12,9 @@ module Services
     # character Emma, or "Night" from the noun, and 17k books have one-word
     # titles; that judgment belongs to the review task's names_title and
     # names_author codes.
+    #
+    # With source_text (an author's Wikipedia lead), a draft that repeats
+    # COPY_RUN consecutive words of it fails as "copied".
     class DescriptionCheck
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -22,8 +25,12 @@ module Services
       MARKDOWN_CITATION = /\s*\(\[[^\]]*\]\((?:[^()\s]|\([^()\s]*\))*\)\)/
       MIN_WORDS = 40
       MAX_WORDS = 140
+      # A draft that shares this many consecutive words with the text it was
+      # written from is a close paraphrase of CC BY-SA text (spec §9), not a
+      # description in our own words.
+      COPY_RUN = 8
 
-      def self.call(text)
+      def self.call(text, source_text: nil)
         cleaned = text.to_s.gsub(MARKDOWN_CITATION, "").strip
         errors = []
         # An em dash is always flagged. An en dash only counts as the same
@@ -36,9 +43,24 @@ module Services
         words = cleaned.split(/[[:space:]]+/).size
         errors << "too_short" if words < MIN_WORDS
         errors << "too_long" if words > MAX_WORDS
+        errors << "copied" if copied?(cleaned, source_text)
 
         Result.new(success?: errors.empty?, data: {text: cleaned}, errors: errors)
       end
+
+      def self.copied?(text, source_text)
+        return false if source_text.blank?
+
+        word_runs(text).intersect?(word_runs(source_text))
+      end
+
+      # Every run of COPY_RUN consecutive words, compared on letters and
+      # digits only, so case, punctuation and quote styles cannot hide a copy.
+      def self.word_runs(text)
+        text.to_s.unicode_normalize(:nfkc).downcase.scan(/[\p{L}\p{N}]+/)
+          .each_cons(COPY_RUN).map { |run| run.join(" ") }.to_set
+      end
+      private_class_method :copied?, :word_runs
     end
   end
 end

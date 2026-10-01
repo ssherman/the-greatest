@@ -99,6 +99,34 @@ module Services
 
         assert_equal %w[em_dash url too_short], result.errors
       end
+
+      SOURCE = "Ernest Miller Hemingway was an American novelist, short-story writer and journalist. " \
+        "Known for an economical, understated style, he influenced later twentieth-century fiction."
+
+      test "a draft sharing eight consecutive words with its source fails as copied" do
+        draft = "#{CLEAN} He was an American novelist, short-story writer and journalist from Illinois."
+
+        result = DescriptionCheck.call(draft, source_text: SOURCE)
+
+        refute result.success?
+        assert_includes result.errors, "copied"
+      end
+
+      test "seven shared words in a row are not a copy" do
+        draft = "#{CLEAN} Hemingway became an American novelist, short-story writer and editor in Paris."
+
+        assert_not_includes DescriptionCheck.call(draft, source_text: SOURCE).errors, "copied"
+      end
+
+      test "case and punctuation do not hide a copy" do
+        draft = "#{CLEAN} WAS AN AMERICAN NOVELIST; SHORT STORY WRITER, AND JOURNALIST."
+
+        assert_includes DescriptionCheck.call(draft, source_text: SOURCE).errors, "copied"
+      end
+
+      test "without source text there is no copy check" do
+        assert_not_includes DescriptionCheck.call("#{CLEAN} #{SOURCE}").errors, "copied"
+      end
     end
   end
 end
