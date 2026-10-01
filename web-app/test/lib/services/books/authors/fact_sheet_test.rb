@@ -13,6 +13,26 @@ module Services
 
         def lookup(countries, unmatched = []) = ::Services::Books::CountryLookup::Result.new(countries: countries, unmatched: unmatched)
 
+        test "a death year more than two years before one of the author's own books is recorded, not applied" do
+          @author.book_authors.create!(book: ::Books::Book.create!(title: "Later Book", first_published_year: 2021), position: 1)
+
+          @sheet.death_year(2013)
+
+          assert_equal ["before_books", false, 2021], @sheet.facts["death_year"].values_at("reason", "applied", "latest_book")
+          assert_nil @author.death_year
+        end
+
+        test "a death year within two years of the author's last book, or with no books, is filled as usual" do
+          @author.book_authors.create!(book: ::Books::Book.create!(title: "Posthumous Book", first_published_year: 2021), position: 1)
+          @sheet.death_year(2019)
+          assert_equal [2019, "filled"], [@author.death_year, @sheet.facts["death_year"]["reason"]]
+
+          bookless = ::Books::Author.create!(name: "Bookless Author")
+          sheet = FactSheet.new(bookless)
+          sheet.death_year(1900)
+          assert_equal 1900, bookless.death_year
+        end
+
         test "records one fact per field, extras stringified, and lists the applied ones" do
           @sheet.record("birth_year", 1900, applied: true, reason: "filled", source: {kind: "test"})
           @sheet.record("gender", nil, applied: false, reason: "null")

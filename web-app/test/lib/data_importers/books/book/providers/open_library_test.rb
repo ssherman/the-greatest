@@ -345,17 +345,17 @@ module DataImporters
             }
           end
 
-          def author_result(author)
-            DataImporters::ImportResult.new(item: author, provider_results: [], success: true)
+          def author_result(author, created: false)
+            DataImporters::ImportResult.new(item: author, provider_results: [], success: true, created: created)
           end
 
           test "an accept links the work's authors through the author importer, by key and name, in Open Library's order" do
             book = ::Books::Book.new(title: "Hadji Murat")
             stub_resolve(resolve_response(verdict: "accept", record: work_with_authors([["OL2A", "Stephen King"], ["OL1A", "Leo Tolstoy"]])))
             ::DataImporters::Books::Author::Importer.expects(:call)
-              .with(name: "Stephen King", open_library_author_key: "OL2A", work_titles: ["Hadji Murat"]).returns(author_result(books_authors(:king)))
+              .with(name: "Stephen King", open_library_author_key: "OL2A", work_titles: ["Hadji Murat"], providers: [:open_library]).returns(author_result(books_authors(:king)))
             ::DataImporters::Books::Author::Importer.expects(:call)
-              .with(name: "Leo Tolstoy", open_library_author_key: "OL1A", work_titles: ["Hadji Murat"]).returns(author_result(books_authors(:tolstoy)))
+              .with(name: "Leo Tolstoy", open_library_author_key: "OL1A", work_titles: ["Hadji Murat"], providers: [:open_library]).returns(author_result(books_authors(:tolstoy)))
 
             result = @provider.populate(book, query: nil)
 
@@ -367,7 +367,7 @@ module DataImporters
             book = ::Books::Book.new(title: "Hadji Murat")
             stub_resolve(resolve_response(verdict: "accept", record: work_with_authors([["OL1A", nil]])))
             ::DataImporters::Books::Author::Importer.expects(:call)
-              .with(name: nil, open_library_author_key: "OL1A", work_titles: ["Hadji Murat"]).returns(author_result(books_authors(:tolstoy)))
+              .with(name: nil, open_library_author_key: "OL1A", work_titles: ["Hadji Murat"], providers: [:open_library]).returns(author_result(books_authors(:tolstoy)))
 
             @provider.populate(book, query: nil)
 
@@ -382,6 +382,23 @@ module DataImporters
             result = @provider.populate(book, query: nil)
 
             assert_not_includes result.data_populated, "authors"
+          end
+
+          test "an accept remembers the work authors this import created" do
+            ids = []
+            provider = Providers::OpenLibrary.new(client: @client, new_author_ids: ids)
+            created = ::Books::Author.create!(name: "Anna Brenner")
+            stub_resolve(resolve_response(verdict: "accept", record: work_with_authors([["OL77A", "Anna Brenner"], ["OL1A", "Leo Tolstoy"]])))
+            ::DataImporters::Books::Author::Importer.expects(:call)
+              .with(name: "Anna Brenner", open_library_author_key: "OL77A", work_titles: ["Hadji Murat"], providers: [:open_library])
+              .returns(author_result(created, created: true))
+            ::DataImporters::Books::Author::Importer.expects(:call)
+              .with(name: "Leo Tolstoy", open_library_author_key: "OL1A", work_titles: ["Hadji Murat"], providers: [:open_library])
+              .returns(author_result(books_authors(:tolstoy)))
+
+            provider.populate(::Books::Book.new(title: "Hadji Murat"), query: nil)
+
+            assert_equal [created.id], ids
           end
 
           test "an accept whose candidate carries no work record links nothing and still succeeds" do

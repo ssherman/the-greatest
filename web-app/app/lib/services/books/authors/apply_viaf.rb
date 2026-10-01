@@ -65,6 +65,10 @@ module Services
             errors: [])
         end
 
+        # A cluster that names a Wikidata item leaves the years to Wikidata:
+        # VIAF merges people (Sarah Morgan's cluster, the right one by its
+        # titles and its Wikidata link, carried another Sarah Morgan's
+        # 1948–2013), and the Wikidata item is curated per person.
         def apply_year(name, year)
           if year.nil?
             sheet.record(name, nil, applied: false, reason: "null")
@@ -72,6 +76,10 @@ module Services
             sheet.record(name, year, applied: false, reason: "not_life_dates", date_type: person.date_type)
           elsif year.negative?
             sheet.record(name, year, applied: false, reason: "bce")
+          elsif person.wikidata_qid.to_s.match?(/\AQ\d+\z/)
+            sheet.record(name, year, applied: false, reason: "wikidata_linked", wikidata: person.wikidata_qid)
+          elsif name == "death_year"
+            sheet.death_year(year)
           else
             sheet.year(name, year)
           end

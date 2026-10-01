@@ -10,8 +10,14 @@ module DataImporters
         # it also covers an abstain, a reject and an unreachable service (the
         # service is not deployed to production). A book that already has
         # authors -- from Open Library just now, or from before -- is left
-        # alone, the same ruling as the merger.
+        # alone, the same ruling as the merger. Authors are imported without
+        # their async enrichment; one this import created is remembered in
+        # new_author_ids.
         class Authors < DataImporters::ProviderBase
+          def initialize(new_author_ids: [])
+            @new_author_ids = new_author_ids
+          end
+
           def populate(book, query:, match: nil)
             return success_result(data_populated: []) if book.book_authors.any?
             return failure_result(errors: ["Book title required to link authors"]) if book.title.blank?
@@ -21,9 +27,14 @@ module DataImporters
 
             linked = 0
             names.each_with_index do |name, index|
-              author = ::DataImporters::Books::Author::Importer.call(name: name, work_titles: [book.title].compact_blank).item
+              imported = ::DataImporters::Books::Author::Importer.call(
+                name: name, work_titles: [book.title].compact_blank,
+                providers: ::DataImporters::Books::Author::Importer::BOOK_STEP_PROVIDERS
+              )
+              author = imported.item
               next unless author&.persisted?
 
+              @new_author_ids << author.id if imported.created?
               link(book, author, index + 1)
               linked += 1
             end

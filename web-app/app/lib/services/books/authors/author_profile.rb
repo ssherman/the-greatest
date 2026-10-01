@@ -25,23 +25,19 @@ module Services
         end
 
         def titles
-          @titles ||= begin
-            configuration = ::Books::RankingConfiguration.default_primary
-            scope = author.books
-            scope = if configuration
-              join = ActiveRecord::Base.sanitize_sql_array([
-                "LEFT JOIN ranked_items ON ranked_items.item_type = 'Books::Book' " \
-                "AND ranked_items.item_id = books_books.id AND ranked_items.ranking_configuration_id = ?",
-                configuration.id
-              ])
-              scope.joins(join).order(Arel.sql("ranked_items.rank ASC NULLS LAST"), "books_books.id")
-            else
-              scope.order("books_books.id")
-            end
-            scope.limit(TITLE_LIMIT).pluck(:title, :alternate_titles)
-              .flat_map { |title, alternates| [title, *Array(alternates)] }
-              .compact_blank.uniq.first(TITLE_LIMIT)
-          end
+          @titles ||= ranked_books_scope.limit(TITLE_LIMIT).pluck(:title, :alternate_titles)
+            .flat_map { |title, alternates| [title, *Array(alternates)] }
+            .compact_blank.uniq.first(TITLE_LIMIT)
+        end
+
+        # Our books by this author, ranked first: [[title, first_published_year], ...].
+        def ranked_books(limit)
+          ranked_books_scope.limit(limit).pluck(:title, :first_published_year)
+        end
+
+        # The year the author's most recent book of ours first appeared, or nil.
+        def latest_published_year
+          written_books.maximum("books_books.first_published_year")
         end
 
         def line
@@ -59,6 +55,25 @@ module Services
         private
 
         attr_reader :author
+
+        # The books the author wrote, ranked first under the default primary
+        # configuration, then by id. A book they only edited is not theirs,
+        # the same rule as Books::TopBooksForAuthorsQuery.
+        def ranked_books_scope
+          configuration = ::Books::RankingConfiguration.default_primary
+          return written_books.order("books_books.id") unless configuration
+
+          join = ActiveRecord::Base.sanitize_sql_array([
+            "LEFT JOIN ranked_items ON ranked_items.item_type = 'Books::Book' " \
+            "AND ranked_items.item_id = books_books.id AND ranked_items.ranking_configuration_id = ?",
+            configuration.id
+          ])
+          written_books.joins(join).order(Arel.sql("ranked_items.rank ASC NULLS LAST"), "books_books.id")
+        end
+
+        def written_books
+          author.books.where(books_book_authors: {role: ::Books::BookAuthor.roles[:author]})
+        end
       end
     end
   end

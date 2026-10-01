@@ -99,6 +99,76 @@ module Services
 
         assert_equal %w[em_dash url too_short], result.errors
       end
+
+      SOURCE = "Ernest Miller Hemingway was an American novelist, short-story writer and journalist. " \
+        "Known for an economical, understated style, he influenced later twentieth-century fiction."
+
+      test "a draft sharing eight consecutive words with its source fails as copied" do
+        draft = "#{CLEAN} He was an American novelist, short-story writer and editor from Illinois."
+
+        result = DescriptionCheck.call(draft, source_text: SOURCE)
+
+        refute result.success?
+        assert_includes result.errors, "copied"
+      end
+
+      test "seven shared words in a row are not a copy" do
+        draft = "#{CLEAN} Hemingway became an American novelist, short-story writer and editor in Paris."
+
+        assert_not_includes DescriptionCheck.call(draft, source_text: SOURCE).errors, "copied"
+      end
+
+      test "case and punctuation do not hide a copy" do
+        draft = "#{CLEAN} WAS AN AMERICAN NOVELIST; SHORT STORY WRITER, AND JOURNALIST."
+
+        assert_includes DescriptionCheck.call(draft, source_text: SOURCE).errors, "copied"
+      end
+
+      test "without source text there is no copy check" do
+        assert_not_includes DescriptionCheck.call("#{CLEAN} #{SOURCE}").errors, "copied"
+      end
+
+      SOURCE2 = "Rabindranath Tagore (রবীন্দ্রনাথ ঠাকুর) was a Bengali poet and composer."
+
+      test "a native-script name split by combining marks is not mistaken for a copy" do
+        draft = "#{CLEAN} Tagore, রবীন্দ্রনাথ ঠাকুর in Bengali, wrote many songs."
+
+        assert_not_includes DescriptionCheck.call(draft, source_text: SOURCE2).errors, "copied"
+      end
+
+      SOURCE3 = "Sacks is best known for The Man Who Mistook His Wife for a Hat, a collection of case studies."
+
+      test "a shared work title fails as copied unless exempted" do
+        draft = "#{CLEAN} His book The Man Who Mistook His Wife for a Hat gathers case histories."
+
+        assert_includes DescriptionCheck.call(draft, source_text: SOURCE3).errors, "copied"
+        refute_includes DescriptionCheck.call(draft, source_text: SOURCE3, exempt_phrases: ["The Man Who Mistook His Wife for a Hat"]).errors, "copied"
+      end
+
+      test "an exempt title does not hide copying elsewhere" do
+        draft = "#{CLEAN} Hemingway was an American novelist, short-story writer and editor from Illinois. " \
+          "His story \"Notes From a Small Island\" is often overlooked."
+
+        result = DescriptionCheck.call(draft, source_text: SOURCE, exempt_phrases: ["Notes From a Small Island"])
+
+        assert_includes result.errors, "copied"
+      end
+
+      test "an exempt phrase shorter than four words does not hide a copy" do
+        draft = "#{CLEAN} He was an American novelist, short-story writer and editor from Illinois."
+
+        result = DescriptionCheck.call(draft, source_text: SOURCE, exempt_phrases: ["A", "an"])
+
+        assert_includes result.errors, "copied"
+      end
+
+      test "a caller may lower the word floor; the default stays for books" do
+        short = "She writes romance novels set in English seaside towns, most of them about families who come home for one summer and stay."
+
+        assert_includes DescriptionCheck.call(short).errors, "too_short"
+        assert_equal [], DescriptionCheck.call(short, min_words: 20).errors
+        assert_includes DescriptionCheck.call("A romance novelist.", min_words: 20).errors, "too_short"
+      end
     end
   end
 end

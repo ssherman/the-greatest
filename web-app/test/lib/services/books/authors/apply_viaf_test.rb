@@ -62,6 +62,24 @@ module Services
           assert_equal [1991, nil], [@author.reload.birth_year, @author.death_year]
         end
 
+        # A cluster can merge two people (Sarah Morgan's carried another Sarah
+        # Morgan's 1948–2013); the Wikidata run that follows is the better source.
+        test "a cluster that names a Wikidata item leaves the years to Wikidata" do
+          facts = apply(viaf_person("1", born: "1948-05-17", died: "2013-12-00", wikidata: "Q57394720")).data[:facts]
+
+          assert_equal ["wikidata_linked", "wikidata_linked"], [facts["birth_year"]["reason"], facts["death_year"]["reason"]]
+          assert_equal [nil, nil], [@author.reload.birth_year, @author.death_year]
+        end
+
+        test "a death year contradicted by the author's own later books is recorded, not applied" do
+          @author.book_authors.create!(book: ::Books::Book.create!(title: "Beach House Summer", first_published_year: 2021), position: 1)
+
+          facts = apply(viaf_person("1", born: "1948", died: "2013")).data[:facts]
+
+          assert_equal ["before_books", 2021], facts["death_year"].values_at("reason", "latest_book")
+          assert_equal [1948, nil], [@author.reload.birth_year, @author.death_year]
+        end
+
         test "a flourished span, a BCE year or a disagreeing year is recorded, never applied" do
           facts = apply(viaf_person("1", born: "1850", died: "1870", date_type: "flourished")).data[:facts]
           assert_equal ["not_life_dates", "not_life_dates"], [facts["birth_year"]["reason"], facts["death_year"]["reason"]]

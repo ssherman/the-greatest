@@ -95,11 +95,9 @@ module DataImporters
               {"field" => "description", "ours" => nil, "theirs" => "A novel set in the Jazz Age", "kind" => "fill"}
             ]).to_json
           )
-          # Newest expectation wins in Mocha, so this overrides the setup
-          # stub -- pins that the chain enqueues AI enrichment AFTER Open
-          # Library ran, with the query's author name (the new book has no
-          # book_authors rows yet).
-          ::Books::EnrichBookJob.expects(:perform_async).with(instance_of(Integer), false, ["F. Scott Fitzgerald"])
+          # F. Scott Fitzgerald is new, so the book waits for his chain
+          # instead of being enriched now (spec §10).
+          ::Books::EnrichBookJob.expects(:perform_async).never
 
           result = Importer.call(title: "The Great Gatsby", author_names: ["F. Scott Fitzgerald"], year: 1925)
 
@@ -113,6 +111,7 @@ module DataImporters
           assert_equal "https://openlibrary.org/works/OL468431W", descriptions.first.source_url
           assert_predicate descriptions.first, :license_cc0?
           assert result.item.identifiers.exists?(identifier_type: :books_work_openlibrary_id, value: "OL468431W")
+          assert_equal [["skipped", "deferred_to_authors"]], result.item.enrichments.pluck(:outcome, :reason)
         end
 
         test "importing a new title resolves once: the finder's resolution feeds the provider" do
@@ -376,10 +375,40 @@ module DataImporters
           assert_equal [books_authors(:tolstoy)], books_books(:war_and_peace).reload.authors.to_a
         end
 
-        test "providers run Open Library first, then Authors, then AI enrichment" do
+        test "providers run Open Library, Authors, AI enrichment, then the new authors' chain" do
           providers = Importer.new.send(:providers)
 
-          assert_equal [Providers::OpenLibrary, Providers::Authors, Providers::AiEnrichment], providers.map(&:class)
+          assert_equal [Providers::OpenLibrary, Providers::Authors, Providers::AiEnrichment, Providers::AuthorEnrichment],
+            providers.map(&:class)
+        end
+
+        # The race closed by spec §10: the Wikidata step for a new author must
+        # see the book among the author's titles, so it is queued only once
+        # the book_authors row exists, AND only once the book's own wait is
+        # already recorded -- and exactly once, not also from the author
+        # importer's own async provider.
+        test "a new author's chain starts once, after the book's wait is recorded and its link is saved" do
+          stub_resolve_down
+          ::Books::EnrichBookJob.expects(:perform_async).never
+          ::Books::Authors::WikidataJob.expects(:perform_async)
+            .with { |author_id| ::Books::BookAuthor.exists?(author_id: author_id) && ::Enrichment.exists?(reason: "deferred_to_authors") }.once
+          ::Books::Authors::WikidataJob.expects(:perform_async)
+            .with { |author_id| !::Books::BookAuthor.exists?(author_id: author_id) }.never
+
+          result = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"])
+
+          assert_includes result.summary[:data_populated], :ai_enrichment_deferred_to_authors
+          assert_equal [["skipped", "deferred_to_authors"]], result.item.enrichments.pluck(:outcome, :reason)
+        end
+
+        test "a book whose authors all exist is enriched at once, and no author chain starts" do
+          stub_resolve_down
+          ::Books::Authors::WikidataJob.expects(:perform_async).never
+          ::Books::EnrichBookJob.expects(:perform_async).with(anything, false, ["Leo Tolstoy"])
+
+          result = Importer.call(title: "Hadji Murat", author_names: ["Lev Tolstoy"])
+
+          assert_includes result.summary[:data_populated], :ai_enrichment_queued
         end
       end
     end

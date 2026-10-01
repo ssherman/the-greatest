@@ -9,6 +9,9 @@ module Services
       # identifier another author already holds is never stamped; the pair is
       # remembered for flag_collisions. The caller saves the author.
       class FactSheet
+        # Books can appear after their author dies, but not for long.
+        POSTHUMOUS_YEARS = 2
+
         attr_reader :author, :facts, :applied
 
         def initialize(author)
@@ -51,6 +54,19 @@ module Services
 
           reason = stamp(type, value)
           record(name, value, applied: reason == "filled", reason: reason)
+        end
+
+        # #year for a death year that a library record or a model reported: a
+        # year more than POSTHUMOUS_YEARS before one of the author's own books
+        # first appeared is someone else's (VIAF merged two Sarah Morgans,
+        # giving a working novelist 1948–2013), so it is recorded, not applied.
+        def death_year(value)
+          latest = AuthorProfile.new(author).latest_published_year
+          if latest && value < latest - POSTHUMOUS_YEARS
+            return record("death_year", value, applied: false, reason: "before_books", latest_book: latest)
+          end
+
+          year("death_year", value)
         end
 
         def year(name, value)

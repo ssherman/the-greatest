@@ -10,17 +10,27 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 
 1. **Trigger.** One of three entry points runs `Services::Books::EnrichBook`, two of them
    through `Books::EnrichBookJob`:
-   - `DataImporters::Books::Book::Providers::AiEnrichment`, last in the importer's provider
-     chain, passing the query's author names because a new book has no `book_authors` yet.
+   - `DataImporters::Books::Book::Providers::AiEnrichment`, third in the importer's provider
+     chain (after `OpenLibrary` and `Authors`, before `AuthorEnrichment`), passing the linked
+     authors' names, and falling back to the query's author names only when the book still has
+     none. When the import created one of the book's linked authors, it queues nothing instead: it
+     writes a skipped `deferred_to_authors` row -- before `AuthorEnrichment` queues that author's
+     chain -- and the author chain's last step (`Books::Authors::EnrichJob`) queues the book once
+     the author is enriched, so the book's origin country can come from the author's stored
+     nationality. See `docs/features/books-author-enrichment.md`, "Handing books on".
    - The **Enrich With AI** button on the admin book page (`Actions::Admin::Books::EnrichBook`),
      with a checkbox that forces the web-search run.
    - `bin/rails books:enrich[id]` (runs inline and prints the ledger) and
-     `bin/rails books:enrich_missing[limit]` (enqueues books with no ledger row and no description).
+     `bin/rails books:enrich_missing[limit]` (enqueues books with no ledger row and no description,
+     plus any book whose only rows are `deferred_to_authors` deferrals, described or not).
    There is deliberately no model callback: `data_migration:all` creates 157k books.
 2. **Knowledge run.** `Services::Books::EnrichBook` runs
    `Services::Ai::Tasks::Books::BookFactsTask` in `knowledge` mode on the `standard` role. One
    call returns `recognized`, an overall confidence, the description, and every fact with its
-   own confidence.
+   own confidence. The prompt carries one line per stored author, from what we hold: `Author:
+   Ernest Hemingway (1899–1961; American)`. An editor (`book_authors.role` `editor`) gets
+   `Editor: <name>` with no years or countries, so an anthology's origin is never read from its
+   editor.
 3. **Review.** If a description came back, and the book does not already have an
    `ai_generated` description (123k of 158k production books carry a legacy one, and the
    applier would record `already_set` regardless, so the review call is skipped), then
