@@ -381,6 +381,11 @@ VIAF id comes from Wikidata (P214) and VIAF itself is not called.
 - A Wikidata id in the cluster's sources is stamped. `WikidataJob` then runs **once** for that author
   with `via_viaf: true`, which forbids it from enqueuing VIAF again. It takes the held-id path (§5.1).
 - Years from the cluster dates. Gender from the `a`/`b` codes. Countries via `CountryLookup.from_iso`.
+  *(Amended in increment 4: years only when the cluster names no Wikidata item, since the Wikidata
+  run that follows is the better source, and never a death year more than two years before one of the
+  author's own books first appeared. A VIAF cluster can merge two people: Sarah Morgan's, the right
+  one by its titles and Wikidata link, carried another Sarah Morgan's 1948–2013. The same death-year
+  check applies to the AI step's years.)*
 - Alternate names from main headings only: inverted forms ("Tolstoy, Leo, graf, 1828-1910") become
   natural order ("Leo Tolstoy") with dates and titles stripped. Latin script only, at most 10.
 
@@ -437,9 +442,12 @@ excluded because living authors have none.
 
 **Description rules** (the book rules adapted to a person):
 
-- One paragraph, 60–110 words, sentences of varied length.
+- One paragraph of at most 110 words, sentences of varied length, only as long as the facts support:
+  as few as 20 words for an author little is known about, never padded or repeated to reach a length.
+  *(Amended in increment 4: the 60-word minimum produced repetitive filler for thin evidence.)*
 - Content: who the author is or was, when and where, what they write or wrote, best-known works named
   plainly, a movement if one applies.
+- Never mention the sources, records or catalogs, or what is not known. *(Amended in increment 4.)*
 - At most one major prize, stated plainly ("won the 1954 Nobel Prize in Literature"). For a person
   this is a fact, not marketing. Book descriptions still ban awards.
 - Do not open with the author's name; the page shows it.

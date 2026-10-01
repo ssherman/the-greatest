@@ -261,7 +261,7 @@ Wikidata step uses:
 | From the VIAF cluster | Written to | Notes |
 |---|---|---|
 | VIAF id, ISNI, LC, a Wikidata id (a bare `Q`-number) from the cluster's sources | `identifiers` | |
-| Birth/death date | `birth_year` / `death_year` | Only when `dateType` is `lived` (a "flourished" span is not a birth or death) and the year is not BCE. VIAF's unknown markers -- `deathDate: 0`, the string `"0"`, and a partial date such as `"18XX"` -- are read as no year at all by `Viaf::Person#year_from`, so they are recorded `null`, never as a conflicting `0`. |
+| Birth/death date | `birth_year` / `death_year` | Only when `dateType` is `lived` (a "flourished" span is not a birth or death) and the year is not BCE. VIAF's unknown markers -- `deathDate: 0`, the string `"0"`, and a partial date such as `"18XX"` -- are read as no year at all by `Viaf::Person#year_from`, so they are recorded `null`, never as a conflicting `0`. A cluster that names a Wikidata item leaves the years to the Wikidata run that follows (`wikidata_linked`): VIAF can merge two people, as Sarah Morgan's cluster carried another Sarah Morgan's 1948–2013. A death year more than two years before one of the author's own books first appeared is recorded as `before_books`, not applied. |
 | Gender code `a`/`b` | `gender` | `u` (unspecified) is left unmapped, so it fills nothing -- the same "record, don't apply" treatment as any code `ApplyViaf` does not recognise. |
 | Nationality codes | `books_author_countries` | Through `CountryLookup#from_iso` (an instance method). Fills only when the author has no countries at all yet -- the same all-or-nothing `FactSheet#countries` gate every source shares, not a rule specific to this one. |
 | Main headings, inverted to natural order at the comma | `alternate_names` | Only a heading entered under a surname (`surname_first == true`, see `docs/features/viaf-api-client.md` for where that flag comes from) is turned into an alternate name at all -- "Willingham, Stacy" becomes "Stacy Willingham". A forename heading ("Marcus Aurelius, Emperor of Rome") is skipped here entirely, since inverting it would be wrong -- `ResolveViaf` shows it to the AI as written, but `ApplyViaf` never adds it as an alternate name. A heading with no entry-order indicator at all (nil -- BnF's UNIMARC style, for example) is skipped the same way, and so is a surname-entered heading with no comma in it ("Willingham Stacy"): there is no inversion to perform, so `ViafNames.natural` returns nil and it is dropped too. The Wikidata-built heading (source `WKP`) is skipped, and so is any heading that only reorders a name the author already has ("Mo, Yan" is Mo Yan, not "Yan Mo"). Latin script only, at most 10 added per run. |
@@ -342,16 +342,21 @@ about to be researched is recorded as `deferred`, not applied.
 - `birth_year`, `death_year`: Common Era, no later than this year, and checked against the *other*
   year -- the one already stored, or else the one the model itself reported -- so death cannot
   land before birth; a self-contradictory pair leaves both years out. A `low`-confidence year is
-  caught before that check runs, so `low_confidence` takes precedence over `invalid`.
+  caught before that check runs, so `low_confidence` takes precedence over `invalid`. A death year
+  more than two years before one of the author's own books first appeared (`FactSheet#death_year`,
+  `AuthorProfile#latest_published_year`) is recorded as `before_books`, not applied.
 - `gender`: male, female or non_binary; `unspecified` counts as blank
 - countries, from the reported nationalities through `CountryLookup.from_text`, only when the
   author has none
 - the description, as `ai_generated`, only when the author has no AI description yet
 - any other fact the model gave `low` confidence is recorded as `low_confidence`, not applied
 
-**The description.** One paragraph of 60 to 110 words in the house style, not opening with the
-author's name, at most one major prize. `Services::Books::DescriptionCheck` runs the same em-dash,
-double-hyphen, URL, markdown-citation and word-count checks it runs for a book, and, on top of
+**The description.** One paragraph of at most 110 words in the house style, only as long as the
+facts support -- as few as 20 for an author little is known about, never padded -- not opening with
+the author's name, at most one major prize, and never mentioning its sources or what is unknown
+(the reviewer flags both as `meta_narration`, and padding as `repetition`).
+`Services::Books::DescriptionCheck` runs the same em-dash, double-hyphen, URL, markdown-citation and
+word-count checks it runs for a book, with a 20-word floor instead of 40 (`min_words:`), and, on top of
 those, a copy check against the Wikipedia lead: words are letters, combining marks and digits (so
 case, punctuation and quote styles cannot hide a copy), and a run of 8 consecutive words shared
 with the lead fails as `copied`. A work title of at least 4 words (`MIN_EXEMPT_WORDS`) may appear

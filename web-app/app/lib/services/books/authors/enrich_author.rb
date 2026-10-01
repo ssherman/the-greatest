@@ -127,7 +127,8 @@ module Services
         # as a failed call.
         def review_description(text)
           source = records.lead&.extract
-          first = ::Services::Books::DescriptionCheck.call(text, source_text: source, exempt_phrases: exempt_titles)
+          first = ::Services::Books::DescriptionCheck.call(text, source_text: source, exempt_phrases: exempt_titles,
+            min_words: ::Services::Ai::Tasks::Books::AuthorFactsTask::MIN_WORDS)
           review = ::Services::Ai::Tasks::Books::AuthorDescriptionReviewTask.new(
             parent: author, description: first.data[:text], source_text: source, flagged: first.errors
           ).call
@@ -140,7 +141,8 @@ module Services
             return {text: first.data[:text], review: verdict(data, first), reason: "rejected"}
           end
 
-          final = ::Services::Books::DescriptionCheck.call(data[:rewritten].presence || first.data[:text], source_text: source, exempt_phrases: exempt_titles)
+          final = ::Services::Books::DescriptionCheck.call(data[:rewritten].presence || first.data[:text], source_text: source, exempt_phrases: exempt_titles,
+            min_words: ::Services::Ai::Tasks::Books::AuthorFactsTask::MIN_WORDS)
           {text: final.data[:text], review: verdict(data, first, final), reason: final.success? ? nil : "rejected"}
         end
 

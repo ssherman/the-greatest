@@ -110,7 +110,11 @@ module Services
           test "the system message carries the author description rules" do
             message = task.send(:system_message)
 
-            assert_includes message, "60 to 110 words"
+            assert_includes message, "at most 110 words"
+            assert_includes message, "as few as 20 words"
+            assert_includes message, "Never repeat a point to fill space"
+            refute_includes message, "60 to 110"
+            assert_includes message, "Never mention your sources"
             assert_includes message, "Do not open with the author's name"
             assert_includes message, "At most one major prize"
             assert_includes message, "never a death year"

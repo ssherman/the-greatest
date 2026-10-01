@@ -28,6 +28,17 @@ module Services
             refute_includes message, "spoiler"
           end
 
+          test "every violation code is in the rules, and the length rules match the author's" do
+            message = task.send(:system_message)
+
+            AuthorDescriptionReviewTask::VIOLATIONS.each { |code| assert_includes message, "- #{code}:" }
+            assert_includes message, "too_short: fewer than 20 words"
+            assert_includes message, "repetition: repeats a point already made"
+            assert_includes message, "mentions its sources"
+            refute_includes message, "60 to 110"
+            assert_includes task(flagged: %w[too_short]).send(:user_prompt), "is under 20 words"
+          end
+
           test "the prompt carries the author, the draft and the source text" do
             prompt = task(source_text: "Lead text here.").send(:user_prompt)
 

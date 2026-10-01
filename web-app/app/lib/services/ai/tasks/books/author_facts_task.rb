@@ -15,6 +15,10 @@ module Services
           LIST_LIMIT = 5
           # A runaway guard, not a summary: a lead is a few paragraphs.
           LEAD_LIMIT = 8_000
+          # A description is as long as the facts allow: a little-known author
+          # gets a few sentences, not padding. Below this it is a fragment.
+          MIN_WORDS = 20
+          MAX_WORDS = 110
 
           def initialize(parent:, records:, mode: :knowledge, provider: nil, model: nil)
             @records = records
@@ -32,7 +36,7 @@ module Services
               Facts. For every fact give a value and a confidence of high, medium or low. Use null (or an empty list) when you do not know; never guess. Set "recognized" to false if neither the sources given nor your own knowledge tell you who this specific author is, and give an overall "confidence" for how well you know them. The Wikidata, library and Wikipedia sources below were matched to this author; prefer them to memory. When no source is given, the name may belong to several people: describe only the person who wrote the books listed. birth_year and death_year are years of the Common Era, and a year before the Common Era is reported as null; death_year is null for a living person. gender is male, female or non_binary. nationalities are English nationality adjectives such as "French" or "Japanese", one for each country the author was a citizen of.
 
               Description rules.
-              - One paragraph, 60 to 110 words, sentences of varied length.
+              - One paragraph of at most #{MAX_WORDS} words, sentences of varied length. Write only as much as the facts support: a few sentences, as few as #{MIN_WORDS} words, for an author little is known about. Never repeat a point to fill space.
               - Say who the author is or was, when and where they lived and worked, what they write or wrote, and their best-known works named plainly. Name a literary movement only if one clearly applies.
               - At most one major prize, stated plainly, such as "won the 1954 Nobel Prize in Literature". No other awards.
               - Do not open with the author's name; the page shows it.
@@ -40,6 +44,7 @@ module Services
               - No em dashes or double hyphens, no semicolons, no lists, no emoji, no quotation marks around titles.
               - No marketing or judgment: no acclaimed, bestselling, masterpiece, beloved, celebrated, legendary, one of the greatest, must-read, no sales figures.
               - No meta narration such as "This author" or "Readers will". Open on the person.
+              - Never mention your sources, records or catalogs, or what is not known about the author. Leave out what you do not know.
               - Plain words. Do not use: delve, tapestry, testament, poignant, seminal, groundbreaking, timeless, gripping, compelling, journey, navigate, resonate, profound, haunting, luminous, or "explores themes of".
               - No "not X but Y" constructions. No ornamental triads of adjectives.
               - Write in your own words and your own sentence structure. Use the Wikipedia text for facts only; never reuse its phrases.

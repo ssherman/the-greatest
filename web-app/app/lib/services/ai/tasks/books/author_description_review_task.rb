@@ -10,14 +10,14 @@ module Services
         # the one rewrite fixes that too.
         class AuthorDescriptionReviewTask < BaseTask
           VIOLATIONS = %w[copied_phrasing names_author_at_start em_dash semicolon marketing meta_narration banned_word
-            not_but triad too_long too_short citation].freeze
+            not_but triad repetition too_long too_short citation].freeze
           CHECK_NOTES = {
             "copied" => "repeats eight or more consecutive words of the source text",
             "em_dash" => "contains an em dash or a spaced en dash (–)",
             "double_hyphen" => "contains a double hyphen",
             "url" => "contains a URL",
             "markdown_link" => "contains a markdown link",
-            "too_short" => "is under 40 words",
+            "too_short" => "is under #{AuthorFactsTask::MIN_WORDS} words",
             "too_long" => "is over 140 words"
           }.freeze
 
@@ -48,15 +48,16 @@ module Services
               - em_dash: an em dash (—), a spaced en dash ( – ), or a double hyphen (--)
               - semicolon: a semicolon
               - marketing: praise or sales language such as acclaimed, bestselling, masterpiece, beloved, celebrated, legendary, "one of the greatest", sales figures, or more than one award
-              - meta_narration: "This author", "Readers will", or similar
+              - meta_narration: "This author", "Readers will", or similar, or mentions its sources, records or catalogs, or what is not known about the author
               - banned_word: delve, tapestry, testament, poignant, seminal, groundbreaking, timeless, gripping, compelling, journey, navigate, resonate, profound, haunting, luminous, "explores themes of"
               - not_but: a "not X but Y" construction
               - triad: an ornamental run of three adjectives or phrases
-              - too_long: more than 110 words
-              - too_short: fewer than 60 words
+              - repetition: repeats a point already made
+              - too_long: more than #{AuthorFactsTask::MAX_WORDS} words
+              - too_short: fewer than #{AuthorFactsTask::MIN_WORDS} words
               - citation: a URL, bracketed reference, footnote, or citation
 
-              If "style_violations" is not empty, or the automated checks found a problem, put a corrected version in "rewritten": one paragraph, 60 to 110 words, plain words, varied sentence length, not opening with the author's name, in wording of your own rather than the source's, same facts, nothing invented. Otherwise set "rewritten" to null.
+              If "style_violations" is not empty, or the automated checks found a problem, put a corrected version in "rewritten": one paragraph of at most #{AuthorFactsTask::MAX_WORDS} words and no longer than the facts allow, with nothing repeated to fill space, plain words, varied sentence length, not opening with the author's name, in wording of your own rather than the source's, same facts, nothing invented. Otherwise set "rewritten" to null.
 
               Output only the JSON object described by the schema.
             SYSTEM_MESSAGE

@@ -35,7 +35,10 @@ module Services
       # copying, not a shared title.
       MIN_EXEMPT_WORDS = 4
 
-      def self.call(text, source_text: nil, exempt_phrases: [])
+      # min_words lowers the floor for a caller whose descriptions may be
+      # short by design: an author little is known about gets a few
+      # sentences rather than padding.
+      def self.call(text, source_text: nil, exempt_phrases: [], min_words: MIN_WORDS)
         cleaned = text.to_s.gsub(MARKDOWN_CITATION, "").strip
         errors = []
         # An em dash is always flagged. An en dash only counts as the same
@@ -46,7 +49,7 @@ module Services
         errors << "url" if cleaned.match?(%r{https?://})
         errors << "markdown_link" if cleaned.include?("](")
         word_count = cleaned.split(/[[:space:]]+/).size
-        errors << "too_short" if word_count < MIN_WORDS
+        errors << "too_short" if word_count < min_words
         errors << "too_long" if word_count > MAX_WORDS
         errors << "copied" if copied?(cleaned, source_text, exempt_phrases)
 

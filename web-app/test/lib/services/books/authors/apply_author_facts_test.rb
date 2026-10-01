@@ -87,6 +87,15 @@ module Services
           assert_equal 0, @author.reload.descriptions.count
         end
 
+        test "a death year contradicted by the author's own later books is recorded, not applied" do
+          @author.book_authors.create!(book: ::Books::Book.create!(title: "Beach House Summer", first_published_year: 2021), position: 1)
+
+          result = apply(death_year: {value: 2013})
+
+          assert_equal ["before_books", 2021, "high"], result.data[:facts]["death_year"].values_at("reason", "latest_book", "confidence")
+          assert_nil @author.reload.death_year
+        end
+
         test "years are Common Era, no later than this year, and a death is no earlier than the birth" do
           reasons = [
             reason_for(:birth_year, Date.current.year + 1), reason_for(:birth_year, 0), reason_for(:birth_year, -50),

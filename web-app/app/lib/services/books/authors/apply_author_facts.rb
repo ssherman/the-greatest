@@ -60,7 +60,7 @@ module Services
           return sheet.record(key, value, applied: false, reason: "low_confidence") if low?(entry)
           return sheet.record(key, value, applied: false, reason: "invalid") unless valid_year?(name, value)
 
-          sheet.year(key, value)
+          (name == :death_year) ? sheet.death_year(value) : sheet.year(key, value)
         end
 
         # A Common Era year no later than this one, on the right side of the

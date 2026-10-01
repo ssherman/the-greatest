@@ -265,6 +265,15 @@ module Services
           assert_equal 0, @author.reload.descriptions.count
         end
 
+        test "a short description of a little-known author is written, not rejected as too short" do
+          short = "She writes romance novels set in English seaside towns, most of them about families who come home for one summer and stay."
+          expect_runs([:knowledge, success_result(facts(description: {value: short}))])
+
+          EnrichAuthor.call(author: @author)
+
+          assert_equal short, @author.reload.descriptions.sole.content
+        end
+
         test "violations with no rewrite are rejected" do
           stub_review(style_violations: ["names_author_at_start"], rewritten: nil)
           expect_runs([:knowledge, success_result(facts)])

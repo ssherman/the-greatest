@@ -161,6 +161,14 @@ module Services
 
         assert_includes result.errors, "copied"
       end
+
+      test "a caller may lower the word floor; the default stays for books" do
+        short = "She writes romance novels set in English seaside towns, most of them about families who come home for one summer and stay."
+
+        assert_includes DescriptionCheck.call(short).errors, "too_short"
+        assert_equal [], DescriptionCheck.call(short, min_words: 20).errors
+        assert_includes DescriptionCheck.call("A romance novelist.", min_words: 20).errors, "too_short"
+      end
     end
   end
 end

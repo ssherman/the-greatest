@@ -59,6 +59,16 @@ module Services
           assert_equal [["Written Book", 2001]], profile.ranked_books(10)
           assert_equal ["Written Book"], profile.titles
         end
+
+        test "the latest published year is that of the author's own books, not the ones they edited" do
+          author = ::Books::Author.create!(name: "Profile Author")
+          author.book_authors.create!(book: ::Books::Book.create!(title: "Early", first_published_year: 1990), position: 1)
+          author.book_authors.create!(book: ::Books::Book.create!(title: "Late", first_published_year: 2010), position: 1)
+          author.book_authors.create!(book: ::Books::Book.create!(title: "Edited", first_published_year: 2024), position: 1, role: :editor)
+
+          assert_equal 2010, AuthorProfile.new(author).latest_published_year
+          assert_nil AuthorProfile.new(::Books::Author.create!(name: "No Books")).latest_published_year
+        end
       end
     end
   end
