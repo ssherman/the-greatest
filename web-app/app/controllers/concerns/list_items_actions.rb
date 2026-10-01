@@ -18,6 +18,12 @@ module ListItemsActions
   extend ActiveSupport::Concern
 
   included do
+    # Viewers may look; writers may change; only deleters may delete (security
+    # audit M4). Gated on the verb rather than action names: every read here
+    # is a GET (modal, the *_search lookups) and every change is POST, PATCH
+    # or DELETE, so an action added later is write-gated by default.
+    before_action :require_domain_write!, unless: -> { request.get? || request.head? }
+    before_action :require_domain_delete!, only: [:destroy, :bulk_delete]
     before_action :set_list
     before_action :set_item, if: :action_requires_item?
   end
