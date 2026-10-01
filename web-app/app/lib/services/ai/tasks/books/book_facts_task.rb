@@ -70,9 +70,13 @@ module Services
           # §10), so the book's origin countries can follow its authors':
           # "Author: Ernest Hemingway (1899–1961; American)". A book with no
           # authors yet falls back to the names the importer passed.
+          #
+          # An editor is named as one, without years or countries: the
+          # prompt reads a book's origin from its authors, and an anthology's
+          # editor is not where the book comes from.
           def author_lines
             links = parent.book_authors.includes(author: :countries).order(:position, :id).to_a
-            return links.map { |link| "Author: #{author_line(link.author)}" } if links.any?
+            return links.map { |link| link.editor? ? "Editor: #{link.author.name}" : "Author: #{author_line(link.author)}" } if links.any?
             return ["Author(s): #{author_names.join(", ")}"] if author_names.any?
 
             []

@@ -28,7 +28,9 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    `Services::Ai::Tasks::Books::BookFactsTask` in `knowledge` mode on the `standard` role. One
    call returns `recognized`, an overall confidence, the description, and every fact with its
    own confidence. The prompt carries one line per stored author, from what we hold: `Author:
-   Ernest Hemingway (1899–1961; American)`.
+   Ernest Hemingway (1899–1961; American)`. An editor (`book_authors.role` `editor`) gets
+   `Editor: <name>` with no years or countries, so an anthology's origin is never read from its
+   editor.
 3. **Review.** If a description came back, and the book does not already have an
    `ai_generated` description (123k of 158k production books carry a legacy one, and the
    applier would record `already_set` regardless, so the review call is skipped), then

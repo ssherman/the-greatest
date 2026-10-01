@@ -63,6 +63,19 @@ module Services
             assert_includes prompt, "Author: Stephen King (born 1947)\nAuthor: Constance Garnett\nAuthor: Old Anon (died 1500)"
           end
 
+          test "an editor is named as an editor, without the years or countries a book's origin could be read from" do
+            books_authors(:garnett).author_countries.create!(country: books_countries(:french))
+            book = ::Books::Book.create!(title: "Collected Stories")
+            book.book_authors.create!(author: books_authors(:tolstoy), position: 1)
+            book.book_authors.create!(author: books_authors(:garnett), position: 2, role: :editor)
+
+            prompt = BookFactsTask.new(parent: book).send(:user_prompt)
+
+            assert_includes prompt, "Author: Leo Tolstoy (1828–1910)\nEditor: Constance Garnett"
+            refute_includes prompt, "Author: Constance Garnett"
+            refute_includes prompt, "French"
+          end
+
           test "stored authors win over the names the importer passed" do
             prompt = BookFactsTask.new(parent: @book, author_names: ["Someone Else"]).send(:user_prompt)
 

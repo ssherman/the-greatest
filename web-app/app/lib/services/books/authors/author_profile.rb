@@ -51,18 +51,20 @@ module Services
 
         attr_reader :author
 
-        # The author's books, ranked first under the default primary
-        # configuration, then by id.
+        # The books the author wrote, ranked first under the default primary
+        # configuration, then by id. A book they only edited is not theirs,
+        # the same rule as Books::TopBooksForAuthorsQuery.
         def ranked_books_scope
+          written = author.books.where(books_book_authors: {role: ::Books::BookAuthor.roles[:author]})
           configuration = ::Books::RankingConfiguration.default_primary
-          return author.books.order("books_books.id") unless configuration
+          return written.order("books_books.id") unless configuration
 
           join = ActiveRecord::Base.sanitize_sql_array([
             "LEFT JOIN ranked_items ON ranked_items.item_type = 'Books::Book' " \
             "AND ranked_items.item_id = books_books.id AND ranked_items.ranking_configuration_id = ?",
             configuration.id
           ])
-          author.books.joins(join).order(Arel.sql("ranked_items.rank ASC NULLS LAST"), "books_books.id")
+          written.joins(join).order(Arel.sql("ranked_items.rank ASC NULLS LAST"), "books_books.id")
         end
       end
     end

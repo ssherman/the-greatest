@@ -47,6 +47,18 @@ module Services
           assert_equal [["Ranked Book", nil], ["Unranked Book", 2001]], profile.ranked_books(10)
           assert_equal [["Ranked Book", nil]], profile.ranked_books(1)
         end
+
+        test "a book the author only edited is not among their books" do
+          author = ::Books::Author.create!(name: "Profile Author")
+          written = ::Books::Book.create!(title: "Written Book", first_published_year: 2001)
+          edited = ::Books::Book.create!(title: "Edited Anthology", alternate_titles: ["Anthology Alt"])
+          author.book_authors.create!(book: written, position: 1)
+          author.book_authors.create!(book: edited, position: 1, role: :editor)
+          profile = AuthorProfile.new(author)
+
+          assert_equal [["Written Book", 2001]], profile.ranked_books(10)
+          assert_equal ["Written Book"], profile.titles
+        end
       end
     end
   end
