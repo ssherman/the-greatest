@@ -6,6 +6,12 @@ module DataImporters
       # Main importer for single ::Books::Author records. The book importer's
       # author step is the first caller.
       class Importer < DataImporters::ImporterBase
+        # The providers a book import runs for an author it creates: all but
+        # the async Enrichment, which the book importer starts itself once
+        # the book and its book_authors rows are saved, so the Wikidata step
+        # sees the book among the author's titles (spec §10).
+        BOOK_STEP_PROVIDERS = %i[open_library].freeze
+
         def self.call(name: nil, open_library_author_key: nil, birth_year: nil, death_year: nil, alternate_names: [], work_titles: [],
           item: nil, force_providers: false, providers: nil, subject: nil, verify: false)
           if item.present?
