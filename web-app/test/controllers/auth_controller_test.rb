@@ -356,6 +356,7 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     post auth_sign_in_path, params: {jwt: FirebaseTokenHelper.token({"sub" => "uid-l3-form", "email" => "l3.form@example.com"})}
 
     assert_response :unsupported_media_type
+    assert_includes response.headers["Cache-Control"], "no-store"
     assert_nil session[:user_id]
   end
 

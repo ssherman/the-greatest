@@ -13,7 +13,7 @@ class UntrustedTextDomTest < ActiveSupport::TestCase
     app/javascript/controllers/wizard_step_controller.js
   ].freeze
 
-  HTML_STRING_SINK = /\.(?:innerHTML|outerHTML)\s*=(?!=)|insertAdjacentHTML/
+  HTML_STRING_SINK = /\.(?:innerHTML|outerHTML)\s*\+?=(?!=)|insertAdjacentHTML/
 
   FILES.each do |relative|
     test "#{relative} writes no HTML strings" do

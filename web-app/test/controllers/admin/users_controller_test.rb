@@ -36,6 +36,12 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_equal [], @controller.view_assigns["users"].map(&:id)
   end
 
+  test "a partial search still matches a user by email substring" do
+    get admin_users_url(q: "admin@")
+    assert_response :success
+    assert_includes @controller.view_assigns["users"].map(&:id), users(:admin_user).id
+  end
+
   test "an array search parameter does not error" do
     get admin_users_url(q: ["admin"])
     assert_response :success

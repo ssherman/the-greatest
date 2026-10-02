@@ -24,6 +24,13 @@ class UserListPolicyTest < ActiveSupport::TestCase
     assert UserListPolicy.new(users(:admin_user), public_list).show?
   end
 
+  test "an anonymous visitor does not own an unsaved list" do
+    list = UserList.new
+    refute UserListPolicy.new(nil, list).owner?
+    refute UserListPolicy.new(nil, list).update?
+    refute UserListPolicy.new(nil, list).destroy?
+  end
+
   test "Scope resolves to only the user's own lists" do
     resolved = UserListPolicy::Scope.new(@user, UserList).resolve
     assert resolved.all? { |l| l.user_id == @user.id }

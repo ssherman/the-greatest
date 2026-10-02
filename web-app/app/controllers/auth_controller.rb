@@ -9,6 +9,7 @@ class AuthController < ApplicationController
   TG_UID_COOKIE = :tg_uid
 
   skip_before_action :verify_authenticity_token, only: [:sign_in, :sign_out, :check_provider]
+  before_action :prevent_caching
 
   # The CSRF token is skipped above because edge-cached pages cannot carry a
   # per-session one. What keeps a cross-site HTML form out instead is the body
@@ -17,7 +18,6 @@ class AuthController < ApplicationController
   # preflight. Every caller (firebase_auth_service.js, authentication_controller.js)
   # sends JSON.
   before_action :require_json_request, only: [:sign_in, :sign_out, :check_provider]
-  before_action :prevent_caching
 
   include VisitorIp
 
