@@ -144,6 +144,51 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
     job_with_jitter(7).perform(@author.id)
   end
 
+  test "a job behind a waiting line whose author holds a VIAF id with a stored cluster runs now" do
+    @schedule.reserve(not_before: 30)
+    @author.identifiers.create!(identifier_type: :books_author_viaf, value: "5391")
+    ExternalRecord.create!(source: :viaf, source_id: "5391", payload: {"viaf_id" => "5391", "name_type" => "Personal"},
+      schema_version: Viaf::Distiller::SCHEMA_VERSION, fetched_at: Time.current)
+    ::Services::Books::Authors::EnrichFromViaf.expects(:call).with(author: @author, refresh: false).returns(outcome)
+    Books::Authors::ViafJob.expects(:perform_in).never
+
+    Books::Authors::ViafJob.new.perform(@author.id)
+  end
+
+  test "a job behind a waiting line whose earlier-era decision will put back a VIAF id with a stored cluster runs now" do
+    @schedule.reserve(not_before: 30)
+    ::MatchDecision.create!(finder: ::Services::Books::Authors::ResolveViaf.name, subject: @author, outcome: :matched, confidence: :high,
+      decided_by: :ai, candidates: [{"external_key" => "5391"}], selected_index: 1, created_at: @author.created_at - 1.day)
+    ExternalRecord.create!(source: :viaf, source_id: "5391", payload: {"viaf_id" => "5391", "name_type" => "Personal"},
+      schema_version: Viaf::Distiller::SCHEMA_VERSION, fetched_at: Time.current)
+    ::Services::Books::Authors::EnrichFromViaf.expects(:call).with(author: @author, refresh: false).returns(outcome)
+    Books::Authors::ViafJob.expects(:perform_in).never
+
+    Books::Authors::ViafJob.new.perform(@author.id)
+  end
+
+  test "a forced run with a stored cluster still waits its turn" do
+    @schedule.reserve(not_before: 30)
+    @author.identifiers.create!(identifier_type: :books_author_viaf, value: "5391")
+    ExternalRecord.create!(source: :viaf, source_id: "5391", payload: {"viaf_id" => "5391", "name_type" => "Personal"},
+      schema_version: Viaf::Distiller::SCHEMA_VERSION, fetched_at: Time.current)
+    ::Services::Books::Authors::EnrichFromViaf.expects(:call).never
+    Books::Authors::EnrichJob.expects(:perform_async).never
+    Books::Authors::ViafJob.expects(:perform_in).with(30 + 300 + 7, @author.id, true, false, true, true)
+
+    job_with_jitter(7).perform(@author.id, true)
+  end
+
+  test "a held id with no stored cluster waits its turn" do
+    @schedule.reserve(not_before: 30)
+    @author.identifiers.create!(identifier_type: :books_author_viaf, value: "9999")
+    ::Services::Books::Authors::EnrichFromViaf.expects(:call).never
+    Books::Authors::EnrichJob.expects(:perform_async).never
+    Books::Authors::ViafJob.expects(:perform_in).with(30 + 300 + 7, @author.id, false, false, true, true)
+
+    job_with_jitter(7).perform(@author.id)
+  end
+
   test "a busy pace on the job's own turn delays the turn and keeps its place in the line" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
     Books::Authors::EnrichJob.expects(:perform_async).never

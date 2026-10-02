@@ -47,7 +47,7 @@ class Books::Authors::ViafJob
 
     # A job not yet in the line waits behind anyone already in it, rather
     # than competing with them for VIAF's two requests a minute.
-    return take_turn(author_id, refresh, enrich_queued, allow_research, not_before: 0) if !in_line && schedule.horizon
+    return take_turn(author_id, refresh, enrich_queued, allow_research, not_before: 0) if !in_line && schedule.horizon && !answerable_from_store?(author, refresh)
 
     result = ::Services::Books::Authors::EnrichFromViaf.call(author: author, refresh: refresh)
     if result.data[:wikidata_qid] && !result.data[:decision].needs_review
@@ -71,6 +71,21 @@ class Books::Authors::ViafJob
   private
 
   def schedule = (@schedule ||= ::Viaf::Schedule.new)
+
+  # A run VIAF need not be asked for skips the line: the author holds, or an
+  # earlier era's decision will put back (RestoreIdentifier), a VIAF id whose
+  # cluster is already stored, so the held-id stage reads it without a
+  # request. After a re-migration most VIAF-bound authors are these (spec
+  # §14). A forced run refetches, so it waits its turn. If the stored cluster
+  # does not settle it and the run must search, a busy pace sends it to the
+  # line then.
+  def answerable_from_store?(author, refresh)
+    return false if refresh
+
+    ids = author.identifiers.where(identifier_type: :books_author_viaf).pluck(:value)
+    ids << ::Services::Books::Authors::RestoreIdentifier.value_for(author: author, finder: ::Services::Books::Authors::ResolveViaf)
+    ::ExternalRecord.where(source: :viaf, source_id: ids.compact, schema_version: ::Viaf::Distiller::SCHEMA_VERSION).exists?
+  end
 
   # Takes the next start in the line and reschedules for it. The AI step is
   # queued now when VIAF is paused or the start is more than CHAIN_PATIENCE

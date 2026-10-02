@@ -26,6 +26,12 @@ module Services
           new(author: author, finder: finder.to_s).call
         end
 
+        # The id `call` would put back, without putting it back; nil when it
+        # would put back nothing.
+        def self.value_for(author:, finder:)
+          new(author: author, finder: finder.to_s).candidate&.last
+        end
+
         def initialize(author:, finder:)
           @author = author
           @finder = finder
@@ -33,6 +39,16 @@ module Services
         end
 
         def call
+          decision, value = candidate
+          return nil if value.nil?
+
+          @author.identifiers.create!(identifier_type: @type, value: value)
+          {"value" => value, "applied" => true, "reason" => "earlier_decision", "decision_id" => decision.id}
+        end
+
+        # [decision, value] for the id an earlier era's decision would put
+        # back, or nil.
+        def candidate
           return nil if @author.identifiers.any? { |identifier| identifier.identifier_type == @type }
 
           decision = ::MatchDecision.where(subject: @author, finder: @finder).order(created_at: :desc, id: :desc).first
@@ -42,8 +58,7 @@ module Services
           return nil if value.blank? || RejectedRecords.new(@author).identifier?(@type, value)
           return nil if ::Identifier.where(identifiable_type: "Books::Author", identifier_type: @type, value: value).exists?
 
-          @author.identifiers.create!(identifier_type: @type, value: value)
-          {"value" => value, "applied" => true, "reason" => "earlier_decision", "decision_id" => decision.id}
+          [decision, value]
         end
 
         private

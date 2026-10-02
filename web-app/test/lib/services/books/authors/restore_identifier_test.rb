@@ -74,6 +74,21 @@ module Services
           assert_equal "Q7243", restore["value"]
         end
 
+        test "value_for returns the value call would put back, and stamps nothing" do
+          decide("Q7243")
+
+          assert_equal "Q7243", RestoreIdentifier.value_for(author: @author, finder: ResolveWikidata)
+          assert_empty held
+        end
+
+        test "value_for returns nil where call returns nil" do
+          decide("Q1", at: @author.created_at - 2.days)
+          decide("Q7243", verdict: :rejected)
+
+          assert_nil RestoreIdentifier.value_for(author: @author, finder: ResolveWikidata)
+          assert_empty held
+        end
+
         test "an author already holding an id of that type, or an id another author holds, gets nothing" do
           decide("Q7243")
           other = ::Books::Author.create!(name: "Holder")
