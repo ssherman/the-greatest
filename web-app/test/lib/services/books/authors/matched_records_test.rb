@@ -122,6 +122,17 @@ module Services
           assert_equal [], records.sources
           refute records.matched?
         end
+
+        test "a decision a person rejected contributes nothing" do
+          row = wikidata_match
+          row.match_decision.update!(verdict: :rejected)
+
+          records = MatchedRecords.new(@author)
+
+          assert_nil records.wikidata
+          assert_not records.matched?
+          assert_equal [], records.sources
+        end
       end
     end
   end

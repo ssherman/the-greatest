@@ -10,6 +10,8 @@ module Services
       # row's decision selected, whose snapshot already carries labelled
       # evidence. A row whose decision matched nothing, or whose held id
       # conflicted with the match (nothing was applied), contributes nothing.
+      # Nor does one a person rejected (spec §12): the latest row stands, so
+      # an older decision is not brought back in its place.
       # Identifiers alone are not used: an id is what a source calls the
       # author, and only a decision says the record is this author.
       class MatchedRecords
@@ -65,7 +67,7 @@ module Services
 
           latest = row(kind)
           decision = latest&.match_decision
-          candidate = decision&.matched? && decision.selected_index && Array(decision.candidates)[decision.selected_index - 1]
+          candidate = decision&.matched? && !decision.verdict_rejected? && decision.selected_candidate
           @matches[kind] = if candidate && latest.reason != CONFLICTS.fetch(kind)
             Match.new(source_id: candidate["external_key"], evidence: candidate["evidence"].to_h)
           end

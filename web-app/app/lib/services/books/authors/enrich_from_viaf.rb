@@ -53,9 +53,14 @@ module Services
 
         # "Newer than the author row": after the production re-migration an
         # author is re-created with its id, and the old rows no longer count.
+        # Neither does a run whose decision a person rejected (spec §12). A
+        # row with no decision counts, so the comparison is NULL-safe.
         def processed?
           author.enrichments.for_kind(KIND).where(outcome: PROCESSED)
-            .where("enrichments.created_at > ?", author.created_at).exists?
+            .where("enrichments.created_at > ?", author.created_at)
+            .left_joins(:match_decision)
+            .where("match_decisions.verdict IS DISTINCT FROM ?", ::MatchDecision.verdicts[:rejected])
+            .exists?
         end
 
         def matched(person)

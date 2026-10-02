@@ -52,10 +52,11 @@ module Services
 
         # Nothing left to fill (spec §9). death_year is left out because a
         # living author has none; "unspecified" is the legacy AI's "don't
-        # know", so it counts as blank.
+        # know", so it counts as blank. A deprecated description (a rejected
+        # link's, spec §12) does not count.
         def complete?
           author.birth_year.present? && ApplyAuthorFacts::GENDERS.include?(author.gender) &&
-            author.author_countries.exists? && author.descriptions.any? { |row| HUMAN_SOURCES.include?(row.source) }
+            author.author_countries.exists? && author.descriptions.any? { |row| HUMAN_SOURCES.include?(row.source) && !row.deprecated? }
         end
 
         def research_allowed? = allow_research && !records.matched?
@@ -114,7 +115,7 @@ module Services
           text = fact && fact[:value]
           return nil if text.blank?
           return {text: text, review: nil, reason: "low_confidence"} if fact[:confidence].to_s.strip.casecmp?("low")
-          return {text: text, review: nil, reason: "already_set"} if author.descriptions.any? { |row| row.source == "ai_generated" }
+          return {text: text, review: nil, reason: "already_set"} if author.descriptions.any? { |row| row.source == "ai_generated" && !row.deprecated? }
 
           review_description(text)
         end
