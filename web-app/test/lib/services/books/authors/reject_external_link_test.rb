@@ -108,7 +108,7 @@ module Services
           assert_nil other.reload.verdict
         end
 
-        test "a rejected VIAF run takes the Wikidata decision its stamped id led to" do
+        test "a rejected VIAF run takes every Wikidata decision its stamped id led to, however old" do
           viaf = decision(ResolveViaf.name, "5391", created_at: 1.hour.ago)
           ledger(EnrichFromViaf::KIND, viaf, "wikidata_qid" => filled("Q9"), "viaf" => filled("5391"))
           earlier = decision(ResolveWikidata.name, "Q9", created_at: 2.hours.ago)
@@ -122,12 +122,40 @@ module Services
 
           result = reject(viaf)
 
-          assert_equal [viaf, follow_up], result.data[:decisions]
+          assert_equal [viaf, earlier, follow_up], result.data[:decisions]
+          assert earlier.reload.verdict_rejected?
           assert follow_up.reload.verdict_rejected?
-          assert_nil earlier.reload.verdict
           @author.reload
           assert_not @author.identifiers.exists?
           assert_nil @author.death_year
+        end
+
+        test "a redirected Wikidata id is removed along with the canonical one" do
+          wikidata = decision(ResolveWikidata.name, "Q2")
+          hold(:books_author_wikidata_qid, "Q2")
+          hold(:books_author_wikidata_qid, "Q1")
+          hold(:books_author_isni, "0000000121")
+          ledger(EnrichFromWikidata::KIND, wikidata, "wikidata_qid" => filled("Q2", redirected_from: ["Q1"]))
+          expect_rerun
+
+          reject(wikidata)
+
+          assert_equal [["books_author_isni", "0000000121"]], @author.reload.identifiers.pluck(:identifier_type, :value)
+        end
+
+        test "a VIAF reject takes a Wikidata decision reached through a Wikidata redirect" do
+          viaf = decision(ResolveViaf.name, "5391")
+          ledger(EnrichFromViaf::KIND, viaf, "wikidata_qid" => filled("Q9"), "viaf" => filled("5391"))
+          redirected = decision(ResolveWikidata.name, "Q10")
+          ledger(EnrichFromWikidata::KIND, redirected, "wikidata_qid" => filled("Q10", redirected_from: ["Q9"]))
+          unrelated = decision(ResolveWikidata.name, "Q11")
+          expect_rerun
+
+          result = reject(viaf)
+
+          assert_equal [viaf, redirected], result.data[:decisions]
+          assert redirected.reload.verdict_rejected?
+          assert_nil unrelated.reload.verdict
         end
 
         test "an AI run that used the record is reverted and its description deprecated; one that did not is left alone" do
@@ -190,10 +218,11 @@ module Services
 
         test "a second reject of the same decision is refused and queues nothing more" do
           wikidata = decision(ResolveWikidata.name, "Q1")
+          stale = ::MatchDecision.find(wikidata.id)
           expect_rerun(times: 1)
 
           assert reject(wikidata).success?
-          assert_not reject(::MatchDecision.find(wikidata.id)).success?
+          assert_not reject(stale).success?
         end
       end
     end

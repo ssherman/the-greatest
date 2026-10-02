@@ -451,10 +451,12 @@ decision, a decision from any other finder, and one already rejected, changing a
 **Rejected together.** A reject is about the record, not one decision: every other decision of the
 same finder that selected the same record for this author, and isn't rejected yet, is rejected with
 it -- otherwise an older or newer decision for the same record would keep feeding it to the AI step
-as evidence. A rejected VIAF run also takes its Wikidata follow-up with it: when the VIAF run
-stamped a Wikidata id, the Wikidata decisions that matched that id at or after the VIAF decision are
-rejected and reverted too. The reverse does not hold -- rejecting a Wikidata decision never rejects
-the VIAF decision that led to it.
+as evidence. A rejected VIAF run also takes every Wikidata decision that matched the Wikidata id the
+VIAF run stamped, whether that decision's own selected key is that id directly or a Wikidata merge
+later moved it on and the ledger recorded the original as `redirected_from` -- a decision pulled in
+this way is rejected regardless of when it was recorded, since once the record is banned for this
+author (`RejectedRecords`) every decision that ever chose it has to go. The reverse does not hold --
+rejecting a Wikidata decision never rejects the VIAF decision that led to it.
 
 **What is removed.** For each rejected run, `RevertFacts` undoes what its ledger row recorded:
 identifiers it stamped, years and gender still holding the value it wrote, alternate names and
@@ -462,7 +464,10 @@ countries it added, and legacy Wikipedia descriptions it deprecated, back to nor
 changed since is a person's, and stays. On top of that, the record's own id (the QID for Wikidata,
 the VIAF id for VIAF) and the Wikipedia article link it named are removed whoever added them --
 even when the run found them already set, since they name the rejected record itself rather than
-something it merely filled in.
+something it merely filled in. A Wikidata run reached through a merge keeps the superseded id
+`ApplyWikidata` found already held, alongside the canonical one it stamps (recorded as
+`redirected_from`); that superseded id is removed the same way, since it still names the rejected
+item.
 
 **The AI step.** A `books.author_facts` run that used a rejected record as evidence is reverted too:
 its applied years, gender and countries go when unchanged since, the same as any other run, because
@@ -470,12 +475,13 @@ those values came from the wrong person's records. When one of the influenced ru
 author's current AI description, that description is deprecated rather than deleted, the same as a
 legacy Wikipedia description.
 
-**The re-run.** Rejecting queues `Books::Authors::WikidataJob(author_id, refresh: true)`, which
-carries the refresh down to VIAF on a miss the same as any other forced re-run.
+**The re-run.** Rejecting queues `Books::Authors::WikidataJob(author_id, true)`, which carries the
+refresh down to VIAF on a miss the same as any other forced re-run.
 
 **Never again.** `RejectedRecords` means a rejected record is never offered as a candidate by either
-resolver and `FactSheet#stamp` refuses to put its id back on the author, so the forced re-run cannot
-re-select or re-stamp the record it just lost. A run whose decision was rejected also stops counting
+resolver, and `FactSheet#stamp` refuses to put its id back on the author, so the forced re-run cannot
+re-select or re-stamp the record it just lost. `MatchedRecords` ignores a rejected decision too, so
+no rejected evidence reaches the AI step. A run whose decision was rejected also stops counting
 as "processed", so a failed re-run doesn't strand the author, and a deprecated AI description no
 longer counts as present, so the AI step's completeness check runs it again.
 

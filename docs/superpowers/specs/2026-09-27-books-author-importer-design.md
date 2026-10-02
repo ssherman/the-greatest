@@ -554,18 +554,22 @@ one by one from the start. Adding it requires a Playwright test (it is a new adm
 
 *(Amended in increment 5: a reject is about the record, not one decision, so every other decision of
 the same finder that selected the same record for this author, and isn't rejected yet, is rejected
-with it. A rejected VIAF run also takes its Wikidata follow-up with it -- the Wikidata decisions
-that matched the Wikidata id the VIAF run stamped, at or after the VIAF decision, are rejected and
-reverted too, though rejecting a Wikidata decision never reaches back to reject the VIAF decision
-that led to it. The record's own id and its Wikipedia article link are removed whoever added them,
-even when the run found them already set, since they name the rejected record itself. An AI run
-that used the record as evidence is reverted too, not only its description -- its applied years,
-gender and countries go the same as any other run's. A rejected record's id is never stamped on
-that author again, by any step, so `FactSheet#stamp` returns `"rejected"` for one. A run whose
-decision was rejected stops counting as processed, so a failed re-run doesn't strand the author. A
-deprecated AI description no longer counts as present, so the AI step's completeness check and the
-"already set" checks look past it. Legacy Wikipedia descriptions the rejected run deprecated go back
-to normal rank, since the rank before isn't recorded and the re-run judges them again.)*
+with it. A rejected VIAF run also takes every Wikidata decision that matched the Wikidata id the VIAF
+run stamped, directly or through a Wikidata redirect the ledger recorded as `redirected_from`,
+regardless of when the decision was recorded -- once the record is banned for this author, every
+decision that ever chose it has to go -- though rejecting a Wikidata decision never reaches back to
+reject the VIAF decision that led to it. The record's own id and its Wikipedia article link are
+removed whoever added them, even when the run found them already set, since they name the rejected
+record itself; a superseded id a Wikidata merge run kept held alongside the canonical one
+(`ApplyWikidata`'s `redirected_from`) is removed the same way. An AI run that used the record as
+evidence is reverted too, not only its description -- its applied years, gender and countries go the
+same as any other run's. A rejected record's id is never stamped on that author again, by any step,
+so `FactSheet#stamp` returns `"rejected"` for one. A run whose decision was rejected stops counting
+as processed, so a failed re-run doesn't strand the author, and `MatchedRecords` ignores it too, so
+no rejected evidence reaches the AI step. A deprecated AI description no longer counts as present, so
+the AI step's completeness check and the "already set" checks look past it. Legacy Wikipedia
+descriptions the rejected run deprecated go back to normal rank, since the rank before isn't recorded
+and the re-run judges them again.)*
 
 ### 13. Backfill and the legacy Wikipedia cleanup
 

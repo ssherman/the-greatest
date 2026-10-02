@@ -6,14 +6,19 @@ module Services
       # The Reject link action on the audit page (spec §12): a person says a
       # Wikidata or VIAF record is not this author. Rejected together: this
       # decision, every other decision of its finder that selected the same
-      # record for the author, and, for a VIAF record, the Wikidata decisions
-      # that matched the Wikidata id its run stamped. For each, what its run
-      # applied is reverted (RevertFacts) and the record's own id and
-      # Wikipedia link are removed, whoever added them. The AI runs that used
-      # a rejected record are reverted too, and the AI description is
-      # deprecated when one of them wrote it. The decisions are marked
-      # rejected and reviewed, and the Wikidata step runs again, forced. No
-      # step considers or stamps a rejected record again (RejectedRecords).
+      # record for the author, and, for a VIAF record, every Wikidata
+      # decision that matched the Wikidata id its run stamped -- directly, or
+      # through a Wikidata redirect the ledger recorded as `redirected_from`
+      # -- regardless of when that decision was recorded. For each, what its
+      # run applied is reverted (RevertFacts) and the record's own id and
+      # Wikipedia link are removed, whoever added them; a superseded id a
+      # Wikidata merge run kept held alongside the canonical one goes too.
+      # The AI runs that used a rejected record are reverted too, and the AI
+      # description is deprecated when one of them wrote it. The decisions
+      # are marked rejected and reviewed, and the Wikidata step runs again,
+      # forced. No step considers or stamps a rejected record again
+      # (RejectedRecords), and MatchedRecords ignores a rejected decision, so
+      # no rejected evidence reaches the AI step.
       class RejectExternalLink
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -71,15 +76,12 @@ module Services
           list = same_record(decision.finder, key_of(decision)).map { |target| [target, source, key_of(target)] }
           return list unless source == "viaf"
 
-          follow_ups = list.flat_map do |target, _source, _key|
-            stamped_qids(target).flat_map { |qid| same_record(ResolveWikidata.name, qid, since: target.created_at) }
-          end
-          list + follow_ups.uniq.map { |target| [target, "wikidata", key_of(target)] }
+          qids = list.flat_map { |target, _source, _key| stamped_qids(target) }.uniq
+          list + wikidata_follow_ups(qids).map { |target| [target, "wikidata", key_of(target)] }
         end
 
-        def same_record(finder, key, since: nil)
+        def same_record(finder, key)
           scope = ::MatchDecision.where(subject: author, finder: finder, outcome: :matched)
-          scope = scope.where(created_at: since..) if since
           found = scope.order(:created_at, :id).reject(&:verdict_rejected?).select { |target| key_of(target) == key }
           found.include?(decision) ? [decision] + (found - [decision]) : found
         end
@@ -89,6 +91,24 @@ module Services
             fact = row.facts["wikidata_qid"]
             fact["value"] if fact.is_a?(Hash) && fact["applied"] == true
           end.uniq
+        end
+
+        # Every unrejected, matched Wikidata decision whose selected key is
+        # one of the stamped qids, or whose own ledger rows record one of
+        # them as a `redirected_from` id (Wikidata merged the stamped item
+        # into the one this decision actually selected). No cutoff by time:
+        # once rejected, the record is banned for this author regardless of
+        # when a decision chose it (spec §12, decision 1).
+        def wikidata_follow_ups(qids)
+          return [] if qids.empty?
+
+          ::MatchDecision.where(subject: author, finder: ResolveWikidata.name, outcome: :matched)
+            .order(:created_at, :id).reject(&:verdict_rejected?)
+            .select { |target| qids.include?(key_of(target)) || redirected_from(target).intersect?(qids) }
+        end
+
+        def redirected_from(target)
+          ::Enrichment.where(match_decision: target).flat_map { |row| Array(row.facts.dig("wikidata_qid", "redirected_from")) }.uniq
         end
 
         def key_of(target) = target.selected_candidate&.dig("external_key").presence
@@ -102,12 +122,15 @@ module Services
         end
 
         def revert_run(target, source, key)
+          redirected = []
           ::Enrichment.where(match_decision: target).find_each do |row|
             @reverted.concat(RevertFacts.call(author: author, facts: row.facts).data[:reverted])
             wikipedia = row.facts["wikipedia"]
             remove_links(wikipedia["value"]) if source == "wikidata" && wikipedia.is_a?(Hash) && wikipedia["reason"] == "already_set"
+            redirected.concat(Array(row.facts.dig("wikidata_qid", "redirected_from"))) if source == "wikidata"
           end
-          identifiers = author.identifiers.where(identifier_type: OWN_IDENTIFIER.fetch(source), value: key).to_a
+          values = ([key] + redirected).compact.uniq
+          identifiers = author.identifiers.where(identifier_type: OWN_IDENTIFIER.fetch(source), value: values).to_a
           identifiers.each(&:destroy!)
           @reverted << OWN_IDENTIFIER_FACT.fetch(source) if identifiers.any?
           author.identifiers.reset
