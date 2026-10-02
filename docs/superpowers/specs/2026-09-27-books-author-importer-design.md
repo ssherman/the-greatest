@@ -632,6 +632,10 @@ description:
   run matches its page's item.
 - **Cache.** The Wikidata and VIAF clients cache in Redis (`config.x.external_api_cache`), not the
   per-container file store, because a backfill spans deploys.
+- **Found by the `[100]` run.** Wikidata names fall back to the all-languages (`mul`) label and
+  aliases, since many items no longer carry an English label (Victor Hugo's). Human whose existence
+  is disputed (Q21070568, Homer) counts as a person in §5's filter. A hyphen between given names
+  compares as a space ("Jean Paul" meets "Jean-Paul").
 
 ### 14. Re-runs after the production re-migration
 

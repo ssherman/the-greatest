@@ -4,7 +4,9 @@ module Wikidata
   # Read-only view of a distilled entity (Distiller's payload), built the
   # same way from a stored external_records row and from a fresh fetch.
   class Entity
-    PERSON_TYPES = %w[Q5 Q61002 Q16017119].freeze # human, pseudonym, collective pseudonym
+    # human, pseudonym, collective pseudonym, human whose existence is
+    # disputed (Homer, Q6691, is typed only as that)
+    PERSON_TYPES = %w[Q5 Q61002 Q16017119 Q21070568].freeze
     MIN_YEAR_PRECISION = 9 # year; 8 is decade, 7 century
 
     YearFact = Struct.new(:year, :reason, keyword_init: true)
@@ -45,7 +47,7 @@ module Wikidata
 
     def person? = instance_of.intersect?(PERSON_TYPES)
 
-    # The label and the English aliases: the names this item answers to.
+    # The label and the aliases (English, then all-languages): the names this item answers to.
     def names = ([label] + aliases).compact_blank.uniq
 
     def birth = year_fact(payload["birth"])

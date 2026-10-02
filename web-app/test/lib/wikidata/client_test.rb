@@ -153,12 +153,28 @@ module Wikidata
       limiter.stubs(:acquire!)
       client = Client.new(http: ::Wikimedia::Http.new(limiter: limiter), cache: ActiveSupport::Cache::MemoryStore.new)
       body = {entities: {"Q36180" => {"id" => "Q36180", "labels" => {"en" => {"language" => "en", "value" => "writer"}}}}}.to_json
-      stub = stub_request(:get, API).with(query: hash_including(action: "wbgetentities", ids: "Q36180", props: "labels", languages: "en"))
+      stub = stub_request(:get, API).with(query: hash_including(action: "wbgetentities", ids: "Q36180", props: "labels", languages: "en|mul"))
         .to_return(json_response(body))
 
       assert_equal({"Q36180" => "writer"}, client.labels(["Q36180"]))
       assert_equal({"Q36180" => "writer"}, client.labels(["Q36180"]))
       assert_requested stub, times: 1
+    end
+
+    test "labels falls back to the all-languages label when an item has no English one" do
+      body = {entities: {"Q1" => {"id" => "Q1", "labels" => {"mul" => {"language" => "mul", "value" => "Victor Hugo"}}}}}.to_json
+      stub_request(:get, API).with(query: hash_including(action: "wbgetentities", props: "labels")).to_return(json_response(body))
+
+      assert_equal({"Q1" => "Victor Hugo"}, @client.labels(["Q1"]))
+    end
+
+    test "country_codes asks the label service for English, then the all-languages label" do
+      stub = stub_request(:post, SPARQL).with { |request| sparql_query(request).include?('wikibase:language "en,mul"') }
+        .to_return(json_response({results: {bindings: []}}.to_json))
+
+      @client.country_codes(["Q30"])
+
+      assert_requested stub
     end
 
     test "a client given no cache uses the external API cache" do

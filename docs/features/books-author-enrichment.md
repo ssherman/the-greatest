@@ -93,8 +93,11 @@ running the later stages:
 3. **Name search.** `search` on the author's name and up to two alternate names, top 10 each.
 
 **Persons-only filter.** Every candidate found in any stage is fetched and filtered to items
-whose P31 (instance of) includes human (Q5), pseudonym (Q61002), or collective pseudonym
-(Q16017119). Everything else -- books, series, lists, movements, fictional characters sharing the
+whose P31 (instance of) includes human (Q5), pseudonym (Q61002), collective pseudonym
+(Q16017119), or human whose existence is disputed (Q21070568, how Wikidata types Homer). An item's
+names are its English label, else its all-languages (`mul`) label, plus its English and `mul`
+aliases: Wikidata now keeps many people's names only under `mul` (Victor Hugo's item has no English
+label). Everything else -- books, series, lists, movements, fictional characters sharing the
 author's name -- is dropped and logged with its own P31, never shown to the AI step.
 
 **Rules 1-3, then the AI:**
@@ -154,7 +157,7 @@ ledger and left alone.
 | Item id, P214 (VIAF), P213 (ISNI), P244 (LC), P648 (Open Library), P2963 (Goodreads), P7400 (LibraryThing) | `identifiers` | Every best-rank Open Library value is stamped, since Wikidata often carries several for one person and each helps the import finder. The other identifier types are single-valued: a stored value that disagrees with Wikidata's is recorded as a conflict, not overwritten. |
 | P569 / P570 | `birth_year` / `death_year` | Only at year precision (9) or finer; decade/century precision, disagreeing best-rank values, `somevalue`, and BCE dates are recorded but not applied. |
 | P21 | `gender` | male, female, trans woman -> female, trans man -> male, non-binary; anything else recorded, not applied. The legacy AI's `unspecified` counts as blank, so Wikidata can fill it. |
-| English label, English aliases, P1559 (native name), P742 (pseudonym) | `alternate_names` | Union after normalization, author's own name excluded, capped at 20 *added* per run. |
+| Label (English, else `mul`), English and `mul` aliases, P1559 (native name), P742 (pseudonym) | `alternate_names` | Union after normalization, author's own name excluded, capped at 20 *added* per run. |
 | P27 (citizenship) | `books_author_countries` | Through `CountryLookup` (below); fills only when the author has no countries at all yet -- it is an all-or-nothing gate, not per-country. |
 | English sitelink | `external_links` | See "Wikipedia" below. |
 

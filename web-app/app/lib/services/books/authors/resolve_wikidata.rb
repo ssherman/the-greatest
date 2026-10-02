@@ -21,6 +21,8 @@ module Services
         ALTERNATE_SEARCHES = 2
         MAX_AI_CANDIDATES = 6
         YEAR_TOLERANCE = 1
+        # Hyphen-minus, hyphen, non-breaking hyphen.
+        HYPHENS = /[-‐‑]/
         QID = "books_author_wikidata_qid"
         BRIDGE_PROPERTIES = {
           "books_author_openlibrary_id" => "P648",
@@ -260,10 +262,11 @@ module Services
           @author_name_keys ||= ([author.name] + Array(author.alternate_names)).map { |name| name_key(name) }.compact_blank.to_set
         end
 
-        # Case, diacritics and the letters NFD leaves whole folded:
-        # "Gabriel Garcia Marquez" meets "Gabriel García Márquez", "Stanislaw" meets "Stanisław".
+        # Case, diacritics and the letters NFD leaves whole folded, and a
+        # hyphen read as a space: "Gabriel Garcia Marquez" meets "Gabriel
+        # García Márquez", "Stanislaw" meets "Stanisław", "Jean Paul" meets "Jean-Paul".
         def name_key(text)
-          ::Services::Text::NameFolder.call(normalized(text))
+          ::Services::Text::NameFolder.call(normalized(text)).gsub(HYPHENS, " ").squeeze(" ").strip
         end
 
         def title_key(text) = normalized(text).downcase

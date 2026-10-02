@@ -15,6 +15,11 @@ module Wikidata
       assert_not entity(types: ["Q7725634"]).person?
     end
 
+    # Homer (Q6691) is typed only as a human whose existence is disputed.
+    test "a human whose existence is disputed is a person" do
+      assert entity(types: ["Q21070568"]).person?
+    end
+
     test "names are the label and the English aliases" do
       assert_equal ["Leo Tolstoy", "Lev Tolstoy"], entity(aliases: ["Lev Tolstoy", "Leo Tolstoy"]).names
     end

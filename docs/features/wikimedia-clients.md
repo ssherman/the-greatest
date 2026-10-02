@@ -22,8 +22,8 @@ against a Wikimedia host directly.
   (P50) or is known for (P800).
 - `country_codes(item_ids)` -- one SPARQL query for a country item's ISO code (P297) and English
   label.
-- `labels(item_ids)` -- English labels for arbitrary items (used for occupation and citizenship
-  labels shown as evidence).
+- `labels(item_ids)` -- English labels for arbitrary items, else the all-languages (`mul`) label
+  many items now carry instead (used for occupation and citizenship labels shown as evidence).
 
 `Wikipedia::Client` offers only `lead(language:, title:)`: the plain-text lead of one article by
 exact title, following redirects, with the page's Wikidata item and whether it is a
@@ -89,8 +89,8 @@ that turns a name into a Wikipedia page directly.
 `country_codes` and `labels` are cached for 30 days, keyed per item (`wikidata:country:<id>`,
 `wikidata:label:<id>`), in `config.x.external_api_cache` rather than `Rails.cache`. These repeat
 across nearly every author. On a cache miss, `country_codes` runs one SPARQL query for the item's
-ISO code (P297) and English label, and `labels` runs one `wbgetentities` call scoped to
-`props=labels`. Neither ever fetches a country's whole entity -- a country such as the United
+ISO code (P297) and English label (the label service falls back to `mul`), and `labels` runs one
+`wbgetentities` call scoped to `props=labels` and `languages=en|mul`. Neither ever fetches a country's whole entity -- a country such as the United
 States is megabytes of statements on its own, and this codebase only ever wants its code and its
 label.
 

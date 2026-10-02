@@ -96,7 +96,7 @@ module Wikidata
         SELECT ?country ?code ?countryLabel WHERE {
           VALUES ?country { #{missing.map { |id| "wd:#{id}" }.join(" ")} }
           OPTIONAL { ?country wdt:P297 ?code }
-          SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+          SERVICE wikibase:label { bd:serviceParam wikibase:language "en,mul". }
         }
       SPARQL
       fetched = {}
@@ -117,9 +117,11 @@ module Wikidata
       cached = read_cached("label", ids)
       fetched = {}
       (ids - cached.keys).each_slice(MAX_IDS) do |slice|
-        data = @http.action_api(API_URL, action: "wbgetentities", ids: slice.join("|"), props: "labels", languages: "en").data
+        # English, else the all-languages label many items now carry instead.
+        data = @http.action_api(API_URL, action: "wbgetentities", ids: slice.join("|"), props: "labels", languages: "en|mul").data
         (data["entities"] || {}).each do |requested, entity|
-          label = (entity.is_a?(Hash) && entity["labels"].is_a?(Hash)) ? entity["labels"].dig("en", "value") : nil
+          labels = (entity.is_a?(Hash) && entity["labels"].is_a?(Hash)) ? entity["labels"] : {}
+          label = labels.dig("en", "value").presence || labels.dig("mul", "value")
           next if label.blank?
 
           fetched[requested] = label

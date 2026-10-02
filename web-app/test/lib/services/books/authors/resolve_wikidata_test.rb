@@ -57,6 +57,31 @@ module Services
           assert_equal ["matched", "identifier"], [result.data[:decision].outcome, result.data[:decision].decided_by]
         end
 
+        test "a held id whose name is only in the all-languages label matches by identifier" do
+          author = ::Books::Author.create!(name: "Victor Hugo", birth_year: 1802)
+          author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q535")
+          entity = wikidata_entity("Q535", born: 1802, died: 1885)
+          entity["labels"] = {"mul" => {"language" => "mul", "value" => "Victor Hugo"}}
+          client = FakeWikidataClient.new(entities: {"Q535" => entity})
+          Services::Ai::Tasks::Matching::SelectExternalRecordTask.expects(:new).never
+
+          result = ResolveWikidata.call(author: author, client: client)
+
+          assert_equal ["matched", "identifier"], [result.data[:decision].outcome, result.data[:decision].decided_by]
+          assert_equal "Victor Hugo", result.data[:decision].candidates.first.dig("evidence", "external_title")
+        end
+
+        test "a hyphen between given names is a space: Jean Paul Sartre is Jean-Paul Sartre" do
+          author = ::Books::Author.create!(name: "Jean Paul Sartre")
+          author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q9364")
+          client = FakeWikidataClient.new(entities: {"Q9364" => wikidata_entity("Q9364", label: "Jean-Paul Sartre")})
+          Services::Ai::Tasks::Matching::SelectExternalRecordTask.expects(:new).never
+
+          result = ResolveWikidata.call(author: author, client: client)
+
+          assert_equal ["matched", "identifier"], [result.data[:decision].outcome, result.data[:decision].decided_by]
+        end
+
         test "a held id that Wikidata has merged resolves to the surviving item" do
           hold(:books_author_wikidata_qid, "Q999")
           client = FakeWikidataClient.new(entities: {"Q999" => wikidata_entity("Q7243", **TOLSTOY)})
