@@ -693,7 +693,7 @@ cd /home/shane/dev/the-greatest/.claude/worktrees/security-audit-fixes/web-app &
 - [ ] **Step 3 (Shane): add the secret before merging.**
 
 `gh secret set SERVER_SSH_HOST_FINGERPRINT --body 'SHA256:N21xW1UBEL1ah+TNfjk/YdtN105gUidJwjMHxxwJUYk'`.
-If the secret is absent, the deploy skips the host-key check (today's behaviour). If it is wrong, the deploy fails at connect and nothing is deployed.
+If the secret is absent, the `Require the host-key fingerprint` step fails the deploy before it connects. If it is wrong, the deploy fails at connect. Either way, nothing is deployed.
 
 - [ ] **Step 4 (needs Shane's OK): push and open the PR.** The PR body describes fixes, not attack paths.
 
@@ -701,6 +701,6 @@ If the secret is absent, the deploy skips the host-key check (today's behaviour)
 
 `gh workflow run "Deploy to Production" --ref security-audit-pr2-deploy-hygiene` runs this branch's workflow file against production. The server still pulls `main` and the current `:latest` images, so it redeploys what is live, using the new SSH pin, the fingerprint check and the `SOPS_AGE_KEY` decrypt. This is a real production deploy (nginx is rebuilt, as on every deploy). It catches a bad fingerprint or decrypt before the merge depends on them.
 
-- [ ] **Step 6 (after merge): read the deploy run.** In `gh run view --log` for the "Deploy to Production" run: the connect succeeds with the fingerprint set, `sops -d` produces no error, and `up -d` completes. Shane checks the three sites in a browser, because Cloudflare challenges `curl`.
+- [ ] **Step 6 (after merge): read the deploy run.** In `gh run view --log` for the "Deploy to Production" run: the `Require the host-key fingerprint` step passes and the connect succeeds, `sops -d` produces no error, and `up -d` completes. Shane checks the three sites in a browser, because Cloudflare challenges `curl`.
 
 Shane's own follow-up, not part of this PR: recreate the dev containers whenever convenient (`docker compose up -d` at the repo root) so the loopback bindings take effect. The volumes persist.

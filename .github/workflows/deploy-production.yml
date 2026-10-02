@@ -12,6 +12,14 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # Without this, an unset secret renders as "" and the SSH action skips the
+      # host-key check silently. This makes a missing secret fail the deploy, and
+      # its success in the log is the evidence that the check ran.
+      - name: Require the host-key fingerprint
+        env:
+          FINGERPRINT: ${{ secrets.SERVER_SSH_HOST_FINGERPRINT }}
+        run: test -n "$FINGERPRINT" || { echo "::error::SERVER_SSH_HOST_FINGERPRINT is not set"; exit 1; }
+
       - name: Deploy application
         # master as of 2026-09-30, pinned to a commit. Not the v1.2.5 tag: it
         # predates the action's checksum check on the drone-ssh binary.
