@@ -83,6 +83,17 @@ module Services
           assert_not_includes queued_ids, missed.id
         end
 
+        test "a VIAF-retry author whose only AI-step row this era failed is not marked already queued" do
+          failed_ai = author("Failed AI").tap do |a|
+            done(a, outcome: :unrecognized) && done(a, kind: EnrichFromViaf::KIND, outcome: :failed) && done(a, kind: EnrichAuthor::KIND, outcome: :failed)
+          end
+
+          backfill
+
+          ours = @viaf_calls.select { |args| args.first == failed_ai.id }
+          assert_equal [[failed_ai.id, false, false, false]], ours
+        end
+
         test "a Wikidata miss with no VIAF row and no AI step this era is a lost chain: the AI step is not marked already queued" do
           lost = author("Lost").tap { |a| done(a, outcome: :unrecognized) }
 
