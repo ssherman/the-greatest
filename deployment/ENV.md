@@ -143,6 +143,13 @@ These variables are used by nginx's built-in template system for environment var
 - **Default**: `10`
 - **Recommended**: Adjust based on server resources and job types
 
+#### SIDEKIQ_ADMIN_USERNAME / SIDEKIQ_ADMIN_PASSWORD
+- **Description**: Basic-auth credentials for the Sidekiq dashboard at `/sidekiq-admin`
+  (answers on every domain)
+- **Required**: Yes in production, or the dashboard is unreachable
+- **Default**: none. If either is blank, every login is refused (`SidekiqWebAuth`) — the
+  dashboard fails closed, never open
+
 ### Application Features
 
 Firebase's project ID is **not** an environment variable. It is hardcoded in

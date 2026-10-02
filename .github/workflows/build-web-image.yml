@@ -58,9 +58,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
+      # The steps holding REPO_DISPATCH_PAT are pinned to commits. The other
+      # actions stay on major tags until Dependabot can keep pins current.
       - name: Delete old untagged images
         continue-on-error: true
-        uses: actions/delete-package-versions@v5
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5.0.0
         with:
           package-name: ${{ github.event.repository.name }}
           package-type: 'container'
@@ -70,7 +72,7 @@ jobs:
 
       - name: Delete old tagged images (keep 20 most recent)
         continue-on-error: true
-        uses: actions/delete-package-versions@v5
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5.0.0
         with:
           package-name: ${{ github.event.repository.name }}
           package-type: 'container'
@@ -81,7 +83,7 @@ jobs:
       
       - name: Trigger Deploy Workflow
         if: success()
-        uses: peter-evans/repository-dispatch@v4
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
         with:
           token: ${{ secrets.REPO_DISPATCH_PAT }}
           event-type: image-built-event

@@ -18,6 +18,11 @@ RUN uv sync --locked --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
 
+# The API only reads its artifact (a read-only mount) and spills to /tmp, so it
+# runs unprivileged, with the same uid as the page fetcher image.
+RUN useradd --create-home --uid 10001 openlibrary
+USER openlibrary
+
 EXPOSE 8080
 CMD ["uvicorn", "--factory", "openlibrary.api.main:factory", \
      "--host", "0.0.0.0", "--port", "8080"]
