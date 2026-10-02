@@ -52,10 +52,11 @@ module Services
 
         # Nothing left to fill (spec §9). death_year is left out because a
         # living author has none; "unspecified" is the legacy AI's "don't
-        # know", so it counts as blank.
+        # know", so it counts as blank. A deprecated description (a rejected
+        # link's, spec §12) does not count.
         def complete?
           author.birth_year.present? && ApplyAuthorFacts::GENDERS.include?(author.gender) &&
-            author.author_countries.exists? && author.descriptions.any? { |row| HUMAN_SOURCES.include?(row.source) }
+            author.author_countries.exists? && author.descriptions.any? { |row| HUMAN_SOURCES.include?(row.source) && !row.deprecated? }
         end
 
         def research_allowed? = allow_research && !records.matched?
@@ -103,18 +104,18 @@ module Services
           author.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message, facts: sources_fact))
         end
 
-        # nil when there is nothing to review or apply. An author who already
-        # has an AI description would get already_set from the applier, so
-        # the review call is skipped and that reason is reported directly. A
-        # low-confidence fact is never written by ApplyAuthorFacts either, so
-        # it is reported the same way, skipping the review call and the code
-        # check that would otherwise run before it (Ruling: a review of a
-        # fact that will not be applied just spends a fast-role call).
+        # nil when there is nothing to review or apply. An author who already has a
+        # non-deprecated AI description would get already_set from the applier, so the
+        # review call is skipped and that reason is reported directly. A
+        # low-confidence fact is never written by ApplyAuthorFacts either, so it is
+        # reported the same way, skipping the review call and the code check that
+        # would otherwise run before it (Ruling: a review of a fact that will not be
+        # applied just spends a fast-role call).
         def description_for(fact)
           text = fact && fact[:value]
           return nil if text.blank?
           return {text: text, review: nil, reason: "low_confidence"} if fact[:confidence].to_s.strip.casecmp?("low")
-          return {text: text, review: nil, reason: "already_set"} if author.descriptions.any? { |row| row.source == "ai_generated" }
+          return {text: text, review: nil, reason: "already_set"} if author.descriptions.any? { |row| row.source == "ai_generated" && !row.deprecated? }
 
           review_description(text)
         end

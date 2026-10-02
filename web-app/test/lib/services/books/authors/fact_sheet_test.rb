@@ -136,6 +136,52 @@ module Services
           @sheet.countries(["ZZ"]) { lookup([], ["ZZ"]) }
           assert_equal ["no_match", ["ZZ"]], @sheet.facts["countries"].values_at("reason", "unmatched")
         end
+
+        def reject_for(author, finder, key)
+          ::MatchDecision.create!(finder: finder, subject: author, outcome: :matched, confidence: :high, decided_by: :rule,
+            verdict: :rejected, candidates: [{"external_key" => key}], selected_index: 1)
+        end
+
+        test "an id of a record rejected for this author is never stamped" do
+          reject_for(@author, ResolveViaf.name, "5391")
+
+          @sheet.single_identifier("viaf", "books_author_viaf", "5391")
+          @author.save!
+
+          assert_equal ["rejected", false], @sheet.facts["viaf"].values_at("reason", "applied")
+          assert_not @author.identifiers.exists?(identifier_type: "books_author_viaf")
+        end
+
+        test "an id a rejected Wikidata decision's ledger named as redirected_from is never stamped either" do
+          rejected = reject_for(@author, ResolveWikidata.name, "Q10")
+          @author.enrichments.create!(kind: EnrichFromWikidata::KIND, provider: "wikidata", outcome: :applied,
+            match_decision: rejected,
+            facts: {"wikidata_qid" => {"value" => "Q10", "applied" => true, "reason" => "filled", "redirected_from" => ["Q9"]}})
+
+          @sheet.single_identifier("wikidata_qid", "books_author_wikidata_qid", "Q9")
+          @author.save!
+
+          assert_equal ["rejected", false], @sheet.facts["wikidata_qid"].values_at("reason", "applied")
+          assert_not @author.identifiers.exists?(identifier_type: "books_author_wikidata_qid")
+        end
+
+        test "a record rejected for another author does not stop the stamp here" do
+          reject_for(::Books::Author.create!(name: "Another Author"), ResolveWikidata.name, "Q1")
+
+          @sheet.single_identifier("wikidata_qid", "books_author_wikidata_qid", "Q1")
+          @author.save!
+
+          assert_equal "filled", @sheet.facts["wikidata_qid"]["reason"]
+          assert @author.identifiers.exists?(identifier_type: "books_author_wikidata_qid", value: "Q1")
+        end
+
+        test "a filled countries fact records the country ids, for a reject to remove" do
+          country = ::Books::Country.create!(name: "Fact Sheet Country")
+
+          @sheet.countries(["FS"]) { lookup([country]) }
+
+          assert_equal [country.id], @sheet.facts["countries"]["country_ids"]
+        end
       end
     end
   end

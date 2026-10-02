@@ -11,8 +11,9 @@ module Services
       # rows are grouped by VIAF id into one candidate each. A rule decides
       # when exactly one person has a heading equal to our name and a birth
       # year agreeing with ours; otherwise at most three clusters are read and
-      # SelectExternalRecordTask chooses. Every run records one MatchDecision.
-      # Applies nothing; Viaf::Client stores every cluster it reads.
+      # SelectExternalRecordTask chooses. Applies nothing; Viaf::Client stores
+      # every cluster it reads. Every run records one MatchDecision. A record
+      # rejected for this author is never a candidate (spec §12).
       class ResolveViaf
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         # suggestions: this cluster's AutoSuggest rows. unavailable: why its
@@ -41,6 +42,7 @@ module Services
           @candidates = {}
           @sources_failed = []
           @shown = nil
+          @rejected = RejectedRecords.new(author)
         end
 
         def call
@@ -54,7 +56,7 @@ module Services
         # ---- stages ---------------------------------------------------------
 
         def held_stage
-          ids = identifier_values(VIAF)
+          ids = identifier_values(VIAF).reject { |id| @rejected.include?(:viaf, id) }
           return nil if ids.empty?
 
           ids.each { |id| fetch(add(id, "held_id")) }
@@ -66,7 +68,11 @@ module Services
         end
 
         def search_stage
-          @client.suggest(author.name).each { |suggestion| add(suggestion.viaf_id, "name_search").suggestions << suggestion }
+          @client.suggest(author.name).each do |suggestion|
+            next if @rejected.include?(:viaf, suggestion.viaf_id)
+
+            add(suggestion.viaf_id, "name_search").suggestions << suggestion
+          end
           pool = persons
           if pool.empty?
             return Verdict.new(outcome: :unmatched, candidate: nil, decided_by: :rule, confidence: :high,
@@ -144,11 +150,26 @@ module Services
           return candidate if candidate.person || candidate.unavailable
 
           candidate.person = @client.cluster(candidate.viaf_id, refresh: @refresh)
+          # A redirect can land on a cluster rejected for this author (spec
+          # §12) — but only once Person#viaf_id names the surviving cluster
+          # rather than the id requested (docs/features/viaf-api-client.md).
+          # A cluster whose own Wikidata link is a Wikidata item rejected for
+          # this author is the same rejected person too (increment 5 Group
+          # A): a VIAF reject bans the person, not only the one record, so
+          # the ban has to reach a cluster through its Wikidata link as well
+          # as its own VIAF id. The rule path reads a cluster through this
+          # same method, so it is covered too.
+          candidate.unavailable = "rejected" if @rejected.include?(:viaf, candidate.person.viaf_id) || rejected_wikidata_link?(candidate.person)
           candidate
         rescue ::Viaf::Exceptions::NotFoundError, ::Viaf::Exceptions::AbandonedRecordError => e
           candidate.unavailable = e.class.name.demodulize
           @sources_failed |= ["viaf_cluster"]
           candidate
+        end
+
+        def rejected_wikidata_link?(person)
+          qid = person.wikidata_qid
+          qid.present? && @rejected.include?(:wikidata, qid)
         end
 
         def persons = @candidates.values.select { |candidate| person?(candidate) }
@@ -327,7 +348,12 @@ module Services
             "death_year" => author.death_year,
             "viaf" => identifier_values(VIAF),
             "titles" => @profile.titles.first(10)
-          }
+          }.merge(rejected_snapshot)
+        end
+
+        def rejected_snapshot
+          ids = @rejected.ids(:viaf)
+          ids.any? ? {"rejected" => ids.to_a.sort} : {}
         end
 
         def snapshot(candidate)
@@ -356,7 +382,15 @@ module Services
           evidence["dropped"] = "not a person" unless candidate.unavailable || person?(candidate)
           {
             "record_type" => nil, "record_id" => nil,
-            "external_source" => "viaf", "external_key" => candidate.viaf_id,
+            # Person#viaf_id once the cluster is read, else the requested id:
+            # the id ApplyViaf stamps. Today that is always the id that was
+            # requested, since the client's cache keeps VIAF's own redirect
+            # under the superseded id (docs/features/viaf-api-client.md). Once
+            # the client re-keys to the surviving cluster, this line and the
+            # guard in `fetch` reject the cluster itself; until then, a
+            # rejected cluster VIAF later merges can come back under its
+            # other id.
+            "external_source" => "viaf", "external_key" => (person&.viaf_id || candidate.viaf_id).to_s,
             "sources" => candidate.sources, "scores" => {},
             "evidence" => evidence.compact
           }

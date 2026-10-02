@@ -17,6 +17,11 @@
             form: {data: {testid: "recheck-form", turbo_confirm: "Run the finder again now, with every source and verify on? This may take several seconds."}} %>
     <% end %>
 
+    <% if entry&.rejectable? && current_user_can_delete? && decision.matched? && decision.selected_candidate && !decision.verdict_rejected? %>
+      <%= button_to "Reject link", reject_decision_path(decision), method: :post, class: "btn btn-error btn-sm",
+            form: {data: {testid: "reject-form", turbo_confirm: "Reject this link? What it wrote on the author is removed, any linked Wikidata or VIAF decision for the same person is rejected with it, any AI description written from it is deprecated, and the author's Wikidata step runs again."}} %>
+    <% end %>
+
     <% if current_user_can_delete? && decision.unmatched? && decision.record && entry&.mergeable? %>
       <% decision.candidates.each_with_index do |candidate, i| %>
         <% target = candidate_records[[candidate["record_type"], candidate["record_id"]]] %>

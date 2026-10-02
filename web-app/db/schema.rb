@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_28_022921) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_01_235314) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -725,6 +725,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_28_022921) do
     t.bigint "subject_id"
     t.string "subject_type"
     t.datetime "updated_at", null: false
+    t.integer "verdict"
     t.boolean "verify", default: false, null: false
     t.index ["ai_chat_id"], name: "index_match_decisions_on_ai_chat_id"
     t.index ["created_at"], name: "index_match_decisions_on_created_at"

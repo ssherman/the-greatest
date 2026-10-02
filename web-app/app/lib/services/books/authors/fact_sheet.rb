@@ -30,8 +30,10 @@ module Services
           author.identifiers.select { |identifier| identifier.identifier_type == type }.map(&:value)
         end
 
-        # "filled", "already_set" or "held_by_other".
+        # "filled", "already_set", "held_by_other" or "rejected": the id of a
+        # record a person rejected for this author is never stamped (spec §12).
         def stamp(type, value)
+          return "rejected" if rejected.identifier?(type, value)
           return "already_set" if identifier_values(type).include?(value)
 
           other = ::Identifier.where(identifiable_type: "Books::Author", identifier_type: type, value: value)
@@ -129,7 +131,8 @@ module Services
           return record("countries", values, applied: false, reason: "no_match", unmatched: lookup.unmatched) if lookup.countries.empty?
 
           lookup.countries.each { |country| author.author_countries.build(country: country) }
-          record("countries", lookup.countries.map(&:name), applied: true, reason: "filled", unmatched: lookup.unmatched, **source)
+          record("countries", lookup.countries.map(&:name), applied: true, reason: "filled", unmatched: lookup.unmatched,
+            country_ids: lookup.countries.map(&:id), **source)
         end
 
         def flag_collisions(reason:, decision:)
@@ -142,6 +145,8 @@ module Services
         end
 
         private
+
+        def rejected = (@rejected ||= RejectedRecords.new(author))
 
         def normalize(text)
           ::Services::Text::NameNormalizer.call(::Services::Text::QuoteNormalizer.call(text.to_s)).to_s

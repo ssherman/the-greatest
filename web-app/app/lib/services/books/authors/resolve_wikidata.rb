@@ -53,6 +53,7 @@ module Services
           @raw = {}
           @redirects = {}
           @sources_failed = []
+          @rejected = RejectedRecords.new(author)
         end
 
         def call
@@ -138,9 +139,14 @@ module Services
 
         # Adds the entities for these ids as candidates reached by `source`.
         # A merged item arrives under the surviving id, so two requested ids
-        # can land on one candidate.
+        # can land on one candidate. A record rejected for this author (spec
+        # §5.1, §12) is never fetched, and one reached through an old id is
+        # dropped.
         def gather(ids, source)
-          load_entities(Array(ids).map(&:to_s).uniq).each do |entity|
+          wanted = Array(ids).map(&:to_s).uniq.reject { |id| @rejected.include?(:wikidata, id) }
+          load_entities(wanted).each do |entity|
+            next if @rejected.include?(:wikidata, entity.id)
+
             candidate = (@candidates[entity.id] ||= Candidate.new(entity: entity, sources: [], titles: [], matching_titles: []))
             candidate.sources |= [source]
           end
@@ -340,7 +346,12 @@ module Services
             "wikidata_qid" => identifier_values(QID),
             "viaf" => identifier_values("books_author_viaf"),
             "titles" => @profile.titles.first(10)
-          }
+          }.merge(rejected_snapshot)
+        end
+
+        def rejected_snapshot
+          ids = @rejected.ids(:wikidata)
+          ids.any? ? {"rejected" => ids.to_a.sort} : {}
         end
 
         def snapshot(candidate)

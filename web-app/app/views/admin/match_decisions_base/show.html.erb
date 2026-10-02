@@ -85,6 +85,16 @@
             <% end %>
           </dd>
         </div>
+        <div>
+          <dt class="font-semibold">Verdict</dt>
+          <dd data-testid="decision-verdict">
+            <% if @decision.verdict %>
+              <span class="badge badge-sm <%= @decision.verdict_rejected? ? "badge-error" : "badge-success" %>"><%= @decision.verdict %></span>
+            <% else %>
+              —
+            <% end %>
+          </dd>
+        </div>
       </dl>
     </div>
   </div>

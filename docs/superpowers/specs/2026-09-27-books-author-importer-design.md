@@ -552,6 +552,27 @@ has the same authorization as the audit page's merge action, and asks for confir
 This lands before the backfill (§16), so the thousands of links the backfill makes can be undone
 one by one from the start. Adding it requires a Playwright test (it is a new admin flow).
 
+*(Amended in increment 5: a reject is about the person, not one record or one decision, so every other
+decision of the same finder that selected the same record for this author, and isn't rejected yet, is
+rejected with it. A rejected VIAF run also takes every Wikidata decision that matched the Wikidata id
+the VIAF run stamped, directly or through a Wikidata redirect the ledger recorded as `redirected_from`,
+regardless of when the decision was recorded -- once the record is banned for this author, every
+decision that ever chose it has to go. It runs the other way too: rejecting a Wikidata decision also
+rejects every matched, unrejected VIAF decision whose cluster names that Wikidata item as its own link,
+one hop, never chased further. The record's own id and its Wikipedia article link are removed whoever
+added them, even when the run found them already set, since they name the rejected record itself; a
+superseded id a Wikidata merge run kept held alongside the canonical one (`ApplyWikidata`'s
+`redirected_from`) is removed the same way. An AI run that used the record as evidence is reverted too,
+not only its description -- its applied years, gender and countries go the same as any other run's. A
+rejected record's id is never stamped on that author again, by any step, so `FactSheet#stamp` returns
+`"rejected"` for one; a rejected Wikidata record is its key plus every id Wikidata merged into it that
+the author's own runs recorded, so none of those ids is stamped or selected again either. A run whose
+decision was rejected stops counting as processed, and `MatchedRecords` ignores it too, so no rejected
+evidence reaches the AI step. A deprecated AI description no longer counts as present, so the AI step's
+completeness check and the "already set" checks look past it. Legacy Wikipedia descriptions the
+rejected run deprecated go back to normal rank, since the rank before isn't recorded and the re-run
+judges them again.)*
+
 ### 13. Backfill and the legacy Wikipedia cleanup
 
 **`books:authors:enrich[limit]`.** The limit is required; `all` is accepted.

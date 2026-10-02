@@ -114,6 +114,16 @@ module Services
           assert_equal [false], @client.refreshes
         end
 
+        test "a run whose decision a person rejected does not count as processed" do
+          decision = ::MatchDecision.create!(finder: ResolveViaf.name, subject: @author, outcome: :matched, confidence: :high,
+            decided_by: :rule, verdict: :rejected, candidates: [{"external_key" => "5391"}], selected_index: 1)
+          @author.enrichments.create!(kind: EnrichFromViaf::KIND, outcome: :applied, reason: "matched 5391", match_decision: decision)
+
+          result = EnrichFromViaf.call(author: @author, client: FakeViafClient.new)
+
+          assert_equal :unmatched, result.data[:outcome]
+        end
+
         test "a rate limit propagates and writes nothing, so the rescheduled run starts clean" do
           client = FakeViafClient.new(suggestions: {"Stacy Willingham" => ::Viaf::Exceptions::RateLimited.new("wait", retry_after: 60)})
 

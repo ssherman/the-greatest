@@ -290,6 +290,108 @@ module Services
           assert_equal "Marcus Aurelius, Emperor of Rome", decision.candidates.first["evidence"]["external_title"]
           assert_match(/\AMarcus Aurelius, Emperor of Rome \|/, @ai_options[:candidate_lines].first)
         end
+
+        def reject_for(author, key, finder: ResolveViaf.name)
+          ::MatchDecision.create!(finder: finder, subject: author, outcome: :matched, confidence: :high,
+            decided_by: :rule, verdict: :rejected, candidates: [{"external_key" => key}], selected_index: 1)
+        end
+
+        test "a cluster whose Wikidata link is a Wikidata item rejected for this author is not matched" do
+          reject_for(@author, "Q9", finder: ResolveWikidata.name)
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => willingham(wikidata: "Q9")}
+          )
+
+          result = resolve(client)
+
+          assert_equal [:unmatched, "rule"], [result.data[:outcome], result.data[:decision].decided_by]
+        end
+
+        test "a cluster whose Wikidata link is not rejected still matches" do
+          reject_for(@author, "Q1", finder: ResolveWikidata.name)
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => willingham(wikidata: "Q9")}
+          )
+
+          result = resolve(client)
+
+          assert_equal [:matched, "rule"], [result.data[:outcome], result.data[:decision].decided_by]
+        end
+
+        test "a suggestion of a record rejected for this author is never a candidate" do
+          reject_for(@author, "5391")
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => willingham}
+          )
+
+          result = resolve(client)
+
+          assert_equal [:unmatched, "rule"], [result.data[:outcome], result.data[:decision].decided_by]
+          assert_equal ["5391"], result.data[:decision].query["rejected"]
+          assert_not client.called?(:cluster)
+        end
+
+        test "a held VIAF id that was rejected is not read" do
+          reject_for(@author, "5391")
+          @author.identifiers.create!(identifier_type: :books_author_viaf, value: "5391")
+          client = FakeViafClient.new(people: {"5391" => willingham})
+
+          resolve(client)
+
+          assert_not_includes client.clusters, "5391"
+        end
+
+        # Models the client after it re-keys a redirect to the surviving
+        # cluster; today's client reports the requested id ("777") instead,
+        # so this Person shape (cluster("777") answering as "5391") does not
+        # yet occur in production (docs/features/viaf-api-client.md).
+        test "a cluster that comes back under a rejected id is dropped" do
+          reject_for(@author, "5391")
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("777", "Stacy Willingham 1991–")]},
+            people: {"777" => willingham("5391")}
+          )
+
+          result = resolve(client)
+
+          assert_equal :unmatched, result.data[:outcome]
+        end
+
+        # Models the client after it re-keys a redirect to the surviving
+        # cluster; today's client reports the requested id ("777") instead.
+        test "a match reached through a redirect records the canonical id as its external_key" do
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("777", "Stacy Willingham 1991–")]},
+            people: {"777" => willingham("5391")}
+          )
+
+          decision = resolve(client).data[:decision]
+
+          selected = decision.candidates[decision.selected_index - 1]
+          assert_equal ["matched", "5391"], [decision.outcome, selected["external_key"]]
+        end
+
+        # Models the client after it re-keys a redirect to the surviving
+        # cluster; today's client reports the requested id ("777") instead.
+        test "rejecting a match reached through a redirect keeps the cluster out of a later run that sees the canonical id directly" do
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("777", "Stacy Willingham 1991–")]},
+            people: {"777" => willingham("5391")}
+          )
+          resolve(client).data[:decision].update!(verdict: :rejected)
+
+          client2 = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => willingham}
+          )
+          result = resolve(client2)
+
+          assert_equal :unmatched, result.data[:outcome]
+          assert_equal ["5391"], result.data[:decision].query["rejected"]
+        end
       end
     end
   end

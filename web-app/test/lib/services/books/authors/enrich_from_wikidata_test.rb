@@ -183,6 +183,17 @@ module Services
           assert_equal "already_set", second.facts.dig("viaf", "reason")
         end
 
+        test "a run whose decision a person rejected does not count as processed" do
+          decision = ::MatchDecision.create!(finder: ResolveWikidata.name, subject: @author, outcome: :matched, confidence: :high,
+            decided_by: :rule, verdict: :rejected, candidates: [{"external_key" => "Q1"}], selected_index: 1)
+          @author.enrichments.create!(kind: EnrichFromWikidata::KIND, outcome: :applied, reason: "matched Q1", match_decision: decision)
+
+          result = EnrichFromWikidata.call(author: @author, client: FakeWikidataClient.new)
+
+          assert_equal :unmatched, result.data[:outcome]
+          assert_equal "no_match", result.data[:enrichment].reason
+        end
+
         test "a held id Wikidata has merged into the matched item applies normally" do
           @author.identifiers.destroy_all
           @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q999")

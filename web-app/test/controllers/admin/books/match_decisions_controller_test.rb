@@ -396,6 +396,93 @@ module Admin
         post recheck_admin_books_match_decision_path(decision)
         assert_redirected_to admin_books_match_decision_path(decision)
       end
+
+      # ---- reject link --------------------------------------------------------
+
+      def link_decision(finder: "Services::Books::Authors::ResolveWikidata", outcome: :matched)
+        ::MatchDecision.create!(
+          finder: finder, subject: books_authors(:tolstoy), record: nil, outcome: outcome, confidence: :medium,
+          decided_by: :ai, needs_review: true, query: {"name" => "Leo Tolstoy"},
+          candidates: [{"record_type" => nil, "record_id" => nil, "external_source" => "wikidata", "external_key" => "Q7243",
+                        "sources" => ["name_search"], "scores" => {}, "evidence" => {"external_title" => "Leo Tolstoy"}}],
+          selected_index: (outcome == :matched) ? 1 : nil, reason: "Works match."
+        )
+      end
+
+      test "an admin rejects a link: the decision is rejected and the author's Wikidata step queued again" do
+        decision = link_decision
+        ::Books::Authors::WikidataJob.expects(:perform_in).with(Services::Books::Authors::RejectExternalLink::RERUN_DELAY, books_authors(:tolstoy).id, true)
+        sign_in_as(@admin, stub_auth: true)
+
+        post reject_admin_books_match_decision_path(decision)
+
+        assert_redirected_to admin_books_match_decision_path(decision)
+        assert decision.reload.verdict_rejected?
+        assert_equal @admin, decision.reviewed_by
+      end
+
+      test "show offers Reject link only on a matched, unrejected link decision" do
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_match_decision_path(link_decision)
+        assert_select "[data-testid=reject-form]", count: 1
+
+        rejected = link_decision.tap { |decision| decision.update!(verdict: :rejected) }
+        get admin_books_match_decision_path(rejected)
+        assert_select "[data-testid=reject-form]", count: 0
+
+        get admin_books_match_decision_path(link_decision(outcome: :unmatched))
+        assert_select "[data-testid=reject-form]", count: 0
+
+        get admin_books_match_decision_path(@pending)
+        assert_select "[data-testid=reject-form]", count: 0
+      end
+
+      test "a books editor, who can write but not delete, cannot reject and is not offered it" do
+        editor = users(:regular_user)
+        DomainRole.create!(user: editor, domain: :books, permission_level: :editor)
+        decision = link_decision
+        ::Books::Authors::WikidataJob.expects(:perform_in).never
+        sign_in_as(editor, stub_auth: true)
+
+        get admin_books_match_decision_path(decision)
+        assert_select "[data-testid=reject-form]", count: 0
+
+        post reject_admin_books_match_decision_path(decision)
+        assert_redirected_to books_root_path
+        assert_nil decision.reload.verdict
+      end
+
+      test "a viewer cannot reject" do
+        decision = link_decision
+        sign_in_as(@viewer, stub_auth: true)
+
+        post reject_admin_books_match_decision_path(decision)
+
+        assert_redirected_to books_root_path
+        assert_nil decision.reload.verdict
+      end
+
+      test "rejecting a book finder's decision is refused and changes nothing" do
+        sign_in_as(@admin, stub_auth: true)
+
+        post reject_admin_books_match_decision_path(@pending)
+
+        assert_redirected_to admin_books_match_decision_path(@pending)
+        assert_nil @pending.reload.verdict
+        assert flash[:alert].present?
+      end
+
+      test "a refused reject (already rejected) redirects with an alert" do
+        decision = link_decision.tap { |link| link.update!(verdict: :rejected) }
+        ::Books::Authors::WikidataJob.expects(:perform_in).never
+        sign_in_as(@admin, stub_auth: true)
+
+        post reject_admin_books_match_decision_path(decision)
+
+        assert_redirected_to admin_books_match_decision_path(decision)
+        assert flash[:alert].present?
+      end
     end
   end
 end

@@ -182,6 +182,17 @@ module Services
         test "no description from the runner records null" do
           assert_equal "null", apply(reviewed: nil).data[:facts]["description"]["reason"]
         end
+
+        test "a deprecated AI description is written over and returns to normal rank" do
+          @author.assign_description(source: :ai_generated, content: "Written from a rejected record.").rank = :deprecated
+          @author.save!
+
+          result = apply
+
+          row = @author.reload.descriptions.sole
+          assert_equal [DESCRIPTION, "normal"], [row.content, row.rank]
+          assert_equal ["filled", true], result.data[:facts]["description"].values_at("reason", "applied")
+        end
       end
     end
   end

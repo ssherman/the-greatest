@@ -347,6 +347,20 @@ module Services
           assert_equal "low_confidence", rows.sole.facts["description"]["reason"]
           assert_equal 0, @author.reload.descriptions.count
         end
+
+        test "a deprecated AI description leaves the author incomplete, and the new one is written over it" do
+          @author.update!(birth_year: 1901, gender: :female)
+          @author.author_countries.create!(country: books_countries(:french))
+          @author.assign_description(source: :ai_generated, content: "Written from a rejected record.").rank = :deprecated
+          @author.save!
+          expect_runs([:knowledge, success_result(facts)])
+
+          EnrichAuthor.call(author: @author)
+
+          row = @author.reload.descriptions.sole
+          assert_equal [DESCRIPTION, "normal"], [row.content, row.rank]
+          assert_equal "filled", rows.sole.facts["description"]["reason"]
+        end
       end
     end
   end

@@ -109,6 +109,12 @@ Create a dedicated test account:
    `e2e/tests/books/admin/import-finder-audit.spec.ts` seeds its own rows by shelling out to
    `bin/rails e2e:import_finder_seed` and removes them with `e2e:import_finder_cleanup`; both are
    idempotent and safe to re-run after an interrupted run.
+
+   `e2e/tests/books/admin/reject-link.spec.ts` seeds a placeholder author through
+   `bin/rails e2e:reject_link_seed`, reads its link state back with `e2e:reject_link_state`, and
+   removes it with `e2e:reject_link_cleanup`. The author is a placeholder
+   (`exclude_from_rankings: true`), so the Wikidata run the reject queues makes no external or
+   model call.
 4. Verify you can manually log in at `https://dev.thegreatestmusic.org` with these credentials
 
 A music-only `DomainRole` is **not** enough. The same account drives both the music and games

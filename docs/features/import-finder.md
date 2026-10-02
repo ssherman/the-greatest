@@ -87,7 +87,7 @@ record that holds its key.
 `match_decisions`: one row per finder call — finder, polymorphic record and subject,
 outcome/confidence/decided_by enums, `verify`, `query` and `candidates` jsonb snapshots,
 `selected_index` (1-based), `reason`, `ai_chat_id`, `sources_failed`, and the audit columns
-`needs_review`, `reviewed_at`, `reviewed_by_id`, `review_note`.
+`needs_review`, `reviewed_at`, `reviewed_by_id`, `review_note`, `verdict`.
 
 `duplicate_candidates`: one row per unordered pair of local records (`item_a_id <
 item_b_id`, unique with `item_type`), `source` (identifier_collision, external_key_collision,
@@ -141,7 +141,10 @@ machinery -- no `ImportQuery`, no merge action, and no Re-check -- because it is
 this already in our catalog" but "which outside record describes this one." Its `MatchDecision`
 rows still show up under **Match Decisions**, filterable by entity like any other. The first is
 `Services::Books::Authors::ResolveWikidata` (registered under the label "Wikidata link"), which
-links a `Books::Author` to a Wikidata person; see `docs/features/books-author-enrichment.md`.
+links a `Books::Author` to a Wikidata person, and `Services::Books::Authors::ResolveViaf` ("VIAF
+link"); see `docs/features/books-author-enrichment.md`. An entry naming a `reject_service` --
+both author link entries do, `Services::Books::Authors::RejectExternalLink` -- gets Reject link
+on its decisions.
 
 **Match decisions** opens on decisions needing review and not yet reviewed, with `verify: true`
 rows hidden -- the sweep writes one per ranked book. Filters: entity, outcome, confidence,
@@ -150,17 +153,21 @@ decided by, review state (`pending` / `reviewed` / `all`), verify runs (`hide` /
 registry rather than the current domain, so a valid label from another domain (say `entity=album`
 on the books host) yields an empty page, while an unknown value is ignored. The show page lists
 the stored query, every candidate (local or external, creators, year, ranked position, sources,
-scores, identifiers shared with the query) with the selected row marked, the reasoning, and the
-AI chat's messages inline, linked to the domain's AI Chats page. Actions for writers: **Mark reviewed** with a note; **Re-check**, which
-runs the finder again synchronously with `verify: true` (every source, no early exit) and
-redirects to the new decision with the original beside it -- offered only where the registry says
-the finder's real sources have landed (books today); **Merge into candidate N**, offered when the
-decision was unmatched, carries the record the importer created, and candidate N is a local
-record of the same model. Re-check excludes the decision's subject when the subject is a record
-of the finder's model (a sweep decision re-resolves that book against the rest), else the created
-record of an unmatched import (or it would match itself), else nothing. A re-check's own row is
-written with `verify: true`, so it appears in the queue only under `verify=include`; the admin is
-redirected to it, and the original stays in the queue until reviewed.
+scores, identifiers shared with the query) with the selected row marked, the reasoning, the
+person's verdict (confirmed or rejected, blank until one is set), and the AI chat's messages
+inline, linked to the domain's AI Chats page. Actions for writers: **Mark reviewed** with a note;
+**Re-check**, which runs the finder again synchronously with `verify: true` (every source, no
+early exit) and redirects to the new decision with the original beside it -- offered only where
+the registry says the finder's real sources have landed (books today); **Merge into candidate
+N**, offered when the decision was unmatched, carries the record the importer created, and
+candidate N is a local record of the same model; **Reject link**, for a matched Wikidata or VIAF
+link decision, to users who can delete in the domain (the merge action's gate), asking for
+confirmation; it undoes what the link wrote and runs the author's steps again (see
+`docs/features/books-author-enrichment.md`). Re-check excludes the decision's subject when the
+subject is a record of the finder's model (a sweep decision re-resolves that book against the
+rest), else the created record of an unmatched import (or it would match itself), else nothing.
+A re-check's own row is written with `verify: true`, so it appears in the queue only under
+`verify=include`; the admin is redirected to it, and the original stays in the queue until reviewed.
 
 **Duplicates** opens on pending pairs, newest first, each record summarized live through
 `FinderBase#summarize` (title, creators, year, ranked position, list count, identifiers) with

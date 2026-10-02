@@ -3,6 +3,12 @@
 # by this marker.
 IMPORT_FINDER_MARKER = "E2E import finder audit seed"
 
+# The placeholder author e2e:reject_link_seed owns, found by name. The QID is
+# the Wikidata sandbox item, so a stray row names nobody real.
+REJECT_LINK_AUTHOR = "E2E Reject Link Seed"
+REJECT_LINK_QID = "Q4115189"
+REJECT_LINK_URL = "https://en.wikipedia.org/wiki/Wikipedia:Sandbox"
+
 namespace :e2e do
   # One value from e2e/.env. Read from the file rather than ENV because these
   # tasks run from a shell that has not loaded that file, and dotenv only loads
@@ -215,5 +221,58 @@ namespace :e2e do
     pairs.each(&:destroy!)
     decisions.each(&:destroy!)
     puts "removed #{pairs.size} pair(s) and #{decisions.size} decision(s)"
+  end
+
+  desc "Seed a placeholder author with one matched Wikidata link for e2e/tests/books/admin/reject-link.spec.ts"
+  task reject_link_seed: :environment do
+    # A placeholder (exclude_from_rankings), so the Wikidata run the reject
+    # queues skips it without calling Wikidata, VIAF or a model. Idempotent:
+    # a rerun resets the author's link rows and its decision.
+    author = Books::Author.find_or_initialize_by(name: REJECT_LINK_AUTHOR)
+    author.update!(exclude_from_rankings: true, birth_year: 1901)
+    author.identifiers.each(&:destroy!)
+    author.external_links.each(&:destroy!)
+    author.enrichments.each(&:destroy!)
+    MatchDecision.where(subject: author).each(&:destroy!)
+
+    author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: REJECT_LINK_QID)
+    author.external_links.create!(url: REJECT_LINK_URL, name: "Wikipedia", source: :wikipedia, link_category: :information)
+    decision = MatchDecision.create!(
+      finder: "Services::Books::Authors::ResolveWikidata", subject: author, record: nil, outcome: :matched,
+      confidence: :medium, decided_by: :ai, verify: false, needs_review: true, reason: "E2E reject link seed",
+      query: {"name" => author.name},
+      candidates: [{"record_type" => nil, "record_id" => nil, "external_source" => "wikidata", "external_key" => REJECT_LINK_QID,
+                    "sources" => ["name_search"], "scores" => {}, "evidence" => {"external_title" => "Wikidata Sandbox"}}],
+      selected_index: 1
+    )
+    author.enrichments.create!(
+      kind: "books.author_wikidata", provider: "wikidata", outcome: :applied, reason: "matched #{REJECT_LINK_QID}",
+      recognized: true, match_decision: decision, facts: {
+        "wikidata_qid" => {"value" => REJECT_LINK_QID, "applied" => true, "reason" => "filled"},
+        "birth_year" => {"value" => 1901, "applied" => true, "reason" => "filled"},
+        "wikipedia" => {"value" => REJECT_LINK_URL, "applied" => true, "reason" => "linked"}
+      }
+    )
+
+    puts({decision_id: decision.id, author_id: author.id}.to_json)
+  end
+
+  desc "Print the e2e:reject_link_seed author's link state as JSON"
+  task reject_link_state: :environment do
+    author = Books::Author.find_by!(name: REJECT_LINK_AUTHOR)
+    puts({
+      wikidata_qids: author.identifiers.where(identifier_type: :books_author_wikidata_qid).pluck(:value),
+      birth_year: author.birth_year,
+      links: author.external_links.pluck(:url)
+    }.to_json)
+  end
+
+  desc "Remove the author e2e:reject_link_seed created, with its decisions"
+  task reject_link_cleanup: :environment do
+    author = Books::Author.find_by(name: REJECT_LINK_AUTHOR)
+    decisions = author ? MatchDecision.where(subject: author).to_a : []
+    decisions.each(&:destroy!)
+    author&.destroy!
+    puts "removed #{author ? 1 : 0} author and #{decisions.size} decision(s)"
   end
 end

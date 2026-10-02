@@ -8,8 +8,9 @@ module Services
       # the model gave low confidence is recorded, not applied. Nationalities
       # become countries through CountryLookup, and only when the author has
       # none. The description is written only when the author has no AI
-      # description yet: the legacy ones are kept. Whether a run is applied
-      # at all is EnrichAuthor's decision; this class saves the author.
+      # description yet, or only a deprecated one: the legacy ones are kept.
+      # Whether a run is applied at all is EnrichAuthor's decision; this class
+      # saves the author.
       class ApplyAuthorFacts
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -106,11 +107,15 @@ module Services
           if description[:reason].present?
             return sheet.record("description", text, applied: false, reason: description[:reason], **review)
           end
-          if author.descriptions.any? { |row| row.source == "ai_generated" }
+          if author.descriptions.any? { |row| row.source == "ai_generated" && !row.deprecated? }
             return sheet.record("description", text, applied: false, reason: "already_set", **review)
           end
 
           row = author.assign_description(source: :ai_generated, content: text, source_url: citations.first)
+          # assign_description never sets a rank. A row a rejected link
+          # deprecated (spec §12) gets new text from new evidence, so it is
+          # shown again.
+          row.rank = :normal if row&.deprecated?
           sheet.record("description", text, applied: row.present?, reason: row ? "filled" : "null", **review)
         end
       end
