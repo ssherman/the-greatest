@@ -2,9 +2,9 @@
 
 module Wikidata
   # The Wikidata operations the author steps use (spec §4), over the paced
-  # Wikimedia::Http. Country and label lookups are cached for 30 days: they
-  # repeat across nearly every author, and a country entity fetched whole
-  # can be megabytes.
+  # Wikimedia::Http. Country and label lookups are cached for 30 days in
+  # config.x.external_api_cache: they repeat across nearly every author, and
+  # a country entity fetched whole can be megabytes.
   class Client
     API_URL = "https://www.wikidata.org/w/api.php"
     SPARQL_URL = "https://query.wikidata.org/sparql"
@@ -18,8 +18,9 @@ module Wikidata
     # A value is safe inside haswbstatement when it has no space or quote.
     STATEMENT_VALUE = /\A[\w.-]+\z/
 
-    def initialize(http: nil)
+    def initialize(http: nil, cache: nil)
       @http = http || ::Wikimedia::Http.new
+      @cache = cache || Rails.application.config.x.external_api_cache
     end
 
     # Keyed by the id asked for: a merged item answers under the surviving
@@ -107,7 +108,7 @@ module Wikidata
         code = row.dig("code", "value").to_s
         entry["code"] ||= code if code.match?(ISO_CODE)
       end
-      fetched.each { |id, entry| Rails.cache.write(cache_key("country", id), entry, expires_in: CACHE_TTL) }
+      fetched.each { |id, entry| @cache.write(cache_key("country", id), entry, expires_in: CACHE_TTL) }
       cached.merge(fetched)
     end
 
@@ -122,7 +123,7 @@ module Wikidata
           next if label.blank?
 
           fetched[requested] = label
-          Rails.cache.write(cache_key("label", requested), label, expires_in: CACHE_TTL)
+          @cache.write(cache_key("label", requested), label, expires_in: CACHE_TTL)
         end
       end
       cached.merge(fetched)
@@ -140,7 +141,7 @@ module Wikidata
       return {} if ids.empty?
 
       keys = ids.index_by { |id| cache_key(kind, id) }
-      Rails.cache.read_multi(*keys.keys).transform_keys { |key| keys[key] }
+      @cache.read_multi(*keys.keys).transform_keys { |key| keys[key] }
     end
   end
 end

@@ -124,11 +124,13 @@ module Wikidata
     end
 
     test "country_codes returns the ISO code and English label, and caches each country" do
-      Rails.stubs(:cache).returns(ActiveSupport::Cache::MemoryStore.new)
+      limiter = mock("limiter")
+      limiter.stubs(:acquire!)
+      client = Client.new(http: ::Wikimedia::Http.new(limiter: limiter), cache: ActiveSupport::Cache::MemoryStore.new)
       stub = stub_request(:post, SPARQL).to_return(json_response(fixture("sparql_country_codes.json")))
 
-      codes = @client.country_codes(["Q30", "Q34266"])
-      again = @client.country_codes(["Q30", "Q34266"])
+      codes = client.country_codes(["Q30", "Q34266"])
+      again = client.country_codes(["Q30", "Q34266"])
 
       assert_equal "US", codes.dig("Q30", "code")
       assert_nil codes.dig("Q34266", "code")
@@ -147,13 +149,28 @@ module Wikidata
     end
 
     test "labels reads English labels with wbgetentities and caches them" do
-      Rails.stubs(:cache).returns(ActiveSupport::Cache::MemoryStore.new)
+      limiter = mock("limiter")
+      limiter.stubs(:acquire!)
+      client = Client.new(http: ::Wikimedia::Http.new(limiter: limiter), cache: ActiveSupport::Cache::MemoryStore.new)
       body = {entities: {"Q36180" => {"id" => "Q36180", "labels" => {"en" => {"language" => "en", "value" => "writer"}}}}}.to_json
       stub = stub_request(:get, API).with(query: hash_including(action: "wbgetentities", ids: "Q36180", props: "labels", languages: "en"))
         .to_return(json_response(body))
 
-      assert_equal({"Q36180" => "writer"}, @client.labels(["Q36180"]))
-      assert_equal({"Q36180" => "writer"}, @client.labels(["Q36180"]))
+      assert_equal({"Q36180" => "writer"}, client.labels(["Q36180"]))
+      assert_equal({"Q36180" => "writer"}, client.labels(["Q36180"]))
+      assert_requested stub, times: 1
+    end
+
+    test "a client given no cache uses the external API cache" do
+      Rails.application.config.x.stubs(:external_api_cache).returns(ActiveSupport::Cache::MemoryStore.new)
+      limiter = mock("limiter")
+      limiter.stubs(:acquire!)
+      client = Client.new(http: ::Wikimedia::Http.new(limiter: limiter))
+      body = {entities: {"Q36180" => {"id" => "Q36180", "labels" => {"en" => {"language" => "en", "value" => "writer"}}}}}.to_json
+      stub = stub_request(:get, API).with(query: hash_including(action: "wbgetentities", props: "labels")).to_return(json_response(body))
+
+      2.times { client.labels(["Q36180"]) }
+
       assert_requested stub, times: 1
     end
   end
