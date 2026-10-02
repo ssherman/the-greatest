@@ -30,7 +30,7 @@ class Music::CoverArtDownloadJob
     Rails.logger.info "Downloading cover art from: #{cover_art_url}"
 
     begin
-      tempfile = Down.download(cover_art_url)
+      tempfile = Down.download(cover_art_url, max_size: 10 * 1024 * 1024)
 
       # Create Image record, attach file, then save
       image = album.images.build(primary: true)

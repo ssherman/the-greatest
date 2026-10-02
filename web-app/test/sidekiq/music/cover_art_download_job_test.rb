@@ -106,6 +106,19 @@ module Music
       refute @album.images.where(primary: true).exists?
     end
 
+    test "perform skips a cover larger than 10 MB without raising" do
+      @album.images.where(primary: true).destroy_all
+      musicbrainz_id = @album.identifiers.find_by!(identifier_type: :music_musicbrainz_release_group_id).value
+
+      stub_request(:get, "https://coverartarchive.org/release-group/#{musicbrainz_id}/front")
+        .to_return(status: 200, body: "x" * (10 * 1024 * 1024 + 1), headers: {"Content-Type" => "image/jpeg"})
+
+      assert_no_difference -> { Image.count } do
+        @job.perform(@album.id)
+      end
+      assert_requested :get, "https://coverartarchive.org/release-group/#{musicbrainz_id}/front"
+    end
+
     test "job is configured for serial queue" do
       assert_equal :serial, CoverArtDownloadJob.get_sidekiq_options["queue"]
     end
