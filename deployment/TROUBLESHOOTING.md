@@ -339,7 +339,9 @@ restarted keeps serving fine, but the snippets those config files `include` exis
 image the failed build never produced. Re-run the deploy (or
 `docker compose -f docker-compose.prod.yml build --no-cache nginx` then
 `docker compose -f docker-compose.prod.yml up -d nginx`), and do not restart nginx until that
-build succeeds.
+build succeeds. The same failure, with `[emerg] open() "/etc/nginx/bots.d/blockbots.conf" failed`,
+appears if the config is rolled back past the bot-blocker removal without rebuilding nginx. Rebuild
+with `build --pull --no-cache nginx` and `up -d --force-recreate nginx`, or roll forward.
 
 **Confirming the lockdown works:** `deployment/scripts/verify-origin-lockdown.sh` from a
 machine outside Cloudflare. A direct `curl` to the IP is *supposed* to fail.

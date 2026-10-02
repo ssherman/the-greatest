@@ -159,6 +159,8 @@ keeps --no-cache for origin-lockdown's Cloudflare range refresh.
 
 - [ ] **Step 1: Write the failing harness probe.** In `local-lockdown-test.sh`, inside run B and after `B7`, add:
 
+**As built:** the B8 probe below could not tell per-visitor from per-edge keying (the burst ends before the bucket matters). The shipped probe is in `deployment/nginx/test/local-lockdown-test.sh` (commit d45c6747): a foreground 1000-request burst from one visitor, then 150 requests from a second visitor that must all get 200, with the client cert on every request.
+
 ```bash
 # B8: per-visitor rate limiting (nginx.conf). One visitor (CF-Connecting-IP 203.0.113.50)
 # far over 90 r/s + burst 200 gets 429s; a different visitor arriving through the same peer

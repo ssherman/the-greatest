@@ -1,5 +1,7 @@
 # The stable line, not :latest (mainline). The deploy builds with --pull, so 1.30.x patch
 # releases still arrive; move to the next stable line deliberately.
+# 1.30 became stable in April 2026; nginx ships a new stable line each April and stops patching
+# the old one, so revisit this pin by April 2027.
 FROM nginx:1.30
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl jq ca-certificates

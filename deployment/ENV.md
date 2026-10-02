@@ -115,9 +115,9 @@ These variables are used by nginx's built-in template system for environment var
 #### NGINX_ENVSUBST_OUTPUT_DIR
 - **Description**: Output directory for processed nginx templates
 - **Required**: Yes
-- **Default**: `/etc/nginx/sites-enabled`
+- **Value**: MUST be `/etc/nginx/sites-enabled`, which `docker-compose.prod.yml` sets
 - **Used By**: nginx built-in templating system
-- **Note**: Automatically handled by official nginx Docker image
+- **Note**: The official nginx image's own default is `/etc/nginx/conf.d`, which our `nginx.conf` does not include. Leaving the variable unset starts nginx with no site servers.
 
 ## Optional Variables
 
@@ -324,7 +324,8 @@ OPENSEARCH_URL=https://opensearch.example.com:9200
 # SSL Certificates
 CLOUDFLARE_API_TOKEN=your_cloudflare_token_here
 
-# Nginx (docker-compose sets these by default)
+# Nginx (docker-compose sets these by default; NGINX_ENVSUBST_OUTPUT_DIR must stay
+# /etc/nginx/sites-enabled, the image default conf.d is not included by nginx.conf)
 NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/sites-enabled
 WEB_HOST=web
 WEB_PORT=80
