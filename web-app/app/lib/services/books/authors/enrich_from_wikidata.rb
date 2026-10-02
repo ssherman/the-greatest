@@ -8,12 +8,12 @@ module Services
       # legacy Wikipedia description; on a miss, deprecate those
       # descriptions. At most one books.author_wikidata ledger row per run,
       # skips and failures included, tied to the run's decision. A Wikimedia
-      # failure writes a failed row and returns. A rate limit propagates so
-      # the job can reschedule -- it still writes a failed row first if a
-      # decision was already recorded this run (facts applied before the
-      # wait are not lost); a rate limit hit during resolution, before any
-      # decision exists, writes nothing. So does any other error once the
-      # run has started (LedgerRun#unexpected).
+      # failure writes a failed row and returns. Any other error once the
+      # run has started writes a failed row too (LedgerRun#unexpected). A
+      # rate limit propagates so the job can reschedule -- it still writes a
+      # failed row first if a decision was already recorded this run (facts
+      # applied before the wait are not lost); a rate limit hit during
+      # resolution, before any decision exists, writes nothing.
       class EnrichFromWikidata
         include LedgerRun
 
