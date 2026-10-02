@@ -7,7 +7,7 @@
 **Architecture:** Each fix is small, local, and independent of the others:
 - The auth endpoints accept only JSON.
 - Two Stimulus controllers stop building HTML strings.
-- The user-list policy is owner-only.
+- User lists: only the owner edits; the owner or a global admin deletes.
 - Two admin searches escape LIKE wildcards.
 - Search query text drops to debug logging.
 - Cover-art downloads get a size cap.
@@ -307,7 +307,7 @@ both controllers off innerHTML.
 
 ---
 
-### Task 3: Owner-only list edits (I1) and escaped admin searches (I4)
+### Task 3: User-list edit/delete rules (I1) and escaped admin searches (I4)
 
 **Files:**
 - Modify: `web-app/app/policies/user_list_policy.rb`
@@ -318,7 +318,7 @@ both controllers off innerHTML.
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `UserListPolicy#update?` and `#destroy?` (owner-only; `edit?` follows `update?` through `ApplicationPolicy`).
+- Produces: `UserListPolicy#update?` (owner only; `edit?` follows it through `ApplicationPolicy`) and `#destroy?` (owner or global admin).
 
 Facts already checked:
 - `UserListPolicy` today inherits `update?` and `destroy?` from `ApplicationPolicy`, which returns true for any global admin or editor. No controller calls them yet, so the hole is latent.
@@ -335,12 +335,20 @@ Append to `test/policies/user_list_policy_test.rb` (inside the class):
     assert UserListPolicy.new(@user, @list).destroy?
   end
 
-  test "update?, edit? and destroy? refuse a global admin or editor who does not own the list" do
+  test "update? and edit? refuse a global admin or editor who does not own the list" do
     [users(:admin_user), users(:editor_user)].each do |staff|
       refute UserListPolicy.new(staff, @list).update?, "#{staff.email} must not update another user's list"
       refute UserListPolicy.new(staff, @list).edit?, "#{staff.email} must not edit another user's list"
-      refute UserListPolicy.new(staff, @list).destroy?, "#{staff.email} must not destroy another user's list"
     end
+  end
+
+  # Decided 2026-10-01 (Shane): an admin can delete anything, a user list included.
+  test "destroy? allows a global admin on a list they do not own" do
+    assert UserListPolicy.new(users(:admin_user), @list).destroy?
+  end
+
+  test "destroy? refuses a global editor who does not own the list" do
+    refute UserListPolicy.new(users(:editor_user), @list).destroy?
   end
 
   test "update? and destroy? refuse an anonymous visitor" do
@@ -388,13 +396,13 @@ Before relying on `[]`, check that no fixture user email and no games ranking co
 Run: `bin/rails test test/policies/user_list_policy_test.rb test/controllers/admin/users_controller_test.rb test/controllers/admin/games/ranking_configurations_controller_test.rb`
 
 Expected:
-- The admin/editor policy test fails, because `ApplicationPolicy` lets staff through.
+- The "update? and edit? refuse" test and the "destroy? refuses a global editor" test fail, because `ApplicationPolicy` lets staff through. The admin-can-destroy test already passes, and it pins Shane's rule that an admin can delete anything.
 - Both `%` tests fail, because every row matches.
 - The array tests may pass today, since `"%#{["admin"]}%"` interpolates without raising. That is fine: they pin the `to_s` guard that Step 3 needs.
 
 - [ ] **Step 3: Implement.**
 
-`app/policies/user_list_policy.rb`: replace the stale comment line `# update?/destroy? are added in Phase B (user-lists-02f).` with `# update?/destroy? are owner-only: staff roles grant nothing over a personal list.`. Then add, after `show?`:
+`app/policies/user_list_policy.rb`: replace the stale comment line `# update?/destroy? are added in Phase B (user-lists-02f).` with `# update? is owner-only; destroy? is the owner or a global admin (admins can delete anything). Editors get neither.`. Then add, after `show?`:
 
 ```ruby
   def update?
@@ -402,9 +410,11 @@ Expected:
   end
 
   def destroy?
-    owner?
+    owner? || global_admin?
   end
 ```
+
+`global_admin?` comes from `ApplicationPolicy` (`user&.admin?`). Do not use `global_role?`, which also passes editors.
 
 `owner?` already returns false for a nil user, because `record.user_id == nil&.id` compares against nil and the list's `user_id` is never nil.
 
@@ -452,9 +462,10 @@ Expected: 0 failures.
 ```bash
 bundle exec standardrb app/policies/user_list_policy.rb app/controllers/admin/users_controller.rb app/controllers/admin/ranking_configurations_controller.rb test/policies/user_list_policy_test.rb test/controllers/admin/users_controller_test.rb test/controllers/admin/games/ranking_configurations_controller_test.rb
 git -C /home/shane/dev/the-greatest/.claude/worktrees/security-audit-fixes add web-app/app/policies/user_list_policy.rb web-app/app/controllers/admin/users_controller.rb web-app/app/controllers/admin/ranking_configurations_controller.rb web-app/test/policies/user_list_policy_test.rb web-app/test/controllers/admin/users_controller_test.rb web-app/test/controllers/admin/games/ranking_configurations_controller_test.rb
-git -C /home/shane/dev/the-greatest/.claude/worktrees/security-audit-fixes commit -m "Owner-only user list edits; escape LIKE wildcards in two admin searches
+git -C /home/shane/dev/the-greatest/.claude/worktrees/security-audit-fixes commit -m "User lists: owner edits, owner or admin deletes; escape LIKE wildcards
 
-UserListPolicy#update? and #destroy? no longer inherit the staff bypass.
+UserListPolicy#update? is owner-only and #destroy? is the owner or a global
+admin; global editors no longer inherit the staff bypass on personal lists.
 The admin users and ranking-configuration searches treat % and _ as
 literals and accept an array q without erroring.
 

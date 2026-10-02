@@ -267,8 +267,9 @@ check and a clean `sops -d`.
 - **L6:** `authentication_controller.js` (the signed-in user's `photoURL`/`displayName`) and
   `wizard_step_controller.js` (an admin-only job error message) build DOM with
   `createElement`/`textContent`/`setAttribute`, as `form_token_controller.js` does.
-- **I1:** `UserListPolicy#update?` and `#destroy?` return owner-only. Today they inherit
-  `ApplicationPolicy`, which passes any global editor or admin.
+- **I1:** `UserListPolicy#update?` is owner-only and `#destroy?` is the owner or a global admin
+  (Shane, 2026-10-01: an admin can delete anything). Today both inherit `ApplicationPolicy`, which
+  also passes global editors. Nothing calls either yet, so this sets the rule before a feature does.
 - **I4:** `Admin::UsersController` and `Admin::RankingConfigurationsController` wrap `params[:q]`
   in `sanitize_sql_like`.
 - **I5:** the 11 `logger.info ... query_definition.inspect` lines under `app/lib/search/` drop to
