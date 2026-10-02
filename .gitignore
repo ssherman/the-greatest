@@ -8,6 +8,8 @@ secrets/*.tmp
 temp.env
 *.decrypted
 .env.*.plain
+.env.new
+.env.backup*
 
 # Local .terraform directories
 **/.terraform/*

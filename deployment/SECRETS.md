@@ -245,9 +245,10 @@ Secrets are automatically decrypted and deployed by GitHub Actions.
    refuses to connect unless the server's host key matches that fingerprint.
 3. On the server, the script runs `git pull`, which brings the encrypted `secrets/.env.production`.
 4. It decrypts with the key passed in the environment, never written to disk:
-   `SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops -d secrets/.env.production > .env.new`, then moves
-   `.env.new` over `.env` and sets mode 0600. A failed decrypt stops the script and leaves the
-   previous `.env` in place.
+   `(umask 077; SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops -d secrets/.env.production > .env.new)`, then
+   moves `.env.new` over `.env` and sets mode 0600. `.env.new` is created private (umask 077), and
+   the script unsets the key variable after the decrypt. A failed decrypt stops the script and
+   leaves the previous `.env` in place.
 5. It pulls the web and worker images, rebuilds nginx, and runs `docker compose up -d`. Compose
    reads `.env` automatically.
 

@@ -21,8 +21,10 @@ jobs:
         run: test -n "$FINGERPRINT" || { echo "::error::SERVER_SSH_HOST_FINGERPRINT is not set"; exit 1; }
 
       - name: Deploy application
-        # master as of 2026-09-30, pinned to a commit. Not the v1.2.5 tag: it
-        # predates the action's checksum check on the drone-ssh binary.
+        # master as of 2026-09-30, pinned to a commit, which fixes the action's
+        # code. It still downloads the drone-ssh binary from appleboy's release
+        # and checks it against that release's checksums file (catches
+        # corruption, not a replaced release). The v1.2.5 tag predates even that.
         uses: appleboy/ssh-action@c4f70287fc37c43b14b30b407224bbbc8e8c6327
         env:
           AGE_PRIVATE_KEY: ${{ secrets.AGE_PRIVATE_KEY }}
@@ -51,9 +53,10 @@ jobs:
 
             # Decrypt secrets to .env. sops reads the age key from the
             # environment, so the key is never written to disk.
-            SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops -d secrets/.env.production > .env.new
+            (umask 077; SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops -d secrets/.env.production > .env.new)
             mv .env.new .env
             chmod 600 .env
+            unset AGE_PRIVATE_KEY
 
             # Pull web/worker images and rebuild nginx
             docker compose -f docker-compose.prod.yml pull
