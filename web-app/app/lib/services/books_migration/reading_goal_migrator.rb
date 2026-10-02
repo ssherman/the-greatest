@@ -37,23 +37,33 @@ module Services
           raise "legacy reading goal id #{maximum_legacy_id} reaches reserved id floor #{RESERVED_ID_FLOOR}"
         end
 
-        unexpected_low_ids = target_model
-          .where(id: ...RESERVED_ID_FLOOR)
-          .where.not(id: @legacy_goal_ids)
-          .order(:id)
-          .pluck(:id)
-        if unexpected_low_ids.any?
-          raise "unexpected target ids below #{RESERVED_ID_FLOOR}: #{unexpected_low_ids.join(", ")}"
-        end
-
         @preflight_rows = nil
         rows = []
         legacy_each { |attrs| rows << attrs }
         @preflight_rows = rows
         @preflight_rows.each { |attrs| build_rows(attrs) }
+
+        delete_orphaned_goals
       end
 
-      # The legacy corpus is intentionally small (399 rows). Materializing it lets
+      # The table's sequence starts at the reserved floor, so every id below it
+      # came from an earlier pass of this migration. One that legacy no longer
+      # holds is a goal its owner deleted on the live legacy site since then.
+      # Runs only after every legacy row has validated, so a failed preflight
+      # deletes nothing.
+      def delete_orphaned_goals
+        orphans = target_model
+          .where(id: ...RESERVED_ID_FLOOR)
+          .where.not(id: @legacy_goal_ids)
+        @orphaned_goal_ids = orphans.order(:id).pluck(:id)
+        orphans.delete_all if @orphaned_goal_ids.any?
+      end
+
+      def extra_result_data
+        {orphaned_goals_deleted: @orphaned_goal_ids}
+      end
+
+      # The legacy corpus is intentionally small (a few hundred rows). Materializing it lets
       # preload_context validate every definition before BulkUpsertMigrator can
       # commit its first 1,000-row batch.
       def legacy_each(&block)

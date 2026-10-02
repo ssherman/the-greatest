@@ -5,12 +5,6 @@ module Services
     class ReadingGoalVerification
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-      EXPECTED_DEFINITION_TOTALS = {
-        imported_goals: 399,
-        distinct_owners: 374,
-        public_goals: 8,
-        id_range: 1..438
-      }.freeze
       RESERVED_ID_FLOOR = ReadingGoalMigrator::RESERVED_ID_FLOOR
       FORBIDDEN_JOIN_TABLES = %w[reading_goal_books books_reading_goal_books].freeze
       FORBIDDEN_PERCENTAGE_COLUMNS = %w[percentage percentage_done].freeze
@@ -45,15 +39,23 @@ module Services
           persisted_percentage_columns: persisted_percentage_columns,
           repairs: repairs
         }
-        errors = definition_errors(data)
+        errors = definition_errors(data, expected_definition_totals(legacy_goals))
 
         Result.new(success?: errors.empty?, data: data, errors: errors)
       end
 
       private
 
-      def expected_definition_totals
-        EXPECTED_DEFINITION_TOTALS
+      # Legacy is the live legacy site, so its totals move between rehearsals;
+      # the expectation is that every legacy goal arrived, not a fixed count.
+      def expected_definition_totals(legacy_goals)
+        legacy_ids = legacy_goals.map(&:id)
+        {
+          imported_goals: legacy_goals.size,
+          distinct_owners: legacy_goals.map(&:user_id).uniq.size,
+          public_goals: legacy_goals.count { |goal| goal.public == true },
+          id_range: legacy_ids.min..legacy_ids.max
+        }
       end
 
       def missing_owner_count(legacy_goals)
@@ -123,8 +125,7 @@ module Services
         end
       end
 
-      def definition_errors(data)
-        expected = expected_definition_totals
+      def definition_errors(data, expected)
         errors = []
         errors << "expected #{expected[:imported_goals]} imported goals, found #{data[:imported_goals]}" if data[:imported_goals] != expected[:imported_goals]
         errors << "expected #{expected[:distinct_owners]} distinct owners, found #{data[:distinct_owners]}" if data[:distinct_owners] != expected[:distinct_owners]
