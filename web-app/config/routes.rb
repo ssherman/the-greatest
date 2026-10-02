@@ -760,6 +760,7 @@ Rails.application.routes.draw do
         member do
           post :review
           post :recheck
+          post :reject
         end
       end
       resources :duplicate_candidates, only: [:index] do

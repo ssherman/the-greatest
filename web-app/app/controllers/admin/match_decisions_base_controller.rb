@@ -11,8 +11,10 @@
 class Admin::MatchDecisionsBaseController < Admin::BaseController
   include Admin::DomainScopedAuth
 
-  before_action :set_decision, only: [:show, :review, :recheck]
+  before_action :set_decision, only: [:show, :review, :recheck, :reject]
   before_action :require_domain_write!, only: [:review, :recheck]
+  # A reject removes what a link wrote, so it takes the merge action's gate.
+  before_action :require_domain_delete!, only: [:reject]
 
   OUTCOMES = ::MatchDecision.outcomes.keys.freeze
   CONFIDENCES = ::MatchDecision.confidences.keys.freeze
@@ -23,7 +25,7 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
   PER_PAGE = 50
 
   helper_method :filter_params, :decisions_index_path, :decision_path, :entries, :entry_for,
-    :review_decision_path, :recheck_decision_path, :ai_chat_path_for
+    :review_decision_path, :recheck_decision_path, :reject_decision_path, :ai_chat_path_for
 
   def index
     @reviewed = REVIEWED.include?(params[:reviewed]) ? params[:reviewed] : "pending"
@@ -68,6 +70,24 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
 
     redirect_to decision_path(match.decision, compare: @decision.id),
       notice: "Re-checked: #{match.outcome}, #{match.confidence} confidence, decided by #{match.decided_by}."
+  end
+
+  # Reject link (spec §12), offered where the registry names a reject
+  # service. Synchronous: it reverts database rows and queues the author's
+  # Wikidata step again. Only the books routes define it.
+  def reject
+    entry = entry_for(@decision)
+    unless entry&.rejectable?
+      redirect_to decision_path(@decision), alert: "Reject is not available for #{entry&.label&.downcase || @decision.finder} decisions."
+      return
+    end
+
+    result = entry.reject_service_class.call(decision: @decision, user: current_user)
+    if result.success?
+      redirect_to decision_path(@decision), notice: reject_notice(result.data)
+    else
+      redirect_to decision_path(@decision), alert: result.errors.to_sentence
+    end
   end
 
   private
@@ -170,5 +190,19 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
 
   def recheck_decision_path(decision)
     public_send(:"recheck_#{route_prefix}match_decision_path", decision)
+  end
+
+  def reject_notice(data)
+    parts = ["Link rejected."]
+    others = data[:decisions].size - 1
+    parts << "#{others} more decision(s) for the same record rejected with it." if others.positive?
+    parts << "Removed: #{data[:reverted].join(", ")}." if data[:reverted].any?
+    parts << "#{data[:descriptions_deprecated]} AI description(s) deprecated." if data[:descriptions_deprecated].positive?
+    parts << "The author's Wikidata step runs again."
+    parts.join(" ")
+  end
+
+  def reject_decision_path(decision)
+    public_send(:"reject_#{route_prefix}match_decision_path", decision)
   end
 end

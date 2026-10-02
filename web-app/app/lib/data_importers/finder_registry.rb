@@ -10,13 +10,14 @@ module DataImporters
   # never reaches an audit page: the decisions index filters by the domain's
   # registered finder names and the duplicates index by its registered models.
   # External-link entries (kind :external_link) audit a service that links a
-  # record to an external source; see Entry#external_link?.
+  # record to an external source; see Entry#external_link?. An external-link
+  # entry may name a reject service, which puts Reject link on its decisions.
   module FinderRegistry
     URL_HELPERS = Rails.application.routes.url_helpers
 
     Entry = Struct.new(
       :finder, :domain, :model, :label, :query, :preloads,
-      :merge_action, :source_field, :execute_action_path, :recheck, :kind,
+      :merge_action, :source_field, :execute_action_path, :recheck, :kind, :reject_service,
       keyword_init: true
     ) do
       def finder_class = finder.constantize
@@ -37,6 +38,12 @@ module DataImporters
       def external_link? = kind == :external_link
 
       def finder? = !external_link?
+
+      # Whether the audit page offers Reject link (spec §12): the service
+      # that rejects one of this entry's decisions.
+      def rejectable? = reject_service.present?
+
+      def reject_service_class = reject_service.constantize
     end
 
     ENTRIES = [
@@ -91,12 +98,12 @@ module DataImporters
       Entry.new(
         finder: "Services::Books::Authors::ResolveWikidata", domain: :books, model: "Books::Author", label: "Wikidata link",
         query: nil, preloads: [], merge_action: nil, source_field: nil, execute_action_path: nil,
-        recheck: false, kind: :external_link
+        recheck: false, kind: :external_link, reject_service: "Services::Books::Authors::RejectExternalLink"
       ),
       Entry.new(
         finder: "Services::Books::Authors::ResolveViaf", domain: :books, model: "Books::Author", label: "VIAF link",
         query: nil, preloads: [], merge_action: nil, source_field: nil, execute_action_path: nil,
-        recheck: false, kind: :external_link
+        recheck: false, kind: :external_link, reject_service: "Services::Books::Authors::RejectExternalLink"
       )
     ].freeze
 

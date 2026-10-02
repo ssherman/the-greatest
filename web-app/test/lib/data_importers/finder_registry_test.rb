@@ -95,5 +95,12 @@ module DataImporters
       assert_includes FinderRegistry.for_domain(:books).map(&:finder), "Services::Books::Authors::ResolveWikidata"
       assert_includes FinderRegistry.for_domain(:books).map(&:finder), "Services::Books::Authors::ResolveViaf"
     end
+
+    test "the two author link entries can reject; no finder can" do
+      rejectable = DataImporters::FinderRegistry::ENTRIES.select(&:rejectable?)
+
+      assert_equal ["Services::Books::Authors::ResolveViaf", "Services::Books::Authors::ResolveWikidata"], rejectable.map(&:finder).sort
+      assert_equal [Services::Books::Authors::RejectExternalLink], rejectable.map(&:reject_service_class).uniq
+    end
   end
 end
