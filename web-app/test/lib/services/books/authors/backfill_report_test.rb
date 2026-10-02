@@ -20,8 +20,8 @@ module Services
           @other = ::Books::Author.create!(name: "Report Other")
         end
 
-        def decide(finder, outcome, decided_by, needs_review: false, at: Time.current)
-          ::MatchDecision.create!(finder: finder.name, subject: @author, outcome: outcome, confidence: :high, decided_by: decided_by,
+        def decide(finder, outcome, decided_by, needs_review: false, at: Time.current, subject: @author)
+          ::MatchDecision.create!(finder: finder.name, subject: subject, outcome: outcome, confidence: :high, decided_by: decided_by,
             needs_review: needs_review, candidates: [], created_at: at)
         end
 
@@ -36,16 +36,26 @@ module Services
 
         def report = BackfillReport.call(since: @since).data
 
-        test "splits each step's decisions by outcome and how they were decided, and counts those needing review" do
-          decide(ResolveWikidata, :matched, :rule)
-          decide(ResolveWikidata, :unmatched, :ai, needs_review: true)
-          decide(ResolveViaf, :matched, :identifier)
-          decide(ResolveWikidata, :matched, :identifier, at: @since - 1.hour)
+        test "splits each step's decisions by outcome and how they were decided, and counts those needing review, " \
+          "by each author's latest decision" do
+          third = ::Books::Author.create!(name: "Report Third")
+
+          # @author's Wikidata step ran twice in the window (a retry): only the later decision should count.
+          decide(ResolveWikidata, :unmatched, :ai, needs_review: true, at: @since + 10.minutes)
+          decide(ResolveWikidata, :matched, :identifier, at: @since + 20.minutes)
+
+          # @other's latest Wikidata decision is flagged, but already reviewed: it must not count as needing review.
+          reviewed = decide(ResolveWikidata, :unmatched, :ai, needs_review: true, at: @since + 5.minutes, subject: @other)
+          reviewed.update!(reviewed_at: Time.current)
+
+          # third: a single VIAF decision, and a Wikidata decision entirely before the window (must not leak in).
+          decide(ResolveViaf, :matched, :identifier, subject: third)
+          decide(ResolveWikidata, :matched, :identifier, at: @since - 1.hour, subject: third)
 
           data = report
 
-          assert_equal({"matched rule" => 1, "unmatched ai" => 1}, data[:decisions]["Wikidata"][:split])
-          assert_equal [1, 0], [data[:decisions]["Wikidata"][:needs_review], data[:decisions]["VIAF"][:needs_review]]
+          assert_equal({"matched identifier" => 1, "unmatched ai" => 1}, data[:decisions]["Wikidata"][:split])
+          assert_equal [0, 0], [data[:decisions]["Wikidata"][:needs_review], data[:decisions]["VIAF"][:needs_review]]
           assert_equal({"matched identifier" => 1}, data[:decisions]["VIAF"][:split])
         end
 
@@ -81,6 +91,7 @@ module Services
           assert_equal({"Books::Authors::ViafJob" => 2}, data[:waiting])
           assert_operator data[:remaining], :>=, 2
           assert(data[:lines].any? { |line| line.include?("list prices") })
+          assert(data[:lines].any? { |line| line.include?("flex") })
         end
       end
     end

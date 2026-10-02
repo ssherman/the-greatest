@@ -48,4 +48,12 @@ class BooksAuthorsRakeTest < ActiveSupport::TestCase
     report.reenable
     assert_output("one\ntwo\n") { report.invoke("2026-10-02T12:00:00Z") }
   end
+
+  test "a bare number is not a time -- enrich's limit does not belong here" do
+    report = Rake::Task["books:authors:enrich_report"]
+    ::Services::Books::Authors::BackfillReport.expects(:call).never
+
+    report.reenable
+    assert_raises(SystemExit) { capture_io { report.invoke("100") } }
+  end
 end

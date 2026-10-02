@@ -9,9 +9,12 @@ module Services
       # decisions split and how many need review, how the ledger rows ended,
       # what the AI calls cost, and what is still waiting.
       #
-      # Prices are list prices per million tokens from a 2026-09 research
-      # pass, and cached input is priced in full, so the dollar figure is an
-      # estimate and an upper bound; the OpenAI usage page has the bill.
+      # Prices are standard list prices per million tokens from a 2026-09
+      # research pass. Every call here runs on OpenAI's flex tier
+      # (Services::Ai::Providers::OpenaiStrategy sets service_tier: "flex"),
+      # usually billed at about half list price, and cached input is priced
+      # in full too, so the dollar figure is an estimate and an upper bound;
+      # the OpenAI usage page has the bill.
       class BackfillReport
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -62,11 +65,20 @@ module Services
           wikidata_rows.distinct.count(:enrichable_id) / ((last - first) / 3600.0)
         end
 
+        # Each author's latest decision for this step in the window: retries
+        # and the forced Wikidata run after a VIAF match leave several per
+        # author, and only the last one stands.
+        def latest_decisions(finder)
+          ids = ::MatchDecision.where(finder: finder, subject_type: "Books::Author", created_at: @since..)
+            .select("DISTINCT ON (subject_id) id").order(:subject_id, created_at: :desc, id: :desc)
+          ::MatchDecision.where(id: ids)
+        end
+
         def decision_numbers(finder)
-          scope = ::MatchDecision.where(finder: finder, subject_type: "Books::Author", created_at: @since..)
+          scope = latest_decisions(finder)
           {
             split: scope.group(:outcome, :decided_by).count.transform_keys { |outcome, decided_by| "#{outcome} #{decided_by}" },
-            needs_review: scope.where(needs_review: true).count
+            needs_review: scope.needing_review.count
           }
         end
 
@@ -103,7 +115,7 @@ module Services
             "#{", #{data[:per_hour].round(1)} an hour" if data[:per_hour]}"
           data[:decisions].each do |label, numbers|
             split = numbers[:split].map { |key, count| "#{key} #{count}" }.join(", ").presence || "none"
-            out << "#{label} decisions: #{split}; #{numbers[:needs_review]} need review"
+            out << "#{label} decisions (latest per author): #{split}; #{numbers[:needs_review]} need review"
           end
           data[:outcomes].each do |kind, counts|
             failed = data[:failures][kind].map { |reason, count| "#{reason || "no reason"} #{count}" }.join(", ")
@@ -115,10 +127,12 @@ module Services
             out << "AI #{model}: #{totals[:chats]} call(s), #{totals[:input]} in / #{totals[:output]} out tokens, " \
               "#{totals[:web_searches]} web search(es), #{price}"
           end
-          out << format("AI total: about $%.2f at list prices (cached input priced in full; the OpenAI usage page has the bill)", data[:ai][:cost])
+          out << format("AI total: about $%.2f at standard list prices. These calls run on the flex tier, usually billed at about " \
+            "half that; cached input is priced in full. The OpenAI usage page has the bill.", data[:ai][:cost])
           if per_author
-            out << format("Per author: about $%.4f. The %d author(s) the Wikidata step has not processed would cost about $%.0f, " \
-              "and take about %.1f hours for the Wikidata step at one every %ds.",
+            out << format("Per author: about $%.4f at list prices (flex tier, usually about half this). The %d author(s) the " \
+              "Wikidata step has not processed would cost about $%.0f at list prices, and take about %.1f hours for the " \
+              "Wikidata step at one every %ds.",
               per_author, data[:remaining], per_author * data[:remaining], data[:remaining] * Backfill::SPACING / 3600.0, Backfill::SPACING)
           end
           waiting = data[:waiting].map { |job, count| "#{job.demodulize} #{count}" }.join(", ").presence || "nothing"

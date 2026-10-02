@@ -24,7 +24,7 @@ namespace :books do
       "bin/rails \"books:authors:enrich_report[2026-10-02T12:00:00Z]\""
     task :enrich_report, [:since] => :environment do |_task, args|
       since = begin
-        Time.zone.parse(args[:since].to_s)
+        Time.iso8601(args[:since].to_s)
       rescue ArgumentError
         nil
       end
