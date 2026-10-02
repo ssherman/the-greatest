@@ -126,6 +126,16 @@ module Services
             refute_includes task.send(:system_message), "web search"
             assert_includes task(mode: :research).send(:system_message), "web search"
           end
+
+          test "BCE years read as BCE in the author's facts and book list" do
+            author = ::Books::Author.create!(name: "Euripides", birth_year: -480, death_year: -406)
+            author.book_authors.create!(book: ::Books::Book.create!(title: "Medea", first_published_year: -431), position: 1)
+
+            text = AuthorFactsTask.new(parent: author, records: records, mode: :knowledge).send(:user_prompt)
+
+            assert_includes text, "Already on record: born 480 BCE; died 406 BCE"
+            assert_includes text, "- Medea (431 BCE)"
+          end
         end
       end
     end
