@@ -323,6 +323,14 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
 
   # --- CSV ---
 
+  test "show renders the download button as a plain link" do
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(@albums_listened)
+
+    assert_select "a[data-testid=download-csv][href*='.csv'][aria-label='Download CSV']"
+    assert_select "dialog#csv_export_modal", count: 0
+  end
+
   test "csv download is BOM-prefixed with per-listable columns and a sanitized filename" do
     sign_in_as(@user, stub_auth: true)
     get my_list_path(@albums_listened, format: :csv)

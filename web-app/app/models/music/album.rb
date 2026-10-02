@@ -40,6 +40,7 @@ class Music::Album < ApplicationRecord
   # has_many :songs, through: :releases
   has_many :credits, as: :creditable, class_name: "Music::Credit", dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
+  has_many :match_decisions, as: :record, dependent: :nullify
   has_many :identifiers, as: :identifiable, dependent: :destroy
 
   # Category associations

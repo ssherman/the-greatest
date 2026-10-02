@@ -8,7 +8,7 @@ module DataImporters
         # Queues a background job to download cover art from IGDB CDN
         # This is an async provider - returns success immediately after queuing
         class CoverArt < DataImporters::ProviderBase
-          def populate(game, query:)
+          def populate(game, query:, match: nil)
             # Game must be persisted for the job to find it
             return failure_result(errors: ["Game must be persisted"]) unless game.persisted?
 

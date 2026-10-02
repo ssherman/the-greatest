@@ -33,6 +33,7 @@ module Games
           merge_all_associations
           reconcile_scalars
           target_game.save! if target_game.changed?
+          resolve_duplicate_candidates
           destroy_source_game
           @transaction_body_completed = true
         end
@@ -404,6 +405,14 @@ module Games
       # read that short list and bake the wrong result into the rankings.
       def regenerate_user_favorites_list
         GenerateUserFavoritesListsJob.perform_async("Games::UserList")
+      end
+
+      # The (source, target) pair on duplicate_candidates becomes merged, other
+      # pending pairs naming the source re-key onto the target, and
+      # match_decisions that named the source now name the target. Inside the
+      # transaction so a rollback undoes it with the rest.
+      def resolve_duplicate_candidates
+        ::Services::DuplicateCandidates::RecordMerge.call(item_type: "Games::Game", source_id: @source_game_id, target_id: target_game.id)
       end
 
       def destroy_source_game

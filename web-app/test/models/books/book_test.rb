@@ -388,5 +388,11 @@ module Books
       book.correction_applied(%w[title])
       assert_equal "very_long", book.book_length
     end
+
+    test "normalizes exotic whitespace in the title on save" do
+      book = ::Books::Book.create!(title: "The Secret Lives")
+
+      assert_equal "The Secret Lives", book.reload.title
+    end
   end
 end

@@ -47,7 +47,7 @@ class Games::CoverArtDownloadJob
     Rails.logger.info "Downloading cover art from: #{cover_url}"
 
     begin
-      tempfile = Down.download(cover_url)
+      tempfile = Down.download(cover_url, max_size: 10 * 1024 * 1024)
 
       # Create Image record, attach file, then save
       image = game.images.build(primary: true)

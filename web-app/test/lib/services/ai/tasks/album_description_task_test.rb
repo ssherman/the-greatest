@@ -16,8 +16,8 @@ module Services
             assert_equal :openai, @task.send(:task_provider)
           end
 
-          test "task_model returns gpt-5-mini" do
-            assert_equal "gpt-5-mini", @task.send(:task_model)
+          test "task_role is standard" do
+            assert_equal :standard, @task.send(:task_role)
           end
 
           test "temperature returns 1.0" do

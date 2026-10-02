@@ -19,7 +19,7 @@ module Services
 
           def task_provider = :openai  # Use OpenAI for JSON schema support
 
-          def task_model = "gpt-5-mini"
+          def task_role = :fast
 
           def temperature = 1.0  # GPT-5 does not support temperature
 

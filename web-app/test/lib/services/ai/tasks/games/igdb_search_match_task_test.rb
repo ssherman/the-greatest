@@ -74,8 +74,8 @@ module Services
             assert_equal :openai, @task.send(:task_provider)
           end
 
-          test "uses gpt-5-mini model" do
-            assert_equal "gpt-5-mini", @task.send(:task_model)
+          test "uses the fast role" do
+            assert_equal :fast, @task.send(:task_role)
           end
 
           test "user_prompt includes search query" do

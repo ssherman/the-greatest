@@ -45,3 +45,10 @@
 # Ignore Docker-related files
 /.dockerignore
 /Dockerfile*
+
+# Not needed at runtime: tests, E2E specs, docs, and stray local artifacts.
+/test
+/e2e
+/docs
+/current_spec_output.txt
+/results.json

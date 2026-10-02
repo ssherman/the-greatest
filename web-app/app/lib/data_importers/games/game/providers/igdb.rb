@@ -30,7 +30,7 @@ module DataImporters
           # @param game [Games::Game] the game to enrich
           # @param query [ImportQuery] contains igdb_id (may be nil for item-based imports)
           # @return [ProviderResult] success or failure result
-          def populate(game, query:)
+          def populate(game, query:, match: nil)
             # Get IGDB ID from query or from existing identifier
             igdb_id = resolve_igdb_id(game, query)
             return failure_result(errors: ["No IGDB ID available"]) unless igdb_id

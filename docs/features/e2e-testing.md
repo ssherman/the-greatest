@@ -36,7 +36,7 @@ web-app/
   e2e/
     playwright.config.ts          # Playwright configuration
     tsconfig.json                 # TypeScript config for e2e tests
-    .env                          # PLAYWRIGHT_ADMIN_EMAIL, PLAYWRIGHT_ADMIN_PASSWORD (gitignored)
+    .env                          # PLAYWRIGHT_ADMIN_EMAIL, PLAYWRIGHT_ADMIN_PASSWORD, PLAYWRIGHT_MEMBER_EMAIL, PLAYWRIGHT_MEMBER_PASSWORD (gitignored)
     auth/
       auth.setup.ts               # Global auth setup: login + save storage state
     fixtures/
@@ -105,6 +105,16 @@ Create a dedicated test account:
    bin/rails e2e:admin
    ```
    The task reads `PLAYWRIGHT_ADMIN_EMAIL` from `e2e/.env` and promotes that user.
+
+   `e2e/tests/books/admin/import-finder-audit.spec.ts` seeds its own rows by shelling out to
+   `bin/rails e2e:import_finder_seed` and removes them with `e2e:import_finder_cleanup`; both are
+   idempotent and safe to re-run after an interrupted run.
+
+   `e2e/tests/books/admin/reject-link.spec.ts` seeds a placeholder author through
+   `bin/rails e2e:reject_link_seed`, reads its link state back with `e2e:reject_link_state`, and
+   removes it with `e2e:reject_link_cleanup`. The author is a placeholder
+   (`exclude_from_rankings: true`), so the Wikidata run the reject queues makes no external or
+   model call.
 4. Verify you can manually log in at `https://dev.thegreatestmusic.org` with these credentials
 
 A music-only `DomainRole` is **not** enough. The same account drives both the music and games
@@ -116,11 +126,30 @@ confusing way (see Troubleshooting).
 the `users` table; the test account survives in Firebase but comes back as a plain `user`, and every
 admin spec then fails.
 
+### The member account
+
+`PLAYWRIGHT_ADMIN_EMAIL` is deliberately **not** a member: `tests/books/account/membership.spec.ts`
+proves the paywall turns a signed-in non-member away, and comping that account would make those
+tests vacuous. Members-only flows (the first is the API token page, `tests/books/member/`) use a
+second account:
+
+1. Create another email/password user in the Firebase project.
+2. Put it in `e2e/.env` as `PLAYWRIGHT_MEMBER_EMAIL` and `PLAYWRIGHT_MEMBER_PASSWORD`.
+3. Sign in once through the browser on `dev-new.thegreatestbooks.org` so the Rails `User` row exists.
+4. `bin/rails e2e:member` grants it a comped membership. Idempotent; re-run after a dev-database refresh,
+   like `e2e:admin`.
+
+The `books-member` Playwright project signs this account in (`auth/books-member-auth.setup.ts`) and
+matches `tests/books/member/**`. Specs there create real rows on the shared dev database and must
+clean up after themselves; `developers-tokens.spec.ts` revokes its own tokens before and after.
+
 ### 3. Environment File
 Create `web-app/e2e/.env` (gitignored):
 ```env
 PLAYWRIGHT_ADMIN_EMAIL=your-test-account@example.com
 PLAYWRIGHT_ADMIN_PASSWORD="your-password-here"
+PLAYWRIGHT_MEMBER_EMAIL=your-member-test-account@example.com
+PLAYWRIGHT_MEMBER_PASSWORD="your-password-here"
 ```
 **Important**: Quote the password value if it contains `#` or other special characters — dotenv treats unquoted `#` as an inline comment delimiter.
 
@@ -224,6 +253,7 @@ Fix:
 ```bash
 bin/rails e2e:admin
 ```
+
 This happens whenever the dev database is reseeded: the Firebase account still exists, so sign-in
 works and Rails auto-creates a fresh `User` with the default `user` role — no admin, no domain roles.
 

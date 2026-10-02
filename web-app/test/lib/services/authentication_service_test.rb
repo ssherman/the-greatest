@@ -9,11 +9,14 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   # AuthenticationService now builds a real ProviderEmailResolver on every
-  # call, which -- on an auth_uid miss -- reaches Identity Toolkit. Every
-  # pre-existing test in this file predates that and expects the token's own
-  # `email` claim to win, so the default here makes the provider-record
-  # lookup find nothing, which is exactly what makes the resolver fall back
-  # to that claim. GoogleServiceAccountToken.access_token is stubbed (not
+  # call, which -- on an auth_uid miss -- reaches Identity Toolkit. The default
+  # here makes the provider-record lookup
+  # find nothing, which makes the resolver fall back to the token's own
+  # `email` claim -- and AuthenticationService offers that claim only when
+  # email_verified is exactly true, which FirebaseTokenHelper's default token
+  # is. A test of an UNVERIFIED claim must stub the provider record it means
+  # (FirebaseAccountLookup.stubs(:call)), as production would supply one.
+  # GoogleServiceAccountToken.access_token is stubbed (not
   # FirebaseAccountLookup.call itself) and the lookup endpoint is stubbed
   # with WebMock rather than mocked away, so the REAL accounts:lookup code
   # path still runs -- which is what lets "a token minting failure refuses
@@ -104,6 +107,9 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   test "surfaces the unverified-email conflict as its own error code" do
+    Services::FirebaseAccountLookup.stubs(:call).returns([
+      {"providerId" => "password", "email" => users(:regular_user).email}
+    ])
     token = FirebaseTokenHelper.token({
       "sub" => "uid-attacker",
       "email" => users(:regular_user).email,
@@ -200,6 +206,9 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   test "password is never email-trusted on a false claim" do
+    Services::FirebaseAccountLookup.stubs(:call).returns([
+      {"providerId" => "password", "email" => "pw.person@example.com"}
+    ])
     token = FirebaseTokenHelper.token({
       "sub" => "uid-pw-untrusted",
       "email" => "pw.person@example.com",
@@ -289,7 +298,8 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
     payload = {
       "sub" => "uid_1",
       "firebase" => {"sign_in_provider" => "facebook.com", "identities" => {"facebook.com" => ["1016"]}},
-      "email" => "claim@example.com"
+      "email" => "claim@example.com",
+      "email_verified" => true
     }
     Services::JwtValidationService.stubs(:call).returns(payload)
 
@@ -341,6 +351,104 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
     Services::FirebaseAccountLookup.stubs(:call).raises(Services::FirebaseAccountLookup::Error, "boom")
 
     assert_no_difference "User.count" do
+      Services::AuthenticationService.call(auth_token: "t", project_id: "the-greatest-books")
+    end
+  end
+
+  # --- H1 of the 2026-09-30 security audit ---
+  #
+  # The token's `email` is the Firebase ACCOUNT RECORD's email, which its holder
+  # sets. A password account can be created for any address without proof, and
+  # an email-less X or Facebook identity linked to it then signs in with a
+  # trusted sign_in_provider and that address on the token. Only a verified
+  # claim may stand in for the provider record.
+
+  test "an unverified claim under a trusted provider cannot take over an existing account" do
+    victim = users(:regular_user)
+    original_uid = victim.auth_uid
+
+    %w[twitter.com facebook.com].each_with_index do |sign_in_provider, i|
+      Services::FirebaseAccountLookup.stubs(:call).returns([
+        {"providerId" => sign_in_provider, "rawId" => "attacker-raw-#{i}"}
+      ])
+      token = FirebaseTokenHelper.token({
+        "sub" => "uid-attacker-#{i}",
+        "email" => victim.email,
+        "email_verified" => false,
+        "firebase" => {"sign_in_provider" => sign_in_provider, "identities" => {sign_in_provider => ["attacker-raw-#{i}"]}}
+      })
+
+      result = call(token)
+
+      assert result[:success], "#{sign_in_provider}: #{result[:error]}"
+      refute_equal victim.id, result[:user].id, "#{sign_in_provider}: signed in as the victim"
+      assert_nil result[:user].email, "#{sign_in_provider}: the unverified claim reached the new row"
+      # Tuple form: regular_user's auth_uid is nil, and Minitest 6 makes
+      # assert_equal(nil, x) a hard failure.
+      assert_equal [victim.id, original_uid], [victim.id, victim.reload.auth_uid],
+        "#{sign_in_provider}: the victim's row was relinked"
+    end
+  end
+
+  test "an unverified claim is never filled onto a uid-matched row with no email" do
+    row = User.create!(
+      auth_uid: "uid-x-blank",
+      external_provider: :twitter,
+      email: nil,
+      email_verified: false,
+      role: :user
+    )
+    Services::FirebaseAccountLookup.stubs(:call).returns([{"providerId" => "twitter.com"}])
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-x-blank",
+      "email" => "unproven.address@example.com",
+      "email_verified" => false,
+      "firebase" => {"sign_in_provider" => "twitter.com"}
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert_equal row.id, result[:user].id
+    assert_nil row.reload.email
+  end
+
+  test "a provider-record email still links an existing account when the claim is unverified" do
+    existing = users(:google_user)
+    Services::FirebaseAccountLookup.stubs(:call).returns([
+      {"providerId" => "google.com", "email" => existing.email}
+    ])
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-google-new-device",
+      "email" => existing.email,
+      "email_verified" => false,
+      "firebase" => {"sign_in_provider" => "google.com"}
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert_equal existing.id, result[:user].id
+    assert_equal "uid-google-new-device", existing.reload.auth_uid
+  end
+
+  test "only a claim whose email_verified is exactly true reaches the resolver" do
+    [false, nil, "true"].each do |claim|
+      payload = {
+        "sub" => "uid_1",
+        "firebase" => {"sign_in_provider" => "facebook.com"},
+        "email" => "claim@example.com",
+        "email_verified" => claim
+      }
+      Services::JwtValidationService.stubs(:call).returns(payload)
+
+      Services::ProviderEmailResolver.expects(:new).with(
+        uid: "uid_1",
+        sign_in_provider: "facebook.com",
+        project_id: "the-greatest-books",
+        fallback_email: nil
+      ).returns(stub(call: nil))
+
       Services::AuthenticationService.call(auth_token: "t", project_id: "the-greatest-books")
     end
   end

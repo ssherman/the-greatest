@@ -104,4 +104,24 @@ class Games::CoverArtDownloadJobTest < ActiveSupport::TestCase
     Games::CoverArtDownloadJob.new.perform(@game.id)
     refute @game.images.where(primary: true).exists?
   end
+
+  test "perform caps the download at 10 MB" do
+    cover_search = mock
+    cover_search.expects(:find_by_game_id).with(7346).returns(success: true, data: [{"image_id" => "abc123"}])
+    cover_search.expects(:image_url).with("abc123", size: ::Games::Igdb::Search::CoverSearch::SIZE_1080P)
+      .returns("https://images.igdb.com/igdb/image/upload/t_1080p/abc123.jpg")
+    ::Games::Igdb::Search::CoverSearch.stubs(:new).returns(cover_search)
+
+    tempfile = Tempfile.new(["cover", ".jpg"])
+    tempfile.write("fake image data")
+    tempfile.rewind
+    Down.expects(:download)
+      .with("https://images.igdb.com/igdb/image/upload/t_1080p/abc123.jpg", max_size: 10 * 1024 * 1024)
+      .returns(tempfile)
+
+    Games::CoverArtDownloadJob.new.perform(@game.id)
+  ensure
+    tempfile&.close
+    tempfile&.unlink
+  end
 end

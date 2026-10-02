@@ -177,7 +177,7 @@ export default class extends Controller {
 
     if (this.hasUserInfoTarget) {
       this.userInfoTarget.style.display = 'block'
-      this.userInfoTarget.innerHTML = this.buildUserInfoHTML(user)
+      this.userInfoTarget.replaceChildren(this.buildUserInfo(user))
     }
 
     if (this.hasErrorMessageTarget) {
@@ -250,17 +250,27 @@ export default class extends Controller {
     }
   }
 
-  // Build user info HTML
-  buildUserInfoHTML(user) {
-    const photo = user.photoURL ? `<img src="${user.photoURL}" alt="Profile" class="w-8 h-8 rounded-full mr-2">` : ''
-    const name = user.displayName || user.email
+  // Built with createElement/textContent rather than an HTML string:
+  // displayName and photoURL come from the identity provider, and the user
+  // sets both.
+  buildUserInfo(user) {
+    const container = document.createElement('div')
+    container.className = 'flex items-center'
 
-    return `
-      <div class="flex items-center">
-        ${photo}
-        <span class="text-sm font-medium">${name}</span>
-      </div>
-    `
+    if (user.photoURL) {
+      const photo = document.createElement('img')
+      photo.setAttribute('src', user.photoURL)
+      photo.setAttribute('alt', 'Profile')
+      photo.className = 'w-8 h-8 rounded-full mr-2'
+      container.append(photo)
+    }
+
+    const name = document.createElement('span')
+    name.className = 'text-sm font-medium'
+    name.textContent = user.displayName || user.email
+    container.append(name)
+
+    return container
   }
 
   // Step 1 → Step 2: validate email and transition

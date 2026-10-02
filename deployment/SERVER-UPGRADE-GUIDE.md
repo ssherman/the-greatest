@@ -36,6 +36,10 @@ Note the new server IP from the output.
 
 Cloud-init runs automatically on new servers. SSH in and monitor:
 
+Your first SSH connection to a new server trusts its host key on first use. Before you accept it,
+compare the fingerprint SSH shows with the host-key fingerprints cloud-init prints to the server's
+console, in your provider's web console.
+
 ```bash
 ssh deploy@<NEW_IP>
 
@@ -78,7 +82,31 @@ cd /home/deploy/apps/the-greatest
 sudo deployment/scripts/generate-certs.sh
 ```
 
-### 6. Deploy the Application
+### 6. Update the Host-Key Fingerprint Secret
+
+A new server has a new SSH host key. The deploy workflow checks the server's key against the
+`SERVER_SSH_HOST_FINGERPRINT` Actions secret and refuses to connect on a mismatch (it also fails
+before connecting if the secret is unset), so update it before the first deploy:
+
+```bash
+ssh deploy@<NEW_IP> 'for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$f"; done'
+gh secret set -R ssherman/the-greatest SERVER_SSH_HOST_FINGERPRINT --body 'SHA256:...'   # the ECDSA line
+```
+
+Use the **ECDSA** line: the deploy action negotiates ECDSA ahead of ED25519. If a future version
+of the action negotiates a different key type, the deploy fails at connect with a fingerprint
+mismatch, and the fix is to set the secret to that key type's line.
+
+If the `SERVER_WEB_HOST` secret holds the server's IP address, update it too, or the deploy
+connects to the old address and fails with a fingerprint mismatch:
+
+```bash
+gh secret set -R ssherman/the-greatest SERVER_WEB_HOST --body '<NEW_IP>'
+```
+
+The host key you compared against the cloud-init console output in step 3 is the one to trust here.
+
+### 7. Deploy the Application
 
 **Option A: Trigger GitHub Actions (recommended)**
 
@@ -103,7 +131,7 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-### 7. Verify
+### 8. Verify
 
 ```bash
 # Check all containers are running
@@ -129,26 +157,29 @@ through-Cloudflare probes are still testing the old origin.
 
 ## Decrypting Secrets
 
-Secrets are encrypted with SOPS/age. To decrypt manually:
+Secrets are encrypted with SOPS/age. To decrypt manually on the server, pass the key in the
+environment, so it never lands on disk or in shell history:
 
 ```bash
-# Write your age key to the expected location
-mkdir -p ~/.config/sops/age
-echo "AGE-SECRET-KEY-1..." > ~/.config/sops/age/keys.txt
-chmod 600 ~/.config/sops/age/keys.txt
-
-# Decrypt
 cd /home/deploy/apps/the-greatest
-sops -d secrets/.env.production > .env
-chmod 600 .env
 
-# Clean up age key
-rm ~/.config/sops/age/keys.txt
+# Paste ONLY the AGE-SECRET-KEY-1... line at the prompt (input is hidden), then press Enter.
+# Do not paste the whole key file: read keeps one line, and the first line of the file is a comment.
+read -rs SOPS_AGE_KEY && export SOPS_AGE_KEY
+
+# Decrypts to .env.new first, so a failed decrypt cannot empty the existing .env
+(umask 077; sops -d secrets/.env.production > .env.new) && mv .env.new .env && chmod 600 .env
+
+unset SOPS_AGE_KEY
 ```
 
 ---
 
 ## Troubleshooting
+
+### Deploy fails at the SSH connect after a server rebuild
+The `SERVER_SSH_HOST_FINGERPRINT` secret still holds the old server's host key and, if
+`SERVER_WEB_HOST` is an IP address, that secret still holds the old IP. Update both. See step 6.
 
 ### Nginx won't start (SSL cert errors)
 Certs don't exist yet. Run `generate-certs.sh` first (Step 5).
@@ -174,5 +205,6 @@ Usually means `.env` file is missing — run the GitHub Actions deploy or decryp
 | Monitor cloud-init | `sudo tail -f /var/log/cloud-init-output.log` |
 | Update DNS | Cloudflare dashboard (manual) |
 | Generate certs | `sudo deployment/scripts/generate-certs.sh` |
+| Update host-key secret | `gh secret set -R ssherman/the-greatest SERVER_SSH_HOST_FINGERPRINT` (step 6) |
 | Deploy app | GitHub Actions → "Deploy to Production" → Run workflow |
 | Check containers | `docker ps` |

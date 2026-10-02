@@ -1,0 +1,29 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "pages": [
+      {
+        "pageid": 18622119,
+        "ns": 0,
+        "title": "Leo Tolstoy",
+        "extract": "Count Lev Nikolayevich Tolstoy (; Russian: Лев Николаевич Толстой, IPA: [ˈlʲef nʲɪkɐˈla(j)ɪvʲɪtɕ tɐlˈstoj] ; 9 September [O.S. 28 August] 1828 – 20 November [O.S. 7 November] 1910), usually referred to in English as Leo Tolstoy, was a Russian writer. He is regarded as one of the greatest and most influential authors of all time.\nBorn to an aristocratic family, Tolstoy achieved  acclaim in his twen",
+        "pageprops": {
+          "defaultsort": "Tolstoy, Leo",
+          "page_image_free": "Leo_Tolstoy_1908_Portrait_(3x4_cropped).jpg",
+          "wikibase-shortdesc": "Russian writer (1828–1910)",
+          "wikibase_item": "Q7243"
+        },
+        "contentmodel": "wikitext",
+        "pagelanguage": "en",
+        "pagelanguagehtmlcode": "en",
+        "pagelanguagedir": "ltr",
+        "touched": "2026-09-27T21:01:04Z",
+        "lastrevid": 1375171072,
+        "length": 98880,
+        "fullurl": "https://en.wikipedia.org/wiki/Leo_Tolstoy",
+        "editurl": "https://en.wikipedia.org/w/index.php?title=Leo_Tolstoy&action=edit",
+        "canonicalurl": "https://en.wikipedia.org/wiki/Leo_Tolstoy"
+      }
+    ]
+  }
+}

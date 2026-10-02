@@ -8,7 +8,7 @@ module DataImporters
         # Queues a background job for Amazon product enrichment with AI validation
         # This is an async provider - returns success immediately after queuing
         class Amazon < DataImporters::ProviderBase
-          def populate(game, query:)
+          def populate(game, query:, match: nil)
             # Validate we have required data for Amazon search
             return failure_result(errors: ["Game title required for Amazon search"]) if game.title.blank?
 

@@ -17,7 +17,7 @@ module Services
 
             def task_provider = :openai
 
-            def task_model = "gpt-5-mini"
+            def task_role = :fast
 
             def chat_type = :analysis
 

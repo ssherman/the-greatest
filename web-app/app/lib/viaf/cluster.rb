@@ -17,8 +17,9 @@ module Viaf
       record = ExternalRecord.find_by(source: :viaf, source_id: id) unless refresh
       return Person.from_payload(record.payload) if record && current_schema?(record)
 
-      payload = fetch_and_distill(id)
-      store(id, payload)
+      data = @client.get("viaf/#{id}")[:data]
+      payload = Distiller.call(data, requested_id: id)
+      store(id, payload, data)
       Person.from_payload(payload)
     end
 
@@ -30,11 +31,6 @@ module Viaf
       record.schema_version == Distiller::SCHEMA_VERSION
     end
 
-    def fetch_and_distill(id)
-      response = @client.get("viaf/#{id}")
-      Distiller.call(response[:data], requested_id: id)
-    end
-
     # `find` already checked the cache under this row's key, but that check
     # and this write are not atomic: RateLimiter is blocking (2 req/min), so
     # the window between another worker's SELECT and its committed INSERT can
@@ -43,10 +39,12 @@ module Viaf
     # uniqueness validation catches it first (RecordInvalid). Either way the
     # winner already persisted a payload distilled from the same cluster, so
     # losing is not an error -- `find` still returns a correct Person built
-    # from its own freshly-distilled payload.
-    def store(id, payload)
+    # from its own freshly-distilled payload. The raw body is stored gzipped
+    # beside the payload (spec §3).
+    def store(id, payload, data)
       record = ExternalRecord.find_or_initialize_by(source: :viaf, source_id: id)
       record.payload = payload
+      record.raw_text = JSON.generate(data)
       record.schema_version = Distiller::SCHEMA_VERSION
       record.fetched_at = Time.current
       record.save!

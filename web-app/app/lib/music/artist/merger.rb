@@ -31,6 +31,7 @@ module Music
           lock_artists
           collect_affected_ranking_configurations
           merge_all_associations
+          resolve_duplicate_candidates
           destroy_source_artist
           @transaction_body_completed = true
         end
@@ -254,6 +255,14 @@ module Music
           BulkCalculateWeightsJob.perform_async(config_id)
           CalculateRankingsJob.perform_in(5.minutes, config_id)
         end
+      end
+
+      # The (source, target) pair on duplicate_candidates becomes merged, other
+      # pending pairs naming the source re-key onto the target, and
+      # match_decisions that named the source now name the target. Inside the
+      # transaction so a rollback undoes it with the rest.
+      def resolve_duplicate_candidates
+        ::Services::DuplicateCandidates::RecordMerge.call(item_type: "Music::Artist", source_id: @source_artist_id, target_id: target_artist.id)
       end
 
       def destroy_source_artist

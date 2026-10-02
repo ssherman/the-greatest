@@ -92,6 +92,17 @@ module Books
       assert_equal 7, result.books.first.ranked_position.to_i
     end
 
+    test "carries ranked_score alongside ranked_position" do
+      RankedItem.create!(
+        item: @book_a, ranking_configuration: @rc, rank: 7, score: 42.5
+      )
+      stub_search(ids: [@book_a.id])
+
+      result = ::Books::SavedSearchQuery.call(criteria: criteria, owner: @owner)
+
+      assert_equal 42.5, result.books.first.ranked_score.to_f
+    end
+
     test "leaves ranked_position nil for an unranked book" do
       stub_search(ids: [@book_b.id])
 

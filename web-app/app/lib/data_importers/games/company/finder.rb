@@ -3,10 +3,21 @@
 module DataImporters
   module Games
     module Company
-      # Finds existing Games::Company records before import
-      # Uses IGDB company identifier for deduplication
+      # Finds an existing Games::Company before import and answers with a
+      # Match. Companies have no ranking, no search index and no external
+      # search; the IGDB company id is the lookup, now and after increment 5.
       class Finder < DataImporters::FinderBase
-        def call(query:)
+        protected
+
+        def model_class = ::Games::Company
+
+        def candidate_sources(query)
+          [DataImporters::Sources::Legacy.new { legacy_lookup(query) }]
+        end
+
+        private
+
+        def legacy_lookup(query)
           return nil if query.igdb_id.blank?
 
           find_by_identifier(

@@ -72,6 +72,11 @@ jobs:
           working-directory: web-app
           bundler-cache: true
 
+      # Before the tests: test:prepare runs a plain `yarn install`, which would
+      # rewrite a drifted yarn.lock instead of failing on it.
+      - name: Install JavaScript dependencies (fails on yarn.lock drift)
+        run: yarn install --frozen-lockfile
+
       - name: Wait for OpenSearch
         run: |
           for i in $(seq 1 60); do
@@ -114,8 +119,11 @@ jobs:
           version: "0.11.17"
           enable-cache: true
 
+      # The fetcher extra brings Playwright's Python package so the browser
+      # layer's error translation is tested against its real exception
+      # classes. No browser is ever downloaded.
       - name: Install dependencies (fails on lockfile drift)
-        run: uv sync --locked
+        run: uv sync --locked --extra fetcher
 
       - name: Lint
         run: uv run ruff check .

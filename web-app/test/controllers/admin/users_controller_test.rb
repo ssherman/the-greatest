@@ -30,6 +30,23 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "a percent sign in the search is a literal, not a wildcard" do
+    get admin_users_url(q: "%")
+    assert_response :success
+    assert_equal [], @controller.view_assigns["users"].map(&:id)
+  end
+
+  test "a partial search still matches a user by email substring" do
+    get admin_users_url(q: "admin@")
+    assert_response :success
+    assert_includes @controller.view_assigns["users"].map(&:id), users(:admin_user).id
+  end
+
+  test "an array search parameter does not error" do
+    get admin_users_url(q: ["admin"])
+    assert_response :success
+  end
+
   test "should get show" do
     get admin_user_url(@regular_user)
     assert_response :success

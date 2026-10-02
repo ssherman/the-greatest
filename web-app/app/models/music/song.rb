@@ -36,6 +36,7 @@ class Music::Song < ApplicationRecord
   has_many :albums, through: :releases, class_name: "Music::Album"
   has_many :credits, as: :creditable, class_name: "Music::Credit", dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
+  has_many :match_decisions, as: :record, dependent: :nullify
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :list_items, as: :listable, dependent: :destroy
   has_many :lists, through: :list_items

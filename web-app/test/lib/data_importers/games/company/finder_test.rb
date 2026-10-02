@@ -21,14 +21,14 @@ module DataImporters
           query = ImportQuery.new(igdb_id: 70)
           result = @finder.call(query: query)
 
-          assert_equal @nintendo, result
+          assert_equal @nintendo, result.record
         end
 
         test "call returns nil when no identifier matches" do
           query = ImportQuery.new(igdb_id: 99999)
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call returns nil when igdb_id is blank" do
@@ -39,7 +39,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
       end
     end

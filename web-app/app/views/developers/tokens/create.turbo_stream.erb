@@ -1,0 +1,25 @@
+<%# Both outcomes answer in a stream (see the controller comment). Success fills
+    the new-token region, refreshes the list so the row appears, and refreshes
+    the form so it is blank again, or the cap notice if this was the last slot.
+    Failure swaps only the form, with the errors and what was typed. The secret
+    is in the update for #developers_new_token and nowhere else in this body. %>
+<% if @secret %>
+  <%= turbo_stream.update "developers_new_token" do %>
+    <%= render "developers/tokens/secret", token: @token, secret: @secret %>
+  <% end %>
+  <%= turbo_stream.replace "developers_tokens" do %>
+    <%= render "developers/tokens/list", tokens: @tokens %>
+  <% end %>
+  <%= turbo_stream.replace "developers_token_form" do %>
+    <%= render "developers/tokens/form", tokens: @tokens %>
+  <% end %>
+<% else %>
+  <%= turbo_stream.replace "developers_token_form" do %>
+    <%= render "developers/tokens/form",
+          tokens: @tokens,
+          errors: @errors,
+          name_value: @name_value,
+          scopes_value: @scopes_value,
+          expires_in_value: @expires_in_value %>
+  <% end %>
+<% end %>

@@ -1,0 +1,28 @@
+<%# web-app/app/views/admin/duplicate_candidates_base/index.html.erb %>
+<% content_for :title, "Duplicate Candidates" %>
+
+<div class="space-y-4">
+  <h1 class="text-2xl font-bold">Duplicate Candidates</h1>
+
+  <div role="tablist" class="tabs tabs-border">
+    <% Admin::DuplicateCandidatesBaseController::STATUSES.each do |status| %>
+      <%= link_to duplicates_index_path(status: status), role: "tab",
+            class: "tab #{"tab-active" if @status == status}", data: {testid: "status-tab-#{status}"} do %>
+        <%= status.humanize %>
+        <span class="badge badge-sm ml-2" data-testid="status-count-<%= status %>"><%= @counts[status].to_i %></span>
+      <% end %>
+    <% end %>
+  </div>
+
+  <% if @pairs.any? %>
+    <div class="space-y-4">
+      <%= render partial: "admin/duplicate_candidates_base/pair", collection: @pairs, as: :pair %>
+    </div>
+  <% else %>
+    <p class="text-center text-base-content/70 py-8">No <%= @status.humanize.downcase %> pairs.</p>
+  <% end %>
+
+  <% if @pagy.pages > 1 %>
+    <div class="mt-4 flex justify-center"><%== @pagy.series_nav %></div>
+  <% end %>
+</div>

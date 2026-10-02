@@ -108,9 +108,11 @@ class Admin::RankingConfigurationsController < Admin::BaseController
   end
 
   def load_ranking_configurations_for_index
-    if params[:q].present?
+    # to_s first: ?q[]=x arrives as an Array, and sanitize_sql_like needs a String.
+    search = params[:q].to_s.presence
+    if search
       @ranking_configurations = ranking_configuration_class
-        .where("name ILIKE ?", "%#{params[:q]}%")
+        .where("name ILIKE ?", "%#{::RankingConfiguration.sanitize_sql_like(search)}%")
     else
       sort_column = sortable_column(params[:sort])
 
@@ -186,7 +188,7 @@ class Admin::RankingConfigurationsController < Admin::BaseController
   # validate_action_name! is inherited from Admin::BaseController; this class only
   # declares which names it accepts.
   def allowed_action_names
-    %w[RefreshRankings BulkCalculateWeights GenerateDynamicLists CreateNextYearConfiguration]
+    %w[RefreshRankings BulkCalculateWeights GenerateDynamicLists CreateNextYearConfiguration RegenerateCsvExport]
   end
 
   def table_partial_path

@@ -43,3 +43,7 @@
 /e2e/.env
 /test-results/
 /playwright-report/
+
+# Yarn is the package manager (yarn.lock). An npm lockfile here is never
+# installed from and only attracts advisories.
+/package-lock.json

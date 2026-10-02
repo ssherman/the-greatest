@@ -24,6 +24,12 @@ class FooterComponentTest < ViewComponent::TestCase
       assert_selector "a[href='/membership']", text: "Support"
     end
 
+    test "#{domain} footer links to the API docs" do
+      render_footer(domain)
+
+      assert_selector "footer a[href='/developers']", text: "API"
+    end
+
     # The year is computed, not typed: the music and games footers this replaces
     # both said 2025, hardcoded, and had been wrong since January.
     test "#{domain} footer credits the company and the current year" do

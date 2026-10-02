@@ -11,11 +11,16 @@ module Viaf
   # This is deliberately separate from the HTTP client so a future dump-based
   # backfill can reuse it: the dump contains the same cluster records.
   module Distiller
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     # MARC name subfields. Deliberately excludes dates (d/f) and the language
     # and script codes some agencies emit as integer codes.
     NAME_SUBFIELD_CODES = %w[a b c q].freeze
+
+    TITLE_LIMIT = 200
+    # A "title" that is only an authority id: NDL files LC's record number
+    # ("n2021040535") as one of its works.
+    ID_LIKE_TITLE = /\A\p{L}{0,3}\s?\d{6,}\z/
 
     WITHDRAWN_MARKERS = %w[
       abandoned abandoned_viaf_record scavenged redirect directto
@@ -45,7 +50,8 @@ module Viaf
         "nationality" => text_values(cluster, "nationalityOfEntity"),
         "language" => text_values(cluster, "languageOfEntity"),
         "occupation" => text_values(cluster, "occupation"),
-        "field_of_activity" => text_values(cluster, "fieldOfActivity")
+        "field_of_activity" => text_values(cluster, "fieldOfActivity"),
+        "titles" => titles(cluster)
       }
     rescue TypeError, NoMethodError => e
       # `.dig` is used through every intermediate node while Normalizer.array
@@ -98,12 +104,38 @@ module Viaf
         name = heading_name(entry)
         next if name.blank?
 
-        {"source" => Normalizer.array(entry.dig("sources", "s")).first, "name" => name}
+        {
+          "source" => Normalizer.array(entry.dig("sources", "s")).first,
+          "name" => name,
+          "surname_first" => surname_first(entry)
+        }
       end
     end
 
     def alternate_names(cluster)
       Normalizer.array(cluster.dig("x400s", "x400")).filter_map { |entry| heading_name(entry).presence }.uniq
+    end
+
+    # MARC21's ind1 (1 = surname entry, 3 = family-name entry) and UNIMARC's
+    # ind2 (1 = surname entry) mark a heading as entered under a surname; a 0
+    # marks a forename entry, and anything else (a different dtype, a missing
+    # indicator, or a blank/"|" value) leaves it unknown.
+    def surname_first(entry)
+      datafield = entry["datafield"]
+      return nil unless datafield.is_a?(Hash)
+
+      case datafield["dtype"]
+      when "MARC21"
+        case datafield["ind1"].to_s.strip
+        when "1", "3" then true
+        when "0" then false
+        end
+      when "UNIMARC"
+        case datafield["ind2"].to_s.strip
+        when "1" then true
+        when "0" then false
+        end
+      end
     end
 
     def heading_name(entry)
@@ -125,9 +157,25 @@ module Viaf
       end.uniq
     end
 
+    # Work titles, the most-catalogued first: how many sources list a work is
+    # the best signal of what the person is known for. A title that parses as
+    # a number ("1984") arrives as an Integer.
+    def titles(cluster)
+      works = Normalizer.array(cluster.dig("titles", "work")).filter_map do |work|
+        next unless work.is_a?(Hash)
+
+        title = work["title"].to_s.squish
+        next if title.blank? || title.match?(ID_LIKE_TITLE)
+
+        [title, Normalizer.array(work.dig("sources", "s")).size]
+      end
+      works.each_with_index.sort_by { |(_title, count), index| [-count, index] }
+        .map { |(title, _count), _index| title }.uniq.first(TITLE_LIMIT)
+    end
+
     # These have no caller outside this module (grepped: Tasks 7/9/10 use only
     # `.call` and SCHEMA_VERSION). Kept private rather than tested directly.
     private_class_method :guard_withdrawn!, :withdrawn_marker, :source_ids,
-      :main_headings, :alternate_names, :heading_name, :text_values
+      :main_headings, :alternate_names, :surname_first, :heading_name, :text_values, :titles
   end
 end

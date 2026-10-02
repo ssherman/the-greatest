@@ -499,11 +499,8 @@ class RankingConfigurationTest < ActiveSupport::TestCase
     assert_equal "Songs", ranking_configurations(:music_songs_global).generated_list_noun
   end
 
-  test "only books names a static one-year penalty" do
-    assert_equal "List: only covers 1 year (yearly book awards, best of the year, etc)",
-      ranking_configurations(:books_global).one_year_penalty_name
-    assert_nil ranking_configurations(:games_global).one_year_penalty_name
-    assert_nil ranking_configurations(:music_albums_global).one_year_penalty_name
+  test "no configuration names a static one-year penalty" do
+    refute_respond_to ranking_configurations(:books_global), :one_year_penalty_name
   end
 
   # --- user-owned configuration rules (spec §4, §11) ---

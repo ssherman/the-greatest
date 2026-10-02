@@ -459,6 +459,21 @@ module Admin
         assert_equal images_before, post_record.reload.body_images.count
       end
 
+      test "update refuses a body image outside the image allowlist and attaches nothing" do
+        post_record = news_posts(:books_december_update)
+        svg = Rack::Test::UploadedFile.new(
+          StringIO.new(%(<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>)),
+          "image/svg+xml", original_filename: "inline.svg"
+        )
+
+        patch admin_books_news_post_path(post_record), params: {
+          news_post: {title: post_record.title, body: post_record.body, body_images: [svg]}
+        }
+
+        assert_response :unprocessable_entity
+        assert_equal 0, post_record.reload.body_images.count
+      end
+
       # Defect 3: destroy is implemented, routed and tested, but no view
       # renders a control that hits it.
       test "index renders a delete control for a user who can delete" do

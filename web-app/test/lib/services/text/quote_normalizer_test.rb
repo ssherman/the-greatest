@@ -56,6 +56,17 @@ module Services
         text = "Don't Stop \u201CBelievin'\u201D"
         assert_equal "Don't Stop \"Believin'\"", QuoteNormalizer.call(text)
       end
+
+      test "folds the acute accent used as an apostrophe to a straight apostrophe" do
+        assert_equal "Ardal O'Hanlon", Services::Text::QuoteNormalizer.call("Ardal O\u00B4Hanlon")
+        assert_equal "Nobody's Children", Services::Text::QuoteNormalizer.call("Nobody\u00B4s Children")
+      end
+
+      test "the acute accent is folded before NFKC would split it into a space and a combining mark" do
+        normalized = Services::Text::NameNormalizer.call(Services::Text::QuoteNormalizer.call("Ardal O\u00B4Hanlon"))
+
+        assert_equal "Ardal O'Hanlon", normalized
+      end
     end
   end
 end

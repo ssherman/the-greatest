@@ -1,0 +1,23 @@
+{
+  "matcher_version": 2,
+  "calibrated": true,
+  "calibrated_at": "2026-09-14T05:27:09.847557+00:00",
+  "method": "random-search",
+  "feature_weights": {
+    "title_similarity": 1.0,
+    "title_variant_exact": 0.3269387239193572,
+    "subtitle_agreement": 1.0,
+    "author_overlap": 1.0,
+    "author_name_similarity": 1.7711736066637014,
+    "year_agreement": 0.7799508222069782,
+    "identifier_agreement": 1.3105033624209699,
+    "language_agreement": 0.0,
+    "popularity_prior": 0.2810214083059436
+  },
+  "conflict_penalties": {
+    "identifier": 0.35
+  },
+  "accept_threshold": 0.9,
+  "reject_threshold": 0.4,
+  "margin_threshold": 0.17548398069653787
+}

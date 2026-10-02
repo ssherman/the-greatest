@@ -1,0 +1,26 @@
+<%# web-app/app/views/admin/duplicate_candidates_base/_side.html.erb  Locals: pair, record, id, side %>
+<div class="rounded-box border border-base-300 p-3 text-sm" data-testid="pair-side"
+     data-side="<%= side %>" data-record-id="<%= id %>" data-missing="<%= record.nil? %>">
+  <% if record %>
+    <% summary = summary_for(pair, id) %>
+    <div class="font-semibold [overflow-wrap:anywhere]">
+      <%= side %>.
+      <% path = Admin::DomainRouting.path_for(record) %>
+      <%= path ? link_to(summary[:title], path, class: "link") : summary[:title] %>
+      <span class="text-base-content/60">#<%= id %></span>
+    </div>
+    <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 mt-2">
+      <dt class="text-base-content/70">Creators</dt><dd class="[overflow-wrap:anywhere]"><%= Array(summary[:creators]).join(", ").presence || "—" %></dd>
+      <dt class="text-base-content/70">Year</dt><dd><%= summary[:year] || "—" %></dd>
+      <dt class="text-base-content/70">Ranked</dt><dd><%= summary[:ranked_position] ? "##{summary[:ranked_position]}" : "—" %></dd>
+      <dt class="text-base-content/70">Lists</dt><dd><%= summary[:list_count] %></dd>
+      <dt class="text-base-content/70">Identifiers</dt>
+      <dd class="[overflow-wrap:anywhere]">
+        <% identifiers = Array(summary[:identifiers]) %>
+        <%= identifiers.first(6).map { |identifier| "#{identifier[:type]}: #{identifier[:value]}" }.join(", ").presence || "—" %><%= " …" if identifiers.size > 6 %>
+      </dd>
+    </dl>
+  <% else %>
+    <div class="font-semibold"><%= side %>. <span class="badge badge-error badge-sm">missing</span> record #<%= id %> no longer exists</div>
+  <% end %>
+</div>

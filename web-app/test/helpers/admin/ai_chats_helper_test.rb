@@ -20,17 +20,50 @@ class Admin::AiChatsHelperTest < ActionView::TestCase
     assert_equal "Album", ai_chat_parent_type_label(@music_album_chat)
   end
 
-  test "ai_chat_parent_type_label returns Albums List for Music::Albums::List parent" do
-    assert_equal "Albums List", ai_chat_parent_type_label(@music_albums_list_chat)
+  test "ai_chat_parent_type_label returns Album List for Music::Albums::List parent" do
+    assert_equal "Album List", ai_chat_parent_type_label(@music_albums_list_chat)
   end
 
-  test "ai_chat_parent_type_label returns Songs List for Music::Songs::List parent" do
-    assert_equal "Songs List", ai_chat_parent_type_label(@music_songs_list_chat)
+  test "ai_chat_parent_type_label returns Song List for Music::Songs::List parent" do
+    assert_equal "Song List", ai_chat_parent_type_label(@music_songs_list_chat)
   end
 
   test "ai_chat_parent_type_label returns nil for chat without parent_type" do
     chat = AiChat.new(parent_type: nil)
     assert_nil ai_chat_parent_type_label(chat)
+  end
+
+  test "ai_chat_parent_type_label covers books and games parents" do
+    assert_equal "Book", ai_chat_parent_type_label(ai_chats(:books_book_chat))
+    assert_equal "Book List", ai_chat_parent_type_label(ai_chats(:ranking_chat))
+    assert_equal "Game", ai_chat_parent_type_label(ai_chats(:games_game_chat))
+    assert_equal "Game List", ai_chat_parent_type_label(ai_chats(:games_list_chat))
+  end
+
+  test "ai_chat_parent_type_label falls back to the stored type when the parent is gone" do
+    chat = AiChat.new(parent_type: "Games::Game", parent_id: 0)
+    assert_equal "Game", ai_chat_parent_type_label(chat)
+  end
+
+  test "ai_chat_parent_type_label says List for a list type no domain registers" do
+    list = List.new(name: "Unregistered")
+    chat = AiChat.new(parent: list)
+    assert_equal "List", ai_chat_parent_type_label(chat)
+  end
+
+  test "admin_ai_chat_parent_path resolves entity and list parents in every domain" do
+    assert_equal "/admin/artists/#{@music_artist_chat.parent.to_param}", admin_ai_chat_parent_path(@music_artist_chat)
+    assert_equal "/admin/books/#{books_books(:war_and_peace).to_param}", admin_ai_chat_parent_path(ai_chats(:books_book_chat))
+    assert_equal "/admin/games/#{games_games(:breath_of_the_wild).to_param}", admin_ai_chat_parent_path(ai_chats(:games_game_chat))
+    assert_equal Admin::DomainRouting.list_config(lists(:books_list))[:path], admin_ai_chat_parent_path(ai_chats(:ranking_chat))
+    assert_equal Admin::DomainRouting.list_config(lists(:games_list))[:path], admin_ai_chat_parent_path(ai_chats(:games_list_chat))
+    assert_equal Admin::DomainRouting.list_config(lists(:music_albums_list))[:path], admin_ai_chat_parent_path(@music_albums_list_chat)
+  end
+
+  test "admin_ai_chat_parent_path is nil without a parent or for an unregistered parent" do
+    assert_nil admin_ai_chat_parent_path(@general_chat)
+    assert_nil admin_ai_chat_parent_path(AiChat.new(parent_type: "Games::Game", parent_id: 0))
+    assert_nil admin_ai_chat_parent_path(AiChat.new(parent: List.new(name: "x")))
   end
 
   # ai_chat_parent_display_name tests
@@ -48,6 +81,12 @@ class Admin::AiChatsHelperTest < ActionView::TestCase
 
   test "ai_chat_parent_display_name returns nil for chat without parent" do
     assert_nil ai_chat_parent_display_name(@general_chat)
+  end
+
+  test "ai_chat_parent_display_name uses title or name for books and games parents" do
+    assert_equal "War and Peace", ai_chat_parent_display_name(ai_chats(:books_book_chat))
+    assert_equal "The Legend of Zelda: Breath of the Wild", ai_chat_parent_display_name(ai_chats(:games_game_chat))
+    assert_equal "Books Test List", ai_chat_parent_display_name(ai_chats(:ranking_chat))
   end
 
   # Badge class tests

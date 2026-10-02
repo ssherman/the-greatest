@@ -4,8 +4,11 @@ module DataImporters
   # Base class for all data providers (MusicBrainz, TMDB, etc.)
   # Each provider knows how to populate data from its specific external source
   class ProviderBase
-    def populate(item, query:)
-      raise NotImplementedError, "Subclasses must implement #populate(item, query:)"
+    # `match` is the finder's Match for a query-based import (nil for an
+    # item-based one): a provider may hydrate from `match.external` or reuse
+    # `match.external_resolution` instead of searching again.
+    def populate(item, query:, match: nil)
+      raise NotImplementedError, "Subclasses must implement #populate(item, query:, match: nil)"
     end
 
     protected

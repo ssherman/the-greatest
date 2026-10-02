@@ -47,6 +47,24 @@ web-app/test/             # mirrors app/, namespaced to match (module Music; cla
 docs/                     # project root, NOT web-app/
 ```
 
+## The Python data service (`data-sources/`)
+
+Python lives in `data-sources/` at the project root, a **sibling of `web-app/`, never inside
+it**. Run Python commands from `data-sources/` and Rails commands from `web-app/`. Dependencies
+are `uv` with a committed lockfile — development and CI installs use `uv sync --locked --extra
+fetcher` (the Open Library image deliberately does not: its own Dockerfile installs with `--no-dev`
+and no `--extra`, so it never carries Camoufox). Every install form fails on drift instead of
+silently resolving something new. The built artifact lives outside the
+repo at `/home/shane/ol-data/versions/<dump-date>/` and is mounted into the service read-only. Four
+boundaries, enforced structurally: it never writes to Rails; it holds nothing that is not
+rebuildable from a dump; it is never on a public request path; no covers, no public search, no
+serving. See `docs/features/open-library-data-service.md`.
+
+`data-sources/` now holds two services with separate images: the Open Library API
+and the **page fetcher** (`docs/features/page-fetcher-service.md`), which returns
+rendered HTML through one Camoufox browser per fetch. Its dependencies are the
+`fetcher` extra: `uv sync --locked --extra fetcher`, which CI also runs.
+
 ## The development database is not disposable
 
 **`bin/refresh-dev-db.sh` restores the whole production dump, books included.** It runs
@@ -90,6 +108,13 @@ whether or not books has launched.
   a refresh after the production migration took books from 126,330 to 157,806 and authors from
   58,247 to 70,973. Anything **derived** from the dev database is stale afterwards and has to be
   regenerated — the Open Library books export and its evaluation pool, for instance.
+- **The legacy books DB (`the_greatest_books_legacy`) is the same script with `--legacy`**
+  (both databases) or `--legacy-only` (leave `the_greatest_development` alone). It comes from
+  the `postgres_tgb_backup_*` files in the same bucket: ~5 GB down, ~65 GB restored, ~25 minutes.
+  Only the books data migration (`data_migration:*`) reads it. A missing legacy DB is harmless
+  otherwise — except that annotaterb's post-`db:migrate` hook tries to connect to every
+  development database in `database.yml` and errors on it; the script sets
+  `ANNOTATERB_SKIP_ON_DB_TASKS=1` for that reason, and so can you.
 
 **The test database is per-checkout.** `config/test_database_name.rb` names the test primary after
 the directory the checkout lives in, so each git worktree gets its own

@@ -8,11 +8,18 @@
     <h1 class="text-4xl font-bold text-base-content"><%= songs_page_heading(@year_filter) %></h1>
   </div>
 
-  <%= render Music::FilterTabsComponent.new(
-    item_type: "songs",
-    base_path: songs_path(ranking_configuration_id: params[:ranking_configuration_id]),
-    year_filter: @year_filter
-  ) %>
+  <div class="flex items-start gap-2">
+    <div class="flex-1 min-w-0">
+      <%= render Music::FilterTabsComponent.new(
+        item_type: "songs",
+        base_path: songs_path(ranking_configuration_id: params[:ranking_configuration_id]),
+        year_filter: @year_filter
+      ) %>
+    </div>
+    <div class="mt-2">
+      <%= render CsvExports::DownloadButtonComponent.new(export_path: @csv_export_path, noun: "songs") %>
+    </div>
+  </div>
 
   <div class="card bg-base-100 shadow-xl">
     <div class="card-body p-0">

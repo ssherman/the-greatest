@@ -1,0 +1,42 @@
+# Resident Evil 4 and Half-Life 2 stand in for any two same-type records.
+# Ids are fixture-hash ids, so item_a_id/item_b_id are set through ERB in
+# ascending order.
+<% a, b = [ActiveRecord::FixtureSet.identify(:resident_evil_4), ActiveRecord::FixtureSet.identify(:half_life_2)].minmax %>
+resident_evil_4_pair:
+  item_type: Games::Game
+  item_a_id: <%= a %>
+  item_b_id: <%= b %>
+  source: 2
+  status: 0
+  evidence: {"reason": "same title, different release year"}
+  occurrences: 1
+
+# Books pairs for the audit pages. got + clash (both King) is the pending pair
+# the books duplicates index opens on; cannery_row + clash is dismissed.
+# Neither pair is one the finder or merger tests raise (those use
+# war_and_peace + crime_and_punishment and combo_steinbeck). If a test
+# elsewhere starts failing because of these rows, change THESE books, not
+# the test.
+<% king_a, king_b = [ActiveRecord::FixtureSet.identify(:got), ActiveRecord::FixtureSet.identify(:clash)].minmax %>
+books_pending_pair:
+  item_type: Books::Book
+  item_a_id: <%= king_a %>
+  item_b_id: <%= king_b %>
+  source: 4
+  status: 0
+  evidence: {"reason": "Same author, similar titles; the sweep matched them.", "decided_by": "ai", "confidence": "medium"}
+  occurrences: 2
+  match_decision: low_confidence_book_match
+
+<% dismissed_a, dismissed_b = [ActiveRecord::FixtureSet.identify(:cannery_row), ActiveRecord::FixtureSet.identify(:clash)].minmax %>
+books_dismissed_pair:
+  item_type: Books::Book
+  item_a_id: <%= dismissed_a %>
+  item_b_id: <%= dismissed_b %>
+  source: 2
+  status: 2
+  evidence: {"reason": "Shared a Goodreads id."}
+  occurrences: 1
+  resolved_at: <%= 1.day.ago.to_fs(:db) %>
+  resolved_by: admin_user
+  resolution_note: "Different books."

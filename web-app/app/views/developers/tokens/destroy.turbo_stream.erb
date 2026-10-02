@@ -1,0 +1,10 @@
+<%# Replace the list rather than remove one row, so the empty state appears
+    when the last token goes; replace the form so a member who was at the cap
+    gets it back. #developers_new_token is deliberately NOT touched: a revoke
+    must never wipe a secret the member has not copied yet. %>
+<%= turbo_stream.replace "developers_tokens" do %>
+  <%= render "developers/tokens/list", tokens: @tokens %>
+<% end %>
+<%= turbo_stream.replace "developers_token_form" do %>
+  <%= render "developers/tokens/form", tokens: @tokens %>
+<% end %>

@@ -25,6 +25,7 @@ module Books
 
     has_many :book_countries, class_name: "Books::BookCountry", dependent: :destroy
     has_many :books, through: :book_countries, class_name: "Books::Book"
+    has_many :author_countries, class_name: "Books::AuthorCountry", dependent: :destroy
 
     validates :name, presence: true
 

@@ -63,6 +63,7 @@ module Books
           merge_all_associations
           reconcile_scalars
           target_book.save! if target_book.changed?
+          resolve_duplicate_candidates
           destroy_source_book
           @transaction_body_completed = true
         end
@@ -125,6 +126,7 @@ module Books
         merge_editions
         merge_external_links
         merge_ai_chats
+        merge_enrichments
         merge_images
         merge_identifiers
         merge_book_countries
@@ -162,6 +164,10 @@ module Books
 
       def merge_ai_chats
         @stats[:ai_chats] = source_book.ai_chats.update_all(parent_id: target_book.id)
+      end
+
+      def merge_enrichments
+        @stats[:enrichments] = source_book.enrichments.update_all(enrichable_id: target_book.id)
       end
 
       def merge_images
@@ -597,6 +603,14 @@ module Books
         return if @reading_goal_cached_urls.empty?
 
         ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", @reading_goal_cached_urls)
+      end
+
+      # The (source, target) pair on duplicate_candidates becomes merged, other
+      # pending pairs naming the source re-key onto the target, and
+      # match_decisions that named the source now name the target. Inside the
+      # transaction so a rollback undoes it with the rest.
+      def resolve_duplicate_candidates
+        ::Services::DuplicateCandidates::RecordMerge.call(item_type: "Books::Book", source_id: @source_book_id, target_id: target_book.id)
       end
 
       def destroy_source_book

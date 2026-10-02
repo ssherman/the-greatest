@@ -1,0 +1,940 @@
+openapi: 3.1.0
+info:
+  title: The Greatest API
+  version: "1"
+  description: |
+    Read access to the ranked catalogues of The Greatest Books, The Greatest Music and
+    The Greatest Games. Every endpoint except this document needs a bearer token; tokens
+    are a membership benefit. Version 1 evolves additively: fields are added, never
+    renamed, removed or retyped.
+servers:
+  - url: https://thegreatestbooks.org
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/openapi.json:
+    get:
+      operationId: getOpenapi
+      summary: This document
+      security: []
+      responses:
+        "200":
+          description: The OpenAPI 3.1 document as JSON, with `servers` set to the host it was fetched from and only the paths that host serves.
+          content:
+            application/json:
+              schema:
+                type: object
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/books:
+    x-domain: books
+    get:
+      operationId: listBooks
+      summary: Books in rank order
+      description: The Greatest Books' primary ranking, best first. Only ranked books appear.
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of ranked books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/books/{slug}:
+    x-domain: books
+    get:
+      operationId: getBook
+      summary: One book
+      parameters:
+        - $ref: "#/components/parameters/slug"
+      responses:
+        "200":
+          description: The book.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/books/{slug}/lists:
+    x-domain: books
+    get:
+      operationId: listBookLists
+      summary: Lists a book is on
+      description: Every active list the book appears on, with its `position` there. Lists that feed the primary ranking come first, heaviest first; the rest follow by id with `weight` null.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the book's listings.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookListingCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/authors:
+    x-domain: books
+    get:
+      operationId: listAuthors
+      summary: Authors in rank order
+      description: The Greatest Books' primary author ranking, best first. Only ranked authors appear. Empty until an author ranking has been calculated.
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of ranked authors.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/authors/{slug}:
+    x-domain: books
+    get:
+      operationId: getAuthor
+      summary: One author
+      description: The author alone. Their books are not embedded; a paginated sub-collection is a later addition.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+      responses:
+        "200":
+          description: The author.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations:
+    x-domain: books
+    get:
+      operationId: listRankingConfigurations
+      summary: Ranking configurations
+      description: The global book rankings the site publishes, primary first. A book's `rank` and a list's `weight` are always relative to one of these.
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of ranking configurations.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankingConfigurationCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}:
+    x-domain: books
+    get:
+      operationId: getRankingConfiguration
+      summary: One ranking configuration
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The ranking configuration.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankingConfigurationItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}/books:
+    x-domain: books
+    get:
+      operationId: listRankingConfigurationBooks
+      summary: Books in rank order on one configuration
+      description: The same rows and shape as `/api/v1/books`, ranked by the named configuration; `rank` is relative to it. Only ranked books appear.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of ranked books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}/lists:
+    x-domain: books
+    get:
+      operationId: listRankingConfigurationLists
+      summary: Lists behind one configuration
+      description: The same rows and shape as `/api/v1/lists`, on the named configuration; `weight` is relative to it.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of lists.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/lists:
+    x-domain: books
+    get:
+      operationId: listLists
+      summary: Lists behind the primary ranking
+      description: The active lists that feed The Greatest Books' primary ranking, heaviest first. `weight` is the list's weight on that ranking; `item_count` is the number of books `items_api_url` serves.
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of lists.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/lists/{id}:
+    x-domain: books
+    get:
+      operationId: getList
+      summary: One list
+      description: Any active list, whether or not it feeds the primary ranking; `weight` is null when it does not.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The list.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/lists/{id}/items:
+    x-domain: books
+    get:
+      operationId: listListItems
+      summary: Books on one list
+      description: The list's books in list order — `position` ascending, unpositioned rows last, then by row id. `position` is null on an unordered list. `rank` on the embedded book is the primary ranking's.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the list's books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListItemCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: A personal access token (`tg_…`). Create one at /developers/tokens.
+  parameters:
+    page:
+      name: page
+      in: query
+      description: 1-based page number. A page past the end returns an empty `data` array.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 2147483647
+        default: 1
+    per_page:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    slug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+    id:
+      name: id
+      in: path
+      required: true
+      description: The resource's integer id.
+      schema:
+        type: integer
+        minimum: 1
+  headers:
+    X-RateLimit-Limit:
+      description: Requests allowed per calendar minute.
+      schema: {type: integer}
+    X-RateLimit-Remaining:
+      description: Requests left in the current minute.
+      schema: {type: integer}
+    X-RateLimit-Reset:
+      description: Unix time at which the minute window resets.
+      schema: {type: integer}
+    X-RateLimit-Daily-Limit:
+      description: Requests allowed per UTC day.
+      schema: {type: integer}
+    X-RateLimit-Daily-Remaining:
+      description: Requests left today.
+      schema: {type: integer}
+    X-RateLimit-Daily-Reset:
+      description: Unix time of the next 00:00 UTC.
+      schema: {type: integer}
+    Retry-After:
+      description: Seconds until the exhausted window resets.
+      schema: {type: integer}
+    WWW-Authenticate:
+      description: RFC 6750 challenge.
+      schema: {type: string}
+  responses:
+    BadRequest:
+      description: A query parameter is malformed or out of range.
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+        X-RateLimit-Daily-Limit:
+          $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+        X-RateLimit-Daily-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+        X-RateLimit-Daily-Reset:
+          $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: No token, or a token that is malformed, unknown, revoked or expired.
+      headers:
+        WWW-Authenticate:
+          $ref: "#/components/headers/WWW-Authenticate"
+          required: true
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: The token is valid but its account is not a member (`membership_required`) or lacks the scope this host needs (`insufficient_scope`).
+      headers:
+        WWW-Authenticate:
+          $ref: "#/components/headers/WWW-Authenticate"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: No record at that address (unknown slug or id).
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+        X-RateLimit-Daily-Limit:
+          $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+        X-RateLimit-Daily-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+        X-RateLimit-Daily-Reset:
+          $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    TooManyRequests:
+      description: A rate-limit window is exhausted. `Retry-After` says when it resets.
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/Retry-After"
+          required: true
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Problem:
+      description: RFC 9457 Problem Details with a stable `code`.
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+          enum: [unauthenticated, invalid_token, membership_required, insufficient_scope, not_found, invalid_parameter, rate_limited]
+        detail:
+          type: string
+    PaginationMeta:
+      type: object
+      required: [page, per_page, total_count, total_pages]
+      properties:
+        page: {type: integer, minimum: 1}
+        per_page: {type: integer, minimum: 1, maximum: 100}
+        total_count: {type: integer, minimum: 0}
+        total_pages: {type: integer, minimum: 1}
+    PaginationLinks:
+      type: object
+      required: [self, next, prev, first, last]
+      properties:
+        self: {type: string, format: uri}
+        next: {type: [string, "null"], format: uri}
+        prev: {type: [string, "null"], format: uri}
+        first: {type: string, format: uri}
+        last: {type: string, format: uri}
+    AuthorSummary:
+      type: object
+      required: [id, slug, name]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        name: {type: string}
+    Book:
+      type: object
+      required: [id, slug, title, subtitle, first_published_year, rank, authors, cover_url, url, api_url]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        title: {type: string}
+        subtitle: {type: [string, "null"]}
+        first_published_year: {type: [integer, "null"]}
+        rank:
+          type: [integer, "null"]
+          description: Position in the site's primary ranking; null when unranked.
+        authors:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthorSummary"
+        cover_url: {type: [string, "null"], format: uri}
+        url: {type: string, format: uri, description: The book's page on the site.}
+        api_url: {type: string, format: uri}
+    BookFull:
+      allOf:
+        - $ref: "#/components/schemas/Book"
+        - type: object
+          required: [sort_title, alternate_titles, book_kind, book_length, page_range, word_count, description, original_language, categories, countries]
+          properties:
+            sort_title: {type: [string, "null"]}
+            alternate_titles:
+              type: array
+              items: {type: string}
+            book_kind:
+              type: string
+              enum: [standalone, collection]
+            book_length:
+              type: [string, "null"]
+              enum: [very_short, short, medium, moderate, long, very_long, null]
+            page_range: {type: [string, "null"]}
+            word_count: {type: [integer, "null"]}
+            description: {type: [string, "null"]}
+            original_language:
+              type: [object, "null"]
+              required: [id, slug, name]
+              properties:
+                id: {type: integer}
+                slug: {type: string}
+                name: {type: string}
+            categories:
+              type: array
+              items:
+                type: object
+                required: [id, slug, name, category_type]
+                properties:
+                  id: {type: integer}
+                  slug: {type: [string, "null"]}
+                  name: {type: string}
+                  category_type: {type: string}
+            countries:
+              type: array
+              items:
+                type: object
+                required: [id, slug, name]
+                properties:
+                  id: {type: integer}
+                  slug: {type: string}
+                  name: {type: string}
+    BookCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Book"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    BookItem:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/BookFull"
+    Author:
+      type: object
+      required: [id, slug, name, sort_name, birth_year, death_year, rank, image_url, url, api_url]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        name: {type: string}
+        sort_name: {type: [string, "null"]}
+        birth_year: {type: [integer, "null"]}
+        death_year: {type: [integer, "null"]}
+        rank:
+          type: [integer, "null"]
+          description: Position in the site's primary author ranking; null when unranked.
+        image_url: {type: [string, "null"], format: uri}
+        url: {type: string, format: uri, description: The author's page on the site.}
+        api_url: {type: string, format: uri}
+    AuthorFull:
+      allOf:
+        - $ref: "#/components/schemas/Author"
+        - type: object
+          required: [alternate_names, kind, description]
+          properties:
+            alternate_names:
+              type: array
+              items: {type: string}
+            kind:
+              type: string
+              enum: [person, organization, pseudonym, collective]
+            description: {type: [string, "null"]}
+    AuthorCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Author"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    AuthorItem:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AuthorFull"
+    RankingConfiguration:
+      type: object
+      required: [id, name, kind, primary, year, description, published_at, last_refreshed_at, item_count, list_count, url, api_url, books_api_url, lists_api_url]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        kind:
+          type: string
+          enum: [books]
+          description: What this configuration ranks. Only `books` today; more kinds will be added, never removed.
+        primary:
+          type: boolean
+          description: Whether this is the site's primary book ranking — the one `/api/v1/books` reads and a book's `rank` refers to everywhere outside this resource. An author's `rank` comes from the separate primary author ranking.
+        year: {type: [integer, "null"]}
+        description: {type: [string, "null"]}
+        published_at: {type: [string, "null"], format: date-time}
+        last_refreshed_at:
+          type: [string, "null"]
+          format: date-time
+          description: When the ranking was last calculated.
+        item_count:
+          type: integer
+          minimum: 0
+          description: Books ranked by this configuration.
+        list_count:
+          type: integer
+          minimum: 0
+          description: Active lists that feed this configuration.
+        url: {type: string, format: uri, description: The ranking's page on the site.}
+        api_url: {type: string, format: uri}
+        books_api_url: {type: string, format: uri, description: The ranked books, best first.}
+        lists_api_url: {type: string, format: uri, description: The active lists that feed it, heaviest first.}
+    RankingConfigurationCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RankingConfiguration"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    RankingConfigurationItem:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/RankingConfiguration"
+    List:
+      type: object
+      required: [id, name, source, year_published, yearly_award, number_of_voters, item_count, weight, activated_at, url, api_url, items_api_url]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        source: {type: [string, "null"], description: Who published the list.}
+        year_published: {type: [integer, "null"]}
+        yearly_award:
+          type: [boolean, "null"]
+          description: Whether the list is one year's award or best-of rather than an all-time list.
+        number_of_voters: {type: [integer, "null"]}
+        item_count:
+          type: integer
+          minimum: 0
+          description: Books on the list — the rows `items_api_url` serves.
+        weight:
+          type: [integer, "null"]
+          description: The list's weight on the ranking configuration it was read through — the primary for `/api/v1/lists`, `/api/v1/lists/{id}` and a book's listings; null when the list has no weight on it — it does not feed that configuration, or has not been weighted yet.
+        activated_at:
+          type: [string, "null"]
+          format: date-time
+          description: When the list went live on the site.
+        url: {type: string, format: uri, description: The list's page on the site.}
+        api_url: {type: string, format: uri}
+        items_api_url: {type: string, format: uri, description: The list's books, in list order.}
+    ListFull:
+      allOf:
+        - $ref: "#/components/schemas/List"
+        - type: object
+          required: [description, source_url]
+          properties:
+            description: {type: [string, "null"]}
+            source_url:
+              type: [string, "null"]
+              description: The original list on the web, as recorded — a few carry more than one address.
+    ListCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/List"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    ListItem:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/ListFull"
+    ListItemRow:
+      type: object
+      required: [position, book]
+      properties:
+        position:
+          type: [integer, "null"]
+          minimum: 1
+          description: The book's place on the list as published; null when the list is unordered.
+        book:
+          $ref: "#/components/schemas/Book"
+    ListItemCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListItemRow"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    BookListingRow:
+      type: object
+      required: [position, list]
+      properties:
+        position:
+          type: [integer, "null"]
+          minimum: 1
+          description: The book's place on this list as published; null when the list is unordered.
+        list:
+          $ref: "#/components/schemas/List"
+    BookListingCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/BookListingRow"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"

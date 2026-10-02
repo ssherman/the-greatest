@@ -17,7 +17,7 @@ module Services
 
         def task_provider = :openai
 
-        def task_model = "gpt-5-mini"
+        def task_role = :fast
 
         def temperature = 1.0 # GPT-5 models only support default temperature of 1.0
 

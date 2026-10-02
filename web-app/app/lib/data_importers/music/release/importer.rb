@@ -11,10 +11,6 @@ module DataImporters
 
         protected
 
-        def finder
-          @finder ||= Finder.new
-        end
-
         def providers
           @providers ||= [
             Providers::MusicBrainz.new

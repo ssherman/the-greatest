@@ -18,6 +18,8 @@ gem "stimulus-rails"
 gem "cssbundling-rails"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 gem "jbuilder"
+# Public API serialization (docs/superpowers/specs/2026-09-12-public-api-framework-design.md, D7).
+gem "alba", "~> 4.0"
 # CSV is no longer a default gem as of Ruby 3.4 (used for user-list CSV export)
 gem "csv"
 # Use Redis adapter to run Action Cable in production
@@ -104,6 +106,9 @@ group :test do
   gem "minitest", "~> 6.0"
   # ostruct is no longer a default gem as of Ruby 4.0 (used for OpenStruct test doubles)
   gem "ostruct"
+  # Validates every API integration test's request and response against
+  # config/api/v1/openapi.yaml. Not committee: 5.6.3 pins minitest ~> 5.3.
+  gem "openapi_first", "~> 3.4"
 end
 gem "faraday"
 gem "faraday-follow_redirects"

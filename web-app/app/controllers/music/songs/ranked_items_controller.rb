@@ -2,6 +2,7 @@ class Music::Songs::RankedItemsController < Music::RankedItemsController
   include Pagy::Method
   include Cacheable
   include PathBasedPagination
+  include CsvExportable
 
   layout "music/application"
 
@@ -28,5 +29,28 @@ class Music::Songs::RankedItemsController < Music::RankedItemsController
     songs_query = songs_query.order(:rank)
 
     @pagy, @songs = pagy_path(songs_query, limit: 100)
+    @csv_export_path = csv_export_path
+  end
+
+  # GET (/rc/:ranking_configuration_id)/songs/export.csv?year=&year_mode=
+  def export
+    return serve_prebuilt_or_prepare(@ranking_configuration) if @year_filter.nil? && current_user.member?
+
+    send_year_filtered_export(@ranking_configuration, year_filter: @year_filter)
+  end
+
+  private
+
+  def csv_export_path
+    songs_export_path(
+      **{ranking_configuration_id: params[:ranking_configuration_id].presence,
+         year: params[:year].presence, year_mode: params[:year_mode].presence}.compact,
+      format: :csv
+    )
+  end
+
+  # The preparing page's back link: this configuration's songs page.
+  def csv_export_back_path
+    songs_path(ranking_configuration_id: params[:ranking_configuration_id].presence)
   end
 end

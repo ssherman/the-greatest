@@ -9,6 +9,7 @@ require "test_helper"
 #  id             :bigint           not null, primary key
 #  fetched_at     :datetime         not null
 #  payload        :jsonb            not null
+#  raw            :binary
 #  schema_version :integer          default(1), not null
 #  source         :integer          not null
 #  created_at     :datetime         not null
@@ -83,5 +84,28 @@ class ExternalRecordTest < ActiveSupport::TestCase
 
     assert record.viaf?
     assert_equal "viaf", record.source
+  end
+
+  test "sources include wikidata and wikipedia alongside viaf" do
+    assert_equal({"viaf" => 0, "wikidata" => 1, "wikipedia" => 2}, ExternalRecord.sources)
+  end
+
+  test "raw_text round-trips UTF-8 through the gzipped raw column" do
+    record = ExternalRecord.create!(source: :wikidata, source_id: "Q7243", payload: {}, fetched_at: Time.current)
+    record.update!(raw_text: '{"label":"Лев Толстой"}')
+
+    reloaded = ExternalRecord.find(record.id)
+
+    assert_equal '{"label":"Лев Толстой"}', reloaded.raw_text
+    assert_operator reloaded.raw.bytesize, :>, 0
+    assert_not_equal reloaded.raw_text.b, reloaded.raw
+  end
+
+  test "raw_text is nil when nothing is stored" do
+    record = ExternalRecord.new(source: :wikidata, source_id: "Q1", payload: {}, fetched_at: Time.current)
+    record.raw_text = nil
+
+    assert_nil record.raw
+    assert_nil record.raw_text
   end
 end

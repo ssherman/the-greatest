@@ -83,6 +83,7 @@ class RankingConfiguration < ApplicationRecord
   has_many :ranked_lists, dependent: :delete_all
   has_many :penalty_applications, dependent: :destroy, inverse_of: :ranking_configuration
   has_many :penalties, through: :penalty_applications, inverse_of: :ranking_configurations
+  has_one :csv_export, dependent: :destroy
 
   # Validations
   validates :name, presence: true, length: {maximum: 255}
@@ -151,15 +152,6 @@ class RankingConfiguration < ApplicationRecord
   # Display noun for generated list names: "The 100 Greatest Books of 2025".
   def generated_list_noun
     media_noun_plural.capitalize
-  end
-
-  # The static one-year penalty this domain tags its year rollups with, or nil
-  # when the domain penalises time scope dynamically instead. Books is the only
-  # domain with a static penalty; games, albums and songs apply the dynamic
-  # Global::Penalty "List: number of years covered", which reads
-  # list.num_years_covered and therefore needs no tag.
-  def one_year_penalty_name
-    nil
   end
 
   def default_primary?

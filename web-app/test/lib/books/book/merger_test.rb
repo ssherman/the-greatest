@@ -86,6 +86,15 @@ module Books
         assert_equal @target.id, chat.reload.parent_id
       end
 
+      test "moves enrichments to the target" do
+        row = Enrichment.create!(enrichable: @source, kind: "books.book_facts", outcome: :nothing_to_apply)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, row.reload.enrichable_id
+        assert_equal "Books::Book", row.enrichable_type
+      end
+
       test "moves images to the target" do
         image = attach_image(@source, primary: false)
 
@@ -800,6 +809,20 @@ module Books
 
         assert result.success?, "the merge committed; reporting failure would be a lie"
         assert_equal "favorites redis is down", merger.stats[:post_commit_error]
+      end
+
+      test "records the merge on duplicate_candidates and repoints match decisions to the target" do
+        third = books_books(:combo_steinbeck)
+        pair = ::Services::DuplicateCandidates::Flag.call(item_type: "Books::Book", ids: [@source.id, @target.id], source: :ai).data
+        other_pair = ::Services::DuplicateCandidates::Flag.call(item_type: "Books::Book", ids: [@source.id, third.id], source: :ai).data
+        decision = MatchDecision.create!(finder: "F", record: @source, outcome: :matched, confidence: :high, decided_by: :ai)
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert pair.reload.merged?
+        assert_equal [@target.id, third.id].minmax, [other_pair.reload.item_a_id, other_pair.item_b_id]
+        assert_equal [@target.id, "Books::Book"], [decision.reload.record_id, decision.record_type]
       end
 
       private

@@ -9,7 +9,10 @@ class Services::BooksMigration::PenaltyResolverTest < ActiveSupport::TestCase
       Global::Penalty.new(name: "Voters: Unknown Count", dynamic_type: :voter_count_unknown),
       Global::Penalty.new(name: "List: only covers 1 specific genre", dynamic_type: :category_specific),
       Global::Penalty.new(name: "Voters: not critics, authors, or experts", dynamic_type: nil),
-      Global::Penalty.new(name: "List: contains over 500 items(Quantity over Quality)", dynamic_type: nil)
+      Global::Penalty.new(name: "List: contains over 500 items(Quantity over Quality)", dynamic_type: nil),
+      Global::Penalty.new(name: "List: number of years covered", dynamic_type: :num_years_covered),
+      Global::Penalty.new(name: "List: is a follow up/honorable mention to a different list", dynamic_type: nil),
+      Global::Penalty.new(name: "List: only covers items with a weird criteria", dynamic_type: nil)
     ]
   end
 
@@ -55,14 +58,53 @@ class Services::BooksMigration::PenaltyResolverTest < ActiveSupport::TestCase
   end
 
   test "unmatched static creates a Books penalty with nil dynamic_type" do
-    strategy, payload = resolver.call(lc("name" => "List: only covers 75 years", "dynamic_type" => nil))
+    strategy, payload = resolver.call(lc("name" => "List: Podcast/Etc that covers 1 book a week/month", "dynamic_type" => nil))
     assert_equal :create_books, strategy
-    assert_equal "List: only covers 75 years", payload[:name]
+    assert_equal "List: Podcast/Etc that covers 1 book a week/month", payload[:name]
     assert_nil payload[:dynamic_type]
   end
 
   test "raises when a dynamic type has no seeded global" do
     bare = R.new(globals_by_name: {}, globals_by_dynamic_type: {})
     assert_raises(KeyError) { bare.call(lc("dynamic_type" => 0)) }
+  end
+
+  test "honorable mention alias reuses the follow-up global" do
+    strategy, penalty = resolver.call(lc("name" => "List: honorable mention"))
+    assert_equal :reuse, strategy
+    assert_equal "List: is a follow up/honorable mention to a different list", penalty.name
+  end
+
+  test "weird criteria alias (books, with the parenthetical) reuses the items global" do
+    legacy = "List: only covers books with a weird criteria(books to help you survive the digital age, etc)"
+    strategy, penalty = resolver.call(lc("name" => legacy))
+    assert_equal :reuse, strategy
+    assert_equal "List: only covers items with a weird criteria", penalty.name
+  end
+
+  test "every year-span static reuses the num_years_covered global" do
+    assert_equal 7, R::YEAR_SPAN_BUCKETS.size
+    R::YEAR_SPAN_BUCKETS.each do |legacy_name, bucket|
+      strategy, penalty = resolver.call(lc("name" => legacy_name))
+      assert_equal :reuse, strategy, legacy_name
+      assert_equal "num_years_covered", penalty.dynamic_type, legacy_name
+      assert_kind_of Integer, bucket
+      assert_operator bucket, :>, 0
+    end
+  end
+
+  test "year-span buckets carry the legacy years" do
+    assert_equal 1, R::YEAR_SPAN_BUCKETS["List: only covers 1 year (yearly book awards, best of the year, etc)"]
+    assert_equal 5, R::YEAR_SPAN_BUCKETS["List: only covers 5 years"]
+    assert_equal 10, R::YEAR_SPAN_BUCKETS["List: only covers 10 years"]
+    assert_equal 25, R::YEAR_SPAN_BUCKETS["List: only covers 25 years"]
+    assert_equal 50, R::YEAR_SPAN_BUCKETS["List: only covers 50 years"]
+    assert_equal 75, R::YEAR_SPAN_BUCKETS["List: only covers 75 years"]
+    assert_equal 100, R::YEAR_SPAN_BUCKETS["List: only covers 100 years"]
+  end
+
+  test "raises when a year-span static has no num_years_covered global to reuse" do
+    bare = R.new(globals_by_name: {}, globals_by_dynamic_type: {})
+    assert_raises(KeyError) { bare.call(lc("name" => "List: only covers 10 years")) }
   end
 end

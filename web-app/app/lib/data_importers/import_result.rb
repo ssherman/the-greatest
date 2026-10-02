@@ -3,12 +3,14 @@
 module DataImporters
   # Aggregated results from all providers for an import operation
   class ImportResult
-    attr_reader :item, :provider_results, :success
+    attr_reader :item, :provider_results, :success, :match
 
-    def initialize(item:, provider_results:, success:)
+    def initialize(item:, provider_results:, success:, match: nil, created: false)
       @item = item
       @provider_results = Array(provider_results)
       @success = success
+      @match = match
+      @created = created
     end
 
     def success?
@@ -17,6 +19,13 @@ module DataImporters
 
     def failure?
       !success?
+    end
+
+    # True when this call made the record: a query-based import whose finder
+    # matched nothing, and whose new item was saved. The book importer's
+    # author step reads it to know which of a book's authors are new.
+    def created?
+      @created == true
     end
 
     def successful_providers
@@ -35,11 +44,14 @@ module DataImporters
       {
         success: success?,
         item_saved: item_saved?,
+        item_created: created?,
         providers_run: provider_results.count,
         providers_succeeded: successful_providers.count,
         providers_failed: failed_providers.count,
         data_populated: successful_providers.flat_map(&:data_populated).uniq,
-        errors: all_errors
+        errors: all_errors,
+        match_outcome: match&.outcome,
+        match_confidence: match&.confidence
       }
     end
 

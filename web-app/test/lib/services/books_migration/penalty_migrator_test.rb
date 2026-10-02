@@ -10,6 +10,8 @@ class Services::BooksMigration::PenaltyMigratorTest < ActiveSupport::TestCase
   setup do
     @voter_names = Global::Penalty.create!(name: "Voters: Unknown Names", dynamic_type: :voter_names_unknown)
     @not_critics = Global::Penalty.create!(name: "Voters: not critics, authors, or experts")
+    @num_years_covered = Global::Penalty.create!(name: "List: number of years covered", dynamic_type: :num_years_covered)
+    @follow_up = Global::Penalty.create!(name: "List: is a follow up/honorable mention to a different list")
     LegacyIdMap.record(model: "Books::RankingConfiguration", legacy_id: 48, new_id: 999_048)
   end
 
@@ -22,7 +24,7 @@ class Services::BooksMigration::PenaltyMigratorTest < ActiveSupport::TestCase
   def legacy(id, overrides = {})
     {
       "id" => id,
-      "name" => "List: only covers 75 years",
+      "name" => "List: Podcast/Etc that covers 1 book a week/month",
       "points" => 20,
       "description" => "legacy desc #{id}",
       "ranking_configuration_id" => 48,
@@ -44,7 +46,7 @@ class Services::BooksMigration::PenaltyMigratorTest < ActiveSupport::TestCase
     end
     penalty = mapped(8001)
     assert_equal "Books::Penalty", penalty.type
-    assert_equal "List: only covers 75 years", penalty.name
+    assert_equal "List: Podcast/Etc that covers 1 book a week/month", penalty.name
     assert_nil penalty.dynamic_type
     assert_nil penalty.user_id
     assert_equal "legacy desc 8001", penalty.description
@@ -64,9 +66,9 @@ class Services::BooksMigration::PenaltyMigratorTest < ActiveSupport::TestCase
   end
 
   test "does not reuse a user-owned Global::Penalty; creates a system Books::Penalty instead" do
-    user_global = Global::Penalty.create!(name: "List: honorable mention", user_id: users(:regular_user).id)
+    user_global = Global::Penalty.create!(name: "List: user-specific penalty", user_id: users(:regular_user).id)
     assert_difference -> { ::Books::Penalty.count }, 1 do
-      run_migrator([legacy(8009, "name" => "List: honorable mention")])
+      run_migrator([legacy(8009, "name" => "List: user-specific penalty")])
     end
     penalty = mapped(8009)
     assert_equal "Books::Penalty", penalty.type

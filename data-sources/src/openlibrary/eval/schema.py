@@ -41,8 +41,9 @@ from pydantic import BaseModel, Field, model_validator
 # records why the opposite rule -- calling an unreachable book a no_match --
 # is unsafe at 38/57.
 #
-# The `evaluation_set` pipeline gate stays `skipped` until Task 28 wires the
-# matcher's evaluation harness to it.
+# The `evaluation_set` pipeline gate is now enforced (Task 28): it runs the
+# harness against this set and fails the build if any of the pinned
+# thresholds in `openlibrary/eval/thresholds.json` regresses.
 MIN_CASES = 300
 MAX_CASES = 500
 MIN_NO_MATCH_CASES = 20

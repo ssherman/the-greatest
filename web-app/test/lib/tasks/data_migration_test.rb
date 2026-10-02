@@ -12,6 +12,10 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
     %w[
       data_migration:reading_goals
       data_migration:verify_reading_goals
+      data_migration:num_years_covered:derive
+      data_migration:penalties
+      data_migration:list_penalties
+      data_migration:penalties:reconcile
       data_migration:all
     ].each { |name| Rake::Task[name].reenable if Rake::Task.task_defined?(name) }
   end
@@ -70,5 +74,87 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       assert_raises(SystemExit) { Rake::Task["data_migration:verify_reading_goals"].invoke }
     end
     assert_match(/reading_goals verification failed: wrong goal count; unexpected target schema/, err)
+  end
+
+  test "num_years_covered:derive derives from legacy rows and appends to the review file" do
+    rows = [{id: 7, name: "Best of the 1990s", description: nil, year_published: 2001, bucket: 10, buckets: [10]}]
+    Services::BooksMigration::NumYearsCoveredDeriver.expects(:legacy_rows).once.returns(rows)
+    Services::BooksMigration::NumYearsCoveredFile.expects(:append).once.with { |entries|
+      entries.size == 1 && entries.first.id == 7 && entries.first.years == 10
+    }.returns(kept: 3, added: 1)
+
+    out, _err = capture_io { Rake::Task["data_migration:num_years_covered:derive"].invoke }
+    assert_match(/kept 3 existing entries, added 1/, out)
+  end
+
+  test "list_penalties runs the num_years_covered migrator after the list-penalty migrator" do
+    order = sequence("list_penalties")
+    Services::BooksMigration::ListPenaltyMigrator.expects(:call).once.in_sequence(order)
+      .returns(success: true, data: {model: "ListPenalty", count: 1})
+    Services::BooksMigration::NumYearsCoveredMigrator.expects(:call).once.in_sequence(order)
+      .returns(success: true, data: {model: "Books::List#num_years_covered", count: 1})
+
+    capture_io { Rake::Task["data_migration:list_penalties"].invoke }
+  end
+
+  test "list_penalties aborts when the num_years_covered migrator fails" do
+    Services::BooksMigration::ListPenaltyMigrator.stubs(:call).returns(success: true, data: {model: "ListPenalty", count: 1})
+    Services::BooksMigration::NumYearsCoveredMigrator.stubs(:call).returns(success: false, error: "entry 5: 0 is not a positive integer")
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:list_penalties"].invoke }
+    end
+    assert_match(/num_years_covered migration failed: entry 5/, err)
+  end
+
+  # penalties:reconcile follows in `all` and destroys rows; a migrator failure
+  # before it must stop the chain, not be printed and walked past.
+  test "list_penalties aborts before the num_years_covered migrator when the list-penalty migrator fails" do
+    Services::BooksMigration::ListPenaltyMigrator.stubs(:call).returns(success: false, error: "no migrated Books::List for legacy list_con_lists.list_id=9")
+    Services::BooksMigration::NumYearsCoveredMigrator.expects(:call).never
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:list_penalties"].invoke }
+    end
+    assert_match(/list_penalties migration failed: no migrated Books::List/, err)
+  end
+
+  test "penalties aborts when the penalty migrator fails, before the application migrator" do
+    Services::BooksMigration::PenaltyMigrator.stubs(:call).returns(success: false, error: "no migrated ranking_configurations")
+    Services::BooksMigration::PenaltyApplicationMigrator.expects(:call).never
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:penalties"].invoke }
+    end
+    assert_match(/penalties migration failed \(Penalty\): no migrated ranking_configurations/, err)
+  end
+
+  test "penalties aborts when the application migrator fails" do
+    Services::BooksMigration::PenaltyMigrator.stubs(:call).returns(success: true, data: {model: "Penalty", count: 1})
+    Services::BooksMigration::PenaltyApplicationMigrator.stubs(:call).returns(success: false, error: "key not found: 42", data: {model: "PenaltyApplication", count: 0})
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:penalties"].invoke }
+    end
+    assert_match(/penalties migration failed \(PenaltyApplication\): key not found: 42/, err)
+  end
+
+  test "penalties:reconcile invokes the reconciler" do
+    Services::BooksMigration::PenaltyReconciler.expects(:call).once.returns(success: true, data: {penalties_destroyed: 0})
+    capture_io { Rake::Task["data_migration:penalties:reconcile"].invoke }
+  end
+
+  test "penalties:reconcile aborts when the reconciler fails" do
+    Services::BooksMigration::PenaltyReconciler.stubs(:call).returns(success: false, error: "no num_years_covered Global::Penalty seeded")
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:penalties:reconcile"].invoke }
+    end
+    assert_match(/penalties:reconcile failed: no num_years_covered/, err)
+  end
+
+  test "penalties:reconcile runs immediately after list_penalties in the all task" do
+    prerequisites = Rake::Task["data_migration:all"].prerequisites
+    assert_equal prerequisites.index("list_penalties") + 1, prerequisites.index("penalties:reconcile")
+    assert_operator prerequisites.index("penalties"), :<, prerequisites.index("list_penalties")
   end
 end

@@ -55,6 +55,7 @@ module Books
           merge_all_associations
           reconcile_scalars
           target_author.save! if target_author.changed?
+          resolve_duplicate_candidates
           destroy_source_author
           @transaction_body_completed = true
         end
@@ -119,8 +120,11 @@ module Books
         merge_identifiers
         merge_external_links
         merge_ai_chats
+        merge_enrichments
+        merge_decision_subjects
         merge_images
         merge_category_items
+        merge_author_countries
         merge_descriptions
         merge_book_authors
         merge_credits
@@ -154,6 +158,20 @@ module Books
         @stats[:ai_chats] = source_author.ai_chats.update_all(parent_id: target_author.id)
       end
 
+      def merge_enrichments
+        @stats[:enrichments] = source_author.enrichments.update_all(enrichable_id: target_author.id)
+      end
+
+      # Wikidata decisions name the author as their subject (record is nil), so
+      # RecordMerge#repoint_decisions, which follows record_id, never reaches
+      # them. Left behind they would point at a deleted author, or, after a
+      # re-migration re-creates preserved ids, at the wrong one.
+      def merge_decision_subjects
+        @stats[:decision_subjects] = ::MatchDecision
+          .where(subject_type: "Books::Author", subject_id: source_author.id)
+          .update_all(subject_id: target_author.id, updated_at: Time.current)
+      end
+
       def merge_images
         has_target_primary = target_author.primary_image.present?
         count = 0
@@ -176,6 +194,15 @@ module Books
           count += 1
         end
         @stats[:category_items] = count
+      end
+
+      def merge_author_countries
+        count = 0
+        source_author.author_countries.find_each do |author_country|
+          target_author.author_countries.find_or_create_by!(country_id: author_country.country_id)
+          count += 1
+        end
+        @stats[:author_countries] = count
       end
 
       # Two unique indexes apply: one on
@@ -420,6 +447,14 @@ module Books
       # post-commit, never inside the transaction.
       def schedule_ranking_recalculation
         ::Books::CalculateAuthorRankingsJob.perform_async
+      end
+
+      # The (source, target) pair on duplicate_candidates becomes merged, other
+      # pending pairs naming the source re-key onto the target, and
+      # match_decisions that named the source now name the target. Inside the
+      # transaction so a rollback undoes it with the rest.
+      def resolve_duplicate_candidates
+        ::Services::DuplicateCandidates::RecordMerge.call(item_type: "Books::Author", source_id: @source_author_id, target_id: target_author.id)
       end
 
       def destroy_source_author

@@ -1,0 +1,40 @@
+# The corpus has a negative class on purpose: an expired token, a token whose
+# owner is not a member, and a token missing the books scope. Secrets live in
+# test/support/api_token_secrets.rb; only their SHA-256 digests are stored here,
+# exactly as in production.
+
+regular_user_token:
+  user: regular_user
+  name: laptop
+  token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::MEMBER) %>
+  token_prefix: <%= ApiTokenSecrets::MEMBER[0, 12] %>
+  scopes: ["books:read", "music:read", "games:read"]
+
+regular_user_music_only_token:
+  user: regular_user
+  name: music-only
+  token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::MUSIC_ONLY) %>
+  token_prefix: <%= ApiTokenSecrets::MUSIC_ONLY[0, 12] %>
+  scopes: ["music:read"]
+
+regular_user_expired_token:
+  user: regular_user
+  name: expired
+  token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::EXPIRED) %>
+  token_prefix: <%= ApiTokenSecrets::EXPIRED[0, 12] %>
+  scopes: ["books:read"]
+  expires_at: <%= 1.day.ago.iso8601 %>
+
+non_member_token:
+  user: books_viewer_user
+  name: laptop
+  token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::NON_MEMBER) %>
+  token_prefix: <%= ApiTokenSecrets::NON_MEMBER[0, 12] %>
+  scopes: ["books:read"]
+
+service_account_token:
+  user: agent_runner_service_account
+  name: default
+  token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::SERVICE) %>
+  token_prefix: <%= ApiTokenSecrets::SERVICE[0, 12] %>
+  scopes: ["books:read", "music:read", "games:read"]

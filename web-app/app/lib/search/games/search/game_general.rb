@@ -17,7 +17,7 @@ module Search
 
           query_definition = build_query_definition(text, min_score, size, from)
 
-          Rails.logger.info "Game search query: #{query_definition.inspect}"
+          Rails.logger.debug { "Game search query: #{query_definition.inspect}" }
 
           response = search(query_definition)
           extract_hits_with_scores(response)

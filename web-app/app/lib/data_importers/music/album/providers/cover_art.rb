@@ -5,7 +5,7 @@ module DataImporters
     module Album
       module Providers
         class CoverArt < DataImporters::ProviderBase
-          def populate(album, query:)
+          def populate(album, query:, match: nil)
             return failure_result(errors: ["Album must be persisted before queuing cover art download job"]) unless album.persisted?
 
             ::Music::CoverArtDownloadJob.perform_async(album.id)

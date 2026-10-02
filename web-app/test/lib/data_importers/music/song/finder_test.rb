@@ -10,6 +10,14 @@ module DataImporters
           @finder = Finder.new
         end
 
+        test "summarize carries the song's artists and release year for the audit pages" do
+          summary = @finder.summarize(music_songs(:time))
+
+          assert_equal "Time", summary[:title]
+          assert_equal ["Pink Floyd"], summary[:creators]
+          assert_equal 1973, summary[:year]
+        end
+
         test "call returns existing song when found by MusicBrainz recording ID" do
           song = music_songs(:time)
           mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
@@ -23,7 +31,7 @@ module DataImporters
           query = ImportQuery.new(musicbrainz_recording_id: mbid)
           result = @finder.call(query: query)
 
-          assert_equal song, result
+          assert_equal song, result.record
         end
 
         test "call returns existing song when found by title" do
@@ -32,7 +40,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_equal song, result
+          assert_equal song, result.record
         end
 
         test "call returns nil when no song found by MusicBrainz ID" do
@@ -41,14 +49,14 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call returns nil when no song found by title" do
           query = ImportQuery.new(title: "Nonexistent Song")
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
 
         test "call prioritizes MusicBrainz ID over title when both present" do
@@ -71,7 +79,7 @@ module DataImporters
           result = @finder.call(query: query)
 
           # Should return song1 (found by MBID) not song2 (found by title)
-          assert_equal song1, result
+          assert_equal song1, result.record
         end
 
         test "call handles query with only title" do
@@ -80,7 +88,7 @@ module DataImporters
 
           result = @finder.call(query: query)
 
-          assert_equal song, result
+          assert_equal song, result.record
         end
 
         test "call handles query with only musicbrainz_recording_id" do
@@ -95,14 +103,14 @@ module DataImporters
           query = ImportQuery.new(musicbrainz_recording_id: mbid)
           result = @finder.call(query: query)
 
-          assert_equal song, result
+          assert_equal song, result.record
         end
 
         test "call returns nil when title is blank" do
           query = ImportQuery.new(title: "")
           result = @finder.call(query: query)
 
-          assert_nil result
+          assert_nil result.record
         end
       end
     end

@@ -7,7 +7,7 @@ module DataImporters
         module Musicbrainz
           # MusicBrainz provider for Music::Song data
           class MusicBrainz < DataImporters::ProviderBase
-            def populate(song, query:)
+            def populate(song, query:, match: nil)
               Rails.logger.info "[SONG_IMPORT] MusicBrainz provider starting for MBID: #{query.musicbrainz_recording_id || query.title}"
 
               api_result = if query.musicbrainz_recording_id.present?

@@ -1,0 +1,30 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "pages": [
+      {
+        "pageid": 20605753,
+        "ns": 0,
+        "title": "John Smith",
+        "extract": "John Smith is a common personal name. It is also commonly used as a placeholder name and pseudonym, and is sometimes used in the United States and the United Kingdom as a term for an average person. \nNotable people with the name include:",
+        "pageprops": {
+          "disambiguation": "",
+          "expectshortpage": "",
+          "toc": "",
+          "wikibase-shortdesc": "Topics referred to by the same term",
+          "wikibase_item": "Q245903"
+        },
+        "contentmodel": "wikitext",
+        "pagelanguage": "en",
+        "pagelanguagehtmlcode": "en",
+        "pagelanguagedir": "ltr",
+        "touched": "2026-09-27T04:28:10Z",
+        "lastrevid": 1376199321,
+        "length": 27493,
+        "fullurl": "https://en.wikipedia.org/wiki/John_Smith",
+        "editurl": "https://en.wikipedia.org/w/index.php?title=John_Smith&action=edit",
+        "canonicalurl": "https://en.wikipedia.org/wiki/John_Smith"
+      }
+    ]
+  }
+}

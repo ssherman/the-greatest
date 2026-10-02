@@ -59,7 +59,5 @@ module Books
     def supports_year_rollups? = true
 
     def generated_list_class = ::Books::List
-
-    def one_year_penalty_name = "List: only covers 1 year (yearly book awards, best of the year, etc)"
   end
 end

@@ -65,6 +65,7 @@ Rails.application.routes.draw do
       # Album routes
       get "albums", to: "music/albums/ranked_items#index", as: :albums
       get "albums/page/:page", to: "music/albums/ranked_items#index", as: :albums_page, constraints: {page: /\d+/}
+      get "albums/export", to: "music/albums/ranked_items#export", as: :albums_export, format: true, constraints: {format: /csv/}
       get "albums/lists", to: "music/albums/lists#index", as: :music_albums_lists
       get "albums/lists/page/:page", to: "music/albums/lists#index", as: :music_albums_lists_page, constraints: {page: /\d+/}
       get "albums/lists/:id", to: "music/albums/lists#show", as: :music_album_list
@@ -89,6 +90,7 @@ Rails.application.routes.draw do
       # Song routes
       get "songs", to: "music/songs/ranked_items#index", as: :songs
       get "songs/page/:page", to: "music/songs/ranked_items#index", as: :songs_page, constraints: {page: /\d+/}
+      get "songs/export", to: "music/songs/ranked_items#export", as: :songs_export, format: true, constraints: {format: /csv/}
       get "songs/lists", to: "music/songs/lists#index", as: :music_songs_lists
       get "songs/lists/page/:page", to: "music/songs/lists#index", as: :music_songs_lists_page, constraints: {page: /\d+/}
       get "songs/lists/:id", to: "music/songs/lists#show", as: :music_song_list
@@ -282,7 +284,9 @@ Rails.application.routes.draw do
 
       resources :song_artists, only: [:update, :destroy]
 
-      resources :ai_chats, only: [:index, :show]
+      # Shared controller, routed per domain -- same shape as corrections. The
+      # domain comes from the host, so the index scopes to this domain's parents.
+      resources :ai_chats, only: [:index, :show], controller: "/admin/ai_chats"
 
       resources :categories do
         collection do
@@ -304,6 +308,20 @@ Rails.application.routes.draw do
         end
       end
 
+      # Import finder audit (docs/features/import-finder.md): shared base
+      # controllers subclassed per domain, like reviews.
+      resources :match_decisions, only: [:index, :show] do
+        member do
+          post :review
+          post :recheck
+        end
+      end
+      resources :duplicate_candidates, only: [:index] do
+        member do
+          post :dismiss
+        end
+      end
+
       resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
         member do
           post :resolve
@@ -314,9 +332,9 @@ Rails.application.routes.draw do
   require "sidekiq/web"
   require "sidekiq/cron/web"
 
+  # Fails closed when either SIDEKIQ_ADMIN_* variable is blank; see SidekiqWebAuth.
   Sidekiq::Web.use(Rack::Auth::Basic) do |username, password|
-    ActiveSupport::SecurityUtils.secure_compare(::Digest::SHA256.hexdigest(username), ::Digest::SHA256.hexdigest(ENV["SIDEKIQ_ADMIN_USERNAME"].to_s)) &
-      ActiveSupport::SecurityUtils.secure_compare(::Digest::SHA256.hexdigest(password), ::Digest::SHA256.hexdigest(ENV["SIDEKIQ_ADMIN_PASSWORD"].to_s))
+    SidekiqWebAuth.authenticate(username, password)
   end
   mount Sidekiq::Web => "/sidekiq-admin"
 
@@ -465,6 +483,33 @@ Rails.application.routes.draw do
     get "deletion_policy", to: "pages#deletion", as: :deletion_policy, constraints: {format: /html/}
   end
 
+  # The API contract, on every real host, unauthenticated and edge-cacheable:
+  # the one /api/ path that SHOULD cache. Served outside Api::V1::BaseController
+  # (which authenticates) -- see Api::V1::OpenapiController.
+  constraints DomainConstraint.new(
+    [:books, :music, :games].map { |domain| Rails.application.config.domains[domain] }.join(",")
+  ) do
+    get "api/v1/openapi", to: "api/v1/openapi#show", as: :api_v1_openapi,
+      defaults: {format: :json}, constraints: {format: :json}
+  end
+
+  # The public API's two pages. /developers is documentation: identical for
+  # every visitor, edge-cached like the policy pages, and it lists only the
+  # endpoints THIS host serves (Api::OpenapiDocument.for_host). /developers/tokens
+  # is where a member mints and revokes tokens: members only, never cached, and
+  # its writes answer in Turbo Streams (Developers::TokensController). Global
+  # routes with a per-domain layout, domain-constrained like /news for the same
+  # reason. No header nav item (spec D14): the links in are the footer and the
+  # /members card.
+  constraints DomainConstraint.new(
+    [:books, :music, :games].map { |domain| Rails.application.config.domains[domain] }.join(",")
+  ) do
+    get "developers", to: "developers#show", as: :developers, constraints: {format: /html/}
+    namespace :developers do
+      resources :tokens, only: [:index, :create, :destroy]
+    end
+  end
+
   # Legacy books URL. ~15 years of inbound links point at /support.
   get "support", to: redirect("/membership", status: 301)
 
@@ -514,6 +559,13 @@ Rails.application.routes.draw do
   patch "searches/:id", to: "saved_searches#update", constraints: {id: /\d+/}
   put "searches/:id", to: "saved_searches#update", constraints: {id: /\d+/}
   delete "searches/:id", to: "saved_searches#destroy", constraints: {id: /\d+/}
+
+  # CSV export (spec §9). Same visibility as show but sign-in only (via
+  # CsvExportable), and not an execution. `format: true` makes the extension
+  # mandatory and the constraint pins it to .csv, so /export alone 404s.
+  # Declared above `searches/:id`, like the other sub-paths.
+  get "searches/:id/export", to: "saved_searches#export", as: :export_saved_search,
+    format: true, constraints: {id: /\d+/, format: /csv/}
 
   # show serves the owner or any viewer when the search is public, including
   # anonymous, and 404s everything else via SavedSearch.visible_to.
@@ -580,6 +632,27 @@ Rails.application.routes.draw do
   end
 
   constraints DomainConstraint.new(Rails.application.config.domains[:books]) do
+    # Public API, books resources. JSON only: `defaults` means no extension is
+    # needed, `constraints` means /api/v1/books.xml matches nothing (a routing
+    # 404, not a 406). Domain comes from the host, like everything else.
+    # Spec: docs/superpowers/specs/2026-09-12-public-api-framework-design.md
+    namespace :api, defaults: {format: :json}, constraints: {format: :json} do
+      namespace :v1 do
+        scope module: :books do
+          resources :books, only: [:index, :show], param: :slug
+          get "books/:slug/lists", to: "book_lists#index", as: :book_lists
+          resources :authors, only: [:index, :show], param: :slug
+          resources :ranking_configurations, only: [:index, :show], constraints: {id: /\d+/}
+          get "ranking_configurations/:ranking_configuration_id/books", to: "books#index",
+            as: :ranking_configuration_books, constraints: {ranking_configuration_id: /\d+/}
+          resources :lists, only: [:index, :show], constraints: {id: /\d+/}
+          get "ranking_configurations/:ranking_configuration_id/lists", to: "lists#index",
+            as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
+          get "lists/:list_id/items", to: "list_items#index", as: :list_items, constraints: {list_id: /\d+/}
+        end
+      end
+    end
+
     get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
     get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal
     post "my/reading-goals", to: "books/my/reading_goals#create"
@@ -663,6 +736,10 @@ Rails.application.routes.draw do
 
       resources :reviews, only: [:index, :show, :destroy]
 
+      # Shared controller, routed per domain -- same shape as corrections. The
+      # domain comes from the host, so the index scopes to this domain's parents.
+      resources :ai_chats, only: [:index, :show], controller: "/admin/ai_chats"
+
       # Shared controller, routed per domain -- same shape as descriptions and
       # category items. The domain comes from the route, so the index can scope to
       # this domain's correctable types.
@@ -674,6 +751,21 @@ Rails.application.routes.draw do
         end
         collection do
           post :bulk_reject
+        end
+      end
+
+      # Import finder audit (docs/features/import-finder.md): shared base
+      # controllers subclassed per domain, like reviews.
+      resources :match_decisions, only: [:index, :show] do
+        member do
+          post :review
+          post :recheck
+          post :reject
+        end
+      end
+      resources :duplicate_candidates, only: [:index] do
+        member do
+          post :dismiss
         end
       end
 
@@ -826,6 +918,14 @@ Rails.application.routes.draw do
     # Ranked index. Root is canonical; pagination is path-based.
     # Order matters: /page/1 must precede the generic /page/:page.
     root to: "books/ranked_items#index", as: :books_root
+    # CSV export (spec §9). Its own action, never a format of the cached
+    # index. `format: true` makes the extension mandatory (a bare constraint
+    # only restricts the optional segment, so /export alone would still route)
+    # and the constraint pins it to .csv, so /export and /export.json both 404.
+    get "export", to: "books/ranked_items#export", as: :books_export,
+      format: true, constraints: {format: /csv/}
+    get "rc/:ranking_configuration_id/export", to: "books/ranked_items#export", as: :books_rc_export,
+      format: true, constraints: {format: /csv/}
     get "page/1", to: redirect("/", status: 301)
     get "page/:page", to: "books/ranked_items#index", as: :books_page, constraints: {page: /\d+/}
     get "the-greatest-books", to: redirect("/", status: 301)
@@ -1099,6 +1199,10 @@ Rails.application.routes.draw do
         end
       end
 
+      # Shared controller, routed per domain -- same shape as corrections. The
+      # domain comes from the host, so the index scopes to this domain's parents.
+      resources :ai_chats, only: [:index, :show], controller: "/admin/ai_chats"
+
       # Shared controller, routed per domain -- same shape as descriptions and
       # category items. The domain comes from the route, so the index can scope to
       # this domain's correctable types.
@@ -1110,6 +1214,20 @@ Rails.application.routes.draw do
         end
         collection do
           post :bulk_reject
+        end
+      end
+
+      # Import finder audit (docs/features/import-finder.md): shared base
+      # controllers subclassed per domain, like reviews.
+      resources :match_decisions, only: [:index, :show] do
+        member do
+          post :review
+          post :recheck
+        end
+      end
+      resources :duplicate_candidates, only: [:index] do
+        member do
+          post :dismiss
         end
       end
 
@@ -1171,6 +1289,7 @@ Rails.application.routes.draw do
         constraints: {id: /\d+/, page: /\d+/}
       get "video-games", to: "games/ranked_items#index", as: :video_games
       get "video-games/page/:page", to: "games/ranked_items#index", as: :video_games_page, constraints: {page: /\d+/}
+      get "video-games/export", to: "games/ranked_items#export", as: :video_games_export, format: true, constraints: {format: /csv/}
       # Year-filtered games (must come before generic patterns)
       get "video-games/since/:year", to: "games/ranked_items#index", as: :video_games_since_year,
         constraints: {year: /\d{4}/}, defaults: {year_mode: "since"}

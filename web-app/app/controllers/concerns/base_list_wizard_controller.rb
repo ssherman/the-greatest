@@ -34,6 +34,14 @@ module BaseListWizardController
   # Ordered list of wizard step names
   WIZARD_STEPS = %w[source parse enrich validate review import complete].freeze
 
+  included do
+    # Viewers may look; writers may drive the wizard (which enqueues paid AI
+    # jobs); only deleters may restart or reparse, which destroy list items
+    # (security audit M4). Every read (show, show_step, step_status) is a GET.
+    before_action :require_domain_write!, unless: -> { request.get? || request.head? }
+    before_action :require_domain_delete!, only: [:restart, :reparse]
+  end
+
   # Saves raw HTML content for parsing.
   # Called from the source step when user provides custom HTML.
   def save_html

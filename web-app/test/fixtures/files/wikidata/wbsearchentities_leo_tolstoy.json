@@ -1,0 +1,39 @@
+{
+  "searchinfo": {
+    "search": "Leo Tolstoy"
+  },
+  "search": [
+    {
+      "id": "Q7243",
+      "label": "Leo Tolstoy",
+      "description": "Russian author (1828–1910)",
+      "match": {
+        "type": "label",
+        "language": "en",
+        "text": "Leo Tolstoy"
+      }
+    },
+    {
+      "id": "Q4256164",
+      "label": "Lev Tolstoy",
+      "description": "1984 film by Sergei Gerasimov",
+      "match": {
+        "type": "alias",
+        "language": "en",
+        "text": "Leo Tolstoy"
+      }
+    },
+    {
+      "id": "Q21160343",
+      "label": "Leo Tolstoy",
+      "description": "Wikimedia disambiguation page",
+      "match": {
+        "type": "label",
+        "language": "en",
+        "text": "Leo Tolstoy"
+      }
+    }
+  ],
+  "search-continue": 3,
+  "success": 1
+}

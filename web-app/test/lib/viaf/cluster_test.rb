@@ -102,6 +102,7 @@ class Viaf::ClusterTest < ActiveSupport::TestCase
       source: :viaf,
       source_id: "96987389",
       payload: {"viaf_id" => "96987389", "name_type" => "Personal", "birth_date" => "1828-09-09"},
+      schema_version: Viaf::Distiller::SCHEMA_VERSION,
       fetched_at: Time.current
     )
     @client.expects(:get).never
@@ -229,5 +230,14 @@ class Viaf::ClusterTest < ActiveSupport::TestCase
     @client.stubs(:get).returns(raw_response)
 
     assert_equal "96987389", @cluster.find(96987389).viaf_id
+  end
+
+  test "stores the complete response, gzipped, beside the distilled payload" do
+    @client.stubs(:get).returns(raw_response)
+
+    @cluster.find("96987389")
+
+    record = ExternalRecord.find_by!(source: :viaf, source_id: "96987389")
+    assert_equal JSON.parse(JSON.generate(raw_response[:data])), JSON.parse(record.raw_text)
   end
 end

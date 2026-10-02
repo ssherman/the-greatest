@@ -6,11 +6,10 @@ class ApplicationController < ActionController::Base
   include Pundit::Authorization
   include Cacheable
   include RankingConfigurationGating
+  include CurrentDomain
 
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
   rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
-
-  before_action :set_current_domain
 
   helper_method :current_user, :signed_in?
 
@@ -43,33 +42,6 @@ class ApplicationController < ActionController::Base
   end
 
   private
-
-  def set_current_domain
-    @current_domain = detect_current_domain
-    @domain_settings = Rails.application.config.domain_settings[@current_domain]
-    Current.domain = @current_domain
-
-    # Debug logging
-    Rails.logger.info "Host: #{request.host}"
-    Rails.logger.info "Detected domain: #{@current_domain}"
-    Rails.logger.info "Domain settings: #{@domain_settings}"
-  end
-
-  def detect_current_domain
-    host = request.host
-
-    Rails.application.config.domains.each do |domain, configured|
-      return domain if configured.split(",").include?(host)
-    end
-
-    :books # default for unrecognized hosts
-  end
-
-  attr_reader :current_domain
-
-  attr_reader :domain_settings
-
-  helper_method :current_domain, :domain_settings
 
   def render_not_found
     prevent_caching

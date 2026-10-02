@@ -1,0 +1,54 @@
+# One row per outcome and per mode, so a scope that returns nothing has
+# something it could have returned.
+
+war_and_peace_facts_applied:
+  enrichable: war_and_peace (Books::Book)
+  kind: books.book_facts
+  mode: knowledge
+  outcome: applied
+  recognized: true
+  confidence: high
+  facts:
+    first_published_year: {value: 1869, confidence: high, applied: false, reason: already_set}
+    word_count: {value: 587287, confidence: low, applied: true, reason: filled}
+  provider: openai
+  model: gpt-6-sol
+
+crime_and_punishment_unrecognized:
+  enrichable: crime_and_punishment (Books::Book)
+  kind: books.book_facts
+  mode: knowledge
+  outcome: unrecognized
+  recognized: false
+  confidence: low
+  provider: openai
+  model: gpt-6-sol
+
+crime_and_punishment_research_skipped:
+  enrichable: crime_and_punishment (Books::Book)
+  kind: books.book_facts
+  mode: research
+  outcome: skipped
+  reason: budget_exhausted
+
+combo_steinbeck_failed:
+  enrichable: combo_steinbeck (Books::Book)
+  kind: books.book_facts
+  mode: knowledge
+  outcome: failed
+  error: "OpenAI timeout"
+  provider: openai
+  model: gpt-6-sol
+
+war_and_peace_research_old:
+  enrichable: war_and_peace (Books::Book)
+  kind: books.book_facts
+  mode: research
+  outcome: nothing_to_apply
+  recognized: true
+  confidence: medium
+  citations: ["https://example.org/war-and-peace"]
+  provider: openai
+  model: gpt-6-astra
+  created_at: 2020-01-01 00:00:00
+  updated_at: 2020-01-01 00:00:00

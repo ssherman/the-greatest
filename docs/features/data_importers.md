@@ -10,13 +10,13 @@ The DataImporters system provides a flexible, extensible framework for importing
 - **Domain-Agnostic Base Classes**: Shared logic for all media types
 - **Incremental Saving**: Items saved after each successful provider for background job compatibility
 - **Provider Aggregation**: Multiple providers can enrich the same record
-- **Intelligent Duplicate Detection**: Uses external identifiers and fallback matching strategies
+- **Finder returns a decision, not a record**: every finder answers with a `Match` (matched or unmatched, confidence, candidates, who decided, why) and records a `MatchDecision`. See [Import finder](./import-finder.md).
 
 ### System Components
 
 #### Base Classes (Domain-Agnostic)
 - **ImporterBase** - Main orchestration logic with provider aggregation and incremental saving
-- **FinderBase** - Base class for finding existing records via external identifiers
+- **FinderBase** - The four-stage finder pipeline (gather candidates, rules, AI selection, record); see [Import finder](./import-finder.md)
 - **ProviderBase** - Base class for external data source integration
 - **ImportQuery** - Factory for domain-specific query objects with validation
 - **ImportResult** - Aggregated results from all providers with success/failure tracking
@@ -51,7 +51,7 @@ The `force_providers: true` parameter allows:
 **Synchronous Provider:**
 ```ruby
 class Providers::MusicBrainz < ProviderBase
-  def populate(item, query:)
+  def populate(item, query:, match: nil)
     # Fetch and populate data immediately
     # Save happens automatically after this returns success
     ProviderResult.new(success: true, provider_name: self.class.name)
@@ -62,7 +62,7 @@ end
 **Asynchronous Provider:**
 ```ruby
 class Providers::CoverArt < ProviderBase
-  def populate(item, query:)
+  def populate(item, query:, match: nil)
     # Queue background job for rate-limited API
     Games::CoverArtDownloadJob.perform_async(item.id)
     # Return success immediately - job updates item later
@@ -82,6 +82,8 @@ end
 | Music | Release | MusicBrainz | Complete |
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
+| Books | Book | OpenLibrary, Authors, AiEnrichment, AuthorEnrichment | Complete |
+| Books | Author | OpenLibrary, Enrichment | Complete (Wikidata, VIAF, AI step; Reject link and backfill still to come) |
 
 ### Music Providers
 
@@ -94,7 +96,7 @@ end
 
 #### AI Description (Async)
 - Queues `AiDescriptionJob` for AI-generated descriptions
-- Uses Claude for natural language descriptions
+- Uses OpenAI (the `standard` role, see `ai_agents.md`) for natural language descriptions
 
 #### Amazon Product (Async)
 - Searches Amazon for related products
@@ -145,6 +147,97 @@ Primary data source for games and companies.
 - Searches Amazon for game-related products
 - AI validation via `AmazonGameMatchTask`
 - Creates external links (no image download)
+
+### Books Providers
+
+#### Open Library (Sync)
+Single provider, backed by the [Open Library data service](./open-library-data-service.md)
+(`data-sources/`, a separate Python process reached over HTTP -- see that doc's "Rails client"
+section for the full contract).
+
+- **Query** (`ImportQuery`) takes `title` (required unless an identifier is present),
+  `author_names`, `year`, `isbn13`, `isbn10`, `asin`, `goodreads_id`, `open_library_work_key`.
+- **Finder** runs four candidate sources in order (identifiers, an exact title/author match, an
+  OpenSearch title-plus-authors query, and the Open Library `/resolve` service); see
+  [Import finder](./import-finder.md) for what each one does.
+- **Provider** calls the service's `/resolve` endpoint with the *book's* current state (not just
+  the query) and, on an accept verdict, applies fills only to blank fields (`title`, `subtitle`,
+  `description`, `first_published_year`); for a new book it reuses the resolution the finder
+  already obtained, so a title import makes one `/resolve` call in total. `title`, `subtitle` and
+  `first_published_year` are blank
+  scalar columns; `description` is stored as a `descriptions` row (`source: openlibrary`) via
+  `Describable#assign_description`, never the legacy `books_books.description` column, and "ours"
+  sent to the service is the book's primary description. A populated field the service calls a
+  conflict or an enrichment is left alone and reported in `data_populated` as `"skipped:<field>"`.
+  On accept, a book with no authors gets the accepted work's authors through the author importer, by
+  key and name, in Open Library's order. Subjects are never applied.
+- **Idempotency:** re-running `Importer.call` with any identifier is idempotent (the finder's
+  identifier and exact sources find it; the provider persists the query's identifiers on accept),
+  including a query keyed by an OLD (redirected) OL key as long as it still carries the title the
+  service can accept on: the service resolves the old key to its terminal work,
+  `OpenLibrarySource#local_holders` finds the book holding that canonical key (it also counts any
+  key in the work's `redirected_from` list, which `/resolve` does not populate), and rule 2 matches
+  on the external accept. A key-only re-run earns no accept, because the service has no title or
+  identifier evidence for it, so that one reaches the AI. A title+author import is idempotent when
+  the linked author carries the query's author name (a newly created author, or a match on that
+  name): the exact source finds the book by title joined to that name on the next run. An author
+  matched under a variant name leaves the re-run to OpenSearch and the AI, and a book linked
+  through an Open Library accept is found again by the service's accept on the same key.
+
+#### AI Enrichment (Async)
+Queues `Books::EnrichBookJob` and returns `[:ai_enrichment_queued]`. Runs after OpenLibrary and
+Authors, so the AI fills fewer blanks, and before AuthorEnrichment. Requires a title and either
+`book.authors` names (the usual case, since the author steps run first) or the query's
+`author_names` when the book still has no authors. When the import created one of the book's
+linked authors, it queues nothing: it writes a skipped `deferred_to_authors` ledger row and
+returns `[:ai_enrichment_deferred_to_authors]`, and the author chain hands the book on when the
+author is enriched. See `docs/features/books_enrichment.md` and
+`docs/features/books-author-enrichment.md`.
+
+#### Author Enrichment (Async)
+`Providers::AuthorEnrichment` runs last, after AiEnrichment, and queues
+`Books::Authors::WikidataJob` for each author this import created, returning
+`[:author_enrichment_queued]`. It runs after the importer has saved the book and its
+`book_authors` rows, so the author chain sees the book among the author's titles -- and after
+AiEnrichment has already written the book's `deferred_to_authors` row, so a chain that finishes
+fast cannot reach its hand-off before the book's wait is even recorded. It does nothing, and
+reports failure, for a book that was never persisted.
+
+#### Authors (Sync)
+`Providers::Authors` runs after Open Library. When the book still has no authors (Open Library abstained,
+rejected, or was unreachable -- the service is not deployed to production), each of the query's
+`author_names` goes through `DataImporters::Books::Author::Importer` by name and is linked in the query's
+order. A book that already has authors is left alone. Both author steps call the author importer with
+`providers: Author::Importer::BOOK_STEP_PROVIDERS` (`[:open_library]`), leaving out its async
+`Providers::Enrichment`, and collect the ids of the authors the import created for the providers after
+them.
+
+### Books Author importer
+`DataImporters::Books::Author::Importer.call(name:, open_library_author_key:, birth_year:, death_year:,
+alternate_names:, work_titles:)`. `name` is required unless a key is given. The finder's sources are the
+Open Library author key, an exact normalized name-or-alternate-name lookup, OpenSearch
+`Search::Books::Search::AuthorByName`, and the Open Library author record for the key; rule 4 is an equal
+normalized name with no birth- or death-year conflict. Stored names and alternate names are normalized on
+save (quotes, exotic spaces), so the exact source can compare them directly. The importer saves the new
+author before providers run (`save_before_providers?`), so a name alone always persists;
+`ImportResult#created?` says whether it made the author. The Open Library provider fills blank years,
+unions alternate names, stamps `books_author_openlibrary_id`, and writes `name` only when blank. When another
+author already holds the key (or a key it redirects from), it applies nothing, flags the two authors as an
+`external_key_collision` pair on the duplicates page, and reports a failure.
+
+**Enrichment (async).** Queues `Books::Authors::WikidataJob` for the new author and returns
+`[:author_enrichment_queued]`. The job resolves the author to a Wikidata person or to none,
+fills blanks from the item, and links the English Wikipedia article only through that item. See
+`docs/features/books-author-enrichment.md`. Providers run only for a new author, so a matched
+author is never re-enriched from an import.
+
+On a Wikidata miss, `WikidataJob` chains into `Books::Authors::ViafJob` — VIAF is not a provider of
+its own, but a job the Wikidata step can lead to. Every chain is meant to end in
+`Books::Authors::EnrichJob`, the AI facts step, which also hands the author's waiting books on to
+book enrichment -- see `docs/features/books-author-enrichment.md`'s "The AI step" and "A stuck
+chain" for what the AI step does and the gaps that can keep a chain from reaching it. Spec:
+`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`. The Reject link action
+(increment 5) and the backfill rake task (increment 6) are still to come.
 
 ## Usage Examples
 
@@ -214,8 +307,8 @@ result = DataImporters::Games::Game::Importer.call(
 
 ### Standard Single-Item Import
 1. **Input Validation**: Domain-specific query object validates parameters
-2. **Find Existing**: Use external identifiers for reliable duplicate detection
-3. **Early Return**: Skip providers if existing item found (unless force_providers: true)
+2. **Find Existing**: The finder returns a `Match`; `match.record` is the existing record or nil
+3. **Early Return**: Skip providers if a record matched (unless force_providers: true); providers otherwise receive the match as `populate(item, query:, match:)`
 4. **Initialize Item**: Create new record if none found
 5. **Provider Execution**: Each provider contributes data, item saved after successful providers
 6. **Result Aggregation**: Return detailed ImportResult with provider feedback
@@ -241,7 +334,7 @@ Both Music and Games use AI to validate Amazon search results.
 **Base Class:** `Services::Ai::Tasks::AmazonProductMatchTask`
 - Shared prompt structure and response handling
 - Abstract methods: `domain_name`, `item_description`, `match_criteria`, `non_match_criteria`
-- Uses `gpt-5-mini` model with structured outputs
+- Runs on the `fast` role (see `ai_agents.md`) with structured outputs
 
 **Music Implementation:** `AmazonAlbumMatchTask`
 - Matches: vinyl, CD, cassette, digital, box sets, special editions
@@ -295,7 +388,7 @@ When creating new platforms, the IGDB provider infers `platform_family` from slu
 
 ### Adding New Providers
 1. Create provider class inheriting from `ProviderBase`
-2. Implement `populate(item, query:)` method
+2. Implement `populate(item, query:, match: nil)`; `match` is the finder's Match for a query-based import, nil for an item-based one — see [Import finder](./import-finder.md)
 3. Use `find_or_initialize_by` for identifiers to prevent duplicates
 4. Add to domain-specific importer's `providers` array
 

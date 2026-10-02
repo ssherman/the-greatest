@@ -70,7 +70,8 @@ def books_file(tmp_path, artifact):
 
 
 def test_load_books_parses_every_line(books_file):
-    written = sum(1 for line in books_file.open() if line.strip())
+    with books_file.open() as fh:
+        written = sum(1 for line in fh if line.strip())
     books = load_books(books_file)
 
     assert written > 0

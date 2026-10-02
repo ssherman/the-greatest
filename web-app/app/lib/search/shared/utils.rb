@@ -13,8 +13,13 @@ module Search
             normalized = Services::Text::QuoteNormalizer.call(text.to_s)
 
             cleaned = normalized
+              # A decomposed accent (a base letter followed by a combining
+              # mark, U+0301 etc.) is not \p{L}: composing first turns it
+              # into one precomposed character the filter below keeps.
+              .unicode_normalize(:nfkc)
               .strip
-              .gsub(/[^\w\s\-'"]/, " ")  # Replace special chars with space
+              # \p{L}\p{N}, not \w: Ruby's \w is ASCII-only, and a stripped accent turns "Misérables" into "mis rables", which the folding analyzer cannot match.
+              .gsub(/[^\p{L}\p{N}_\s\-'"]/, " ")  # Replace special chars with space
               .gsub(/\s+/, " ")          # Collapse multiple spaces
               .strip
 
@@ -28,9 +33,14 @@ module Search
           normalized = Services::Text::QuoteNormalizer.call(text.to_s)
 
           normalized
+            # A decomposed accent (a base letter followed by a combining
+            # mark, U+0301 etc.) is not \p{L}: composing first turns it
+            # into one precomposed character the filter below keeps.
+            .unicode_normalize(:nfkc)
             .strip
             .downcase
-            .gsub(/[^\w\s\-'.]/, " ")  # Replace special chars with space (keep periods for acronyms like B.O.B.)
+            # \p{L}\p{N}, not \w: Ruby's \w is ASCII-only, and a stripped accent turns "Misérables" into "mis rables", which the folding analyzer cannot match.
+            .gsub(/[^\p{L}\p{N}_\s\-'.]/, " ")  # Replace special chars with space (keep periods for acronyms like B.O.B.)
             .gsub(/\s+/, " ")          # Collapse multiple spaces
             .strip
         end

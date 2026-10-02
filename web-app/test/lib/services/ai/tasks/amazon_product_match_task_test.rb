@@ -50,7 +50,7 @@ module Services
           task = TestMatchTask.new(parent: @album, search_results: @search_results)
 
           assert_equal :openai, task.send(:task_provider)
-          assert_equal "gpt-5-mini", task.send(:task_model)
+          assert_equal :fast, task.send(:task_role)
           assert_equal 1.0, task.send(:temperature)
         end
 

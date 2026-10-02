@@ -1,5 +1,6 @@
 require "test_helper"
 require "active_record/testing/query_assertions"
+require "csv"
 
 class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
   include ActiveRecord::Assertions::QueryAssertions
@@ -316,6 +317,14 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "a[href=?]", edit_saved_search_path(@public_search)
     assert_select "form[action=?][method=post]", saved_search_path(@public_search)
+  end
+
+  test "show renders the download button" do
+    stub_advanced(ids: [], total: 0)
+    get saved_search_path(@public_search)
+
+    assert_select "a[data-testid=download-csv][href='#{export_saved_search_path(@public_search, format: :csv)}']"
+    assert_select "dialog#csv_export_modal h3", text: /results/
   end
 
   test "show 404s on a domain with no saved searches" do
@@ -784,6 +793,56 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference "Books::SavedSearch.count" do
       delete saved_search_path(@private_search)
     end
+
+    assert_response :not_found
+  end
+
+  # --- export (spec §9) ---
+
+  test "export requires sign-in even for a public search" do
+    get export_saved_search_path(@public_search, format: :csv)
+
+    assert_redirected_to "/"
+  end
+
+  test "a non-member exports the top 500 results of a visible search" do
+    stub_advanced(ids: [books_books(:war_and_peace).id], total: 1)
+    sign_in_as(users(:user_with_expired_membership), stub_auth: true)
+
+    get export_saved_search_path(@public_search, format: :csv)
+
+    assert_response :success
+    assert_includes response.media_type, "text/csv"
+    assert_match "no-store", response.headers["Cache-Control"].to_s
+    assert_equal "noindex", response.headers["X-Robots-Tag"]
+    assert_includes response.headers["Content-Disposition"], "great-russian-novels-#{Date.current.iso8601}.csv"
+    rows = CSV.parse(response.body.delete_prefix(CsvExports::Writer::BOM))
+    assert_equal CsvExports::Books::RankedBookRow::HEADERS, rows.first
+    assert_equal ["War and Peace"], rows.drop(1).map { |row| row[3] }
+  end
+
+  test "a private search's export 404s for a stranger" do
+    sign_in_as(@other, stub_auth: true)
+
+    get export_saved_search_path(@private_search, format: :csv)
+
+    assert_response :not_found
+  end
+
+  test "the export does not count as an execution" do
+    stub_advanced(ids: [], total: 0)
+    sign_in_as(@user, stub_auth: true)
+    before = @public_search.last_executed_at
+
+    get export_saved_search_path(@public_search, format: :csv)
+
+    assert_equal before, @public_search.reload.last_executed_at
+  end
+
+  test "export without the csv format is not routable" do
+    sign_in_as(@user, stub_auth: true)
+
+    get "/searches/#{@public_search.id}/export"
 
     assert_response :not_found
   end

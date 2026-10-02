@@ -1,0 +1,2 @@
+# Deliberately empty. Tests create the export rows they need so the claim,
+# stale-claim and download paths start from a known state.

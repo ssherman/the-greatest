@@ -15,10 +15,16 @@ function headersOf(input, init) {
   return raw instanceof Headers ? raw : new Headers(raw)
 }
 
-// Turbo's prefetch delegate silently discards a failed response, which is
-// already the right outcome for a request the visitor never asked to make
-// by clicking; navigating on a mere 100ms hover would be a worse surprise
-// than the reload the wrapper would otherwise pick.
+// A prefetch is a request the visitor never asked for, so a challenged one
+// must not navigate them anywhere. Passing the response through is only safe
+// for a sender that discards failures, and Turbo has two: data-turbo-preload
+// does (it caches successes only), but the 100ms hover prefetcher caches the
+// FetchRequest whatever the response was and replays it on the click without
+// calling window.fetch -- the click never reaches this wrapper, and Turbo
+// renders the challenge page inline, where its CSP meta tag takes over the
+// document. That is why every layout carries
+// <meta name="turbo-prefetch" content="false"> (guarded by
+// test/lint/turbo_prefetch_disabled_test.rb).
 function isPrefetch(input, init) {
   return headersOf(input, init).get("X-Sec-Purpose") === "prefetch"
 }

@@ -171,6 +171,14 @@ module Admin
           RANKING_CONFIGURATIONS.dig(name, :domain)
       end
 
+      def entity_types_for(domain)
+        types_in(ENTITIES, domain)
+      end
+
+      def list_types_for(domain)
+        types_in(LISTS, domain)
+      end
+
       def path_for(record)
         return nil if record.nil? || !record.persisted?
 
@@ -207,6 +215,10 @@ module Admin
       end
 
       private
+
+      def types_in(table, domain)
+        table.filter_map { |type, config| type if config[:domain] == domain.to_sym }
+      end
 
       def resolve(config, record)
         return nil if config.nil?

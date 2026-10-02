@@ -13,6 +13,10 @@ class MembershipGateTest < ActiveSupport::TestCase
     refute MembershipGate.members_only?(:ranked_lists)
   end
 
+  test "the API is registered as a members-only feature" do
+    assert MembershipGate.members_only?(:api)
+  end
+
   test "every registered feature carries a human description" do
     # The registry exists to be read by a person asking "what is behind the
     # paywall?". A bare key with no description does not answer that.
@@ -27,5 +31,9 @@ class MembershipGateTest < ActiveSupport::TestCase
 
   test "validate! returns the symbol for a registered feature" do
     assert_equal :members_area, MembershipGate.validate!("members_area")
+  end
+
+  test "the full CSV export is registered as a paid feature" do
+    assert MembershipGate.members_only?(:csv_export_full)
   end
 end

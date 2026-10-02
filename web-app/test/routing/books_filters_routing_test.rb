@@ -41,7 +41,8 @@ class BooksFiltersRoutingTest < ActionDispatch::IntegrationTest
     # 84 from this file's filter_bases/filter_dates loop, plus 40 from the
     # curated-collections loop in config/routes.rb (2 bases x 5 dates - 1
     # skipped duplicate = 9 combos x 2 page forms x 2 rc prefixes = 36, plus
-    # 2 bare :collection forms x 2 rc prefixes = 4).
-    assert_equal 124, count
+    # 2 bare :collection forms x 2 rc prefixes = 4), plus the 2 CSV export
+    # routes (/export.csv and its /rc/:ranking_configuration_id form).
+    assert_equal 126, count
   end
 end

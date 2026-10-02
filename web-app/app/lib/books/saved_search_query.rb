@@ -84,7 +84,7 @@ module Books
 
       books = ::Books::Book
         .where(id: ids)
-        .select("books_books.*, ranked_items.rank AS ranked_position")
+        .select("books_books.*, ranked_items.rank AS ranked_position, ranked_items.score AS ranked_score")
         .joins(
           "LEFT OUTER JOIN ranked_items ON ranked_items.item_id = books_books.id " \
           "AND ranked_items.item_type = 'Books::Book' " \

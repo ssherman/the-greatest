@@ -24,6 +24,7 @@
         when no page sets it, so every existing page is byte-identical. %>
     <%= yield(:head_links) if content_for?(:head_links) %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="turbo-prefetch" content="false">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 

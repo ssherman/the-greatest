@@ -1,0 +1,63 @@
+<%# The create form, or the cap notice when the member cannot create another.
+    Root id is the Turbo Stream target both write actions replace. The value
+    locals are only ever passed by create.turbo_stream.erb after a failed
+    submission, so what the member typed survives the error. %>
+<section id="developers_token_form">
+  <h2 class="text-xl font-semibold mb-3">Create a token</h2>
+  <% cap = Rails.application.config.x.api.max_tokens_per_user %>
+  <% if tokens.size >= cap %>
+    <p class="text-base-content/70" data-testid="token-cap-reached">
+      You have <%= cap %> tokens, the most one account can hold. Revoke one to create another.
+    </p>
+  <% else %>
+    <% if local_assigns[:errors].present? %>
+      <div class="alert alert-error mb-4" role="alert" data-testid="token-form-error">
+        <span class="font-bold">Problem:</span>
+        <span><%= errors.to_sentence %></span>
+      </div>
+    <% end %>
+
+    <%= form_with url: developers_tokens_path, scope: :api_token, class: "space-y-4" do |form| %>
+      <fieldset class="fieldset">
+        <%# A label styled as the legend, with an explicit for: -- the contact
+            form's pattern. A <legend> does not label an input. %>
+        <%= form.label :name, "Name", for: "api_token_name", class: "fieldset-legend" %>
+        <%= form.text_field :name,
+              id: "api_token_name",
+              required: true,
+              maxlength: 60,
+              autocomplete: "off",
+              class: "input w-full",
+              value: local_assigns[:name_value] %>
+        <p class="label">Where it will be used, so you know which one to revoke later.</p>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Scopes</legend>
+        <% Api::Scopes.mintable_by(current_user).each do |scope| %>
+          <% checked = local_assigns[:scopes_value].nil? || scopes_value.include?(scope) %>
+          <label class="label cursor-pointer justify-start gap-3" for="<%= "api_token_scope_#{scope.tr(":", "_")}" %>">
+            <%= check_box_tag "api_token[scopes][]", scope, checked,
+                  id: "api_token_scope_#{scope.tr(":", "_")}",
+                  class: "checkbox" %>
+            <span><code><%= scope %></code>: <%= Api::Scopes.description(scope) %></span>
+          </label>
+        <% end %>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <%= form.label :expires_in, "Expires", for: "api_token_expires_in", class: "fieldset-legend" %>
+        <%# Option values are STRINGS: options_for_select compares the selected
+            value with Array#include?, and the re-rendered form passes back the
+            posted string, so an integer 90 would never show as selected. %>
+        <%= form.select :expires_in,
+              [["Never", ""], ["In 30 days", "30"], ["In 90 days", "90"], ["In a year", "365"]],
+              {selected: local_assigns[:expires_in_value]},
+              id: "api_token_expires_in",
+              class: "select w-full" %>
+      </fieldset>
+
+      <%= form.submit "Create token", class: "btn btn-primary" %>
+    <% end %>
+  <% end %>
+</section>

@@ -1,0 +1,89 @@
+<%# web-app/app/views/admin/match_decisions_base/index.html.erb %>
+<% content_for :title, "Match Decisions" %>
+
+<div class="space-y-4">
+  <h1 class="text-2xl font-bold">Match Decisions</h1>
+
+  <%= form_with url: decisions_index_path, method: :get, class: "flex flex-wrap items-end gap-3", data: {testid: "decision-filters"} do |form| %>
+    <div>
+      <%= form.label :entity, "Entity", class: "label text-xs" %>
+      <%= form.select :entity, options_for_select([["All", ""]] + entries.map { |entry| [entry.label, entry.label.parameterize] }, params[:entity]), {}, class: "select select-sm" %>
+    </div>
+    <div>
+      <%= form.label :outcome, "Outcome", class: "label text-xs" %>
+      <%= form.select :outcome, options_for_select([["All", ""]] + Admin::MatchDecisionsBaseController::OUTCOMES.map { |value| [value.humanize, value] }, params[:outcome]), {}, class: "select select-sm" %>
+    </div>
+    <div>
+      <%= form.label :confidence, "Confidence", class: "label text-xs" %>
+      <%= form.select :confidence, options_for_select([["All", ""]] + Admin::MatchDecisionsBaseController::CONFIDENCES.map { |value| [value.humanize, value] }, params[:confidence]), {}, class: "select select-sm" %>
+    </div>
+    <div>
+      <%= form.label :decided_by, "Decided by", class: "label text-xs" %>
+      <%= form.select :decided_by, options_for_select([["All", ""]] + Admin::MatchDecisionsBaseController::DECIDED_BY.map { |value| [value.humanize, value] }, params[:decided_by]), {}, class: "select select-sm" %>
+    </div>
+    <div>
+      <%= form.label :reviewed, "Review", class: "label text-xs" %>
+      <%= form.select :reviewed, options_for_select([["Needs review", "pending"], ["Reviewed", "reviewed"], ["All", "all"]], @reviewed), {}, class: "select select-sm" %>
+    </div>
+    <div>
+      <%= form.label :verify, "Verify runs", class: "label text-xs" %>
+      <%= form.select :verify, options_for_select([["Hide", "hide"], ["Include", "include"]], @verify), {}, class: "select select-sm" %>
+    </div>
+    <%= form.submit "Filter", class: "btn btn-sm" %>
+    <%= link_to "Reset", decisions_index_path, class: "btn btn-sm btn-ghost" %>
+  <% end %>
+
+  <div class="overflow-x-auto">
+    <table class="table bg-base-100">
+      <thead>
+        <tr><th>When</th><th>Query</th><th>Outcome</th><th>Record</th><th>Confidence</th><th>Decided by</th><th>Review</th></tr>
+      </thead>
+      <tbody>
+        <% if @decisions.any? %>
+          <% @decisions.each do |decision| %>
+            <% entry = entry_for(decision) %>
+            <tr data-testid="decision-row" data-decision-id="<%= decision.id %>" data-finder="<%= decision.finder %>"
+                data-outcome="<%= decision.outcome %>" data-confidence="<%= decision.confidence %>"
+                data-decided-by="<%= decision.decided_by %>" data-verify="<%= decision.verify %>"
+                data-reviewed="<%= decision.reviewed_at.present? %>">
+              <td class="whitespace-nowrap">
+                <%= link_to decision.created_at.strftime("%Y-%m-%d %H:%M"), decision_path(decision), class: "link" %>
+              </td>
+              <td class="max-w-md truncate [overflow-wrap:anywhere]">
+                <span class="badge badge-ghost badge-sm mr-1"><%= entry&.label || decision.finder.demodulize %></span>
+                <%= audit_query_line(decision) %>
+                <% if decision.verify? %><span class="badge badge-outline badge-sm ml-1">verify</span><% end %>
+              </td>
+              <td><span class="badge badge-sm <%= decision.matched? ? "badge-info" : "badge-ghost" %>"><%= decision.outcome %></span></td>
+              <td class="[overflow-wrap:anywhere]">
+                <% if decision.record %>
+                  <% path = Admin::DomainRouting.path_for(decision.record) %>
+                  <%= path ? link_to(audit_record_label(decision.record), path, class: "link") : audit_record_label(decision.record) %>
+                <% else %>
+                  —
+                <% end %>
+              </td>
+              <td><%= decision.confidence %></td>
+              <td><%= decision.decided_by %></td>
+              <td class="whitespace-nowrap">
+                <% if decision.reviewed_at %>
+                  reviewed <%= decision.reviewed_at.to_date.iso8601 %>
+                <% elsif decision.needs_review? %>
+                  <span class="badge badge-warning badge-sm">needs review</span>
+                <% else %>
+                  —
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        <% else %>
+          <tr><td colspan="7" class="text-center text-base-content/70 py-8">No decisions match these filters.</td></tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if @pagy.pages > 1 %>
+    <div class="mt-4 flex justify-center"><%== @pagy.series_nav %></div>
+  <% end %>
+</div>

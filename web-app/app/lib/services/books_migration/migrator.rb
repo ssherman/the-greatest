@@ -4,7 +4,7 @@ module Services
     # (as String-keyed attribute hashes), transforms + upserts each through the
     # real new-model AR class, with search indexing suppressed for the load.
     # Idempotent — safe to re-run. Subclasses define legacy_model, model_key, and
-    # upsert_row(attrs); optionally finalize.
+    # upsert_row(attrs); optionally finalize and extra_result_data.
     class Migrator
       BATCH_SIZE = 1000
 
@@ -23,7 +23,7 @@ module Services
           end
         end
         finalize
-        {success: true, data: {model: model_key, count: @count}}
+        {success: true, data: {model: model_key, count: @count}.merge(extra_result_data)}
       rescue => e
         {success: false, error: e.message, data: {model: model_key, count: @count}}
       end
@@ -37,6 +37,12 @@ module Services
       end
 
       def finalize
+      end
+
+      # Extra keys a subclass wants in the success result's data (counts it kept
+      # during finalize, for instance). Default: none.
+      def extra_result_data
+        {}
       end
     end
   end

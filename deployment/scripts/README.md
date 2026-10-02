@@ -152,11 +152,15 @@ Cloudflare API token may be invalid or lack permissions.
 **Fix:**
 1. Verify token in Cloudflare dashboard
 2. Ensure token has "Zone:DNS:Edit" permissions for all zones
-3. Re-encrypt with correct token:
+3. Re-encrypt with the correct token, on your own machine rather than the server:
    ```bash
-   SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt \
+   SOPS_AGE_KEY_FILE=~/.config/sops/age/production.txt \
      sops secrets/.env.production
    ```
+   See `deployment/SECRETS.md` for the full edit workflow. To decrypt on the
+   server instead, use the `read -rs SOPS_AGE_KEY` form in "Decrypting
+   Secrets" in `deployment/SERVER-UPGRADE-GUIDE.md`; the key never goes in a
+   file there.
 
 ### Docker pull fails
 

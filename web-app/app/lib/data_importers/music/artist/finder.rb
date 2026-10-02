@@ -3,15 +3,28 @@
 module DataImporters
   module Music
     module Artist
-      # Finds existing Music::Artist records before import
+      # Finds an existing Music::Artist before import and answers with a Match.
+      # Increment 1: the pre-redesign lookup (MBID, else a MusicBrainz name
+      # search resolved to a local MBID, else exact name) runs as the single
+      # decisive source. Increment 6 replaces it with the real sources.
       class Finder < DataImporters::FinderBase
-        def call(query:)
+        protected
+
+        def model_class = ::Music::Artist
+
+        def ranking_configuration_class = ::Music::Artists::RankingConfiguration
+
+        def candidate_sources(query)
+          [DataImporters::Sources::Legacy.new { legacy_lookup(query) }]
+        end
+
+        private
+
+        def legacy_lookup(query)
           return find_existing_item(query) if query.musicbrainz_id.present?
 
           find_existing_item_by_name(query)
         end
-
-        private
 
         def find_existing_item(query)
           # Direct lookup by MusicBrainz ID if provided

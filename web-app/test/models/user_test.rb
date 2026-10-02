@@ -3,6 +3,7 @@
 # Table name: users
 #
 #  id                     :bigint           not null, primary key
+#  account_kind           :integer          default(0), not null
 #  auth_data              :jsonb
 #  auth_uid               :string
 #  confirmation_sent_at   :datetime
@@ -394,5 +395,41 @@ class UserTest < ActiveSupport::TestCase
 
     refute duplicate.valid?
     assert_includes duplicate.errors[:email], "has already been taken"
+  end
+
+  # --- service accounts -------------------------------------------------------
+
+  test "account_kind defaults to person" do
+    assert users(:regular_user).person?
+    refute users(:regular_user).service?
+    assert users(:agent_runner_service_account).service?
+  end
+
+  test "person and service scopes partition users" do
+    assert_includes User.person, users(:regular_user)
+    refute_includes User.person, users(:agent_runner_service_account)
+    assert_includes User.service, users(:agent_runner_service_account)
+  end
+
+  test "service_account_email builds an address on the .invalid domain" do
+    assert_equal "agent-runner@service-accounts.thegreatest.invalid", User.service_account_email("agent-runner")
+    assert_match User::SERVICE_ACCOUNT_NAME_FORMAT, "agent-runner"
+    refute_match User::SERVICE_ACCOUNT_NAME_FORMAT, "Agent Runner"
+    refute_match User::SERVICE_ACCOUNT_NAME_FORMAT, "agent_runner"
+  end
+
+  test "creating a person creates the default user lists" do
+    user = User.create!(email: "person-lists@example.com", role: :user, email_verified: false, display_name: "P")
+
+    assert_operator user.user_lists.count, :>, 0
+  end
+
+  test "creating a service account creates no user lists" do
+    user = User.create!(
+      email: User.service_account_email("lists-check"), role: :user, email_verified: false,
+      display_name: "lists-check", account_kind: :service
+    )
+
+    assert_equal 0, user.user_lists.count
   end
 end

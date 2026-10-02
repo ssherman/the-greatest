@@ -41,19 +41,31 @@ class Books::Author < ApplicationRecord
   has_many :credits, class_name: "Books::Credit", dependent: :destroy
   has_many :book_authors, class_name: "Books::BookAuthor", dependent: :destroy
   has_many :books, through: :book_authors, class_name: "Books::Book"
+  has_many :author_countries, class_name: "Books::AuthorCountry", dependent: :destroy
+  has_many :countries, through: :author_countries, class_name: "Books::Country"
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
+  has_many :enrichments, as: :enrichable, dependent: :destroy
+  has_many :match_decisions, as: :record, dependent: :nullify
   has_many :images, as: :parent, dependent: :destroy
   has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"
   has_many :external_links, as: :parent, dependent: :destroy
   has_many :category_items, as: :item, dependent: :destroy, inverse_of: :item
   has_many :categories, through: :category_items, class_name: "Books::Category"
   has_many :ranked_items, as: :item, dependent: :destroy
+  # Scoped to the primary AUTHOR ranking (Books::Authors::, not Books::). The
+  # lambda runs once per query, not once per record, so a preload costs one
+  # query for the batch and the value is always read live. Derived from
+  # ranked_items, so Books::Author::Merger has nothing extra to migrate.
+  has_one :primary_ranked_item,
+    -> { where(ranking_configuration_id: Books::Authors::RankingConfiguration.default_primary&.id) },
+    as: :item, class_name: "RankedItem"
 
   validates :name, presence: true
   validates :kind, presence: true
 
   before_validation :normalize_name
+  before_validation :normalize_alternate_names
 
   def as_indexed_json
     {
@@ -66,7 +78,15 @@ class Books::Author < ApplicationRecord
   private
 
   def normalize_name
-    self.name = Services::Text::QuoteNormalizer.call(name) if name.present?
+    return if name.blank?
+
+    self.name = Services::Text::NameNormalizer.call(Services::Text::QuoteNormalizer.call(name))
+  end
+
+  def normalize_alternate_names
+    self.alternate_names = Array(alternate_names)
+      .map { |value| Services::Text::NameNormalizer.call(Services::Text::QuoteNormalizer.call(value)) }
+      .compact_blank.uniq
   end
 
   def queue_books_for_reindexing

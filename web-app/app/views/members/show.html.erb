@@ -28,9 +28,24 @@
   </div>
 
   <h2 class="text-xl font-semibold mb-3">What's here</h2>
+
+  <div class="card bg-base-200 mb-6">
+    <div class="card-body">
+      <h3 class="card-title text-lg">API access</h3>
+      <p>
+        Read the rankings from your own scripts and apps. Books and authors are
+        on the API now; music and games follow as their resources ship. One token
+        works on every site.
+      </p>
+      <div class="card-actions mt-2">
+        <%= link_to "Manage tokens", developers_tokens_path, class: "btn btn-primary" %>
+        <%= link_to "Read the docs", developers_path, class: "btn btn-ghost" %>
+      </div>
+    </div>
+  </div>
+
   <p class="text-base-content/80">
-    This is where members' features land as they ship. Right now it is mostly a
-    thank-you page — the site has no ads, sells no data, and has no investors,
-    and members are the reason that can stay true.
+    More lands here as it ships. The site has no ads, sells no data and has no
+    investors, and members are the reason that can stay true.
   </p>
 </div>

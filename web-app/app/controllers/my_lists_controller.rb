@@ -1,5 +1,3 @@
-require "csv"
-
 # Read-only "My Lists" surface (user-lists Phase A). Global routes resolve
 # Current.domain to the relevant UserList STI subclasses and pick the per-domain
 # layout dynamically. index is owner-only (requires sign-in); show serves the
@@ -75,7 +73,7 @@ class MyListsController < ApplicationController
       format.html { @pagy, @items = pagy_path(collection, limit: 100) }
       format.csv do
         items = collection.is_a?(Array) ? collection : collection.to_a
-        send_data build_csv(items),
+        send_data CsvExports::UserList.call(list: @list, items: items).string,
           type: "text/csv; charset=utf-8",
           filename: csv_filename,
           disposition: "attachment"
@@ -101,49 +99,6 @@ class MyListsController < ApplicationController
     ids = items.map(&:listable_id)
     ranks = @ranking_config.ranked_items.where(item_id: ids).pluck(:item_id, :rank).to_h
     items.sort_by { |i| [ranks[i.listable_id] ? 0 : 1, ranks[i.listable_id] || 0] }
-  end
-
-  # CSV (UTF-8 + BOM for Excel). Columns vary per listable; the Completed On
-  # column appears only on lists whose list_type supports a completion date.
-  def build_csv(items)
-    listable_name = @list.class.listable_class.name
-    show_completed = @list.completed_on_enabled?
-    "\uFEFF" + CSV.generate do |csv|
-      csv << csv_headers(listable_name, show_completed)
-      items.each { |item| csv << csv_row(item, listable_name, show_completed) }
-    end
-  end
-
-  def csv_headers(listable_name, show_completed)
-    headers =
-      case listable_name
-      when "Music::Album", "Music::Song" then ["Position", "Title", "Artists", "Year"]
-      when "Books::Book" then ["Position", "Title", "Authors", "Year"]
-      else ["Position", "Title", "Year"]
-      end
-    show_completed ? headers + ["Completed On"] : headers
-  end
-
-  def csv_row(item, listable_name, show_completed)
-    listable = item.listable
-    row =
-      case listable_name
-      when "Music::Album", "Music::Song"
-        [item.position, listable.title, artist_names(listable), listable.release_year]
-      when "Books::Book"
-        [item.position, listable.title, author_names(listable), listable.first_published_year]
-      else
-        [item.position, listable.title, listable.release_year]
-      end
-    show_completed ? row + [item.completed_on&.iso8601] : row
-  end
-
-  def artist_names(listable)
-    listable.artists.map(&:name).join(", ")
-  end
-
-  def author_names(listable)
-    listable.book_authors.map { |book_author| book_author.author.name }.join(", ")
   end
 
   def csv_filename

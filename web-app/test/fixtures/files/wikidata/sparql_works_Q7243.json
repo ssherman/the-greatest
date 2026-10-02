@@ -1,0 +1,232 @@
+{
+  "head": {
+    "vars": [
+      "author",
+      "workLabel"
+    ]
+  },
+  "results": {
+    "bindings": [
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "Anna Karenina"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "Anna Karenina"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "War and Peace"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "War and Peace"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "War and Peace"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "The Kingdom of God Is Within You"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "The Kingdom of God Is Within You"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "Resurrection"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "Resurrection"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "The Forged Coupon"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "The Cossacks"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "The Kreutzer Sonata"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "The Kreutzer Sonata"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "Lucerne"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "Childhood"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "Childhood"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "The Devil"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "The Devil"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "The Power of Darkness"
+        }
+      },
+      {
+        "author": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q7243"
+        },
+        "workLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "How Much Land Does a Man Need?"
+        }
+      }
+    ]
+  }
+}

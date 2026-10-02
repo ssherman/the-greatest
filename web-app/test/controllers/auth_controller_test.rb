@@ -11,9 +11,12 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
   # AuthenticationService now builds a real ProviderEmailResolver on every
   # sign-in, which -- on an auth_uid miss -- reaches Identity Toolkit. None
   # of the tests below exercise that lookup, so the default here makes the
-  # provider-record lookup find nothing, which is exactly what makes the
-  # resolver fall back to the token's own `email` claim -- the behavior
-  # every test here predates and expects.
+  # provider-record lookup find nothing, which makes the resolver fall back
+  # to the token's own `email` claim -- and AuthenticationService offers that
+  # claim only when email_verified is exactly true, which
+  # FirebaseTokenHelper's default token is. A test of an UNVERIFIED claim
+  # must stub the provider record it means
+  # (FirebaseAccountLookup.stubs(:call)), as production would supply one.
   def stub_account_lookup_empty
     Services::GoogleServiceAccountToken.stubs(:access_token).returns("test-service-account-token")
     WebMock.stub_request(:post, %r{\Ahttps://identitytoolkit\.googleapis\.com/v1/projects/[^/]+/accounts:lookup\z})
@@ -83,6 +86,9 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "returns email_verification_required when an unverified email hits an existing account" do
+    Services::FirebaseAccountLookup.stubs(:call).returns([
+      {"providerId" => "password", "email" => users(:google_user).email}
+    ])
     token = FirebaseTokenHelper.token({
       "sub" => "attacker-uid-2",
       "email" => users(:google_user).email,
@@ -341,5 +347,53 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     assert_equal "twitter", body["provider"]
     assert_includes body["message"], "X",
       "the message must use the registry label, not a capitalised enum name"
+  end
+
+  # L3: these three actions skip the CSRF token (edge-cached pages cannot carry
+  # one), so JSON is what keeps a cross-site HTML form out: a form can send
+  # urlencoded, multipart or text/plain without a CORS preflight, never JSON.
+  test "sign_in refuses a form-encoded body and signs nobody in" do
+    post auth_sign_in_path, params: {jwt: FirebaseTokenHelper.token({"sub" => "uid-l3-form", "email" => "l3.form@example.com"})}
+
+    assert_response :unsupported_media_type
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_nil session[:user_id]
+  end
+
+  test "sign_in refuses a text/plain body" do
+    post auth_sign_in_path,
+      params: {jwt: FirebaseTokenHelper.token({"sub" => "uid-l3-text", "email" => "l3.text@example.com"})}.to_json,
+      headers: {"CONTENT_TYPE" => "text/plain"}
+
+    assert_response :unsupported_media_type
+    assert_nil session[:user_id]
+  end
+
+  test "sign_in accepts JSON with a charset parameter" do
+    post auth_sign_in_path,
+      params: {jwt: FirebaseTokenHelper.token({"sub" => "uid-l3-charset", "email" => "l3.charset@example.com"})}.to_json,
+      headers: {"CONTENT_TYPE" => "application/json; charset=utf-8"}
+
+    assert_response :success
+    assert session[:user_id]
+  end
+
+  test "sign_out refuses a form post and leaves the visitor signed in" do
+    post auth_sign_in_path, params: {
+      jwt: FirebaseTokenHelper.token({"sub" => "uid-l3-out", "email" => "l3.out@example.com"})
+    }, as: :json
+    signed_in_id = session[:user_id]
+    assert signed_in_id
+
+    post auth_sign_out_path
+
+    assert_response :unsupported_media_type
+    assert_equal signed_in_id, session[:user_id]
+  end
+
+  test "check_provider refuses a form-encoded body" do
+    post auth_check_provider_path, params: {email: users(:google_user).email}
+
+    assert_response :unsupported_media_type
   end
 end

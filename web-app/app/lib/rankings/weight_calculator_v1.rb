@@ -3,6 +3,10 @@
 module Rankings
   class WeightCalculatorV1 < WeightCalculator
     PERCENTAGE_WESTERN_THRESHOLD = 90.0
+    # Books lists reach "no temporal penalty" at this many years covered. Chosen so
+    # the log curve below lands within a few points of the legacy static ladder
+    # (50/40/30/20/10/7/5 at 1/5/10/25/50/75/100 years) when the application is 50.
+    BOOKS_FULL_COVERAGE_YEARS = 200
 
     private
 
@@ -295,7 +299,7 @@ module Rankings
         penalty_application = penalty.penalty_applications.find_by(ranking_configuration: ranking_configuration)
         next unless penalty_application
 
-        penalty_value, calculation_details = calculate_temporal_coverage_penalty_with_calculation_details(penalty, penalty_application)
+        penalty_value, calculation_details = temporal_coverage_penalty(list.num_years_covered, penalty_application.value)
         next unless penalty_value > 0
 
         total_temporal_penalty += penalty_value
@@ -315,11 +319,15 @@ module Rankings
       total_temporal_penalty
     end
 
-    def calculate_temporal_coverage_penalty_with_calculation_details(penalty, penalty_application, exponent: 2.0)
-      years_covered = list.num_years_covered
-      return [0, {}] unless years_covered.present?
+    # One curve per media type, shared by the details and non-details paths.
+    # Books get a log curve: the quadratic is flat for them (calculate_books_year_range
+    # is ~5000 years, so a 100-year list would keep 96% of the max), while ln-scaling
+    # reproduces the legacy static ladder within a few points. Every other domain keeps
+    # the quadratic exactly as it was.
+    # => [penalty_value, calculation_details]
+    def temporal_coverage_penalty(years_covered, max_penalty, exponent: 2.0)
+      return books_temporal_coverage_penalty(years_covered, max_penalty) if list.class.name.start_with?("Books::")
 
-      max_penalty = penalty_application.value
       max_year_range = calculate_media_year_range
 
       if years_covered >= max_year_range
@@ -345,6 +353,28 @@ module Rankings
       }
 
       [penalty_value, calculation_details]
+    end
+
+    def books_temporal_coverage_penalty(years_covered, max_penalty)
+      if years_covered >= BOOKS_FULL_COVERAGE_YEARS
+        return [0, {
+          "years_covered" => years_covered,
+          "full_coverage_years" => BOOKS_FULL_COVERAGE_YEARS,
+          "media_type" => list.class.name,
+          "formula" => "0 (full coverage)"
+        }]
+      end
+
+      log_ratio = Math.log(years_covered) / Math.log(BOOKS_FULL_COVERAGE_YEARS)
+      penalty_value = (max_penalty * (1.0 - log_ratio)).clamp(0, max_penalty)
+
+      [penalty_value, {
+        "years_covered" => years_covered,
+        "full_coverage_years" => BOOKS_FULL_COVERAGE_YEARS,
+        "media_type" => list.class.name,
+        "log_ratio" => log_ratio,
+        "formula" => "max_value * (1.0 - ln(years_covered) / ln(full_coverage_years))"
+      }]
     end
 
     def find_penalty_details_by_dynamic_type(dynamic_type)
@@ -556,26 +586,14 @@ module Rankings
       total_temporal_penalty
     end
 
-    def calculate_temporal_coverage_penalty_for_penalty(penalty, exponent: 2.0)
+    def calculate_temporal_coverage_penalty_for_penalty(penalty)
       years_covered = list.num_years_covered
       return 0 unless years_covered.present?
 
-      # Get the penalty application value for this configuration
       penalty_application = penalty.penalty_applications.find_by(ranking_configuration: ranking_configuration)
       return 0 unless penalty_application
 
-      max_penalty = penalty_application.value
-
-      # Calculate the maximum year range for this media type
-      max_year_range = calculate_media_year_range
-
-      return 0 if years_covered >= max_year_range  # No penalty for full coverage
-
-      # Power curve penalty calculation - lists with limited coverage get penalty
-      ratio = years_covered.to_f / max_year_range.to_f
-      penalty_value = max_penalty * ((1.0 - ratio)**exponent)
-
-      penalty_value.clamp(0, max_penalty)
+      temporal_coverage_penalty(years_covered, penalty_application.value).first
     end
 
     def calculate_media_year_range

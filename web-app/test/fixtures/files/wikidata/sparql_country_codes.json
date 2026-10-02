@@ -1,0 +1,39 @@
+{
+  "head": {
+    "vars": [
+      "country",
+      "code",
+      "countryLabel"
+    ]
+  },
+  "results": {
+    "bindings": [
+      {
+        "country": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q30"
+        },
+        "code": {
+          "type": "literal",
+          "value": "US"
+        },
+        "countryLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "United States"
+        }
+      },
+      {
+        "country": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q34266"
+        },
+        "countryLabel": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "Russian Empire"
+        }
+      }
+    ]
+  }
+}
