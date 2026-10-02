@@ -70,7 +70,12 @@ module Wikidata
           ?work rdfs:label ?workLabel . FILTER(LANG(?workLabel) = "en")
         } LIMIT #{WORKS_ROW_LIMIT}
       SPARQL
-      bindings(@http.sparql(SPARQL_URL, query)).each_with_object({}) do |row, found|
+      rows = bindings(@http.sparql(SPARQL_URL, query))
+      if rows.size >= WORKS_ROW_LIMIT
+        Rails.logger.warn("Wikidata::Client#works: #{rows.size} rows filled the #{WORKS_ROW_LIMIT}-row limit for " \
+          "#{ids.join(", ")}; titles past it were cut")
+      end
+      rows.each_with_object({}) do |row, found|
         id = entity_id(row["author"])
         title = row.dig("workLabel", "value")
         next if id.nil? || title.blank?

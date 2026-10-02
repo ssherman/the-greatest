@@ -92,7 +92,8 @@ module Services
         end
 
         def search_stage
-          search_names.each { |name| gather(@client.search(name).map { |hit| hit["id"] }, "name_search") }
+          # One search per name, then every hit's entity in one call.
+          gather(search_names.flat_map { |name| @client.search(name).map { |hit| hit["id"] } }, "name_search")
           if persons.empty?
             return Verdict.new(outcome: :unmatched, candidate: nil, decided_by: :rule, confidence: :high,
               reason: "No person among #{@candidates.size} Wikidata candidates.")
@@ -185,13 +186,15 @@ module Services
           end
         end
 
-        # Evidence labels only: a failure leaves them out, never the run.
+        # Evidence labels only: a failure leaves them out, never the run, and
+        # is recorded in sources_failed.
         def labels
           @labels ||= begin
             ids = persons.flat_map { |candidate| candidate.entity.occupation_ids + candidate.entity.citizenship_ids }.uniq
             ids.empty? ? {} : @client.labels(ids)
           rescue ::Wikimedia::Exceptions::Error => e
             Rails.logger.warn("#{self.class.name}: labels failed for author #{author.id}: #{e.class}: #{e.message}")
+            @sources_failed << "wikidata_labels"
             {}
           end
         end
@@ -300,8 +303,12 @@ module Services
 
         def record(verdict)
           ordered = ordered_persons + (@candidates.values - persons)
+          # Settled before the snapshots read labels: a labels failure there
+          # only blanks evidence shown on the audit page, which no rule used.
+          # One the AI saw (describe) is already in @sources_failed by now.
           confidence = verdict.confidence
           confidence = :medium if confidence == :high && @sources_failed.any?
+          snapshots = ordered.map { |candidate| snapshot(candidate) }
           decision = ::MatchDecision.create!(
             finder: self.class.name,
             subject: author,
@@ -311,7 +318,7 @@ module Services
             decided_by: verdict.decided_by,
             verify: false,
             query: author_snapshot,
-            candidates: ordered.map { |candidate| snapshot(candidate) },
+            candidates: snapshots,
             selected_index: verdict.candidate && (ordered.index(verdict.candidate) + 1),
             reason: verdict.reason,
             ai_chat: verdict.ai_chat,

@@ -106,6 +106,23 @@ module Wikidata
       assert_equal({}, @client.works([]))
     end
 
+    test "works logs a warning when the answer fills the row limit, since titles were cut" do
+      rows = Array.new(Client::WORKS_ROW_LIMIT) do |index|
+        {"author" => {"value" => "http://www.wikidata.org/entity/Q7243"}, "workLabel" => {"value" => "Work #{index}"}}
+      end
+      stub_request(:post, SPARQL).to_return(json_response({results: {bindings: rows}}.to_json))
+      Rails.logger.expects(:warn).with { |message| message.include?("#{Client::WORKS_ROW_LIMIT}-row limit") }.once
+
+      assert_equal Client::WORKS_ROW_LIMIT, @client.works(["Q7243"])["Q7243"].size
+    end
+
+    test "works logs nothing when the answer is under the row limit" do
+      stub_request(:post, SPARQL).to_return(json_response(fixture("sparql_works_Q7243.json")))
+      Rails.logger.expects(:warn).never
+
+      @client.works(["Q7243"])
+    end
+
     test "country_codes returns the ISO code and English label, and caches each country" do
       Rails.stubs(:cache).returns(ActiveSupport::Cache::MemoryStore.new)
       stub = stub_request(:post, SPARQL).to_return(json_response(fixture("sparql_country_codes.json")))
