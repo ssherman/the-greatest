@@ -242,6 +242,13 @@ module Services
           assert_equal result.data[:decision], row.match_decision
           assert result.data[:decision].persisted?
         end
+
+        test "an unexpected error logs the full message with backtrace" do
+          ApplyWikidata.stubs(:call).raises(RuntimeError, "boom")
+          Rails.logger.expects(:error).with { |message| message.include?("RuntimeError") && message.include?("boom") && message.lines.size > 1 }
+
+          enrich
+        end
       end
     end
   end

@@ -100,7 +100,7 @@ module Services
           deprecated = description_ids(verdicts, "deprecated")
           restored = description_ids(verdicts, "restored")
           rows = author.descriptions.select do |row|
-            (deprecated.include?(row.id) && row.deprecated?) || (restored.include?(row.id) && !row.deprecated?)
+            (deprecated.include?(row.id) && row.deprecated?) || (restored.include?(row.id) && row.normal?)
           end
           rows.each { |row| row.update!(rank: row.deprecated? ? :normal : :deprecated) }
           rows.any?

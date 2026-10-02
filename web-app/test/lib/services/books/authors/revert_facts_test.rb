@@ -124,6 +124,17 @@ module Services
           assert_equal ["legacy_wikipedia"], result.data[:reverted]
         end
 
+        test "a description the run restored that a person has since promoted to preferred stays preferred" do
+          row = @author.descriptions.create!(source: :wikipedia, content: "x", source_url: "https://en.wikipedia.org/wiki/X", rank: :preferred)
+          facts = {"legacy_wikipedia" => {"applied" => true, "reason" => "restored",
+                                          "value" => [{"description_id" => row.id, "verdict" => "restored", "why" => "sitelink"}]}}
+
+          result = revert(facts)
+
+          assert_equal "preferred", row.reload.rank
+          assert_empty result.data[:reverted]
+        end
+
         test "a legacy description the run left deprecated is not touched" do
           row = @author.descriptions.create!(source: :wikipedia, content: "x", source_url: "https://en.wikipedia.org/wiki/X", rank: :deprecated)
           facts = {"legacy_wikipedia" => {"applied" => true, "reason" => "deprecated",

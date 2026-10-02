@@ -49,7 +49,7 @@ module Services
         # Raising instead would have Sidekiq retry the whole run, recording a
         # new decision each time.
         def unexpected(error, facts: {})
-          Rails.logger.error("#{self.class.name}: author #{author.id}: #{error.class.name}: #{error.message}")
+          Rails.logger.error("#{self.class.name}: author #{author.id}: #{error.full_message(highlight: false)}")
           write(outcome: :failed, reason: "unexpected_error", error: "#{error.class.name}: #{error.message}", facts: facts)
         end
       end
