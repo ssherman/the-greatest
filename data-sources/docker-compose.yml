@@ -26,6 +26,10 @@ services:
     build: .
     image: the-greatest/data-sources:latest
     profiles: ["build"]
+    # The image runs as an unprivileged user, but this one-shot job writes the
+    # artifact into the host's data directory, which that user cannot. It runs
+    # as root, as it always has; the long-running `api` does not.
+    user: root
     volumes:
       - ${OL_DATA_HOST:-/home/shane/ol-data}:/data
     environment:
