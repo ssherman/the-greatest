@@ -320,6 +320,10 @@ module Services
           assert_not_includes client.clusters, "5391"
         end
 
+        # Models the client after it re-keys a redirect to the surviving
+        # cluster; today's client reports the requested id ("777") instead,
+        # so this Person shape (cluster("777") answering as "5391") does not
+        # yet occur in production (docs/features/viaf-api-client.md).
         test "a cluster that comes back under a rejected id is dropped" do
           reject_for(@author, "5391")
           client = FakeViafClient.new(
@@ -332,6 +336,8 @@ module Services
           assert_equal :unmatched, result.data[:outcome]
         end
 
+        # Models the client after it re-keys a redirect to the surviving
+        # cluster; today's client reports the requested id ("777") instead.
         test "a match reached through a redirect records the canonical id as its external_key" do
           client = FakeViafClient.new(
             suggestions: {"Stacy Willingham" => [viaf_suggestion("777", "Stacy Willingham 1991–")]},
@@ -344,6 +350,8 @@ module Services
           assert_equal ["matched", "5391"], [decision.outcome, selected["external_key"]]
         end
 
+        # Models the client after it re-keys a redirect to the surviving
+        # cluster; today's client reports the requested id ("777") instead.
         test "rejecting a match reached through a redirect keeps the cluster out of a later run that sees the canonical id directly" do
           client = FakeViafClient.new(
             suggestions: {"Stacy Willingham" => [viaf_suggestion("777", "Stacy Willingham 1991–")]},

@@ -150,7 +150,9 @@ module Services
           return candidate if candidate.person || candidate.unavailable
 
           candidate.person = @client.cluster(candidate.viaf_id, refresh: @refresh)
-          # A redirect can land on a cluster rejected for this author (spec §12).
+          # A redirect can land on a cluster rejected for this author (spec
+          # §12) — but only once Person#viaf_id names the surviving cluster
+          # rather than the id requested (docs/features/viaf-api-client.md).
           candidate.unavailable = "rejected" if @rejected.include?(:viaf, candidate.person.viaf_id)
           candidate
         rescue ::Viaf::Exceptions::NotFoundError, ::Viaf::Exceptions::AbandonedRecordError => e
@@ -369,10 +371,14 @@ module Services
           evidence["dropped"] = "not a person" unless candidate.unavailable || person?(candidate)
           {
             "record_type" => nil, "record_id" => nil,
-            # The canonical cluster id once the cluster is read, since a
-            # redirect can mean this differs from what was requested; it is
-            # the id ApplyViaf stamps, so a rejection must name the cluster
-            # itself, not the suggestion that led to it.
+            # Person#viaf_id once the cluster is read, else the requested id:
+            # the id ApplyViaf stamps. Today that is always the id that was
+            # requested, since the client's cache keeps VIAF's own redirect
+            # under the superseded id (docs/features/viaf-api-client.md). Once
+            # the client re-keys to the surviving cluster, this line and the
+            # guard in `fetch` reject the cluster itself; until then, a
+            # rejected cluster VIAF later merges can come back under its
+            # other id.
             "external_source" => "viaf", "external_key" => (person&.viaf_id || candidate.viaf_id).to_s,
             "sources" => candidate.sources, "scores" => {},
             "evidence" => evidence.compact
