@@ -552,6 +552,21 @@ has the same authorization as the audit page's merge action, and asks for confir
 This lands before the backfill (§16), so the thousands of links the backfill makes can be undone
 one by one from the start. Adding it requires a Playwright test (it is a new admin flow).
 
+*(Amended in increment 5: a reject is about the record, not one decision, so every other decision of
+the same finder that selected the same record for this author, and isn't rejected yet, is rejected
+with it. A rejected VIAF run also takes its Wikidata follow-up with it -- the Wikidata decisions
+that matched the Wikidata id the VIAF run stamped, at or after the VIAF decision, are rejected and
+reverted too, though rejecting a Wikidata decision never reaches back to reject the VIAF decision
+that led to it. The record's own id and its Wikipedia article link are removed whoever added them,
+even when the run found them already set, since they name the rejected record itself. An AI run
+that used the record as evidence is reverted too, not only its description -- its applied years,
+gender and countries go the same as any other run's. A rejected record's id is never stamped on
+that author again, by any step, so `FactSheet#stamp` returns `"rejected"` for one. A run whose
+decision was rejected stops counting as processed, so a failed re-run doesn't strand the author. A
+deprecated AI description no longer counts as present, so the AI step's completeness check and the
+"already set" checks look past it. Legacy Wikipedia descriptions the rejected run deprecated go back
+to normal rank, since the rank before isn't recorded and the re-run judges them again.)*
+
 ### 13. Backfill and the legacy Wikipedia cleanup
 
 **`books:authors:enrich[limit]`.** The limit is required; `all` is accepted.

@@ -6,7 +6,7 @@ resolved through Wikidata first, then through VIAF when Wikidata finds no person
 searching Wikipedia. Every choice of an external record is a recorded decision, visible on the
 books admin audit pages, and every value it writes is traceable to the run that wrote it.
 
-Spec: `docs/superpowers/specs/2026-09-27-books-author-importer-design.md` §3-§10, §13, §14. See
+Spec: `docs/superpowers/specs/2026-09-27-books-author-importer-design.md` §3-§10, §12, §13, §14. See
 also `docs/features/wikimedia-clients.md` for the Wikidata/Wikipedia clients themselves,
 `docs/features/viaf-api-client.md` for the VIAF client the VIAF step below consumes, and
 `docs/features/import-finder.md` for the audit pages and the `MatchDecision` machinery this
@@ -441,6 +441,49 @@ legacy data (2026-09-27): 33,678 authors -> 34,400 join rows, 0 missing authors,
 migration step, not a one-off: production's books data is truncated and re-migrated more than
 once before launch, and this task has to run every time, right after `:countries`.
 
+## Rejecting a link
+
+`Services::Books::Authors::RejectExternalLink.call(decision:, user:)` is the Reject link action on
+a `ResolveWikidata` or `ResolveViaf` decision's audit page (spec §12), behind the same
+authorization as the merge action's delete gate -- a reject removes data. It refuses an unmatched
+decision, a decision from any other finder, and one already rejected, changing and queuing nothing.
+
+**Rejected together.** A reject is about the record, not one decision: every other decision of the
+same finder that selected the same record for this author, and isn't rejected yet, is rejected with
+it -- otherwise an older or newer decision for the same record would keep feeding it to the AI step
+as evidence. A rejected VIAF run also takes its Wikidata follow-up with it: when the VIAF run
+stamped a Wikidata id, the Wikidata decisions that matched that id at or after the VIAF decision are
+rejected and reverted too. The reverse does not hold -- rejecting a Wikidata decision never rejects
+the VIAF decision that led to it.
+
+**What is removed.** For each rejected run, `RevertFacts` undoes what its ledger row recorded:
+identifiers it stamped, years and gender still holding the value it wrote, alternate names and
+countries it added, and legacy Wikipedia descriptions it deprecated, back to normal rank. A value
+changed since is a person's, and stays. On top of that, the record's own id (the QID for Wikidata,
+the VIAF id for VIAF) and the Wikipedia article link it named are removed whoever added them --
+even when the run found them already set, since they name the rejected record itself rather than
+something it merely filled in.
+
+**The AI step.** A `books.author_facts` run that used a rejected record as evidence is reverted too:
+its applied years, gender and countries go when unchanged since, the same as any other run, because
+those values came from the wrong person's records. When one of the influenced runs wrote the
+author's current AI description, that description is deprecated rather than deleted, the same as a
+legacy Wikipedia description.
+
+**The re-run.** Rejecting queues `Books::Authors::WikidataJob(author_id, refresh: true)`, which
+carries the refresh down to VIAF on a miss the same as any other forced re-run.
+
+**Never again.** `RejectedRecords` means a rejected record is never offered as a candidate by either
+resolver and `FactSheet#stamp` refuses to put its id back on the author, so the forced re-run cannot
+re-select or re-stamp the record it just lost. A run whose decision was rejected also stops counting
+as "processed", so a failed re-run doesn't strand the author, and a deprecated AI description no
+longer counts as present, so the AI step's completeness check runs it again.
+
+**A known gap with VIAF merges.** `Viaf::Client` reports the id that was requested, even across
+VIAF's own redirects (see `docs/features/viaf-api-client.md`, "merged clusters"), so a rejected VIAF
+cluster that VIAF later merges into another one can come back to this author under its other id. The
+admin rejects it again.
+
 ## The ledger
 
 Every Wikidata run writes at most one `Enrichment` row, kind `books.author_wikidata`, provider
@@ -512,6 +555,9 @@ Every row that called the model carries a `sources` fact listing the records in 
 (`[{"source" => "wikidata", "source_id" => "Q7243"}, {"source" => "wikipedia", "source_id" =>
 "en:12345"}, {"source" => "viaf", "source_id" => "…"}]`), so a rejected link can find the
 descriptions it influenced.
+
+**A filled `countries` fact now also carries `country_ids`**, so reverting it removes the exact rows
+it added rather than matching by the country's name.
 
 ## Operating
 
