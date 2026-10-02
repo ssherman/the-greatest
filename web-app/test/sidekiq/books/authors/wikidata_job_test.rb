@@ -54,9 +54,9 @@ class Books::Authors::WikidataJobTest < ActiveSupport::TestCase
 
   test "research off reaches the VIAF step on a miss" do
     ::Services::Books::Authors::EnrichFromWikidata.stubs(:call).returns(outcome(:unmatched))
-    Books::Authors::ViafJob.expects(:perform_async).with(@author.id, false, false, false)
+    Books::Authors::ViafJob.expects(:perform_async).with(@author.id, true, false, false)
 
-    Books::Authors::WikidataJob.new.perform(@author.id, false, false, false)
+    Books::Authors::WikidataJob.new.perform(@author.id, true, false, false)
   end
 
   test "research off reaches the AI step on a match" do
@@ -68,11 +68,11 @@ class Books::Authors::WikidataJobTest < ActiveSupport::TestCase
 
   test "a rate limit reschedules with research still off" do
     ::Services::Books::Authors::EnrichFromWikidata.stubs(:call).raises(::Wikimedia::Exceptions::RateLimited.new("wait", retry_after: 30))
-    Books::Authors::WikidataJob.expects(:perform_in).with(30, @author.id, false, false, false)
+    Books::Authors::WikidataJob.expects(:perform_in).with(30, @author.id, true, true, false)
     job = Books::Authors::WikidataJob.new
     job.stubs(:rand).returns(0)
 
-    job.perform(@author.id, false, false, false)
+    job.perform(@author.id, true, true, false)
   end
 
   test "does nothing for an author deleted since enqueue" do
