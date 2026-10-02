@@ -6,10 +6,10 @@ module Services
       # Undoes what one author-step run applied, from the facts its ledger
       # row recorded (spec §12): the identifiers it stamped, the Wikipedia
       # link it added, the alternate names and countries it added, the legacy
-      # Wikipedia descriptions it deprecated, and each year or gender it wrote
-      # that still holds the value written. A value changed since is a
-      # person's, and stays. Only facts marked applied are touched, and only
-      # this author's rows. Saves the author.
+      # Wikipedia descriptions it deprecated or restored, and each year or
+      # gender it wrote that still holds the value written. A value changed
+      # since is a person's, and stays. Only facts marked applied are
+      # touched, and only this author's rows. Saves the author.
       class RevertFacts
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -57,7 +57,7 @@ module Services
           when "alternate_names" then remove_alternate_names(Array(fact["value"]))
           when "countries" then destroy(added_countries(fact))
           when "wikipedia" then destroy(author.external_links.where(url: fact["value"].to_s))
-          when "legacy_wikipedia" then restore_legacy(Array(fact["value"]))
+          when "legacy_wikipedia" then undo_legacy(Array(fact["value"]))
           else false
           end
         end
@@ -92,14 +92,21 @@ module Services
           author.author_countries.joins(:country).where(books_countries: {name: Array(fact["value"])})
         end
 
-        # The rank before is not recorded; normal never collides with the
-        # one-preferred index. The next Wikidata run judges them again.
-        def restore_legacy(verdicts)
-          ids = verdicts.select { |verdict| verdict["verdict"] == "deprecated" }.map { |verdict| verdict["description_id"] }
-          rows = author.descriptions.select { |row| ids.include?(row.id) && row.deprecated? }
-          rows.each { |row| row.update!(rank: :normal) }
+        # A description the run deprecated goes back to normal (every legacy
+        # Wikipedia description was migrated at normal rank, and normal never
+        # collides with the one-preferred index); one it restored is
+        # deprecated again. The next Wikidata run judges them afresh.
+        def undo_legacy(verdicts)
+          deprecated = description_ids(verdicts, "deprecated")
+          restored = description_ids(verdicts, "restored")
+          rows = author.descriptions.select do |row|
+            (deprecated.include?(row.id) && row.deprecated?) || (restored.include?(row.id) && !row.deprecated?)
+          end
+          rows.each { |row| row.update!(rank: row.deprecated? ? :normal : :deprecated) }
           rows.any?
         end
+
+        def description_ids(verdicts, verdict) = verdicts.select { |entry| entry["verdict"] == verdict }.map { |entry| entry["description_id"] }
 
         def name_key(text)
           ::Services::Text::NameNormalizer.call(::Services::Text::QuoteNormalizer.call(text.to_s)).to_s.downcase

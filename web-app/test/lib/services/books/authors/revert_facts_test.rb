@@ -113,6 +113,26 @@ module Services
           assert_equal "deprecated", other.reload.rank
         end
 
+        test "a legacy description the run restored is deprecated again" do
+          row = @author.descriptions.create!(source: :wikipedia, content: "x", source_url: "https://en.wikipedia.org/wiki/X")
+          facts = {"legacy_wikipedia" => {"applied" => true, "reason" => "restored",
+                                          "value" => [{"description_id" => row.id, "verdict" => "restored", "why" => "sitelink"}]}}
+
+          result = revert(facts)
+
+          assert row.reload.deprecated?
+          assert_equal ["legacy_wikipedia"], result.data[:reverted]
+        end
+
+        test "a legacy description the run left deprecated is not touched" do
+          row = @author.descriptions.create!(source: :wikipedia, content: "x", source_url: "https://en.wikipedia.org/wiki/X", rank: :deprecated)
+          facts = {"legacy_wikipedia" => {"applied" => true, "reason" => "deprecated",
+                                          "value" => [{"description_id" => row.id, "verdict" => "left_deprecated", "why" => "different_item"}]}}
+
+          assert_empty revert(facts).data[:reverted]
+          assert row.reload.deprecated?
+        end
+
         test "facts not applied, and facts it does not know, are left alone" do
           @author.update!(birth_year: 1901)
 

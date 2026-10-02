@@ -205,6 +205,19 @@ module Services
           assert_equal ["Q7243", "Q999"], @author.identifiers.where(identifier_type: :books_author_wikidata_qid).pluck(:value).sort
         end
 
+        test "a later match restores a legacy description an earlier miss deprecated" do
+          @author.identifiers.destroy_all
+          legacy = @author.descriptions.create!(source: :wikipedia, content: "x", source_url: "https://en.wikipedia.org/wiki/Leo_Tolstoy")
+          enrich(wikidata: FakeWikidataClient.new)
+          assert legacy.reload.deprecated?
+
+          @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q7243")
+          enrich(refresh: true)
+
+          assert legacy.reload.normal?
+          assert_equal "restored", rows.last.facts.dig("legacy_wikipedia", "reason")
+        end
+
         test "an unexpected error after the decision writes one failed row tied to it, and does not raise" do
           ApplyWikidata.stubs(:call).raises(RuntimeError, "boom")
 
