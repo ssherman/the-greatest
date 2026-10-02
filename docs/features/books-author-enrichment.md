@@ -448,15 +448,18 @@ a `ResolveWikidata` or `ResolveViaf` decision's audit page (spec §12), behind t
 authorization as the merge action's delete gate -- a reject removes data. It refuses an unmatched
 decision, a decision from any other finder, and one already rejected, changing and queuing nothing.
 
-**Rejected together.** A reject is about the record, not one decision: every other decision of the
-same finder that selected the same record for this author, and isn't rejected yet, is rejected with
-it -- otherwise an older or newer decision for the same record would keep feeding it to the AI step
-as evidence. A rejected VIAF run also takes every Wikidata decision that matched the Wikidata id the
-VIAF run stamped, whether that decision's own selected key is that id directly or a Wikidata merge
-later moved it on and the ledger recorded the original as `redirected_from` -- a decision pulled in
-this way is rejected regardless of when it was recorded, since once the record is banned for this
-author (`RejectedRecords`) every decision that ever chose it has to go. The reverse does not hold --
-rejecting a Wikidata decision never rejects the VIAF decision that led to it.
+**Rejected together.** A reject is about the person, not one record or one decision: every other
+decision of the same finder that selected the same record for this author, and isn't rejected yet, is
+rejected with it -- otherwise an older or newer decision for the same record would keep feeding it to
+the AI step as evidence. A rejected VIAF run also takes every Wikidata decision that matched the
+Wikidata id the VIAF run stamped, whether that decision's own selected key is that id directly or a
+Wikidata merge later moved it on and the ledger recorded the original as `redirected_from` -- a
+decision pulled in this way is rejected regardless of when it was recorded, since once the record is
+banned for this author (`RejectedRecords`) every decision that ever chose it has to go. It runs the
+other way too (increment 5): rejecting a Wikidata decision also rejects every matched, unrejected VIAF
+decision whose cluster names that Wikidata item as its own link -- a VIAF cluster that links to a
+rejected Wikidata item is the same rejected person, one hop, never chased further. Either direction
+reverts what the swept-in decision's own run applied, just as if it had been rejected directly.
 
 **What is removed.** For each rejected run, `RevertFacts` undoes what its ledger row recorded:
 identifiers it stamped, years and gender still holding the value it wrote, alternate names and
@@ -484,15 +487,30 @@ re-select or re-stamp the record it just lost. A rejected Wikidata record is its
 Wikidata merged into it that the author's own runs recorded, so none of them is stamped or selected
 again either -- otherwise VIAF could still hand the author the superseded id, or an older decision
 could still name it, and a later correct match would see it as a held conflict rather than a blank to
-fill. `MatchedRecords` ignores a rejected decision too, so no rejected evidence reaches the AI step. A
-run whose decision was rejected also stops counting as "processed", so a failed re-run doesn't strand
-the author, and a deprecated AI description no longer counts as present, so the AI step's
-completeness check runs it again.
+fill. The gap runs in reverse too: if Wikidata later merges a *rejected* item into another one after
+the reject, the surviving id was never recorded as anything of ours, so it is not banned, and a name
+search can hand the author that surviving id again. The admin rejects it again. `MatchedRecords`
+ignores a rejected decision too, so no rejected evidence reaches the AI step. A deprecated AI
+description no longer counts as present, so the AI step's completeness check runs it again.
+
+**A run whose decision was rejected stops counting as "processed" -- but a re-run can still stall
+before reaching VIAF.** `WikidataJob` only forwards to `ViafJob` when this run's own outcome is
+`:unmatched`; a `:skipped` or `:failed` outcome goes straight to the AI step instead. So after a
+VIAF reject, if the forced Wikidata re-run the reject queues fails, or if the author's *earlier*
+Wikidata miss -- the unrejected `unrecognized` row that sent the chain to VIAF the first time --
+is still sitting there, an ordinary (non-forced) run counts that old row as processed, skips
+Wikidata, and never reaches VIAF again. A failed re-run does *not* un-strand the author by itself.
+Recovery is another forced run: `Books::Authors::WikidataJob.perform_async(author_id, true)`.
 
 **A known gap with VIAF merges.** `Viaf::Client` reports the id that was requested, even across
 VIAF's own redirects (see `docs/features/viaf-api-client.md`, "merged clusters"), so a rejected VIAF
 cluster that VIAF later merges into another one can come back to this author under its other id. The
 admin rejects it again.
+
+**A running chain can race the reject.** A chain already mid-run for the author when the reject
+happens -- an `EnrichJob` reading the soon-to-be-rejected evidence, say -- can still write after the
+reject completes, and that write is not reverted. Recovery is the same: reject again, or correct the
+author by hand.
 
 ## The ledger
 

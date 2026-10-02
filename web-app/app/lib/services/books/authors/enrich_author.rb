@@ -104,13 +104,13 @@ module Services
           author.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message, facts: sources_fact))
         end
 
-        # nil when there is nothing to review or apply. An author who already
-        # has an AI description would get already_set from the applier, so
-        # the review call is skipped and that reason is reported directly. A
-        # low-confidence fact is never written by ApplyAuthorFacts either, so
-        # it is reported the same way, skipping the review call and the code
-        # check that would otherwise run before it (Ruling: a review of a
-        # fact that will not be applied just spends a fast-role call).
+        # nil when there is nothing to review or apply. An author who already has a
+        # non-deprecated AI description would get already_set from the applier, so the
+        # review call is skipped and that reason is reported directly. A
+        # low-confidence fact is never written by ApplyAuthorFacts either, so it is
+        # reported the same way, skipping the review call and the code check that
+        # would otherwise run before it (Ruling: a review of a fact that will not be
+        # applied just spends a fast-role call).
         def description_for(fact)
           text = fact && fact[:value]
           return nil if text.blank?

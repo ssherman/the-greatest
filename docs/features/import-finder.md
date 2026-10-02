@@ -87,7 +87,7 @@ record that holds its key.
 `match_decisions`: one row per finder call — finder, polymorphic record and subject,
 outcome/confidence/decided_by enums, `verify`, `query` and `candidates` jsonb snapshots,
 `selected_index` (1-based), `reason`, `ai_chat_id`, `sources_failed`, and the audit columns
-`needs_review`, `reviewed_at`, `reviewed_by_id`, `review_note`.
+`needs_review`, `reviewed_at`, `reviewed_by_id`, `review_note`, `verdict`.
 
 `duplicate_candidates`: one row per unordered pair of local records (`item_a_id <
 item_b_id`, unique with `item_type`), `source` (identifier_collision, external_key_collision,
@@ -166,9 +166,8 @@ confirmation; it undoes what the link wrote and runs the author's steps again (s
 `docs/features/books-author-enrichment.md`). Re-check excludes the decision's subject when the
 subject is a record of the finder's model (a sweep decision re-resolves that book against the
 rest), else the created record of an unmatched import (or it would match itself), else nothing.
-A re-check's own row is
-written with `verify: true`, so it appears in the queue only under `verify=include`; the admin is
-redirected to it, and the original stays in the queue until reviewed.
+A re-check's own row is written with `verify: true`, so it appears in the queue only under
+`verify=include`; the admin is redirected to it, and the original stays in the queue until reviewed.
 
 **Duplicates** opens on pending pairs, newest first, each record summarized live through
 `FinderBase#summarize` (title, creators, year, ranked position, list count, identifiers) with
