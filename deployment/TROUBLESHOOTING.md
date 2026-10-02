@@ -264,7 +264,7 @@ docker compose -f docker-compose.prod.yml logs nginx | grep 404
 2. **Nginx location block not matching**
    Check nginx configuration:
    ```bash
-   docker compose -f docker-compose.prod.yml exec nginx cat /etc/nginx/conf.d/the-greatest.conf
+   docker compose -f docker-compose.prod.yml exec nginx cat /etc/nginx/sites-enabled/the-greatest.conf
    ```
 
 ### Nginx Configuration Errors

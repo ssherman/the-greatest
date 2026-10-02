@@ -95,7 +95,6 @@ curl https://thegreatestmovies.org
   - SSL termination for 6 domain variants
   - www to non-www redirects
   - Firebase Auth proxy for /__/auth/* paths
-  - Bad bot blocking
   - Security headers
 
 ### Redis Service
@@ -292,7 +291,7 @@ the whole matrix against a throwaway container.
 
 - All secrets managed via environment variables (SOPS/age)
 - SSL certificates with strong ciphers (TLS 1.2+), HSTS enabled
-- Bad bot blocking active
+- Per-visitor rate limits in nginx (90 req/s, burst 200, 200 connections; `nginx.conf`)
 - UFW firewall (22, 80, 443) and fail2ban for SSH — note that Docker-published ports do not
   obey UFW, which is why the origin lockdown lives in nginx rather than the host firewall
 - Non-root user for Rails processes
