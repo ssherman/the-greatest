@@ -44,6 +44,13 @@ module Services
           assert_empty held
         end
 
+        test "a match from this era is not put back: the author's own era already decided, and a person may have removed the id" do
+          decide("Q8", at: @author.created_at + 1.minute)
+
+          assert_nil restore
+          assert_empty held
+        end
+
         test "a rejected latest decision puts nothing back, even with an older match behind it" do
           decide("Q1", at: @author.created_at - 2.days)
           decide("Q7243", verdict: :rejected)
