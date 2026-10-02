@@ -331,6 +331,35 @@ module Services
 
           assert_equal :unmatched, result.data[:outcome]
         end
+
+        test "a match reached through a redirect records the canonical id as its external_key" do
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("777", "Stacy Willingham 1991–")]},
+            people: {"777" => willingham("5391")}
+          )
+
+          decision = resolve(client).data[:decision]
+
+          selected = decision.candidates[decision.selected_index - 1]
+          assert_equal ["matched", "5391"], [decision.outcome, selected["external_key"]]
+        end
+
+        test "rejecting a match reached through a redirect keeps the cluster out of a later run that sees the canonical id directly" do
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("777", "Stacy Willingham 1991–")]},
+            people: {"777" => willingham("5391")}
+          )
+          resolve(client).data[:decision].update!(verdict: :rejected)
+
+          client2 = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => willingham}
+          )
+          result = resolve(client2)
+
+          assert_equal :unmatched, result.data[:outcome]
+          assert_equal ["5391"], result.data[:decision].query["rejected"]
+        end
       end
     end
   end

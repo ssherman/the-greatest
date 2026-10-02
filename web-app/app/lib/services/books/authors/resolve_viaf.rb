@@ -369,7 +369,11 @@ module Services
           evidence["dropped"] = "not a person" unless candidate.unavailable || person?(candidate)
           {
             "record_type" => nil, "record_id" => nil,
-            "external_source" => "viaf", "external_key" => candidate.viaf_id,
+            # The canonical cluster id once the cluster is read, since a
+            # redirect can mean this differs from what was requested; it is
+            # the id ApplyViaf stamps, so a rejection must name the cluster
+            # itself, not the suggestion that led to it.
+            "external_source" => "viaf", "external_key" => (person&.viaf_id || candidate.viaf_id).to_s,
             "sources" => candidate.sources, "scores" => {},
             "evidence" => evidence.compact
           }
