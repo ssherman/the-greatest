@@ -202,6 +202,16 @@ email would make `find_user` create a new row rather than refuse, trading a narr
 console-mitigated takeover for guaranteed duplicate accounts. Keep the setting
 enabled — it remains load-bearing.
 
+**Correction 2026-10-01 (security audit H1).** D8's trade-off was decided on a false
+premise. Email enumeration protection blocks `accounts:update`, but not the route that
+matters: create a Firebase password account for the victim's address (allowed under
+"multiple accounts per identity provider", no verification), link an email-less X or
+Facebook identity, sign in with it. The fallback then read the unverified claim and
+`TRUSTED_EMAIL_PROVIDERS` trusted it. And the cost D8 feared does not arise: Facebook and
+Apple tokens carry no `email` claim, so the fallback was already nil for them. The fallback
+now receives the claim only when `email_verified == true`
+(`authentication_service.rb`). Keep enumeration protection on regardless.
+
 **D9 — `users.email_verified` keeps recording the raw token claim.** Unchanged. It
 is the provider's own assertion; the linking decision remains a separate key.
 
