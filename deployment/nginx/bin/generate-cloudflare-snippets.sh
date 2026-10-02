@@ -3,7 +3,7 @@
 #
 #   cloudflare-real-ip.conf  set_real_ip_from for every Cloudflare range, plus
 #                            real_ip_header CF-Connecting-IP -- so $remote_addr, the access
-#                            log, the bot-blocker's per-IP limits and Rails' request.remote_ip
+#                            log, the per-visitor rate limits and Rails' request.remote_ip
 #                            all see the visitor, not the Cloudflare edge.
 #   cloudflare-geo.conf      geo $realip_remote_addr $from_cloudflare -- 1 for a Cloudflare
 #                            range or loopback, 0 otherwise. Keyed on $realip_remote_addr

@@ -79,9 +79,8 @@ run_nginx() {   # run_nginx [extra docker run args...]
     "$@" "$image" >/dev/null
   # Wait until nginx itself -- not docker-proxy on the published ports, which accepts the
   # TCP connection immediately regardless of whether nginx is ready -- answers on both
-  # ports. The bot-blocker's config is huge (tens of thousands of lines) and takes real
-  # time to load, so a host-side probe can hit docker-proxy while nginx is still starting
-  # and get the connection reset mid-handshake. Probing from inside the container makes
+  # ports. So a host-side probe can hit docker-proxy while nginx is still starting and get
+  # the connection reset mid-handshake. Probing from inside the container makes
   # "connection refused" (curl exit 7) unambiguous: once nginx is listening, port 80
   # answers 444 (exit 52) and port 443 rejects the SNI-less handshake (exit 35).
   for _ in $(seq 1 120); do
@@ -155,6 +154,26 @@ expect_http "B4 HTTP with forged X-Forwarded-Proto only redirects (proxy branch 
 expect_exit "B5 HTTPS with unknown SNI is still rejected" "35" -k --resolve "evil.test:$https_port:127.0.0.1" "https://evil.test:$https_port/"
 expect_exit "B6 HTTP with unknown Host is still refused"  "52 56" -H "Host: evil.test" "http://127.0.0.1:$http_port/"
 expect_exit "B7 HTTPS correct SNI but foreign Host is refused" "52 56 92 http:421" -k --resolve "$music:$https_port:127.0.0.1" -H "Host: evil.test" "https://$music:$https_port/"
+# B8: per-visitor rate limiting (nginx.conf). One visitor (CF-Connecting-IP 203.0.113.50)
+# far over 90 r/s + burst 200 gets 429s. Straight after, a different visitor (.51) arriving
+# through the same peer (10.99.0.1) sends 150 requests and every one must be 200. Per-visitor
+# key: .51 has a fresh bucket and 150 <= burst 200, so all are admitted. Shared-edge key: the
+# bucket is full when the burst ends and refills at 90 r/s, so 150 free slots would take ~1.6 s
+# and most of the 150 get 429. No timing window to hit. The client cert keeps this valid
+# whether ssl_verify_client is optional or on.
+b8_curl=(-sk -Z --max-time 60 --cert "$work/client.pem" --key "$work/client.key"
+  --resolve "$music:$https_port:127.0.0.1" -o /dev/null -w '%{http_code}\n')
+burst_codes=$(curl "${b8_curl[@]}" --parallel-max 100 -H "CF-Connecting-IP: 203.0.113.50" \
+  "https://$music:$https_port/?n=[1-1000]")
+limited=$(printf '%s\n' "$burst_codes" | grep -c '^429$')
+if [ "$limited" -gt 0 ]; then pass "B8a one visitor over the limit gets 429 ($limited of 1000)"
+else fail "B8a one visitor over the limit gets 429" "no 429 in 1000 requests: $(printf '%s\n' "$burst_codes" | sort | uniq -c | tr '\n' ' ')"; fi
+other_codes=$(curl "${b8_curl[@]}" --parallel-max 50 -H "CF-Connecting-IP: 203.0.113.51" \
+  "https://$music:$https_port/?n=[1-150]")
+other_total=$(printf '%s\n' "$other_codes" | grep -c .)
+other_bad=$(printf '%s\n' "$other_codes" | grep -vc '^200$')
+if [ "$other_total" -eq 150 ] && [ "$other_bad" -eq 0 ]; then pass "B8b another visitor through the same edge is unaffected (150 of 150 http 200)"
+else fail "B8b another visitor through the same edge is unaffected" "$other_bad non-200 of $other_total: $(printf '%s\n' "$other_codes" | sort | uniq -c | tr '\n' ' ')"; fi
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all lockdown probes passed"; else echo "$failures lockdown probe(s) failed"; exit 1; fi

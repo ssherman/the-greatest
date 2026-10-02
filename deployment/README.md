@@ -87,7 +87,7 @@ curl https://thegreatestmovies.org
 - **Health Check**: Process check for sidekiq
 
 ### Nginx Service
-- **Build**: Custom image with bad-bot-blocker
+- **Build**: Custom image on nginx 1.30 (stable), rebuilt with --pull --no-cache on every deploy
 - **Ports**: 80, 443
 - **SSL**: Let's Encrypt certificates via Cloudflare DNS
 - **Templating**: Uses nginx's built-in template system with environment variable substitution
@@ -95,7 +95,6 @@ curl https://thegreatestmovies.org
   - SSL termination for 6 domain variants
   - www to non-www redirects
   - Firebase Auth proxy for /__/auth/* paths
-  - Bad bot blocking
   - Security headers
 
 ### Redis Service
@@ -277,7 +276,7 @@ The origin serves a page only when all three of these hold (design:
    every port-443 request; the switch to `on` is what makes this condition mandatory.
 
 The same Cloudflare list feeds `real_ip_header CF-Connecting-IP`, so nginx's `$remote_addr`,
-the access log, the bot-blocker's per-IP limits, and Rails' `request.remote_ip` are the
+the access log, the per-visitor rate limits (90 req/s, burst 200, 200 connections; `nginx.conf`), and Rails' `request.remote_ip` are the
 visitor's address, not the Cloudflare edge's. The access log carries `cf=<peer> verify=<AOP result>`.
 
 **Accepted residual:** Cloudflare's shared origin-pull certificate proves "from Cloudflare's
@@ -292,7 +291,7 @@ the whole matrix against a throwaway container.
 
 - All secrets managed via environment variables (SOPS/age)
 - SSL certificates with strong ciphers (TLS 1.2+), HSTS enabled
-- Bad bot blocking active
+- Per-visitor rate limits in nginx (90 req/s, burst 200, 200 connections; `nginx.conf`)
 - UFW firewall (22, 80, 443) and fail2ban for SSH — note that Docker-published ports do not
   obey UFW, which is why the origin lockdown lives in nginx rather than the host firewall
 - Non-root user for Rails processes

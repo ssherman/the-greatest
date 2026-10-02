@@ -12,6 +12,10 @@ This guide covers how to rollback The Greatest application to a previous working
 
 ## Quick Rollback
 
+**Preferred rollback:** revert the PR on GitHub and let the deploy workflow run. That workflow
+runs `build --pull --no-cache nginx` and then `up -d`, so nginx's config and image move together.
+The manual options below are for when the workflow cannot run.
+
 If you need to rollback immediately:
 
 ### Option 1: Rollback to Previous Docker Image
@@ -47,8 +51,15 @@ git push origin main
 
 # Rebuild or pull previous image
 docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml build --pull --no-cache nginx
 docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d --force-recreate nginx
 ```
+
+nginx's config (`nginx.conf` and the site template) is bind-mounted from the checkout, but its
+image is built from `deployment/nginx/`, so both must move together. `restart` reuses the old
+container and image, and a plain `up -d` does nothing when compose sees no change, so rebuild
+nginx and force-recreate it.
 
 ### Option 3: Emergency Rollback (Keep Container Running)
 
@@ -165,13 +176,15 @@ docker compose -f docker-compose.prod.yml restart web worker
 
 3. **Rebuild nginx container**
    ```bash
-   docker compose -f docker-compose.prod.yml build nginx
+   docker compose -f docker-compose.prod.yml build --pull --no-cache nginx
    ```
 
-4. **Restart affected services**
+4. **Recreate nginx**
    ```bash
-   docker compose -f docker-compose.prod.yml restart
+   docker compose -f docker-compose.prod.yml up -d --force-recreate nginx
    ```
+   nginx's config is bind-mounted from the checkout but its image is built from it, so rebuild
+   and recreate it together. `restart` would keep the old container and image.
 
 5. **Test configuration**
    ```bash
