@@ -9,6 +9,14 @@ class AuthController < ApplicationController
   TG_UID_COOKIE = :tg_uid
 
   skip_before_action :verify_authenticity_token, only: [:sign_in, :sign_out, :check_provider]
+
+  # The CSRF token is skipped above because edge-cached pages cannot carry a
+  # per-session one. What keeps a cross-site HTML form out instead is the body
+  # type: a form can post urlencoded, multipart or text/plain without a CORS
+  # preflight, but not application/json, and this app never answers a
+  # preflight. Every caller (firebase_auth_service.js, authentication_controller.js)
+  # sends JSON.
+  before_action :require_json_request, only: [:sign_in, :sign_out, :check_provider]
   before_action :prevent_caching
 
   include VisitorIp
@@ -137,6 +145,12 @@ class AuthController < ApplicationController
   end
 
   private
+
+  def require_json_request
+    return if request.media_type == "application/json"
+
+    render json: {success: false, error: "Unsupported Media Type"}, status: :unsupported_media_type
+  end
 
   def render_rate_limited
     render json: {
