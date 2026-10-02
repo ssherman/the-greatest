@@ -8,6 +8,12 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
     # Sidekiq runs inline in tests: a real enqueue would run the next step.
     Books::Authors::EnrichJob.stubs(:perform_async)
     Books::Authors::WikidataJob.stubs(:perform_async)
+
+    # CI has no Redis: every job reserves its start time in a fake. The
+    # clock is frozen so a second passing mid-reservation cannot shift a wait.
+    freeze_time
+    @schedule = Viaf::Schedule.new(redis: Books::OpenLibrary::FakeRedis.new)
+    Viaf::Schedule.stubs(:new).returns(@schedule)
   end
 
   def outcome(wikidata_qid: nil, needs_review: false)
@@ -118,5 +124,23 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
     Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, true, true, true)
 
     job_with_jitter(7).perform(@author.id, true)
+  end
+
+  test "a busy pace behind a long VIAF line queues the AI step now and waits its turn" do
+    8.times { @schedule.reserve(not_before: 30) }
+    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
+    Books::Authors::EnrichJob.expects(:perform_async).with(@author.id, false).once
+    Books::Authors::ViafJob.expects(:perform_in).with(30 + (8 * 90) + 7, @author.id, false, true, false)
+
+    job_with_jitter(7).perform(@author.id, false, false, false)
+  end
+
+  test "a busy pace behind a short line only waits its turn" do
+    2.times { @schedule.reserve(not_before: 30) }
+    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
+    Books::Authors::EnrichJob.expects(:perform_async).never
+    Books::Authors::ViafJob.expects(:perform_in).with(30 + (2 * 90) + 7, @author.id, false, false, true)
+
+    job_with_jitter(7).perform(@author.id)
   end
 end
