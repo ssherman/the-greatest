@@ -16,10 +16,10 @@ class Books::Authors::EnrichJobTest < ActiveSupport::TestCase
     ::Services::Books::Authors::EnrichAuthor::Result.new(success?: success, data: {enrichments: []}, errors: success ? [] : ["timeout"])
   end
 
-  test "runs on the low queue with three retries" do
+  test "runs on the author_chain queue with three retries" do
     options = Books::Authors::EnrichJob.get_sidekiq_options
 
-    assert_equal ["low", 3], [options["queue"].to_s, options["retry"]]
+    assert_equal ["author_chain", 3], [options["queue"].to_s, options["retry"]]
   end
 
   test "runs the AI step, then hands on only the books that were waiting" do

@@ -12,7 +12,7 @@ module Services
         def setup
           ::Sidekiq::ScheduledSet.stubs(:new).returns([job("Books::Authors::WikidataJob", 1, false, false, false), job("Books::EnrichBookJob", 2)])
           ::Sidekiq::RetrySet.stubs(:new).returns([job("Books::Authors::EnrichJob", 3, false)])
-          ::Sidekiq::Queue.stubs(:new).with("low").returns([job("Books::Authors::ViafJob", 4, false, true, false)])
+          ::Sidekiq::Queue.stubs(:new).with("author_chain").returns([job("Books::Authors::ViafJob", 4, false, true, false)])
         end
 
         test "collects the authors of chain jobs scheduled, retrying or enqueued on the low queue" do

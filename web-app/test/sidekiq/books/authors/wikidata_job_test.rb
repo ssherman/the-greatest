@@ -14,10 +14,10 @@ class Books::Authors::WikidataJobTest < ActiveSupport::TestCase
     ::Services::Books::Authors::EnrichFromWikidata::Result.new(success?: value != :failed, data: {outcome: value}, errors: [])
   end
 
-  test "runs on the low queue with three retries" do
+  test "runs on the author_chain queue with three retries" do
     options = Books::Authors::WikidataJob.get_sidekiq_options
 
-    assert_equal ["low", 3], [options["queue"].to_s, options["retry"]]
+    assert_equal ["author_chain", 3], [options["queue"].to_s, options["retry"]]
   end
 
   test "runs the Wikidata step for the author" do

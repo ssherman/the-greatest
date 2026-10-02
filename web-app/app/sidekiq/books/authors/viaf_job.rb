@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 # One author through Services::Books::Authors::EnrichFromViaf (spec §8,
-# §11), only after a Wikidata miss. On the low queue, not serial.
+# §11), only after a Wikidata miss. On the author_chain queue, last in
+# strict order after low; not serial.
 #
 # When the matched cluster named a Wikidata item this run stamped, and the
 # VIAF decision itself does not need review, Wikidata runs once more for it
@@ -25,10 +26,12 @@
 # match that names a Wikidata item still sends the author through the
 # forced Wikidata run, which ends at the AI step again (EnrichAuthor skips
 # an author already complete). Facts a late VIAF run finds land as fills.
+# A run answerable from a stored cluster skips the line entirely, rather
+# than waiting behind runs that must ask VIAF (see answerable_from_store?).
 class Books::Authors::ViafJob
   include Sidekiq::Job
 
-  sidekiq_options queue: :low, retry: 3
+  sidekiq_options queue: :author_chain, retry: 3
 
   RESCHEDULE_JITTER = 0..30
 

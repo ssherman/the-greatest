@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 # One author through Services::Books::Authors::EnrichFromWikidata (spec §11).
-# On the low queue: it has no latency requirement, and low is last in the
-# strict queue order. Expected failures write a failed ledger row inside the
+# On the author_chain queue, last in strict order, after low: it has no
+# latency requirement. Expected failures write a failed ledger row inside the
 # runner and do not raise. A rate limit (a 429, maxlag, or our own pace busy
 # for longer than the inline wait) reschedules this job rather than holding
 # a worker thread. A miss goes on to Books::Authors::ViafJob, unless VIAF sent
@@ -14,7 +14,7 @@
 class Books::Authors::WikidataJob
   include Sidekiq::Job
 
-  sidekiq_options queue: :low, retry: 3
+  sidekiq_options queue: :author_chain, retry: 3
 
   RESCHEDULE_JITTER = 0..30
 

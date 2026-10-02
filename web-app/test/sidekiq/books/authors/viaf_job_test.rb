@@ -26,10 +26,10 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
     Books::Authors::ViafJob.new.tap { |job| job.stubs(:rand).returns(seconds) }
   end
 
-  test "runs on the low queue with three retries" do
+  test "runs on the author_chain queue with three retries" do
     options = Books::Authors::ViafJob.get_sidekiq_options
 
-    assert_equal ["low", 3], [options["queue"].to_s, options["retry"]]
+    assert_equal ["author_chain", 3], [options["queue"].to_s, options["retry"]]
   end
 
   test "runs the VIAF step, passing refresh through, then the AI step" do
