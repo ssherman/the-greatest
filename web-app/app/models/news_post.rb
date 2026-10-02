@@ -71,6 +71,7 @@ class NewsPost < ApplicationRecord
   validates :title, presence: true
   validates :body, presence: true
   validates :domain, presence: true
+  validate :uploaded_images_are_allowed_types
 
   # A NULL published_at is excluded by SQL three-valued logic -- NULL <= now is
   # NULL, which is not true -- so this single predicate covers drafts and
@@ -96,4 +97,20 @@ class NewsPost < ApplicationRecord
 
   # A published post's URL is a permanent link, so retitling must not move it.
   def should_generate_new_friendly_id? = slug.blank?
+
+  private
+
+  # New uploads only. A post saved before this check existed may already hold
+  # another type, and it must stay editable.
+  def uploaded_images_are_allowed_types
+    attachments = []
+    attachments << share_image.attachment if share_image.attached?
+    attachments.concat(body_images.attachments.to_a) if body_images.attached?
+
+    attachments.select(&:new_record?).each do |attachment|
+      next if attachment.blob.content_type.in?(Image::ALLOWED_CONTENT_TYPES)
+
+      errors.add(attachment.name.to_sym, "must be a JPEG, PNG, WebP, or GIF")
+    end
+  end
 end

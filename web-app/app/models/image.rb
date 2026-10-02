@@ -17,6 +17,10 @@
 #  index_images_on_parent_and_primary  (parent_type,parent_id,primary)
 #
 class Image < ApplicationRecord
+  # Raster formats only. NewsPost uploads share this list. SVG is not on it,
+  # because a stored SVG is a document that can carry script.
+  ALLOWED_CONTENT_TYPES = %w[image/jpeg image/png image/webp image/gif].freeze
+
   belongs_to :parent, polymorphic: true
 
   has_one_attached :file do |attachable|
@@ -43,8 +47,7 @@ class Image < ApplicationRecord
   def acceptable_image_format
     return unless file.attached?
 
-    allowed_types = %w[image/jpeg image/png image/webp image/gif]
-    return if file.blob.content_type.in?(allowed_types)
+    return if file.blob.content_type.in?(ALLOWED_CONTENT_TYPES)
 
     if file.blob.content_type.in?(%w[image/heic image/heif])
       errors.add(:file, "HEIC/HEIF format is not supported. Please convert to JPEG, PNG, or WebP before uploading.")
