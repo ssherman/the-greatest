@@ -2,6 +2,11 @@
 
 require "sidekiq"
 require "sidekiq-cron"
+# Sidekiq::Queue, ScheduledSet and RetrySet (used by Services::Books::Authors::QueuedChain
+# and its test) live here, not in the base "sidekiq" require. Initializers run on every
+# boot regardless of eager_load, so this is available in dev/test even though app/lib is
+# autoloaded lazily there.
+require "sidekiq/api"
 
 Sidekiq.configure_server do |config|
   config.redis = {url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0")}
