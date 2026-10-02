@@ -549,14 +549,17 @@ work-record author join and the shelf now go through `redirects` in the
 same way editions and identifiers already did (R83); London's shelf holds
 13,218 works, and the fix costs nothing measurable per page.
 
-**The read-only mount proof.** `docker compose exec api sh -c 'touch
-/data/versions/2026-07-31/works.parquet'` and `mkdir /data/tmp/probe` both
-fail with "Read-only file system" (Task 34, Step 4). What enforces this is
-the compose file's `:ro` bind mount on `/data` -- nothing in DuckDB itself
-refuses a write, and there is no DuckDB flag that would. The one place the
-service does write is `OL_API_TEMP_DIR` (DuckDB's spill directory), which
-defaults to the container's own `/tmp` -- writable, and never under the
-artifact mount.
+**The read-only mount proof.** `docker compose exec -u root api sh -c 'touch
+/data/versions/2026-07-31/works.parquet'` and the matching `mkdir
+/data/tmp/probe` both fail with "Read-only file system". Run both probes
+with `-u root`: the API image runs unprivileged (uid 10001), and as that user
+the `touch` fails on file permissions before the mount is ever tested. The
+original run (Task 34, Step 4) predates the unprivileged user, so it ran as
+root without needing the flag. What enforces this is the compose file's
+`:ro` bind mount on `/data` -- nothing in DuckDB itself refuses a write, and
+there is no DuckDB flag that would. The one place the service does write is
+`OL_API_TEMP_DIR` (DuckDB's spill directory), which defaults to the
+container's own `/tmp` -- writable, and never under the artifact mount.
 
 **Version pinning.** The API always opens an explicit `OL_DATA_VERSION`
 directory (`deps.open_artifact`), never a symlink: `deps.SymlinkedVersion` is

@@ -72,6 +72,11 @@ jobs:
           working-directory: web-app
           bundler-cache: true
 
+      # Before the tests: test:prepare runs a plain `yarn install`, which would
+      # rewrite a drifted yarn.lock instead of failing on it.
+      - name: Install JavaScript dependencies (fails on yarn.lock drift)
+        run: yarn install --frozen-lockfile
+
       - name: Wait for OpenSearch
         run: |
           for i in $(seq 1 60); do

@@ -11,9 +11,12 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
   # AuthenticationService now builds a real ProviderEmailResolver on every
   # sign-in, which -- on an auth_uid miss -- reaches Identity Toolkit. None
   # of the tests below exercise that lookup, so the default here makes the
-  # provider-record lookup find nothing, which is exactly what makes the
-  # resolver fall back to the token's own `email` claim -- the behavior
-  # every test here predates and expects.
+  # provider-record lookup find nothing, which makes the resolver fall back
+  # to the token's own `email` claim -- and AuthenticationService offers that
+  # claim only when email_verified is exactly true, which
+  # FirebaseTokenHelper's default token is. A test of an UNVERIFIED claim
+  # must stub the provider record it means
+  # (FirebaseAccountLookup.stubs(:call)), as production would supply one.
   def stub_account_lookup_empty
     Services::GoogleServiceAccountToken.stubs(:access_token).returns("test-service-account-token")
     WebMock.stub_request(:post, %r{\Ahttps://identitytoolkit\.googleapis\.com/v1/projects/[^/]+/accounts:lookup\z})
@@ -83,6 +86,9 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "returns email_verification_required when an unverified email hits an existing account" do
+    Services::FirebaseAccountLookup.stubs(:call).returns([
+      {"providerId" => "password", "email" => users(:google_user).email}
+    ])
     token = FirebaseTokenHelper.token({
       "sub" => "attacker-uid-2",
       "email" => users(:google_user).email,
