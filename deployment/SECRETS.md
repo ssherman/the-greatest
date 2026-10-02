@@ -229,20 +229,27 @@ Secrets are automatically decrypted and deployed by GitHub Actions.
 
 ### GitHub Actions Secrets Required
 
-- `AGE_PRIVATE_KEY` - Entire contents of age private key file
-- `DEPLOY_SSH_KEY` - SSH private key for deploy user
+- `AGE_PRIVATE_KEY` - Entire contents of the age private key file
+- `DEPLOY_SSH_KEY` - SSH private key for the deploy user
 - `SERVER_WEB_HOST` - Production server hostname or IP
+- `SERVER_SSH_HOST_FINGERPRINT` - SHA256 fingerprint of the server's ECDSA SSH host key
+  (`SHA256:...`). Not sensitive: it is a hash of a public key. Update it whenever the server is
+  rebuilt (see `SERVER-UPGRADE-GUIDE.md`).
+- `REPO_DISPATCH_PAT` - used by the image workflow to trigger the deploy and prune old images
 
 ### How Deployment Works
 
-1. GitHub Actions checks out code
-2. Installs SOPS
-3. Writes `AGE_PRIVATE_KEY` to `~/.config/sops/age/keys.txt`
-4. Decrypts `secrets/.env.production` → `.env.decrypted`
-5. Rsyncs code to server (excluding encrypted secrets)
-6. Writes decrypted `.env` atomically to server with 0600 permissions
-7. Pulls Docker images and restarts services
-8. Docker Compose auto-loads `.env`
+1. A push to `main` runs CI, builds and pushes the web image, then sends an `image-built-event`.
+2. The "Deploy to Production" workflow first checks that `SERVER_SSH_HOST_FINGERPRINT` is set, and
+   fails before connecting if it is not. It then connects to the server over SSH as `deploy` and
+   refuses to connect unless the server's host key matches that fingerprint.
+3. On the server, the script runs `git pull`, which brings the encrypted `secrets/.env.production`.
+4. It decrypts with the key passed in the environment, never written to disk:
+   `SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops -d secrets/.env.production > .env.new`, then moves
+   `.env.new` over `.env` and sets mode 0600. A failed decrypt stops the script and leaves the
+   previous `.env` in place.
+5. It pulls the web and worker images, rebuilds nginx, and runs `docker compose up -d`. Compose
+   reads `.env` automatically.
 
 ### Manual Deployment with Secrets
 

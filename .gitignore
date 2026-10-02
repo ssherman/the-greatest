@@ -1,10 +1,13 @@
 .env
 web-app/.env
 
-# SOPS decrypted files
+# SOPS decrypted files (deployment/SECRETS.md uses these names anywhere in the tree)
 secrets/*.decrypted
 secrets/*.plain
 secrets/*.tmp
+temp.env
+*.decrypted
+.env.*.plain
 
 # Local .terraform directories
 **/.terraform/*
