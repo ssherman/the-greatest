@@ -300,6 +300,44 @@ module Services
           assert_equal ["wikidata", "Q7243", ["name_search"]], [candidate["external_source"], candidate["external_key"], candidate["sources"]]
           assert_equal ["Leo Tolstoy", 1828, ["writer"]], candidate["evidence"].values_at("external_title", "external_year", "occupations")
         end
+
+        def reject_for(author, key)
+          ::MatchDecision.create!(finder: ResolveWikidata.name, subject: author, outcome: :matched, confidence: :high,
+            decided_by: :rule, verdict: :rejected, candidates: [{"external_key" => key}], selected_index: 1)
+        end
+
+        test "a record rejected for this author is never fetched, and the run decides without it" do
+          reject_for(@author, "Q7243")
+          client = FakeWikidataClient.new(searches: {"Leo Tolstoy" => ["Q7243"]}, entities: {"Q7243" => wikidata_entity("Q7243", **TOLSTOY)})
+
+          result = resolve(client)
+
+          assert_equal [:unmatched, "rule"], [result.data[:outcome], result.data[:decision].decided_by]
+          assert_equal [], result.data[:decision].candidates
+          assert_equal ["Q7243"], result.data[:decision].query["rejected"]
+          assert_not client.calls.any? { |call| call.first == :entities && call.last.include?("Q7243") }
+        end
+
+        test "an old id Wikidata merged into a rejected item is dropped too" do
+          reject_for(@author, "Q7243")
+          client = FakeWikidataClient.new(searches: {"Leo Tolstoy" => ["Q999"]}, entities: {"Q999" => wikidata_entity("Q7243", **TOLSTOY)})
+
+          result = resolve(client)
+
+          assert_equal :unmatched, result.data[:outcome]
+          assert_equal [], result.data[:decision].candidates
+        end
+
+        test "a record rejected for another author is still a candidate here" do
+          reject_for(::Books::Author.create!(name: "Someone Else"), "Q7243")
+          hold(:books_author_wikidata_qid, "Q7243")
+          client = FakeWikidataClient.new(entities: {"Q7243" => wikidata_entity("Q7243", **TOLSTOY)})
+
+          result = resolve(client)
+
+          assert_equal [:matched, "Q7243"], [result.data[:outcome], result.data[:entity].id]
+          assert_nil result.data[:decision].query["rejected"]
+        end
       end
     end
   end

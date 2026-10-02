@@ -11,8 +11,9 @@ module Services
       # rows are grouped by VIAF id into one candidate each. A rule decides
       # when exactly one person has a heading equal to our name and a birth
       # year agreeing with ours; otherwise at most three clusters are read and
-      # SelectExternalRecordTask chooses. Every run records one MatchDecision.
-      # Applies nothing; Viaf::Client stores every cluster it reads.
+      # SelectExternalRecordTask chooses. Applies nothing; Viaf::Client stores
+      # every cluster it reads. Every run records one MatchDecision. A record
+      # rejected for this author is never a candidate (spec §12).
       class ResolveViaf
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         # suggestions: this cluster's AutoSuggest rows. unavailable: why its
@@ -41,6 +42,7 @@ module Services
           @candidates = {}
           @sources_failed = []
           @shown = nil
+          @rejected = RejectedRecords.new(author)
         end
 
         def call
@@ -54,7 +56,7 @@ module Services
         # ---- stages ---------------------------------------------------------
 
         def held_stage
-          ids = identifier_values(VIAF)
+          ids = identifier_values(VIAF).reject { |id| @rejected.include?(:viaf, id) }
           return nil if ids.empty?
 
           ids.each { |id| fetch(add(id, "held_id")) }
@@ -66,7 +68,11 @@ module Services
         end
 
         def search_stage
-          @client.suggest(author.name).each { |suggestion| add(suggestion.viaf_id, "name_search").suggestions << suggestion }
+          @client.suggest(author.name).each do |suggestion|
+            next if @rejected.include?(:viaf, suggestion.viaf_id)
+
+            add(suggestion.viaf_id, "name_search").suggestions << suggestion
+          end
           pool = persons
           if pool.empty?
             return Verdict.new(outcome: :unmatched, candidate: nil, decided_by: :rule, confidence: :high,
@@ -144,6 +150,8 @@ module Services
           return candidate if candidate.person || candidate.unavailable
 
           candidate.person = @client.cluster(candidate.viaf_id, refresh: @refresh)
+          # A redirect can land on a cluster rejected for this author (spec §12).
+          candidate.unavailable = "rejected" if @rejected.include?(:viaf, candidate.person.viaf_id)
           candidate
         rescue ::Viaf::Exceptions::NotFoundError, ::Viaf::Exceptions::AbandonedRecordError => e
           candidate.unavailable = e.class.name.demodulize
@@ -327,7 +335,12 @@ module Services
             "death_year" => author.death_year,
             "viaf" => identifier_values(VIAF),
             "titles" => @profile.titles.first(10)
-          }
+          }.merge(rejected_snapshot)
+        end
+
+        def rejected_snapshot
+          ids = @rejected.ids(:viaf)
+          ids.any? ? {"rejected" => ids.to_a.sort} : {}
         end
 
         def snapshot(candidate)

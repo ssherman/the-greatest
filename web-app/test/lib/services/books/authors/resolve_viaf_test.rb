@@ -290,6 +290,47 @@ module Services
           assert_equal "Marcus Aurelius, Emperor of Rome", decision.candidates.first["evidence"]["external_title"]
           assert_match(/\AMarcus Aurelius, Emperor of Rome \|/, @ai_options[:candidate_lines].first)
         end
+
+        def reject_for(author, key)
+          ::MatchDecision.create!(finder: ResolveViaf.name, subject: author, outcome: :matched, confidence: :high,
+            decided_by: :rule, verdict: :rejected, candidates: [{"external_key" => key}], selected_index: 1)
+        end
+
+        test "a suggestion of a record rejected for this author is never a candidate" do
+          reject_for(@author, "5391")
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => willingham}
+          )
+
+          result = resolve(client)
+
+          assert_equal [:unmatched, "rule"], [result.data[:outcome], result.data[:decision].decided_by]
+          assert_equal ["5391"], result.data[:decision].query["rejected"]
+          assert_not client.called?(:cluster)
+        end
+
+        test "a held VIAF id that was rejected is not read" do
+          reject_for(@author, "5391")
+          @author.identifiers.create!(identifier_type: :books_author_viaf, value: "5391")
+          client = FakeViafClient.new(people: {"5391" => willingham})
+
+          resolve(client)
+
+          assert_not_includes client.clusters, "5391"
+        end
+
+        test "a cluster that comes back under a rejected id is dropped" do
+          reject_for(@author, "5391")
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("777", "Stacy Willingham 1991–")]},
+            people: {"777" => willingham("5391")}
+          )
+
+          result = resolve(client)
+
+          assert_equal :unmatched, result.data[:outcome]
+        end
       end
     end
   end
