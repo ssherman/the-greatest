@@ -564,10 +564,12 @@ record itself; a superseded id a Wikidata merge run kept held alongside the cano
 (`ApplyWikidata`'s `redirected_from`) is removed the same way. An AI run that used the record as
 evidence is reverted too, not only its description -- its applied years, gender and countries go the
 same as any other run's. A rejected record's id is never stamped on that author again, by any step,
-so `FactSheet#stamp` returns `"rejected"` for one. A run whose decision was rejected stops counting
-as processed, so a failed re-run doesn't strand the author, and `MatchedRecords` ignores it too, so
-no rejected evidence reaches the AI step. A deprecated AI description no longer counts as present, so
-the AI step's completeness check and the "already set" checks look past it. Legacy Wikipedia
+so `FactSheet#stamp` returns `"rejected"` for one; a rejected Wikidata record is its key plus every id
+Wikidata merged into it that the author's own runs recorded, so none of those ids is stamped or
+selected again either. A run whose decision was rejected stops counting as processed, so a failed
+re-run doesn't strand the author, and `MatchedRecords` ignores it too, so no rejected evidence reaches
+the AI step. A deprecated AI description no longer counts as present, so the AI step's completeness
+check and the "already set" checks look past it. Legacy Wikipedia
 descriptions the rejected run deprecated go back to normal rank, since the rank before isn't recorded
 and the re-run judges them again.)*
 

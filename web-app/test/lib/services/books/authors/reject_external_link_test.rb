@@ -158,6 +158,38 @@ module Services
           assert_nil unrelated.reload.verdict
         end
 
+        test "a redirected Wikidata reject also rejects an older decision keyed the pre-merge id" do
+          old = decision(ResolveWikidata.name, "Q1", created_at: 1.day.ago)
+          @author.update!(birth_year: 1920)
+          ledger(EnrichFromWikidata::KIND, old, "birth_year" => filled(1920))
+          wikidata = decision(ResolveWikidata.name, "Q2")
+          ledger(EnrichFromWikidata::KIND, wikidata, "wikidata_qid" => filled("Q2", redirected_from: ["Q1"]))
+          unrelated = decision(ResolveWikidata.name, "Q3")
+          expect_rerun
+
+          result = reject(wikidata)
+
+          assert_equal [wikidata, old], result.data[:decisions]
+          assert old.reload.verdict_rejected?
+          assert_nil @author.reload.birth_year
+          assert_nil unrelated.reload.verdict
+        end
+
+        test "a VIAF cascade sweeps in another decision sharing the redirected follow-up's key" do
+          viaf = decision(ResolveViaf.name, "5391")
+          ledger(EnrichFromViaf::KIND, viaf, "wikidata_qid" => filled("Q9"), "viaf" => filled("5391"))
+          redirected = decision(ResolveWikidata.name, "Q10", created_at: 1.hour.ago)
+          ledger(EnrichFromWikidata::KIND, redirected, "wikidata_qid" => filled("Q10", redirected_from: ["Q9"]))
+          conflict = decision(ResolveWikidata.name, "Q10")
+          ledger(EnrichFromWikidata::KIND, conflict, "wikidata_qid" => {"value" => "Q10", "applied" => false, "reason" => "held_qid_conflict"})
+          expect_rerun
+
+          result = reject(viaf)
+
+          assert_includes result.data[:decisions], conflict
+          assert conflict.reload.verdict_rejected?
+        end
+
         test "an AI run that used the record is reverted and its description deprecated; one that did not is left alone" do
           wikidata = decision(ResolveWikidata.name, "Q1")
           @author.update!(gender: :female, death_year: 1980)

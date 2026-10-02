@@ -46,6 +46,23 @@ module Services
 
           assert_equal Set.new, RejectedRecords.new(@author).ids(:wikidata)
         end
+
+        test "a rejected Wikidata decision also bans the ids a merge redirected it from" do
+          rejected = decision(ResolveWikidata.name, "Q10")
+          @author.enrichments.create!(kind: EnrichFromWikidata::KIND, provider: "wikidata", outcome: :applied,
+            match_decision: rejected,
+            facts: {"wikidata_qid" => {"value" => "Q10", "applied" => true, "reason" => "filled", "redirected_from" => ["Q9"]}})
+          other = decision(ResolveWikidata.name, "Q11", verdict: nil)
+          @author.enrichments.create!(kind: EnrichFromWikidata::KIND, provider: "wikidata", outcome: :applied,
+            match_decision: other,
+            facts: {"wikidata_qid" => {"value" => "Q11", "applied" => true, "reason" => "filled", "redirected_from" => ["Q12"]}})
+
+          rejected_records = RejectedRecords.new(@author)
+
+          assert_equal Set["Q10", "Q9"], rejected_records.ids(:wikidata)
+          assert rejected_records.identifier?("books_author_wikidata_qid", "Q9")
+          assert_not rejected_records.identifier?("books_author_wikidata_qid", "Q12")
+        end
       end
     end
   end

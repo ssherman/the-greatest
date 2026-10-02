@@ -73,17 +73,24 @@ module Services
         # [[decision, source, key], ...], this decision first.
         def targets
           source = RejectedRecords::FINDERS.fetch(decision.finder)
-          list = same_record(decision.finder, key_of(decision)).map { |target| [target, source, key_of(target)] }
-          return list unless source == "viaf"
+          if source == "viaf"
+            list = same_record(decision.finder, key_of(decision)).map { |target| [target, source, key_of(target)] }
+            qids = list.flat_map { |target, _source, _key| stamped_qids(target) }.uniq
+            return list + wikidata_decisions_for(qids).map { |target| [target, "wikidata", key_of(target)] }
+          end
 
-          qids = list.flat_map { |target, _source, _key| stamped_qids(target) }.uniq
-          list + wikidata_follow_ups(qids).map { |target| [target, "wikidata", key_of(target)] }
+          ids = ([key_of(decision)] + redirected_from(decision)).compact.uniq
+          pin_first(wikidata_decisions_for(ids), decision).map { |target| [target, source, key_of(target)] }
         end
 
         def same_record(finder, key)
           scope = ::MatchDecision.where(subject: author, finder: finder, outcome: :matched)
           found = scope.order(:created_at, :id).reject(&:verdict_rejected?).select { |target| key_of(target) == key }
-          found.include?(decision) ? [decision] + (found - [decision]) : found
+          pin_first(found, decision)
+        end
+
+        def pin_first(list, item)
+          list.include?(item) ? [item] + (list - [item]) : list
         end
 
         def stamped_qids(viaf_decision)
@@ -93,22 +100,42 @@ module Services
           end.uniq
         end
 
-        # Every unrejected, matched Wikidata decision whose selected key is
-        # one of the stamped qids, or whose own ledger rows record one of
-        # them as a `redirected_from` id (Wikidata merged the stamped item
-        # into the one this decision actually selected). No cutoff by time:
-        # once rejected, the record is banned for this author regardless of
-        # when a decision chose it (spec §12, decision 1).
-        def wikidata_follow_ups(qids)
-          return [] if qids.empty?
+        # Every unrejected, matched Wikidata decision that is the same record
+        # as one of `ids`: its own key is one of them, or -- one hop, never
+        # chased further -- its own ledger rows name one of them as
+        # `redirected_from`. A key reached this way is folded into the set
+        # before the final match, so a cascaded follow-up's own plain
+        # siblings (another decision sharing its exact key, with no redirect
+        # of its own) are swept in too -- the same "same key" rule decision 1
+        # already applies to the decision being rejected directly.
+        def wikidata_decisions_for(ids)
+          return [] if ids.empty?
 
-          ::MatchDecision.where(subject: author, finder: ResolveWikidata.name, outcome: :matched)
+          pool = ::MatchDecision.where(subject: author, finder: ResolveWikidata.name, outcome: :matched)
             .order(:created_at, :id).reject(&:verdict_rejected?)
-            .select { |target| qids.include?(key_of(target)) || redirected_from(target).intersect?(qids) }
+          redirects = redirects_by_decision(pool)
+          reached = pool.select { |target| redirects.fetch(target.id, []).intersect?(ids) }.map { |target| key_of(target) }
+          expanded = (ids + reached).compact.uniq
+          pool.select { |target| expanded.include?(key_of(target)) || redirects.fetch(target.id, []).intersect?(ids) }
+        end
+
+        # {decision_id => ["Q9", ...]}, one query for every decision in `pool`.
+        def redirects_by_decision(pool)
+          return {} if pool.empty?
+
+          ::Enrichment.where(match_decision_id: pool.map(&:id))
+            .each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |row, map|
+              map[row.match_decision_id].concat(wikidata_qid_redirects(row))
+            end
         end
 
         def redirected_from(target)
-          ::Enrichment.where(match_decision: target).flat_map { |row| Array(row.facts.dig("wikidata_qid", "redirected_from")) }.uniq
+          ::Enrichment.where(match_decision: target).flat_map { |row| wikidata_qid_redirects(row) }.uniq
+        end
+
+        def wikidata_qid_redirects(row)
+          fact = row.facts["wikidata_qid"]
+          fact.is_a?(Hash) ? Array(fact["redirected_from"]) : []
         end
 
         def key_of(target) = target.selected_candidate&.dig("external_key").presence
@@ -127,7 +154,7 @@ module Services
             @reverted.concat(RevertFacts.call(author: author, facts: row.facts).data[:reverted])
             wikipedia = row.facts["wikipedia"]
             remove_links(wikipedia["value"]) if source == "wikidata" && wikipedia.is_a?(Hash) && wikipedia["reason"] == "already_set"
-            redirected.concat(Array(row.facts.dig("wikidata_qid", "redirected_from"))) if source == "wikidata"
+            redirected.concat(wikidata_qid_redirects(row)) if source == "wikidata"
           end
           values = ([key] + redirected).compact.uniq
           identifiers = author.identifiers.where(identifier_type: OWN_IDENTIFIER.fetch(source), value: values).to_a

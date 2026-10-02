@@ -480,10 +480,14 @@ refresh down to VIAF on a miss the same as any other forced re-run.
 
 **Never again.** `RejectedRecords` means a rejected record is never offered as a candidate by either
 resolver, and `FactSheet#stamp` refuses to put its id back on the author, so the forced re-run cannot
-re-select or re-stamp the record it just lost. `MatchedRecords` ignores a rejected decision too, so
-no rejected evidence reaches the AI step. A run whose decision was rejected also stops counting
-as "processed", so a failed re-run doesn't strand the author, and a deprecated AI description no
-longer counts as present, so the AI step's completeness check runs it again.
+re-select or re-stamp the record it just lost. A rejected Wikidata record is its key plus every id
+Wikidata merged into it that the author's own runs recorded, so none of them is stamped or selected
+again either -- otherwise VIAF could still hand the author the superseded id, or an older decision
+could still name it, and a later correct match would see it as a held conflict rather than a blank to
+fill. `MatchedRecords` ignores a rejected decision too, so no rejected evidence reaches the AI step. A
+run whose decision was rejected also stops counting as "processed", so a failed re-run doesn't strand
+the author, and a deprecated AI description no longer counts as present, so the AI step's
+completeness check runs it again.
 
 **A known gap with VIAF merges.** `Viaf::Client` reports the id that was requested, even across
 VIAF's own redirects (see `docs/features/viaf-api-client.md`, "merged clusters"), so a rejected VIAF

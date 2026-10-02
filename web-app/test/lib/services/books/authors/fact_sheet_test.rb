@@ -151,6 +151,18 @@ module Services
           assert_not @author.identifiers.exists?(identifier_type: "books_author_viaf")
         end
 
+        test "an id a rejected Wikidata decision's ledger named as redirected_from is never stamped either" do
+          rejected = reject_for(@author, ResolveWikidata.name, "Q10")
+          @author.enrichments.create!(kind: EnrichFromWikidata::KIND, provider: "wikidata", outcome: :applied,
+            match_decision: rejected,
+            facts: {"wikidata_qid" => {"value" => "Q10", "applied" => true, "reason" => "filled", "redirected_from" => ["Q9"]}})
+
+          @sheet.single_identifier("wikidata_qid", "books_author_wikidata_qid", "Q9")
+
+          assert_equal ["rejected", false], @sheet.facts["wikidata_qid"].values_at("reason", "applied")
+          assert_not @author.identifiers.exists?(identifier_type: "books_author_wikidata_qid")
+        end
+
         test "a record rejected for another author does not stop the stamp here" do
           reject_for(::Books::Author.create!(name: "Another Author"), ResolveWikidata.name, "Q1")
 
