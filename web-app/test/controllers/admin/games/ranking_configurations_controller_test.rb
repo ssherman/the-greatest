@@ -64,6 +64,26 @@ module Admin
         assert_response :success
       end
 
+      test "a percent sign in the search is a literal, not a wildcard" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_games_ranking_configurations_path(q: "%")
+        assert_response :success
+        assert_equal [], @controller.view_assigns["ranking_configurations"].map(&:id)
+      end
+
+      test "a partial search still matches a configuration by name substring" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_games_ranking_configurations_path(q: "Global")
+        assert_response :success
+        assert_includes @controller.view_assigns["ranking_configurations"].map(&:id), ranking_configurations(:games_global).id
+      end
+
+      test "an array search parameter does not error" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_games_ranking_configurations_path(q: ["Global"])
+        assert_response :success
+      end
+
       test "should handle sorting by name" do
         sign_in_as(@admin_user, stub_auth: true)
         get admin_games_ranking_configurations_path(sort: "name")

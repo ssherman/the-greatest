@@ -26,7 +26,7 @@ module Search
 
           query_definition = build_query_definition(title, authors, year, options[:min_score], size, from)
 
-          Rails.logger.info "Book title+authors search query: #{query_definition.inspect}"
+          Rails.logger.debug { "Book title+authors search query: #{query_definition.inspect}" }
 
           response = search(query_definition)
           extract_hits_with_scores(response)

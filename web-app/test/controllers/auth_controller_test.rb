@@ -348,4 +348,52 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     assert_includes body["message"], "X",
       "the message must use the registry label, not a capitalised enum name"
   end
+
+  # L3: these three actions skip the CSRF token (edge-cached pages cannot carry
+  # one), so JSON is what keeps a cross-site HTML form out: a form can send
+  # urlencoded, multipart or text/plain without a CORS preflight, never JSON.
+  test "sign_in refuses a form-encoded body and signs nobody in" do
+    post auth_sign_in_path, params: {jwt: FirebaseTokenHelper.token({"sub" => "uid-l3-form", "email" => "l3.form@example.com"})}
+
+    assert_response :unsupported_media_type
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_nil session[:user_id]
+  end
+
+  test "sign_in refuses a text/plain body" do
+    post auth_sign_in_path,
+      params: {jwt: FirebaseTokenHelper.token({"sub" => "uid-l3-text", "email" => "l3.text@example.com"})}.to_json,
+      headers: {"CONTENT_TYPE" => "text/plain"}
+
+    assert_response :unsupported_media_type
+    assert_nil session[:user_id]
+  end
+
+  test "sign_in accepts JSON with a charset parameter" do
+    post auth_sign_in_path,
+      params: {jwt: FirebaseTokenHelper.token({"sub" => "uid-l3-charset", "email" => "l3.charset@example.com"})}.to_json,
+      headers: {"CONTENT_TYPE" => "application/json; charset=utf-8"}
+
+    assert_response :success
+    assert session[:user_id]
+  end
+
+  test "sign_out refuses a form post and leaves the visitor signed in" do
+    post auth_sign_in_path, params: {
+      jwt: FirebaseTokenHelper.token({"sub" => "uid-l3-out", "email" => "l3.out@example.com"})
+    }, as: :json
+    signed_in_id = session[:user_id]
+    assert signed_in_id
+
+    post auth_sign_out_path
+
+    assert_response :unsupported_media_type
+    assert_equal signed_in_id, session[:user_id]
+  end
+
+  test "check_provider refuses a form-encoded body" do
+    post auth_check_provider_path, params: {email: users(:google_user).email}
+
+    assert_response :unsupported_media_type
+  end
 end
