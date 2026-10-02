@@ -41,6 +41,14 @@ module Services
 
         def reject(target) = RejectExternalLink.call(decision: target, user: @user)
 
+        def viaf_decision(key, qid:, created_at: Time.current)
+          ::MatchDecision.create!(
+            finder: ResolveViaf.name, subject: @author, outcome: :matched, confidence: :medium, decided_by: :ai,
+            needs_review: true, candidates: [{"external_source" => "viaf", "external_key" => key, "evidence" => {"wikidata_qid" => qid}}],
+            selected_index: 1, created_at: created_at
+          )
+        end
+
         test "reverts what the run applied, removes the record's own id and link, rejects and reviews, and runs Wikidata again" do
           wikidata = decision(ResolveWikidata.name, "Q1")
           hold(:books_author_wikidata_qid, "Q1")
@@ -130,6 +138,25 @@ module Services
           assert_nil @author.death_year
         end
 
+        test "rejecting a Wikidata decision also rejects a VIAF decision whose cluster links to the same Wikidata item" do
+          wikidata = decision(ResolveWikidata.name, "Q9")
+          viaf = viaf_decision("5391", qid: "Q9")
+          ledger(EnrichFromViaf::KIND, viaf, "viaf" => filled("5391"), "gender" => filled("female"))
+          hold(:books_author_viaf, "5391")
+          @author.update!(gender: :female)
+          other_viaf = viaf_decision("7777", qid: "Q99")
+          expect_rerun
+
+          result = reject(wikidata)
+
+          assert_equal [wikidata, viaf], result.data[:decisions]
+          assert viaf.reload.verdict_rejected?
+          @author.reload
+          assert_not @author.identifiers.exists?(identifier_type: "books_author_viaf")
+          assert_nil @author.gender
+          assert_nil other_viaf.reload.verdict
+        end
+
         test "a redirected Wikidata id is removed along with the canonical one" do
           wikidata = decision(ResolveWikidata.name, "Q2")
           hold(:books_author_wikidata_qid, "Q2")
@@ -190,6 +217,24 @@ module Services
           assert conflict.reload.verdict_rejected?
         end
 
+        test "the sweep follows a sibling's own redirect to reach the decision it superseded" do
+          z = decision(ResolveWikidata.name, "Q1", created_at: 2.days.ago)
+          @author.update!(death_year: 1950)
+          ledger(EnrichFromWikidata::KIND, z, "death_year" => filled(1950))
+          y = decision(ResolveWikidata.name, "Q2", created_at: 1.day.ago)
+          ledger(EnrichFromWikidata::KIND, y, "wikidata_qid" => filled("Q2", redirected_from: ["Q1"]))
+          w = decision(ResolveWikidata.name, "Q2")
+          expect_rerun
+
+          result = reject(w)
+
+          assert_includes result.data[:decisions], y
+          assert_includes result.data[:decisions], z
+          assert y.reload.verdict_rejected?
+          assert z.reload.verdict_rejected?
+          assert_nil @author.reload.death_year
+        end
+
         test "an AI run that used the record is reverted and its description deprecated; one that did not is left alone" do
           wikidata = decision(ResolveWikidata.name, "Q1")
           @author.update!(gender: :female, death_year: 1980)
@@ -221,6 +266,22 @@ module Services
           assert_equal "normal", @author.descriptions.reload.sole.rank
         end
 
+        test "a ledger row from before the author's current era still has its own id removed, but what it applied stays" do
+          wikidata = decision(ResolveWikidata.name, "Q1")
+          hold(:books_author_wikidata_qid, "Q1")
+          @author.update!(birth_year: 1901)
+          ledger(EnrichFromWikidata::KIND, wikidata, "wikidata_qid" => filled("Q1"), "birth_year" => filled(1901))
+          @author.update_columns(created_at: 1.hour.from_now)
+          expect_rerun
+
+          result = reject(wikidata)
+
+          assert result.success?
+          assert wikidata.reload.verdict_rejected?
+          assert_not @author.identifiers.exists?
+          assert_equal 1901, @author.reload.birth_year
+        end
+
         test "a decision with no ledger row is still rejected and its record's id removed" do
           wikidata = decision(ResolveWikidata.name, "Q1")
           hold(:books_author_wikidata_qid, "Q1")
@@ -246,6 +307,16 @@ module Services
           end
           assert_nil unmatched.reload.verdict
           assert_nil finder.reload.verdict
+        end
+
+        test "a decision with an earlier review note keeps it, appended after the reject note" do
+          wikidata = decision(ResolveWikidata.name, "Q1")
+          wikidata.review!(by: @user, note: "Looked fine at the time.")
+          expect_rerun
+
+          reject(wikidata)
+
+          assert_equal "Link rejected. Earlier note: Looked fine at the time.", wikidata.reload.review_note
         end
 
         test "a second reject of the same decision is refused and queues nothing more" do

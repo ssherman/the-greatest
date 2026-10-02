@@ -4,15 +4,20 @@ module Services
   module Books
     module Authors
       # The Reject link action on the audit page (spec §12): a person says a
-      # Wikidata or VIAF record is not this author. Rejected together: this
-      # decision, every other decision of its finder that selected the same
-      # record for the author, and, for a VIAF record, every Wikidata
-      # decision that matched the Wikidata id its run stamped -- directly, or
-      # through a Wikidata redirect the ledger recorded as `redirected_from`
-      # -- regardless of when that decision was recorded. For each, what its
-      # run applied is reverted (RevertFacts) and the record's own id and
-      # Wikipedia link are removed, whoever added them; a superseded id a
-      # Wikidata merge run kept held alongside the canonical one goes too.
+      # Wikidata or VIAF record is not this author. A reject bans the person,
+      # not only the one record, so it runs both ways (increment 5 Group A).
+      # Rejected together: this decision, every other decision of its finder
+      # that selected the same record for the author, and, for a VIAF
+      # record, every Wikidata decision that matched the Wikidata id its run
+      # stamped -- directly, or through a Wikidata redirect the ledger
+      # recorded as `redirected_from` -- regardless of when that decision was
+      # recorded. The other way: rejecting a Wikidata decision also rejects
+      # every VIAF decision whose cluster names that Wikidata id as its own
+      # link, one hop, never chased further. For each, what its run applied
+      # is reverted (RevertFacts, only this author's own era -- Group B) and
+      # the record's own id and Wikipedia link are removed, whoever added
+      # them; a superseded id a Wikidata merge run kept held alongside the
+      # canonical one goes too.
       # The AI runs that used a rejected record are reverted too, and the AI
       # description is deprecated when one of them wrote it. The decisions
       # are marked rejected and reviewed, and the Wikidata step runs again,
@@ -80,7 +85,23 @@ module Services
           end
 
           ids = ([key_of(decision)] + redirected_from(decision)).compact.uniq
-          pin_first(wikidata_decisions_for(ids), decision).map { |target| [target, source, key_of(target)] }
+          wikidata_targets = pin_first(wikidata_decisions_for(ids), decision).map { |target| [target, source, key_of(target)] }
+          wikidata_targets + viaf_decisions_linked_to(ids).map { |target| [target, "viaf", key_of(target)] }
+        end
+
+        # A VIAF cluster whose own Wikidata link is one of these rejected
+        # Wikidata ids is the same rejected person (Group A): the cascade
+        # runs one hop, Wikidata to VIAF, matching on the candidate's own
+        # evidence rather than a ledger row, since the link is VIAF's own
+        # record of the person, not something ApplyViaf stamped. No further
+        # recursion from here -- a VIAF decision swept in this way does not
+        # itself pull in more Wikidata decisions.
+        def viaf_decisions_linked_to(ids)
+          return [] if ids.empty?
+
+          ::MatchDecision.where(subject: author, finder: ResolveViaf.name, outcome: :matched)
+            .order(:created_at, :id).reject(&:verdict_rejected?)
+            .select { |target| ids.include?(target.selected_candidate&.dig("evidence", "wikidata_qid")) }
         end
 
         def same_record(finder, key)
@@ -114,6 +135,13 @@ module Services
           pool = ::MatchDecision.where(subject: author, finder: ResolveWikidata.name, outcome: :matched)
             .order(:created_at, :id).reject(&:verdict_rejected?)
           redirects = redirects_by_decision(pool)
+          # Seed the id set with the redirects of every pool decision whose
+          # own key is already in it, before matching: a sibling sharing the
+          # key being rejected can itself carry a `redirected_from` onto an
+          # older, pre-merge decision, and that older decision has to be
+          # reached too, not just the sibling.
+          seeded = pool.select { |target| ids.include?(key_of(target)) }.flat_map { |target| redirects.fetch(target.id, []) }
+          ids = (ids + seeded).uniq
           reached = pool.select { |target| redirects.fetch(target.id, []).intersect?(ids) }.map { |target| key_of(target) }
           expanded = (ids + reached).compact.uniq
           pool.select { |target| expanded.include?(key_of(target)) || redirects.fetch(target.id, []).intersect?(ids) }
@@ -151,10 +179,18 @@ module Services
         def revert_run(target, source, key)
           redirected = []
           ::Enrichment.where(match_decision: target).find_each do |row|
+            redirected.concat(wikidata_qid_redirects(row)) if source == "wikidata"
+            # Spec §14: a pre-migration ledger row survives truncation and
+            # points at a re-created author with the same id. Only a row from
+            # this author's own era gets reverted -- the record's own id (and
+            # any redirected ids gathered above) is removed regardless of
+            # age, since it names the rejected record itself, not something
+            # that era applied.
+            next unless row.created_at > author.created_at
+
             @reverted.concat(RevertFacts.call(author: author, facts: row.facts).data[:reverted])
             wikipedia = row.facts["wikipedia"]
             remove_links(wikipedia["value"]) if source == "wikidata" && wikipedia.is_a?(Hash) && wikipedia["reason"] == "already_set"
-            redirected.concat(wikidata_qid_redirects(row)) if source == "wikidata"
           end
           values = ([key] + redirected).compact.uniq
           identifiers = author.identifiers.where(identifier_type: OWN_IDENTIFIER.fetch(source), value: values).to_a
@@ -172,9 +208,12 @@ module Services
         end
 
         # The AI step's runs whose input included a rejected record (its
-        # "sources" fact, spec §9).
+        # "sources" fact, spec §9), restricted to this author's own era
+        # (spec §14, Group B): a pre-migration run's values are not this
+        # author's to revert.
         def influenced_ai_runs(records)
-          author.enrichments.for_kind(EnrichAuthor::KIND).order(:created_at, :id).select do |row|
+          author.enrichments.for_kind(EnrichAuthor::KIND).where("enrichments.created_at > ?", author.created_at)
+            .order(:created_at, :id).select do |row|
             Array(row.facts.dig("sources", "value")).intersect?(records)
           end
         end
@@ -183,8 +222,8 @@ module Services
         # one, so the latest run that applied a description wrote the
         # current text.
         def deprecate_ai_description(influenced)
-          writer = author.enrichments.for_kind(EnrichAuthor::KIND).order(created_at: :desc, id: :desc)
-            .find { |row| row.facts.dig("description", "applied") == true }
+          writer = author.enrichments.for_kind(EnrichAuthor::KIND).where("enrichments.created_at > ?", author.created_at)
+            .order(created_at: :desc, id: :desc).find { |row| row.facts.dig("description", "applied") == true }
           return unless writer && influenced.include?(writer)
 
           author.descriptions.reload.select { |row| row.source == "ai_generated" && !row.deprecated? }.each do |row|
@@ -195,7 +234,9 @@ module Services
 
         def mark_rejected(target)
           target.update!(verdict: :rejected)
-          target.review!(by: user, note: target.review_note.presence || "Link rejected.")
+          note = "Link rejected."
+          note += " Earlier note: #{target.review_note}" if target.review_note.present?
+          target.review!(by: user, note: note)
         end
       end
     end
