@@ -52,9 +52,15 @@ module Services
           # chose): leave a failed row carrying whatever facts were applied
           # before the wait, so the run isn't invisible to the audit pages.
           # No decision yet (rate limited during resolution) means nothing
-          # was decided or applied, so nothing is written. Either way the
-          # exception still propagates so the job reschedules.
-          write(outcome: :failed, reason: "rate_limited", error: "#{e.class.name.demodulize}: #{e.message}", facts: @facts || {}) if @decision
+          # was decided or applied, so nothing is written, and an id put back
+          # this run is taken back off for the rescheduled run to restore and
+          # record. Either way the exception still propagates so the job
+          # reschedules.
+          if @decision
+            write(outcome: :failed, reason: "rate_limited", error: "#{e.class.name.demodulize}: #{e.message}", facts: @facts || {})
+          else
+            take_back_restore(ResolveWikidata::QID)
+          end
           raise
         rescue ::Wikimedia::Exceptions::Error => e
           finish(:failed, write(outcome: :failed, reason: "wikimedia_error", error: "#{e.class.name.demodulize}: #{e.message}",

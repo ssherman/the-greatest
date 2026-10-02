@@ -46,7 +46,10 @@ module Services
         rescue ::Viaf::Exceptions::RateLimited
           # A busy pace or a pause (Paused is a RateLimited) is a request to
           # wait, not a failure, and neither is a Viaf::Exceptions::Error:
-          # without this clause the catch-all below would swallow it.
+          # without this clause the catch-all below would swallow it. An id
+          # put back this run is taken back off, so the rescheduled run
+          # restores it again and records it.
+          take_back_restore(ResolveViaf::VIAF)
           raise
         rescue ::Viaf::Exceptions::Error => e
           finish(:failed, write(outcome: :failed, reason: "viaf_error", error: "#{e.class.name.demodulize}: #{e.message}"))

@@ -15,7 +15,8 @@ module Services
       # An including class defines KIND, PROVIDER and `author`, and sets
       # @decision when its resolver records one. @restored, when a run put
       # back an earlier decision's id (RestoreIdentifier), is recorded on
-      # its row.
+      # its row, or taken back off when a rate limit stops the run before
+      # there is a row to record it on.
       module LedgerRun
         PROCESSED = %w[applied nothing_to_apply unrecognized].freeze
         CONFIDENCE = {"certain" => "high", "high" => "high", "medium" => "medium", "low" => "low"}.freeze
@@ -51,6 +52,18 @@ module Services
         def unexpected(error, facts: {})
           Rails.logger.error("#{self.class.name}: author #{author.id}: #{error.full_message(highlight: false)}")
           write(outcome: :failed, reason: "unexpected_error", error: "#{error.class.name}: #{error.message}", facts: facts)
+        end
+
+        # A run a rate limit stops before its resolver decided writes no row.
+        # An id RestoreIdentifier put back this run would then look, to the
+        # rescheduled attempt, like one the author already held, and the
+        # restore would never be recorded. Taking it back off lets that
+        # attempt put it back and record it.
+        def take_back_restore(type)
+          return if @restored.nil? || @decision
+
+          author.identifiers.where(identifier_type: type, value: @restored["value"]).find_each(&:destroy!)
+          author.identifiers.reset
         end
       end
     end

@@ -754,7 +754,9 @@ latest decision chose, provided that decision:
 The id must also be neither rejected for this author nor held by another author. The held-id
 stage then finds it and the stored record answers, so a re-migrated author whose earlier match
 stands costs no search, no AI selection and none of VIAF's daily budget. The run's ledger row
-records it as the fact `restored_identifier`.
+records it as the fact `restored_identifier`. A run a rate limit stops before its resolver decides
+writes no row, so it takes the restored id back off (`LedgerRun#take_back_restore`); the
+rescheduled run puts it back and records it.
 
 A restored id the held stage cannot corroborate -- names or years disagree, or the cluster is gone
 -- stays on the author regardless, and the run falls through to the bridge (Wikidata only; VIAF has

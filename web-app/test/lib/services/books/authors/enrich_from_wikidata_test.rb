@@ -231,6 +231,23 @@ module Services
           assert_equal ["Q7243", decision.id], rows.sole.facts["restored_identifier"].values_at("value", "decision_id")
         end
 
+        test "a rate limit before the decision takes a restored id back off, so the rescheduled run restores and records it" do
+          @author.identifiers.destroy_all
+          ::MatchDecision.create!(finder: ResolveWikidata.name, subject: @author, outcome: :matched, confidence: :high,
+            decided_by: :ai, candidates: [{"external_source" => "wikidata", "external_key" => "Q7243"}], selected_index: 1,
+            created_at: @author.created_at - 1.day)
+          limited = FakeWikidataClient.new
+          limited.stubs(:entities).raises(::Wikimedia::Exceptions::RateLimited.new("wait", retry_after: 30))
+
+          assert_raises(::Wikimedia::Exceptions::RateLimited) { enrich(wikidata: limited) }
+          assert_empty @author.identifiers.where(identifier_type: :books_author_wikidata_qid)
+          assert_empty rows
+
+          enrich
+
+          assert_equal "Q7243", rows.sole.facts.dig("restored_identifier", "value")
+        end
+
         test "an unexpected error after the decision writes one failed row tied to it, and does not raise" do
           ApplyWikidata.stubs(:call).raises(RuntimeError, "boom")
 

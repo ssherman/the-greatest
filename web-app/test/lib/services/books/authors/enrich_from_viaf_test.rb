@@ -143,6 +143,21 @@ module Services
           assert_equal "5391", rows.sole.facts.dig("restored_identifier", "value")
         end
 
+        test "a rate limit before the decision takes a restored id back off, so the rescheduled run restores and records it" do
+          ::MatchDecision.create!(finder: ResolveViaf.name, subject: @author, outcome: :matched, confidence: :high,
+            decided_by: :rule, candidates: [{"external_source" => "viaf", "external_key" => "5391"}], selected_index: 1,
+            created_at: @author.created_at - 1.day)
+          limited = FakeViafClient.new(people: {"5391" => ::Viaf::Exceptions::RateLimited.new("wait", retry_after: 30)})
+
+          assert_raises(::Viaf::Exceptions::RateLimited) { run_viaf(client: limited) }
+          assert_empty @author.identifiers.where(identifier_type: :books_author_viaf)
+          assert_empty rows
+
+          run_viaf
+
+          assert_equal "5391", rows.sole.facts.dig("restored_identifier", "value")
+        end
+
         test "an unexpected error after the decision writes one failed row tied to it, and does not raise" do
           ApplyViaf.stubs(:call).raises(RuntimeError, "boom")
 
