@@ -218,6 +218,19 @@ module Services
           assert_equal "restored", rows.last.facts.dig("legacy_wikipedia", "reason")
         end
 
+        test "a re-migrated author gets back the Wikidata id its earlier match chose, and resolves without searching" do
+          @author.identifiers.destroy_all
+          decision = ::MatchDecision.create!(finder: ResolveWikidata.name, subject: @author, outcome: :matched, confidence: :high,
+            decided_by: :ai, candidates: [{"external_source" => "wikidata", "external_key" => "Q7243"}], selected_index: 1,
+            created_at: @author.created_at - 1.day)
+
+          result = enrich
+
+          assert_equal ["identifier", "certain"], [result.data[:decision].decided_by, result.data[:decision].confidence]
+          assert_not @wikidata.called?(:search)
+          assert_equal ["Q7243", decision.id], rows.sole.facts["restored_identifier"].values_at("value", "decision_id")
+        end
+
         test "an unexpected error after the decision writes one failed row tied to it, and does not raise" do
           ApplyWikidata.stubs(:call).raises(RuntimeError, "boom")
 

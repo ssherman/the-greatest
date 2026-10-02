@@ -13,7 +13,9 @@ module Services
       # no decision counts, so the verdict comparison is NULL-safe.
       #
       # An including class defines KIND, PROVIDER and `author`, and sets
-      # @decision when its resolver records one.
+      # @decision when its resolver records one. @restored, when a run put
+      # back an earlier decision's id (RestoreIdentifier), is recorded on
+      # its row.
       module LedgerRun
         PROCESSED = %w[applied nothing_to_apply unrecognized].freeze
         CONFIDENCE = {"certain" => "high", "high" => "high", "medium" => "medium", "low" => "low"}.freeze
@@ -33,6 +35,7 @@ module Services
         def processed? = LedgerRun.processed(self.class::KIND).where(enrichable_id: author.id).exists?
 
         def write(outcome:, reason:, recognized: nil, facts: {}, citations: [], error: nil)
+          facts = facts.merge("restored_identifier" => @restored) if @restored
           author.enrichments.create!(
             kind: self.class::KIND, provider: self.class::PROVIDER, outcome: outcome, reason: reason, recognized: recognized,
             confidence: CONFIDENCE[@decision&.confidence], facts: facts, citations: citations,

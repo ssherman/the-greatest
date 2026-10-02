@@ -131,6 +131,18 @@ module Services
           assert_empty rows
         end
 
+        test "a re-migrated author gets back the VIAF id its earlier match chose, and resolves without AutoSuggest" do
+          ::MatchDecision.create!(finder: ResolveViaf.name, subject: @author, outcome: :matched, confidence: :high,
+            decided_by: :rule, candidates: [{"external_source" => "viaf", "external_key" => "5391"}], selected_index: 1,
+            created_at: @author.created_at - 1.day)
+
+          result = run_viaf
+
+          assert_equal "identifier", result.data[:decision].decided_by
+          assert_not @client.called?(:suggest)
+          assert_equal "5391", rows.sole.facts.dig("restored_identifier", "value")
+        end
+
         test "an unexpected error after the decision writes one failed row tied to it, and does not raise" do
           ApplyViaf.stubs(:call).raises(RuntimeError, "boom")
 

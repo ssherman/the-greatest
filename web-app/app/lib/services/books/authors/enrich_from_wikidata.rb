@@ -39,6 +39,7 @@ module Services
           return finish(:skipped, write(outcome: :skipped, reason: "placeholder")) if author.exclude_from_rankings?
           return finish(:skipped, write(outcome: :skipped, reason: "already_processed")) if !refresh && processed?
 
+          @restored = RestoreIdentifier.call(author: author, finder: ResolveWikidata)
           resolved = ResolveWikidata.call(author: author, refresh: refresh, client: @client).data
           @decision = resolved[:decision]
           case resolved[:outcome]
