@@ -154,6 +154,23 @@ expect_http "B4 HTTP with forged X-Forwarded-Proto only redirects (proxy branch 
 expect_exit "B5 HTTPS with unknown SNI is still rejected" "35" -k --resolve "evil.test:$https_port:127.0.0.1" "https://evil.test:$https_port/"
 expect_exit "B6 HTTP with unknown Host is still refused"  "52 56" -H "Host: evil.test" "http://127.0.0.1:$http_port/"
 expect_exit "B7 HTTPS correct SNI but foreign Host is refused" "52 56 92 http:421" -k --resolve "$music:$https_port:127.0.0.1" -H "Host: evil.test" "https://$music:$https_port/"
+# B8: per-visitor rate limiting (nginx.conf). One visitor (CF-Connecting-IP 203.0.113.50)
+# far over 90 r/s + burst 200 gets 429s; a different visitor arriving through the same peer
+# (10.99.0.1) is unaffected, which proves the key is the visitor, not the Cloudflare edge.
+# The second visitor is probed WHILE the burst is running: the bucket refills at 90 r/s, so a
+# probe sent after the burst ends would pass even if the key were the shared edge address.
+# 6000 requests keep the burst going for a few hundred ms so the probe lands inside it.
+curl -sk -Z --parallel-max 100 --resolve "$music:$https_port:127.0.0.1" \
+  -H "CF-Connecting-IP: 203.0.113.50" -o /dev/null -w '%{http_code}\n' \
+  "https://$music:$https_port/?n=[1-6000]" > "$work/burst_codes" &
+burst_pid=$!
+sleep 0.2
+expect_http "B8b another visitor through the same edge is unaffected" 200 -k \
+  --resolve "$music:$https_port:127.0.0.1" -H "CF-Connecting-IP: 203.0.113.51" "https://$music:$https_port/"
+wait "$burst_pid"
+limited=$(grep -c '^429$' "$work/burst_codes")
+if [ "$limited" -gt 0 ]; then pass "B8a one visitor over the limit gets 429 ($limited of 6000)"
+else fail "B8a one visitor over the limit gets 429" "no 429 in 6000 requests: $(sort "$work/burst_codes" | uniq -c | tr '\n' ' ')"; fi
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all lockdown probes passed"; else echo "$failures lockdown probe(s) failed"; exit 1; fi

@@ -276,7 +276,7 @@ The origin serves a page only when all three of these hold (design:
    every port-443 request; the switch to `on` is what makes this condition mandatory.
 
 The same Cloudflare list feeds `real_ip_header CF-Connecting-IP`, so nginx's `$remote_addr`,
-the access log, the per-visitor rate limits, and Rails' `request.remote_ip` are the
+the access log, the per-visitor rate limits (90 req/s, burst 200, 200 connections; `nginx.conf`), and Rails' `request.remote_ip` are the
 visitor's address, not the Cloudflare edge's. The access log carries `cf=<peer> verify=<AOP result>`.
 
 **Accepted residual:** Cloudflare's shared origin-pull certificate proves "from Cloudflare's
