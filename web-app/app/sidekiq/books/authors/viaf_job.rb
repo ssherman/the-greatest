@@ -25,27 +25,27 @@ class Books::Authors::ViafJob
 
   RESCHEDULE_JITTER = 0..30
 
-  def perform(author_id, refresh = false, enrich_queued = false)
+  def perform(author_id, refresh = false, enrich_queued = false, allow_research = true)
     author = ::Books::Author.find_by(id: author_id)
     # Deleted or merged away between enqueue and run: nothing to do.
     return if author.nil?
 
     result = ::Services::Books::Authors::EnrichFromViaf.call(author: author, refresh: refresh)
     if result.data[:wikidata_qid] && !result.data[:decision].needs_review
-      ::Books::Authors::WikidataJob.perform_async(author_id, true, true)
+      ::Books::Authors::WikidataJob.perform_async(author_id, true, true, allow_research)
     elsif !enrich_queued
-      ::Books::Authors::EnrichJob.perform_async(author_id)
+      ::Books::Authors::EnrichJob.perform_async(author_id, allow_research)
     end
   rescue ::Viaf::Exceptions::Paused => e
-    ::Books::Authors::EnrichJob.perform_async(author_id) unless enrich_queued
-    reschedule(e, author_id, refresh, true)
+    ::Books::Authors::EnrichJob.perform_async(author_id, allow_research) unless enrich_queued
+    reschedule(e, author_id, refresh, true, allow_research)
   rescue ::Viaf::Exceptions::RateLimited => e
-    reschedule(e, author_id, refresh, enrich_queued)
+    reschedule(e, author_id, refresh, enrich_queued, allow_research)
   end
 
   private
 
-  def reschedule(error, author_id, refresh, enrich_queued)
-    self.class.perform_in(error.retry_after.to_i + rand(RESCHEDULE_JITTER), author_id, refresh, enrich_queued)
+  def reschedule(error, author_id, refresh, enrich_queued, allow_research)
+    self.class.perform_in(error.retry_after.to_i + rand(RESCHEDULE_JITTER), author_id, refresh, enrich_queued, allow_research)
   end
 end

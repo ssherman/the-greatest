@@ -29,14 +29,14 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
   test "runs the VIAF step, passing refresh through, then the AI step" do
     ::Services::Books::Authors::EnrichFromViaf.expects(:call).with(author: @author, refresh: true).returns(outcome)
     Books::Authors::WikidataJob.expects(:perform_async).never
-    Books::Authors::EnrichJob.expects(:perform_async).with(@author.id)
+    Books::Authors::EnrichJob.expects(:perform_async).with(@author.id, true)
 
     Books::Authors::ViafJob.new.perform(@author.id, true)
   end
 
   test "a newly found Wikidata id sends the author back to Wikidata once, forced, and the AI step waits for that run" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).returns(outcome(wikidata_qid: "Q7243"))
-    Books::Authors::WikidataJob.expects(:perform_async).with(@author.id, true, true)
+    Books::Authors::WikidataJob.expects(:perform_async).with(@author.id, true, true, true)
     Books::Authors::EnrichJob.expects(:perform_async).never
 
     Books::Authors::ViafJob.new.perform(@author.id)
@@ -45,9 +45,19 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
   test "a Wikidata id from a decision that needs review goes straight to the AI step" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).returns(outcome(wikidata_qid: "Q7243", needs_review: true))
     Books::Authors::WikidataJob.expects(:perform_async).never
-    Books::Authors::EnrichJob.expects(:perform_async).with(@author.id)
+    Books::Authors::EnrichJob.expects(:perform_async).with(@author.id, true)
 
     Books::Authors::ViafJob.new.perform(@author.id)
+  end
+
+  test "research off reaches the AI step and the forced Wikidata hop" do
+    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).returns(outcome)
+    Books::Authors::EnrichJob.expects(:perform_async).with(@author.id, false)
+    Books::Authors::ViafJob.new.perform(@author.id, false, false, false)
+
+    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).returns(outcome(wikidata_qid: "Q7243"))
+    Books::Authors::WikidataJob.expects(:perform_async).with(@author.id, true, true, false)
+    Books::Authors::ViafJob.new.perform(@author.id, false, false, false)
   end
 
   test "does nothing for an author deleted since enqueue" do
@@ -59,8 +69,8 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
 
   test "a VIAF pause queues the AI step at once and reschedules itself, remembering that it did" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::Paused.new("paused", retry_after: 3600))
-    Books::Authors::EnrichJob.expects(:perform_async).with(@author.id).once
-    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, false, true)
+    Books::Authors::EnrichJob.expects(:perform_async).with(@author.id, true).once
+    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, false, true, true)
 
     job_with_jitter(7).perform(@author.id)
   end
@@ -68,7 +78,7 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
   test "a pause on a rescheduled run does not queue the AI step again" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::Paused.new("paused", retry_after: 3600))
     Books::Authors::EnrichJob.expects(:perform_async).never
-    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, false, true)
+    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, false, true, true)
 
     job_with_jitter(7).perform(@author.id, false, true)
   end
@@ -76,7 +86,7 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
   test "a busy pace only reschedules, keeping refresh and what was already queued" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
     Books::Authors::EnrichJob.expects(:perform_async).never
-    Books::Authors::ViafJob.expects(:perform_in).with(37, @author.id, true, false)
+    Books::Authors::ViafJob.expects(:perform_in).with(37, @author.id, true, false, true)
 
     job_with_jitter(7).perform(@author.id, true)
   end
@@ -90,7 +100,7 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
 
   test "a rescheduled run that finds a Wikidata id still sends the author back to Wikidata" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).returns(outcome(wikidata_qid: "Q7243"))
-    Books::Authors::WikidataJob.expects(:perform_async).with(@author.id, true, true)
+    Books::Authors::WikidataJob.expects(:perform_async).with(@author.id, true, true, true)
 
     Books::Authors::ViafJob.new.perform(@author.id, false, true)
   end
@@ -98,14 +108,14 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
   test "a busy pace after a pause keeps enrich_queued" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
     Books::Authors::EnrichJob.expects(:perform_async).never
-    Books::Authors::ViafJob.expects(:perform_in).with(37, @author.id, false, true)
+    Books::Authors::ViafJob.expects(:perform_in).with(37, @author.id, false, true, true)
 
     job_with_jitter(7).perform(@author.id, false, true)
   end
 
   test "a pause keeps refresh" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::Paused.new("paused", retry_after: 3600))
-    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, true, true)
+    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, true, true, true)
 
     job_with_jitter(7).perform(@author.id, true)
   end
