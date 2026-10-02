@@ -81,12 +81,14 @@ module Services
           if source == "viaf"
             list = same_record(decision.finder, key_of(decision)).map { |target| [target, source, key_of(target)] }
             qids = list.flat_map { |target, _source, _key| stamped_qids(target) }.uniq
-            return list + wikidata_decisions_for(qids).map { |target| [target, "wikidata", key_of(target)] }
+            wikidata_decisions, = wikidata_decisions_for(qids)
+            return list + wikidata_decisions.map { |target| [target, "wikidata", key_of(target)] }
           end
 
           ids = ([key_of(decision)] + redirected_from(decision)).compact.uniq
-          wikidata_targets = pin_first(wikidata_decisions_for(ids), decision).map { |target| [target, source, key_of(target)] }
-          wikidata_targets + viaf_decisions_linked_to(ids).map { |target| [target, "viaf", key_of(target)] }
+          wikidata_decisions, wikidata_ids = wikidata_decisions_for(ids)
+          wikidata_targets = pin_first(wikidata_decisions, decision).map { |target| [target, source, key_of(target)] }
+          wikidata_targets + viaf_decisions_linked_to(wikidata_ids).map { |target| [target, "viaf", key_of(target)] }
         end
 
         # A VIAF cluster whose own Wikidata link is one of these rejected
@@ -129,8 +131,16 @@ module Services
         # siblings (another decision sharing its exact key, with no redirect
         # of its own) are swept in too -- the same "same key" rule decision 1
         # already applies to the decision being rejected directly.
+        #
+        # Returns `[decisions, ids]`: the swept decisions, and the full
+        # Wikidata id set they ultimately stand for -- each one's own key
+        # plus its own entries in the `redirects` map already loaded here.
+        # That second value is the FINAL target set a Wikidata->VIAF cascade
+        # has to match against, which can be wider than the `ids` this method
+        # was called with once the sweep reaches a sibling through its own
+        # redirect.
         def wikidata_decisions_for(ids)
-          return [] if ids.empty?
+          return [[], []] if ids.empty?
 
           pool = ::MatchDecision.where(subject: author, finder: ResolveWikidata.name, outcome: :matched)
             .order(:created_at, :id).reject(&:verdict_rejected?)
@@ -144,7 +154,9 @@ module Services
           ids = (ids + seeded).uniq
           reached = pool.select { |target| redirects.fetch(target.id, []).intersect?(ids) }.map { |target| key_of(target) }
           expanded = (ids + reached).compact.uniq
-          pool.select { |target| expanded.include?(key_of(target)) || redirects.fetch(target.id, []).intersect?(ids) }
+          decisions = pool.select { |target| expanded.include?(key_of(target)) || redirects.fetch(target.id, []).intersect?(ids) }
+          final_ids = decisions.flat_map { |target| [key_of(target)] + redirects.fetch(target.id, []) }.compact.uniq
+          [decisions, final_ids]
         end
 
         # {decision_id => ["Q9", ...]}, one query for every decision in `pool`.

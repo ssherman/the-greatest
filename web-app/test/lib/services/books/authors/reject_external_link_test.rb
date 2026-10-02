@@ -235,6 +235,29 @@ module Services
           assert_nil @author.reload.death_year
         end
 
+        test "rejecting a Wikidata decision also rejects a VIAF decision linked to a sibling the sweep reached" do
+          z = decision(ResolveWikidata.name, "Q1", created_at: 2.days.ago)
+          y = decision(ResolveWikidata.name, "Q2", created_at: 1.day.ago)
+          ledger(EnrichFromWikidata::KIND, y, "wikidata_qid" => filled("Q2", redirected_from: ["Q1"]))
+          v = viaf_decision("5391", qid: "Q2")
+          ledger(EnrichFromViaf::KIND, v, "viaf" => filled("5391"), "gender" => filled("female"))
+          hold(:books_author_viaf, "5391")
+          @author.update!(gender: :female)
+          unrelated_viaf = viaf_decision("7777", qid: "Q99")
+          expect_rerun
+
+          result = reject(z)
+
+          assert z.reload.verdict_rejected?
+          assert y.reload.verdict_rejected?
+          assert v.reload.verdict_rejected?
+          assert_includes result.data[:decisions], v
+          @author.reload
+          assert_not @author.identifiers.exists?(identifier_type: "books_author_viaf")
+          assert_nil @author.gender
+          assert_nil unrelated_viaf.reload.verdict
+        end
+
         test "an AI run that used the record is reverted and its description deprecated; one that did not is left alone" do
           wikidata = decision(ResolveWikidata.name, "Q1")
           @author.update!(gender: :female, death_year: 1980)

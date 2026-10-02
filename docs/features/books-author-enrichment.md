@@ -496,11 +496,9 @@ description no longer counts as present, so the AI step's completeness check run
 **A run whose decision was rejected stops counting as "processed" -- but a re-run can still stall
 before reaching VIAF.** `WikidataJob` only forwards to `ViafJob` when this run's own outcome is
 `:unmatched`; a `:skipped` or `:failed` outcome goes straight to the AI step instead. So after a
-VIAF reject, if the forced Wikidata re-run the reject queues fails, or if the author's *earlier*
-Wikidata miss -- the unrejected `unrecognized` row that sent the chain to VIAF the first time --
-is still sitting there, an ordinary (non-forced) run counts that old row as processed, skips
-Wikidata, and never reaches VIAF again. A failed re-run does *not* un-strand the author by itself.
-Recovery is another forced run: `Books::Authors::WikidataJob.perform_async(author_id, true)`.
+VIAF reject, if the forced re-run fails, the author's earlier Wikidata miss still counts as
+processed, so ordinary (non-forced) runs skip Wikidata and never reach VIAF again; recover with a
+forced run, `Books::Authors::WikidataJob.perform_async(author_id, true)`.
 
 **A known gap with VIAF merges.** `Viaf::Client` reports the id that was requested, even across
 VIAF's own redirects (see `docs/features/viaf-api-client.md`, "merged clusters"), so a rejected VIAF

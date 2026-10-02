@@ -159,6 +159,7 @@ module Services
             facts: {"wikidata_qid" => {"value" => "Q10", "applied" => true, "reason" => "filled", "redirected_from" => ["Q9"]}})
 
           @sheet.single_identifier("wikidata_qid", "books_author_wikidata_qid", "Q9")
+          @author.save!
 
           assert_equal ["rejected", false], @sheet.facts["wikidata_qid"].values_at("reason", "applied")
           assert_not @author.identifiers.exists?(identifier_type: "books_author_wikidata_qid")
