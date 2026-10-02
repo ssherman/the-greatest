@@ -195,7 +195,7 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
   def reject_notice(data)
     parts = ["Link rejected."]
     others = data[:decisions].size - 1
-    parts << "#{others} more decision(s) for the same record rejected with it." if others.positive?
+    parts << "#{others} related decision(s) rejected with it." if others.positive?
     parts << "Removed: #{data[:reverted].join(", ")}." if data[:reverted].any?
     parts << "#{data[:descriptions_deprecated]} AI description(s) deprecated." if data[:descriptions_deprecated].positive?
     parts << "The author's Wikidata step runs again."
