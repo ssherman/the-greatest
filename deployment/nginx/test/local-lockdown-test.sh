@@ -79,9 +79,9 @@ run_nginx() {   # run_nginx [extra docker run args...]
     "$@" "$image" >/dev/null
   # Wait until nginx itself -- not docker-proxy on the published ports, which accepts the
   # TCP connection immediately regardless of whether nginx is ready -- answers on both
-  # ports. The bot-blocker's config is huge (tens of thousands of lines) and takes real
-  # time to load, so a host-side probe can hit docker-proxy while nginx is still starting
-  # and get the connection reset mid-handshake. Probing from inside the container makes
+  # ports. docker-proxy accepts the TCP connection before nginx is ready, so a host-side
+  # probe can hit it while nginx is still starting and get the connection reset
+  # mid-handshake. Probing from inside the container makes
   # "connection refused" (curl exit 7) unambiguous: once nginx is listening, port 80
   # answers 444 (exit 52) and port 443 rejects the SNI-less handshake (exit 35).
   for _ in $(seq 1 120); do

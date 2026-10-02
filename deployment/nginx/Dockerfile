@@ -1,18 +1,13 @@
-FROM nginx:latest
+# The stable line, not :latest (mainline). The deploy builds with --pull, so 1.30.x patch
+# releases still arrive; move to the next stable line deliberately.
+FROM nginx:1.30
 
-RUN apt-get update && apt-get install -y --no-install-recommends wget curl jq ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends curl jq ca-certificates
 
 # Create directories with proper permissions for nginx user
 RUN mkdir -p /etc/nginx/snippets /etc/nginx/templates /etc/nginx/sites-enabled /etc/nginx/certs && \
     chmod 755 /etc/nginx/sites-enabled && \
     chown -R nginx:nginx /etc/nginx/sites-enabled
-
-# Install nginx-ultimate-bad-bot-blocker using automated installer
-# Reference: https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker
-RUN wget https://raw.githubusercontent.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/master/install-ngxblocker -O /usr/local/sbin/install-ngxblocker
-RUN chmod +x /usr/local/sbin/install-ngxblocker
-RUN /usr/local/sbin/install-ngxblocker -x
-RUN /usr/local/sbin/setup-ngxblocker -x -e conf
 
 # Drop the base image's stock server block (listens on [::]:80, serves /usr/share/nginx/html).
 # It is not ours, it answers any Host on IPv6 inside the container, and it is what the

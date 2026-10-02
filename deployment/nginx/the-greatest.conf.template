@@ -61,8 +61,6 @@ server {
 
     include /etc/nginx/snippets/ssl-params.conf;
     include /etc/nginx/snippets/cloudflare-only.conf;
-    include /etc/nginx/bots.d/blockbots.conf;
-    include /etc/nginx/bots.d/ddos.conf;
 
     root /var/www/html;
     index index.html;
@@ -104,8 +102,6 @@ server {
 
     include /etc/nginx/snippets/ssl-params.conf;
     include /etc/nginx/snippets/cloudflare-only.conf;
-    include /etc/nginx/bots.d/blockbots.conf;
-    include /etc/nginx/bots.d/ddos.conf;
 
     root /var/www/html;
     index index.html;
@@ -147,8 +143,6 @@ server {
 
     include /etc/nginx/snippets/ssl-params.conf;
     include /etc/nginx/snippets/cloudflare-only.conf;
-    include /etc/nginx/bots.d/blockbots.conf;
-    include /etc/nginx/bots.d/ddos.conf;
 
     root /var/www/html;
     index index.html;
@@ -176,8 +170,6 @@ server {
 
     include /etc/nginx/snippets/ssl-params.conf;
     include /etc/nginx/snippets/cloudflare-only.conf;
-    include /etc/nginx/bots.d/blockbots.conf;
-    include /etc/nginx/bots.d/ddos.conf;
 
     root /var/www/html;
     index index.html;
