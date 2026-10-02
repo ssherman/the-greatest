@@ -11,9 +11,12 @@ module Services
       # research off for the whole chain.
       #
       # An author whose Wikidata step missed and whose VIAF step never
-      # finished (a failure, or a job lost) gets the VIAF step again. Its AI
-      # step already ran, so the job is told so (enrich_queued) and queues
-      # it again only through the Wikidata hop, when VIAF finds an item.
+      # finished (a failure, or a job lost) gets the VIAF step again. An
+      # author whose AI step already ran this era (a books.author_facts row
+      # newer than the author row) has the job told so (enrich_queued), so a
+      # VIAF match queues the AI step again only through the forced Wikidata
+      # hop; a lost chain, whose AI step never ran, carries enrich_queued
+      # false, so VIAF's own miss path queues the AI step.
       #
       # An author with a chain job already waiting in Sidekiq is left out,
       # so a second run while the first is still scheduled queues no one
@@ -43,11 +46,12 @@ module Services
           waiting = @queued || QueuedChain.author_ids
           wikidata = take(ranked(self.class.unprocessed).pluck(:id), waiting)
           viaf = take(viaf_retries.order(:id).pluck(:id), waiting)
+          ran = ai_step_ran(viaf)
 
           wikidata.each_with_index do |id, index|
             ::Books::Authors::WikidataJob.perform_in(index * SPACING, id, false, false, false)
           end
-          viaf.each { |id| ::Books::Authors::ViafJob.perform_async(id, false, true, false) }
+          viaf.each { |id| ::Books::Authors::ViafJob.perform_async(id, false, ran.include?(id), false) }
 
           Result.new(success?: true, errors: [], data: {
             wikidata: wikidata.size, viaf: viaf.size, left_out: @left_out,
@@ -82,6 +86,18 @@ module Services
             .where(id: wikidata.where(outcome: :unrecognized).select(:enrichable_id))
             .where.not(id: wikidata.where(outcome: %w[applied nothing_to_apply]).select(:enrichable_id))
             .where.not(id: LedgerRun.processed(EnrichFromViaf::KIND).select(:enrichable_id))
+        end
+
+        # Authors whose AI step already ran this era (a books.author_facts
+        # row newer than the author row): their VIAF retry must not queue it
+        # again. A lost chain never reached it, so theirs does.
+        def ai_step_ran(ids)
+          return Set.new if ids.empty?
+
+          ::Enrichment.for_kind(EnrichAuthor::KIND).where(enrichable_type: "Books::Author", enrichable_id: ids)
+            .joins("INNER JOIN books_authors ON books_authors.id = enrichments.enrichable_id")
+            .where("enrichments.created_at > books_authors.created_at")
+            .distinct.pluck(:enrichable_id).to_set
         end
       end
     end

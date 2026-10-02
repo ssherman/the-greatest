@@ -34,8 +34,8 @@ module Services
         test "queues unprocessed authors ranked first by rank, then by books written, at the Wikidata pace with research off" do
           second = author("Second Ranked", rank: 2)
           first = author("First Ranked", rank: 1)
-          prolific = author("Prolific", books: 3)
           single = author("Single", books: 1)
+          prolific = author("Prolific", books: 3)
 
           backfill
 
@@ -70,7 +70,9 @@ module Services
         end
 
         test "a Wikidata miss whose VIAF step never finished gets the VIAF step again, with the AI step marked already queued" do
-          missed = author("Missed").tap { |a| done(a, outcome: :unrecognized) && done(a, kind: EnrichFromViaf::KIND, outcome: :failed) }
+          missed = author("Missed").tap do |a|
+            done(a, outcome: :unrecognized) && done(a, kind: EnrichFromViaf::KIND, outcome: :failed) && done(a, kind: EnrichAuthor::KIND)
+          end
           viaf_done = author("VIAF Done").tap { |a| done(a, outcome: :unrecognized) && done(a, kind: EnrichFromViaf::KIND, outcome: :unrecognized) }
           matched_later = author("Matched Later").tap { |a| done(a, outcome: :unrecognized) && done(a, outcome: :applied) }
 
@@ -79,6 +81,26 @@ module Services
           ours = @viaf_calls.select { |args| [missed.id, viaf_done.id, matched_later.id].include?(args.first) }
           assert_equal [[missed.id, false, true, false]], ours
           assert_not_includes queued_ids, missed.id
+        end
+
+        test "a Wikidata miss with no VIAF row and no AI step this era is a lost chain: the AI step is not marked already queued" do
+          lost = author("Lost").tap { |a| done(a, outcome: :unrecognized) }
+
+          backfill
+
+          ours = @viaf_calls.select { |args| args.first == lost.id }
+          assert_equal [[lost.id, false, false, false]], ours
+        end
+
+        test "with no queued set given, the production path reads the chain Sidekiq itself has waiting" do
+          waiting = author("Waiting", rank: 1)
+          next_up = author("Next", rank: 2)
+          QueuedChain.stubs(:author_ids).returns(Set[waiting.id])
+
+          Backfill.call(limit: nil)
+
+          assert_not_includes queued_ids, waiting.id
+          assert_includes queued_ids, next_up.id
         end
 
         test "unprocessed counts the authors a full run would queue for the Wikidata step" do
