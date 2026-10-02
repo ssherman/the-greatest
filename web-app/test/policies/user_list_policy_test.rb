@@ -54,4 +54,30 @@ class UserListPolicyTest < ActiveSupport::TestCase
     refute UserListPolicy.new(users(:admin_user), list).show?
     refute UserListPolicy.new(nil, list).show?
   end
+
+  test "update? and destroy? allow the owner" do
+    assert UserListPolicy.new(@user, @list).update?
+    assert UserListPolicy.new(@user, @list).destroy?
+  end
+
+  test "update? and edit? refuse a global admin or editor who does not own the list" do
+    [users(:admin_user), users(:editor_user)].each do |staff|
+      refute UserListPolicy.new(staff, @list).update?, "#{staff.email} must not update another user's list"
+      refute UserListPolicy.new(staff, @list).edit?, "#{staff.email} must not edit another user's list"
+    end
+  end
+
+  # Decided 2026-10-01 (Shane): an admin can delete anything, a user list included.
+  test "destroy? allows a global admin on a list they do not own" do
+    assert UserListPolicy.new(users(:admin_user), @list).destroy?
+  end
+
+  test "destroy? refuses a global editor who does not own the list" do
+    refute UserListPolicy.new(users(:editor_user), @list).destroy?
+  end
+
+  test "update? and destroy? refuse an anonymous visitor" do
+    refute UserListPolicy.new(nil, @list).update?
+    refute UserListPolicy.new(nil, @list).destroy?
+  end
 end
