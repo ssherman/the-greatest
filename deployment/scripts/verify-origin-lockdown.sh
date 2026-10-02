@@ -5,11 +5,14 @@
 #   deployment/scripts/verify-origin-lockdown.sh            # against 45.33.28.21
 #   ORIGIN_IP=203.0.113.5 deployment/scripts/verify-origin-lockdown.sh   # a rebuilt server
 #
-# Direct probes must be refused: connection closed (curl 52/56), handshake rejected (35),
-# refused (7), timed out (28), stream closed (92, HTTP/2), nginx's 400 "No required SSL
-# certificate was sent" once Authenticated Origin Pulls is enforced, or nginx's own 421
-# Misdirected Request (Host does not match SNI). Anything that looks like a page or a
-# redirect is a failure. Through-Cloudflare probes use /api/ paths, which skip Super Bot
+# Direct probes must be refused BY NGINX: connection closed (curl 52/56), handshake
+# rejected (35), stream closed (92, HTTP/2), nginx's 400 "No required SSL certificate was
+# sent" once Authenticated Origin Pulls is enforced, or nginx's own 421 Misdirected Request
+# (Host does not match SNI). Connection refused (7) and timeout (28) are failures: nothing
+# in this design produces them, so they mean the server is down or unreachable, which
+# proves nothing -- and against a rebuilt server before DNS cutover, the through-Cloudflare
+# probes below still test the OLD origin. Anything that looks like a page or a redirect is
+# also a failure. Through-Cloudflare probes use /api/ paths, which skip Super Bot
 # Fight Mode, and must carry a cf-ray with an origin-generated status (401 or 404) -- never
 # 403, 5xx, or a Cloudflare 52x. Spec:
 # docs/superpowers/specs/2026-09-14-origin-lockdown-design.md §6-7.
@@ -26,7 +29,8 @@ direct_refused() {   # direct_refused <name> <curl args...>
   local code rc
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -k -A "$ua" "$@"); rc=$?
   case "$rc:$code" in
-    7:*|28:*|35:*|52:*|56:*|92:*|0:400|0:421) pass "$name (curl exit $rc, http $code)" ;;
+    35:*|52:*|56:*|92:*|0:400|0:421) pass "$name (curl exit $rc, http $code)" ;;
+    7:*|28:*) fail "$name" "curl exit $rc -- origin unreachable (refused or timed out); nginx did not answer, so this proves nothing" ;;
     *) fail "$name" "curl exit $rc, http $code -- the origin answered directly" ;;
   esac
 }
