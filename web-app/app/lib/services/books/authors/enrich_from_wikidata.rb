@@ -12,15 +12,15 @@ module Services
       # the job can reschedule -- it still writes a failed row first if a
       # decision was already recorded this run (facts applied before the
       # wait are not lost); a rate limit hit during resolution, before any
-      # decision exists, writes nothing.
+      # decision exists, writes nothing. So does any other error once the
+      # run has started (LedgerRun#unexpected).
       class EnrichFromWikidata
+        include LedgerRun
+
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
         KIND = "books.author_wikidata"
         PROVIDER = "wikidata"
-        # "Done" outcomes. A failed or skipped run leaves the author to be tried again.
-        PROCESSED = %w[applied nothing_to_apply unrecognized].freeze
-        LEDGER_CONFIDENCE = {"certain" => "high", "high" => "high", "medium" => "medium", "low" => "low"}.freeze
 
         def self.call(author:, refresh: false, client: nil, wikipedia_client: nil)
           new(author: author, refresh: refresh, client: client, wikipedia_client: wikipedia_client).call
@@ -58,23 +58,13 @@ module Services
         rescue ::Wikimedia::Exceptions::Error => e
           finish(:failed, write(outcome: :failed, reason: "wikimedia_error", error: "#{e.class.name.demodulize}: #{e.message}",
             facts: @facts || {}))
+        rescue => e
+          finish(:failed, unexpected(e, facts: @facts || {}))
         end
 
         private
 
         attr_reader :author, :refresh
-
-        # "Newer than the author row": after the production re-migration an
-        # author is re-created with its id, and the old rows no longer count.
-        # Neither does a run whose decision a person rejected (spec §12). A
-        # row with no decision counts, so the comparison is NULL-safe.
-        def processed?
-          author.enrichments.for_kind(KIND).where(outcome: PROCESSED)
-            .where("enrichments.created_at > ?", author.created_at)
-            .left_joins(:match_decision)
-            .where("match_decisions.verdict IS DISTINCT FROM ?", ::MatchDecision.verdicts[:rejected])
-            .exists?
-        end
 
         def matched(entity, redirected_ids)
           applied = ApplyWikidata.call(author: author, entity: entity, decision: @decision, client: @client,
@@ -99,14 +89,6 @@ module Services
           legacy = CleanLegacyWikipedia.call(author: author, entity: nil, refresh: refresh, client: @wikipedia_client)
           facts = legacy ? {"legacy_wikipedia" => legacy} : {}
           finish(:unmatched, write(outcome: :unrecognized, reason: "no_match", recognized: false, facts: facts))
-        end
-
-        def write(outcome:, reason:, recognized: nil, facts: {}, citations: [], error: nil)
-          author.enrichments.create!(
-            kind: KIND, provider: PROVIDER, outcome: outcome, reason: reason, recognized: recognized,
-            confidence: LEDGER_CONFIDENCE[@decision&.confidence], facts: facts, citations: citations,
-            error: error, match_decision: @decision
-          )
         end
 
         def finish(outcome, row)

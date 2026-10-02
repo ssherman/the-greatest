@@ -130,6 +130,27 @@ module Services
           assert_raises(::Viaf::Exceptions::RateLimited) { run_viaf(client: client) }
           assert_empty rows
         end
+
+        test "an unexpected error after the decision writes one failed row tied to it, and does not raise" do
+          ApplyViaf.stubs(:call).raises(RuntimeError, "boom")
+
+          result = run_viaf
+
+          row = rows.sole
+          assert_equal [:failed, false], [result.data[:outcome], result.success?]
+          assert_equal ["failed", "unexpected_error", "RuntimeError: boom"], [row.outcome, row.reason, row.error]
+          assert_equal result.data[:decision], row.match_decision
+        end
+
+        # Viaf::Exceptions::RateLimited (and Paused, its subclass) are not
+        # Viaf::Exceptions::Error: they are requests to wait, and ViafJob
+        # turns them into a reschedule. The catch-all must not swallow them.
+        test "a pause propagates past the catch-all and writes nothing" do
+          client = FakeViafClient.new(suggestions: {"Stacy Willingham" => ::Viaf::Exceptions::Paused.new("paused", retry_after: 3600)})
+
+          assert_raises(::Viaf::Exceptions::Paused) { run_viaf(client: client) }
+          assert_empty rows
+        end
       end
     end
   end

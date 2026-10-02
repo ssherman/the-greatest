@@ -204,6 +204,18 @@ module Services
           assert_equal "applied", rows.sole.outcome
           assert_equal ["Q7243", "Q999"], @author.identifiers.where(identifier_type: :books_author_wikidata_qid).pluck(:value).sort
         end
+
+        test "an unexpected error after the decision writes one failed row tied to it, and does not raise" do
+          ApplyWikidata.stubs(:call).raises(RuntimeError, "boom")
+
+          result = enrich
+
+          row = rows.sole
+          assert_equal [:failed, false], [result.data[:outcome], result.success?]
+          assert_equal ["failed", "unexpected_error", "RuntimeError: boom"], [row.outcome, row.reason, row.error]
+          assert_equal result.data[:decision], row.match_decision
+          assert result.data[:decision].persisted?
+        end
       end
     end
   end
