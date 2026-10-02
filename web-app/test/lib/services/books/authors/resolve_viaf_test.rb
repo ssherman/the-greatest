@@ -291,9 +291,33 @@ module Services
           assert_match(/\AMarcus Aurelius, Emperor of Rome \|/, @ai_options[:candidate_lines].first)
         end
 
-        def reject_for(author, key)
-          ::MatchDecision.create!(finder: ResolveViaf.name, subject: author, outcome: :matched, confidence: :high,
+        def reject_for(author, key, finder: ResolveViaf.name)
+          ::MatchDecision.create!(finder: finder, subject: author, outcome: :matched, confidence: :high,
             decided_by: :rule, verdict: :rejected, candidates: [{"external_key" => key}], selected_index: 1)
+        end
+
+        test "a cluster whose Wikidata link is a Wikidata item rejected for this author is not matched" do
+          reject_for(@author, "Q9", finder: ResolveWikidata.name)
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => willingham(wikidata: "Q9")}
+          )
+
+          result = resolve(client)
+
+          assert_equal [:unmatched, "rule"], [result.data[:outcome], result.data[:decision].decided_by]
+        end
+
+        test "a cluster whose Wikidata link is not rejected still matches" do
+          reject_for(@author, "Q1", finder: ResolveWikidata.name)
+          client = FakeViafClient.new(
+            suggestions: {"Stacy Willingham" => [viaf_suggestion("5391", "Stacy Willingham 1991–")]},
+            people: {"5391" => willingham(wikidata: "Q9")}
+          )
+
+          result = resolve(client)
+
+          assert_equal [:matched, "rule"], [result.data[:outcome], result.data[:decision].decided_by]
         end
 
         test "a suggestion of a record rejected for this author is never a candidate" do

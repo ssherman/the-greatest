@@ -153,12 +153,23 @@ module Services
           # A redirect can land on a cluster rejected for this author (spec
           # §12) — but only once Person#viaf_id names the surviving cluster
           # rather than the id requested (docs/features/viaf-api-client.md).
-          candidate.unavailable = "rejected" if @rejected.include?(:viaf, candidate.person.viaf_id)
+          # A cluster whose own Wikidata link is a Wikidata item rejected for
+          # this author is the same rejected person too (increment 5 Group
+          # A): a VIAF reject bans the person, not only the one record, so
+          # the ban has to reach a cluster through its Wikidata link as well
+          # as its own VIAF id. The rule path reads a cluster through this
+          # same method, so it is covered too.
+          candidate.unavailable = "rejected" if @rejected.include?(:viaf, candidate.person.viaf_id) || rejected_wikidata_link?(candidate.person)
           candidate
         rescue ::Viaf::Exceptions::NotFoundError, ::Viaf::Exceptions::AbandonedRecordError => e
           candidate.unavailable = e.class.name.demodulize
           @sources_failed |= ["viaf_cluster"]
           candidate
+        end
+
+        def rejected_wikidata_link?(person)
+          qid = person.wikidata_qid
+          qid.present? && @rejected.include?(:wikidata, qid)
         end
 
         def persons = @candidates.values.select { |candidate| person?(candidate) }
