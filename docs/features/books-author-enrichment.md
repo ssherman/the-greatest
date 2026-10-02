@@ -479,7 +479,10 @@ author's current AI description, that description is deprecated rather than dele
 legacy Wikipedia description.
 
 **The re-run.** Rejecting queues `Books::Authors::WikidataJob(author_id, true)`, which carries the
-refresh down to VIAF on a miss the same as any other forced re-run.
+refresh down to VIAF on a miss the same as any other forced re-run. It is queued inside the reject's
+transaction, ten seconds out so it cannot start before the commit: if Sidekiq's Redis refuses the push,
+the whole reject rolls back and the page says so, and trying again later works. A reject never
+commits without its re-run.
 
 **Never again.** `RejectedRecords` means a rejected record is never offered as a candidate by either
 resolver, and `FactSheet#stamp` refuses to put its id back on the author, so the forced re-run cannot

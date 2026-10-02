@@ -36,7 +36,7 @@ module Services
         def hold(type, value) = @author.identifiers.create!(identifier_type: type, value: value)
 
         def expect_rerun(times: 1)
-          ::Books::Authors::WikidataJob.expects(:perform_async).with(@author.id, true).times(times)
+          ::Books::Authors::WikidataJob.expects(:perform_in).with(RejectExternalLink::RERUN_DELAY, @author.id, true).times(times)
         end
 
         def reject(target) = RejectExternalLink.call(decision: target, user: @user)
@@ -316,8 +316,29 @@ module Services
           assert_not @author.identifiers.exists?
         end
 
+        test "when the re-run cannot be queued, nothing is rejected or reverted, and a retry goes through" do
+          wikidata = decision(ResolveWikidata.name, "Q1")
+          hold(:books_author_wikidata_qid, "Q1")
+          @author.update!(birth_year: 1901)
+          ledger(EnrichFromWikidata::KIND, wikidata, "wikidata_qid" => filled("Q1"), "birth_year" => filled(1901))
+          ::Books::Authors::WikidataJob.stubs(:perform_in)
+            .raises(::RedisClient::CannotConnectError, "connection refused").then.returns("jid")
+
+          result = reject(wikidata)
+
+          assert_not result.success?
+          assert_equal 1, result.errors.size
+          assert_nil wikidata.reload.verdict
+          assert_equal 1901, @author.reload.birth_year
+          assert @author.identifiers.exists?(identifier_type: "books_author_wikidata_qid", value: "Q1")
+
+          assert reject(::MatchDecision.find(wikidata.id)).success?
+          assert wikidata.reload.verdict_rejected?
+          assert_nil @author.reload.birth_year
+        end
+
         test "refuses an unmatched decision, a finder's decision, and one already rejected, changing and queuing nothing" do
-          ::Books::Authors::WikidataJob.expects(:perform_async).never
+          ::Books::Authors::WikidataJob.expects(:perform_in).never
           unmatched = decision(ResolveWikidata.name, nil, outcome: :unmatched)
           finder = decision("DataImporters::Books::Author::Finder", "Q1")
           rejected = decision(ResolveWikidata.name, "Q1")

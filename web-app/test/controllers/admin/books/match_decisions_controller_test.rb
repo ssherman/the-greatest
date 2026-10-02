@@ -411,7 +411,7 @@ module Admin
 
       test "an admin rejects a link: the decision is rejected and the author's Wikidata step queued again" do
         decision = link_decision
-        ::Books::Authors::WikidataJob.expects(:perform_async).with(books_authors(:tolstoy).id, true)
+        ::Books::Authors::WikidataJob.expects(:perform_in).with(Services::Books::Authors::RejectExternalLink::RERUN_DELAY, books_authors(:tolstoy).id, true)
         sign_in_as(@admin, stub_auth: true)
 
         post reject_admin_books_match_decision_path(decision)
@@ -442,7 +442,7 @@ module Admin
         editor = users(:regular_user)
         DomainRole.create!(user: editor, domain: :books, permission_level: :editor)
         decision = link_decision
-        ::Books::Authors::WikidataJob.expects(:perform_async).never
+        ::Books::Authors::WikidataJob.expects(:perform_in).never
         sign_in_as(editor, stub_auth: true)
 
         get admin_books_match_decision_path(decision)
@@ -475,7 +475,7 @@ module Admin
 
       test "a refused reject (already rejected) redirects with an alert" do
         decision = link_decision.tap { |link| link.update!(verdict: :rejected) }
-        ::Books::Authors::WikidataJob.expects(:perform_async).never
+        ::Books::Authors::WikidataJob.expects(:perform_in).never
         sign_in_as(@admin, stub_auth: true)
 
         post reject_admin_books_match_decision_path(decision)

@@ -30,6 +30,9 @@ module Services
         OWN_IDENTIFIER = {"wikidata" => "books_author_wikidata_qid", "viaf" => "books_author_viaf"}.freeze
         OWN_IDENTIFIER_FACT = {"wikidata" => "wikidata_qid", "viaf" => "viaf"}.freeze
         AI_FACTS = %w[birth_year death_year gender countries].freeze
+        # Seconds before the re-run may start; the transaction that queues
+        # it commits long before.
+        RERUN_DELAY = 10
 
         def self.call(decision:, user:)
           new(decision: decision, user: user).call
@@ -51,13 +54,21 @@ module Services
             decision.lock!
             next nil if decision.verdict_rejected?
 
-            targets.tap { |list| reject_all(list) }
+            list = targets.tap { |found| reject_all(found) }
+            # Queued inside the transaction, last, so a push that fails
+            # rolls the whole reject back and a retry can go through: a
+            # reject committed without its re-run would leave the author
+            # stripped, and a retry is refused as already rejected. The
+            # delay keeps the job from starting before this commits.
+            ::Books::Authors::WikidataJob.perform_in(RERUN_DELAY, author.id, true)
+            list
           end
           return refused("This link was already rejected.") if rejected.nil?
 
-          ::Books::Authors::WikidataJob.perform_async(author.id, true)
           Result.new(success?: true,
             data: {decisions: rejected.map(&:first), reverted: @reverted.uniq, descriptions_deprecated: @deprecated}, errors: [])
+        rescue ::RedisClient::Error => e
+          refused("The author's re-run could not be queued (#{e.class.name.demodulize}), so nothing was changed. Try again.")
         end
 
         private
