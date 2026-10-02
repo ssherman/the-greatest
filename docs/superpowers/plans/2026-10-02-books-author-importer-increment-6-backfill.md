@@ -87,6 +87,19 @@ Shane said "let's do increment 6" after these were recommended. They are listed 
    - the two low-severity follow-ups from increment 5;
    - a Wikidata works-truncation flag on the decision (the client only logs it, Task 3).
 
+## Execution amendments (2026-10-02)
+
+What changed during execution, beyond the plan as written:
+
+- **Task 9:** the VIAF line uses 300-second turns sized to the daily budget; a busy pace on a job's own
+  turn only delays it (`in_line`); a job not yet in line joins it when anyone is waiting; a run answerable
+  from storage skips it.
+- **Task 11:** the VIAF retry sets `enrich_queued` per author, from a non-failed `books.author_facts` row
+  this era.
+- **Task 12:** the report counts each author's latest decision, uses `needing_review`, notes the flex tier,
+  and takes a strict ISO-8601 time.
+- **Final fix wave:** the author chain runs on its own `author_chain` queue, last in `config/sidekiq.yml`.
+
 ## Review Focus
 
 1. **A second `books:authors:enrich` while the first is still scheduled** must queue no author twice. Task 11 test: "an author with a chain job already waiting is left out".
@@ -2897,8 +2910,8 @@ This makes real Wikidata, VIAF and OpenAI calls against the development database
    - Run `bin/rails data_migration:author_countries`. It's additive.
 3. **Start Sidekiq for this checkout** with the low queue. Shane runs `bin/dev`, or the agent runs `bundle exec sidekiq` in the background, with Shane's go-ahead.
 4. **Queue the batch:** `bin/rails "books:authors:enrich[100]"`.
-5. **Wait.** The Wikidata step takes about 10 minutes; the VIAF share continues at about one author every 90 seconds.
-6. **Run the printed `books:authors:enrich_report[...]`** once the Wikidata step is through, and again after an hour for the VIAF tail.
+5. **Wait.** The Wikidata step takes about 10 minutes; the VIAF share continues at one author every 300 seconds or so; a `[100]` batch's VIAF share takes a few hours.
+6. **Run the printed `books:authors:enrich_report[...]`** once the Wikidata step is through, and again once the VIAF line has run out (the report's last line shows when).
 7. **Bring Shane the report's lines, plus:**
    - three or four decisions to spot-check on the audit pages: one AI-decided match, one unmatched, one needing review;
    - the cost and time extrapolation for `[all]`.

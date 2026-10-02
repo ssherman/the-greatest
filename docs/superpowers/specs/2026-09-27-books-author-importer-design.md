@@ -506,7 +506,7 @@ moment the book's enrichment would run.
   merged away mid-chain makes every job return early, and a `WikidataJob` or `ViafJob` that
   exhausts its own Sidekiq retries never reaches `EnrichJob` either (a `ViafJob` that already
   paused has queued `EnrichJob` itself, so a pause alone strands nothing). *(Amended in increment
-  4.)*
+  4.)* *(Amended in increment 6: a turn more than ten minutes away hands the AI step on the same way.)*
 - A book with two new authors can be enqueued twice, when both chains finish close together: the
   second hand-off runs before the first book run has written its row. The second run only fills
   blanks, and concurrent runs are safe (the unique description index). When the chains finish far
@@ -525,6 +525,13 @@ moment the book's enrichment would run.
 | `Books::Authors::EnrichJob` `(author_id, allow_research = true)` | `low` | 3 | `EnrichBookJob` for the author's books that waited for it |
 
 `low` is the last queue in strict priority, so these jobs never delay anything else.
+
+*(Amended in increment 6: `WikidataJob(author_id, refresh = false, via_viaf = false, allow_research = true)`
+and `ViafJob(author_id, refresh = false, enrich_queued = false, allow_research = true, in_line = false)`;
+every hop carries `allow_research`. `ViafJob` also queues `EnrichJob` at once when its turn in
+`Viaf::Schedule`'s line is more than ten minutes away (§8, §13). The three chain jobs moved to their own
+`author_chain` queue, listed after `low`: `low` also carries members' jobs on the live sites (ranking
+refreshes, CSV exports), and a backfill of tens of thousands of authors on `low` would queue ahead of them.)*
 
 Expected failures (HTTP errors, timeouts, malformed data) write a `failed` ledger row and continue
 the chain. Rate-limit signals reschedule the same job. Anything else raises and uses Sidekiq's

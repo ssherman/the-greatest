@@ -52,7 +52,7 @@ handed its author to `EnrichJob` -- on a pause, or a turn more than `CHAIN_PATIE
 queued it itself, so neither strands anything). Either gap leaves the book to
 `books:enrich_missing`, which counts it whatever descriptions it already has (see "Handing books
 on" below); an exhausted job is also visible in Sidekiq's Dead set. All three jobs run on the
-`low` queue with `retry: 3`.
+`author_chain` queue, last in strict order after `low`, with `retry: 3`.
 
 **The book importer starts the chain itself.** A book import runs the author importer without its
 async provider, collects the authors it created (`ImportResult#created?`), and queues their
@@ -422,10 +422,13 @@ which counts a deferral-only book as missing whatever descriptions it already ha
 Library provider can write one onto a brand-new book before `AiEnrichment` ever defers it), and
 which also picks up any book a chain never reached at all. An exhausted job is also visible in
 Sidekiq's Dead set. Run `books:enrich_missing` only once no author-chain jobs (`Books::Authors::*`)
-are in the `low` queue or in Sidekiq's Scheduled or Retry sets -- a rate-limited `WikidataJob` or a
-paused `ViafJob` waits in Scheduled, not in `low`. It cannot tell a genuinely stranded book from one
-whose author chain is still legitimately running, and running it early enriches a book before its
-new authors have countries.
+are in the `author_chain` queue or in Sidekiq's Scheduled or Retry sets -- a rate-limited
+`WikidataJob` or a paused `ViafJob` waits in Scheduled, not in `author_chain`. It cannot tell a
+genuinely stranded book from one whose author chain is still legitimately running, and running it
+early enriches a book before its new authors have countries. A scheduled `ViafJob` whose third
+argument (`enrich_queued`) is `true` does not count: its author's AI step already ran (or is
+queued) and has handed its books on, so during a backfill's VIAF tail -- where waiting `ViafJob`s
+can sit in Scheduled for weeks to months -- that job alone is not a reason to hold off.
 
 ## Countries
 
@@ -680,7 +683,9 @@ Where to look:
   author's history.
 
 Before running `books:enrich_missing`, check the queue and Sidekiq's Scheduled and Retry sets for
-any `Books::Authors::*` job -- see "A stuck chain" above.
+any `Books::Authors::*` job -- see "A stuck chain" above. A scheduled `ViafJob` whose third
+argument (`enrich_queued`) is `true` does not count against that check: its author's AI step
+already ran (or is queued).
 
 ### The backfill
 
@@ -694,8 +699,8 @@ It also re-queues the VIAF step for any author whose Wikidata step missed and wh
 never finished. The retry passes `enrich_queued = true` only for an author with a
 `books.author_facts` row newer than the author row (its AI step already ran this era); an author
 whose chain was lost (no facts row) gets `false`, so the retry queues its AI step. It leaves out
-every author with a `Books::Authors::*` job already scheduled, retrying, or on the low queue
-(`QueuedChain`), so a second run while the first is still going queues almost no one twice --
+every author with a `Books::Authors::*` job already scheduled, retrying, or on the `author_chain`
+queue (`QueuedChain`), so a second run while the first is still going queues almost no one twice --
 except a job that is running at that exact moment, which `QueuedChain` cannot see.
 
 It prints the counts, when the last Wikidata job starts, and the report command:
