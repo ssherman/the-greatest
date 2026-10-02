@@ -7,17 +7,24 @@ module Viaf
   # minute. Sent back after the same short wait, a backlog of thousands
   # would retry together every half minute and fill the low queue with
   # jobs that cannot run. Each waiting job takes the next free start time
-  # instead, SLOT_SECONDS after the last one given out, so a backlog of N
-  # runs once each, in turn.
+  # instead, SLOT_SECONDS after the last one given out, and keeps that turn
+  # until its author is done (Books::Authors::ViafJob), so a backlog runs
+  # in turn.
   #
   # Held in Redis so every worker shares one line. HINCRBY then HSET is
-  # not atomic: two jobs reserving at the same moment on an empty line can
-  # get the same start, and the second simply waits again.
+  # not atomic: two jobs reserving at once on an empty or stale line can
+  # get the same start, and a near start can overwrite a far one written a
+  # moment earlier. The jobs affected find VIAF busy or paused at their
+  # start and take a new one.
   class Schedule
     KEY = "viaf:schedule"
     FIELD = "last"
-    # An author costs one to four requests at two a minute.
-    SLOT_SECONDS = 90
+    # Sized to the daily budget, not the pace: about 950 usable requests a
+    # day at three or four an author is roughly 270 authors a day, one every
+    # 300 s or so. Spaced at the pace (90 s), a backlog would spend the
+    # budget by mid-morning and spend the rest of the day bouncing off
+    # budget pauses.
+    SLOT_SECONDS = 300
 
     def initialize(redis: nil)
       @redis = redis || REDIS_POOL

@@ -76,7 +76,7 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
   test "a VIAF pause queues the AI step at once and reschedules itself, remembering that it did" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::Paused.new("paused", retry_after: 3600))
     Books::Authors::EnrichJob.expects(:perform_async).with(@author.id, true).once
-    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, false, true, true)
+    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, false, true, true, true)
 
     job_with_jitter(7).perform(@author.id)
   end
@@ -84,7 +84,7 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
   test "a pause on a rescheduled run does not queue the AI step again" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::Paused.new("paused", retry_after: 3600))
     Books::Authors::EnrichJob.expects(:perform_async).never
-    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, false, true, true)
+    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, false, true, true, true)
 
     job_with_jitter(7).perform(@author.id, false, true)
   end
@@ -92,7 +92,7 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
   test "a busy pace only reschedules, keeping refresh and what was already queued" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
     Books::Authors::EnrichJob.expects(:perform_async).never
-    Books::Authors::ViafJob.expects(:perform_in).with(37, @author.id, true, false, true)
+    Books::Authors::ViafJob.expects(:perform_in).with(37, @author.id, true, false, true, true)
 
     job_with_jitter(7).perform(@author.id, true)
   end
@@ -114,33 +114,60 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
   test "a busy pace after a pause keeps enrich_queued" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
     Books::Authors::EnrichJob.expects(:perform_async).never
-    Books::Authors::ViafJob.expects(:perform_in).with(37, @author.id, false, true, true)
+    Books::Authors::ViafJob.expects(:perform_in).with(37, @author.id, false, true, true, true)
 
     job_with_jitter(7).perform(@author.id, false, true)
   end
 
   test "a pause keeps refresh" do
     ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::Paused.new("paused", retry_after: 3600))
-    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, true, true, true)
+    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, true, true, true, true)
 
     job_with_jitter(7).perform(@author.id, true)
   end
 
-  test "a busy pace behind a long VIAF line queues the AI step now and waits its turn" do
+  test "a job behind a waiting line joins it without asking VIAF, and a far turn queues the AI step now" do
     8.times { @schedule.reserve(not_before: 30) }
-    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
+    ::Services::Books::Authors::EnrichFromViaf.expects(:call).never
     Books::Authors::EnrichJob.expects(:perform_async).with(@author.id, false).once
-    Books::Authors::ViafJob.expects(:perform_in).with(30 + (8 * 90) + 7, @author.id, false, true, false)
+    Books::Authors::ViafJob.expects(:perform_in).with(30 + (8 * 300) + 7, @author.id, false, true, false, true)
 
     job_with_jitter(7).perform(@author.id, false, false, false)
   end
 
-  test "a busy pace behind a short line only waits its turn" do
-    2.times { @schedule.reserve(not_before: 30) }
-    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
+  test "a job behind a short line waits its turn without queuing the AI step" do
+    @schedule.reserve(not_before: 30)
+    ::Services::Books::Authors::EnrichFromViaf.expects(:call).never
     Books::Authors::EnrichJob.expects(:perform_async).never
-    Books::Authors::ViafJob.expects(:perform_in).with(30 + (2 * 90) + 7, @author.id, false, false, true)
+    Books::Authors::ViafJob.expects(:perform_in).with(30 + 300 + 7, @author.id, false, false, true, true)
 
     job_with_jitter(7).perform(@author.id)
+  end
+
+  test "a busy pace on the job's own turn delays the turn and keeps its place in the line" do
+    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::RateLimited.new("VIAF pace busy", retry_after: 30))
+    Books::Authors::EnrichJob.expects(:perform_async).never
+    Books::Authors::ViafJob.expects(:perform_in).with(37, @author.id, true, false, true, true)
+
+    job_with_jitter(7).perform(@author.id, true, false, true, true)
+
+    assert_nil @schedule.horizon
+  end
+
+  test "a pause on the job's own turn sends it to the back of the line and queues the AI step now" do
+    2.times { @schedule.reserve(not_before: 30) }
+    ::Services::Books::Authors::EnrichFromViaf.stubs(:call).raises(::Viaf::Exceptions::Paused.new("paused", retry_after: 3600))
+    Books::Authors::EnrichJob.expects(:perform_async).with(@author.id, true).once
+    Books::Authors::ViafJob.expects(:perform_in).with(3607, @author.id, false, true, true, true)
+
+    job_with_jitter(7).perform(@author.id, false, false, true, true)
+  end
+
+  test "a far turn does not queue the AI step again once it was queued" do
+    8.times { @schedule.reserve(not_before: 30) }
+    Books::Authors::EnrichJob.expects(:perform_async).never
+    Books::Authors::ViafJob.expects(:perform_in).with(30 + (8 * 300) + 7, @author.id, false, true, true, true)
+
+    job_with_jitter(7).perform(@author.id, false, true)
   end
 end
