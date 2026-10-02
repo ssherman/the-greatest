@@ -1,6 +1,6 @@
-# SSL Certificate Management Scripts
+# Deployment Scripts
 
-This directory contains scripts for managing SSL certificates using Let's Encrypt and Cloudflare DNS validation.
+This directory contains scripts for managing SSL certificates using Let's Encrypt and Cloudflare DNS validation, and for verifying the origin lockdown.
 
 ## Overview
 
@@ -52,6 +52,23 @@ sudo ./deployment/scripts/renew-certs.sh
 - `.env` file exists with `CLOUDFLARE_API_TOKEN`
 - Root/sudo access
 - Certificates must already exist (run `generate-certs.sh` first)
+
+### verify-origin-lockdown.sh
+
+Confirms the origin serves only Cloudflare (README → Security → Origin Lockdown). Run from a
+machine **outside** Cloudflare's network, after every nginx change or server rebuild.
+
+**Usage:**
+```bash
+deployment/scripts/verify-origin-lockdown.sh                  # production IP
+ORIGIN_IP=<ip> deployment/scripts/verify-origin-lockdown.sh   # a rebuilt server
+```
+
+**What it checks:** seven direct-to-IP probes that must be refused (correct SNI, no SNI,
+unknown SNI, correct SNI with a foreign `Host`, forged `X-Forwarded-Proto` on port 80, unknown
+`Host`, our `Host` on port 80) and three through-Cloudflare `/api/` probes that must answer with
+a `cf-ray`. Exit 0 only when all ten pass. A direct probe that gets a page or a redirect is the
+failure it exists to catch.
 
 ## Automatic Renewal
 

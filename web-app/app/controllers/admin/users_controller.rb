@@ -4,7 +4,9 @@ class Admin::UsersController < Admin::BaseController
 
   def index
     @users = User.all
-    @users = @users.where("email ILIKE ?", "%#{params[:q]}%") if params[:q].present?
+    # to_s first: ?q[]=x arrives as an Array, and sanitize_sql_like needs a String.
+    search = params[:q].to_s.presence
+    @users = @users.where("email ILIKE ?", "%#{::User.sanitize_sql_like(search)}%") if search
     @users = @users.order(created_at: :desc)
 
     @pagy, @users = pagy(@users, limit: 25)

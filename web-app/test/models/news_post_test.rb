@@ -149,4 +149,41 @@ class NewsPostTest < ActiveSupport::TestCase
     assert_not_includes reserved, "topic"
     assert_not_includes reserved, "page"
   end
+
+  SVG_BYTES = %(<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>)
+
+  test "refuses a share image outside the image allowlist" do
+    post = NewsPost.new(domain: :books, title: "Svg share", body: "x", user: users(:admin_user))
+    post.share_image.attach(io: StringIO.new(SVG_BYTES), filename: "share.svg", content_type: "image/svg+xml")
+
+    assert_not post.valid?
+    assert_includes post.errors[:share_image], "must be a JPEG, PNG, WebP, or GIF"
+  end
+
+  test "refuses a body image outside the image allowlist" do
+    post = NewsPost.new(domain: :books, title: "Svg body", body: "x", user: users(:admin_user))
+    post.body_images.attach(io: StringIO.new(SVG_BYTES), filename: "inline.svg", content_type: "image/svg+xml")
+
+    assert_not post.valid?
+    assert_includes post.errors[:body_images], "must be a JPEG, PNG, WebP, or GIF"
+  end
+
+  test "accepts allowlisted images" do
+    post = NewsPost.new(domain: :books, title: "Png images", body: "x", user: users(:admin_user))
+    post.share_image.attach(io: File.open(file_fixture("test_image.png")), filename: "share.png")
+    post.body_images.attach(io: File.open(file_fixture("test_image.png")), filename: "inline.png")
+
+    assert post.valid?, post.errors.full_messages.to_sentence
+  end
+
+  # The check covers new uploads only: a post saved before it existed may hold
+  # another type, and must stay editable.
+  test "an already-stored attachment of another type does not block saving the post" do
+    post = news_posts(:books_december_update)
+    blob = ActiveStorage::Blob.create_and_upload!(io: StringIO.new(SVG_BYTES), filename: "old.svg", content_type: "image/svg+xml")
+    ActiveStorage::Attachment.create!(name: "body_images", record: post, blob: blob)
+
+    post.reload.title = "Retitled"
+    assert post.save, post.errors.full_messages.to_sentence
+  end
 end

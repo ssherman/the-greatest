@@ -143,6 +143,16 @@ docker ps
 curl -I https://thegreatestmusic.org
 ```
 
+The origin lockdown (README → Security) ships inside the nginx image — there is nothing to
+configure per server. Confirm it from your machine:
+
+```bash
+ORIGIN_IP=<NEW_IP> deployment/scripts/verify-origin-lockdown.sh
+```
+
+Until DNS points at the new server, only the direct probes say anything about it — the
+through-Cloudflare probes are still testing the old origin.
+
 ---
 
 ## Decrypting Secrets

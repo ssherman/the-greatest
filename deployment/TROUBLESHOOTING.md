@@ -8,6 +8,7 @@ Common issues and solutions for The Greatest production deployment.
 - [Database Issues](#database-issues)
 - [SSL Certificate Issues](#ssl-certificate-issues)
 - [Nginx Issues](#nginx-issues)
+  - [Origin Lockdown](#origin-lockdown)
 - [Performance Issues](#performance-issues)
 - [Disk Space Issues](#disk-space-issues)
 - [Network Issues](#network-issues)
@@ -295,6 +296,54 @@ docker compose -f docker-compose.prod.yml exec nginx nginx -t
    docker compose -f docker-compose.prod.yml exec nginx nginx -t
    ```
 
+### Origin Lockdown
+
+The origin answers only Cloudflare (see README → Security → Origin Lockdown). Four ways it
+shows up when something is off:
+
+**Every request returns 495 or 400 mentioning a client certificate.**
+Cloudflare's `tls_client_auth` zone setting and nginx's `ssl_verify_client` disagree.
+- 400 "No required SSL certificate was sent": nginx is `on` but Cloudflare is not presenting
+  a certificate. Fastest fix is on the Cloudflare side: `bin/cfrules apply <zone>` in
+  `the-greatest-cloudflare` with `tls_client_auth: on`, or set nginx back to `optional`.
+- 495 "SSL certificate error": Cloudflare presents a certificate nginx cannot verify. Check
+  `deployment/nginx/certs/cloudflare-origin-pull-ca.pem` against Cloudflare's published CA
+  (fingerprint in the file header). Rolling Cloudflare back to `tls_client_auth: off` is one
+  settings PATCH and stops the errors immediately.
+
+`ssl_verify_depth` defaults to 1; Cloudflare's certificate is signed directly by the committed
+root today, so if a 495 ever appears with the correct CA, check the depth before rolling back.
+
+With `ssl_verify_client` set (including `optional`), nginx answers 421 Misdirected Request when
+a request's Host differs from the connection's SNI; Cloudflare sets SNI = Host by default, so a
+421 in the origin log points at an Origin Rule overriding only one of them.
+
+**Site down or 52x from Cloudflare right after Cloudflare announced new IP ranges.**
+The geo/real_ip lists are generated at image build. Rebuild nginx:
+```bash
+docker compose -f docker-compose.prod.yml build --no-cache nginx
+docker compose -f docker-compose.prod.yml up -d nginx
+```
+
+**nginx container is `unhealthy` after a config change.**
+The healthcheck curls `localhost` from inside the container, which is allowed only because
+`127.0.0.1/32` and `::1/128` are in the generated geo map. Check
+`docker compose -f docker-compose.prod.yml exec nginx cat /etc/nginx/snippets/cloudflare-geo.conf`.
+(The Dockerfile also removes the base image's stock `/etc/nginx/conf.d/default.conf`, which
+listened on `[::]:80` and answered this same healthcheck with a 404 before our own config ever ran.)
+
+**nginx fails to start with `open() "/etc/nginx/snippets/cloudflare-geo.conf" failed`, or the
+deploy workflow failed at `build nginx`.**
+The repo's bind-mounted config is newer than the image; a running container that has not been
+restarted keeps serving fine, but the snippets those config files `include` exist only in the
+image the failed build never produced. Re-run the deploy (or
+`docker compose -f docker-compose.prod.yml build --no-cache nginx` then
+`docker compose -f docker-compose.prod.yml up -d nginx`), and do not restart nginx until that
+build succeeds.
+
+**Confirming the lockdown works:** `deployment/scripts/verify-origin-lockdown.sh` from a
+machine outside Cloudflare. A direct `curl` to the IP is *supposed* to fail.
+
 ## Performance Issues
 
 ### Slow Response Times
@@ -440,8 +489,12 @@ docker ps -q | xargs docker inspect --format='{{.LogPath}}' | xargs ls -lh
 ```bash
 ping thegreatestmusic.org
 nslookup thegreatestmusic.org
-curl -I http://localhost
+docker compose -f docker-compose.prod.yml exec nginx curl -I -H 'Host: thegreatestmusic.org' http://localhost/up
 ```
+A plain host-side `curl -I http://localhost` gets "Empty reply from server" by design: from the
+host, that request reaches nginx via docker-proxy (not loopback) with `Host: localhost`, which
+matches no server block and the origin lockdown's `default_server` closes the connection. Run
+`curl` from inside the nginx container, as above, to bypass the lockdown for this diagnosis.
 
 **Solutions**:
 
@@ -473,8 +526,8 @@ curl -I http://localhost
 2. **SSL verification failure**
    Ensure SSL mode is "Full" or "Full (strict)" in Cloudflare dashboard.
 
-3. **Cloudflare IP not whitelisted**
-   If using firewall, whitelist Cloudflare IPs.
+3. **Cloudflare range missing from the origin's allow list**
+   Rebuild nginx (see Origin Lockdown above); the list is generated at image build.
 
 ## Application Issues
 
