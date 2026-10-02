@@ -19,5 +19,18 @@ namespace :books do
       puts "Wikidata misses go on to VIAF at about two requests a minute; each author's AI step follows its last record step."
       puts "Report: bin/rails \"books:authors:enrich_report[#{started.utc.iso8601}]\""
     end
+
+    desc "Report what the author steps did since a time, before a wider backfill: " \
+      "bin/rails \"books:authors:enrich_report[2026-10-02T12:00:00Z]\""
+    task :enrich_report, [:since] => :environment do |_task, args|
+      since = begin
+        Time.zone.parse(args[:since].to_s)
+      rescue ArgumentError
+        nil
+      end
+      abort "Usage: bin/rails \"books:authors:enrich_report[ISO-8601 time]\" -- the time the batch was queued" if since.nil?
+
+      puts ::Services::Books::Authors::BackfillReport.call(since: since).data[:lines]
+    end
   end
 end

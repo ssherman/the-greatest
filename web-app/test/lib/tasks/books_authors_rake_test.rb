@@ -7,7 +7,7 @@ class BooksAuthorsRakeTest < ActiveSupport::TestCase
   setup do
     # Load only this one rake file (see penalties_rake_test.rb for why not
     # Rails.application.load_tasks).
-    unless Rake::Task.task_defined?("books:authors:enrich")
+    unless Rake::Task.task_defined?("books:authors:enrich") && Rake::Task.task_defined?("books:authors:enrich_report")
       Rake::Task.define_task(:environment) {} unless Rake::Task.task_defined?(:environment)
       silence_warnings { load Rails.root.join("lib/tasks/books/authors.rake").to_s }
     end
@@ -36,5 +36,16 @@ class BooksAuthorsRakeTest < ActiveSupport::TestCase
     assert_output(/Queued 2 author\(s\) for the Wikidata step/) { @task.invoke("100") }
     @task.reenable
     assert_output(/books:authors:enrich_report\[/) { @task.invoke("all") }
+  end
+
+  test "the report needs a time, and prints the report's lines" do
+    report = Rake::Task["books:authors:enrich_report"]
+    ::Services::Books::Authors::BackfillReport.expects(:call).with(since: Time.utc(2026, 10, 2, 12))
+      .returns(::Services::Books::Authors::BackfillReport::Result.new(success?: true, errors: [], data: {lines: ["one", "two"]}))
+
+    report.reenable
+    assert_raises(SystemExit) { capture_io { report.invoke("") } }
+    report.reenable
+    assert_output("one\ntwo\n") { report.invoke("2026-10-02T12:00:00Z") }
   end
 end
