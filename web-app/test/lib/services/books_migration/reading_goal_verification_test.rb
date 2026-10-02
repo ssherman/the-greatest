@@ -9,7 +9,8 @@ module Services
         :start_date,
         :end_date,
         :number_of_books,
-        :percentage_done
+        :percentage_done,
+        :public
       )
       LegacyMembershipRelation = Data.define(:rows) do
         def pluck(*) = rows
@@ -34,7 +35,8 @@ module Services
             start_date: Date.new(2022, 1, 1),
             end_date: Date.new(2022, 12, 31),
             number_of_books: 4,
-            percentage_done: BigDecimal(50)
+            percentage_done: BigDecimal(50),
+            public: true
           ),
           LegacyGoal.new(
             id: 102,
@@ -42,7 +44,8 @@ module Services
             start_date: Date.new(2022, 4, 1),
             end_date: Date.new(2022, 6, 30),
             number_of_books: 2,
-            percentage_done: BigDecimal(50)
+            percentage_done: BigDecimal(50),
+            public: nil
           )
         ]
         @memberships = {
@@ -63,12 +66,7 @@ module Services
       end
 
       test "classifies each intentional live-projection repair independently" do
-        result = run_verification(expected: {
-          imported_goals: 2,
-          distinct_owners: 1,
-          public_goals: 1,
-          id_range: 101..102
-        })
+        result = run_verification
 
         assert_predicate result, :success?
         assert_empty result.errors
@@ -79,12 +77,7 @@ module Services
       end
 
       test "scopes definition totals to legacy ids and inspects forbidden target schema" do
-        result = run_verification(expected: {
-          imported_goals: 2,
-          distinct_owners: 1,
-          public_goals: 1,
-          id_range: 101..102
-        })
+        result = run_verification
 
         assert_equal 2, result.data[:imported_goals]
         assert_equal 1, result.data[:distinct_owners]
@@ -94,14 +87,28 @@ module Services
         assert_equal 0, result.data[:persisted_percentage_columns]
       end
 
-      test "the production report enforces the approved definition totals" do
+      test "expects every legacy goal to have been imported" do
+        ::Books::ReadingGoal.find(102).destroy!
+
         result = run_verification
 
         refute_predicate result, :success?
-        assert_includes result.errors, "expected 399 imported goals, found 2"
-        assert_includes result.errors, "expected 374 distinct owners, found 1"
-        assert_includes result.errors, "expected 8 public goals, found 1"
-        assert_includes result.errors, "expected imported id range 1..438, found 101..102"
+        assert_includes result.errors, "expected 2 imported goals, found 1"
+        assert_includes result.errors, "expected imported id range 101..102, found 101..101"
+      end
+
+      test "expects the legacy public flags and owners" do
+        other_owner = User.create!(email: "reading-goal-other-owner@example.com", role: :user)
+        goals = [
+          @legacy_goals.first,
+          @legacy_goals.last.with(user_id: other_owner.id, public: true)
+        ]
+
+        result = run_verification(goals: goals)
+
+        refute_predicate result, :success?
+        assert_includes result.errors, "expected 2 public goals, found 1"
+        assert_includes result.errors, "expected 2 distinct owners, found 1"
       end
 
       test "missing imported owners and unrelated low target ids fail verification" do
@@ -112,20 +119,15 @@ module Services
           start_date: Date.new(2022, 1, 1),
           end_date: Date.new(2022, 12, 31),
           number_of_books: 1,
-          percentage_done: BigDecimal(0)
+          percentage_done: BigDecimal(0),
+          public: false
         )
         create_imported_goal(id: 99, name: "Unexpected low goal", public: false,
           starts_on: Date.new(2021, 1, 1), ends_on: Date.new(2021, 12, 31))
 
         result = run_verification(
           goals: @legacy_goals + [missing_owner_goal],
-          memberships: @memberships.merge(103 => []),
-          expected: {
-            imported_goals: 2,
-            distinct_owners: 1,
-            public_goals: 1,
-            id_range: 101..102
-          }
+          memberships: @memberships.merge(103 => [])
         )
 
         refute_predicate result, :success?
@@ -158,7 +160,7 @@ module Services
         )
       end
 
-      def run_verification(goals: @legacy_goals, memberships: @memberships, expected: nil)
+      def run_verification(goals: @legacy_goals, memberships: @memberships)
         LegacyBooks::ReadingGoal.expects(:all).once.returns(goals)
         memberships.each do |goal_id, rows|
           LegacyBooks::ReadingGoalBook.stubs(:where)
@@ -166,9 +168,7 @@ module Services
             .returns(LegacyMembershipRelation.new(rows: rows))
         end
 
-        verifier = ReadingGoalVerification.new
-        verifier.stubs(:expected_definition_totals).returns(expected) if expected
-        verifier.call
+        ReadingGoalVerification.call
       end
     end
   end
