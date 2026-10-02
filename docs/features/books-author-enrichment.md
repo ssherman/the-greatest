@@ -30,11 +30,14 @@ Books::Authors::WikidataJob     EnrichFromWikidata
   unmatched, not via_viaf ->    ViafJob
   anything else ->              EnrichJob
 Books::Authors::ViafJob         EnrichFromViaf
+  not in line, someone waiting -> joins Viaf::Schedule's line (no VIAF call yet)
   new Wikidata id, decision
   doesn't need review ->        WikidataJob(author_id, true, true), which ends in EnrichJob
-  otherwise ->                  EnrichJob (unless a pause already queued it)
-  VIAF paused ->                EnrichJob at once (once), then reschedule
-  VIAF pace busy ->             reschedule only
+  otherwise ->                  EnrichJob (unless already queued: a pause, a turn too far
+                                 off, or the backfill's VIAF retry)
+  VIAF paused ->                EnrichJob at once (once), then back of the line
+  turn > CHAIN_PATIENCE away -> EnrichJob at once (once), then waits its turn
+  VIAF pace busy, own turn ->   reschedule that turn only
 Books::Authors::EnrichJob       EnrichAuthor, then EnrichBookJob for each book that waited
 ```
 
@@ -45,7 +48,8 @@ Every chain is meant to end at `EnrichJob`, whatever the Wikidata or VIAF outcom
 waiting on its new author is normally handed on -- not guaranteed. An author deleted or merged
 away mid-chain makes every job return early, doing nothing. A `WikidataJob` or `ViafJob` that
 exhausts its own Sidekiq retries never reaches `EnrichJob` either (a `ViafJob` that has already
-paused has queued `EnrichJob` itself, so a pause strands nothing). Either gap leaves the book to
+handed its author to `EnrichJob` -- on a pause, or a turn more than `CHAIN_PATIENCE` away -- has
+queued it itself, so neither strands anything). Either gap leaves the book to
 `books:enrich_missing`, which counts it whatever descriptions it already has (see "Handing books
 on" below); an exhausted job is also visible in Sidekiq's Dead set. All three jobs run on the
 `low` queue with `retry: 3`.
@@ -62,11 +66,13 @@ increment 4 the author importer's own provider queued the job mid-import, before
 direct author import still queues `WikidataJob` from `Providers::Enrichment`.
 
 A VIAF match flagged `needs_review` never sends the author back to Wikidata: the stamped id stays
-as VIAF's own, flagged fact rather than evidence for a certain Wikidata match. A VIAF *pause* (a
-Cloudflare block, VIAF's 429, or the day's budget running low: `Viaf::Exceptions::Paused`) sends
-the author to the AI step at once and reschedules the VIAF job; a busy pace (seconds) only
-reschedules. If VIAF answers later with a new Wikidata id, the `via_viaf` Wikidata run ends in a
-second `EnrichJob`, which fills only what the first left blank.
+as VIAF's own, flagged fact rather than evidence for a certain Wikidata match. A job not yet in
+`Viaf::Schedule`'s line joins it whenever anyone else is already waiting, without spending a VIAF
+call to find that out. A VIAF *pause* (a Cloudflare block, VIAF's 429, or the day's budget running
+low: `Viaf::Exceptions::Paused`), or a turn in the line more than `ViafJob::CHAIN_PATIENCE` away,
+sends the author to the AI step at once and reschedules the VIAF job; a busy pace hit on the job's
+own turn only reschedules that turn. If VIAF answers later with a new Wikidata id, the `via_viaf`
+Wikidata run ends in a second `EnrichJob`, which fills only what the first left blank.
 
 An author an admin has flagged `exclude_from_rankings` is skipped by every step without an
 external or model call: a `skipped` ledger row with reason `placeholder`.
@@ -125,10 +131,10 @@ flagged for review.
 **`needs_review`** is set when the decision was decided by the AI fallback (the AI call itself
 failed) or its confidence is `medium` or `low`. A rule that would otherwise land at `high`
 confidence is downgraded to `medium` -- and so flagged for review -- when a source it depended on
-(for example the `works` SPARQL query) failed partway through the run. A labels failure
-(`wikidata_labels`) only downgrades a confidence the AI itself saw: the labels a rule-decided run
-fetches are only for the audit-page snapshot, built after the rule has already decided, so they
-come too late to touch its confidence.
+(for example the `works` SPARQL query) failed partway through the run. A labels failure is recorded
+in the decision's `sources_failed` too (`wikidata_labels`), but it only ever downgrades a
+confidence the AI itself saw: the labels a rule-decided run fetches are only for the audit-page
+snapshot, built after the rule has already decided, so they come too late to touch its confidence.
 
 Every run, whatever it decides, writes one `MatchDecision` (`finder` =
 `Services::Books::Authors::ResolveWikidata`) and is visible on the books admin audit pages as a
@@ -305,18 +311,19 @@ longer block already running. Either way `Viaf::Client#get` raises
 `viaf_error` failure. A job not yet in `Viaf::Schedule`'s line joins it whenever anyone is already
 waiting (`Schedule#horizon`), without spending a VIAF call to find that out. The line is a Redis
 hash shared by every worker, and each new start is `SLOT_SECONDS` (300, sized to VIAF's daily
-budget rather than its per-minute pace) after the last one handed out. A pause (the gate closed, or
-a 429) sends the job to the back of the line. A busy pace hit on the job's own turn (`in_line`)
-only delays that turn, by VIAF's `retry_after` plus jitter, and resumes from the suggestions and
-clusters already stored rather than losing the author's place in the line -- one author can need
-more requests than a minute's pace allows. A backlog of waiting authors therefore each gets one
-turn, in order, instead of every job retrying on the same short delay. When VIAF is paused, or a
-job's turn is more than `ViafJob::CHAIN_PATIENCE` (600 seconds) away, the author goes on to the AI
-step at once and the job carries `enrich_queued`, so its own later turn does not queue the AI step
-again; VIAF's facts land as fills whenever that turn comes. A redirect hop is the one exception to
-all of this: resolving a merged cluster, it waits for its own pace slot instead of raising, for up
-to about a minute, since a hop that has already spent its 301 cannot be rescheduled without just
-repeating it.
+budget rather than its per-minute pace) after the last one handed out, and never earlier than the
+wait VIAF itself asked for -- the floor that pushes the whole line out past a pause. A pause (the
+gate closed, or a 429) sends the job to the back of the line. A busy pace hit on the job's own turn
+(`in_line`) only delays that turn, by VIAF's `retry_after` plus jitter, and resumes from the
+suggestions and clusters already stored rather than losing the author's place in the line -- one
+author can need more requests than a minute's pace allows. A backlog of waiting authors therefore
+each gets one turn, in order, instead of every job retrying on the same short delay. When VIAF is
+paused, or a job's turn is more than `ViafJob::CHAIN_PATIENCE` (600 seconds) away, the author goes
+on to the AI step at once and the job carries `enrich_queued`, so its own later turn does not queue
+the AI step again; VIAF's facts land as fills whenever that turn comes. A redirect hop is the one
+exception to all of this: resolving a merged cluster, it waits for its own pace slot instead of
+raising, for up to about a minute, since a hop that has already spent its 301 cannot be rescheduled
+without just repeating it.
 
 **A rescheduled run repeats nothing it does not have to.** AutoSuggest answers are cached a day,
 so a re-run's `suggest` call is free the same day. An ordinary (`refresh: false`) run also reads
@@ -406,10 +413,11 @@ Only books that waited are handed on this way; the author's other books never ar
 **A stuck chain.** The hand-off above is not guaranteed. Every job in the chain returns early,
 doing nothing, for an author deleted or merged away between enqueue and run. A `WikidataJob` or
 `ViafJob` that exhausts its own Sidekiq retries never reaches `EnrichJob` either -- except a
-`ViafJob` that has already paused, which has queued `EnrichJob` itself before rescheduling, so a
-pause alone strands nothing. `EnrichJob` is built not to have this problem: it hands off even once
-its own retries are exhausted, via `sidekiq_retries_exhausted`, so only a break earlier in the
-chain can strand a book. A book left behind this way is still found by `books:enrich_missing`,
+`ViafJob` that has already handed its author to `EnrichJob` (on a pause, or a turn more than
+`CHAIN_PATIENCE` away), which has queued it before rescheduling, so neither alone strands anything.
+`EnrichJob` is built not to have this problem: it hands off even once its own retries are
+exhausted, via `sidekiq_retries_exhausted`, so only a break earlier in the chain can strand a book.
+A book left behind this way is still found by `books:enrich_missing`,
 which counts a deferral-only book as missing whatever descriptions it already has (the Open
 Library provider can write one onto a brand-new book before `AiEnrichment` ever defers it), and
 which also picks up any book a chain never reached at all. An exhausted job is also visible in
@@ -492,10 +500,9 @@ deprecated again. A value changed since is a person's, and stays. On top of that
 id (the QID for Wikidata, the VIAF id for VIAF) and the Wikipedia article link it named are removed
 whoever added them -- even when the run found them already set, since they name the rejected
 record itself rather than something it merely filled in. A Wikidata run reached through a merge
-keeps the superseded id
-`ApplyWikidata` found already held, alongside the canonical one it stamps (recorded as
-`redirected_from`); that superseded id is removed the same way, since it still names the rejected
-item.
+keeps the superseded id `ApplyWikidata` found already held, alongside the canonical one it stamps
+(recorded as `redirected_from`); that superseded id is removed the same way, since it still names
+the rejected item.
 
 **The AI step.** A `books.author_facts` run that used a rejected record as evidence is reverted too:
 its applied years, gender and countries go when unchanged since, the same as any other run, because
@@ -589,9 +596,10 @@ network call, even though the bridge search itself (`by_statements`) still runs 
 A run that falls through to the name-search stage is not cheap to repeat: every candidate the
 searches turn up is fetched again, in one entities call for all of the author's search names,
 regardless of whether it was seen before, and the `works` SPARQL query (`attach_titles`) is never
-cached at all, so it re-runs in full for every person-candidate each time that stage is reached. This is worth sizing correctly before the increment-6 backfill:
-authors who resolve by identifier stay cheap to re-touch, but the long tail that reaches AI
-selection costs close to a fresh run every time.
+cached at all, so it re-runs in full for every person-candidate each time that stage is reached.
+This is worth sizing correctly before the increment-6 backfill: authors who resolve by identifier
+stay cheap to re-touch, but the long tail that reaches AI selection costs close to a fresh run
+every time.
 
 **VIAF writes the same way.** Every VIAF run, matched or not, writes at most one `Enrichment` row,
 kind `books.author_viaf`, provider `viaf`, linked to its own `MatchDecision` *once a decision
@@ -677,17 +685,18 @@ any `Books::Authors::*` job -- see "A stuck chain" above.
 ### The backfill
 
 `bin/rails "books:authors:enrich[100]"` (or `[all]`) queues the chain for authors the Wikidata step
-has not processed (`LedgerRun.processed`; placeholders never are): ranked authors first by rank
-under the primary authors configuration, then the rest by how many books they wrote. Each
-`WikidataJob` starts `Backfill::SPACING` (6) seconds after the one before, with research off for
-the whole chain. A limit is required; `all` is the decision to run wide.
+has not processed (`LedgerRun.processed`; placeholders never are, so they are left out): ranked
+authors first by rank under the primary authors configuration, then the rest by how many books they
+wrote. Each `WikidataJob` starts `Backfill::SPACING` (6) seconds after the one before, with research
+off for the whole chain. A limit is required; `all` is the decision to run wide.
 
 It also re-queues the VIAF step for any author whose Wikidata step missed and whose VIAF step
 never finished. The retry passes `enrich_queued = true` only for an author with a
 `books.author_facts` row newer than the author row (its AI step already ran this era); an author
 whose chain was lost (no facts row) gets `false`, so the retry queues its AI step. It leaves out
 every author with a `Books::Authors::*` job already scheduled, retrying, or on the low queue
-(`QueuedChain`), so a second run while the first is still going queues no one twice.
+(`QueuedChain`), so a second run while the first is still going queues almost no one twice --
+except a job that is running at that exact moment, which `QueuedChain` cannot see.
 
 It prints the counts, when the last Wikidata job starts, and the report command:
 `bin/rails "books:authors:enrich_report[<time the batch was queued>]"`. The report gives:
@@ -700,9 +709,9 @@ It prints the counts, when the last Wikidata job starts, and the report command:
 
 Run `[100]` first and read the report before `[all]` (spec §13). Wikidata alone for ~71k authors is
 about five days at this pace. VIAF serves 200-300 authors a day, so its share of the misses runs on
-for weeks after that; the AI step does not wait for it. Run `data_migration:author_countries`
-before measuring any batch -- without it the AI step treats nearly every author as incomplete and
-the cost figure overstates production.
+for weeks to months after that (see "VIAF" above); the AI step does not wait for it. Run
+`data_migration:author_countries` before measuring any batch -- without it the AI step treats
+nearly every author as incomplete and the cost figure overstates production.
 
 The Wikidata and VIAF clients cache labels, country codes and AutoSuggest answers in
 `config.x.external_api_cache`, a Redis store (namespace `external-api`). It survives deploys, which
@@ -740,19 +749,26 @@ latest decision chose, provided that decision:
 The id must also be neither rejected for this author nor held by another author. The held-id
 stage then finds it and the stored record answers, so a re-migrated author whose earlier match
 stands costs no search, no AI selection and none of VIAF's daily budget. The run's ledger row
-records it as the fact `restored_identifier`. A restored id the held stage cannot corroborate --
-names or years disagree, or the cluster is gone -- stays on the author regardless, and the run
-falls through to the bridge or search stage, as it would without a restore.
+records it as the fact `restored_identifier`.
+
+A restored id the held stage cannot corroborate -- names or years disagree, or the cluster is gone
+-- stays on the author regardless, and the run falls through to the bridge (Wikidata only; VIAF has
+no bridge stage) or search stage. A later match there, naming a different item or cluster, meets
+the restored id as a held conflict when applied (`held_qid_conflict` / `held_viaf_conflict`):
+nothing from that run is applied, and the decision is flagged for review -- the same outcome as the
+earlier era, when the author held that id outright.
 
 The launch order after the final data migration is: `data_migration:all` (which runs
 `:author_countries`), then `bin/rails "books:authors:enrich[all]"`.
 
-Every author with no carried-over decision (above) runs again regardless: "processed" (above)
-compares a ledger row's timestamp against the *re-created* author row, and every pre-migration row
-is now older than it, so nothing counts as done. What that re-run actually costs is the story told
-above under "a re-run is only cheap in the cases that decide early" -- not "already paid": losing
-the held QIDs, if anything, pushes *more* authors into the name-search path that costs close to a
-fresh run.
+Every author runs again regardless: "processed" (above) compares a ledger row's timestamp against
+the *re-created* author row, and every pre-migration row is now older than it, so nothing counts as
+done -- `LedgerRun.processed` and `Backfill.unprocessed` read the same rule, so every re-created
+author is selected whether or not a decision carried over. What that re-run actually costs is the
+story told above under "a re-run is only cheap in the cases that decide early" -- not "already
+paid". For an author with no carried-over decision, losing the held QIDs pushes it into the
+name-search path that costs close to a fresh run; one whose earlier match stands runs cheaply
+instead ("Ids come back from the decisions," above).
 
 **VIAF identifiers are lost the same way, and are cheaper to re-fetch.** `books_author_viaf`, ISNI
 and LC on the author row do not survive a truncate and re-migration either, for the same reason as
@@ -760,6 +776,8 @@ the Wikidata id above -- `AuthorIdentifierMigrator` only re-creates the Open Lib
 `external_records` rows for VIAF survive untouched (they carry no foreign key into the books
 tables at all), and `Viaf::Cluster` keeps every cluster it ever reads, chosen or not (see "VIAF"
 above) -- so a post-migration re-run reads every cluster a previous run already fetched straight
-from the cache, spending none of the day's VIAF budget on it. What does repeat is the cheap part:
-one `Viaf::Client#suggest` call per author (itself cached a day, so a same-day re-run of the same
-name is free too), and the AI selection where resolution reaches it.
+from the cache, spending none of the day's VIAF budget on it. For an author with no carried-over
+VIAF decision, what does repeat is the cheap part: one `Viaf::Client#suggest` call (itself cached a
+day, so a same-day re-run of the same name is free too), and the AI selection where resolution
+reaches it. An author whose earlier VIAF match does carry over skips even that -- the same
+restored-id path as Wikidata's, above.

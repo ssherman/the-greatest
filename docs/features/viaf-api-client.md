@@ -15,14 +15,15 @@ Design and research notes: `docs/superpowers/specs/2026-08-30-viaf-api-client-de
 cached in `external_records` regardless), and `last_rate_limit` (the last response's budget
 headers). The first request of a call paces at `:immediate` -- busy raises rather than blocking a
 worker thread -- but a redirect hop (a merged cluster answering 301) paces through a separate,
-always-`:blocking`
-limiter and waits for its own slot instead, since a hop that already spent its 301 cannot be
-rescheduled without just repeating it. Every request also checks `Viaf::Gate` first (see "Rate
-limits" below). A closed gate, a busy pace, a Cloudflare block or a 429 all surface as
+always-`:blocking` limiter and waits for its own slot instead, since a hop that already spent its
+301 cannot be rescheduled without just repeating it. Every request also checks `Viaf::Gate` first
+(see "Rate limits" below). A closed gate, a busy pace, a Cloudflare block or a 429 all surface as
 `Viaf::Exceptions::RateLimited`, carrying `retry_after`, which the calling job turns into a
 reschedule. The ones that pause VIAF for every caller (the gate, a block, a 429) are raised as its
 subclass `Viaf::Exceptions::Paused`, so a job can tell an hour-long pause from a pace that clears
-in seconds: `Books::Authors::ViafJob` hands the author to the AI step at once on a pause.
+in seconds: `Books::Authors::ViafJob` hands the author to the AI step at once on a pause, and also
+when a wait in `Viaf::Schedule`'s line runs past `ViafJob::CHAIN_PATIENCE`
+(`docs/features/books-author-enrichment.md` has the mechanics).
 
 For console use, `Viaf::Search::AutoSuggest` and `Viaf::Cluster` below still talk to
 `Viaf::BaseClient` directly, in its default `:blocking` mode: a call simply waits its turn --

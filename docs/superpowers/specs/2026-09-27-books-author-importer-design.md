@@ -601,8 +601,8 @@ description:
 
 - **The task.** `books:authors:enrich[limit|all]` with the selection above. Placeholders are left
   out. A rejected run does not count as processed.
-- **Duplicates.** Authors already waiting in Sidekiq are left out, so a second run never doubles
-  the AI cost.
+- **Duplicates.** Authors already waiting in Sidekiq are left out, so a second run almost never
+  doubles the AI cost -- a job running at that exact moment is outside what `QueuedChain` can see.
 - **VIAF retries.** Authors whose Wikidata step missed and whose VIAF step never finished get the
   VIAF step again. `enrich_queued` is set only for an author whose AI step already ran this era (a
   `books.author_facts` row newer than the author row); an author whose chain was lost gets it

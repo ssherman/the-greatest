@@ -98,7 +98,7 @@ label.
 which the increment-6 author backfill spans for days. It is kept separate from `Rails.cache`
 because music and games are live on the same global cache store, and production sets no
 `config.cache_store` there, so `Rails.cache` is still a per-container file store wiped on every
-deploy.
+deploy. In test it's a null store, so no lookup leaks between tests.
 
 A chosen Wikidata entity or Wikipedia lead is stored in `external_records`: the complete response
 body gzipped in `raw`, and the small view the code actually reads in `payload`
