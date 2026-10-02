@@ -404,7 +404,9 @@ VIAF id comes from Wikidata (P214) and VIAF itself is not called.
 - **The chain never waits on VIAF.** A paused `ViafJob` (`Viaf::Exceptions::Paused`: a Cloudflare
   block, a 429, or the day's budget running low) enqueues `EnrichJob` at once, once, and
   reschedules itself. A busy pace only reschedules: it clears in seconds. Facts it finds later land
-  as fills only. *(Amended in increment 4.)*
+  as fills only. *(Amended in increment 4.)* *(Amended in increment 6: a busy pace no longer clears
+  in seconds under a backlog -- waiting jobs take turns from a shared line, and a turn more than ten
+  minutes away hands the AI step on at once; see §13's increment-6 amendment.)*
 
 At 1–2 requests for a held id and 3–5 for a search, the ~1,000/day budget covers about 200–300
 authors a day. That is ample for imports; the backfill's VIAF share takes months, in the background.
@@ -594,6 +596,35 @@ description:
 - If the item differs, **or the author could not be matched at all**, the description's rank is set
   to `deprecated`. Given the error rate in §Problem, an unconfirmed page counts as wrong.
 - Deprecated, not deleted, so the change is reversible. The ledger records each decision.
+
+**Increment 6 amendment (2026-10-02).** As built:
+
+- **The task.** `books:authors:enrich[limit|all]` with the selection above. Placeholders are left
+  out. A rejected run does not count as processed.
+- **Duplicates.** Authors already waiting in Sidekiq are left out, so a second run never doubles
+  the AI cost.
+- **VIAF retries.** Authors whose Wikidata step missed and whose VIAF step never finished get the
+  VIAF step again. `enrich_queued` is set only for an author whose AI step already ran this era (a
+  `books.author_facts` row newer than the author row); an author whose chain was lost gets it
+  unset, so the retry queues the AI step.
+- **The report.** `books:authors:enrich_report[since]` gives the report §13 asks for, plus
+  throughput, ledger failure reasons, and the extrapolation to the remaining authors.
+- **VIAF scale.**
+  - VIAF serves 200–300 authors a day, far below the backfill's Wikidata misses.
+  - Waiting VIAF jobs take start times `SLOT_SECONDS` (300) apart from a shared line
+    (`Viaf::Schedule`), sized to the daily budget rather than the per-minute pace, instead of all
+    retrying on a short delay. A job not yet in the line joins it whenever anyone is already
+    waiting; a pause sends a job to the back of the line; a busy pace on a job's own turn only
+    delays that turn, resuming from the suggestions and clusters already stored.
+  - A turn more than ten minutes (`ViafJob::CHAIN_PATIENCE`) off sends the author to the AI step at
+    once, as a pause does (§8: the chain never waits on VIAF).
+- **Ids after a re-migration** (§14). Each record step puts back the id its latest earlier-era,
+  matched, unrejected and trusted decision chose, so a re-migration re-run costs no search and no
+  AI selection for those authors.
+- **Legacy descriptions.** A description deprecated as `author_unmatched` is restored when a later
+  run matches its page's item.
+- **Cache.** The Wikidata and VIAF clients cache in Redis (`config.x.external_api_cache`), not the
+  per-container file store, because a backfill spans deploys.
 
 ### 14. Re-runs after the production re-migration
 

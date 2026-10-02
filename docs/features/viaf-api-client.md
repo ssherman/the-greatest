@@ -11,10 +11,11 @@ Design and research notes: `docs/superpowers/specs/2026-08-30-viaf-api-client-de
 **`Viaf::Client`** is what the background jobs call through
 (`Services::Books::Authors::ResolveViaf`, via `Books::Authors::ViafJob` -- see
 `docs/features/books-author-enrichment.md`): `suggest(query)` (AutoSuggest, cached a day in
-`Rails.cache`), `cluster(viaf_id, refresh: false)` (the distilled `Viaf::Person`, cached in
-`external_records` regardless), and `last_rate_limit` (the last response's budget headers). The
-first request of a call paces at `:immediate` -- busy raises rather than blocking a worker thread
--- but a redirect hop (a merged cluster answering 301) paces through a separate, always-`:blocking`
+`config.x.external_api_cache`), `cluster(viaf_id, refresh: false)` (the distilled `Viaf::Person`,
+cached in `external_records` regardless), and `last_rate_limit` (the last response's budget
+headers). The first request of a call paces at `:immediate` -- busy raises rather than blocking a
+worker thread -- but a redirect hop (a merged cluster answering 301) paces through a separate,
+always-`:blocking`
 limiter and waits for its own slot instead, since a hop that already spent its 301 cannot be
 rescheduled without just repeating it. Every request also checks `Viaf::Gate` first (see "Rate
 limits" below). A closed gate, a busy pace, a Cloudflare block or a 429 all surface as
