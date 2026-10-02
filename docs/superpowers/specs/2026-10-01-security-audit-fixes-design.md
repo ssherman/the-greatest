@@ -156,6 +156,7 @@ delete.
   This is `master` as of 2026-09-30, which verifies the drone-ssh binary checksum; the `v1.2.5`
   tag (`0ff4204d…`) predates that check, so it is the worse pin.
 - `fingerprint: ${{ secrets.SERVER_SSH_HOST_FINGERPRINT }}`.
+- A guard step that fails the job when the fingerprint secret is empty.
 - `permissions: {}` — the job never uses `GITHUB_TOKEN`.
 - Replace the `mkdir ~/.config/sops/age` / `printf ... > keys.txt` / `rm` sequence with
   `SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops -d secrets/.env.production > .env.new`. The server's sops
@@ -186,8 +187,9 @@ The pinned action runs drone-ssh 1.8.4 → easyssh-proxy v1.5.2, which sets no
 v0.49.0's `defaultHostKeyAlgos` lists `ecdsa-sha2-nistp256` first among plain keys and
 `ssh-ed25519` last, and the server has an ECDSA-256 host key, so ECDSA is what the action sees.
 A drone-ssh upgrade that reorders this fails the connect, and the fix is the other line.
-Failure modes are safe: an absent secret skips verification (today's behaviour); a
-wrong one fails the connect and deploys nothing. A rebuilt server has a new host key, so
+Failure modes are safe: an absent secret fails a guard step before the connect (the action
+itself would silently skip verification on an empty value, so the workflow refuses to); a wrong
+one fails the connect. Either way nothing deploys. A rebuilt server has a new host key, so
 `SERVER-UPGRADE-GUIDE.md` gains an "update the fingerprint secret" step.
 
 ### M6: enforce `yarn.lock`
