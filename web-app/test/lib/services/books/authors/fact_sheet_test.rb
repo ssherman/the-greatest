@@ -146,6 +146,7 @@ module Services
           reject_for(@author, ResolveViaf.name, "5391")
 
           @sheet.single_identifier("viaf", "books_author_viaf", "5391")
+          @author.save!
 
           assert_equal ["rejected", false], @sheet.facts["viaf"].values_at("reason", "applied")
           assert_not @author.identifiers.exists?(identifier_type: "books_author_viaf")

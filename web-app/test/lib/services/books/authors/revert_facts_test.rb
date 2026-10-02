@@ -70,37 +70,47 @@ module Services
           @author.author_countries.create!(country: added)
           @author.author_countries.create!(country: kept)
 
-          revert("countries" => filled(["Revert Added"], country_ids: [added.id]))
+          # The fact's value is a stale name the country no longer has, so a
+          # name-based removal would miss it: only the recorded country_ids
+          # can find it.
+          revert("countries" => filled(["Old Name"], country_ids: [added.id]))
 
           assert_equal [kept], @author.reload.countries.to_a
         end
 
         test "a ledger row from before country ids were recorded removes its countries by name" do
           added = ::Books::Country.create!(name: "Revert Named")
+          other = ::Books::Country.create!(name: "Revert Other")
           @author.author_countries.create!(country: added)
+          @author.author_countries.create!(country: other)
 
           revert("countries" => filled(["Revert Named"]))
 
-          assert_not @author.author_countries.exists?
+          assert_equal [other], @author.reload.countries.to_a
         end
 
         test "removes the Wikipedia link the run added" do
           @author.external_links.create!(url: URL, name: "Wikipedia", source: :wikipedia, link_category: :information)
+          other_url = "https://example.com/revert-facts-author"
+          @author.external_links.create!(url: other_url, name: "Buy books", source: :amazon, link_category: :product_link)
 
           revert("wikipedia" => {"value" => URL, "applied" => true, "reason" => "linked", "page" => "en:9"})
 
-          assert_not @author.external_links.exists?
+          assert_equal [other_url], @author.reload.external_links.pluck(:url)
         end
 
         test "legacy Wikipedia descriptions the run deprecated return to normal rank" do
           row = @author.assign_description(source: :wikipedia, content: "A legacy lead.", source_url: URL)
           row.rank = :deprecated
+          other = @author.assign_description(source: :ai_generated, content: "An AI description deprecated by a reject.")
+          other.rank = :deprecated
           @author.save!
 
           revert("legacy_wikipedia" => {"value" => [{"description_id" => row.id, "verdict" => "deprecated", "why" => "different_item"}],
                                         "applied" => true, "reason" => "deprecated"})
 
           assert_equal "normal", row.reload.rank
+          assert_equal "deprecated", other.reload.rank
         end
 
         test "facts not applied, and facts it does not know, are left alone" do
