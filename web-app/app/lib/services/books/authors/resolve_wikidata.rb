@@ -257,9 +257,10 @@ module Services
           @author_name_keys ||= ([author.name] + Array(author.alternate_names)).map { |name| name_key(name) }.compact_blank.to_set
         end
 
-        # Case and diacritics folded: "Gabriel Garcia Marquez" meets "Gabriel García Márquez".
+        # Case, diacritics and the letters NFD leaves whole folded:
+        # "Gabriel Garcia Marquez" meets "Gabriel García Márquez", "Stanislaw" meets "Stanisław".
         def name_key(text)
-          normalized(text).unicode_normalize(:nfd).gsub(/\p{Mn}/, "").downcase
+          ::Services::Text::NameFolder.call(normalized(text))
         end
 
         def title_key(text) = normalized(text).downcase

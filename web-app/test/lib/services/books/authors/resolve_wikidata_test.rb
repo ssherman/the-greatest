@@ -46,6 +46,17 @@ module Services
           assert_equal ["matched", "identifier"], [result.data[:decision].outcome, result.data[:decision].decided_by]
         end
 
+        test "names are compared with the letters NFD leaves whole transliterated" do
+          author = ::Books::Author.create!(name: "Stanislaw Lem")
+          author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q6530")
+          client = FakeWikidataClient.new(entities: {"Q6530" => wikidata_entity("Q6530", label: "Stanisław Lem")})
+          Services::Ai::Tasks::Matching::SelectExternalRecordTask.expects(:new).never
+
+          result = ResolveWikidata.call(author: author, client: client)
+
+          assert_equal ["matched", "identifier"], [result.data[:decision].outcome, result.data[:decision].decided_by]
+        end
+
         test "a held id that Wikidata has merged resolves to the surviving item" do
           hold(:books_author_wikidata_qid, "Q999")
           client = FakeWikidataClient.new(entities: {"Q999" => wikidata_entity("Q7243", **TOLSTOY)})
