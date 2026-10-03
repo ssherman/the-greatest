@@ -75,8 +75,8 @@ module Reviews
 
     def apply_sort(scope)
       case sort
-      when "rating_high" then scope.order(rating: :desc, id: :desc)
-      when "rating_low" then scope.order(rating: :asc, id: :desc)
+      when "rating_high" then scope.order(Arel.sql("reviews.rating DESC NULLS LAST"), id: :desc)
+      when "rating_low" then scope.order(Arel.sql("reviews.rating ASC NULLS LAST"), id: :desc)
       when "title" then scope.order(Arel.sql("#{reviewable_class.review_title_order} ASC"), id: :desc)
       when "rank" then scope.joins(rank_join).order(Arel.sql("ranked_items.rank ASC NULLS LAST"), id: :desc)
       else scope.order(created_at: :desc, id: :desc)

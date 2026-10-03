@@ -73,6 +73,18 @@ module Reviews
       assert_equal low.sort, low
     end
 
+    test "rating sorts put unrated reviews last in both directions" do
+      Review.create!(user: @user, reviewable: books_books(:got), body: "<p>No stars.</p>")
+
+      high = query(sort: "rating_high").call.map(&:rating)
+      low = query(sort: "rating_low").call.map(&:rating)
+
+      assert_nil high.last
+      assert_nil low.last
+      assert_equal high.compact.sort.reverse, high.compact
+      assert_equal low.compact.sort, low.compact
+    end
+
     test "sorts A-Z by the reviewable's title" do
       # Fixture timestamps are assigned once per fixture FILE, so every review in
       # reviews.yml shares one created_at -- the default sort's tiebreak (id DESC)

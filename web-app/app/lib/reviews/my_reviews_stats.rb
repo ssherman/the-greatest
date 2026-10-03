@@ -20,11 +20,13 @@ module Reviews
     end
 
     def written
-      @written ||= scope.where.not(body: nil).count
+      body_counts[false].to_i
     end
 
+    # Counted, not derived: written includes reviews with no rating, which total
+    # (rated reviews) does not, so total - written is no longer a count of anything.
     def rating_only
-      total - written
+      body_counts[true].to_i
     end
 
     # Explicit Float bounds, and Float on the way out. Integer#/ would floor, and
@@ -50,6 +52,11 @@ module Reviews
 
     def scope
       @user.reviews.where(reviewable_type: @reviewable_class.name)
+    end
+
+    # One grouped query for both written and rating_only: {false => written, true => rating-only}.
+    def body_counts
+      @body_counts ||= scope.group(Arel.sql("reviews.body IS NULL")).count
     end
 
     def raw_counts
