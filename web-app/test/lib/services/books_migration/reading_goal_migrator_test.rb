@@ -26,6 +26,18 @@ module Services
         }.merge(overrides)
       end
 
+      def create_goal(id:, name:)
+        ::Books::ReadingGoal.create!(
+          id: id,
+          user: @user,
+          name: name,
+          target_count: 1,
+          starts_on: Date.new(2024, 1, 1),
+          ends_on: Date.new(2024, 12, 31),
+          public: false
+        )
+      end
+
       def run_migrator(rows, legacy_ids: rows.map { |row| row.fetch("id") })
         LegacyBooks::ReadingGoal.stubs(:pluck).with(:id).returns(legacy_ids)
         migrator = ReadingGoalMigrator.new
@@ -128,22 +140,57 @@ module Services
         assert_match(/legacy reading goal id 10000 reaches reserved id floor 10000/, result[:error])
       end
 
-      test "rejects an unrelated existing low target id before flushing" do
-        ::Books::ReadingGoal.create!(
-          id: 437,
-          user: @user,
-          name: "New app collision",
-          target_count: 1,
-          starts_on: Date.new(2024, 1, 1),
-          ends_on: Date.new(2024, 12, 31),
-          public: false
-        )
-        ::Books::ReadingGoal.expects(:upsert_all).never
+      test "deletes low target goals whose legacy goal no longer exists" do
+        create_goal(id: 437, name: "Deleted in legacy since the last pass")
 
         result = run_migrator([legacy_row], legacy_ids: [438])
 
+        assert result[:success], result[:error]
+        assert_equal [437], result.dig(:data, :orphaned_goals_deleted)
+        assert_not ::Books::ReadingGoal.exists?(437)
+        assert ::Books::ReadingGoal.exists?(438)
+      end
+
+      test "never deletes goals at or above the reserved id floor" do
+        create_goal(id: 10_000, name: "First new-app goal")
+        create_goal(id: 15_000, name: "Later new-app goal")
+
+        result = run_migrator([legacy_row])
+
+        assert result[:success], result[:error]
+        assert_equal [], result.dig(:data, :orphaned_goals_deleted)
+        assert ::Books::ReadingGoal.exists?(10_000)
+        assert ::Books::ReadingGoal.exists?(15_000)
+      end
+
+      test "deletes nothing when a legacy goal fails validation" do
+        create_goal(id: 437, name: "Deleted in legacy since the last pass")
+
+        result = run_migrator([legacy_row("name" => " ")], legacy_ids: [438])
+
         refute result[:success]
-        assert_match(/unexpected target ids below 10000: 437/, result[:error])
+        assert ::Books::ReadingGoal.exists?(437)
+      end
+
+      test "deletes nothing when a legacy id reaches the reserved floor" do
+        create_goal(id: 437, name: "Deleted in legacy since the last pass")
+
+        result = run_migrator([legacy_row("id" => 10_000)])
+
+        refute result[:success]
+        assert ::Books::ReadingGoal.exists?(437)
+      end
+
+      test "a rerun after deleting orphans deletes nothing more" do
+        create_goal(id: 437, name: "Deleted in legacy since the last pass")
+        first = run_migrator([legacy_row], legacy_ids: [438])
+        assert_equal [437], first.dig(:data, :orphaned_goals_deleted)
+
+        second = run_migrator([legacy_row], legacy_ids: [438])
+
+        assert second[:success], second[:error]
+        assert_equal [], second.dig(:data, :orphaned_goals_deleted)
+        assert_equal [438], ::Books::ReadingGoal.order(:id).pluck(:id)
       end
 
       test "preserves timestamps and is idempotent on the legacy id" do

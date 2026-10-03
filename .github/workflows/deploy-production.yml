@@ -60,5 +60,5 @@ jobs:
 
             # Pull web/worker images and rebuild nginx
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml build --no-cache nginx
+            docker compose -f docker-compose.prod.yml build --pull --no-cache nginx
             docker compose -f docker-compose.prod.yml up -d
