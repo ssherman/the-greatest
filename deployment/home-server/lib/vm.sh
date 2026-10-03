@@ -45,3 +45,6 @@ render_user_data() {
     REPO_REF="$REPO_REF" envsubst '${VM_NAME} ${ROLE} ${SSH_PUBKEY} ${ENV_B64} ${REPO_REF}' \
     <"$HS_DIR/cloud-init/user-data.yaml.tmpl" >"$3"
 }
+
+# Stub, replaced by Task 6.
+ensure_vm() { :; }

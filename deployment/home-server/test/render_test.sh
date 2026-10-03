@@ -35,7 +35,14 @@ t_ol_env() {
 }
 t_fetcher_isolation() {
   local env; env="$(env_from_yaml "$SANDBOX/fetcher.yaml")"
-  grep -qx 'TUNNEL_TOKEN=fetcher-token' <<<"$env" && ! grep -q 'ol-token\|ol-beat\|ol-refresh' <<<"$env"
+  grep -qx 'TUNNEL_TOKEN=fetcher-token' <<<"$env" && ! grep -q 'ol-' <<<"$env"
+}
+t_env_keys() {
+  local r keys
+  for r in ol fetcher; do
+    keys="$(env_from_yaml "$SANDBOX/$r.yaml" | cut -d= -f1 | tr '\n' ' ')"
+    [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH " ] || return 1
+  done
 }
 t_key() { grep -q 'ssh-ed25519 AAAATEST' "$SANDBOX/ol.yaml"; }
 t_ref() { grep -q 'clone --depth 1 --branch main ' "$SANDBOX/ol.yaml"; }
@@ -49,6 +56,7 @@ check "user-data starts with #cloud-config" t_first_line
 check "no template variable is left unrendered" t_no_leftovers
 check "ol gets its role, token and refresh check" t_ol_env
 check "fetcher holds nothing of ol's" t_fetcher_isolation
+check "each env has exactly the keys guest/lib.sh documents" t_env_keys
 check "the dev key is authorized" t_key
 check "the VM clones the tracked ref" t_ref
 check "unset secrets render as blanks, not errors" t_blank_secrets

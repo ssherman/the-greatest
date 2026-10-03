@@ -21,7 +21,7 @@ on_host() { ssh "${SSH_OPTS[@]}" "root@$PVE_HOST" "$@"; }
 host_file_matches() {
   local want have
   want="$(sha256sum <"$1" | cut -d' ' -f1)"
-  have="$(on_host "sha256sum < '$2' 2>/dev/null | cut -d' ' -f1" || true)"
+  have="$(on_host "sha256sum 2>/dev/null < '$2' | cut -d' ' -f1" || true)"
   [ "$want" = "$have" ]
 }
 
@@ -42,10 +42,25 @@ put_host() {
 load_secrets() {
   local file="$REPO_ROOT/secrets/home-server.env" key value
   [ -f "$file" ] || die "missing $file"
+  local plain
+  plain="$(sops -d "$file")" || die "could not decrypt $file (is SOPS_AGE_KEY_FILE set?)"
   while IFS='=' read -r key value; do
-    [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] && export "$key=$value"
-  done < <(sops -d "$file") || die "could not decrypt $file (is SOPS_AGE_KEY_FILE set?)"
+    if [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]]; then export "$key=$value"; fi
+  done <<<"$plain"
   [ -n "${PVE_HOST:-}" ] || die "PVE_HOST is not set in $file"
+}
+
+# load_host_state [ref]: the ref the VMs track and whether tunnels are on, both
+# kept on the host so any machine running provision sees the same answer.
+load_host_state() {
+  on_host "mkdir -p $HOST_STATE"
+  if [ -n "${1:-}" ]; then
+    on_host "printf '%s\n' '$1' > $HOST_STATE/repo-ref"
+  fi
+  REPO_REF="$(on_host "cat $HOST_STATE/repo-ref 2>/dev/null || echo main")"
+  TUNNELS_ENABLED=0
+  if on_host "test -f $HOST_STATE/tunnels-enabled"; then TUNNELS_ENABLED=1; fi
+  export REPO_REF TUNNELS_ENABLED
 }
 
 report_changes() {

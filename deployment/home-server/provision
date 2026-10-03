@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# deployment/home-server/provision
+# Converges the Proxmox home server from this repo (docs/features/home-server.md).
+#   provision                       host, any missing VM, VM env and units
+#   provision --rebuild ol|fetcher  replace that VM's OS disk (data disk kept)
+#   provision --enable-tunnels      start cloudflared on both VMs, once Access is in place
+#   provision --verify [--external-from user@host] [--recovery]
+#   provision --ref <git ref>       the ref the VMs track (stored on the host; default main)
+# shellcheck disable=SC2034 # EXTERNAL_FROM and RECOVERY are read by lib/verify.sh
+set -euo pipefail
+HS_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$HS_DIR/../.." && pwd)"
+# shellcheck source=lib/common.sh
+. "$HS_DIR/lib/common.sh"
+# shellcheck source=lib/host.sh
+. "$HS_DIR/lib/host.sh"
+# shellcheck source=lib/vm.sh
+. "$HS_DIR/lib/vm.sh"
+# shellcheck source=lib/verify.sh
+. "$HS_DIR/lib/verify.sh"
+
+mode=converge rebuild_role="" EXTERNAL_FROM="" RECOVERY=0 ref_arg="" UPGRADED=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --rebuild) mode=rebuild; rebuild_role="${2:?--rebuild needs ol or fetcher}"; shift 2 ;;
+    --enable-tunnels) mode=enable-tunnels; shift ;;
+    --verify) mode=verify; shift ;;
+    --external-from) EXTERNAL_FROM="${2:?}"; shift 2 ;;
+    --recovery) RECOVERY=1; shift ;;
+    --ref) ref_arg="${2:?}"; shift 2 ;;
+    -h | --help) sed -n '2,8p' "$0"; exit 0 ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+load_secrets
+on_host true || die "cannot reach root@$PVE_HOST over SSH"
+load_host_state "$ref_arg"
+
+case "$mode" in
+  converge)
+    converge_host_packages
+    converge_host_network
+    converge_host_firewall
+    for role in fetcher ol; do ensure_vm "$role"; done
+    ;;
+  rebuild) rebuild_vm "$rebuild_role" ;;
+  enable-tunnels) enable_tunnels ;;
+  verify) verify_all ;;
+esac
+report_changes
+if [ "$UPGRADED" != 0 ]; then log "upgraded $UPGRADED host package(s)"; fi
