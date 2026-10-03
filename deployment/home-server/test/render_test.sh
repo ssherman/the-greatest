@@ -11,6 +11,8 @@ set -uo pipefail
 . "$HS_DIR/lib/host.sh"
 # shellcheck source=../lib/vm.sh
 . "$HS_DIR/lib/vm.sh"
+# shellcheck source=../lib/verify.sh
+. "$HS_DIR/lib/verify.sh"
 
 new_sandbox
 export REPO_REF=main TUNNELS_ENABLED=0 OL_TUNNEL_TOKEN=ol-token FETCHER_TUNNEL_TOKEN=fetcher-token
@@ -67,6 +69,32 @@ t_cluster_fw() {
   done
 }
 
+t_cluster_fw_v4_only() {
+  local out="$SANDBOX/cluster4.fw" set body
+  LAN_IPV4_CIDR=192.0.2.0/24 LAN_IPV6_PREFIX='' render_cluster_fw "$out" || return 1
+  ! grep -q '\${' "$out" || return 1
+  for set in lan management; do
+    # the section's lines up to its blank terminator, header dropped
+    body="$(sed -n "/^\[IPSET $set\]/,/^\$/p" "$out" | sed '1d;$d')"
+    [ "$body" = "192.0.2.0/24" ] || return 1
+  done
+  [ "$(grep -c '^\[IPSET' "$out")" = 3 ]
+}
+t_vm_spec_sizes() {
+  vm_spec ol && [ "$CORES $MEM $DATADISK" = "12 24576 300" ] || return 1
+  vm_spec fetcher && [ "$CORES $MEM" = "4 4096" ]
+}
+t_storage_defaults() {
+  [ "$(unset VM_STORAGE DATA_STORAGE IMAGE_STORAGE; echo "$(vm_storage) $(data_storage) $(image_storage)")" = "local-lvm local-lvm local" ] &&
+    [ "$(VM_STORAGE=local-zfs DATA_STORAGE=rpool2 IMAGE_STORAGE=local; echo "$(vm_storage) $(data_storage) $(image_storage)")" = "local-zfs rpool2 local" ] &&
+    [ "$(VM_STORAGE=local-zfs; unset DATA_STORAGE; data_storage)" = "local-zfs" ]
+}
+t_trace_ip() {
+  [ "$(printf 'fl=1\nh=1.1.1.1\nip=203.0.113.9\nts=1\n' | pick_trace_ip)" = "203.0.113.9" ] &&
+    [ -z "$(printf 'ip=not-an-address\nh=1.1.1.1\n' | pick_trace_ip)" ] &&
+    [ -z "$(printf 'warp=off\n' | pick_trace_ip)" ]
+}
+
 t_key_with_comment() {
   local f="$SANDBOX/hash.pub"
   echo "ssh-ed25519 AAAATEST it's # x" >"$f"
@@ -98,4 +126,8 @@ check "the dev key is authorized" t_key
 check "the VM clones the tracked ref" t_ref
 check "unset secrets render as blanks, not errors" t_blank_secrets
 check "cluster.fw renders both LAN ranges into lan and management" t_cluster_fw
+check "cluster.fw renders IPv4-only sets with no blank or unrendered line" t_cluster_fw_v4_only
+check "vm_spec sizes: ol 12 vCPU / 24 GB, fetcher unchanged" t_vm_spec_sizes
+check "storage names default to local-lvm / local and come from the secrets when set" t_storage_defaults
+check "pick_trace_ip returns only a dotted IPv4 ip= line" t_trace_ip
 finish

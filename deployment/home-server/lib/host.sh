@@ -3,6 +3,27 @@
 # shellcheck disable=SC2034 # UPGRADED is read by provision, which sources this file
 # The Proxmox host (spec §4): packages, network, firewall.
 
+# converge_host_zfs: cap ZFS's cache (the ARC) on a host that runs ZFS, so it
+# cannot crowd out the VMs (spec §12). A host without ZFS is left alone.
+converge_host_zfs() {
+  on_host "test -d /sys/module/zfs" || return 0
+  local arc="${ARC_MAX_BYTES:-8589934592}" tmp file_changed=0
+  [[ "$arc" =~ ^[0-9]+$ ]] || die "ARC_MAX_BYTES must be a number of bytes, got '$arc'"
+  new_tmpdir tmp
+  printf 'options zfs zfs_arc_max=%s\n' "$arc" >"$tmp/zfs.conf"
+  host_file_matches "$tmp/zfs.conf" /etc/modprobe.d/zfs.conf || file_changed=1
+  put_host "$tmp/zfs.conf" /etc/modprobe.d/zfs.conf
+  if [ "$(on_host "cat /sys/module/zfs/parameters/zfs_arc_max")" != "$arc" ]; then
+    on_host "echo $arc > /sys/module/zfs/parameters/zfs_arc_max" || die "could not set zfs_arc_max at runtime"
+    note_change "zfs_arc_max set to $arc"
+  fi
+  # A root-on-ZFS host loads the module from the initramfs, which carries modprobe.d.
+  if [ "$file_changed" = 1 ] && [ "$(on_host "findmnt -no FSTYPE /")" = zfs ]; then
+    on_host "update-initramfs -u -k all >/dev/null 2>&1" || die "update-initramfs failed after capping the ZFS ARC"
+    note_change "initramfs rebuilt for the ARC cap"
+  fi
+}
+
 converge_host_packages() {
   put_host "$HS_DIR/host/sbin/confirm-or-revert" /usr/local/sbin/confirm-or-revert 0755
 
@@ -54,6 +75,7 @@ converge_host_packages() {
     note_change "snippets on local storage"
   fi
   on_host "mkdir -p $HOST_STATE"
+  converge_host_zfs
 
   local running newest
   running="$(on_host "uname -r")"
@@ -131,7 +153,7 @@ converge_host_network() {
   LAN_IPV4_CIDR="$(on_host "ip -4 -o route show dev vmbr0 proto kernel scope link | awk '{print \$1}' | head -1")"
   LAN_IPV6_PREFIX="$(on_host "ip -6 -o route show dev vmbr0 proto kernel | awk '\$1 !~ /^fe80/ {print \$1}' | head -1")"
   [ -n "$LAN_IPV4_CIDR" ] || die "vmbr0 has no IPv4 route; is the static inet stanza for PVE_LAN_IPV4 present in /etc/network/interfaces?"
-  [ -n "$LAN_IPV6_PREFIX" ] || die "vmbr0 has no IPv6 prefix route"
+  [ -n "$LAN_IPV6_PREFIX" ] || log "vmbr0 has no global IPv6 prefix; the firewall sets will be IPv4 only"
   export LAN_IPV4_CIDR LAN_IPV6_PREFIX
 
   [ "$(on_host "sysctl -n net.ipv4.ip_forward")" = 1 ] || die "ip_forward is off; vmbr1's post-up did not run"
@@ -141,8 +163,11 @@ converge_host_network() {
 # render_cluster_fw <out>: the datacenter file with this house's LAN ranges.
 render_cluster_fw() {
   # shellcheck disable=SC2016 # envsubst takes the variable list literally
-  LAN_IPV4_CIDR="$LAN_IPV4_CIDR" LAN_IPV6_PREFIX="$LAN_IPV6_PREFIX" \
-    envsubst '${LAN_IPV4_CIDR} ${LAN_IPV6_PREFIX}' <"$HS_DIR/host/firewall/cluster.fw.tmpl" >"$1"
+  # With no IPv6 prefix the placeholder line is dropped, not rendered blank.
+  { if [ -n "${LAN_IPV6_PREFIX:-}" ]; then cat; else grep -vxF '${LAN_IPV6_PREFIX}'; fi; } \
+    <"$HS_DIR/host/firewall/cluster.fw.tmpl" |
+    LAN_IPV4_CIDR="$LAN_IPV4_CIDR" LAN_IPV6_PREFIX="${LAN_IPV6_PREFIX:-}" \
+      envsubst '${LAN_IPV4_CIDR} ${LAN_IPV6_PREFIX}' >"$1"
 }
 
 converge_host_firewall() {

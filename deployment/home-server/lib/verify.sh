@@ -45,12 +45,20 @@ expect_blocked() {
 
 # The host's one stable global IPv6 address (no ULA, no temporary); fails
 # unless exactly one candidate remains. Callers must never print it.
+# Returns 2 when there is none at all (a v4-only house), 1 when ambiguous.
 host_global_ipv6() {
   local list
   list="$(on_host "ip -6 -o addr show vmbr0 scope global | grep -v temporary | awk '{print \$4}' | cut -d/ -f1")" || return 1
   list="$(printf '%s\n' "$list" | grep -vE '^f[cd]' | grep . || true)"
-  [ -n "$list" ] && [ "$(printf '%s\n' "$list" | wc -l)" = 1 ] || return 1
+  [ -n "$list" ] || return 2
+  [ "$(printf '%s\n' "$list" | wc -l)" = 1 ] || return 1
   printf '%s\n' "$list"
+}
+
+# pick_trace_ip: stdin is a Cloudflare /cdn-cgi/trace body; prints the ip= value
+# only when it is a dotted IPv4 address. Callers must never print it.
+pick_trace_ip() {
+  sed -n 's/^ip=\([0-9]\{1,3\}\(\.[0-9]\{1,3\}\)\{3\}\)$/\1/p' | head -n1
 }
 
 verify_host() {
@@ -84,7 +92,7 @@ verify_vms() {
 # from the ol VM, and only then must the fetcher fail to reach it. "Blocked"
 # means a timeout; any other failure is reported as a broken probe.
 verify_egress() {
-  local lan_ip router ol_ip target host port rc host6
+  local lan_ip router ol_ip target host port rc host6 rc6=0
   lan_ip="$(on_host "ip -4 -o addr show vmbr0 | awk '{print \$4}' | cut -d/ -f1 | head -1")"
   router="$(on_host "ip -4 route show default dev vmbr0 | awk '{print \$3}' | head -1")"
   ol_ip="$(vm_ip ol)"
@@ -103,8 +111,10 @@ verify_egress() {
   done
 
   # The host's own global IPv6 address, read here and never printed.
-  host6="$(host_global_ipv6)" || host6=""
-  if [ -z "$host6" ]; then
+  host6="$(host_global_ipv6)" || rc6=$?
+  if [ "$rc6" = 2 ]; then
+    echo "SKIP  egress: the host has no global IPv6 address, so there is no public IPv6 to probe"
+  elif [ -z "$host6" ]; then
     bad "egress: the host does not have exactly one stable global IPv6 address to probe"
   else
     if tcp_from_vm ol "$host6" 22; then
@@ -130,32 +140,39 @@ verify_idempotent() {
 }
 
 # --external-from user@host: a machine outside the house checks the host's
-# public IPv6 address for open ports. The address is read from the host at
-# run time and never printed. A port counts as closed only when nc reports a
-# timeout or a refusal; anything else (resolution, usage, no nc, ssh) fails.
+# public address for open ports: its global IPv6 address, or, when the host has
+# none, the house's public IPv4 (behind the router's NAT, with no port
+# forwards, every port must be closed). The address is read at run time and
+# never printed. A port counts as closed only when nc reports a timeout or a
+# refusal; anything else (resolution, usage, no nc, ssh) fails.
 verify_external() {
-  local host6 port out rc closed22=0
-  # The control comes first: if the external box cannot reach IPv6 at all
-  # (or ssh to it fails), nothing below means anything.
-  if ssh "${SSH_OPTS[@]}" "$EXTERNAL_FROM" "nc -6 -z -w 5 2606:4700:4700::1111 443" >/dev/null 2>&1; then
-    ok "exposure control: $EXTERNAL_FROM has IPv6 (reaches 2606:4700:4700::1111:443)"
+  local addr port out rc closed22=0 fam=-6 ctl="2606:4700:4700::1111 443" what="public IPv6" rc6=0
+  addr="$(host_global_ipv6)" || rc6=$?
+  if [ "$rc6" = 2 ]; then
+    fam=-4 ctl="1.1.1.1 443" what="public IPv4"
+    addr="$(on_host "curl -4 -fsS --max-time 10 https://1.1.1.1/cdn-cgi/trace" | pick_trace_ip)" || addr=""
+  fi
+  # The control comes first: if the external box cannot reach the internet over
+  # this family at all (or ssh to it fails), nothing below means anything.
+  # shellcheck disable=SC2086,SC2029 # $ctl is "host port"; built on the client on purpose
+  if ssh "${SSH_OPTS[@]}" "$EXTERNAL_FROM" "nc $fam -z -w 5 $ctl" >/dev/null 2>&1; then
+    ok "exposure control: $EXTERNAL_FROM reaches ${ctl% *}:${ctl#* } over IPv${fam#-}"
   else
-    bad "exposure control: $EXTERNAL_FROM cannot reach 2606:4700:4700::1111:443 over IPv6 (or ssh to it failed); no port result would mean anything"
+    bad "exposure control: $EXTERNAL_FROM cannot reach ${ctl% *}:${ctl#* } over IPv${fam#-} (or ssh to it failed); no port result would mean anything"
     return
   fi
-  host6="$(host_global_ipv6)" || host6=""
-  if [ -z "$host6" ]; then bad "exposure: the host does not have exactly one stable global IPv6 address to check"; return; fi
+  if [ -z "$addr" ]; then bad "exposure: could not determine the host's $what to check"; return; fi
   for port in 22 8006 111 3128; do
     rc=0
     # shellcheck disable=SC2029 # the command is built on the client on purpose
-    out="$(ssh "${SSH_OPTS[@]}" "$EXTERNAL_FROM" "nc -6 -v -z -w 5 $host6 $port 2>&1" 2>&1)" || rc=$?
+    out="$(ssh "${SSH_OPTS[@]}" "$EXTERNAL_FROM" "nc $fam -v -z -w 5 $addr $port 2>&1" 2>&1)" || rc=$?
     if [ "$rc" = 0 ]; then
-      bad "exposure: port $port on the host's public IPv6 is reachable from $EXTERNAL_FROM"
+      bad "exposure: port $port on the host's $what is reachable from $EXTERNAL_FROM"
     elif [ "$rc" = 1 ] && printf '%s' "$out" | grep -qE '^nc: connect to .* port [0-9]+ \(tcp\) (timed out|failed: Connection refused)'; then
-      ok "exposure: port $port on the host's public IPv6 is closed from outside"
+      ok "exposure: port $port on the host's $what is closed from outside"
       if [ "$port" = 22 ]; then closed22=1; fi
     else
-      bad "exposure: port $port check was inconclusive (rc=$rc)" "$(printf '%s' "${out//$host6/<host>}" | head -n1 | head -c 200)"
+      bad "exposure: port $port check was inconclusive (rc=$rc)" "$(printf '%s' "${out//$addr/<host>}" | head -n1 | head -c 200)"
     fi
   done
   if [ "$closed22" = 1 ]; then
@@ -198,12 +215,23 @@ verify_recovery() {
   verify_egress
 }
 
+# running_foreign_vmids: the running VMIDs other than 110 and 120.
+running_foreign_vmids() {
+  on_host "qm list" | awk '$3 == "running" && $1 != 110 && $1 != 120 {print $1}'
+}
+
 verify_all() {
   export VERIFY=1 # converge, but do not upgrade packages: verify changes nothing
+  # Guests provision did not create are never touched: note what runs now.
+  local preexisting id
+  preexisting="$(running_foreign_vmids)" || die "could not list the host's VMs"
   verify_host
   verify_vms
   verify_egress
   verify_idempotent
+  for id in $preexisting; do
+    expect "pre-existing guest $id still running" on_host "qm status $id | grep -q running"
+  done
   if [ -n "$EXTERNAL_FROM" ]; then verify_external; fi
   if [ "$RECOVERY" = 1 ]; then verify_recovery; fi
   if [ "$VERIFY_FAILURES" = 0 ]; then log "verify: all passed"; else die "verify: $VERIFY_FAILURES failed"; fi

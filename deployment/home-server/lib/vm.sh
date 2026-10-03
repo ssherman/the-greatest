@@ -8,10 +8,16 @@ DEBIAN_IMAGE=debian-13-genericcloud-amd64.qcow2
 DEBIAN_IMAGE_DIR=https://cloud.debian.org/images/cloud/trixie/latest
 SSH_PUBKEY_FILE="${SSH_PUBKEY_FILE:-$HOME/.ssh/id_ed25519.pub}"
 
+# Storage names come from secrets/home-server.env (spec §12). Functions, not
+# assignments: the secrets are loaded after this file is sourced.
+vm_storage() { printf '%s' "${VM_STORAGE:-local-lvm}"; }
+data_storage() { printf '%s' "${DATA_STORAGE:-$(vm_storage)}"; }
+image_storage() { printf '%s' "${IMAGE_STORAGE:-local}"; }
+
 vm_spec() {
   case "$1" in
     ol)
-      VMID=110 NAME=ol CORES=8 MEM=16384 OSDISK=32 DATADISK=300
+      VMID=110 NAME=ol CORES=12 MEM=24576 OSDISK=32 DATADISK=300
       NET="virtio,bridge=vmbr0,firewall=1" IPCONFIG="ip=dhcp,ip6=auto" NAMESERVER="" STARTUP="order=1" ;;
     fetcher)
       VMID=120 NAME=fetcher CORES=4 MEM=4096 OSDISK=40 DATADISK=0
@@ -82,7 +88,8 @@ set -u
 img=$DEBIAN_IMAGE
 url=$DEBIAN_IMAGE_DIR
 dir=/var/lib/vz/import
-stage=/var/lib/vz/.image-staging
+if [ '$(image_storage)' != local ]; then dir=\$(dirname "\$(pvesm path '$(image_storage):import/$DEBIAN_IMAGE')") || exit 1; fi
+stage=\$(dirname \$dir)/.image-staging
 mkdir -p \$dir
 if [ $refresh = 0 ] && cd \$dir && [ -f \$img ] && [ -f SHA512SUMS ] && sha512sum --ignore-missing -c SHA512SUMS; then
   echo "reusing the verified local \$img" >&2
@@ -109,7 +116,7 @@ write_snippet() { # write_snippet <role>; leaves the rendered env in $ENV_RENDER
 }
 
 attach_os_disk() {
-  on_host "qm set $VMID --scsi0 local-lvm:0,import-from=local:import/$DEBIAN_IMAGE,discard=on,ssd=1,iothread=1 --boot order=scsi0 >/dev/null &&
+  on_host "qm set $VMID --scsi0 $(vm_storage):0,import-from=$(image_storage):import/$DEBIAN_IMAGE,discard=on,ssd=1,iothread=1 --boot order=scsi0 >/dev/null &&
     qm disk resize $VMID scsi0 ${OSDISK}G"
 }
 
@@ -117,13 +124,13 @@ create_vm() {
   log "creating VM $VMID ($NAME)"
   on_host "qm create $VMID --name $NAME --machine q35 --cpu host --cores $CORES --memory $MEM --balloon 0 \
     --scsihw virtio-scsi-single --net0 $NET --agent enabled=1 --onboot 1 --startup $STARTUP \
-    --ostype l26 --serial0 socket --vga serial0 --ide2 local-lvm:cloudinit \
+    --ostype l26 --serial0 socket --vga serial0 --ide2 $(vm_storage):cloudinit \
     --ipconfig0 $IPCONFIG --cicustom user=local:snippets/$NAME-user-data.yaml" || die "qm create $VMID failed"
   local half="VM $VMID ($NAME) was created but not finished and is left as it is; destroying it (qm destroy $VMID --purge) and re-running provision is Shane's call"
   if [ -n "$NAMESERVER" ]; then on_host "qm set $VMID --nameserver '$NAMESERVER' >/dev/null" || die "$half"; fi
   attach_os_disk || die "$half"
   if [ "$DATADISK" != 0 ]; then
-    on_host "qm set $VMID --scsi1 local-lvm:$DATADISK,discard=on,ssd=1,iothread=1 >/dev/null" || die "$half"
+    on_host "qm set $VMID --scsi1 $(data_storage):$DATADISK,discard=on,ssd=1,iothread=1 >/dev/null" || die "$half"
   fi
   on_host "qm start $VMID" || die "$half"
   note_change "created VM $VMID ($NAME)"

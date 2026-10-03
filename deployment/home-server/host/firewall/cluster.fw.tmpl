@@ -5,7 +5,7 @@ enable: 1
 policy_in: DROP
 policy_out: ACCEPT
 
-[IPSET lan] # the house LAN: IPv4 and the host's current IPv6 /64
+[IPSET lan] # the house LAN: IPv4, plus the host's current IPv6 /64 when it has one
 ${LAN_IPV4_CIDR}
 ${LAN_IPV6_PREFIX}
 

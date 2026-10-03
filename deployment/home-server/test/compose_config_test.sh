@@ -13,7 +13,7 @@ cfg() { # cfg <role> [profile]
 }
 
 t_build() {
-  cfg ol build | jq -e '.services.build.cpus == 6 and
+  cfg ol build | jq -e '.services.build.cpus == 10 and
     .services.build.command == ["python","-m","openlibrary.pipeline.build","--root","/data","--memory-limit","8GB","--threads","4"]' >/dev/null
 }
 t_api() {
@@ -29,7 +29,7 @@ t_fetcher_untouched() {
 }
 
 if ! command -v docker >/dev/null; then echo "SKIP  docker not installed"; exit 0; fi
-check "build is capped at 6 CPUs and 8GB" t_build
+check "build is capped at 10 CPUs and 8GB" t_build
 check "api gets 6GB and a read-only /srv/ol-data" t_api
 check "cloudflared is a pinned version" t_pinned
 check "cloudflared is off until the tunnel profile is on" t_off_by_default
