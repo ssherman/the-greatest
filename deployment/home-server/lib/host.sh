@@ -31,6 +31,33 @@ converge_host_zfs() {
   fi
 }
 
+# host_dns_search <pvesh dns json> <desired ip>: prints the search domain to
+# pass to `pvesh set` when dns1 must change, and nothing when it already matches.
+# pvesh requires --search, so the existing one is kept; home.arpa if it has none.
+host_dns_search() {
+  local json="$1" want="$2" have search
+  have="$(printf '%s' "$json" | jq -r '.dns1 // ""')" || return 1
+  [ "$have" != "$want" ] || return 0
+  search="$(printf '%s' "$json" | jq -r '.search // ""')" || return 1
+  printf '%s\n' "${search:-home.arpa}"
+}
+
+# converge_host_dns: point the host's resolver at the LAN router. A host moved
+# from an old network keeps its old nameserver and apt cannot resolve anything.
+# PVE_LAN_DNS is optional (secrets/home-server.env); it defaults to PVE_LAN_GATEWAY4.
+converge_host_dns() {
+  local want="${PVE_LAN_DNS:-${PVE_LAN_GATEWAY4:-}}" json search
+  [ -n "$want" ] || die "set PVE_LAN_DNS or PVE_LAN_GATEWAY4 in secrets/home-server.env"
+  json="$(on_host "pvesh get /nodes/localhost/dns --output-format json")" || die "could not read the host's DNS settings"
+  search="$(host_dns_search "$json" "$want")" || die "could not parse the host's DNS settings"
+  if [ -n "$search" ]; then
+    on_host "pvesh set /nodes/localhost/dns --dns1 '$want' --search '$search'" || die "could not set host DNS to $want"
+    note_change "host DNS -> $want"
+  fi
+  on_host "getent hosts download.proxmox.com >/dev/null" ||
+    die "DNS set to $want but download.proxmox.com still doesn't resolve"
+}
+
 converge_host_packages() {
   put_host "$HS_DIR/host/sbin/confirm-or-revert" /usr/local/sbin/confirm-or-revert 0755
 

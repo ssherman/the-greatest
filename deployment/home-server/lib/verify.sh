@@ -136,7 +136,7 @@ verify_egress() {
 
 verify_idempotent() {
   CHANGES=()
-  converge_host_packages; converge_host_network; converge_host_firewall
+  converge_host_dns; converge_host_packages; converge_host_network; converge_host_firewall
   local role; for role in fetcher ol; do ensure_vm "$role"; done
   if [ "${#CHANGES[@]}" = 0 ]; then ok "a second provision changes nothing"; else bad "a second provision changed: ${CHANGES[*]}"; fi
 }

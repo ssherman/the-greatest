@@ -41,6 +41,7 @@ load_host_state "$ref_arg"
 case "$mode" in
   converge)
     foreign_before="$(running_foreign_vmids)" || die "could not list the host's VMs"
+    converge_host_dns
     converge_host_packages
     converge_host_network
     converge_host_firewall
