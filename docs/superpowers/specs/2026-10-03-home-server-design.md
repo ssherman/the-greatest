@@ -362,3 +362,36 @@ The dev machine reaches the host over IPv6, so WSL needs `networkingMode=mirrore
 - `docs/features/open-library-data-service.md` and `docs/features/page-fetcher-service.md`:
   rewrite "Where it runs" and the promotion section (promotion is now automatic).
 - `deployment/ENV.md`, `web-app/.env.example`: the new ENV names.
+
+## 12. Amendment, 2026-10-03: the target moves to the HP Elite Mini
+
+Decided by Shane before go-live, while the first box's first build was running. Nothing in
+production depended on the first box. The original target (§1, i7-7700K) is retired from this
+project once the Mini verifies.
+
+**The Mini, as found:** HP Elite Mini 800 G9, i7-12700T (12 cores / 20 threads), 62 GB usable
+RAM, Proxmox 9.0.10. Two NVMe drives, both ZFS: `rpool` (1 TB; system plus the empty
+`local-zfs`) and `rpool2` (4 TB). Static IPv4 on `vmbr0`, which is VLAN-aware; **no global IPv6**.
+It already runs VM 101 `musicbrainz` (8 vCPU, 16 GB, a 1 TB disk on `rpool2`, `onboot`), which
+production's music data importer calls only when a list is added. It was set up by hand and is
+productized later, separately.
+
+**What changes:**
+
+- **Storage is configuration, not code.** `VM_STORAGE` holds OS disks and the cloud-init drive,
+  `DATA_STORAGE` holds the `ol` data disk, and `IMAGE_STORAGE` holds imported cloud images. They
+  live in `secrets/home-server.env` beside the other house values. On the Mini that's `local-zfs`,
+  `rpool2` and `local`.
+- **ZFS's cache (the ARC) is capped at 8 GiB** on a host that runs ZFS, persistently, so it can't
+  crowd out the VMs.
+- **IPv6 is optional.** With no global IPv6 on `vmbr0`, the `lan` and `management` sets are IPv4
+  only. The IPv6 egress probe SKIPs with its reason. The exposure check (`--external-from`) tests
+  the house's public IPv4 instead; behind the router's NAT, with no port forwards, all ports must
+  be closed.
+- **Sizes:** `ol` gets 12 vCPU and 24 GB. The build container's CPU cap rises to 10. The fetcher
+  is unchanged. MusicBrainz keeps its 16 GB, which leaves the host about 14 GB including the ARC.
+  The build keeps `--threads 4` and the swap file as backstops until a measured build says
+  otherwise.
+- **Guests provision didn't create are never touched.** Verify asserts that every VM running
+  before it started is still running afterwards.
+- **Access:** the Mini is the SSH alias `pve-mini`, and `PVE_HOST` names it.

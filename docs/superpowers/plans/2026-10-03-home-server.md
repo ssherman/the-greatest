@@ -2727,7 +2727,39 @@ git push
 
 ---
 
+### Task 9b: Move the target to the HP Elite Mini (spec §12)
+
+**Files:** `deployment/home-server/lib/{vm,host,verify,common}.sh`, `deployment/home-server/host/firewall/cluster.fw.tmpl`, `deployment/home-server/compose.ol.yml`, `deployment/home-server/test/{render,compose_config}_test.sh`, plus any new test files.
+
+**Requirements** (spec §12 is binding; each one needs a test where it can be tested offline):
+
+1. **Storage from configuration.** `VM_STORAGE` (OS disks, cloud-init drive; default `local-lvm`), `DATA_STORAGE` (ol data disk; default `$VM_STORAGE`) and `IMAGE_STORAGE` (the dir storage holding imported images; default `local`) replace every hard-coded storage name in lib/vm.sh. They are read from the decrypted secrets like the other house values.
+2. **ZFS ARC cap.** When `/sys/module/zfs` exists on the host, a new step in converge_host_packages (or a small `converge_host_zfs`):
+   - writes `/etc/modprobe.d/zfs.conf` with `options zfs zfs_arc_max=<ARC_MAX_BYTES, default 8589934592>`;
+   - sets `/sys/module/zfs/parameters/zfs_arc_max` at runtime;
+   - when the file changed and root is on ZFS (`findmnt -no FSTYPE /` = zfs), runs `update-initramfs -u -k all`.
+   
+   It records a change only when something changed.
+3. **Optional IPv6.**
+   - `converge_host_network` exports an empty `LAN_IPV6_PREFIX` when vmbr0 has no global IPv6, logging it rather than dying.
+   - `render_cluster_fw` leaves no blank or `${…}` lines in the ipsets when the prefix is empty. Add a render_test case for v4-only.
+   - `verify_egress`'s IPv6 probe SKIPs (with the reason) when `host_global_ipv6` finds no address.
+   - `verify_external`: if the host has no global IPv6, it reads the house's public IPv4 on the host (`curl -4 -fsS https://1.1.1.1/cdn-cgi/trace`, the `ip=` line), and probes that with `nc -4`, using the same closed/inconclusive classifier and the `$EXTERNAL_FROM` control (IPv4 variant: `1.1.1.1 443`). It never prints the address.
+4. **Sizes.** vm_spec `ol`: CORES=12, MEM=24576. compose.ol.yml build `cpus: 10`, with the comment updated. Update compose_config_test.
+5. **Untouched guests.** `verify_all` records the running VMIDs other than 110/120 at its start, and after `verify_idempotent` asserts each one is still running: "pre-existing guest <id> still running".
+6. `deployment/home-server/test/run.sh` green, plus the data-sources checks if touched. Commit, push.
+
+**Then run it against the Mini** (only after the commit is pushed):
+- `provision --ref worktree-home-server`, then `provision` again (expect `no changes`), then `provision --verify`.
+- Expect the host package step to upgrade Proxmox 9.0 → 9.2 (no reboot), the enterprise repo to be disabled, vmbr1 created through the armed revert, the firewall enabled through the armed revert, and VMs 110/120 created on `local-zfs` with the ol data disk on `rpool2`.
+- VM 101 must be running after every step.
+- STOP and report on any failure. Never touch VM 101, and never reboot.
+
+---
+
 ### Task 10: First build and measurements (real box)
+
+> Runs on the Elite Mini after Task 9b (spec §12).
 
 **Files:**
 - Create: `docs/features/home-server.md` (its "Measured" section; Task 11 writes the rest)
