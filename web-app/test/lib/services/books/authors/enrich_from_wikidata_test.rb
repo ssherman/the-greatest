@@ -204,6 +204,68 @@ module Services
           assert_equal "applied", rows.sole.outcome
           assert_equal ["Q7243", "Q999"], @author.identifiers.where(identifier_type: :books_author_wikidata_qid).pluck(:value).sort
         end
+
+        test "a later match restores a legacy description an earlier miss deprecated" do
+          @author.identifiers.destroy_all
+          legacy = @author.descriptions.create!(source: :wikipedia, content: "x", source_url: "https://en.wikipedia.org/wiki/Leo_Tolstoy")
+          enrich(wikidata: FakeWikidataClient.new)
+          assert legacy.reload.deprecated?
+
+          @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q7243")
+          enrich(refresh: true)
+
+          assert legacy.reload.normal?
+          assert_equal "restored", rows.last.facts.dig("legacy_wikipedia", "reason")
+        end
+
+        test "a re-migrated author gets back the Wikidata id its earlier match chose, and resolves without searching" do
+          @author.identifiers.destroy_all
+          decision = ::MatchDecision.create!(finder: ResolveWikidata.name, subject: @author, outcome: :matched, confidence: :high,
+            decided_by: :ai, candidates: [{"external_source" => "wikidata", "external_key" => "Q7243"}], selected_index: 1,
+            created_at: @author.created_at - 1.day)
+
+          result = enrich
+
+          assert_equal ["identifier", "certain"], [result.data[:decision].decided_by, result.data[:decision].confidence]
+          assert_not @wikidata.called?(:search)
+          assert_equal ["Q7243", decision.id], rows.sole.facts["restored_identifier"].values_at("value", "decision_id")
+        end
+
+        test "a rate limit before the decision takes a restored id back off, so the rescheduled run restores and records it" do
+          @author.identifiers.destroy_all
+          ::MatchDecision.create!(finder: ResolveWikidata.name, subject: @author, outcome: :matched, confidence: :high,
+            decided_by: :ai, candidates: [{"external_source" => "wikidata", "external_key" => "Q7243"}], selected_index: 1,
+            created_at: @author.created_at - 1.day)
+          limited = FakeWikidataClient.new
+          limited.stubs(:entities).raises(::Wikimedia::Exceptions::RateLimited.new("wait", retry_after: 30))
+
+          assert_raises(::Wikimedia::Exceptions::RateLimited) { enrich(wikidata: limited) }
+          assert_empty @author.identifiers.where(identifier_type: :books_author_wikidata_qid)
+          assert_empty rows
+
+          enrich
+
+          assert_equal "Q7243", rows.sole.facts.dig("restored_identifier", "value")
+        end
+
+        test "an unexpected error after the decision writes one failed row tied to it, and does not raise" do
+          ApplyWikidata.stubs(:call).raises(RuntimeError, "boom")
+
+          result = enrich
+
+          row = rows.sole
+          assert_equal [:failed, false], [result.data[:outcome], result.success?]
+          assert_equal ["failed", "unexpected_error", "RuntimeError: boom"], [row.outcome, row.reason, row.error]
+          assert_equal result.data[:decision], row.match_decision
+          assert result.data[:decision].persisted?
+        end
+
+        test "an unexpected error logs the full message with backtrace" do
+          ApplyWikidata.stubs(:call).raises(RuntimeError, "boom")
+          Rails.logger.expects(:error).with { |message| message.include?("RuntimeError") && message.include?("boom") && message.lines.size > 1 }
+
+          enrich
+        end
       end
     end
   end

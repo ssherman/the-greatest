@@ -22,8 +22,8 @@ against a Wikimedia host directly.
   (P50) or is known for (P800).
 - `country_codes(item_ids)` -- one SPARQL query for a country item's ISO code (P297) and English
   label.
-- `labels(item_ids)` -- English labels for arbitrary items (used for occupation and citizenship
-  labels shown as evidence).
+- `labels(item_ids)` -- English labels for arbitrary items, else the all-languages (`mul`) label
+  many items now carry instead (used for occupation and citizenship labels shown as evidence).
 
 `Wikipedia::Client` offers only `lead(language:, title:)`: the plain-text lead of one article by
 exact title, following redirects, with the page's Wikidata item and whether it is a
@@ -86,17 +86,19 @@ that turns a name into a Wikipedia page directly.
 
 ## Caching
 
-`country_codes` and `labels` are cached in `Rails.cache` for 30 days, keyed per item
-(`wikidata:country:<id>`, `wikidata:label:<id>`). These repeat across nearly every author. On a
-cache miss, `country_codes` runs one SPARQL query for the item's ISO code (P297) and English
-label, and `labels` runs one `wbgetentities` call scoped to `props=labels`. Neither ever fetches a
-country's whole entity -- a country such as the United States is megabytes of statements on its
-own, and this codebase only ever wants its code and its label.
+`country_codes` and `labels` are cached for 30 days, keyed per item (`wikidata:country:<id>`,
+`wikidata:label:<id>`), in `config.x.external_api_cache` rather than `Rails.cache`. These repeat
+across nearly every author. On a cache miss, `country_codes` runs one SPARQL query for the item's
+ISO code (P297) and English label (the label service falls back to `mul`), and `labels` runs one
+`wbgetentities` call scoped to `props=labels` and `languages=en|mul`. Neither ever fetches a country's whole entity -- a country such as the United
+States is megabytes of statements on its own, and this codebase only ever wants its code and its
+label.
 
-Production sets no `config.cache_store` (`config/environments/production.rb` has the line
-commented out), so `Rails.cache` falls back to a per-container file store. That store is wiped on
-every deploy, so in practice these 30-day entries last only until the next deploy, not the full 30
-days.
+`config.x.external_api_cache` is a Redis store (namespace `external-api`) that survives deploys,
+which the increment-6 author backfill spans for days. It is kept separate from `Rails.cache`
+because music and games are live on the same global cache store, and production sets no
+`config.cache_store` there, so `Rails.cache` is still a per-container file store wiped on every
+deploy. In test it's a null store, so no lookup leaks between tests.
 
 A chosen Wikidata entity or Wikipedia lead is stored in `external_records`: the complete response
 body gzipped in `raw`, and the small view the code actually reads in `payload`

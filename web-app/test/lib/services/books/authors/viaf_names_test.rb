@@ -26,6 +26,10 @@ module Services
           assert_not ViafNames.same?("", "")
         end
 
+        test "a name written with ł is the same name written with l" do
+          assert ViafNames.same?("Stanislaw Lem", "Lem, Stanisław")
+        end
+
         test "a reordering has the same words as a name, in another order" do
           assert ViafNames.reordering?("Yan Mo", of: "Mo Yan")
           assert_not ViafNames.reordering?("Mo Yan", of: "Mo Yan")

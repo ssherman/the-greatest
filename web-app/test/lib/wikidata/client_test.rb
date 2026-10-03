@@ -106,12 +106,31 @@ module Wikidata
       assert_equal({}, @client.works([]))
     end
 
+    test "works logs a warning when the answer fills the row limit, since titles were cut" do
+      rows = Array.new(Client::WORKS_ROW_LIMIT) do |index|
+        {"author" => {"value" => "http://www.wikidata.org/entity/Q7243"}, "workLabel" => {"value" => "Work #{index}"}}
+      end
+      stub_request(:post, SPARQL).to_return(json_response({results: {bindings: rows}}.to_json))
+      Rails.logger.expects(:warn).with { |message| message.include?("#{Client::WORKS_ROW_LIMIT}-row limit") }.once
+
+      assert_equal Client::WORKS_ROW_LIMIT, @client.works(["Q7243"])["Q7243"].size
+    end
+
+    test "works logs nothing when the answer is under the row limit" do
+      stub_request(:post, SPARQL).to_return(json_response(fixture("sparql_works_Q7243.json")))
+      Rails.logger.expects(:warn).never
+
+      @client.works(["Q7243"])
+    end
+
     test "country_codes returns the ISO code and English label, and caches each country" do
-      Rails.stubs(:cache).returns(ActiveSupport::Cache::MemoryStore.new)
+      limiter = mock("limiter")
+      limiter.stubs(:acquire!)
+      client = Client.new(http: ::Wikimedia::Http.new(limiter: limiter), cache: ActiveSupport::Cache::MemoryStore.new)
       stub = stub_request(:post, SPARQL).to_return(json_response(fixture("sparql_country_codes.json")))
 
-      codes = @client.country_codes(["Q30", "Q34266"])
-      again = @client.country_codes(["Q30", "Q34266"])
+      codes = client.country_codes(["Q30", "Q34266"])
+      again = client.country_codes(["Q30", "Q34266"])
 
       assert_equal "US", codes.dig("Q30", "code")
       assert_nil codes.dig("Q34266", "code")
@@ -130,13 +149,44 @@ module Wikidata
     end
 
     test "labels reads English labels with wbgetentities and caches them" do
-      Rails.stubs(:cache).returns(ActiveSupport::Cache::MemoryStore.new)
+      limiter = mock("limiter")
+      limiter.stubs(:acquire!)
+      client = Client.new(http: ::Wikimedia::Http.new(limiter: limiter), cache: ActiveSupport::Cache::MemoryStore.new)
       body = {entities: {"Q36180" => {"id" => "Q36180", "labels" => {"en" => {"language" => "en", "value" => "writer"}}}}}.to_json
-      stub = stub_request(:get, API).with(query: hash_including(action: "wbgetentities", ids: "Q36180", props: "labels", languages: "en"))
+      stub = stub_request(:get, API).with(query: hash_including(action: "wbgetentities", ids: "Q36180", props: "labels", languages: "en|mul"))
         .to_return(json_response(body))
 
-      assert_equal({"Q36180" => "writer"}, @client.labels(["Q36180"]))
-      assert_equal({"Q36180" => "writer"}, @client.labels(["Q36180"]))
+      assert_equal({"Q36180" => "writer"}, client.labels(["Q36180"]))
+      assert_equal({"Q36180" => "writer"}, client.labels(["Q36180"]))
+      assert_requested stub, times: 1
+    end
+
+    test "labels falls back to the all-languages label when an item has no English one" do
+      body = {entities: {"Q1" => {"id" => "Q1", "labels" => {"mul" => {"language" => "mul", "value" => "Victor Hugo"}}}}}.to_json
+      stub_request(:get, API).with(query: hash_including(action: "wbgetentities", props: "labels")).to_return(json_response(body))
+
+      assert_equal({"Q1" => "Victor Hugo"}, @client.labels(["Q1"]))
+    end
+
+    test "country_codes asks the label service for English, then the all-languages label" do
+      stub = stub_request(:post, SPARQL).with { |request| sparql_query(request).include?('wikibase:language "en,mul"') }
+        .to_return(json_response({results: {bindings: []}}.to_json))
+
+      @client.country_codes(["Q30"])
+
+      assert_requested stub
+    end
+
+    test "a client given no cache uses the external API cache" do
+      Rails.application.config.x.stubs(:external_api_cache).returns(ActiveSupport::Cache::MemoryStore.new)
+      limiter = mock("limiter")
+      limiter.stubs(:acquire!)
+      client = Client.new(http: ::Wikimedia::Http.new(limiter: limiter))
+      body = {entities: {"Q36180" => {"id" => "Q36180", "labels" => {"en" => {"language" => "en", "value" => "writer"}}}}}.to_json
+      stub = stub_request(:get, API).with(query: hash_including(action: "wbgetentities", props: "labels")).to_return(json_response(body))
+
+      2.times { client.labels(["Q36180"]) }
+
       assert_requested stub, times: 1
     end
   end

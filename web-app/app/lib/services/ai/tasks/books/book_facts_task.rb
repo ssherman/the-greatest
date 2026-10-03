@@ -34,7 +34,7 @@ module Services
               - No em dashes or double hyphens, no semicolons, no lists, no emoji, no quotation marks around titles.
               - No marketing or judgment: no acclaimed, bestselling, masterpiece, unforgettable, must-read, no awards, no sales figures.
               - No meta narration such as "This novel" or "Readers will". Open on the subject.
-              - Plain words. Do not use: delve, tapestry, testament, poignant, seminal, groundbreaking, timeless, gripping, compelling, journey, navigate, resonate, profound, haunting, luminous, or "explores themes of".
+              - Plain words. Do not use: #{BannedWords.prose}.
               - No "not X but Y" constructions. No ornamental triads of adjectives.
               - Only what you are sure of. Say less rather than guess. If you do not know the book well enough to describe its premise, set description to null.
               - No citations, URLs, footnotes, or bracketed references inside any text field.
@@ -53,7 +53,7 @@ module Services
             lines = ["Book: \"#{parent.title}\""]
             lines << "Subtitle: #{parent.subtitle}" if parent.subtitle.present?
             lines.concat(author_lines)
-            lines << "First published (our record): #{parent.first_published_year}" if parent.first_published_year.present?
+            lines << "First published (our record): #{::Services::Books::YearLabel.call(parent.first_published_year)}" if parent.first_published_year.present?
             identifier_lines.each { |line| lines << line }
 
             existing = parent.primary_description&.content
@@ -88,8 +88,8 @@ module Services
           end
 
           def life_years(author)
-            birth = author.birth_year
-            death = author.death_year
+            birth = ::Services::Books::YearLabel.call(author.birth_year)
+            death = ::Services::Books::YearLabel.call(author.death_year)
             if birth && death
               "#{birth}–#{death}"
             elsif birth

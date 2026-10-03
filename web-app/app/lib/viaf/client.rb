@@ -29,13 +29,13 @@ module Viaf
     SUGGEST_TTL = 1.day
     REFRESH_WINDOW = 1.day
 
-    def initialize(base_client: nil, gate: nil, cache: Rails.cache)
+    def initialize(base_client: nil, gate: nil, cache: nil)
       @base_client = base_client || BaseClient.new(
         rate_limiter: RateLimiter.new(mode: :immediate),
         redirect_rate_limiter: RateLimiter.new(mode: :blocking)
       )
       @gate = gate || Gate.new
-      @cache = cache
+      @cache = cache || Rails.application.config.x.external_api_cache
     end
 
     def suggest(query)

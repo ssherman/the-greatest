@@ -18,7 +18,7 @@ module Services
         Match = Struct.new(:source_id, :evidence, keyword_init: true)
 
         # The same "done" outcomes for both steps.
-        PROCESSED = EnrichFromWikidata::PROCESSED
+        PROCESSED = LedgerRun::PROCESSED
         CONFLICTS = {
           EnrichFromWikidata::KIND => "held_qid_conflict",
           EnrichFromViaf::KIND => "held_viaf_conflict"
