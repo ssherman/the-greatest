@@ -75,7 +75,7 @@ class ReviewsController < ApplicationController
       purge_cached_page(@review)
       render_widget_and_summary(reviewable, @review)
     else
-      render turbo_stream: [], status: :unprocessable_entity
+      render_invalid(@review)
     end
   end
 
@@ -87,7 +87,7 @@ class ReviewsController < ApplicationController
       purge_cached_page(@review)
       render_widget_and_summary(@review.reviewable, @review)
     else
-      render turbo_stream: [], status: :unprocessable_entity
+      render_invalid(@review)
     end
   end
 
@@ -115,6 +115,17 @@ class ReviewsController < ApplicationController
     return if current_user
 
     render turbo_stream: [], status: :unauthorized
+  end
+
+  # Still an empty turbo stream (see the class comment), but a review that is empty
+  # once sanitized names its reason in a header: the modal cannot tell this 422 from
+  # a rejected CSRF token by status alone, and its own check cannot know that the
+  # sanitizer will reduce a body like "<br>" to nothing.
+  def render_invalid(review)
+    if review.errors.of_kind?(:base, :rating_or_body_missing)
+      response.set_header("X-Review-Error", "rating_or_text_required")
+    end
+    render turbo_stream: [], status: :unprocessable_entity
   end
 
   # Only rating, title and body are assignable. reviewable is resolved from the

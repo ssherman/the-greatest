@@ -74,7 +74,7 @@ class Review < ApplicationRecord
   def rating_or_body_present
     return if rating.present? || body.present?
 
-    errors.add(:base, "A review needs a rating or some text")
+    errors.add(:base, :rating_or_body_missing, message: "A review needs a rating or some text")
   end
 
   # BodySanitizer.call sanitizes but never transforms, so this is idempotent: running

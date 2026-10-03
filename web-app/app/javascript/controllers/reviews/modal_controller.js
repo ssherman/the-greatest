@@ -150,6 +150,12 @@ export default class extends Controller {
     if (fetchResponse && fetchResponse.statusCode === 404) {
       return "This review could not be found. It may have already been removed."
     }
+    // validate() cannot see that the server's sanitizer reduces a body like "<br>"
+    // to nothing, so ReviewsController#render_invalid names that reason in a header
+    // -- a bare 422 could also be a rejected CSRF token.
+    if (fetchResponse && fetchResponse.header("X-Review-Error") === "rating_or_text_required") {
+      return "Pick a rating or write a review before saving."
+    }
     return "Something went wrong. Please try again."
   }
 

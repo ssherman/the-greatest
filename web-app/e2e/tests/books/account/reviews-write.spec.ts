@@ -130,6 +130,21 @@ test.describe('Writing a review', () => {
     await expect(page.locator('#review_card')).toContainText('Read it, no stars from me.');
   });
 
+  test('a review that is only markup, with no rating, says what is missing', async ({ page }) => {
+    await page.goto(BOOK);
+
+    await page.getByTestId('review-widget-label').click();
+    await expect(page.locator('#review_modal')).toBeVisible();
+
+    // Non-blank to the dialog's own check, but the sanitizer reduces it to nothing,
+    // so only the server can refuse it -- and the message must still be specific.
+    await page.locator('#review_modal textarea').fill('<br>');
+    await page.getByRole('button', { name: 'Save' }).click();
+
+    await expect(page.locator('#review_modal [role="alert"]')).toHaveText('Pick a rating or write a review before saving.');
+    await expect(page.locator('#review_modal')).toBeVisible();
+  });
+
   test('a rating can be cleared only when there is text', async ({ page }) => {
     await page.goto(BOOK);
 
