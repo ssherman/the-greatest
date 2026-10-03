@@ -12,12 +12,22 @@ module Reviews
     end
 
     def render?
-      summary&.rated?
+      summary&.any_reviews?
     end
 
     private
 
     attr_reader :summary
+
+    # "· 3 ratings · 2 reviews" after the stars; "1 review" alone when nothing is
+    # rated, since there are no stars for the dot to follow.
+    def counts_text
+      parts = []
+      parts << pluralize(summary.ratings_count, "rating") if summary.rated?
+      parts << pluralize(summary.text_reviews_count, "review") if summary.text_reviews_count.positive?
+      text = parts.join(" · ")
+      summary.rated? ? "· #{text}" : text
+    end
 
     # "stars" matters: without it this is the only one of the three star labels in the
     # branch (see ReviewComponent#stars_label, StarsComponent's own default) that omits

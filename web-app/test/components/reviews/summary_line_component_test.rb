@@ -72,5 +72,21 @@ module Reviews
 
       assert_no_selector "[data-testid='review-summary-line']"
     end
+
+    test "a book with only unrated reviews shows the review count and no stars" do
+      summary = ReviewSummary.new(ratings_count: 0, ratings_sum: 0, text_reviews_count: 1)
+      render_inline(Reviews::SummaryLineComponent.new(summary: summary))
+
+      assert_selector "[data-testid='review-summary-line']"
+      assert_selector "[data-testid='review-summary-counts']", text: /\A\s*1 review\s*\z/
+      assert_no_selector "[role='img']"
+    end
+
+    test "renders nothing when there are no reviews at all" do
+      summary = ReviewSummary.new(ratings_count: 0, ratings_sum: 0, text_reviews_count: 0)
+      render_inline(Reviews::SummaryLineComponent.new(summary: summary))
+
+      assert_no_selector "[data-testid='review-summary-line']"
+    end
   end
 end
