@@ -7,6 +7,8 @@ set -uo pipefail
 . "$(dirname "$0")/helpers.sh"
 # shellcheck source=../lib/common.sh
 . "$HS_DIR/lib/common.sh"
+# shellcheck source=../lib/host.sh
+. "$HS_DIR/lib/host.sh"
 # shellcheck source=../lib/vm.sh
 . "$HS_DIR/lib/vm.sh"
 
@@ -55,6 +57,16 @@ t_blank_secrets() {
     grep -qx 'TUNNEL_TOKEN=' "$SANDBOX/blank.env"
 }
 
+t_cluster_fw() {
+  local out="$SANDBOX/cluster.fw" set
+  LAN_IPV4_CIDR=192.0.2.0/24 LAN_IPV6_PREFIX=2001:db8:1::/64 render_cluster_fw "$out" || return 1
+  ! grep -q '\${' "$out" || return 1
+  for set in lan management; do
+    sed -n "/^\[IPSET $set\]/,/^\$/p" "$out" | grep -qx '192.0.2.0/24' || return 1
+    sed -n "/^\[IPSET $set\]/,/^\$/p" "$out" | grep -qx '2001:db8:1::/64' || return 1
+  done
+}
+
 check "both user-data files are valid YAML" t_yaml
 check "user-data starts with #cloud-config" t_first_line
 check "no template variable is left unrendered" t_no_leftovers
@@ -65,4 +77,5 @@ check "the security-only origin pattern survives rendering" t_codename_literal
 check "the dev key is authorized" t_key
 check "the VM clones the tracked ref" t_ref
 check "unset secrets render as blanks, not errors" t_blank_secrets
+check "cluster.fw renders both LAN ranges into lan and management" t_cluster_fw
 finish

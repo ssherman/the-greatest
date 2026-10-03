@@ -134,28 +134,42 @@ converge_host_network() {
   [ "$(on_host "sysctl -n net.ipv6.conf.all.forwarding")" = 0 ] || die "IPv6 forwarding is on; the fetcher must have no IPv6 path"
 }
 
-converge_host_firewall() {
-  local rendered
-  rendered="$(mktemp -d)"
+# render_cluster_fw <out>: the datacenter file with this house's LAN ranges.
+render_cluster_fw() {
   # shellcheck disable=SC2016 # envsubst takes the variable list literally
   LAN_IPV4_CIDR="$LAN_IPV4_CIDR" LAN_IPV6_PREFIX="$LAN_IPV6_PREFIX" \
-    envsubst '${LAN_IPV4_CIDR} ${LAN_IPV6_PREFIX}' <"$HS_DIR/host/firewall/cluster.fw.tmpl" >"$rendered/cluster.fw"
-  cp "$HS_DIR/host/firewall/host.fw" "$HS_DIR/host/firewall/110.fw" "$HS_DIR/host/firewall/120.fw" "$rendered/"
+    envsubst '${LAN_IPV4_CIDR} ${LAN_IPV6_PREFIX}' <"$HS_DIR/host/firewall/cluster.fw.tmpl" >"$1"
+}
 
-  local pairs=("cluster.fw:/etc/pve/firewall/cluster.fw" "host.fw:/etc/pve/nodes/pve/host.fw"
-    "110.fw:/etc/pve/firewall/110.fw" "120.fw:/etc/pve/firewall/120.fw")
+converge_host_firewall() {
+  # The rendered files hold the host's /64; remove them on any exit, die included.
+  FW_RENDERED="$(mktemp -d)"
+  trap 'rm -rf "$FW_RENDERED"' EXIT
+  render_cluster_fw "$FW_RENDERED/cluster.fw"
+  cp "$HS_DIR/host/firewall/host.fw" "$HS_DIR/host/firewall/110.fw" "$HS_DIR/host/firewall/120.fw" "$FW_RENDERED/"
+
+  # cluster.fw is last: it is the file that turns the firewall on.
+  local pairs=("host.fw:/etc/pve/nodes/pve/host.fw" "110.fw:/etc/pve/firewall/110.fw"
+    "120.fw:/etc/pve/firewall/120.fw" "cluster.fw:/etc/pve/firewall/cluster.fw")
   local pair stale=()
   for pair in "${pairs[@]}"; do
-    host_file_matches "$rendered/${pair%%:*}" "${pair#*:}" || stale+=("$pair")
+    host_file_matches "$FW_RENDERED/${pair%%:*}" "${pair#*:}" || stale+=("$pair")
   done
-  if [ "${#stale[@]}" = 0 ]; then rm -rf "$rendered"; return 0; fi
+  # Matching files are not enough: a fired revert leaves them in place with the
+  # firewall stopped. Then fall through and apply under a fresh revert.
+  if [ "${#stale[@]}" = 0 ] && on_host "pve-firewall status | grep -q 'enabled/running'"; then
+    return 0
+  fi
 
-  # Stopping pve-firewall drops every rule it installed: the safe state if a
-  # rule here cuts SSH off.
-  on_host "confirm-or-revert arm firewall 120 'pve-firewall stop'"
-  for pair in "${stale[@]}"; do put_host "$rendered/${pair%%:*}" "${pair#*:}"; done
-  rm -rf "$rendered"
-  on_host "pve-firewall compile >/dev/null" || die "pve-firewall rejected the rules (compile failed)"
+  # The revert disables the datacenter firewall in cluster.fw before stopping
+  # it, so a reboot afterwards comes up open rather than with the bad rules, and
+  # the next run sees cluster.fw differ and rewrites it.
+  on_host "confirm-or-revert arm firewall 120 \"sed -i 's/^enable: 1/enable: 0/' /etc/pve/firewall/cluster.fw; pve-firewall stop\""
+  for pair in "${stale[@]}"; do put_host "$FW_RENDERED/${pair%%:*}" "${pair#*:}"; done
+  # compile exits 0 on bad rules (it warns on stderr and skips them).
+  local warnings
+  warnings="$(on_host "pve-firewall compile 2>&1 >/dev/null")" || die "pve-firewall compile failed: $warnings"
+  [ -z "$warnings" ] || die "pve-firewall rejected rules: $warnings"
   on_host "systemctl restart pve-firewall"
   sleep 15
   if on_host "pve-firewall status | grep -q 'enabled/running'"; then

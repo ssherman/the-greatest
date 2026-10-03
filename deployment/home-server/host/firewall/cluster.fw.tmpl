@@ -9,6 +9,10 @@ policy_out: ACCEPT
 ${LAN_IPV4_CIDR}
 ${LAN_IPV6_PREFIX}
 
+[IPSET management] # Proxmox's own allow for 22/8006 (and its console ports); covers both families
+${LAN_IPV4_CIDR}
+${LAN_IPV6_PREFIX}
+
 [IPSET private] # destinations the fetcher may never reach
 0.0.0.0/8
 10.0.0.0/8

@@ -1,6 +1,6 @@
 # Installed by deployment/home-server/provision. SSH and the web UI from the
-# house LAN only. Proxmox also keeps its own management rule for the host's
-# local network, which is what stops a mistake here from locking out SSH.
+# house LAN only. The lockout guard is the datacenter `management` ipset in
+# cluster.fw: Proxmox's own rule allows 22/8006 from it whatever this file says.
 [OPTIONS]
 enable: 1
 
