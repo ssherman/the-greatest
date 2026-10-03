@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 # One author through Services::Books::Authors::EnrichAuthor (spec §9-§11),
-# the chain's last step, on the low queue. A failed AI run raises, so
+# the chain's last step, on the author_chain queue, last in strict order
+# after low. A failed AI run raises, so
 # Sidekiq retries it as it does a book's. The books whose enrichment waited
 # for this author (Services::Books::DeferredEnrichment) are then handed on
 # to Books::EnrichBookJob: after a successful run, or once the retries are
@@ -9,7 +10,7 @@
 class Books::Authors::EnrichJob
   include Sidekiq::Job
 
-  sidekiq_options queue: :low, retry: 3
+  sidekiq_options queue: :author_chain, retry: 3
 
   sidekiq_retries_exhausted do |job, _exception|
     hand_off(job["args"].first)

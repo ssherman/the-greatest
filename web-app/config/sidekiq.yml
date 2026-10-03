@@ -1,6 +1,10 @@
 ---
 :concurrency: 5
+# Strict priority, in this order. author_chain is last: the books author
+# chain (Books::Authors::*Job) can hold tens of thousands of jobs during a
+# backfill, and must never queue ahead of members' jobs on low.
 :queues:
   - critical
   - default
   - low
+  - author_chain

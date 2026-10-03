@@ -7,7 +7,7 @@ class FakeWikidataClient
 
   # entities: requested id => entity Hash (see WikidataEntityBuilder)
   # searches: name => [ids]; statements: [ids]; works: id => [titles]
-  def initialize(entities: {}, searches: {}, statements: [], works: {}, labels: {}, country_codes: {}, works_error: nil)
+  def initialize(entities: {}, searches: {}, statements: [], works: {}, labels: {}, country_codes: {}, works_error: nil, labels_error: nil)
     @entities = entities
     @searches = searches
     @statements = statements
@@ -15,6 +15,7 @@ class FakeWikidataClient
     @labels = labels
     @country_codes = country_codes
     @works_error = works_error
+    @labels_error = labels_error
     @calls = []
   end
 
@@ -42,6 +43,8 @@ class FakeWikidataClient
 
   def labels(ids)
     @calls << [:labels, ids]
+    raise @labels_error if @labels_error
+
     @labels.slice(*ids)
   end
 

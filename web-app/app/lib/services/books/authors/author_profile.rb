@@ -13,7 +13,7 @@ module Services
         def self.lifespan(birth, death)
           return nil if birth.nil? && death.nil?
 
-          "#{birth || "?"}–#{death}"
+          "#{::Services::Books::YearLabel.call(birth) || "?"}–#{::Services::Books::YearLabel.call(death)}"
         end
 
         def initialize(author)

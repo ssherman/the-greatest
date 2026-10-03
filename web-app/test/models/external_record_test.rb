@@ -18,8 +18,9 @@ require "test_helper"
 #
 # Indexes
 #
-#  index_external_records_on_source_and_fetched_at  (source,fetched_at)
-#  index_external_records_on_source_and_source_id   (source,source_id) UNIQUE
+#  index_external_records_on_source_and_fetched_at         (source,fetched_at)
+#  index_external_records_on_source_and_source_id          (source,source_id) UNIQUE
+#  index_external_records_on_wikipedia_language_and_title  (((payload ->> 'language'::text)), ((payload ->> 'title'::text))) WHERE (source = 2)
 #
 class ExternalRecordTest < ActiveSupport::TestCase
   test "valid with required attributes" do
@@ -107,5 +108,17 @@ class ExternalRecordTest < ActiveSupport::TestCase
 
     assert_nil record.raw
     assert_nil record.raw_text
+  end
+
+  # WikipediaLead.fetch reads stored leads by language and title. The
+  # index's WHERE names the wikipedia source by its enum value, so a
+  # renumbered enum would leave it indexing the wrong rows.
+  test "stored Wikipedia leads are indexed by language and title" do
+    index = ActiveRecord::Base.connection.indexes(:external_records)
+      .find { |candidate| candidate.name == "index_external_records_on_wikipedia_language_and_title" }
+
+    assert index, "the index is missing"
+    assert_equal "(source = 2)", index.where
+    assert_equal 2, ExternalRecord.sources["wikipedia"]
   end
 end

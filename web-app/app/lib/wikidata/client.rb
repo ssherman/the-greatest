@@ -2,9 +2,9 @@
 
 module Wikidata
   # The Wikidata operations the author steps use (spec §4), over the paced
-  # Wikimedia::Http. Country and label lookups are cached for 30 days: they
-  # repeat across nearly every author, and a country entity fetched whole
-  # can be megabytes.
+  # Wikimedia::Http. Country and label lookups are cached for 30 days in
+  # config.x.external_api_cache: they repeat across nearly every author, and
+  # a country entity fetched whole can be megabytes.
   class Client
     API_URL = "https://www.wikidata.org/w/api.php"
     SPARQL_URL = "https://query.wikidata.org/sparql"
@@ -18,8 +18,9 @@ module Wikidata
     # A value is safe inside haswbstatement when it has no space or quote.
     STATEMENT_VALUE = /\A[\w.-]+\z/
 
-    def initialize(http: nil)
+    def initialize(http: nil, cache: nil)
       @http = http || ::Wikimedia::Http.new
+      @cache = cache || Rails.application.config.x.external_api_cache
     end
 
     # Keyed by the id asked for: a merged item answers under the surviving
@@ -70,7 +71,12 @@ module Wikidata
           ?work rdfs:label ?workLabel . FILTER(LANG(?workLabel) = "en")
         } LIMIT #{WORKS_ROW_LIMIT}
       SPARQL
-      bindings(@http.sparql(SPARQL_URL, query)).each_with_object({}) do |row, found|
+      rows = bindings(@http.sparql(SPARQL_URL, query))
+      if rows.size >= WORKS_ROW_LIMIT
+        Rails.logger.warn("Wikidata::Client#works: #{rows.size} rows filled the #{WORKS_ROW_LIMIT}-row limit for " \
+          "#{ids.join(", ")}; titles past it were cut")
+      end
+      rows.each_with_object({}) do |row, found|
         id = entity_id(row["author"])
         title = row.dig("workLabel", "value")
         next if id.nil? || title.blank?
@@ -90,7 +96,7 @@ module Wikidata
         SELECT ?country ?code ?countryLabel WHERE {
           VALUES ?country { #{missing.map { |id| "wd:#{id}" }.join(" ")} }
           OPTIONAL { ?country wdt:P297 ?code }
-          SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+          SERVICE wikibase:label { bd:serviceParam wikibase:language "en,mul". }
         }
       SPARQL
       fetched = {}
@@ -102,7 +108,7 @@ module Wikidata
         code = row.dig("code", "value").to_s
         entry["code"] ||= code if code.match?(ISO_CODE)
       end
-      fetched.each { |id, entry| Rails.cache.write(cache_key("country", id), entry, expires_in: CACHE_TTL) }
+      fetched.each { |id, entry| @cache.write(cache_key("country", id), entry, expires_in: CACHE_TTL) }
       cached.merge(fetched)
     end
 
@@ -111,13 +117,15 @@ module Wikidata
       cached = read_cached("label", ids)
       fetched = {}
       (ids - cached.keys).each_slice(MAX_IDS) do |slice|
-        data = @http.action_api(API_URL, action: "wbgetentities", ids: slice.join("|"), props: "labels", languages: "en").data
+        # English, else the all-languages label many items now carry instead.
+        data = @http.action_api(API_URL, action: "wbgetentities", ids: slice.join("|"), props: "labels", languages: "en|mul").data
         (data["entities"] || {}).each do |requested, entity|
-          label = (entity.is_a?(Hash) && entity["labels"].is_a?(Hash)) ? entity["labels"].dig("en", "value") : nil
+          labels = (entity.is_a?(Hash) && entity["labels"].is_a?(Hash)) ? entity["labels"] : {}
+          label = labels.dig("en", "value").presence || labels.dig("mul", "value")
           next if label.blank?
 
           fetched[requested] = label
-          Rails.cache.write(cache_key("label", requested), label, expires_in: CACHE_TTL)
+          @cache.write(cache_key("label", requested), label, expires_in: CACHE_TTL)
         end
       end
       cached.merge(fetched)
@@ -135,7 +143,7 @@ module Wikidata
       return {} if ids.empty?
 
       keys = ids.index_by { |id| cache_key(kind, id) }
-      Rails.cache.read_multi(*keys.keys).transform_keys { |key| keys[key] }
+      @cache.read_multi(*keys.keys).transform_keys { |key| keys[key] }
     end
   end
 end

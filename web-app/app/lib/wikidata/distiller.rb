@@ -5,8 +5,14 @@ module Wikidata
   # Only best-rank statements count: the preferred ones when any exist,
   # otherwise the normal ones, never deprecated ones. The full entity is kept
   # separately, gzipped (ExternalRecord#raw_text).
+  #
+  # Names read English first, then "mul", the label Wikidata keeps for all
+  # languages: many people's items now carry their name only there (Victor
+  # Hugo's has no English label at all). SCHEMA_VERSION 2 added that
+  # fallback, so an item stored under 1 is fetched and distilled again.
   module Distiller
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
+    NAME_LANGUAGES = %w[en mul].freeze
 
     IDENTIFIER_PROPERTIES = {
       "viaf" => "P214", "isni" => "P213", "lcnaf" => "P244",
@@ -25,8 +31,8 @@ module Wikidata
       claims = entity["claims"].is_a?(Hash) ? entity["claims"] : {}
       {
         "id" => entity["id"],
-        "label" => english(entity["labels"]),
-        "aliases" => english_list(entity["aliases"]),
+        "label" => name(entity["labels"]),
+        "aliases" => name_list(entity["aliases"]),
         "description" => english(entity["descriptions"]),
         "instance_of" => item_ids(claims, "P31"),
         "birth" => times(claims, "P569"),
@@ -46,10 +52,18 @@ module Wikidata
       terms.is_a?(Hash) ? terms.dig("en", "value") : nil
     end
 
-    def english_list(terms)
+    # The English label, else the all-languages one.
+    def name(terms)
+      return nil unless terms.is_a?(Hash)
+
+      NAME_LANGUAGES.lazy.filter_map { |language| terms.dig(language, "value") }.first
+    end
+
+    # English aliases, then the all-languages ones.
+    def name_list(terms)
       return [] unless terms.is_a?(Hash)
 
-      Array(terms["en"]).filter_map { |term| term["value"] if term.is_a?(Hash) }
+      NAME_LANGUAGES.flat_map { |language| Array(terms[language]).filter_map { |term| term["value"] if term.is_a?(Hash) } }.uniq
     end
 
     def best(claims, property)
@@ -83,6 +97,6 @@ module Wikidata
       end
     end
 
-    private_class_method :english, :english_list, :best, :values, :item_ids, :times
+    private_class_method :english, :name, :name_list, :best, :values, :item_ids, :times
   end
 end

@@ -130,6 +130,54 @@ module Services
           assert_raises(::Viaf::Exceptions::RateLimited) { run_viaf(client: client) }
           assert_empty rows
         end
+
+        test "a re-migrated author gets back the VIAF id its earlier match chose, and resolves without AutoSuggest" do
+          ::MatchDecision.create!(finder: ResolveViaf.name, subject: @author, outcome: :matched, confidence: :high,
+            decided_by: :rule, candidates: [{"external_source" => "viaf", "external_key" => "5391"}], selected_index: 1,
+            created_at: @author.created_at - 1.day)
+
+          result = run_viaf
+
+          assert_equal "identifier", result.data[:decision].decided_by
+          assert_not @client.called?(:suggest)
+          assert_equal "5391", rows.sole.facts.dig("restored_identifier", "value")
+        end
+
+        test "a rate limit before the decision takes a restored id back off, so the rescheduled run restores and records it" do
+          ::MatchDecision.create!(finder: ResolveViaf.name, subject: @author, outcome: :matched, confidence: :high,
+            decided_by: :rule, candidates: [{"external_source" => "viaf", "external_key" => "5391"}], selected_index: 1,
+            created_at: @author.created_at - 1.day)
+          limited = FakeViafClient.new(people: {"5391" => ::Viaf::Exceptions::RateLimited.new("wait", retry_after: 30)})
+
+          assert_raises(::Viaf::Exceptions::RateLimited) { run_viaf(client: limited) }
+          assert_empty @author.identifiers.where(identifier_type: :books_author_viaf)
+          assert_empty rows
+
+          run_viaf
+
+          assert_equal "5391", rows.sole.facts.dig("restored_identifier", "value")
+        end
+
+        test "an unexpected error after the decision writes one failed row tied to it, and does not raise" do
+          ApplyViaf.stubs(:call).raises(RuntimeError, "boom")
+
+          result = run_viaf
+
+          row = rows.sole
+          assert_equal [:failed, false], [result.data[:outcome], result.success?]
+          assert_equal ["failed", "unexpected_error", "RuntimeError: boom"], [row.outcome, row.reason, row.error]
+          assert_equal result.data[:decision], row.match_decision
+        end
+
+        # Viaf::Exceptions::RateLimited (and Paused, its subclass) are not
+        # Viaf::Exceptions::Error: they are requests to wait, and ViafJob
+        # turns them into a reschedule. The catch-all must not swallow them.
+        test "a pause propagates past the catch-all and writes nothing" do
+          client = FakeViafClient.new(suggestions: {"Stacy Willingham" => ::Viaf::Exceptions::Paused.new("paused", retry_after: 3600)})
+
+          assert_raises(::Viaf::Exceptions::Paused) { run_viaf(client: client) }
+          assert_empty rows
+        end
       end
     end
   end

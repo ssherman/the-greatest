@@ -65,6 +65,20 @@ module Wikidata
       assert_equal 0, payload["sitelink_count"]
     end
 
+    # Wikidata now keeps many names only under "mul" (default for all
+    # languages): Victor Hugo's item has no English label at all.
+    test "falls back to the all-languages label and adds its aliases, preferring English where both exist" do
+      mul_only = Distiller.call({"id" => "Q535", "labels" => {"mul" => {"language" => "mul", "value" => "Victor Hugo"}},
+        "aliases" => {"mul" => [{"language" => "mul", "value" => "Victor-Marie Hugo"}], "en" => [{"language" => "en", "value" => "Hugo"}]},
+        "claims" => {}, "sitelinks" => {}})
+      both = Distiller.call({"id" => "Q1", "labels" => {"en" => {"language" => "en", "value" => "Leo Tolstoy"},
+                                                        "mul" => {"language" => "mul", "value" => "Lev Tolstoy"}}, "aliases" => {}, "claims" => {}, "sitelinks" => {}})
+
+      assert_equal "Victor Hugo", mul_only["label"]
+      assert_equal ["Hugo", "Victor-Marie Hugo"], mul_only["aliases"]
+      assert_equal "Leo Tolstoy", both["label"]
+    end
+
     test "refuses a missing entity" do
       assert_raises(::Wikimedia::Exceptions::ParseError) { Distiller.call({"id" => "Q0", "missing" => true}) }
       assert_raises(::Wikimedia::Exceptions::ParseError) { Distiller.call(nil) }
