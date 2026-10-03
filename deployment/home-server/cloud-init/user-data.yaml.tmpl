@@ -26,6 +26,9 @@ write_files:
       APT::Periodic::Unattended-Upgrade "1";
   - path: /etc/apt/apt.conf.d/52unattended-upgrades-home-server
     content: |
+      // Security updates only: the default pattern also takes point releases.
+      #clear Unattended-Upgrade::Origins-Pattern;
+      Unattended-Upgrade::Origins-Pattern { "origin=Debian,codename=${distro_codename}-security,label=Debian-Security"; };
       // reboot-if-required.timer reboots, and only when no data build is running.
       Unattended-Upgrade::Automatic-Reboot "false";
 runcmd:

@@ -27,7 +27,8 @@ env_from_yaml() { # decode the env file a rendered user-data carries
 
 t_yaml() { for r in ol fetcher; do ruby -ryaml -e 'YAML.load_file(ARGV[0])' "$SANDBOX/$r.yaml" || return 1; done; }
 t_first_line() { [ "$(head -1 "$SANDBOX/ol.yaml")" = "#cloud-config" ]; }
-t_no_leftovers() { ! grep -q '\${' "$SANDBOX/ol.yaml" "$SANDBOX/fetcher.yaml"; }
+# ${distro_codename} is apt's own variable, meant to survive rendering.
+t_no_leftovers() { ! cat "$SANDBOX/ol.yaml" "$SANDBOX/fetcher.yaml" | grep -v 'distro_codename' | grep -q '\${'; }
 t_ol_env() {
   env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'ROLE=ol' &&
     env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'TUNNEL_TOKEN=ol-token' &&
@@ -44,6 +45,9 @@ t_env_keys() {
     [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH " ] || return 1
   done
 }
+t_codename_literal() {
+  grep -qF '${distro_codename}-security' "$SANDBOX/ol.yaml" "$SANDBOX/fetcher.yaml"
+}
 t_key() { grep -q 'ssh-ed25519 AAAATEST' "$SANDBOX/ol.yaml"; }
 t_ref() { grep -q 'clone --depth 1 --branch main ' "$SANDBOX/ol.yaml"; }
 t_blank_secrets() {
@@ -57,6 +61,7 @@ check "no template variable is left unrendered" t_no_leftovers
 check "ol gets its role, token and refresh check" t_ol_env
 check "fetcher holds nothing of ol's" t_fetcher_isolation
 check "each env has exactly the keys guest/lib.sh documents" t_env_keys
+check "the security-only origin pattern survives rendering" t_codename_literal
 check "the dev key is authorized" t_key
 check "the VM clones the tracked ref" t_ref
 check "unset secrets render as blanks, not errors" t_blank_secrets

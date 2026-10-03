@@ -24,17 +24,23 @@ converge_host_packages() {
     note_change "installed jq unattended-upgrades"
   fi
   local pending
-  pending="$(on_host "apt-get -s full-upgrade | grep -c '^Inst' || true")"
+  # No pipefail on the far side: capture first so a failing apt is not a zero.
+  # shellcheck disable=SC2016 # the remote shell expands these
+  pending="$(on_host 'out="$(apt-get -s full-upgrade)" || exit 1; printf "%s\n" "$out" | grep -c "^Inst" || true')" ||
+    die "apt-get -s full-upgrade failed on the host"
   if [ "$pending" != 0 ]; then
     log "upgrading $pending host package(s)"
-    on_host "DEBIAN_FRONTEND=noninteractive apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold full-upgrade >/dev/null"
+    # A transient unit, so an SSH drop cannot SIGHUP dpkg mid-upgrade.
+    on_host "systemd-run --wait --pipe --quiet --collect --unit=provision-upgrade env DEBIAN_FRONTEND=noninteractive apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold full-upgrade >/dev/null" ||
+      die "apt-get full-upgrade failed on the host"
     UPGRADED="$pending" # reported, but not a "change" for the idempotence check
   fi
 
   # Nothing here uses NFS.
-  if on_host "systemctl is-enabled --quiet rpcbind.socket || systemctl is-active --quiet rpcbind"; then
-    on_host "systemctl disable --now rpcbind.socket rpcbind.service >/dev/null 2>&1"
-    note_change "disabled rpcbind"
+  # shellcheck disable=SC2016 # the remote shell expands these
+  if ! on_host 'for u in rpcbind.socket rpcbind.service; do [ "$(systemctl is-enabled $u 2>/dev/null)" = masked ] || exit 1; done'; then
+    on_host "systemctl mask --now rpcbind.socket rpcbind.service >/dev/null 2>&1"
+    note_change "masked rpcbind"
   fi
 
   # Custom cloud-init user-data lives in snippets on `local`.
