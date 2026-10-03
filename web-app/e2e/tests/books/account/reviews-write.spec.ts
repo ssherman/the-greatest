@@ -112,4 +112,41 @@ test.describe('Writing a review', () => {
     await expect(page.getByTestId('review')).toContainText('at the very end.');
     await expect(page.locator('.review-spoiler')).toHaveText('dies');
   });
+
+  test('a reader can save a written review with no rating', async ({ page }) => {
+    await page.goto(BOOK);
+
+    await page.getByTestId('review-widget-label').click();
+    await expect(page.locator('#review_modal')).toBeVisible();
+
+    await page.locator('#review_modal textarea').fill('Read it, no stars from me.');
+    await page.getByRole('button', { name: 'Save' }).click();
+
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+    await expect(page.getByTestId('review-widget-label')).toHaveText('Edit your review');
+    await expect(page.getByRole('img', { name: 'Reviewed without a rating' })).toBeVisible();
+    await expect(page.locator('#review_summary_line')).toContainText('1 review');
+    await expect(page.locator('#review_card')).toContainText('No ratings yet');
+    await expect(page.locator('#review_card')).toContainText('Read it, no stars from me.');
+  });
+
+  test('a rating can be cleared only when there is text', async ({ page }) => {
+    await page.goto(BOOK);
+
+    await page.getByTestId('review-widget-label').click();
+    await page.getByTestId('review-star-button').nth(2).click();
+    await expect(page.getByTestId('review-clear-rating')).toBeVisible();
+    await page.getByTestId('review-clear-rating').click();
+    await expect(page.getByTestId('review-clear-rating')).toBeHidden();
+
+    // No stars and no text: the modal refuses before anything is sent.
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('#review_modal [role="alert"]')).toHaveText('Pick a rating or write a review before saving.');
+    await expect(page.locator('#review_modal')).toBeVisible();
+
+    await page.locator('#review_modal textarea').fill('Text instead of stars.');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+    await expect(page.locator('#review_summary_line')).toContainText('1 review');
+  });
 });

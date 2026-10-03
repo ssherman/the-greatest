@@ -10,9 +10,13 @@
 <div class="card bg-base-100 shadow-xl">
   <div class="card-body">
     <div class="flex flex-wrap items-center gap-3">
-      <%= render Reviews::StarsComponent.new(rating: @review.rating, size: "size-5",
-            label: "Rated #{@review.rating} out of 5 stars") %>
-      <span class="tabular-nums text-base-content/70"><%= @review.rating %> / 5</span>
+      <% if @review.rating %>
+        <%= render Reviews::StarsComponent.new(rating: @review.rating, size: "size-5",
+              label: "Rated #{@review.rating} out of 5 stars") %>
+        <span class="tabular-nums text-base-content/70"><%= @review.rating %> / 5</span>
+      <% else %>
+        <span class="text-base-content/70">No rating</span>
+      <% end %>
     </div>
 
     <% if @review.title.present? %>

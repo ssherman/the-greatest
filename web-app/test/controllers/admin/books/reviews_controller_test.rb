@@ -23,6 +23,24 @@ module Admin
         ENV["CLOUDFLARE_CACHE_PURGE_TOKEN"] = @original_purge_token
       end
 
+      test "show renders a review with no rating" do
+        review = Review.create!(user: @regular_user, reviewable: books_books(:got), body: "<p>No stars.</p>")
+        sign_in_as(@admin_user, stub_auth: true)
+
+        get admin_books_review_path(review)
+
+        assert_response :success
+      end
+
+      test "index renders when a review has no rating" do
+        Review.create!(user: @regular_user, reviewable: books_books(:got), body: "<p>No stars.</p>")
+        sign_in_as(@admin_user, stub_auth: true)
+
+        get admin_books_reviews_path
+
+        assert_response :success
+      end
+
       test "index redirects unauthenticated users" do
         get admin_books_reviews_path
         assert_redirected_to books_root_path
