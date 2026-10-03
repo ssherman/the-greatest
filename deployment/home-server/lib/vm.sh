@@ -111,7 +111,7 @@ create_vm() {
 
 wait_for_first_boot() { # wait_for_first_boot <role>
   local i
-  for i in $(seq 1 60); do vm_ssh "$1" true 2>/dev/null && break; sleep 10; done
+  for i in $(seq 1 60); do (vm_ssh "$1" true) 2>/dev/null && break; sleep 10; done
   vm_ssh "$1" true || die "$1 never answered SSH"
   log "waiting for $1's cloud-init (the first image build takes several minutes)"
   vm_ssh "$1" "cloud-init status --wait >/dev/null; cloud-init status --long" | tee /dev/stderr | grep -q 'status: done' ||
@@ -154,6 +154,9 @@ ensure_vm() {
   fi
   converge_vm_settings
   if ! on_host "qm status $VMID | grep -q running"; then on_host "qm start $VMID"; note_change "started VM $VMID"; fi
+  # push_vm_env needs the env file and state dir cloud-init creates, so a VM
+  # still in its first boot is waited for. A finished VM answers at once.
+  if ! (vm_ssh "$1" 'cloud-init status') 2>/dev/null | grep -q 'status: done'; then wait_for_first_boot "$1"; fi
   push_vm_env "$1"
 }
 
