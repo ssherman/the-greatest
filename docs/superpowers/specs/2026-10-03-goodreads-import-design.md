@@ -466,8 +466,10 @@ item.
 - **Books.** Pairs the finder flags go into the existing `DuplicateCandidate` queue. Auto
   `merge_books` only when the normalized titles are equal, the author id sets are identical, and the
   two books share a corroborated identifier.
-- **Authors.** The author finder runs in `verify: true` over each import-created author (the 2,934
-  normalized-name groups are the expected yield). Auto `merge_authors` only when the normalized
+- **Authors.** The author finder runs in `verify: true` over **every author in a normalized-name
+  group** (2,934 groups, 7,229 authors), not only import-created ones: the legacy add-book modal
+  created authors with `Author.find_or_create_by!(name:)`, and those never appear in a CSV. Auto
+  `merge_authors` only when the normalized
   names are equal, there is no birth/death year conflict, there is no conflicting external
   identifier (OL key, Wikidata QID, VIAF), **and** a `fast` AI check given both authors' book lists
   says they are the same person. Everything else is queued.
@@ -563,7 +565,8 @@ Each has its own plan and PR.
 
 **Non-goals**: scraping users' Goodreads shelves (the CSV export is the only input); creating
 `Books::Edition` rows; Goodreads descriptions or genres; other services (StoryGraph, LibraryThing);
-the Proxmox deployment itself.
+the Proxmox deployment itself; porting the legacy add-book modal (Goodreads URL, Amazon URL, title
+and author), which is a separate, later project.
 
 **Dependencies**: the replay (increment 5) and production verification need the Open Library
 service and page fetcher deployed (Proxmox, Cloudflare Access, the fetcher's egress block). The
