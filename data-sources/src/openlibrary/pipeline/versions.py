@@ -1,4 +1,3 @@
-# data-sources/src/openlibrary/pipeline/versions.py
 """What the home server's refresh timer asks before and after a build.
 
 The pipeline never decides whether to build or what to serve: the `ol` VM's
@@ -45,7 +44,10 @@ def read_status(root: Path) -> VersionStatus:
         for directory in sorted(d for d in versions_dir.iterdir() if d.is_dir()):
             try:
                 manifest = json.loads((directory / "manifest.json").read_text())
-            except (FileNotFoundError, json.JSONDecodeError):
+            except (OSError, ValueError):
+                incomplete.append(directory.name)
+                continue
+            if not isinstance(manifest, dict):
                 incomplete.append(directory.name)
                 continue
             (passing if manifest.get("gates_passed") is True else failed).append(directory.name)
@@ -65,13 +67,15 @@ def prune(root: Path, *, keep: int, current: str | None) -> list[Path]:
     keep_versions = set(status.passing[-keep:]) if keep > 0 else set()
     if current:
         keep_versions.add(current)
-    newest_passing = status.passing[-1] if status.passing else None
+    built = status.passing + status.failed
+    newest_built = max(built) if built else None
 
     def superseded(date: str) -> bool:
-        return newest_passing is not None and date < newest_passing
+        return newest_built is not None and date < newest_built
 
     doomed = [d for d in status.passing if d not in keep_versions]
-    # A failed or unfinished date keeps its _staging until a newer date passes:
+    # A failed or unfinished date keeps its _staging until a newer date builds
+    # (passes or fails):
     # it is what explains the failure.
     doomed += [d for d in status.failed + status.incomplete if superseded(d)]
 
@@ -110,7 +114,7 @@ def status_command(root: Path = typer.Option(..., "--root")) -> None:  # noqa: B
 @app.command("prune")
 def prune_command(
     root: Path = typer.Option(..., "--root"),  # noqa: B008
-    keep: int = typer.Option(2, "--keep"),
+    keep: int = typer.Option(2, "--keep", min=1),
     current: str | None = typer.Option(None, "--current"),
 ) -> None:
     for path in prune(root, keep=keep, current=current):

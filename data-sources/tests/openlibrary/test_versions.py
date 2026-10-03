@@ -1,4 +1,3 @@
-# data-sources/tests/openlibrary/test_versions.py
 import json
 from pathlib import Path
 
@@ -69,7 +68,7 @@ def test_prune_keeps_the_newest_passing_versions_and_the_current_one(tmp_path):
     assert removed == [tmp_path / "versions" / "2026-07-31"]
 
 
-def test_prune_keeps_a_failed_build_until_a_newer_date_passes(tmp_path):
+def test_prune_keeps_a_failed_build_until_a_newer_date_builds(tmp_path):
     _version(tmp_path, "2026-08-31", gates_passed=True)
     _version(tmp_path, "2026-09-30", gates_passed=False)
 
@@ -81,6 +80,36 @@ def test_prune_keeps_a_failed_build_until_a_newer_date_passes(tmp_path):
     assert not (tmp_path / "versions" / "2026-09-30").exists()
 
 
+def test_prune_drops_an_older_failed_date_when_a_newer_one_also_fails(tmp_path):
+    _version(tmp_path, "2026-08-31", gates_passed=True)
+    _version(tmp_path, "2026-09-30", gates_passed=False)
+    _version(tmp_path, "2026-10-31", gates_passed=False)
+    _dumps(tmp_path, "2026-09-30")
+    _dumps(tmp_path, "2026-10-31")
+
+    prune(tmp_path, keep=2, current="2026-08-31")
+
+    assert not (tmp_path / "versions" / "2026-09-30").exists()
+    assert (tmp_path / "versions" / "2026-10-31").exists()
+    assert sorted(p.name for p in (tmp_path / "dumps").iterdir()) == ["2026-10-31"]
+
+
+def test_prune_removes_a_superseded_incomplete_version(tmp_path):
+    _version(tmp_path, "2026-08-31", gates_passed=None)
+    _version(tmp_path, "2026-09-30", gates_passed=True)
+
+    prune(tmp_path, keep=2, current="2026-09-30")
+
+    assert not (tmp_path / "versions" / "2026-08-31").exists()
+
+
+def test_a_manifest_that_is_not_an_object_is_incomplete(tmp_path):
+    directory = _version(tmp_path, "2026-08-31", gates_passed=None)
+    (directory / "manifest.json").write_text("[]")
+
+    assert read_status(tmp_path).incomplete == ["2026-08-31"]
+
+
 def test_prune_drops_dumps_once_their_date_is_built_or_superseded(tmp_path):
     _version(tmp_path, "2026-08-31", gates_passed=True)
     _version(tmp_path, "2026-09-30", gates_passed=False)
@@ -88,8 +117,10 @@ def test_prune_drops_dumps_once_their_date_is_built_or_superseded(tmp_path):
     _dumps(tmp_path, "2026-08-31")
     _dumps(tmp_path, "2026-09-30")
 
-    prune(tmp_path, keep=2, current="2026-08-31")
+    removed = prune(tmp_path, keep=2, current="2026-08-31")
 
+    assert tmp_path / "dumps" / "2026-07-31" in removed
+    assert tmp_path / "dumps" / "2026-08-31" in removed
     # 09-30 failed and is newer than anything passing: its dumps stay for a retry.
     assert sorted(p.name for p in (tmp_path / "dumps").iterdir()) == ["2026-09-30"]
 
