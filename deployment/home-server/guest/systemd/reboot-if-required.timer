@@ -1,0 +1,8 @@
+[Unit]
+Description=Nightly reboot window
+
+[Timer]
+OnCalendar=*-*-* 05:30
+
+[Install]
+WantedBy=timers.target

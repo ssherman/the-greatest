@@ -1,0 +1,6 @@
+[Unit]
+Description=Reboot for installed updates unless a data build is running
+
+[Service]
+Type=oneshot
+ExecStart=/opt/the-greatest/deployment/home-server/guest/reboot-if-required.sh
