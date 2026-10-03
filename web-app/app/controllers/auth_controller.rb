@@ -26,9 +26,8 @@ class AuthController < ApplicationController
   # check_provider confirms whether an address has an account and names its
   # provider, which is an enumeration oracle.
   #
-  # by: goes through visitor_ip, never request.remote_ip -- in production
-  # remote_ip is the Cloudflare edge IP, so keying on it would put every visitor
-  # in one bucket and lock out the whole site.
+  # by: goes through visitor_ip (the VisitorIp concern), like every IP-keyed
+  # limit, so they all agree on who the visitor is.
   #
   # with: is not optional. Rails' default raises TooManyRequests, which renders
   # an HTML error body to a caller that asked for JSON.

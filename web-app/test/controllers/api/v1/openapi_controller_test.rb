@@ -73,11 +73,11 @@ module Api
 
         freeze_time do
           limit.times do
-            get "/api/v1/openapi.json", headers: {"CF-Connecting-IP" => "203.0.113.42"}
+            get "/api/v1/openapi.json", env: {"REMOTE_ADDR" => "203.0.113.42"}
             assert_response :success
           end
 
-          get "/api/v1/openapi.json", headers: {"CF-Connecting-IP" => "203.0.113.42"}
+          get "/api/v1/openapi.json", env: {"REMOTE_ADDR" => "203.0.113.42"}
 
           assert_response :too_many_requests
           assert_api_conform(status: 429)
@@ -88,7 +88,7 @@ module Api
           assert_nil response.headers["X-RateLimit-Daily-Limit"]
           refute_match(/public/, response.headers["Cache-Control"].to_s)
 
-          get "/api/v1/openapi.json", headers: {"CF-Connecting-IP" => "203.0.113.43"}
+          get "/api/v1/openapi.json", env: {"REMOTE_ADDR" => "203.0.113.43"}
           assert_response :success
         end
       end

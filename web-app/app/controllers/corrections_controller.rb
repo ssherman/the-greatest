@@ -38,9 +38,8 @@ class CorrectionsController < ApplicationController
   # legacy submissions were anonymous -- because nothing an anonymous flood
   # produces is published; it costs triage time, which bulk-reject makes cheap.
   #
-  # by: goes through visitor_ip, NOT request.remote_ip -- see the VisitorIp
-  # concern. remote_ip in production is the Cloudflare edge IP, so keying on it
-  # would put every visitor into one bucket and lock out the whole site.
+  # by: goes through visitor_ip (the VisitorIp concern), like every IP-keyed
+  # limit, so they all agree on who the visitor is.
   #
   # with: is not optional. Rails' default raises TooManyRequests, which renders an
   # HTML error body.

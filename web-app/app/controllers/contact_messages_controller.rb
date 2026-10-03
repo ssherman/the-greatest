@@ -21,8 +21,8 @@ class ContactMessagesController < ApplicationController
   # banned, so theirs is looser. Both are guesses -- legacy stored no contact
   # messages, so there is no history to set them from.
   #
-  # by: goes through visitor_ip, NEVER request.remote_ip, which in production is
-  # the Cloudflare edge IP and would put every visitor in one bucket.
+  # by: goes through visitor_ip (the VisitorIp concern), like every IP-keyed
+  # limit, so they all agree on who the visitor is.
   #
   # with: is not optional -- Rails' default raises TooManyRequests and renders an
   # HTML error body, which would blank the modal.

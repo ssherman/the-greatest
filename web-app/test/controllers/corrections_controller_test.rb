@@ -209,10 +209,10 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal users(:regular_user), Correction.last.user
   end
 
-  test "records the Cloudflare connecting ip, not the edge ip" do
+  test "records the visitor ip" do
     post corrections_path,
       params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "wrong"}},
-      headers: {"CF-Connecting-IP" => "198.51.100.4"}
+      env: {"REMOTE_ADDR" => "198.51.100.4"}
 
     assert_equal "198.51.100.4", Correction.last.submitter_ip
   end
@@ -290,12 +290,31 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     (CorrectionsController::ANONYMOUS_RATE + 1).times do
       post corrections_path,
         params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "wrong"}},
-        headers: {"CF-Connecting-IP" => "198.51.100.9"}
+        env: {"REMOTE_ADDR" => "198.51.100.9"}
     end
 
     assert_response :too_many_requests
     assert_match(/no-store/, response.headers["Cache-Control"])
     assert_select "[data-testid=correction-error]", "Thanks — you've sent us several corrections just now. Please try again shortly."
+  end
+
+  # The test above loops from one address, so it passes whatever by: reads --
+  # even a constant. Only a second address can show the bucket is per visitor.
+  test "the anonymous rate limit is keyed per visitor, not shared" do
+    Rails.application.config.x.rate_limit_store.clear
+
+    (CorrectionsController::ANONYMOUS_RATE + 1).times do
+      post corrections_path,
+        params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "wrong"}},
+        env: {"REMOTE_ADDR" => "198.51.100.9"}
+    end
+    assert_response :too_many_requests
+
+    post corrections_path,
+      params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "wrong"}},
+      env: {"REMOTE_ADDR" => "203.0.113.5"}
+
+    assert_redirected_to books_book_correction_thanks_path(slug: @book.slug)
   end
 
   # The anonymous cap must not apply to a signed-in contributor. In the migrated
@@ -309,7 +328,7 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     (CorrectionsController::ANONYMOUS_RATE + 1).times do |i|
       post corrections_path,
         params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "wrong #{i}"}},
-        headers: {"CF-Connecting-IP" => "198.51.100.9"}
+        env: {"REMOTE_ADDR" => "198.51.100.9"}
     end
 
     assert_response :redirect

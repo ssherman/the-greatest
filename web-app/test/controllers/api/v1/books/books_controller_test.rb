@@ -386,11 +386,12 @@ module Api
             # regardless of ordering, so it can't tell a correctly-ordered peek
             # (skip the lookup once over the limit) from a regression that runs
             # the lookup first and checks the limit after.
-            headers = bearer("tg_#{"z" * 40}").merge("CF-Connecting-IP" => "203.0.113.7")
-            limit.times { get "/api/v1/books", headers: headers }
+            headers = bearer("tg_#{"z" * 40}")
+            visitor = {"REMOTE_ADDR" => "203.0.113.7"}
+            limit.times { get "/api/v1/books", headers: headers, env: visitor }
 
             assert_no_queries do
-              get "/api/v1/books", headers: headers
+              get "/api/v1/books", headers: headers, env: visitor
             end
             assert_api_conform(status: 429)
 
@@ -398,7 +399,7 @@ module Api
             assert_equal "rate_limited", json[:code]
             assert response.headers["Retry-After"].present?
 
-            get "/api/v1/books", headers: bearer("tg_#{"z" * 40}").merge("CF-Connecting-IP" => "203.0.113.8")
+            get "/api/v1/books", headers: headers, env: {"REMOTE_ADDR" => "203.0.113.8"}
             assert_response :unauthorized
           end
         end
