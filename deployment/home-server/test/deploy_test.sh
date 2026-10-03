@@ -39,7 +39,7 @@ t_unwatched() {
 }
 t_watched() {
   setup; commit data-sources/app v2
-  deploy && called '^compose build fetcher$' && called '^compose up -d --remove-orphans$' &&
+  deploy && called '^compose build fetcher$' && called '^compose up -d --remove-orphans fetcher$' && ! called 'up .*api' &&
     [ "$(cat "$STATE_DIR/deployed-sha")" = "$(head_of_origin)" ]
 }
 t_home_server_dir() {
@@ -56,7 +56,7 @@ t_retry_after_failure() {
   unset BUILD_EXIT; : >"$CALLS"
   deploy && called '^compose build fetcher$' && [ "$(cat "$STATE_DIR/deployed-sha")" = "$(head_of_origin)" ]
 }
-t_force_flag() { setup; deploy --force && called '^compose build fetcher$' && called '^compose up -d'; }
+t_force_flag() { setup; deploy --force && called '^compose build fetcher$' && called '^compose up -d --remove-orphans fetcher$'; }
 t_force_marker() {
   setup; touch "$STATE_DIR/force-deploy"
   deploy && called '^compose build fetcher$' && [ ! -f "$STATE_DIR/force-deploy" ]
@@ -70,6 +70,23 @@ t_ol_without_version_tunnels() {
   setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=1 HC_DEPLOY=https://hc.test/deploy
   commit data-sources/app v2
   deploy && called '^compose up -d cloudflared$' && ! called '^compose up -d --remove-orphans$'
+}
+t_ol_with_version_tunnels() {
+  setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=1 HC_DEPLOY=https://hc.test/deploy
+  echo 2026-08-31 >"$OL_DATA/current-version"; commit data-sources/app v2
+  deploy && called '^compose up -d --remove-orphans api cloudflared$' && ! called 'fetcher$'
+}
+t_fetcher_never_api() {
+  setup; commit data-sources/app v2
+  deploy && ! called 'api'
+}
+t_ol_noop_ignores_lock() {
+  setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  flock "$BUILD_LOCK" sleep 3 &
+  sleep 0.5
+  deploy; rc=$?
+  wait
+  [ "$rc" = 0 ] && called 'no change' && ! called 'deferred'
 }
 t_ol_build_running() {
   setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
@@ -90,5 +107,8 @@ check "--force deploys without a change" t_force_flag
 check "the force-deploy marker deploys once and is cleared" t_force_marker
 check "ol with no data version builds but does not start api" t_ol_without_version
 check "ol with no data version still starts the tunnel" t_ol_without_version_tunnels
+check "ol with a version and tunnels brings up api and cloudflared only" t_ol_with_version_tunnels
+check "the fetcher role never brings up api" t_fetcher_never_api
+check "a no-op ol deploy does not care about the build lock" t_ol_noop_ignores_lock
 check "ol does not deploy under a running build" t_ol_build_running
 finish

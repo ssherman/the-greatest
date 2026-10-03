@@ -16,16 +16,6 @@ if [ "${1:-}" = --force ] || [ -f "$STATE_DIR/force-deploy" ]; then force=1; fi
 
 fail() { log "deploy failed: $1"; hc_ping "${HC_DEPLOY:-}" fail "$1"; exit 1; }
 
-if [ "$ROLE" = ol ]; then
-  # Never rebuild under a running data build, and never let one start mid-deploy.
-  exec 9>"$BUILD_LOCK"
-  if ! flock -n 9; then
-    log "a data build is running; deploying next time"
-    hc_ping "${HC_DEPLOY:-}" "" "deferred: build running"
-    exit 0
-  fi
-fi
-
 cd "$REPO_DIR"
 git fetch --quiet --depth 1 origin "$REPO_REF" || fail "git fetch origin $REPO_REF"
 target="$(git rev-parse FETCH_HEAD)"
@@ -45,6 +35,17 @@ if ! needs_deploy; then
 fi
 
 log "deploying ${target:0:12} (was ${deployed:0:12})"
+if [ "$ROLE" = ol ]; then
+  # Only a deploy with something to do takes the lock, so a no-op check every
+  # 15 minutes never blocks the refresh. Never rebuild under a running data
+  # build, and never let one start mid-deploy.
+  exec 9>"$BUILD_LOCK"
+  if ! flock -n 9; then
+    log "a data build is running; deploying next time"
+    hc_ping "${HC_DEPLOY:-}" "" "deferred: build running"
+    exit 0
+  fi
+fi
 git checkout --quiet --force --detach "$target" || fail "checkout ${target:0:12}"
 "$INSTALL_UNITS" || fail "install-units"
 
@@ -60,7 +61,10 @@ if [ "$ROLE" = ol ] && [ ! -f "$OL_DATA/current-version" ]; then
   log "no Open Library version yet; ol-refresh starts api after the first build"
   if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then "$COMPOSE" up -d cloudflared || fail "compose up cloudflared"; fi
 else
-  "$COMPOSE" up -d --remove-orphans || fail "compose up"
+  # Both services are defined on both VMs: name only this VM's.
+  up=("$service")
+  if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then up+=(cloudflared); fi
+  "$COMPOSE" up -d --remove-orphans "${up[@]}" || fail "compose up"
 fi
 
 echo "$target" >"$STATE_DIR/deployed-sha"

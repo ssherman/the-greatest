@@ -25,6 +25,9 @@ t_ol_beats_on_version() {
   setup; write_env ROLE=ol HC_HEARTBEAT=https://hc.test/beat
   "$GUEST/heartbeat.sh" && called 'curl .*127\.0\.0\.1:8080/version'
 }
+t_fetcher_beats_on_health() {
+  setup; "$GUEST/heartbeat.sh" && called 'curl .*127\.0\.0\.1:8081/health' && ! called '8080/version'
+}
 t_no_flag_no_reboot() { setup; "$GUEST/reboot-if-required.sh" && ! called 'systemctl reboot'; }
 t_flag_reboots() { setup; touch "$REBOOT_FLAG"; "$GUEST/reboot-if-required.sh" && called '^systemctl reboot$'; }
 t_build_defers_reboot() {
@@ -52,6 +55,7 @@ t_units_idempotent() {
 check "heartbeat pings when the service answers" t_beat_when_up
 check "heartbeat stays silent when the service is down" t_silent_when_down
 check "the ol heartbeat asks /version" t_ol_beats_on_version
+check "the fetcher heartbeat asks /health" t_fetcher_beats_on_health
 check "no reboot-required flag, no reboot" t_no_flag_no_reboot
 check "the flag reboots" t_flag_reboots
 check "a running build defers the reboot" t_build_defers_reboot

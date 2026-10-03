@@ -77,7 +77,7 @@ t_lock_held() {
   sleep 0.5
   refresh; rc=$?
   wait
-  [ "$rc" = 0 ] && ! called '^compose '
+  [ "$rc" = 0 ] && ! called '^compose ' && called 'deferred: lock held'
 }
 t_unmounted() {
   setup; export NEXT_ACTION="build 2026-09-30" NOT_MOUNTED=1

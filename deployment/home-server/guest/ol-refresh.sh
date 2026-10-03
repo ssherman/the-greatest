@@ -17,7 +17,11 @@ fail() { log "refresh failed: $1"; hc fail "$1"; exit 1; }
 versions() { "$COMPOSE" run --rm --no-deps -T build python -m openlibrary.pipeline.versions "$@" --root /data; }
 
 exec 9>"$BUILD_LOCK"
-if ! flock -n 9; then log "a build or deploy holds $BUILD_LOCK; trying next run"; exit 0; fi
+if ! flock -n 9; then
+  log "a build or deploy holds $BUILD_LOCK; trying next run"
+  hc "" "deferred: lock held"
+  exit 0
+fi
 
 # The data disk mounts with nofail so a missing disk cannot hang boot; a build
 # must then refuse, or it would fill the OS disk instead.
@@ -51,8 +55,9 @@ new="$(jq -r '.passing[-1] // empty' <<<"$status")"
 old="$(cat "$OL_DATA/current-version" 2>/dev/null || true)"
 
 serve() {
-  printf '%s\n' "$1" >"$OL_DATA/current-version.tmp"
-  mv "$OL_DATA/current-version.tmp" "$OL_DATA/current-version"
+  # Called under `|| log`, where set -e is off: fail explicitly.
+  printf '%s\n' "$1" >"$OL_DATA/current-version.tmp" || return 1
+  mv "$OL_DATA/current-version.tmp" "$OL_DATA/current-version" || return 1
   OL_DATA_VERSION="$1" "$COMPOSE" up -d api
 }
 serving() { curl -fsS -m 10 "$API_URL/version" | jq -r '.dump_date'; }

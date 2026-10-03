@@ -13,18 +13,27 @@ case "$ROLE" in
   ol)
     disk=/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
     # Format only a blank disk: a rebuilt VM keeps the data it had (spec §5).
-    blkid "$disk" >/dev/null || mkfs.ext4 -q -L ol-data "$disk"
+    # blkid -p exits 2 only for "nothing found"; any other failure (missing
+    # disk, I/O error) must leave the disk untouched.
+    rc=0
+    blkid -p "$disk" >/dev/null || rc=$?
+    if [ "$rc" = 2 ]; then
+      mkfs.ext4 -q -L ol-data "$disk"
+    elif [ "$rc" != 0 ]; then
+      log "blkid exited $rc on $disk; not formatting it"
+    fi
     mkdir -p "$OL_DATA"
     # nofail: a missing disk must not hang boot; ol-refresh.sh refuses to build instead.
     grep -q '^LABEL=ol-data ' /etc/fstab ||
       echo "LABEL=ol-data $OL_DATA ext4 defaults,discard,nofail 0 2" >>/etc/fstab
-    mountpoint -q "$OL_DATA" || mount "$OL_DATA"
+    # A failed mount must not stop the units installing: ol-refresh.sh refuses to build unmounted.
+    mountpoint -q "$OL_DATA" || mount "$OL_DATA" || log "could not mount $OL_DATA"
     ;;
   fetcher)
     # No IPv6 at all: every device in the house has a public IPv6 address (spec §4).
     printf 'net.ipv6.conf.all.disable_ipv6 = 1\nnet.ipv6.conf.default.disable_ipv6 = 1\n' \
       >/etc/sysctl.d/90-no-ipv6.conf
-    sysctl -q --system
+    sysctl -q --system || log "sysctl --system failed"
     ;;
   *) echo "first-boot: unknown ROLE '$ROLE'" >&2; exit 1 ;;
 esac
