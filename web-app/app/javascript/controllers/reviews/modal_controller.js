@@ -73,6 +73,8 @@ export default class extends Controller {
   // review with none, and a reader may want to take a rating back.
   clearRating() {
     this.setRatingValue(null)
+    // The button hides itself, which would drop keyboard focus out of the dialog.
+    this.starTargets[0]?.focus()
   }
 
   // A review needs a rating or some text -- the server enforces the same rule

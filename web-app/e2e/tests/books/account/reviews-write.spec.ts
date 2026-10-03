@@ -138,6 +138,8 @@ test.describe('Writing a review', () => {
     await expect(page.getByTestId('review-clear-rating')).toBeVisible();
     await page.getByTestId('review-clear-rating').click();
     await expect(page.getByTestId('review-clear-rating')).toBeHidden();
+    // The button hides itself, so focus must land somewhere inside the dialog.
+    await expect(page.getByTestId('review-star-button').first()).toBeFocused();
 
     // No stars and no text: the modal refuses before anything is sent.
     await page.getByRole('button', { name: 'Save' }).click();
