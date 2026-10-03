@@ -462,13 +462,14 @@ def trigram_artifact(fixture_artifact, tmp_path_factory) -> ArtifactPaths:
     other derived-artifact fixture in this file is): the committed corpus
     carries one work whose title_fp is '' (a legitimate degenerate-title
     shape other tests need), and `jaccard('', x)` raises in DuckDB rather than
-    comparing unequal. The plain `title_fp <> ''` guard filters it out of the
-    fixture corpus's own 94-row table today, but adding ~200 more rows changes
-    DuckDB's query plan enough that the filter and the jaccard call stop
-    evaluating in the safe order and the same query raises. Rule 6's own
-    `WHERE`/`ORDER BY` clauses are unchanged by this fix either way -- this
-    fixture just needs a `works` table without that row so the derived
-    artifact exercises the volume guard, not an unrelated crash.
+    comparing unequal. Adding ~200 low-cardinality rows to that table made the
+    title_fp chunk dictionary-encoded, and DuckDB evaluates `jaccard` over the
+    whole dictionary, '' included, so rule 6 raised. That was the same bug
+    that later crashed the 2026-09-30 gate, misread at the time as a plan
+    change; rule 6 now guards it and
+    `test_rule_six_survives_a_dictionary_encoded_title_fp_holding_empty_strings`
+    pins it. This fixture still leaves the row out so it isolates the volume
+    guard and nothing else.
     """
     root = tmp_path_factory.mktemp("ol-artifact-trigram")
     derived = ArtifactPaths(root=root, dump_date=fixture_artifact.dump_date)
@@ -566,3 +567,94 @@ def test_a_trigram_match_set_under_the_cap_still_tags_candidates_and_trips_no_gu
     assert "trigram" not in result.volume_guards_tripped
     fired = {key for key, rules in result.candidates.items() if "trigram" in rules}
     assert len(fired) == TRIGRAM_CONTROL_COUNT
+
+
+# The 2026-09-30 build crashed its evaluation gate in rule 6 with "Jaccard
+# Function: An argument too short!". `jaccard` raises on '', and the real
+# `works` table holds ~600k degenerate titles whose title_fp is ''. The
+# `title_fp <> ''` filter does not protect it: when a Parquet column chunk is
+# DICTIONARY-encoded, DuckDB (1.5.5) evaluates a scalar function over the
+# whole dictionary, including entries no surviving row references, so a
+# dictionary holding '' raises even for a single selected row whose value is
+# not ''. Whether a chunk is dictionary-encoded is the writer's call per row
+# group: none was in 2026-07-31, which is why that gate passed; row group 3 of
+# 2026-09-30 was, and mixed '' with real titles. This fixture builds that
+# layout on purpose.
+DICTIONARY_EMPTY_FP_ROWS = 2000
+
+
+@pytest.fixture(scope="module")
+def dictionary_artifact(fixture_artifact, tmp_path_factory) -> ArtifactPaths:
+    """A `works` table whose title_fp column chunk is dictionary-encoded and
+    holds '' alongside the trigram control block: the layout that crashed the
+    2026-09-30 evaluation gate."""
+    root = tmp_path_factory.mktemp("ol-artifact-dictionary")
+    derived = ArtifactPaths(root=root, dump_date=fixture_artifact.dump_date)
+    derived.ensure()
+    for table in TABLES:
+        shutil.copyfile(fixture_artifact.table(table), derived.table(table))
+
+    control_synthetic_fp = title_fingerprints(TRIGRAM_CONTROL_QUERY_TITLE).full[::-1]
+    con = connect(derived, memory_limit="1GB")
+    with contextlib.closing(con):
+        con.execute(
+            f"""
+            COPY (
+              SELECT
+                'OLDICTEMPTY' || lpad(CAST(i AS VARCHAR), 4, '0') || 'W' AS work_key,
+                '!!!' AS title, '' AS title_fp, '' AS title_fp_nosub, '' AS title_fp_noart,
+                CAST({DICTIONARY_EMPTY_FP_ROWS} AS INTEGER) AS title_fp_freq,
+                CAST({DICTIONARY_EMPTY_FP_ROWS} AS INTEGER) AS title_fp_nosub_freq,
+                CAST({DICTIONARY_EMPTY_FP_ROWS} AS INTEGER) AS title_fp_noart_freq,
+                CAST(0 AS SMALLINT) AS author_count,
+                1 AS revision,
+                DATE '2026-09-30' AS last_modified
+              FROM range({DICTIONARY_EMPTY_FP_ROWS}) t(i)
+              UNION ALL
+              SELECT
+                'OLDICTCTRL' || lpad(CAST(i AS VARCHAR), 4, '0') || 'W',
+                '{TRIGRAM_CONTROL_QUERY_TITLE}',
+                '{control_synthetic_fp}',
+                '{control_synthetic_fp}',
+                '{control_synthetic_fp}',
+                CAST({TRIGRAM_CONTROL_COUNT} AS INTEGER),
+                CAST({TRIGRAM_CONTROL_COUNT} AS INTEGER),
+                CAST({TRIGRAM_CONTROL_COUNT} AS INTEGER),
+                CAST(0 AS SMALLINT),
+                1,
+                DATE '2026-09-30'
+              FROM range({TRIGRAM_CONTROL_COUNT}) t(i)
+            ) TO '{derived.table("works")}' (FORMAT parquet)
+            """
+        )
+    return derived
+
+
+def test_rule_six_survives_a_dictionary_encoded_title_fp_holding_empty_strings(
+    dictionary_artifact,
+):
+    con = connect(dictionary_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        # The layout IS the test: assert it, so a writer change cannot quietly
+        # turn this into a test of nothing.
+        chunks = con.execute(
+            f"""
+            SELECT encodings, stats_min_value, stats_max_value
+            FROM parquet_metadata('{dictionary_artifact.table("works")}')
+            WHERE path_in_schema = 'title_fp'
+            """
+        ).fetchall()
+        assert len(chunks) == 1
+        ((encodings, min_value, max_value),) = chunks
+        assert "DICTIONARY" in encodings
+        assert min_value == ""
+        assert max_value != ""
+
+        result = generate_candidates(
+            con, dictionary_artifact, BlockingQuery(title=TRIGRAM_CONTROL_QUERY_TITLE)
+        )
+
+    assert "trigram" not in result.guards_tripped
+    fired = {key for key, rules in result.candidates.items() if "trigram" in rules}
+    assert len(fired) == TRIGRAM_CONTROL_COUNT
+    assert all(key.startswith("OLDICTCTRL") for key in fired)
