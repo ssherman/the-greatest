@@ -143,8 +143,7 @@ render_cluster_fw() {
 
 converge_host_firewall() {
   # The rendered files hold the host's /64; remove them on any exit, die included.
-  FW_RENDERED="$(mktemp -d)"
-  trap 'rm -rf "$FW_RENDERED"' EXIT
+  new_tmpdir FW_RENDERED
   render_cluster_fw "$FW_RENDERED/cluster.fw"
   cp "$HS_DIR/host/firewall/host.fw" "$HS_DIR/host/firewall/110.fw" "$HS_DIR/host/firewall/120.fw" "$FW_RENDERED/"
 

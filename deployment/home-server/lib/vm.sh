@@ -56,7 +56,7 @@ vm_ip() {
   vm_spec "$1"
   if [ "$1" = fetcher ]; then echo 10.20.0.10; return; fi
   on_host "qm guest cmd $VMID network-get-interfaces 2>/dev/null" |
-    jq -r '[.[] | select(.name != "lo") | ."ip-addresses"[]? | select(."ip-address-type" == "ipv4") | ."ip-address"] | first // empty'
+    jq -r '[.[] | select(.name | test("^(eth|en)")) |."ip-addresses"[]? | select(."ip-address-type" == "ipv4") | ."ip-address"] | first // empty'
 }
 
 # vm_ssh <role> <cmd>: as `debian`, jumping through the host. Host keys are
@@ -72,17 +72,36 @@ vm_ssh() {
 # ensure_image [refresh]: the Debian cloud image, checksum-verified. A rebuild
 # refreshes it; otherwise an existing copy is reused.
 ensure_image() {
-  local fetch="curl -fsSLO $DEBIAN_IMAGE_DIR/$DEBIAN_IMAGE && curl -fsSLO $DEBIAN_IMAGE_DIR/SHA512SUMS && sha512sum --ignore-missing -c SHA512SUMS"
-  if [ "${1:-}" = refresh ]; then
-    on_host "mkdir -p /var/lib/vz/import && cd /var/lib/vz/import && $fetch" || die "could not fetch and verify $DEBIAN_IMAGE"
-  else
-    on_host "mkdir -p /var/lib/vz/import && cd /var/lib/vz/import && { [ -f $DEBIAN_IMAGE ] || { $fetch; }; }" ||
-      die "could not fetch and verify $DEBIAN_IMAGE"
-  fi
+  local refresh=0 script
+  if [ "${1:-}" = refresh ]; then refresh=1; fi
+  # Downloads land in a staging dir under their real names, are verified there,
+  # and only then replace the installed pair. A failure leaves the installed
+  # image untouched. The reuse path re-verifies it against the stored SHA512SUMS.
+  read -r -d '' script <<EOF || true
+set -u
+img=$DEBIAN_IMAGE
+url=$DEBIAN_IMAGE_DIR
+dir=/var/lib/vz/import
+stage=/var/lib/vz/.image-staging
+mkdir -p \$dir
+if [ $refresh = 0 ] && cd \$dir && [ -f \$img ] && [ -f SHA512SUMS ] && sha512sum --ignore-missing -c SHA512SUMS; then
+  echo "reusing the verified local \$img" >&2
+  exit 0
+fi
+rm -rf \$stage && mkdir -p \$stage && cd \$stage &&
+  curl -fsSL -o \$img \$url/\$img && curl -fsSL -o SHA512SUMS \$url/SHA512SUMS &&
+  sha512sum --ignore-missing -c SHA512SUMS &&
+  mv \$img \$dir/\$img.new && mv SHA512SUMS \$dir/SHA512SUMS.new &&
+  mv \$dir/\$img.new \$dir/\$img && mv \$dir/SHA512SUMS.new \$dir/SHA512SUMS
+rc=\$?
+cd / && rm -rf \$stage
+exit \$rc
+EOF
+  on_host "$script" || die "could not fetch and verify $DEBIAN_IMAGE (any previous good copy is untouched)"
 }
 
 write_snippet() { # write_snippet <role>; leaves the rendered env in $ENV_RENDERED
-  local tmp; tmp="$(mktemp -d)"
+  local tmp; new_tmpdir tmp
   render_vm_env "$1" "$tmp/env"
   render_user_data "$1" "$tmp/env" "$tmp/user-data"
   put_host "$tmp/user-data" "/var/lib/vz/snippets/$NAME-user-data.yaml" 0600
@@ -100,12 +119,13 @@ create_vm() {
     --scsihw virtio-scsi-single --net0 $NET --agent enabled=1 --onboot 1 --startup $STARTUP \
     --ostype l26 --serial0 socket --vga serial0 --ide2 local-lvm:cloudinit \
     --ipconfig0 $IPCONFIG --cicustom user=local:snippets/$NAME-user-data.yaml" || die "qm create $VMID failed"
-  if [ -n "$NAMESERVER" ]; then on_host "qm set $VMID --nameserver '$NAMESERVER' >/dev/null"; fi
-  attach_os_disk
+  local half="VM $VMID ($NAME) was created but not finished and is left as it is; destroying it (qm destroy $VMID --purge) and re-running provision is Shane's call"
+  if [ -n "$NAMESERVER" ]; then on_host "qm set $VMID --nameserver '$NAMESERVER' >/dev/null" || die "$half"; fi
+  attach_os_disk || die "$half"
   if [ "$DATADISK" != 0 ]; then
-    on_host "qm set $VMID --scsi1 local-lvm:$DATADISK,discard=on,ssd=1,iothread=1 >/dev/null"
+    on_host "qm set $VMID --scsi1 local-lvm:$DATADISK,discard=on,ssd=1,iothread=1 >/dev/null" || die "$half"
   fi
-  on_host "qm start $VMID"
+  on_host "qm start $VMID" || die "$half"
   note_change "created VM $VMID ($NAME)"
 }
 
@@ -114,7 +134,10 @@ wait_for_first_boot() { # wait_for_first_boot <role>
   for i in $(seq 1 60); do (vm_ssh "$1" true) 2>/dev/null && break; sleep 10; done
   vm_ssh "$1" true || die "$1 never answered SSH"
   log "waiting for $1's cloud-init (the first image build takes several minutes)"
-  vm_ssh "$1" "cloud-init status --wait >/dev/null; cloud-init status --long" | tee /dev/stderr | grep -q 'status: done' ||
+  local out
+  out="$(vm_ssh "$1" "cloud-init status --wait >/dev/null; cloud-init status --long")" || true
+  printf '%s\n' "$out" >&2
+  grep -q 'status: done' <<<"$out" ||
     die "$1's cloud-init did not finish cleanly; read: vm_ssh $1 'sudo cat /var/log/cloud-init-output.log'"
 }
 
@@ -126,6 +149,9 @@ converge_vm_settings() {
   grep -qx "balloon: 0" <<<"$cfg" || drift=1
   grep -qx "onboot: 1" <<<"$cfg" || drift=1
   grep -qx "startup: $STARTUP" <<<"$cfg" || drift=1
+  if [ "$DATADISK" != 0 ]; then
+    grep -q '^scsi1:' <<<"$cfg" || die "VM $VMID ($NAME) has no data disk (scsi1); not touching it, look at: qm config $VMID"
+  fi
   if [ "$drift" = 1 ]; then
     on_host "qm set $VMID --cores $CORES --memory $MEM --balloon 0 --onboot 1 --startup $STARTUP >/dev/null"
     note_change "VM $VMID settings (takes effect at its next restart)"
@@ -156,7 +182,9 @@ ensure_vm() {
   if ! on_host "qm status $VMID | grep -q running"; then on_host "qm start $VMID"; note_change "started VM $VMID"; fi
   # push_vm_env needs the env file and state dir cloud-init creates, so a VM
   # still in its first boot is waited for. A finished VM answers at once.
-  if ! (vm_ssh "$1" 'cloud-init status') 2>/dev/null | grep -q 'status: done'; then wait_for_first_boot "$1"; fi
+  local ci
+  ci="$( (vm_ssh "$1" 'cloud-init status') 2>/dev/null)" || true
+  if ! grep -q 'status: done' <<<"$ci"; then wait_for_first_boot "$1"; fi
   push_vm_env "$1"
 }
 
@@ -166,9 +194,11 @@ rebuild_vm() { # replace only the OS disk; the data disk is never touched (spec 
   ensure_image refresh
   write_snippet "$1"
   on_host "qm shutdown $VMID --timeout 120 || qm stop $VMID"
-  on_host "qm disk unlink $VMID --idlist scsi0 --force"
-  attach_os_disk
-  on_host "qm cloudinit update $VMID && qm start $VMID"
+  on_host "qm disk unlink $VMID --idlist scsi0 --force" || die "could not unlink VM $VMID's OS disk; nothing was changed after the shutdown"
+  local gone="VM $VMID now has no OS disk; re-run: provision --rebuild $1"
+  attach_os_disk || die "$gone"
+  on_host "qm cloudinit update $VMID" || die "$gone"
+  on_host "qm start $VMID" || die "$gone"
   note_change "rebuilt VM $VMID ($NAME)"
   wait_for_first_boot "$1"
 }

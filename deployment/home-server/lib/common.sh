@@ -14,6 +14,19 @@ log() { printf '==> %s\n' "$*" >&2; }
 die() { printf 'provision: %s\n' "$*" >&2; exit 1; }
 note_change() { CHANGES+=("$1"); log "changed: $1"; }
 
+# new_tmpdir <var>: a temp dir (it holds rendered secrets or addresses) that is
+# removed on any exit, die included. One shared list and one EXIT trap, so
+# callers cannot replace each other's cleanup. Not a $(...) call: the list
+# must be updated in the calling shell.
+CLEANUP_DIRS=()
+cleanup_dirs() { if [ "${#CLEANUP_DIRS[@]}" -gt 0 ]; then rm -rf "${CLEANUP_DIRS[@]}"; fi; }
+new_tmpdir() {
+  local d; d="$(mktemp -d)" || die "mktemp failed"
+  CLEANUP_DIRS+=("$d")
+  trap cleanup_dirs EXIT
+  printf -v "$1" '%s' "$d"
+}
+
 # shellcheck disable=SC2029 # the command is built on the client on purpose
 # A fixed locale: sshd accepts the client's LC_*, and an unsupported one makes
 # perl warn on stderr, which provision parses and treats as failure.

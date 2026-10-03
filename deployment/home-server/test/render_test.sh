@@ -77,6 +77,14 @@ t_runcmd_fail_fast() {
   ruby -ryaml -e 'c = YAML.load_file(ARGV[0])["runcmd"].find { |r| r.is_a?(Array) }; exit(c[0] == "bash" && c[1] =~ /e/ && c[2] == "pipefail" && c.last.include?("first-boot.sh") ? 0 : 1)' "$SANDBOX/ol.yaml"
 }
 
+t_tmpdirs_cleaned() {
+  local out
+  out="$(bash -c '. "$1/lib/common.sh"; new_tmpdir a; new_tmpdir b; echo "$a $b"; die gone' _ "$HS_DIR" 2>/dev/null)"
+  # shellcheck disable=SC2086 # two paths, split on purpose
+  set -- $out
+  [ -n "${1:-}" ] && [ -n "${2:-}" ] && [ ! -e "$1" ] && [ ! -e "$2" ]
+}
+check "temp dirs holding rendered secrets are removed even when provision dies" t_tmpdirs_cleaned
 check "a key comment containing ' #' stays inside the YAML string" t_key_with_comment
 check "docker, clone and first-boot run as one fail-fast script" t_runcmd_fail_fast
 check "both user-data files are valid YAML" t_yaml
