@@ -46,6 +46,42 @@ module Services
           assert_equal ["matched", "identifier"], [result.data[:decision].outcome, result.data[:decision].decided_by]
         end
 
+        test "names are compared with the letters NFD leaves whole transliterated" do
+          author = ::Books::Author.create!(name: "Stanislaw Lem")
+          author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q6530")
+          client = FakeWikidataClient.new(entities: {"Q6530" => wikidata_entity("Q6530", label: "Stanisław Lem")})
+          Services::Ai::Tasks::Matching::SelectExternalRecordTask.expects(:new).never
+
+          result = ResolveWikidata.call(author: author, client: client)
+
+          assert_equal ["matched", "identifier"], [result.data[:decision].outcome, result.data[:decision].decided_by]
+        end
+
+        test "a held id whose name is only in the all-languages label matches by identifier" do
+          author = ::Books::Author.create!(name: "Victor Hugo", birth_year: 1802)
+          author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q535")
+          entity = wikidata_entity("Q535", born: 1802, died: 1885)
+          entity["labels"] = {"mul" => {"language" => "mul", "value" => "Victor Hugo"}}
+          client = FakeWikidataClient.new(entities: {"Q535" => entity})
+          Services::Ai::Tasks::Matching::SelectExternalRecordTask.expects(:new).never
+
+          result = ResolveWikidata.call(author: author, client: client)
+
+          assert_equal ["matched", "identifier"], [result.data[:decision].outcome, result.data[:decision].decided_by]
+          assert_equal "Victor Hugo", result.data[:decision].candidates.first.dig("evidence", "external_title")
+        end
+
+        test "a hyphen between given names is a space: Jean Paul Sartre is Jean-Paul Sartre" do
+          author = ::Books::Author.create!(name: "Jean Paul Sartre")
+          author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q9364")
+          client = FakeWikidataClient.new(entities: {"Q9364" => wikidata_entity("Q9364", label: "Jean-Paul Sartre")})
+          Services::Ai::Tasks::Matching::SelectExternalRecordTask.expects(:new).never
+
+          result = ResolveWikidata.call(author: author, client: client)
+
+          assert_equal ["matched", "identifier"], [result.data[:decision].outcome, result.data[:decision].decided_by]
+        end
+
         test "a held id that Wikidata has merged resolves to the surviving item" do
           hold(:books_author_wikidata_qid, "Q999")
           client = FakeWikidataClient.new(entities: {"Q999" => wikidata_entity("Q7243", **TOLSTOY)})
@@ -157,6 +193,51 @@ module Services
           result = resolve(client)
 
           assert_equal ["ai", "medium", true], [result.data[:decision].decided_by, result.data[:decision].confidence, result.data[:decision].needs_review]
+        end
+
+        test "searches each name but fetches every hit in one entities call" do
+          client = FakeWikidataClient.new(
+            searches: {"Leo Tolstoy" => ["Q7243"], "Lev Tolstoy" => ["Q7243", "Q1"], "Lev Nikolayevich Tolstoy" => ["Q2"]},
+            entities: {
+              "Q7243" => wikidata_entity("Q7243", **TOLSTOY),
+              "Q1" => wikidata_entity("Q1", label: "Lev Tolstoy", types: ["Q11424"]),
+              "Q2" => wikidata_entity("Q2", label: "Lev Nikolayevich Tolstoy", types: ["Q11424"])
+            },
+            works: {"Q7243" => ["War and Peace"]}
+          )
+
+          resolve(client)
+
+          assert_equal [[:entities, ["Q7243", "Q1", "Q2"]]], client.calls.select { |call| call.first == :entities }
+          assert_equal 3, client.calls.count { |call| call.first == :search }
+        end
+
+        test "a labels failure the AI saw is recorded and lowers a high answer to medium" do
+          client = FakeWikidataClient.new(
+            searches: {"Leo Tolstoy" => ["Q7243"]},
+            entities: {"Q7243" => wikidata_entity("Q7243", **TOLSTOY, occupations: ["Q36180"])},
+            labels_error: ::Wikimedia::Exceptions::HttpError.new("boom", 500)
+          )
+          ai_selects(1, confidence: "high")
+
+          decision = resolve(client).data[:decision]
+
+          assert_equal ["wikidata_labels"], decision.sources_failed
+          assert_equal ["ai", "medium", true], [decision.decided_by, decision.confidence, decision.needs_review]
+        end
+
+        test "a labels failure after a rule decided is recorded without lowering the rule's confidence" do
+          client = FakeWikidataClient.new(
+            searches: {"Leo Tolstoy" => ["Q7243"]},
+            entities: {"Q7243" => wikidata_entity("Q7243", **TOLSTOY, occupations: ["Q36180"])},
+            works: {"Q7243" => ["War and Peace"]},
+            labels_error: ::Wikimedia::Exceptions::HttpError.new("boom", 500)
+          )
+
+          decision = resolve(client).data[:decision]
+
+          assert_equal ["wikidata_labels"], decision.sources_failed
+          assert_equal ["rule", "high", false], [decision.decided_by, decision.confidence, decision.needs_review]
         end
 
         test "no person among the candidates: unmatched by rule, with no AI call" do

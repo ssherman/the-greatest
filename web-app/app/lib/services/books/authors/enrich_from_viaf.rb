@@ -12,13 +12,12 @@ module Services
       # written and the rescheduled run starts clean, resuming from the
       # suggestions and clusters already stored.
       class EnrichFromViaf
+        include LedgerRun
+
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
         KIND = "books.author_viaf"
         PROVIDER = "viaf"
-        # "Done" outcomes. A failed or skipped run leaves the author to be tried again.
-        PROCESSED = %w[applied nothing_to_apply unrecognized].freeze
-        LEDGER_CONFIDENCE = {"certain" => "high", "high" => "high", "medium" => "medium", "low" => "low"}.freeze
 
         def self.call(author:, refresh: false, client: nil)
           new(author: author, refresh: refresh, client: client).call
@@ -36,6 +35,7 @@ module Services
           return finish(:skipped, write(outcome: :skipped, reason: "placeholder")) if author.exclude_from_rankings?
           return finish(:skipped, write(outcome: :skipped, reason: "already_processed")) if !refresh && processed?
 
+          @restored = RestoreIdentifier.call(author: author, finder: ResolveViaf)
           resolved = ResolveViaf.call(author: author, refresh: refresh, client: @client).data
           @decision = resolved[:decision]
           case resolved[:outcome]
@@ -43,25 +43,23 @@ module Services
           when :unmatched then finish(:unmatched, write(outcome: :unrecognized, reason: "no_match", recognized: false))
           else finish(:failed, write(outcome: :failed, reason: "resolve_failed", error: resolved[:reason]))
           end
+        rescue ::Viaf::Exceptions::RateLimited
+          # A busy pace or a pause (Paused is a RateLimited) is a request to
+          # wait, not a failure, and neither is a Viaf::Exceptions::Error:
+          # without this clause the catch-all below would swallow it. An id
+          # put back this run is taken back off, so the rescheduled run
+          # restores it again and records it.
+          take_back_restore(ResolveViaf::VIAF)
+          raise
         rescue ::Viaf::Exceptions::Error => e
           finish(:failed, write(outcome: :failed, reason: "viaf_error", error: "#{e.class.name.demodulize}: #{e.message}"))
+        rescue => e
+          finish(:failed, unexpected(e))
         end
 
         private
 
         attr_reader :author, :refresh
-
-        # "Newer than the author row": after the production re-migration an
-        # author is re-created with its id, and the old rows no longer count.
-        # Neither does a run whose decision a person rejected (spec §12). A
-        # row with no decision counts, so the comparison is NULL-safe.
-        def processed?
-          author.enrichments.for_kind(KIND).where(outcome: PROCESSED)
-            .where("enrichments.created_at > ?", author.created_at)
-            .left_joins(:match_decision)
-            .where("match_decisions.verdict IS DISTINCT FROM ?", ::MatchDecision.verdicts[:rejected])
-            .exists?
-        end
 
         def matched(person)
           applied = ApplyViaf.call(author: author, person: person, decision: @decision)
@@ -75,14 +73,6 @@ module Services
           outcome = applied.data[:applied].any? ? :applied : :nothing_to_apply
           finish(:matched, write(outcome: outcome, reason: "matched #{person.viaf_id}", recognized: true, facts: facts,
             citations: ["https://viaf.org/viaf/#{person.viaf_id}"]))
-        end
-
-        def write(outcome:, reason:, recognized: nil, facts: {}, citations: [], error: nil)
-          author.enrichments.create!(
-            kind: KIND, provider: PROVIDER, outcome: outcome, reason: reason, recognized: recognized,
-            confidence: LEDGER_CONFIDENCE[@decision&.confidence], facts: facts, citations: citations,
-            error: error, match_decision: @decision
-          )
         end
 
         def finish(outcome, row)

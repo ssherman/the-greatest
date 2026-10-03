@@ -14,10 +14,10 @@ module Services
 
         module_function
 
-        # Letters-only words, case and diacritics folded, in order.
+        # Letters-only words, folded by Services::Text::NameFolder, in order.
         def words(text)
           normalized = ::Services::Text::NameNormalizer.call(::Services::Text::QuoteNormalizer.call(text.to_s)).to_s
-          normalized.gsub(PARENTHESISED, " ").unicode_normalize(:nfd).gsub(/\p{Mn}/, "").downcase.scan(/\p{L}+/)
+          ::Services::Text::NameFolder.call(normalized.gsub(PARENTHESISED, " ")).scan(/\p{L}+/)
         end
 
         def tokens(text) = words(text).sort

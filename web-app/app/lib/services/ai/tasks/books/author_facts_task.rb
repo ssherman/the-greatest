@@ -45,7 +45,7 @@ module Services
               - No marketing or judgment: no acclaimed, bestselling, masterpiece, beloved, celebrated, legendary, one of the greatest, must-read, no sales figures.
               - No meta narration such as "This author" or "Readers will". Open on the person.
               - Never mention your sources, records or catalogs, or what is not known about the author. Leave out what you do not know.
-              - Plain words. Do not use: delve, tapestry, testament, poignant, seminal, groundbreaking, timeless, gripping, compelling, journey, navigate, resonate, profound, haunting, luminous, or "explores themes of".
+              - Plain words. Do not use: #{BannedWords.prose}.
               - No "not X but Y" constructions. No ornamental triads of adjectives.
               - Write in your own words and your own sentence structure. Use the Wikipedia text for facts only; never reuse its phrases.
               - Only what you are sure of. Say less rather than guess. If you do not know who this author is well enough to describe them, set description to null.
@@ -76,8 +76,8 @@ module Services
 
           def stored_facts
             facts = []
-            facts << "born #{parent.birth_year}" if parent.birth_year
-            facts << "died #{parent.death_year}" if parent.death_year
+            facts << "born #{::Services::Books::YearLabel.call(parent.birth_year)}" if parent.birth_year
+            facts << "died #{::Services::Books::YearLabel.call(parent.death_year)}" if parent.death_year
             facts << "gender #{parent.gender.tr("_", "-")}" if parent.gender.present? && parent.gender != "unspecified"
             countries = parent.countries.map(&:name).sort
             facts << "nationality #{countries.join(", ")}" if countries.any?
@@ -89,7 +89,7 @@ module Services
             return [] if books.empty?
 
             ["Books by this author in our catalog, best known first:"] +
-              books.map { |title, year| year ? "- #{title} (#{year})" : "- #{title}" }
+              books.map { |title, year| year ? "- #{title} (#{::Services::Books::YearLabel.call(year)})" : "- #{title}" }
           end
 
           def source_lines

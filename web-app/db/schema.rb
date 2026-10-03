@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_01_235314) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_02_130910) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -503,6 +503,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_01_235314) do
     t.integer "source", null: false
     t.string "source_id", null: false
     t.datetime "updated_at", null: false
+    t.index "((payload ->> 'language'::text)), ((payload ->> 'title'::text))", name: "index_external_records_on_wikipedia_language_and_title", where: "(source = 2)"
     t.index ["source", "fetched_at"], name: "index_external_records_on_source_and_fetched_at"
     t.index ["source", "source_id"], name: "index_external_records_on_source_and_source_id", unique: true
   end

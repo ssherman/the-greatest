@@ -16,8 +16,9 @@
 #
 # Indexes
 #
-#  index_external_records_on_source_and_fetched_at  (source,fetched_at)
-#  index_external_records_on_source_and_source_id   (source,source_id) UNIQUE
+#  index_external_records_on_source_and_fetched_at         (source,fetched_at)
+#  index_external_records_on_source_and_source_id          (source,source_id) UNIQUE
+#  index_external_records_on_wikipedia_language_and_title  (((payload ->> 'language'::text)), ((payload ->> 'title'::text))) WHERE (source = 2)
 #
 class ExternalRecord < ApplicationRecord
   enum :source, {viaf: 0, wikidata: 1, wikipedia: 2}

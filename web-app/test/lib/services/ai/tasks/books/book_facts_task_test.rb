@@ -120,6 +120,17 @@ module Services
             refute_includes knowledge, "web search"
             assert_includes research, "web search"
           end
+
+          test "BCE years read as BCE for the book and its author" do
+            author = ::Books::Author.create!(name: "Euripides", birth_year: -480, death_year: -406)
+            book = ::Books::Book.create!(title: "Medea", first_published_year: -431)
+            book.book_authors.create!(author: author, position: 1)
+
+            text = BookFactsTask.new(parent: book).send(:user_prompt)
+
+            assert_includes text, "Author: Euripides (480 BCE–406 BCE)"
+            assert_includes text, "First published (our record): 431 BCE"
+          end
         end
       end
     end

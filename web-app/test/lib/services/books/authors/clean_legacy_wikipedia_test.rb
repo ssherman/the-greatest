@@ -22,6 +22,8 @@ module Services
 
         def clean(entity, client = FakeWikipediaClient.new) = CleanLegacyWikipedia.call(author: @author, entity: entity, client: client)
 
+        def unmatched_run(fact) = @author.enrichments.create!(kind: EnrichFromWikidata::KIND, outcome: :unrecognized, facts: {"legacy_wikipedia" => fact})
+
         test "keeps a description whose URL is the matched item's sitelink, without calling Wikipedia" do
           row = legacy("https://en.wikipedia.org/wiki/Michael_Harriot")
           client = FakeWikipediaClient.new
@@ -102,6 +104,55 @@ module Services
 
           assert_equal ["deprecated", "unreadable_url"], fact["value"].first.values_at("verdict", "why")
           assert row.reload.deprecated?
+        end
+
+        test "a description deprecated because no one matched is restored when a later run matches its item" do
+          row = legacy("https://en.wikipedia.org/wiki/Michael_Harriot")
+          unmatched_run(clean(nil))
+          assert row.reload.deprecated?
+
+          fact = clean(@entity)
+
+          assert row.reload.normal?
+          assert_equal ["restored", "sitelink"], fact["value"].sole.values_at("verdict", "why")
+          assert_equal ["restored", true], fact.values_at("reason", "applied")
+        end
+
+        test "one deprecated because no one matched stays deprecated when the match is a different page's item" do
+          row = legacy("https://en.wikipedia.org/wiki/Ainsley_Harriott")
+          unmatched_run(clean(nil))
+
+          fact = clean(@entity, FakeWikipediaClient.new({["en", "Ainsley Harriott"] => lead("Ainsley Harriott", "Q4697012")}))
+
+          assert row.reload.deprecated?
+          assert_equal "left_deprecated", fact["value"].sole["verdict"]
+          assert_equal ["kept", false], fact.values_at("reason", "applied")
+        end
+
+        test "a description deprecated for another reason, or by a run older than the author row, is not judged again" do
+          other_reason = legacy("https://en.wikipedia.org/wiki/Ainsley_Harriott")
+          other_reason.update!(rank: :deprecated)
+          @author.enrichments.create!(kind: EnrichFromWikidata::KIND, outcome: :applied, facts: {"legacy_wikipedia" => {
+            "value" => [{"description_id" => other_reason.id, "verdict" => "deprecated", "why" => "different_item"}]
+          }})
+          old_era = @author.descriptions.create!(source: :wikipedia, kind: :long, content: "Old.",
+            source_url: "https://en.wikipedia.org/wiki/Michael_Harriot", rank: :deprecated)
+          @author.enrichments.create!(kind: EnrichFromWikidata::KIND, outcome: :unrecognized, created_at: @author.created_at - 1.day,
+            facts: {"legacy_wikipedia" => {"value" => [{"description_id" => old_era.id, "verdict" => "deprecated", "why" => "author_unmatched"}]}})
+
+          assert_nil clean(@entity)
+          assert [other_reason, old_era].all? { |row| row.reload.deprecated? }
+        end
+
+        test "a rate limit on the second description leaves the first, already judged, untouched" do
+          unreadable = legacy("https://example.com/somewhere")
+          @author.descriptions.create!(source: :wikipedia, kind: :long, content: "Legacy text.",
+            source_url: "https://en.wikipedia.org/wiki/Ainsley_Harriott")
+          client = FakeWikipediaClient.new({["en", "Ainsley Harriott"] => ::Wikimedia::Exceptions::RateLimited.new("wait", retry_after: 30)})
+
+          assert_raises(::Wikimedia::Exceptions::RateLimited) { clean(@entity, client) }
+
+          assert unreadable.reload.normal?
         end
       end
     end

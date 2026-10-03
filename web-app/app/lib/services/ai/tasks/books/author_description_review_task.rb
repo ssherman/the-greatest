@@ -49,7 +49,7 @@ module Services
               - semicolon: a semicolon
               - marketing: praise or sales language such as acclaimed, bestselling, masterpiece, beloved, celebrated, legendary, "one of the greatest", sales figures, or more than one award
               - meta_narration: "This author", "Readers will", or similar, or mentions its sources, records or catalogs, or what is not known about the author
-              - banned_word: delve, tapestry, testament, poignant, seminal, groundbreaking, timeless, gripping, compelling, journey, navigate, resonate, profound, haunting, luminous, "explores themes of"
+              - banned_word: #{BannedWords.list}
               - not_but: a "not X but Y" construction
               - triad: an ornamental run of three adjectives or phrases
               - repetition: repeats a point already made

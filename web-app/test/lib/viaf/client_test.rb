@@ -83,6 +83,14 @@ class Viaf::ClientTest < ActiveSupport::TestCase
     assert_kind_of Viaf::Exceptions::RateLimited, Viaf::Exceptions::Paused.new("paused", retry_after: 1)
   end
 
+  test "a client given no cache uses the external API cache" do
+    Rails.application.config.x.stubs(:external_api_cache).returns(ActiveSupport::Cache::MemoryStore.new)
+    client = Viaf::Client.new(base_client: @base, gate: @gate)
+    @base.expects(:get).with("viaf/AutoSuggest", {query: "Stacy Willingham"}).once.returns(suggest_response)
+
+    2.times { client.suggest("Stacy Willingham") }
+  end
+
   test "an AutoSuggest answer is cached for a day, so a rescheduled run asks once" do
     @base.expects(:get).with("viaf/AutoSuggest", {query: "Stacy Willingham"}).twice.returns(suggest_response)
 

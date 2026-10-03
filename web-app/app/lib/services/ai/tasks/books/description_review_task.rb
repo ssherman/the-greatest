@@ -41,7 +41,7 @@ module Services
               - names_author: names the author
               - marketing: praise or sales language such as acclaimed, bestselling, masterpiece, unforgettable, must-read, awards, sales figures
               - meta_narration: "This novel", "This book", "Readers will", or similar
-              - banned_word: delve, tapestry, testament, poignant, seminal, groundbreaking, timeless, gripping, compelling, journey, navigate, resonate, profound, haunting, luminous, "explores themes of"
+              - banned_word: #{BannedWords.list}
               - not_but: a "not X but Y" or "isn't about X, it's about Y" construction
               - triad: an ornamental run of three adjectives or phrases
               - too_long: more than 110 words

@@ -267,7 +267,7 @@ module Services
         # subtitles ("Forget me not : a novel").
         def title_key(text)
           main = text.to_s.sub(%r{\s*[:/;].*\z}m, "").presence || text.to_s
-          ::Services::Text::QuoteNormalizer.call(main).to_s.unicode_normalize(:nfd).gsub(/\p{Mn}/, "").downcase.squish
+          ::Services::Text::NameFolder.call(::Services::Text::QuoteNormalizer.call(main)).squish
         end
 
         # ---- describing -----------------------------------------------------
