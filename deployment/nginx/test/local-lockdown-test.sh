@@ -65,7 +65,7 @@ cat > "$work/upstream.conf" <<'EOF'
 server {
     listen 80 default_server;
     default_type text/plain;
-    return 200 "host=$http_host xfh=$http_x_forwarded_host xff=$http_x_forwarded_for fwd=$http_forwarded\n";
+    return 200 "host=$http_host xfh=$http_x_forwarded_host xff=$http_x_forwarded_for fwd=$http_forwarded cip=$http_client_ip\n";
 }
 EOF
 docker run -d --name "$upstream" --network "$net" --network-alias web \
@@ -167,16 +167,20 @@ expect_exit "B7 HTTPS correct SNI but foreign Host is refused" "52 56 92 http:42
 # ":$https_port"; Rails must see the bare server name. X-Forwarded-For must end with the
 # real_ip visitor -- the entry Rails' RemoteIp settles on (web-app VisitorIp) -- even when
 # the client forged one in front of it, and a client Forwarded header (which Rack would
-# prefer) must be stripped.
+# prefer) must be stripped. So must Client-IP: when it is not in X-Forwarded-For, Rails'
+# RemoteIp raises IpSpoofAttackError and the request is a 500.
 echo_body=$(curl -sk --max-time 10 --cert "$work/client.pem" --key "$work/client.key" \
   --resolve "$music:$https_port:127.0.0.1" -H "CF-Connecting-IP: 203.0.113.9" \
-  -H "X-Forwarded-For: 198.51.100.66" -H "Forwarded: for=198.51.100.77" "https://$music:$https_port/")
+  -H "X-Forwarded-For: 198.51.100.66" -H "Forwarded: for=198.51.100.77" \
+  -H "Client-IP: 198.51.100.88" "https://$music:$https_port/")
 if [[ "$echo_body" == "host=$music xfh=$music "* ]]; then pass "B9 upstream Host and X-Forwarded-Host are the bare server name"
 else fail "B9 upstream Host and X-Forwarded-Host are the bare server name" "got [$echo_body]"; fi
 if [[ "$echo_body" == *" xff=198.51.100.66, 203.0.113.9 fwd="* ]]; then pass "B10 X-Forwarded-For ends with the real_ip visitor"
 else fail "B10 X-Forwarded-For ends with the real_ip visitor" "got [$echo_body]"; fi
-if [[ "$echo_body" == *" fwd=" ]]; then pass "B11 a client Forwarded header never reaches Rails"
+if [[ "$echo_body" == *" fwd= cip="* ]]; then pass "B11 a client Forwarded header never reaches Rails"
 else fail "B11 a client Forwarded header never reaches Rails" "got [$echo_body]"; fi
+if [[ "$echo_body" == *" cip=" ]]; then pass "B12 a client Client-IP header never reaches Rails"
+else fail "B12 a client Client-IP header never reaches Rails" "got [$echo_body]"; fi
 # B8: per-visitor rate limiting (nginx.conf). One visitor (CF-Connecting-IP 203.0.113.50)
 # far over 90 r/s + burst 200 gets 429s. Straight after, a different visitor (.51) arriving
 # through the same peer (10.99.0.1) sends 150 requests and every one must be 200. Per-visitor
