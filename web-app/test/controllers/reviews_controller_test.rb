@@ -95,6 +95,49 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "creates a written review with no rating" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_difference "Review.count", 1 do
+      post reviews_path, params: valid_params(rating: "", body: "<p>Words only.</p>"), as: :turbo_stream
+    end
+
+    assert_response :success
+    assert_nil created_review.rating
+    assert_equal "<p>Words only.</p>", created_review.body
+  end
+
+  test "rejects a review with neither a rating nor text" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_difference "Review.count" do
+      post reviews_path, params: valid_params(rating: ""), as: :turbo_stream
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "clearing the rating on a written review keeps the review" do
+    sign_in_as(@user, stub_auth: true)
+
+    patch review_path(@own_review), params: {review: {rating: ""}}, as: :turbo_stream
+
+    assert_response :success
+    assert_nil @own_review.reload.rating
+    assert_not_nil @own_review.body
+  end
+
+  test "clearing the rating on a review with no text is refused" do
+    sign_in_as(@user, stub_auth: true)
+    rating_only = reviews(:regular_user_crime_and_punishment)
+
+    patch review_path(rating_only), params: {review: {rating: ""}}, as: :turbo_stream
+
+    assert_response :unprocessable_entity
+    assert_equal 3, rating_only.reload.rating
+  end
+
   test "rejects a rating outside one to five" do
     sign_in_as(@user, stub_auth: true)
 
