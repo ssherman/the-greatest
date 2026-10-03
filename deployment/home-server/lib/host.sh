@@ -69,11 +69,17 @@ network_change() {
     rm -rf /etc/network/interfaces.d; cp -a /root/interfaces.d.provision-bak /etc/network/interfaces.d; ifreload -a'"
   "$mutate"
   # Detached: ifreload may drop this very connection.
-  on_host "systemd-run --quiet --collect --unit=provision-ifreload ifreload -a" || true
+  on_host "rm -f /run/provision-ifreload.rc; systemd-run --quiet --collect --unit=provision-ifreload /bin/sh -c 'ifreload -a; echo \$? > /run/provision-ifreload.rc'" || true
   sleep 15
   if on_host true; then
-    on_host "confirm-or-revert confirm network"
-    note_change "$what"
+    if [ "$(on_host "cat /run/provision-ifreload.rc 2>/dev/null" || true)" = 0 ]; then
+      on_host "confirm-or-revert confirm network"
+      note_change "$what"
+    else
+      log "ifreload did not report success after: $what; leaving the revert armed"
+      sleep 130
+      die "'$what' was reverted: ifreload failed or did not finish"
+    fi
   else
     log "lost the host after: $what; waiting for the automatic revert"
     sleep 130
@@ -83,9 +89,20 @@ network_change() {
 }
 
 add_vmbr0_ipv4() {
-  on_host "sed -i '/^iface vmbr0 inet6 /i iface vmbr0 inet static\n\taddress $PVE_LAN_IPV4\n\tgateway $PVE_LAN_GATEWAY4\n' /etc/network/interfaces"
+  on_host "sed -i '/^iface vmbr0 inet6 /i iface vmbr0 inet static\n\taddress $PVE_LAN_IPV4\n\tgateway $PVE_LAN_GATEWAY4\n' /etc/network/interfaces &&
+    grep -q '^iface vmbr0 inet static' /etc/network/interfaces"
 }
 write_vmbr1() { on_host "cat > /etc/network/interfaces.d/vmbr1" <"$HS_DIR/host/network/vmbr1"; }
+
+# The vmbr1 post-up rules must exist exactly once; a duplicate means a reload
+# re-added them.
+assert_nat_rules_single() {
+  local nat ct
+  nat="$(on_host "iptables -t nat -S POSTROUTING | grep -c -- '-s 10.20.0.0/24 -o vmbr0 -j MASQUERADE' || true")"
+  ct="$(on_host "iptables -t raw -S PREROUTING | grep -c -- '-i fwbr+ -j CT --zone 1' || true")"
+  [ "$nat" = 1 ] || die "expected one MASQUERADE rule for 10.20.0.0/24, found $nat"
+  [ "$ct" = 1 ] || die "expected one raw CT zone rule, found $ct"
+}
 
 converge_host_network() {
   # GitHub and ghcr.io have no IPv6, so the host and guests need IPv4 (spec §1).
@@ -105,9 +122,11 @@ converge_host_network() {
     network_change "vmbr1 private NAT bridge" write_vmbr1
   fi
 
+  assert_nat_rules_single
+
   LAN_IPV4_CIDR="$(on_host "ip -4 -o route show dev vmbr0 proto kernel scope link | awk '{print \$1}' | head -1")"
   LAN_IPV6_PREFIX="$(on_host "ip -6 -o route show dev vmbr0 proto kernel | awk '\$1 !~ /^fe80/ {print \$1}' | head -1")"
-  [ -n "$LAN_IPV4_CIDR" ] || die "vmbr0 has no IPv4 route; did the router hand out a DHCP lease?"
+  [ -n "$LAN_IPV4_CIDR" ] || die "vmbr0 has no IPv4 route; is the static inet stanza for PVE_LAN_IPV4 present in /etc/network/interfaces?"
   [ -n "$LAN_IPV6_PREFIX" ] || die "vmbr0 has no IPv6 prefix route"
   export LAN_IPV4_CIDR LAN_IPV6_PREFIX
 

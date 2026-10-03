@@ -1,15 +1,18 @@
 # Installed by deployment/home-server/provision. The fetcher VM's private
 # network (spec §4): IPv4 only, NAT'd out vmbr0. What it may reach is decided
 # by /etc/pve/firewall/120.fw, enforced on this host.
+# post-up reruns on every ifreload, so the rules are added only when absent and
+# removed in a loop.
 auto vmbr1
 iface vmbr1 inet static
 	address 10.20.0.1/24
 	bridge-ports none
 	bridge-stp off
 	bridge-fd 0
+	ipv6-addrgen off
 	post-up   echo 1 > /proc/sys/net/ipv4/ip_forward
-	post-up   iptables -t nat -A POSTROUTING -s 10.20.0.0/24 -o vmbr0 -j MASQUERADE
-	post-down iptables -t nat -D POSTROUTING -s 10.20.0.0/24 -o vmbr0 -j MASQUERADE
+	post-up   iptables -t nat -C POSTROUTING -s 10.20.0.0/24 -o vmbr0 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.20.0.0/24 -o vmbr0 -j MASQUERADE
+	post-down while iptables -t nat -D POSTROUTING -s 10.20.0.0/24 -o vmbr0 -j MASQUERADE 2>/dev/null; do :; done
 	# Required with the Proxmox firewall on a NAT'd guest's NIC (Proxmox admin guide, "Masquerading").
-	post-up   iptables -t raw -I PREROUTING -i fwbr+ -j CT --zone 1
-	post-down iptables -t raw -D PREROUTING -i fwbr+ -j CT --zone 1
+	post-up   iptables -t raw -C PREROUTING -i fwbr+ -j CT --zone 1 2>/dev/null || iptables -t raw -I PREROUTING -i fwbr+ -j CT --zone 1
+	post-down while iptables -t raw -D PREROUTING -i fwbr+ -j CT --zone 1 2>/dev/null; do :; done
