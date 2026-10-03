@@ -11,13 +11,15 @@
 #     header from the right, skipping trusted proxies (nginx's container has a
 #     private Docker bridge address, which Rails trusts by default), so the
 #     first untrusted entry is the visitor. Entries a client added further left
-#     are never reached.
+#     are never reached. A client's Forwarded header is ignored
+#     (config/initializers/forwarded_headers.rb).
 #   - The web container publishes no port, so nothing reaches Rails without
 #     going through nginx. A request that did would be believed on its own
 #     X-Forwarded-For.
 #
-# Never read CF-Connecting-IP here: Rails cannot tell whether Cloudflare or the
-# client set it. nginx can, and has already folded it into $remote_addr.
+# Never read CF-Connecting-IP (or Forwarded) here: Rails cannot tell whether
+# Cloudflare or the client set it. nginx can, and has already folded it into
+# $remote_addr.
 #
 # Every IP-keyed rate limit in this app goes through here.
 module VisitorIp

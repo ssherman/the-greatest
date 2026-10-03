@@ -47,6 +47,14 @@ class VisitorIpTest < ActiveSupport::TestCase
         "HTTP_CF_CONNECTING_IP" => "198.51.100.77")
   end
 
+  # Rack would otherwise prefer Forwarded over X-Forwarded-For; see
+  # config/initializers/forwarded_headers.rb.
+  test "ignores a Forwarded header a client sent" do
+    assert_equal "203.0.113.5",
+      visitor_ip_for("REMOTE_ADDR" => NGINX, "HTTP_X_FORWARDED_FOR" => "203.0.113.5, 203.0.113.5",
+        "HTTP_FORWARDED" => "for=198.51.100.77")
+  end
+
   test "handles an IPv6 visitor" do
     assert_equal "2001:db8::5",
       visitor_ip_for("REMOTE_ADDR" => NGINX, "HTTP_X_FORWARDED_FOR" => "2001:db8::5, 2001:db8::5")
