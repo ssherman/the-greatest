@@ -75,6 +75,26 @@ This document lists all environment variables required for production deployment
 - **Example**: `https://opensearch.example.com:9200`
 - **Used By**: web, worker
 
+### Home server data services
+
+#### OPEN_LIBRARY_SERVICE_URL
+- **Description**: Open Library data service base URL
+- **Required**: Yes, for books imports
+- **Value**: `https://ol-api.thegreatestbooks.org`
+- **Used By**: web, worker
+
+#### PAGE_FETCHER_SERVICE_URL
+- **Description**: Page fetcher service base URL
+- **Required**: Yes, for page fetches
+- **Value**: `https://page-fetcher.thegreatestbooks.org`
+- **Used By**: web, worker
+
+#### CLOUDFLARE_ACCESS_CLIENT_ID / CLOUDFLARE_ACCESS_CLIENT_SECRET
+- **Description**: The `prod-rails` Access service token, sent by both clients (docs/features/home-server.md)
+- **Required**: Yes, both, in production; neither in development
+- **Used By**: web, worker
+- **Security**: Never commit; lives in `secrets/.env.production`
+
 ### SSL Certificate Configuration
 
 #### CLOUDFLARE_API_TOKEN

@@ -179,6 +179,43 @@ module Books
 
         assert_equal 30, fake_request.options.timeout
       end
+
+      def access
+        CloudflareAccess::Credentials.new(client_id: "id.access", client_secret: "s3cret")
+      end
+
+      test "sends the Cloudflare Access headers when configured" do
+        config = Books::OpenLibrary::Configuration.new(base_url: BASE_URL, access: access)
+        client = Books::OpenLibrary::BaseClient.new(config, breaker: @breaker)
+        stub_request(:get, "#{BASE_URL}/works/OL1W").to_return(status: 200, body: "{}")
+
+        client.get("/works/OL1W")
+
+        assert_requested :get, "#{BASE_URL}/works/OL1W", headers: {"CF-Access-Client-Id" => "id.access", "CF-Access-Client-Secret" => "s3cret"}
+      end
+
+      test "sends no Access headers when not configured" do
+        none = CloudflareAccess::Credentials.new(client_id: nil, client_secret: nil)
+        config = Books::OpenLibrary::Configuration.new(base_url: BASE_URL, access: none)
+        client = Books::OpenLibrary::BaseClient.new(config, breaker: @breaker)
+        stub_request(:get, "#{BASE_URL}/works/OL1W").to_return(status: 200, body: "{}")
+
+        client.get("/works/OL1W")
+
+        assert_requested(:get, "#{BASE_URL}/works/OL1W") { |req| !req.headers.key?("Cf-Access-Client-Id") && !req.headers.key?("Cf-Access-Client-Secret") }
+      end
+
+      test "never writes the Access secret to the request log" do
+        log = StringIO.new
+        config = Books::OpenLibrary::Configuration.new(base_url: BASE_URL, access: access, logger: Logger.new(log))
+        client = Books::OpenLibrary::BaseClient.new(config, breaker: @breaker)
+        stub_request(:get, "#{BASE_URL}/works/OL1W").to_return(status: 200, body: "{}")
+
+        client.get("/works/OL1W")
+
+        assert_includes log.string, "CF-Access-Client-Id"
+        assert_not_includes log.string, "s3cret"
+      end
     end
   end
 end

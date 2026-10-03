@@ -8,13 +8,14 @@ module PageFetcher
     DEFAULT_USER_AGENT = "TheGreatest/1.0 (+https://thegreatestbooks.org)"
     DEFAULT_OPEN_TIMEOUT = 3
 
-    attr_accessor :base_url, :open_timeout, :user_agent, :logger
+    attr_accessor :base_url, :open_timeout, :user_agent, :logger, :access
 
-    def initialize(base_url: nil, open_timeout: nil, user_agent: nil, logger: nil)
+    def initialize(base_url: nil, open_timeout: nil, user_agent: nil, logger: nil, access: nil)
       @base_url = base_url.nil? ? ENV.fetch("PAGE_FETCHER_SERVICE_URL", DEFAULT_URL) : base_url
       @open_timeout = open_timeout.nil? ? DEFAULT_OPEN_TIMEOUT : open_timeout
       @user_agent = user_agent.nil? ? DEFAULT_USER_AGENT : user_agent
       @logger = logger.nil? ? Rails.logger : logger
+      @access = access.nil? ? CloudflareAccess::Credentials.from_env : access
 
       validate_configuration!
     end
@@ -22,6 +23,11 @@ module PageFetcher
     private
 
     def validate_configuration!
+      if access.partial?
+        raise Exceptions::ConfigurationError,
+          "CLOUDFLARE_ACCESS_CLIENT_ID and CLOUDFLARE_ACCESS_CLIENT_SECRET must both be set, or neither"
+      end
+
       raise Exceptions::ConfigurationError, "PAGE_FETCHER_SERVICE_URL cannot be blank" if base_url.blank?
 
       uri = URI.parse(base_url)
