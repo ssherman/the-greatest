@@ -83,4 +83,19 @@ class ReviewSummaryTest < ActiveSupport::TestCase
   test "rated? is false with no ratings, including a summary that survived its last review being deleted" do
     refute ReviewSummary.new(reviewable: books_books(:got), ratings_count: 0).rated?
   end
+
+  test "any_reviews? is true for a summary with only unrated written reviews" do
+    summary = ReviewSummary.new(ratings_count: 0, ratings_sum: 0, text_reviews_count: 1)
+
+    assert summary.any_reviews?
+    assert_not summary.rated?
+  end
+
+  test "any_reviews? is true for a rated summary with no text" do
+    assert ReviewSummary.new(ratings_count: 1, ratings_sum: 4, text_reviews_count: 0).any_reviews?
+  end
+
+  test "any_reviews? is false when there is nothing at all" do
+    assert_not ReviewSummary.new(ratings_count: 0, ratings_sum: 0, text_reviews_count: 0).any_reviews?
+  end
 end

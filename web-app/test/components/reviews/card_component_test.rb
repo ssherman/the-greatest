@@ -98,5 +98,19 @@ module Reviews
 
       assert_no_selector "#ratings-reviews"
     end
+
+    test "a book with only unrated reviews shows the reviews and no histogram" do
+      book = books_books(:got)
+      Review.create!(user: users(:contractor_user), reviewable: book, body: "<p>Words, no stars.</p>")
+      Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book.id)
+      summary = ReviewSummary.find_by!(reviewable_type: "Books::Book", reviewable_id: book.id)
+
+      render_inline(Reviews::CardComponent.new(summary: summary, reviews: book.reviews.with_body.recent))
+
+      assert_selector "#ratings-reviews"
+      assert_text "No ratings yet"
+      assert_no_selector "[data-testid='rating-histogram']"
+      assert_selector "[data-testid='review']", count: 1
+    end
   end
 end

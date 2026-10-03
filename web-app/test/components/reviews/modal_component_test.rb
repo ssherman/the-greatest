@@ -70,5 +70,11 @@ module Reviews
 
       assert_text "||"
     end
+
+    test "ships a clear-rating control, hidden until a rating is picked" do
+      render_inline(Reviews::ModalComponent.new)
+
+      assert_selector "button[data-testid='review-clear-rating'][data-action='click->reviews--modal#clearRating'].hidden", visible: :all
+    end
   end
 end

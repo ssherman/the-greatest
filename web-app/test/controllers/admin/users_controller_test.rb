@@ -302,6 +302,12 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "show renders for a user with an unrated review" do
+    Review.create!(user: @regular_user, reviewable: books_books(:got), body: "<p>No stars.</p>")
+    get admin_user_url(@regular_user)
+    assert_response :success
+  end
+
   test "show renders for a user with no reviews" do
     user = users(:editor_user)
     user.reviews.destroy_all

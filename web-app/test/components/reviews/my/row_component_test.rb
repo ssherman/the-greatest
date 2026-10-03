@@ -10,6 +10,15 @@ module Reviews
         assert_text "Worth every one of its twelve hundred pages", normalize_ws: true
       end
 
+      test "an unrated review shows its snippet and no stars" do
+        review = Review.create!(user: users(:regular_user), reviewable: books_books(:got), body: "<p>No stars here.</p>")
+        render_inline(Reviews::My::RowComponent.new(review: review))
+
+        assert_no_selector "[role='img']"
+        assert_selector "[data-testid='review-snippet']", text: "No stars here."
+        assert_selector "[data-testid='edit-review']"
+      end
+
       test "a rating-only review offers writing one instead of a snippet" do
         render_inline(Reviews::My::RowComponent.new(review: reviews(:regular_user_crime_and_punishment)))
         assert_selector "[data-testid='write-review']"

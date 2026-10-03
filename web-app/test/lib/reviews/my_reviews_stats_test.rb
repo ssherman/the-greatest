@@ -11,13 +11,20 @@ module Reviews
       assert @stats.counts_by_rating.values.all? { |value| value.is_a?(Integer) }
     end
 
-    test "totals split into written and rating-only" do
-      assert_equal @stats.total, @stats.written + @stats.rating_only
-      assert_equal users(:regular_user).reviews.count, @stats.total
-      # rating_only is defined as total - written, so the assertion above holds
-      # for any value #written returns -- it can't catch a broken #written on its
-      # own. Pin #written independently against the real fixture data instead.
+    test "every review is either written or rating-only" do
+      all = users(:regular_user).reviews.where(reviewable_type: "Books::Book").count
+      assert_equal all, @stats.written + @stats.rating_only
       assert_equal users(:regular_user).reviews.where.not(body: nil).count, @stats.written
+    end
+
+    test "an unrated written review counts as written but not as rated" do
+      before = [@stats.total, @stats.written, @stats.rating_only, @stats.average]
+      Review.create!(user: users(:regular_user), reviewable: books_books(:got), body: "<p>No stars.</p>")
+
+      stats = MyReviewsStats.new(user: users(:regular_user), reviewable_class: ::Books::Book)
+
+      assert_equal [before[0], before[1] + 1, before[2], before[3]],
+        [stats.total, stats.written, stats.rating_only, stats.average]
     end
 
     test "average is rounded to one decimal and is a Float" do

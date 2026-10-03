@@ -22,7 +22,7 @@ export default class extends Controller {
         reviewableId: row.reviewableId,
         csrfToken: document.querySelector('meta[name="csrf-token"]')?.content || "",
         review: reviewId
-          ? { id: reviewId, rating: Number(row.rating), title: row.title, body: row.body }
+          ? { id: reviewId, rating: row.rating ? Number(row.rating) : null, title: row.title, body: row.body }
           : null
       }
     }))

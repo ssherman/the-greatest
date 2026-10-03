@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_02_130910) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_03_213421) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1108,7 +1108,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_130910) do
   create_table "reviews", force: :cascade do |t|
     t.text "body"
     t.datetime "created_at", null: false
-    t.integer "rating", null: false
+    t.integer "rating"
     t.bigint "reviewable_id", null: false
     t.string "reviewable_type", null: false
     t.string "title"
@@ -1120,6 +1120,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_130910) do
     t.index ["user_id", "reviewable_type", "reviewable_id"], name: "index_reviews_on_user_and_reviewable", unique: true
     t.check_constraint "body IS NULL OR length(btrim(body, ' \t\n\r\f\v'::text)) > 0", name: "reviews_body_not_blank"
     t.check_constraint "rating >= 1 AND rating <= 5", name: "reviews_rating_range"
+    t.check_constraint "rating IS NOT NULL OR body IS NOT NULL", name: "reviews_rating_or_body"
   end
 
   create_table "saved_searches", force: :cascade do |t|

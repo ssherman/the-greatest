@@ -158,7 +158,7 @@ test.describe('My Reviews', () => {
   // and the exact-count assertion at the top of this file would fail on every
   // later run, for a reason nowhere near where it broke.
   test.describe('deleting from a row', () => {
-    const SCRATCH_BOOK = '/book/nightmare-abbey';
+    const SCRATCH_BOOK = '/book/headlong-hall';
 
     // Clean up by IDENTITY, not by counting rows. MyReviewsController::PER_PAGE
     // is 25, so /my/reviews can never show more than 25 delete buttons -- a

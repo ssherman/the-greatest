@@ -79,7 +79,7 @@ test.describe('Book page ratings and reviews', () => {
   test('an unrated book shows no rating surface', async ({ page }) => {
     // Book 200, verified to have no review_summary row. 72,659 of the 126,289 books
     // have never been rated, so this is the common case, not an edge case.
-    await page.goto('/book/nightmare-abbey');
+    await page.goto('/book/headlong-hall');
 
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(page.getByTestId('review-summary-line')).toHaveCount(0);
