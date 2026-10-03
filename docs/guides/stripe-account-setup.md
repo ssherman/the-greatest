@@ -587,17 +587,10 @@ described above; this section is the runbook that carries them forward.
 Two gaps surfaced during review of this branch that aren't part of the Stripe setup itself, but
 are worth fixing in the deployment configuration:
 
-- **Set `config.hosts` in `web-app/config/environments/production.rb`.** It's commented out today.
-  This app's Stripe redirect URLs (`success_url`/`cancel_url`/the portal's `return_url`) are no
-  longer built from `request.host` — `MembershipController#canonical_host` reads
-  `Rails.application.config.domains[Current.domain]` instead, specifically because `request.host`
-  is attacker-controlled here (nginx forwards the raw client `Host` header via
-  `proxy_set_header Host $http_host;` in `deployment/nginx/snippets/proxy-params.conf`, and
-  `config.hosts` isn't set to reject an unrecognised one). So this specific exploit path is closed
-  for checkout. But `config.hosts` protects every *other* place in the app that might read
-  `request.host` without knowing about this hazard, present or future, and Rails' own comment in
-  that file calls it out as DNS-rebinding protection for exactly this reason. Setting it is small
-  and has no known downside; there's just no code path in this branch that strictly requires it.
+- **Set `config.hosts` in production.** Done. `web-app/config/initializers/host_authorization.rb`
+  admits exactly the hosts in `config.domains`, with `/up` exempt for the container healthcheck,
+  and nginx forwards `proxy_set_header Host $host;`, so a client-supplied port no longer reaches
+  Rails. `MembershipController#canonical_host` still builds Stripe URLs from `config.domains`.
 - **Configure nginx's `real_ip` module with Cloudflare's published IP ranges.** Done —
   `deployment/nginx/bin/generate-cloudflare-snippets.sh` generates `set_real_ip_from` for every
   Cloudflare range plus `real_ip_header CF-Connecting-IP` at image build, and the origin now
