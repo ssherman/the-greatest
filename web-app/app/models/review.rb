@@ -4,7 +4,7 @@
 #
 #  id              :bigint           not null, primary key
 #  body            :text
-#  rating          :integer          not null
+#  rating          :integer
 #  reviewable_type :string           not null
 #  title           :string
 #  created_at      :datetime         not null
@@ -41,12 +41,15 @@ class Review < ApplicationRecord
 
   before_validation :sanitize_body
 
-  validates :rating, presence: true, numericality: {
+  # Optional: Goodreads, and so an import, allows a written review with no stars.
+  # rating_or_body_present is what stops an empty review.
+  validates :rating, numericality: {
     only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 5
-  }
+  }, allow_nil: true
   validates :title, length: {maximum: MAX_TITLE_LENGTH}
   validates :body, length: {maximum: MAX_BODY_LENGTH}
   validates :user_id, uniqueness: {scope: [:reviewable_type, :reviewable_id]}
+  validate :rating_or_body_present
 
   # Honest only because the sanitizer and the reviews_body_not_blank check constraint
   # make an empty-string body unrepresentable. Legacy's identical scope returned 5,177
@@ -55,7 +58,9 @@ class Review < ApplicationRecord
   # `id: :desc` is a tiebreaker, not a preference -- Postgres gives no ordering
   # guarantee among ties, and rating has only 5 distinct values / created_at arrives in
   # bulk-import clusters, so ties are the norm on the paginated surfaces these back.
-  scope :by_rating, -> { order(rating: :desc, id: :desc) }
+  # NULLS LAST: an unrated review has no place in a by-rating ordering, and Postgres
+  # sorts NULL first under DESC by default.
+  scope :by_rating, -> { order(Arel.sql("reviews.rating DESC NULLS LAST"), id: :desc) }
   scope :recent, -> { order(created_at: :desc, id: :desc) }
 
   # Bulk paths (the increment-2 migrator) bypass this by design and call
@@ -63,6 +68,14 @@ class Review < ApplicationRecord
   after_commit :recalculate_summary
 
   private
+
+  # Runs after sanitize_body (a before_validation), so a body the sanitizer reduced
+  # to nil does not count. Mirrors the reviews_rating_or_body check constraint.
+  def rating_or_body_present
+    return if rating.present? || body.present?
+
+    errors.add(:base, "A review needs a rating or some text")
+  end
 
   # BodySanitizer.call sanitizes but never transforms, so this is idempotent: running
   # it again on its own output returns the same string. That is why no length has to be

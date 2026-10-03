@@ -8,7 +8,7 @@
 #
 #  id              :bigint           not null, primary key
 #  body            :text
-#  rating          :integer          not null
+#  rating          :integer
 #  reviewable_type :string           not null
 #  title           :string
 #  created_at      :datetime         not null

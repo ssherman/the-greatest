@@ -6,7 +6,7 @@ require "test_helper"
 #
 #  id              :bigint           not null, primary key
 #  body            :text
-#  rating          :integer          not null
+#  rating          :integer
 #  reviewable_type :string           not null
 #  title           :string
 #  created_at      :datetime         not null
@@ -34,10 +34,47 @@ class ReviewTest < ActiveSupport::TestCase
     assert_equal users(:regular_user), reviews(:regular_user_war_and_peace).user
   end
 
-  test "requires a rating" do
+  test "requires a rating or a body" do
     review = Review.new(user: users(:regular_user), reviewable: books_books(:got))
     assert_not review.valid?
-    assert_includes review.errors[:rating], "can't be blank"
+    assert_includes review.errors[:base], "A review needs a rating or some text"
+  end
+
+  test "accepts a body with no rating" do
+    review = Review.new(user: users(:regular_user), reviewable: books_books(:got), body: "<p>No stars from me.</p>")
+    assert review.valid?
+    assert_nil review.rating
+  end
+
+  test "a body the sanitizer empties does not count as text" do
+    review = Review.new(user: users(:regular_user), reviewable: books_books(:got), body: "   ")
+    assert_not review.valid?
+    assert_nil review.body
+    assert_includes review.errors[:base], "A review needs a rating or some text"
+  end
+
+  test "an image-only body with no rating is invalid" do
+    review = Review.new(
+      user: users(:regular_user), reviewable: books_books(:got),
+      body: %(<img src="https://example.test/x.png">)
+    )
+    assert_not review.valid?
+  end
+
+  test "the database rejects a review with neither a rating nor a body" do
+    review = Review.create!(user: users(:contractor_user), reviewable: books_books(:got), rating: 4)
+
+    # update_columns skips validations, so only the check constraint stands in the way.
+    assert_raises(ActiveRecord::StatementInvalid) { review.update_columns(rating: nil) }
+  end
+
+  test "by_rating puts unrated reviews last" do
+    book = books_books(:got)
+    Review.create!(user: users(:contractor_user), reviewable: book, body: "<p>Unrated.</p>")
+    Review.create!(user: users(:regular_user), reviewable: book, rating: 2)
+    Review.create!(user: users(:admin_user), reviewable: book, rating: 5)
+
+    assert_equal [5, 2, nil], Review.where(reviewable: book).by_rating.map(&:rating)
   end
 
   test "rejects a rating below 1" do
