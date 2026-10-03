@@ -1,0 +1,9 @@
+# Installed by deployment/home-server/provision. SSH and the web UI from the
+# house LAN only. Proxmox also keeps its own management rule for the host's
+# local network, which is what stops a mistake here from locking out SSH.
+[OPTIONS]
+enable: 1
+
+[RULES]
+IN ACCEPT -source +lan -p tcp -dport 22 -log nolog
+IN ACCEPT -source +lan -p tcp -dport 8006 -log nolog

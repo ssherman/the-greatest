@@ -134,5 +134,35 @@ converge_host_network() {
   [ "$(on_host "sysctl -n net.ipv6.conf.all.forwarding")" = 0 ] || die "IPv6 forwarding is on; the fetcher must have no IPv6 path"
 }
 
-# Stub, replaced by Task 7.
-converge_host_firewall() { :; }
+converge_host_firewall() {
+  local rendered
+  rendered="$(mktemp -d)"
+  # shellcheck disable=SC2016 # envsubst takes the variable list literally
+  LAN_IPV4_CIDR="$LAN_IPV4_CIDR" LAN_IPV6_PREFIX="$LAN_IPV6_PREFIX" \
+    envsubst '${LAN_IPV4_CIDR} ${LAN_IPV6_PREFIX}' <"$HS_DIR/host/firewall/cluster.fw.tmpl" >"$rendered/cluster.fw"
+  cp "$HS_DIR/host/firewall/host.fw" "$HS_DIR/host/firewall/110.fw" "$HS_DIR/host/firewall/120.fw" "$rendered/"
+
+  local pairs=("cluster.fw:/etc/pve/firewall/cluster.fw" "host.fw:/etc/pve/nodes/pve/host.fw"
+    "110.fw:/etc/pve/firewall/110.fw" "120.fw:/etc/pve/firewall/120.fw")
+  local pair stale=()
+  for pair in "${pairs[@]}"; do
+    host_file_matches "$rendered/${pair%%:*}" "${pair#*:}" || stale+=("$pair")
+  done
+  if [ "${#stale[@]}" = 0 ]; then rm -rf "$rendered"; return 0; fi
+
+  # Stopping pve-firewall drops every rule it installed: the safe state if a
+  # rule here cuts SSH off.
+  on_host "confirm-or-revert arm firewall 120 'pve-firewall stop'"
+  for pair in "${stale[@]}"; do put_host "$rendered/${pair%%:*}" "${pair#*:}"; done
+  rm -rf "$rendered"
+  on_host "pve-firewall compile >/dev/null" || die "pve-firewall rejected the rules (compile failed)"
+  on_host "systemctl restart pve-firewall"
+  sleep 15
+  if on_host "pve-firewall status | grep -q 'enabled/running'"; then
+    on_host "confirm-or-revert confirm firewall"
+  else
+    die "firewall did not come up; the armed revert stops it in under two minutes"
+  fi
+  # A pve-firewall restart must leave vmbr1's NAT and CT rules alone (spec §4).
+  assert_nat_rules_single
+}

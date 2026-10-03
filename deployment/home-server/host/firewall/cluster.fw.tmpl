@@ -1,0 +1,21 @@
+# Rendered by deployment/home-server/provision; the LAN ranges are read off
+# the host at provision time, never committed (spec §4).
+[OPTIONS]
+enable: 1
+policy_in: DROP
+policy_out: ACCEPT
+
+[IPSET lan] # the house LAN: IPv4 and the host's current IPv6 /64
+${LAN_IPV4_CIDR}
+${LAN_IPV6_PREFIX}
+
+[IPSET private] # destinations the fetcher may never reach
+0.0.0.0/8
+10.0.0.0/8
+100.64.0.0/10
+127.0.0.0/8
+169.254.0.0/16
+172.16.0.0/12
+192.168.0.0/16
+224.0.0.0/4
+240.0.0.0/4
