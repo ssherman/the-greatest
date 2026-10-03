@@ -274,36 +274,54 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
   end
 
   # A loop from a single integration-test session proves the limit trips, but
-  # not that it is keyed correctly -- with no CF-Connecting-IP header,
-  # visitor_ip falls back to the constant remote_ip every request in this
-  # process shares, so a test like the two above would pass identically
-  # against `by: -> { "constant" }`. Only two DIFFERENT visitor ips can tell
-  # visitor_ip and a shared bucket apart: with by: visitor_ip each gets its
-  # own bucket and the second visitor is unaffected; with a shared key the
-  # second visitor's request would land in the first's already-exhausted
-  # bucket.
-  test "check_provider rate limit is keyed on CF-Connecting-IP, not the shared edge ip" do
+  # not that it is keyed correctly -- every request in this process comes from
+  # 127.0.0.1 unless REMOTE_ADDR says otherwise, so a test like the two above
+  # would pass identically against `by: -> { "constant" }`. Only two DIFFERENT
+  # visitor ips can tell visitor_ip and a shared bucket apart: with by:
+  # visitor_ip each gets its own bucket and the second visitor is unaffected;
+  # with a shared key the second visitor's request would land in the first's
+  # already-exhausted bucket.
+  test "check_provider rate limit is keyed per visitor, not shared" do
     (AuthController::CHECK_PROVIDER_RATE + 1).times do
       post auth_check_provider_path, params: {email: "someone@example.com"},
-        headers: {"CF-Connecting-IP" => "203.0.113.5"}, as: :json
+        env: {"REMOTE_ADDR" => "203.0.113.5"}, as: :json
     end
+    assert_response :too_many_requests
 
     post auth_check_provider_path, params: {email: "someone@example.com"},
-      headers: {"CF-Connecting-IP" => "203.0.113.9"}, as: :json
+      env: {"REMOTE_ADDR" => "203.0.113.9"}, as: :json
 
     assert_response :success
   end
 
-  test "sign_in rate limit is keyed on CF-Connecting-IP, not the shared edge ip" do
+  test "sign_in rate limit is keyed per visitor, not shared" do
     bad = FirebaseTokenHelper.token({"aud" => "other-project"})
 
     (AuthController::SIGN_IN_RATE + 1).times do
-      post auth_sign_in_path, params: {jwt: bad}, headers: {"CF-Connecting-IP" => "203.0.113.5"}, as: :json
+      post auth_sign_in_path, params: {jwt: bad}, env: {"REMOTE_ADDR" => "203.0.113.5"}, as: :json
     end
+    assert_response :too_many_requests
 
-    post auth_sign_in_path, params: {jwt: bad}, headers: {"CF-Connecting-IP" => "203.0.113.9"}, as: :json
+    post auth_sign_in_path, params: {jwt: bad}, env: {"REMOTE_ADDR" => "203.0.113.9"}, as: :json
 
     assert_response :unauthorized
+  end
+
+  # The M1 audit finding: when visitor_ip trusted CF-Connecting-IP, a client
+  # talking to the origin could send a new value with every request and never
+  # fill a bucket. The header must now make no difference.
+  test "rotating CF-Connecting-IP does not buy a fresh check_provider bucket" do
+    AuthController::CHECK_PROVIDER_RATE.times do |i|
+      post auth_check_provider_path, params: {email: "someone@example.com"},
+        headers: {"CF-Connecting-IP" => "198.51.100.#{i + 1}"},
+        env: {"REMOTE_ADDR" => "203.0.113.5"}, as: :json
+    end
+
+    post auth_check_provider_path, params: {email: "someone@example.com"},
+      headers: {"CF-Connecting-IP" => "198.51.100.250"},
+      env: {"REMOTE_ADDR" => "203.0.113.5"}, as: :json
+
+    assert_response :too_many_requests
   end
 
   test "check_provider names every registry provider, not only the enabled ones" do

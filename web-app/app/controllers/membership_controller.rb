@@ -192,6 +192,5 @@ class MembershipController < ApplicationController
     Rails.application.config.domains[Current.domain].to_s.split(",").first
   end
 
-  # visitor_ip comes from the VisitorIp concern -- see it for why remote_ip alone
-  # is wrong behind Cloudflare.
+  # visitor_ip comes from the VisitorIp concern.
 end

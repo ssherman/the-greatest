@@ -358,14 +358,13 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to "https://checkout.stripe.com/c/pay/cs_donate"
   end
 
-  test "the donate rate limit keys on CF-Connecting-IP, not the shared edge ip" do
+  test "the donate rate limit is keyed per visitor, not shared" do
     Stripe::Checkout::Session.stubs(:create).returns(stub(url: "https://checkout.stripe.com/c/pay/cs_donate"))
 
-    11.times { post membership_donate_url, headers: {"CF-Connecting-IP" => "203.0.113.5"} }
-    # A different real visitor, arriving through the same Cloudflare PoP (so the
-    # same request.remote_ip in this environment) but with their own
-    # CF-Connecting-IP, must not inherit the first visitor's count.
-    post membership_donate_url, headers: {"CF-Connecting-IP" => "203.0.113.9"}
+    11.times { post membership_donate_url, env: {"REMOTE_ADDR" => "203.0.113.5"} }
+    assert_redirected_to membership_path
+    # A different visitor must not inherit the first visitor's count.
+    post membership_donate_url, env: {"REMOTE_ADDR" => "203.0.113.9"}
 
     assert_redirected_to "https://checkout.stripe.com/c/pay/cs_donate"
   end

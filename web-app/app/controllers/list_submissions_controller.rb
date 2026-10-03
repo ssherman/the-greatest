@@ -33,9 +33,8 @@ class ListSubmissionsController < ApplicationController
   # a tighter cap. Nothing an anonymous flood produces is published; it costs
   # triage time.
   #
-  # by: goes through visitor_ip, NEVER request.remote_ip -- in production that is
-  # the Cloudflare edge IP, so keying on it puts every visitor in one bucket and
-  # throttles the whole site.
+  # by: goes through visitor_ip (the VisitorIp concern), like every IP-keyed
+  # limit, so they all agree on who the visitor is.
   #
   # with: renders rather than redirects: the redirect target is edge-cached, so a
   # flash set there is never read. Rails' default raise renders an HTML error body.

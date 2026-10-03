@@ -465,11 +465,11 @@ The flow, `POST /membership/checkout` for a signed-in visitor:
    `checkout.stripe.com` URL.
 
 **`success_url`/`cancel_url` are never built from `request.host`.** `canonical_host` in
-`MembershipController` reads `Rails.application.config.domains[Current.domain]` instead, because
-nginx forwards the client's raw `Host` header verbatim and `config.hosts` is unset in production —
-see `docs/guides/stripe-account-setup.md`'s "Ops follow-ups" for why that's still worth fixing
-separately. A forged `Host` header cannot make this app mint a real Stripe-branded checkout link
-pointing anywhere but a real site.
+`MembershipController` reads `Rails.application.config.domains[Current.domain]` instead. nginx
+now forwards `Host $host` and production's `config.hosts` admits only `config.domains`
+(`config/initializers/host_authorization.rb`), but this path does not depend on either: a forged
+`Host` header cannot make this app mint a real Stripe-branded checkout link pointing anywhere but
+a real site.
 
 **Donations** (`POST /membership/donate`) reuse the same `CreateCheckoutSession` service in
 `mode: "payment"` with `submit_type: "donate"`, against the single `kind: :donation` plan (a

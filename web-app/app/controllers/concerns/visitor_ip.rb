@@ -1,25 +1,33 @@
 # frozen_string_literal: true
 
-# Prefers the IP Cloudflare recorded for the visitor over the shared edge IP
-# every other visitor at that PoP appears to have. This is correct ONLY for
-# traffic that actually came through Cloudflare: nginx has no real_ip module
-# configured with Cloudflare's ranges (a deployment change, not a code one --
-# see the ops runbook), so nothing here verifies the request came through
-# Cloudflare at all. A request straight to the origin can set this header to
-# anything and evade the rate limit entirely -- it does not merely fall back
-# to request.remote_ip, which alone was at least accurate for that traffic.
+# The visitor's IP, for keying rate limits and recording who submitted what.
 #
-# request.remote_ip is only the fallback, for requests that did not come
-# through Cloudflare at all -- local development, and health checks hitting
-# the origin directly.
+# It is request.remote_ip, which is the visitor only because of how the origin
+# is wired (deployment/README.md, origin lockdown):
+#   - nginx accepts connections only from Cloudflare's ranges, and its real_ip
+#     module takes CF-Connecting-IP only from those ranges, so nginx's
+#     $remote_addr is the visitor.
+#   - nginx appends $remote_addr to X-Forwarded-For. Rails' RemoteIp walks that
+#     header from the right, skipping trusted proxies (nginx's container has a
+#     private Docker bridge address, which Rails trusts by default), so the
+#     first untrusted entry is the visitor. Entries a client added further left
+#     are never reached. A client's Forwarded header is ignored
+#     (config/initializers/forwarded_headers.rb).
+#   - The web container publishes no port, so nothing reaches Rails without
+#     going through nginx. A request that did would be believed on its own
+#     X-Forwarded-For.
 #
-# Every IP-keyed rate limit in this app must go through here.
+# Never read CF-Connecting-IP (or Forwarded) here: Rails cannot tell whether
+# Cloudflare or the client set it. nginx can, and has already folded it into
+# $remote_addr.
+#
+# Every IP-keyed rate limit in this app goes through here.
 module VisitorIp
   extend ActiveSupport::Concern
 
   private
 
   def visitor_ip
-    request.headers["CF-Connecting-IP"].presence || request.remote_ip
+    request.remote_ip
   end
 end

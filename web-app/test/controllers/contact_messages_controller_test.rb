@@ -128,6 +128,21 @@ class ContactMessagesControllerTest < ActionDispatch::IntegrationTest
     assert_match(/The sixth message, rate limited\./, response.body)
   end
 
+  test "the anonymous rate limit is keyed per visitor, not shared" do
+    (ContactMessagesController::ANONYMOUS_RATE + 1).times do |i|
+      post contact_messages_path,
+        params: {contact_message: {email: "reader@example.org", message: "Message #{i}"}},
+        env: {"REMOTE_ADDR" => "198.51.100.9"}, as: :turbo_stream
+    end
+    assert_response :too_many_requests
+
+    post contact_messages_path,
+      params: {contact_message: {email: "reader@example.org", message: "Another visitor"}},
+      env: {"REMOTE_ADDR" => "203.0.113.5"}, as: :turbo_stream
+
+    assert_response :success
+  end
+
   # curl -d "contact_message=x" sends contact_message as a scalar String, not a
   # hash -- params.fetch(:contact_message, {}).permit(...) then called permit
   # on a String and 500'd. This is a public, unauthenticated endpoint.

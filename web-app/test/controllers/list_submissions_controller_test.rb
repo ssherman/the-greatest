@@ -150,7 +150,7 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
   test "an anonymous submitter is rate limited" do
     (ListSubmissionsController::ANONYMOUS_RATE + 1).times do |i|
       post "/list_submissions", params: @params.deep_merge(list: {url: "https://example.com/anon-#{i}"}),
-        headers: {"CF-Connecting-IP" => "198.51.100.9"}
+        env: {"REMOTE_ADDR" => "198.51.100.9"}
     end
 
     assert_response :too_many_requests
@@ -164,38 +164,34 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
   test "a throttled submission preserves what the submitter typed" do
     ListSubmissionsController::ANONYMOUS_RATE.times do |i|
       post "/list_submissions", params: @params.deep_merge(list: {url: "https://example.com/anon-#{i}"}),
-        headers: {"CF-Connecting-IP" => "198.51.100.9"}
+        env: {"REMOTE_ADDR" => "198.51.100.9"}
     end
 
     post "/list_submissions", params: @params.deep_merge(list: {name: "A Pasted List Worth Keeping"}),
-      headers: {"CF-Connecting-IP" => "198.51.100.9"}
+      env: {"REMOTE_ADDR" => "198.51.100.9"}
 
     assert_response :too_many_requests
     assert_match "A Pasted List Worth Keeping", response.body
   end
 
-  # request.remote_ip is a constant "127.0.0.1" for every request in this test
-  # process regardless of what CF-Connecting-IP carries (ActionDispatch::RemoteIp
-  # does not fold that header in -- confirmed empirically, not assumed), so a
-  # single-anonymous-submitter loop trips at the same iteration count whichever
-  # field by: reads, even with an explicit header set throughout. The only test
-  # shape that can tell visitor_ip and remote_ip apart is two DIFFERENT visitor
-  # ips: with by: visitor_ip each gets its own bucket and both loops below
-  # succeed in full; with by: request.remote_ip -- the production bug that
-  # shares one bucket across every visitor behind Cloudflare -- the second
-  # visitor's requests land in the SAME already-exhausted bucket as the
-  # first's, and the second loop's last request comes back rate limited
-  # instead of redirecting.
-  test "an anonymous rate limit is keyed on visitor ip, not the shared remote_ip" do
+  # Every request in this test process comes from 127.0.0.1 unless REMOTE_ADDR
+  # says otherwise, so a single-submitter loop trips at the same iteration
+  # count whatever by: reads -- even a constant. The only shape that can tell
+  # a per-visitor bucket from a shared one is two DIFFERENT visitor ips: per
+  # visitor, each gets its own bucket and both loops below succeed in full;
+  # shared, the second visitor's requests land in the first's exhausted bucket
+  # and the second loop's last request comes back rate limited instead of
+  # redirecting.
+  test "an anonymous rate limit is keyed per visitor, not shared" do
     ListSubmissionsController::ANONYMOUS_RATE.times do |i|
       post "/list_submissions", params: @params.deep_merge(list: {url: "https://example.com/ip-a-#{i}"}),
-        headers: {"CF-Connecting-IP" => "198.51.100.9"}
+        env: {"REMOTE_ADDR" => "198.51.100.9"}
     end
     assert_response :redirect
 
     ListSubmissionsController::ANONYMOUS_RATE.times do |i|
       post "/list_submissions", params: @params.deep_merge(list: {url: "https://example.com/ip-b-#{i}"}),
-        headers: {"CF-Connecting-IP" => "203.0.113.5"}
+        env: {"REMOTE_ADDR" => "203.0.113.5"}
     end
     assert_response :redirect
   end
@@ -208,7 +204,7 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
 
     (ListSubmissionsController::ANONYMOUS_RATE + 1).times do |i|
       post "/list_submissions", params: @params.deep_merge(list: {url: "https://example.com/signed-in-not-anon-#{i}"}),
-        headers: {"CF-Connecting-IP" => "198.51.100.9"}
+        env: {"REMOTE_ADDR" => "198.51.100.9"}
     end
 
     assert_response :redirect

@@ -21,8 +21,8 @@ class My::RankingConfigurationsController < ApplicationController
 
   # Five manual refreshes per user per rolling day. Declared after the two
   # filters above so a click during a run is rejected before it counts, and
-  # keyed by user id, never request.remote_ip (the Cloudflare edge IP). with:
-  # is required: Rails' default raises and renders an HTML error body.
+  # keyed by user id, since the action requires sign-in. with: is required:
+  # Rails' default raises and renders an HTML error body.
   rate_limit to: REFRESH_LIMIT, within: REFRESH_WINDOW,
     by: -> { current_user.id },
     with: -> { refresh_limited },

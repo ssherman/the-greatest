@@ -38,11 +38,10 @@ class Correction < ApplicationRecord
   # (jsonb) rather than on this row, so a length validation here could not see it.
   #
   # They exist for the same reason MAX_NOTES_LENGTH does, only more so:
-  # /suggest-correction is an anonymous POST anyone can make, its rate limit keys
-  # on visitor_ip which the origin will believe from a spoofed CF-Connecting-IP
-  # if a request ever reaches it off-edge, and this repo ships no Rack or nginx
-  # body limit. Without these, one request stores an arbitrarily large blob per
-  # field and an arbitrarily long array.
+  # /suggest-correction is an anonymous POST anyone can make, its rate limit is
+  # per visitor IP (so anyone with many addresses has many budgets), and this
+  # repo ships no Rack or nginx body limit. Without these, one request stores an
+  # arbitrarily large blob per field and an arbitrarily long array.
   #
   # Sized off the real corpus rather than guessed -- 446 migrated corrections and
   # the 139,850 book descriptions they were migrated against:

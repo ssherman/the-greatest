@@ -98,12 +98,11 @@ one bucket per IP and can't be individually identified, so they get the tighter 
 anonymous flood produces is ever published, but triage still costs time, and a shared cap is the
 only defense available for traffic with no other identity.
 
-`by: visitor_ip`, never `request.remote_ip` — in production `remote_ip` is the shared Cloudflare
-edge IP, so keying on it would put every anonymous visitor on the internet into the same bucket
-and throttle the whole site after ten submissions from anyone, anywhere.
-`app/controllers/concerns/visitor_ip.rb` reads `CF-Connecting-IP` first, falling back to
-`remote_ip` only for requests that didn't come through Cloudflare (local dev, direct health
-checks). Both `rate_limit` calls are declared with `store:` pointed at the same shared store, and
+`by: visitor_ip` (`app/controllers/concerns/visitor_ip.rb`), which is `request.remote_ip`. That
+is the visitor only because nginx sets its `$remote_addr` from `CF-Connecting-IP` for
+connections from Cloudflare's ranges and refuses every other connection (origin lockdown,
+`deployment/README.md`). Rails never reads `CF-Connecting-IP` itself.
+Both `rate_limit` calls are declared with `store:` pointed at the same shared store, and
 `with:` renders `#new` in place rather than redirecting — the redirect target (`/lists/new`) is
 edge-cached, so a flash set on a redirect there would never be read by the visitor who tripped the
 limit.
@@ -239,7 +238,7 @@ the admin UI the way it is on a correction's show page.
 | `app/controllers/list_submissions_controller.rb` | `new`/`create`/`thanks`; rate limiting, honeypot, edge-caching, type resolution |
 | `app/lib/services/lists/submission_registry.rb` | domain -> allowed `List` subclasses; the only place a type name is resolved to a class |
 | `app/lib/services/lists/submission.rb` | length caps, duplicate check, builds and saves the `unapproved` `List` |
-| `app/controllers/concerns/visitor_ip.rb` | `CF-Connecting-IP`-first IP resolution, shared by every IP-keyed rate limit |
+| `app/controllers/concerns/visitor_ip.rb` | the visitor's IP (request.remote_ip behind nginx's real_ip), shared by every IP-keyed rate limit |
 | `app/controllers/concerns/cacheable.rb` | the `expires_in`/`prevent_caching` helpers behind the edge-caching split |
 | `app/views/list_submissions/_form.html.erb` | the shared form; `aria-label`s label every input since daisyUI 5's `fieldset`/`legend` doesn't |
 | `app/mailers/admin_mailer.rb` (`new_list_submission`) | owner notification, `deliver_later` |
