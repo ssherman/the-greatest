@@ -41,6 +41,12 @@ class ReviewSummary < ApplicationRecord
     ratings_count.to_i.positive?
   end
 
+  # Whether there is anything at all to show: a rating, or a review written without
+  # one. The card and the summary line gate on this; the histogram stays on rated?.
+  def any_reviews?
+    rated? || text_reviews_count.to_i.positive?
+  end
+
   # The single rounding site for the average, so the summary line and the reviews card
   # can never print different numbers for the same book.
   def rounded_average_rating

@@ -181,6 +181,40 @@ module Services
         assert_not statements.any? { |sql| sql.include?("pg_advisory_xact_lock") },
           "backfill_all! is a single set-based rebuild and must not serialize per row"
       end
+
+      test ".recalculate counts an unrated review as a text review, not a rating" do
+        Review.create!(user: users(:regular_user), reviewable: @book, rating: 4)
+        Review.create!(user: users(:admin_user), reviewable: @book, body: "<p>No stars.</p>")
+
+        recalculate(@book)
+        summary = summary_for(@book)
+
+        # Without COUNT(rating), ratings_count would be 2 and the average 2.0.
+        assert_equal [1, 4, 1], [summary.ratings_count, summary.ratings_sum, summary.text_reviews_count]
+        assert_in_delta 4.0, summary.average_rating
+      end
+
+      test ".recalculate keeps a summary row for a book whose only review is unrated" do
+        Review.create!(user: users(:regular_user), reviewable: @book, body: "<p>Words only.</p>")
+
+        recalculate(@book)
+        summary = summary_for(@book)
+
+        assert_not_nil summary
+        assert_equal [0, 0, 1], [summary.ratings_count, summary.ratings_sum, summary.text_reviews_count]
+        assert_nil summary.average_rating
+      end
+
+      test ".backfill_all! agrees with .recalculate on unrated reviews" do
+        Review.create!(user: users(:regular_user), reviewable: @book, rating: 2)
+        Review.create!(user: users(:admin_user), reviewable: @book, body: "<p>Unrated.</p>")
+
+        recalculate(@book)
+        incremental = summary_for(@book).slice(:ratings_count, :ratings_sum, :text_reviews_count)
+        SummaryRecalculator.backfill_all!
+
+        assert_equal incremental, summary_for(@book).slice(:ratings_count, :ratings_sum, :text_reviews_count)
+      end
     end
   end
 end
