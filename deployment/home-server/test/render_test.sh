@@ -70,15 +70,28 @@ t_cluster_fw() {
 }
 
 t_cluster_fw_v4_only() {
-  local out="$SANDBOX/cluster4.fw" set body
+  local out="$SANDBOX/cluster4.fw" set
   LAN_IPV4_CIDR=192.0.2.0/24 LAN_IPV6_PREFIX='' render_cluster_fw "$out" || return 1
   ! grep -q '\${' "$out" || return 1
   for set in lan management; do
-    # the section's lines up to its blank terminator, header dropped
-    body="$(sed -n "/^\[IPSET $set\]/,/^\$/p" "$out" | sed '1d;$d')"
-    [ "$body" = "192.0.2.0/24" ] || return 1
+    # Byte-exact (a $(...) capture would hide trailing blank lines): the
+    # header dropped, the section is the one IPv4 line and its blank terminator.
+    sed -n "/^\[IPSET $set\]/,/^\$/p" "$out" | sed 1d >"$SANDBOX/block"
+    printf '192.0.2.0/24\n\n' | cmp -s - "$SANDBOX/block" || return 1
   done
+  # No line of only whitespace, and no two blank lines in a row, anywhere.
+  ! grep -qE '^[[:space:]]+$' "$out" || return 1
+  cat -s "$out" | cmp -s - "$out" || return 1
   [ "$(grep -c '^\[IPSET' "$out")" = 3 ]
+}
+t_reboot_reason() {
+  local msg
+  [ -z "$(reboot_needed_reason 2.3.4-pve1 zfs-2.3.4-pve1 6.8.1 6.8.1)" ] &&
+    [ -z "$(reboot_needed_reason "" "" 6.8.1 6.8.1)" ] || return 1
+  msg="$(reboot_needed_reason 2.3.4-pve1 zfs-2.4.4-pve1 6.8.1 6.8.1)"
+  grep -q '2.3.4-pve1' <<<"$msg" && grep -q '2.4.4-pve1' <<<"$msg" && grep -q 'onboot' <<<"$msg" || return 1
+  msg="$(reboot_needed_reason "" "" 6.8.1 6.14.0)"
+  grep -q '6.8.1' <<<"$msg" && grep -q '6.14.0' <<<"$msg"
 }
 t_vm_spec_sizes() {
   vm_spec ol && [ "$CORES $MEM $DATADISK" = "12 24576 300" ] || return 1
@@ -130,4 +143,5 @@ check "cluster.fw renders IPv4-only sets with no blank or unrendered line" t_clu
 check "vm_spec sizes: ol 12 vCPU / 24 GB, fetcher unchanged" t_vm_spec_sizes
 check "storage names default to local-lvm / local and come from the secrets when set" t_storage_defaults
 check "pick_trace_ip returns only a dotted IPv4 ip= line" t_trace_ip
+check "a ZFS module/userland or kernel mismatch yields a reboot message naming both versions" t_reboot_reason
 finish

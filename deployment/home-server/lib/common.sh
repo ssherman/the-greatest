@@ -78,6 +78,22 @@ load_host_state() {
   export REPO_REF TUNNELS_ENABLED
 }
 
+# running_foreign_vmids: the running VMIDs other than 110 and 120 (guests
+# provision did not create). Fails if the host cannot be asked.
+running_foreign_vmids() {
+  local out
+  out="$(on_host "qm list")" || return 1
+  printf '%s\n' "$out" | awk '$3 == "running" && $1 != 110 && $1 != 120 {print $1}'
+}
+
+# assert_foreign_guests_running <ids>: die if any of them stopped.
+assert_foreign_guests_running() {
+  local id
+  for id in $1; do
+    on_host "qm status $id | grep -q running" || die "pre-existing guest $id is no longer running; provision never touches it, look at: qm status $id"
+  done
+}
+
 report_changes() {
   if [ "${#CHANGES[@]}" = 0 ]; then log "no changes"; else log "${#CHANGES[@]} change(s): ${CHANGES[*]}"; fi
 }

@@ -40,12 +40,15 @@ load_host_state "$ref_arg"
 
 case "$mode" in
   converge)
+    foreign_before="$(running_foreign_vmids)" || die "could not list the host's VMs"
     converge_host_packages
     converge_host_network
     converge_host_firewall
+    require_host_ready_for_vms
     for role in fetcher ol; do ensure_vm "$role"; done
+    assert_foreign_guests_running "$foreign_before"
     ;;
-  rebuild) rebuild_vm "$rebuild_role" ;;
+  rebuild) require_host_ready_for_vms; rebuild_vm "$rebuild_role" ;;
   enable-tunnels) enable_tunnels ;;
   verify) verify_all ;;
 esac

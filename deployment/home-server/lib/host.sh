@@ -6,7 +6,10 @@
 # converge_host_zfs: cap ZFS's cache (the ARC) on a host that runs ZFS, so it
 # cannot crowd out the VMs (spec §12). A host without ZFS is left alone.
 converge_host_zfs() {
-  on_host "test -d /sys/module/zfs" || return 0
+  local rc=0
+  on_host "[ -d /sys/module/zfs ]" || rc=$?
+  [ "$rc" != 255 ] || die "lost the host while checking for ZFS"
+  [ "$rc" = 0 ] || return 0
   local arc="${ARC_MAX_BYTES:-8589934592}" tmp file_changed=0
   [[ "$arc" =~ ^[0-9]+$ ]] || die "ARC_MAX_BYTES must be a number of bytes, got '$arc'"
   new_tmpdir tmp
@@ -17,7 +20,11 @@ converge_host_zfs() {
     on_host "echo $arc > /sys/module/zfs/parameters/zfs_arc_max" || die "could not set zfs_arc_max at runtime"
     note_change "zfs_arc_max set to $arc"
   fi
-  # A root-on-ZFS host loads the module from the initramfs, which carries modprobe.d.
+  # A root-on-ZFS host loads the module from the initramfs, which carries
+  # modprobe.d. Also rebuild when an earlier failed rebuild left it without the file.
+  if [ "$(on_host "findmnt -no FSTYPE /")" = zfs ]; then
+    [ "$(on_host "lsinitramfs /boot/initrd.img-\$(uname -r) 2>/dev/null | grep -c etc/modprobe.d/zfs.conf || true")" -gt 0 ] || file_changed=1
+  fi
   if [ "$file_changed" = 1 ] && [ "$(on_host "findmnt -no FSTYPE /")" = zfs ]; then
     on_host "update-initramfs -u -k all >/dev/null 2>&1" || die "update-initramfs failed after capping the ZFS ARC"
     note_change "initramfs rebuilt for the ARC cap"
@@ -28,11 +35,12 @@ converge_host_packages() {
   put_host "$HS_DIR/host/sbin/confirm-or-revert" /usr/local/sbin/confirm-or-revert 0755
 
   # The enterprise repos need a subscription; with none, apt update fails.
+  # Chosen by content, not name: the no-subscription ceph repo must stay on.
   local f
-  for f in pve-enterprise ceph; do
-    if on_host "test -f /etc/apt/sources.list.d/$f.sources && ! grep -q '^Enabled: no' /etc/apt/sources.list.d/$f.sources"; then
-      on_host "echo 'Enabled: no' >> /etc/apt/sources.list.d/$f.sources"
-      note_change "disabled $f.sources"
+  for f in $(on_host "grep -l enterprise.proxmox.com /etc/apt/sources.list.d/*.sources 2>/dev/null || true"); do
+    if ! on_host "grep -q '^Enabled: no' '$f'"; then
+      on_host "echo 'Enabled: no' >> '$f'"
+      note_change "disabled $(basename "$f")"
     fi
   done
   put_host "$HS_DIR/host/apt/proxmox.sources" /etc/apt/sources.list.d/proxmox.sources
@@ -85,6 +93,46 @@ converge_host_packages() {
   fi
 }
 
+# reboot_needed_reason <zfs-module-version> <zfs-userland-line> <running-kernel> <newest-kernel>:
+# prints why the host must be rebooted before any guest is created or changed;
+# prints nothing when it need not be. The module version is empty without ZFS.
+reboot_needed_reason() {
+  local mod=$1 user=${2#zfs-} running=$3 newest=$4 why=""
+  if [ -n "$mod" ] && [ "$mod" != "$user" ]; then why="the loaded ZFS module is $mod but the installed ZFS userland is $user"; fi
+  if [ "$running" != "$newest" ]; then
+    why="${why:+$why, and }the running kernel is $running but $newest is installed"
+  fi
+  [ -z "$why" ] || printf '%s: reboot the host (guests with onboot come back by themselves), then re-run provision\n' "$why"
+}
+
+host_reboot_reason() {
+  local mod="" user="" running newest
+  if on_host "[ -d /sys/module/zfs ]"; then
+    mod="$(on_host "cat /sys/module/zfs/version")" || return 1
+    user="$(on_host "zfs version | head -1")" || return 1
+  fi
+  running="$(on_host "uname -r")" || return 1
+  newest="$(on_host "ls /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||' | sort -V | tail -1")" || return 1
+  reboot_needed_reason "$mod" "$user" "$running" "$newest"
+}
+
+# host_reboot_current: for --verify, a FAIL line instead of a die.
+host_reboot_current() {
+  local why
+  why="$(host_reboot_reason)" || { echo "could not read the host's ZFS and kernel versions"; return 1; }
+  [ -z "$why" ] || { echo "$why"; return 1; }
+}
+
+# require_host_ready_for_vms: gates VM creation and changes (never the host
+# steps before it). provision never reboots; creating zvols on a stale module
+# is the thing being avoided. Under --verify it is a FAIL line elsewhere.
+require_host_ready_for_vms() {
+  [ "${VERIFY:-0}" != 1 ] || return 0
+  local why
+  why="$(host_reboot_reason)" || die "could not read the host's ZFS and kernel versions"
+  [ -z "$why" ] || die "$why"
+}
+
 # network_change <description> <function>: run a change that could cut this
 # session off. A revert is armed first; only a successful reconnect confirms it.
 network_change() {
@@ -118,7 +166,14 @@ add_vmbr0_ipv4() {
   on_host "sed -i '/^iface vmbr0 inet6 /i iface vmbr0 inet static\n\taddress $PVE_LAN_IPV4\n\tgateway $PVE_LAN_GATEWAY4\n' /etc/network/interfaces &&
     grep -q '^iface vmbr0 inet static' /etc/network/interfaces"
 }
-write_vmbr1() { on_host "cat > /etc/network/interfaces.d/vmbr1" <"$HS_DIR/host/network/vmbr1"; }
+# ifupdown2 reads interfaces.d only through a `source` line; some installs lack it.
+interfaces_has_source() { on_host "grep -qE '^source(-directory)?[[:space:]]+/etc/network/interfaces.d' /etc/network/interfaces"; }
+write_vmbr1() {
+  if ! interfaces_has_source; then
+    on_host "printf '\nsource /etc/network/interfaces.d/*\n' >> /etc/network/interfaces" || return 1
+  fi
+  on_host "mkdir -p /etc/network/interfaces.d && cat > /etc/network/interfaces.d/vmbr1" <"$HS_DIR/host/network/vmbr1"
+}
 
 # The vmbr1 post-up rules must exist exactly once; a duplicate means a reload
 # re-added them.
@@ -144,7 +199,7 @@ converge_host_network() {
     have="$(on_host "awk '/^iface vmbr0 inet /{f=1;next} /^iface|^auto|^source/{f=0} f && \$1==\"address\" {print \$2}' /etc/network/interfaces")"
     [ "$have" = "$PVE_LAN_IPV4" ] || die "vmbr0 has IPv4 ${have:-<none>}, secrets say $PVE_LAN_IPV4; fix by hand"
   fi
-  if ! host_file_matches "$HS_DIR/host/network/vmbr1" /etc/network/interfaces.d/vmbr1; then
+  if ! host_file_matches "$HS_DIR/host/network/vmbr1" /etc/network/interfaces.d/vmbr1 || ! interfaces_has_source; then
     network_change "vmbr1 private NAT bridge" write_vmbr1
   fi
 
@@ -177,7 +232,7 @@ converge_host_firewall() {
   cp "$HS_DIR/host/firewall/host.fw" "$HS_DIR/host/firewall/110.fw" "$HS_DIR/host/firewall/120.fw" "$FW_RENDERED/"
 
   # cluster.fw is last: it is the file that turns the firewall on.
-  local pairs=("host.fw:/etc/pve/nodes/pve/host.fw" "110.fw:/etc/pve/firewall/110.fw"
+  local pairs=("host.fw:/etc/pve/local/host.fw" "110.fw:/etc/pve/firewall/110.fw"
     "120.fw:/etc/pve/firewall/120.fw" "cluster.fw:/etc/pve/firewall/cluster.fw")
   local pair stale=()
   for pair in "${pairs[@]}"; do

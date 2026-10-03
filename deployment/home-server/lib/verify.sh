@@ -63,7 +63,9 @@ pick_trace_ip() {
 
 verify_host() {
   expect "host: apt update is clean" on_host "! apt-get update -q 2>&1 | grep -qE '^(E|Err):|401 +Unauthorized'"
-  expect "host: enterprise repos disabled" on_host "grep -q '^Enabled: no' /etc/apt/sources.list.d/pve-enterprise.sources"
+  # shellcheck disable=SC2016 # the remote shell expands these
+  expect "host: enterprise repos disabled" on_host 'for f in $(grep -l enterprise.proxmox.com /etc/apt/sources.list.d/*.sources 2>/dev/null); do grep -q "^Enabled: no" $f || exit 1; done'
+  expect "host: ZFS module and kernel are current (no reboot pending)" host_reboot_current
   expect "host: unattended-upgrades installed" on_host "dpkg -s unattended-upgrades"
   expect "host: nothing listens on 111 (tcp or udp)" on_host "! ss -lntuH 'sport = :111' | grep -q ."
   expect "host: firewall running" on_host "pve-firewall status | grep -q 'enabled/running'"
@@ -213,11 +215,6 @@ verify_recovery() {
   verify_host
   verify_vms
   verify_egress
-}
-
-# running_foreign_vmids: the running VMIDs other than 110 and 120.
-running_foreign_vmids() {
-  on_host "qm list" | awk '$3 == "running" && $1 != 110 && $1 != 120 {print $1}'
 }
 
 verify_all() {
