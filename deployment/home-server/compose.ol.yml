@@ -1,0 +1,12 @@
+# The `ol` VM's production settings (docs/features/home-server.md), merged over
+# data-sources/docker-compose.yml by guest/compose.sh. Sized for a 16 GB,
+# 8-vCPU VM: 6 GB for the API's DuckDB, 8 GB for a running build, the rest is
+# page cache over the artifact.
+services:
+  api:
+    environment:
+      OL_API_MEMORY_LIMIT: 6GB
+  build:
+    # The live API keeps 2 of the 8 vCPUs while a build runs.
+    cpus: 6
+    command: [python, -m, openlibrary.pipeline.build, --root, /data, --memory-limit, 8GB]

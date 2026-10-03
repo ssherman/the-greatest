@@ -1,0 +1,53 @@
+# deployment/home-server/lib/common.sh
+# shellcheck shell=bash
+# shellcheck disable=SC2034 # HOST_STATE is read by provision, which sources this file
+# Logging, change tracking and the SSH plumbing every provision step uses.
+
+HS_DIR="${HS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+REPO_ROOT="${REPO_ROOT:-$(cd "$HS_DIR/../.." && pwd)}"
+CHANGES=()
+# Where provision keeps its own state on the host (tunnels flag, tracked ref).
+HOST_STATE=/etc/the-greatest-home-server
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+
+log() { printf '==> %s\n' "$*" >&2; }
+die() { printf 'provision: %s\n' "$*" >&2; exit 1; }
+note_change() { CHANGES+=("$1"); log "changed: $1"; }
+
+# shellcheck disable=SC2029 # the command is built on the client on purpose
+on_host() { ssh "${SSH_OPTS[@]}" "root@$PVE_HOST" "$@"; }
+
+# host_file_matches <local> <remote>: true when the remote file has the same bytes.
+host_file_matches() {
+  local want have
+  want="$(sha256sum <"$1" | cut -d' ' -f1)"
+  have="$(on_host "sha256sum < '$2' 2>/dev/null | cut -d' ' -f1" || true)"
+  [ "$want" = "$have" ]
+}
+
+# put_host <local> <remote> [mode]: write only when different; records a change.
+# /etc/pve is the cluster filesystem: no chmod there, and no temp file + rename.
+put_host() {
+  local src=$1 dest=$2 mode=${3:-0644}
+  host_file_matches "$src" "$dest" && return 0
+  case "$dest" in
+    /etc/pve/*) on_host "cat > '$dest'" <"$src" ;;
+    *) on_host "mkdir -p '$(dirname "$dest")' && cat > '$dest.new' && chmod $mode '$dest.new' && mv '$dest.new' '$dest'" <"$src" ;;
+  esac
+  note_change "$dest"
+}
+
+# load_secrets: secrets/home-server.env -> exported variables. Parsed, not
+# eval'ed: a value is data, never shell.
+load_secrets() {
+  local file="$REPO_ROOT/secrets/home-server.env" key value
+  [ -f "$file" ] || die "missing $file"
+  while IFS='=' read -r key value; do
+    [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] && export "$key=$value"
+  done < <(sops -d "$file") || die "could not decrypt $file (is SOPS_AGE_KEY_FILE set?)"
+  [ -n "${PVE_HOST:-}" ] || die "PVE_HOST is not set in $file"
+}
+
+report_changes() {
+  if [ "${#CHANGES[@]}" = 0 ]; then log "no changes"; else log "${#CHANGES[@]} change(s): ${CHANGES[*]}"; fi
+}

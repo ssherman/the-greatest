@@ -1,0 +1,41 @@
+#cloud-config
+# deployment/home-server/cloud-init/user-data.yaml.tmpl, rendered by
+# provision (lib/vm.sh render_user_data) into a Proxmox snippet. First boot
+# of the ${ROLE} VM; guest/first-boot.sh does the role-specific rest.
+hostname: ${VM_NAME}
+users:
+  - name: debian
+    groups: [sudo]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${SSH_PUBKEY}
+ssh_pwauth: false
+disable_root: true
+package_update: true
+package_upgrade: true
+packages: [ca-certificates, curl, git, jq, qemu-guest-agent, unattended-upgrades]
+write_files:
+  - path: /etc/the-greatest/home-server.env
+    permissions: "0600"
+    encoding: b64
+    content: ${ENV_B64}
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+  - path: /etc/apt/apt.conf.d/52unattended-upgrades-home-server
+    content: |
+      // reboot-if-required.timer reboots, and only when no data build is running.
+      Unattended-Upgrade::Automatic-Reboot "false";
+runcmd:
+  - systemctl enable --now qemu-guest-agent
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+  - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update -q
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - systemctl enable --now docker
+  - usermod -aG docker debian
+  - git clone --depth 1 --branch ${REPO_REF} https://github.com/ssherman/the-greatest /opt/the-greatest
+  - /opt/the-greatest/deployment/home-server/guest/first-boot.sh

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# deployment/home-server/test/render_test.sh
+# shellcheck disable=SC2016 # the Ruby programs are single-quoted on purpose
+# What each VM is told at first boot.
+set -uo pipefail
+# shellcheck source=helpers.sh
+. "$(dirname "$0")/helpers.sh"
+# shellcheck source=../lib/common.sh
+. "$HS_DIR/lib/common.sh"
+# shellcheck source=../lib/vm.sh
+. "$HS_DIR/lib/vm.sh"
+
+new_sandbox
+export REPO_REF=main TUNNELS_ENABLED=0 OL_TUNNEL_TOKEN=ol-token FETCHER_TUNNEL_TOKEN=fetcher-token
+export HC_OL_HEARTBEAT=https://hc.test/ol-beat HC_OL_DEPLOY=https://hc.test/ol-deploy HC_OL_REFRESH=https://hc.test/ol-refresh
+export HC_FETCHER_HEARTBEAT=https://hc.test/f-beat HC_FETCHER_DEPLOY=https://hc.test/f-deploy
+echo "ssh-ed25519 AAAATEST test@example.com" >"$SANDBOX/key.pub"
+export SSH_PUBKEY_FILE="$SANDBOX/key.pub"
+
+for role in ol fetcher; do
+  render_vm_env "$role" "$SANDBOX/$role.env"
+  render_user_data "$role" "$SANDBOX/$role.env" "$SANDBOX/$role.yaml"
+done
+env_from_yaml() { # decode the env file a rendered user-data carries
+  ruby -ryaml -rbase64 -e 'y = YAML.load_file(ARGV[0]); f = y["write_files"].find { |w| w["path"] == "/etc/the-greatest/home-server.env" }; print Base64.decode64(f["content"])' "$1"
+}
+
+t_yaml() { for r in ol fetcher; do ruby -ryaml -e 'YAML.load_file(ARGV[0])' "$SANDBOX/$r.yaml" || return 1; done; }
+t_first_line() { [ "$(head -1 "$SANDBOX/ol.yaml")" = "#cloud-config" ]; }
+t_no_leftovers() { ! grep -q '\${' "$SANDBOX/ol.yaml" "$SANDBOX/fetcher.yaml"; }
+t_ol_env() {
+  env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'ROLE=ol' &&
+    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'TUNNEL_TOKEN=ol-token' &&
+    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'HC_REFRESH=https://hc.test/ol-refresh'
+}
+t_fetcher_isolation() {
+  local env; env="$(env_from_yaml "$SANDBOX/fetcher.yaml")"
+  grep -qx 'TUNNEL_TOKEN=fetcher-token' <<<"$env" && ! grep -q 'ol-token\|ol-beat\|ol-refresh' <<<"$env"
+}
+t_key() { grep -q 'ssh-ed25519 AAAATEST' "$SANDBOX/ol.yaml"; }
+t_ref() { grep -q 'clone --depth 1 --branch main ' "$SANDBOX/ol.yaml"; }
+t_blank_secrets() {
+  (unset OL_TUNNEL_TOKEN HC_OL_HEARTBEAT; render_vm_env ol "$SANDBOX/blank.env") &&
+    grep -qx 'TUNNEL_TOKEN=' "$SANDBOX/blank.env"
+}
+
+check "both user-data files are valid YAML" t_yaml
+check "user-data starts with #cloud-config" t_first_line
+check "no template variable is left unrendered" t_no_leftovers
+check "ol gets its role, token and refresh check" t_ol_env
+check "fetcher holds nothing of ol's" t_fetcher_isolation
+check "the dev key is authorized" t_key
+check "the VM clones the tracked ref" t_ref
+check "unset secrets render as blanks, not errors" t_blank_secrets
+finish

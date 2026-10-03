@@ -1,0 +1,13 @@
+# The Cloudflare Tunnel connector for whichever service this VM runs
+# (docs/features/home-server.md). The routing (hostname -> http://api:8080 or
+# http://fetcher:8081) lives in the tunnel's dashboard configuration, so this
+# file is the same on both VMs. Profile "tunnel" is on only after
+# `provision --enable-tunnels`, which runs once Cloudflare Access is in place.
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: "${TUNNEL_TOKEN:-}"
