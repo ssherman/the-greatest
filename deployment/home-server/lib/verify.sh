@@ -14,16 +14,20 @@ expect() {
 
 # Probes return the connection's rc: 0 reached, 124 timed out (what a DROP
 # looks like), anything else is something other than a block.
+# rc 101 means "no route to it" (nothing to block: the address cannot be used).
 tcp_from_vm() { # tcp_from_vm <role> <host> <port>
-  vm_ssh "$1" "timeout 5 bash -c '</dev/tcp/$2/$3'" >/dev/null 2>&1
+  vm_ssh "$1" "out=\$(timeout 5 bash -c '</dev/tcp/$2/$3' 2>&1); rc=\$?; case \"\$out\" in *'Network is unreachable'*|*'Cannot assign requested address'*) exit 101;; esac; exit \$rc" >/dev/null 2>&1
 }
 PROBE_PY='import socket,sys
 try:
     socket.create_connection((sys.argv[1], int(sys.argv[2])), 5)
 except (socket.timeout, TimeoutError):
     sys.exit(124)
-except OSError:
-    sys.exit(1)'
+except OSError as e:
+    import errno
+    sys.exit(101 if e.errno in (errno.ENETUNREACH, errno.EADDRNOTAVAIL, errno.EHOSTUNREACH) else 1)
+except Exception:
+    sys.exit(2)'
 tcp_from_fetcher_container() {
   local b64; b64="$(printf '%s' "$PROBE_PY" | base64 -w0)"
   vm_ssh fetcher "docker exec the-greatest-fetcher-1 python -c \"import base64;exec(base64.b64decode('$b64'))\" $1 $2" >/dev/null 2>&1
@@ -39,10 +43,18 @@ expect_blocked() {
   else bad "$name" "probe failed with rc=$rc, not a timeout, so this proves nothing"; fi
 }
 
-host_global_ipv6() { on_host "ip -6 -o addr show vmbr0 scope global | awk '{print \$4}' | cut -d/ -f1 | head -1"; }
+# The host's one stable global IPv6 address (no ULA, no temporary); fails
+# unless exactly one candidate remains. Callers must never print it.
+host_global_ipv6() {
+  local list
+  list="$(on_host "ip -6 -o addr show vmbr0 scope global | grep -v temporary | awk '{print \$4}' | cut -d/ -f1")" || return 1
+  list="$(printf '%s\n' "$list" | grep -vE '^f[cd]' | grep . || true)"
+  [ -n "$list" ] && [ "$(printf '%s\n' "$list" | wc -l)" = 1 ] || return 1
+  printf '%s\n' "$list"
+}
 
 verify_host() {
-  expect "host: apt update is clean" on_host "! apt-get update -q 2>&1 | grep -qE '^(E|Err):| 401 |401 +Unauthorized'"
+  expect "host: apt update is clean" on_host "! apt-get update -q 2>&1 | grep -qE '^(E|Err):|401 +Unauthorized'"
   expect "host: enterprise repos disabled" on_host "grep -q '^Enabled: no' /etc/apt/sources.list.d/pve-enterprise.sources"
   expect "host: unattended-upgrades installed" on_host "dpkg -s unattended-upgrades"
   expect "host: nothing listens on 111 (tcp or udp)" on_host "! ss -lntuH 'sport = :111' | grep -q ."
@@ -91,16 +103,16 @@ verify_egress() {
   done
 
   # The host's own global IPv6 address, read here and never printed.
-  host6="$(host_global_ipv6)"
+  host6="$(host_global_ipv6)" || host6=""
   if [ -z "$host6" ]; then
-    bad "egress: the host has no global IPv6 address to probe"
+    bad "egress: the host does not have exactly one stable global IPv6 address to probe"
   else
     if tcp_from_vm ol "$host6" 22; then
       ok "egress control: ol reaches the host's public IPv6 on 22"
       rc="$(probe_rc tcp_from_vm fetcher "$host6" 22)"
-      expect_blocked "egress: fetcher cannot reach the host's public IPv6" "$rc" 1
+      expect_blocked "egress: fetcher cannot reach the host's public IPv6" "$rc" 101
       rc="$(probe_rc tcp_from_fetcher_container "$host6" 22)"
-      expect_blocked "egress: fetcher container cannot reach the host's public IPv6" "$rc" 1
+      expect_blocked "egress: fetcher container cannot reach the host's public IPv6" "$rc" 101
     else
       bad "egress control: ol cannot reach the host's public IPv6 on 22, so this probe proves nothing"
     fi
@@ -123,37 +135,45 @@ verify_idempotent() {
 # timeout or a refusal; anything else (resolution, usage, no nc, ssh) fails.
 verify_external() {
   local host6 port out rc closed22=0
-  host6="$(host_global_ipv6)"
-  if [ -z "$host6" ]; then bad "exposure: the host has no global IPv6 address to check"; return; fi
+  # The control comes first: if the external box cannot reach IPv6 at all
+  # (or ssh to it fails), nothing below means anything.
+  if ssh "${SSH_OPTS[@]}" "$EXTERNAL_FROM" "nc -6 -z -w 5 2606:4700:4700::1111 443" >/dev/null 2>&1; then
+    ok "exposure control: $EXTERNAL_FROM has IPv6 (reaches 2606:4700:4700::1111:443)"
+  else
+    bad "exposure control: $EXTERNAL_FROM cannot reach 2606:4700:4700::1111:443 over IPv6 (or ssh to it failed); no port result would mean anything"
+    return
+  fi
+  host6="$(host_global_ipv6)" || host6=""
+  if [ -z "$host6" ]; then bad "exposure: the host does not have exactly one stable global IPv6 address to check"; return; fi
   for port in 22 8006 111 3128; do
     rc=0
     # shellcheck disable=SC2029 # the command is built on the client on purpose
     out="$(ssh "${SSH_OPTS[@]}" "$EXTERNAL_FROM" "nc -6 -v -z -w 5 $host6 $port 2>&1" 2>&1)" || rc=$?
     if [ "$rc" = 0 ]; then
       bad "exposure: port $port on the host's public IPv6 is reachable from $EXTERNAL_FROM"
-    elif printf '%s' "$out" | grep -qiE 'timed out|refused'; then
+    elif [ "$rc" = 1 ] && printf '%s' "$out" | grep -qE '^nc: connect to .* port [0-9]+ \(tcp\) (timed out|failed: Connection refused)'; then
       ok "exposure: port $port on the host's public IPv6 is closed from outside"
       if [ "$port" = 22 ]; then closed22=1; fi
     else
-      bad "exposure: port $port check was inconclusive (rc=$rc)" "$(printf '%s' "${out//$host6/<host>}" | head -c 200)"
+      bad "exposure: port $port check was inconclusive (rc=$rc)" "$(printf '%s' "${out//$host6/<host>}" | head -n1 | head -c 200)"
     fi
   done
   if [ "$closed22" = 1 ]; then
-    ok "exposure control: nc from $EXTERNAL_FROM reached the address and saw a timeout or refusal on 22"
+    ok "exposure control: nc itself reported a timeout or refusal on 22 (not an ssh or resolution error)"
   else
-    bad "exposure control: nc's result for port 22 was not a timeout or refusal"
+    bad "exposure control: nc's own result for port 22 was not a timeout or refusal"
   fi
-  expect "exposure control: $EXTERNAL_FROM has IPv6 (reaches 2606:4700:4700::1111:443)" \
-    ssh "${SSH_OPTS[@]}" "$EXTERNAL_FROM" "nc -6 -z -w 5 2606:4700:4700::1111 443"
 }
 
 # crash_service <role> <container> <check cmd>: SIGKILL the container's main
 # process (a crash; `docker kill` is a manual stop that restart policies respect),
 # then expect Docker to bring it back.
 crash_service() {
-  local role=$1 container=$2 check=$3 before after
+  local role=$1 container=$2 check=$3 before after pid
   before="$(vm_ssh "$role" "docker inspect -f '{{.RestartCount}}' $container" 2>/dev/null || echo 0)"
-  vm_ssh "$role" "sudo kill -9 \"\$(docker inspect -f '{{.State.Pid}}' $container)\"" >/dev/null
+  pid="$(vm_ssh "$role" "docker inspect -f '{{.State.Pid}}' $container" 2>/dev/null || echo 0)"
+  if ! [ "$pid" -gt 0 ] 2>/dev/null; then bad "recovery: $container is not running (pid ${pid:-none}), nothing to crash"; return; fi
+  if ! vm_ssh "$role" "sudo kill -9 $pid" >/dev/null 2>&1; then bad "recovery: could not kill $container's process"; return; fi
   sleep 30
   expect "recovery: $container answers after its process was killed" vm_ssh "$role" "$check"
   after="$(vm_ssh "$role" "docker inspect -f '{{.RestartCount}}' $container" 2>/dev/null || echo 0)"
