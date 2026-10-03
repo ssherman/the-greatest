@@ -15,7 +15,9 @@ die() { printf 'provision: %s\n' "$*" >&2; exit 1; }
 note_change() { CHANGES+=("$1"); log "changed: $1"; }
 
 # shellcheck disable=SC2029 # the command is built on the client on purpose
-on_host() { ssh "${SSH_OPTS[@]}" "root@$PVE_HOST" "$@"; }
+# A fixed locale: sshd accepts the client's LC_*, and an unsupported one makes
+# perl warn on stderr, which provision parses and treats as failure.
+on_host() { ssh "${SSH_OPTS[@]}" "root@$PVE_HOST" "export LC_ALL=C LANG=C;" "$@"; }
 
 # host_file_matches <local> <remote>: true when the remote file has the same bytes.
 host_file_matches() {
