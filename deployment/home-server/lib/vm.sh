@@ -40,11 +40,141 @@ render_vm_env() {
 render_user_data() {
   vm_spec "$1"
   [ -f "$SSH_PUBKEY_FILE" ] || die "missing $SSH_PUBKEY_FILE"
+  # The key goes into a single-quoted YAML scalar, so a comment containing " #" stays text.
+  local key; key="$(cat "$SSH_PUBKEY_FILE")"
   # shellcheck disable=SC2016 # envsubst takes the variable list literally
-  VM_NAME="$NAME" ROLE="$1" SSH_PUBKEY="$(cat "$SSH_PUBKEY_FILE")" ENV_B64="$(base64 -w0 <"$2")" \
+  VM_NAME="$NAME" ROLE="$1" SSH_PUBKEY="${key//\'/\'\'}" ENV_B64="$(base64 -w0 <"$2")" \
     REPO_REF="$REPO_REF" envsubst '${VM_NAME} ${ROLE} ${SSH_PUBKEY} ${ENV_B64} ${REPO_REF}' \
     <"$HS_DIR/cloud-init/user-data.yaml.tmpl" >"$3"
 }
 
-# Stub, replaced by Task 6.
-ensure_vm() { :; }
+VM_SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no
+  -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
+
+# vm_ip <role>: fetcher's is fixed; ol's comes from the guest agent.
+vm_ip() {
+  vm_spec "$1"
+  if [ "$1" = fetcher ]; then echo 10.20.0.10; return; fi
+  on_host "qm guest cmd $VMID network-get-interfaces 2>/dev/null" |
+    jq -r '[.[] | select(.name != "lo") | ."ip-addresses"[]? | select(."ip-address-type" == "ipv4") | ."ip-address"] | first // empty'
+}
+
+# vm_ssh <role> <cmd>: as `debian`, jumping through the host. Host keys are
+# not pinned: the VMs are only reachable through the (pinned) host, and a
+# rebuilt VM gets new keys by design.
+vm_ssh() {
+  local role=$1 ip; shift
+  ip="$(vm_ip "$role")"
+  [ -n "$ip" ] || die "no IPv4 address for $role yet"
+  ssh "${VM_SSH_OPTS[@]}" -o ProxyCommand="ssh ${SSH_OPTS[*]} -W %h:%p root@$PVE_HOST" "debian@$ip" "$@"
+}
+
+# ensure_image [refresh]: the Debian cloud image, checksum-verified. A rebuild
+# refreshes it; otherwise an existing copy is reused.
+ensure_image() {
+  local fetch="curl -fsSLO $DEBIAN_IMAGE_DIR/$DEBIAN_IMAGE && curl -fsSLO $DEBIAN_IMAGE_DIR/SHA512SUMS && sha512sum --ignore-missing -c SHA512SUMS"
+  if [ "${1:-}" = refresh ]; then
+    on_host "mkdir -p /var/lib/vz/import && cd /var/lib/vz/import && $fetch" || die "could not fetch and verify $DEBIAN_IMAGE"
+  else
+    on_host "mkdir -p /var/lib/vz/import && cd /var/lib/vz/import && { [ -f $DEBIAN_IMAGE ] || { $fetch; }; }" ||
+      die "could not fetch and verify $DEBIAN_IMAGE"
+  fi
+}
+
+write_snippet() { # write_snippet <role>; leaves the rendered env in $ENV_RENDERED
+  local tmp; tmp="$(mktemp -d)"
+  render_vm_env "$1" "$tmp/env"
+  render_user_data "$1" "$tmp/env" "$tmp/user-data"
+  put_host "$tmp/user-data" "/var/lib/vz/snippets/$NAME-user-data.yaml" 0600
+  ENV_RENDERED="$tmp/env"
+}
+
+attach_os_disk() {
+  on_host "qm set $VMID --scsi0 local-lvm:0,import-from=local:import/$DEBIAN_IMAGE,discard=on,ssd=1,iothread=1 --boot order=scsi0 >/dev/null &&
+    qm disk resize $VMID scsi0 ${OSDISK}G"
+}
+
+create_vm() {
+  log "creating VM $VMID ($NAME)"
+  on_host "qm create $VMID --name $NAME --machine q35 --cpu host --cores $CORES --memory $MEM --balloon 0 \
+    --scsihw virtio-scsi-single --net0 $NET --agent enabled=1 --onboot 1 --startup $STARTUP \
+    --ostype l26 --serial0 socket --vga serial0 --ide2 local-lvm:cloudinit \
+    --ipconfig0 $IPCONFIG --cicustom user=local:snippets/$NAME-user-data.yaml" || die "qm create $VMID failed"
+  if [ -n "$NAMESERVER" ]; then on_host "qm set $VMID --nameserver '$NAMESERVER' >/dev/null"; fi
+  attach_os_disk
+  if [ "$DATADISK" != 0 ]; then
+    on_host "qm set $VMID --scsi1 local-lvm:$DATADISK,discard=on,ssd=1,iothread=1 >/dev/null"
+  fi
+  on_host "qm start $VMID"
+  note_change "created VM $VMID ($NAME)"
+}
+
+wait_for_first_boot() { # wait_for_first_boot <role>
+  local i
+  for i in $(seq 1 60); do vm_ssh "$1" true 2>/dev/null && break; sleep 10; done
+  vm_ssh "$1" true || die "$1 never answered SSH"
+  log "waiting for $1's cloud-init (the first image build takes several minutes)"
+  vm_ssh "$1" "cloud-init status --wait >/dev/null; cloud-init status --long" | tee /dev/stderr | grep -q 'status: done' ||
+    die "$1's cloud-init did not finish cleanly; read: vm_ssh $1 'sudo cat /var/log/cloud-init-output.log'"
+}
+
+converge_vm_settings() {
+  local cfg drift=0
+  cfg="$(on_host "qm config $VMID")"
+  grep -qx "cores: $CORES" <<<"$cfg" || drift=1
+  grep -qx "memory: $MEM" <<<"$cfg" || drift=1
+  grep -qx "balloon: 0" <<<"$cfg" || drift=1
+  grep -qx "onboot: 1" <<<"$cfg" || drift=1
+  grep -qx "startup: $STARTUP" <<<"$cfg" || drift=1
+  if [ "$drift" = 1 ]; then
+    on_host "qm set $VMID --cores $CORES --memory $MEM --balloon 0 --onboot 1 --startup $STARTUP >/dev/null"
+    note_change "VM $VMID settings (takes effect at its next restart)"
+  fi
+}
+
+push_vm_env() { # push_vm_env <role>: the env file, then a forced deploy if it changed
+  local want have
+  want="$(sha256sum <"$ENV_RENDERED" | cut -d' ' -f1)"
+  have="$(vm_ssh "$1" "sudo sha256sum /etc/the-greatest/home-server.env | cut -d' ' -f1")"
+  [ "$want" = "$have" ] && return 0
+  vm_ssh "$1" "sudo install -m 0600 /dev/stdin /etc/the-greatest/home-server.env" <"$ENV_RENDERED"
+  vm_ssh "$1" "sudo touch /var/lib/the-greatest/force-deploy && sudo systemctl start the-greatest-deploy.service" ||
+    log "deploy on $1 failed or was deferred; it retries every 15 minutes"
+  note_change "$1 env"
+}
+
+ensure_vm() {
+  vm_spec "$1"
+  ensure_image
+  write_snippet "$1"
+  if ! on_host "qm status $VMID >/dev/null 2>&1"; then
+    create_vm
+    wait_for_first_boot "$1"
+    return
+  fi
+  converge_vm_settings
+  if ! on_host "qm status $VMID | grep -q running"; then on_host "qm start $VMID"; note_change "started VM $VMID"; fi
+  push_vm_env "$1"
+}
+
+rebuild_vm() { # replace only the OS disk; the data disk is never touched (spec §5)
+  vm_spec "$1"
+  on_host "qm status $VMID >/dev/null 2>&1" || die "VM $VMID does not exist; run provision without --rebuild"
+  ensure_image refresh
+  write_snippet "$1"
+  on_host "qm shutdown $VMID --timeout 120 || qm stop $VMID"
+  on_host "qm disk unlink $VMID --idlist scsi0 --force"
+  attach_os_disk
+  on_host "qm cloudinit update $VMID && qm start $VMID"
+  note_change "rebuilt VM $VMID ($NAME)"
+  wait_for_first_boot "$1"
+}
+
+enable_tunnels() {
+  [ -n "${OL_TUNNEL_TOKEN:-}" ] && [ -n "${FETCHER_TUNNEL_TOKEN:-}" ] ||
+    die "both tunnel tokens must be set in secrets/home-server.env first (sops secrets/home-server.env)"
+  on_host "touch $HOST_STATE/tunnels-enabled"
+  TUNNELS_ENABLED=1
+  local role
+  for role in fetcher ol; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
+}

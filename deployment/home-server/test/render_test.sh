@@ -67,6 +67,18 @@ t_cluster_fw() {
   done
 }
 
+t_key_with_comment() {
+  local f="$SANDBOX/hash.pub"
+  echo "ssh-ed25519 AAAATEST it's # x" >"$f"
+  SSH_PUBKEY_FILE="$f" render_user_data ol "$SANDBOX/ol.env" "$SANDBOX/hash.yaml" &&
+    [ "$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0])["users"][0]["ssh_authorized_keys"][0]' "$SANDBOX/hash.yaml")" = "ssh-ed25519 AAAATEST it's # x" ]
+}
+t_runcmd_fail_fast() {
+  ruby -ryaml -e 'c = YAML.load_file(ARGV[0])["runcmd"].find { |r| r.is_a?(Array) }; exit(c[0] == "bash" && c[1] =~ /e/ && c[2] == "pipefail" && c.last.include?("first-boot.sh") ? 0 : 1)' "$SANDBOX/ol.yaml"
+}
+
+check "a key comment containing ' #' stays inside the YAML string" t_key_with_comment
+check "docker, clone and first-boot run as one fail-fast script" t_runcmd_fail_fast
 check "both user-data files are valid YAML" t_yaml
 check "user-data starts with #cloud-config" t_first_line
 check "no template variable is left unrendered" t_no_leftovers

@@ -9,7 +9,7 @@ users:
     sudo: "ALL=(ALL) NOPASSWD:ALL"
     shell: /bin/bash
     ssh_authorized_keys:
-      - ${SSH_PUBKEY}
+      - '${SSH_PUBKEY}'
 ssh_pwauth: false
 disable_root: true
 package_update: true
@@ -33,12 +33,19 @@ write_files:
       Unattended-Upgrade::Automatic-Reboot "false";
 runcmd:
   - systemctl enable --now qemu-guest-agent
-  - install -m 0755 -d /etc/apt/keyrings
-  - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-  - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" > /etc/apt/sources.list.d/docker.list
-  - apt-get update -q
-  - DEBIAN_FRONTEND=noninteractive apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  - systemctl enable --now docker
-  - usermod -aG docker debian
-  - git clone --depth 1 --branch ${REPO_REF} https://github.com/ssherman/the-greatest /opt/the-greatest
-  - /opt/the-greatest/deployment/home-server/guest/first-boot.sh
+  # One script, so the first failure stops it: a failed Docker install must not
+  # go on to clone and run first-boot.sh.
+  - - bash
+    - -euxo
+    - pipefail
+    - -c
+    - |
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+      echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" > /etc/apt/sources.list.d/docker.list
+      apt-get update -q
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      systemctl enable --now docker
+      usermod -aG docker debian
+      git clone --depth 1 --branch ${REPO_REF} https://github.com/ssherman/the-greatest /opt/the-greatest
+      /opt/the-greatest/deployment/home-server/guest/first-boot.sh

@@ -13,14 +13,20 @@ case "$ROLE" in
   ol)
     disk=/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
     # Format only a blank disk: a rebuilt VM keeps the data it had (spec §5).
-    # blkid -p exits 2 only for "nothing found"; any other failure (missing
-    # disk, I/O error) must leave the disk untouched.
-    rc=0
-    blkid -p "$disk" >/dev/null || rc=$?
-    if [ "$rc" = 2 ]; then
-      mkfs.ext4 -q -L ol-data "$disk"
-    elif [ "$rc" != 0 ]; then
-      log "blkid exited $rc on $disk; not formatting it"
+    # An absent disk is skipped (blkid -p on a missing device also exits 2, and
+    # mkfs would fail and abort first-boot before the units install). blkid -p
+    # exits 2 only for "nothing found"; any other failure (I/O error) leaves
+    # the disk untouched.
+    if [ ! -b "$disk" ]; then
+      log "data disk $disk is absent; not formatting or mounting it"
+    else
+      rc=0
+      blkid -p "$disk" >/dev/null || rc=$?
+      if [ "$rc" = 2 ]; then
+        mkfs.ext4 -q -L ol-data "$disk"
+      elif [ "$rc" != 0 ]; then
+        log "blkid exited $rc on $disk; not formatting it"
+      fi
     fi
     mkdir -p "$OL_DATA"
     # nofail: a missing disk must not hang boot; ol-refresh.sh refuses to build instead.
