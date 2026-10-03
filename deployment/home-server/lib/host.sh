@@ -59,6 +59,61 @@ converge_host_packages() {
   fi
 }
 
-# Stubs, replaced by Tasks 6-7.
-converge_host_network() { :; }
+# network_change <description> <function>: run a change that could cut this
+# session off. A revert is armed first; only a successful reconnect confirms it.
+network_change() {
+  local what=$1 mutate=$2
+  on_host "cp -a /etc/network/interfaces /root/interfaces.provision-bak &&
+    rm -rf /root/interfaces.d.provision-bak && cp -a /etc/network/interfaces.d /root/interfaces.d.provision-bak"
+  on_host "confirm-or-revert arm network 120 'cp -a /root/interfaces.provision-bak /etc/network/interfaces;
+    rm -rf /etc/network/interfaces.d; cp -a /root/interfaces.d.provision-bak /etc/network/interfaces.d; ifreload -a'"
+  "$mutate"
+  # Detached: ifreload may drop this very connection.
+  on_host "systemd-run --quiet --collect --unit=provision-ifreload ifreload -a" || true
+  sleep 15
+  if on_host true; then
+    on_host "confirm-or-revert confirm network"
+    note_change "$what"
+  else
+    log "lost the host after: $what; waiting for the automatic revert"
+    sleep 130
+    if on_host true; then die "'$what' cut off SSH and was reverted"; fi
+    die "host unreachable even after the revert; use the console"
+  fi
+}
+
+add_vmbr0_ipv4() {
+  on_host "sed -i '/^iface vmbr0 inet6 /i iface vmbr0 inet static\n\taddress $PVE_LAN_IPV4\n\tgateway $PVE_LAN_GATEWAY4\n' /etc/network/interfaces"
+}
+write_vmbr1() { on_host "cat > /etc/network/interfaces.d/vmbr1" <"$HS_DIR/host/network/vmbr1"; }
+
+converge_host_network() {
+  # GitHub and ghcr.io have no IPv6, so the host and guests need IPv4 (spec §1).
+  # Static, not DHCP: ifupdown2 treats an interface with an `inet dhcp` stanza as
+  # wholly dhcp (dhcp.py:191 starts `dhclient -6`; address.py:1565 skips static
+  # addresses), which drops vmbr0's static IPv6.
+  [ -n "${PVE_LAN_IPV4:-}" ] && [ -n "${PVE_LAN_GATEWAY4:-}" ] ||
+    die "PVE_LAN_IPV4 and PVE_LAN_GATEWAY4 must be set in secrets/home-server.env"
+  if ! on_host "grep -q '^iface vmbr0 inet ' /etc/network/interfaces"; then
+    network_change "vmbr0 gains static IPv4 $PVE_LAN_IPV4" add_vmbr0_ipv4
+  else
+    local have
+    have="$(on_host "awk '/^iface vmbr0 inet /{f=1;next} /^iface|^auto|^source/{f=0} f && \$1==\"address\" {print \$2}' /etc/network/interfaces")"
+    [ "$have" = "$PVE_LAN_IPV4" ] || die "vmbr0 has IPv4 ${have:-<none>}, secrets say $PVE_LAN_IPV4; fix by hand"
+  fi
+  if ! host_file_matches "$HS_DIR/host/network/vmbr1" /etc/network/interfaces.d/vmbr1; then
+    network_change "vmbr1 private NAT bridge" write_vmbr1
+  fi
+
+  LAN_IPV4_CIDR="$(on_host "ip -4 -o route show dev vmbr0 proto kernel scope link | awk '{print \$1}' | head -1")"
+  LAN_IPV6_PREFIX="$(on_host "ip -6 -o route show dev vmbr0 proto kernel | awk '\$1 !~ /^fe80/ {print \$1}' | head -1")"
+  [ -n "$LAN_IPV4_CIDR" ] || die "vmbr0 has no IPv4 route; did the router hand out a DHCP lease?"
+  [ -n "$LAN_IPV6_PREFIX" ] || die "vmbr0 has no IPv6 prefix route"
+  export LAN_IPV4_CIDR LAN_IPV6_PREFIX
+
+  [ "$(on_host "sysctl -n net.ipv4.ip_forward")" = 1 ] || die "ip_forward is off; vmbr1's post-up did not run"
+  [ "$(on_host "sysctl -n net.ipv6.conf.all.forwarding")" = 0 ] || die "IPv6 forwarding is on; the fetcher must have no IPv6 path"
+}
+
+# Stub, replaced by Task 7.
 converge_host_firewall() { :; }
