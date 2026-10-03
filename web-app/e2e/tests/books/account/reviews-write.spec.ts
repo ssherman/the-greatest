@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // A book with no migrated reviews, so this spec never disturbs real data.
-const BOOK = '/book/nightmare-abbey';
+const BOOK = '/book/headlong-hall';
 
 async function removeExistingReview(page) {
   await page.getByTestId('review-widget-label').click();

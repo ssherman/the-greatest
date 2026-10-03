@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 
-// nightmare-abbey is the scratch book: lib/tasks/e2e.rake excludes it from the
+// headlong-hall is the scratch book: lib/tasks/e2e.rake excludes it from the
 // /my/reviews seed precisely so specs can create and destroy reviews on it.
-const SCRATCH_BOOK = "/book/nightmare-abbey";
+const SCRATCH_BOOK = "/book/headlong-hall";
 
 test.describe("Books admin — reviews", () => {
   test("the list renders newest-first and links into a review", async ({ page }) => {
@@ -57,7 +57,7 @@ test.describe("Books admin — reviews", () => {
 
       // Find it in the admin list by its own text, never by position -- the list
       // is newest-first but other specs write reviews too.
-      await page.goto("/admin/reviews?q=nightmare");
+      await page.goto("/admin/reviews?q=headlong");
       const row = page.locator("main table tbody tr", { hasText: "E2E admin scratch review" }).first();
       await expect(row).toBeVisible();
       await row.getByRole("link").first().click();

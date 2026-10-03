@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// nightmare-abbey is this repo's designated E2E scratch book -- see
+// headlong-hall is this repo's designated E2E scratch book -- see
 // lib/tasks/e2e.rake and e2e/tests/books/admin/reviews.spec.ts, which already
 // write and delete data against it -- so the apply case, which permanently
 // mutates a real book field, lands on it rather than on a canonical work.
@@ -18,7 +18,7 @@ import { test, expect } from '@playwright/test';
 // comma-joined input -- no test here touches an array field, and the string
 // field this spec does drive (#accepted_subtitle) is unchanged. That change is
 // covered by Admin::CorrectionsControllerTest, not here.
-const APPLY_BOOK = '/book/nightmare-abbey';
+const APPLY_BOOK = '/book/headlong-hall';
 const REJECT_BOOK = '/book/war-and-peace';
 const SUBTITLE_MARKER = 'A Gothic Satire [e2e-corrections-spec]';
 const NOTES_MARKER = 'E2E corrections spec: reject-with-reason case';
@@ -85,7 +85,7 @@ test.describe('Admin corrections', () => {
 
     // The strongest proof of all: Applier wrote the field onto the real
     // record, and the public page reads it live. If apply were a no-op, this
-    // text would not exist anywhere -- nightmare-abbey has no subtitle
+    // text would not exist anywhere -- headlong-hall has no subtitle
     // otherwise. This is also the FIRST time this test visits APPLY_BOOK
     // itself (the earlier submission redirected to the thanks page, not
     // here), so there is no pre-apply disk-cached response it could be

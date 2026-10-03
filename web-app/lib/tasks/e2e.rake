@@ -106,9 +106,9 @@ namespace :e2e do
     abort "No User with email #{email}. Run `bin/rails e2e:admin` first." if user.nil?
 
     # Excluded because other specs depend on these three having specific review
-    # states of their own (nightmare-abbey: zero reviews; the-great-gatsby and
+    # states of their own (headlong-hall: zero reviews; the-great-gatsby and
     # room-for-murder: specific migrated review corpora).
-    excluded_slugs = %w[nightmare-abbey the-great-gatsby room-for-murder]
+    excluded_slugs = %w[headlong-hall the-great-gatsby room-for-murder]
     target_count = 30
 
     # The spec searches its own reviews for "Animal Farm" and asserts exactly one
@@ -182,7 +182,7 @@ namespace :e2e do
     # "Merge into candidate 1") and one pending pair between the same two
     # books. Idempotent: a second run resets the rows the spec reviewed and
     # dismissed instead of adding more. Prints one JSON line with the ids.
-    book_a = Books::Book.find_by!(slug: ENV.fetch("E2E_BOOK_A", "nightmare-abbey"))
+    book_a = Books::Book.find_by!(slug: ENV.fetch("E2E_BOOK_A", "headlong-hall"))
     book_b = Books::Book.find_by!(slug: ENV.fetch("E2E_BOOK_B", "war-and-peace"))
     a, b = [book_a.id, book_b.id].minmax
 
