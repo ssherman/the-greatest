@@ -5,9 +5,10 @@
 # (JSON), which is why it does not assume ActionController::Base: helper_method
 # only exists on the HTML side.
 #
-# Unrecognised hosts fall back to :books. In production config.hosts is unset,
-# so request.host is client-supplied -- nothing here should ever be used to
-# build a URL (see Api::Host and the routes file for the canonical source).
+# Unrecognised hosts fall back to :books. Production's config.hosts admits only
+# config.domains, but request.host is still the client's choice among them --
+# nothing here should ever be used to build a URL (see Api::Host and the
+# routes file for the canonical source).
 module CurrentDomain
   extend ActiveSupport::Concern
 

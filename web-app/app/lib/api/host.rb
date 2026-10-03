@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 # The canonical absolute origin for the current site. Every URL the API emits
-# is built from here, never from request.host: in production config.hosts is
-# unset and nginx forwards the raw Host header, so request.host is whatever the
-# client sent. config.domains is the same source config/routes.rb constrains on.
+# is built from here, never from request.host, which is only as trustworthy as
+# nginx and config.hosts make it. config.domains is the same source
+# config/routes.rb constrains on.
 module Api
   module Host
     def self.base_url(domain = Current.domain)
