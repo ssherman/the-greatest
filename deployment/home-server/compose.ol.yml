@@ -9,4 +9,8 @@ services:
   build:
     # The live API keeps 2 of the 8 vCPUs while a build runs.
     cpus: 6
-    command: [python, -m, openlibrary.pipeline.build, --root, /data, --memory-limit, 8GB]
+    # --threads 4: DuckDB's list aggregates (year_evidence) hold per-thread
+    # state outside --memory-limit and cannot spill. The first build ran 8
+    # threads and was OOM-killed at 15.8 GB RSS. guest/ol-refresh.sh also
+    # puts a 16 GB swap file on the data disk as a backstop.
+    command: [python, -m, openlibrary.pipeline.build, --root, /data, --memory-limit, 8GB, --threads, "4"]

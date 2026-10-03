@@ -14,7 +14,7 @@ cfg() { # cfg <role> [profile]
 
 t_build() {
   cfg ol build | jq -e '.services.build.cpus == 6 and
-    .services.build.command == ["python","-m","openlibrary.pipeline.build","--root","/data","--memory-limit","8GB"]' >/dev/null
+    .services.build.command == ["python","-m","openlibrary.pipeline.build","--root","/data","--memory-limit","8GB","--threads","4"]' >/dev/null
 }
 t_api() {
   cfg ol | jq -e '.services.api.environment.OL_API_MEMORY_LIMIT == "6GB" and

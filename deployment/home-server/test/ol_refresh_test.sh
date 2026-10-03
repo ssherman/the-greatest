@@ -11,7 +11,13 @@ setup() {
   new_sandbox
   write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=0 HC_REFRESH=https://hc.test/refresh
   export PROMOTE_TIMEOUT_S=1 POLL_S=0 API_URL=http://api.test
-  unset NEXT_ACTION NEXT_ACTION_FAIL BUILD_EXIT BROKEN_VERSION NOT_MOUNTED
+  unset NEXT_ACTION NEXT_ACTION_FAIL BUILD_EXIT BROKEN_VERSION NOT_MOUNTED SWAP_ACTIVE MKSWAP_EXIT SWAP_SIZE
+  stub swapon 'case "${1:-}" in --show*) [ -n "${SWAP_ACTIVE:-}" ] && echo "$OL_DATA/swapfile" ;; esac; true'
+  stub fallocate 'touch "${!#}"'
+  stub mkswap 'exit "${MKSWAP_EXIT:-0}"'
+  # `command -p` searches the default PATH, never $SANDBOX/bin. A plain
+  # `command chmod` finds this stub again and forks forever.
+  stub chmod 'command -p chmod "$@"'
   stub mountpoint '[ -z "${NOT_MOUNTED:-}" ]'
   stub curl 'url="${!#}"
 case "$url" in
@@ -95,7 +101,28 @@ check "failed gates keep the old version and name the gate" t_gate_failure
 check "a build that died keeps the old version" t_crash
 check "an API that will not serve the new version is reverted" t_reverts
 check "first promotion fails: no current-version is left behind" t_first_promotion_fails
+t_swap_active() {
+  setup; serving 2026-08-31; export NEXT_ACTION="build 2026-09-30" SWAP_ACTIVE=1
+  status_json '{"passing":["2026-08-31","2026-09-30"],"failed":[],"incomplete":[]}'
+  refresh && ! called '^fallocate ' && ! called '^mkswap ' && ! called '^swapon /'
+}
+t_swap_created() {
+  setup; serving 2026-08-31; export NEXT_ACTION="build 2026-09-30" SWAP_SIZE=1M
+  status_json '{"passing":["2026-08-31","2026-09-30"],"failed":[],"incomplete":[]}'
+  refresh && called "^fallocate -l 1M $OL_DATA/swapfile" && called "^chmod 600 $OL_DATA/swapfile" &&
+    called "^mkswap $OL_DATA/swapfile" &&
+    [ "$(grep -E '^(swapon /|compose run --rm --no-deps -T build$)' "$CALLS" | cut -d' ' -f1 | tr '\n' ' ')" = "swapon compose " ]
+}
+t_swap_fails() {
+  setup; serving 2026-08-31; export NEXT_ACTION="build 2026-09-30" MKSWAP_EXIT=1
+  ! refresh && called 'swap file.*refresh/fail' && ! called '^swapon /' &&
+    ! called '^compose run --rm --no-deps -T build$'
+}
+
 check "a held build lock means no second build" t_lock_held
 check "an unmounted data disk refuses to build" t_unmounted
 check "Open Library unreachable is a failure" t_unreachable
+check "active swap is left alone" t_swap_active
+check "missing swap is created and enabled before the build" t_swap_created
+check "a swap file that cannot be made fails the refresh before any build" t_swap_fails
 finish

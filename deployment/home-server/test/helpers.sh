@@ -35,8 +35,20 @@ write_env() { printf '%s\n' "$@" >"$ENV_FILE"; }
 
 # stub <name> <body>: a command on PATH that logs "<name> <args>" to $CALLS,
 # then runs body.
+#
+# Every stub carries a depth guard. A stub whose body reaches a command by
+# name finds itself first on PATH; one did (`command chmod`), and the
+# recursion forked until it took the whole machine down. The guard stops any
+# such chain at a few levels and fails loudly. Stubs that wrap a real tool
+# must call it with `command -p`, which ignores PATH.
 stub() {
-  printf '#!/usr/bin/env bash\necho "%s $*" >>"$CALLS"\n%s\n' "$1" "$2" >"$SANDBOX/bin/$1"
-  chmod +x "$SANDBOX/bin/$1"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf '[ "${STUB_DEPTH:-0}" -lt 3 ] || { echo "stub %s re-entered itself" >&2; exit 99; }\n' "$1"
+    printf 'export STUB_DEPTH=$(( ${STUB_DEPTH:-0} + 1 ))\n'
+    printf 'echo "%s $*" >>"$CALLS"\n' "$1"
+    printf '%s\n' "$2"
+  } >"$SANDBOX/bin/$1"
+  command -p chmod +x "$SANDBOX/bin/$1"
 }
 called() { grep -qE "$1" "$CALLS"; }

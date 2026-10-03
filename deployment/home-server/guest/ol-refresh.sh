@@ -36,6 +36,20 @@ case "$action" in
   *) fail "unexpected next-action output: $action" ;;
 esac
 
+# A build's DuckDB list aggregates keep per-thread state outside memory_limit
+# (the first build was OOM-killed at 15.8 GB), so back the VM with swap. Done
+# only once a build is certain (after next-action: skip runs touch nothing),
+# and deliberately not in fstab, so boot never depends on it.
+SWAP_SIZE="${SWAP_SIZE:-16G}"
+swapfile="$OL_DATA/swapfile"
+if ! swapon --show=NAME --noheadings | grep -qxF "$swapfile"; then
+  if [ ! -f "$swapfile" ]; then
+    { fallocate -l "$SWAP_SIZE" "$swapfile" && chmod 600 "$swapfile" && mkswap "$swapfile" >/dev/null; } ||
+      { rm -f "$swapfile"; fail "could not create the $SWAP_SIZE swap file $swapfile"; }
+  fi
+  swapon "$swapfile" || fail "could not enable swap on $swapfile"
+fi
+
 log "building $date"
 built=0
 "$COMPOSE" run --rm --no-deps -T build && built=1
