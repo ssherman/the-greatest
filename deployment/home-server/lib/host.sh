@@ -23,17 +23,21 @@ converge_host_packages() {
     on_host "DEBIAN_FRONTEND=noninteractive apt-get install -y -q jq unattended-upgrades >/dev/null"
     note_change "installed jq unattended-upgrades"
   fi
-  local pending
-  # No pipefail on the far side: capture first so a failing apt is not a zero.
-  # shellcheck disable=SC2016 # the remote shell expands these
-  pending="$(on_host 'out="$(apt-get -s full-upgrade)" || exit 1; printf "%s\n" "$out" | grep -c "^Inst" || true')" ||
-    die "apt-get -s full-upgrade failed on the host"
-  if [ "$pending" != 0 ]; then
-    log "upgrading $pending host package(s)"
-    # A transient unit, so an SSH drop cannot SIGHUP dpkg mid-upgrade.
-    on_host "systemd-run --wait --pipe --quiet --collect --unit=provision-upgrade env DEBIAN_FRONTEND=noninteractive apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold full-upgrade >/dev/null" ||
-      die "apt-get full-upgrade failed on the host"
-    UPGRADED="$pending" # reported, but not a "change" for the idempotence check
+  if [ "${VERIFY:-0}" = 1 ]; then
+    log "skipping upgrade under --verify"
+  else
+    local pending
+    # No pipefail on the far side: capture first so a failing apt is not a zero.
+    # shellcheck disable=SC2016 # the remote shell expands these
+    pending="$(on_host 'out="$(apt-get -s full-upgrade)" || exit 1; printf "%s\n" "$out" | grep -c "^Inst" || true')" ||
+      die "apt-get -s full-upgrade failed on the host"
+    if [ "$pending" != 0 ]; then
+      log "upgrading $pending host package(s)"
+      # A transient unit, so an SSH drop cannot SIGHUP dpkg mid-upgrade.
+      on_host "systemd-run --wait --pipe --quiet --collect --unit=provision-upgrade env DEBIAN_FRONTEND=noninteractive apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold full-upgrade >/dev/null" ||
+        die "apt-get full-upgrade failed on the host"
+      UPGRADED="$pending" # reported, but not a "change" for the idempotence check
+    fi
   fi
 
   # Nothing here uses NFS.
