@@ -137,6 +137,10 @@ jobs:
   home-server:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # The workflow default is web-app/; these paths are from the repo root.
+    defaults:
+      run:
+        working-directory: .
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
