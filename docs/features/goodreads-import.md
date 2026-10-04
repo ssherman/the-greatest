@@ -21,10 +21,16 @@ Nothing in production calls the resolver yet. The only entry point is the dry-ru
 
 ## Parsing
 
-`Books::Goodreads::ExportFile.parse(bytes)` decodes the file (BOM stripped; Windows-1252 when the
-bytes are not UTF-8; scrubbed when they are neither), parses it with liberal quoting, and refuses
-it unless the `Book Id`, `Title`, `Author` and `Exclusive Shelf` headers are present. It never
-refuses a row.
+`Books::Goodreads::ExportFile.parse(bytes)` decodes the file, parses it with liberal quoting, and
+refuses it unless the `Book Id`, `Title`, `Author` and `Exclusive Shelf` headers are present. It
+never refuses a row.
+
+- Decoding: the BOM is stripped. A file that is UTF-8 apart from stray bytes stays UTF-8, with the
+  stray bytes scrubbed. Anything else is read as Windows-1252, its undefined bytes dropped. NUL
+  bytes are removed.
+- A row whose field count differs from the header's (a stray quote split a field) is failed with
+  "columns do not line up with the header". Nothing in it is read or stored, not even `raw`,
+  because any value, Private Notes included, may sit under the wrong header.
 
 `Books::Goodreads::ExportRow` reads one row by header name:
 
@@ -66,7 +72,11 @@ is intended: the replay rebuilds them.
    later import links to an earlier import's provisional book instead of making another.
 3. **Outcome.** A match links. The finder flags medium, low and fallback decisions. No match
    creates a provisional book through `CreateBook`. An AI "none of these" creates too, and is
-   flagged. Nothing falls back to the top search hit.
+   flagged. Nothing falls back to the top search hit. A failed AI call (the finder's `fallback`
+   decision) is not an answer: the edition is left unresolved for the next run, so an AI outage
+   cannot fill the catalog with duplicates. A decision that does not end up as the edition's
+   (the run failed, or another import resolved the edition first) is taken out of the review
+   queue.
 
 `CreateBook` holds `pg_advisory_xact_lock` on the edition's signature, re-reads the edition, adopts
 a book that a same-signature edition created since the finder looked (never one the finder already
@@ -77,6 +87,9 @@ considered), and otherwise creates through `DataImporters::Books::Book::Importer
 - `stamp_identifiers: true`, so the edition's Goodreads id and ISBNs are on the book even when Open
   Library is down;
 - `enrich: false`, because enrichment runs on admin approval (increment 6).
+
+A book that comes out of the importer with no author is rolled back (`CreateFailed`) and the
+edition retried later: an authorless book cannot be found by any later author-aware search.
 
 Every creation is `verification: unverified` until increment 4 adds the Goodreads fetch.
 

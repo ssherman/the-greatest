@@ -34,15 +34,24 @@ module Books
         ::Services::Text::NameNormalizer.call(::Services::Text::QuoteNormalizer.call(text.to_s)).downcase
       end
 
-      def initialize(row_number:, fields:)
+      MISALIGNED = "columns do not line up with the header"
+
+      # misaligned: the row's field count differs from the header's (a stray
+      # quote split a field). Every value may sit under the wrong header --
+      # Private Notes under My Review, a title under Author -- so none is
+      # read or kept, not even raw.
+      def initialize(row_number:, fields:, misaligned: false)
         @row_number = row_number
-        @fields = fields.to_h.reject { |header, _value| header.blank? }
+        @misaligned = misaligned
+        @fields = misaligned ? {} : fields.to_h.reject { |header, _value| header.blank? }
         @raw = @fields.except(PRIVATE_NOTES)
         @notes = []
         parse
       end
 
       def errors
+        return [MISALIGNED] if @misaligned
+
         [
           ("no Goodreads book id" if goodreads_book_id.nil?),
           ("no title" if title.blank?),

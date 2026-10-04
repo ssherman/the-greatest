@@ -14,11 +14,20 @@ module Services
       # 3. Outcome: a match links (the finder flags medium, low and fallback
       #    decisions). No match creates a provisional book through CreateBook.
       #    An AI "none of these" creates too, and is flagged here; nothing
-      #    ever falls back to the top search hit.
+      #    ever falls back to the top search hit. A failed AI call (the
+      #    finder's fallback decision) is not an answer: it raises, and the
+      #    edition waits for the next run instead of creating a duplicate of a
+      #    book the AI never got to judge.
+      #
+      # A decision that does not end up as the edition's (the run failed, or
+      # another import resolved the edition first) is taken out of the review
+      # queue, so a retry never leaves an orphan flag behind.
       #
       # Every AI call is counted on the import. Nothing caps them.
       class ResolveEdition
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
+        MatchingFailed = Class.new(StandardError)
+        POSTGRES_ERRORS = [ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished].freeze
 
         def self.call(edition:, import:, finder: nil, importer: ::DataImporters::Books::Book::Importer)
           new(edition: edition, import: import, finder: finder, importer: importer).call
@@ -36,18 +45,35 @@ module Services
 
           match = @finder.call(query: query, subject: @edition)
           @import.increment!(:ai_calls_count) if ai_call?(match.decision)
-
-          if match.matched?
-            @edition.update!(book: match.record, resolution: :matched, verification: :not_needed,
-              match_decision: match.decision, resolved_at: Time.current)
-            return done(:matched)
-          end
-
-          match.decision&.update!(needs_review: true) if match.decided_by == :ai
-          done(CreateBook.call(edition: @edition, import: @import, match: match, importer: @importer).data[:outcome])
+          outcome = resolve(match)
+          supersede(match.decision) unless @edition.match_decision_id == match.decision&.id
+          done(outcome)
+        rescue *POSTGRES_ERRORS
+          raise
+        rescue
+          supersede(match&.decision)
+          raise
         end
 
         private
+
+        def resolve(match)
+          if match.matched?
+            @edition.update!(book: match.record, resolution: :matched, verification: :not_needed,
+              match_decision: match.decision, resolved_at: Time.current)
+            return :matched
+          end
+          if match.decided_by == :fallback
+            raise MatchingFailed, "matching failed for Goodreads edition #{@edition.id}: #{match.reason}"
+          end
+
+          match.decision&.update!(needs_review: true) if match.decided_by == :ai
+          CreateBook.call(edition: @edition, import: @import, match: match, importer: @importer).data[:outcome]
+        end
+
+        def supersede(decision)
+          decision.update!(needs_review: false) if decision&.needs_review?
+        end
 
         def settled?
           @edition.resolved_at.present? && (@edition.book_id.present? || @edition.parked?)

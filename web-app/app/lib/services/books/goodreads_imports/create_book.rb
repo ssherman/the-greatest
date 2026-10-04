@@ -40,8 +40,12 @@ module Services
           @importer = importer
         end
 
+        # requires_new: inside a caller's transaction (the dry run, a test, a
+        # future job) a CreateFailed must still roll back what the providers
+        # already saved -- a book with no author, a new author -- rather than
+        # leave it for the next edition to find.
         def call
-          ActiveRecord::Base.transaction do
+          ActiveRecord::Base.transaction(requires_new: true) do
             acquire_lock
             @edition.reload
             next done(:cached) if settled?
@@ -96,6 +100,12 @@ module Services
           book = result.item
           unless result.created? && book&.persisted?
             raise CreateFailed, "no book created for Goodreads edition #{@edition.id}: #{result.all_errors.join("; ")}"
+          end
+          # An authorless book is legacy root cause 5: no later author-required
+          # search can find it. The importer saves one when the author step
+          # fails and a later provider succeeds.
+          unless ::Books::BookAuthor.exists?(book: book)
+            raise CreateFailed, "the book for Goodreads edition #{@edition.id} got no author: #{result.all_errors.join("; ")}"
           end
 
           record_provenance(book, result.created_author_ids)

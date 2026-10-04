@@ -8,10 +8,14 @@ module Books
     # (Goodreads import spec §4). Refuses a file that is not CSV or lacks the
     # export's headers; never refuses a row (a bad row is the row's problem).
     #
-    # Encoding: a BOM is stripped; bytes that are not valid UTF-8 are read as
-    # Windows-1252; bytes that are neither are scrubbed. Liberal parsing
-    # keeps a field with a stray quote, the likely cause of the 23 legacy
-    # imports that died on CSV::MalformedCSVError.
+    # Encoding: a BOM is stripped; a file that is UTF-8 apart from stray
+    # bytes stays UTF-8, with the stray bytes scrubbed; anything else is read
+    # as Windows-1252, its undefined bytes dropped. NUL bytes are removed
+    # (Postgres refuses them). Liberal parsing keeps a field with a stray
+    # quote, the likely cause of the 23 legacy imports that died on
+    # CSV::MalformedCSVError. Where a stray quote has split a field, the
+    # row's columns no longer line up with the header; that row is passed on
+    # misaligned, so nothing in it is read under the wrong header.
     class ExportFile
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -27,12 +31,17 @@ module Books
       end
 
       def parse
-        table = CSV.parse(decode, headers: true, liberal_parsing: true, skip_blanks: true,
-          header_converters: ->(header) { header.to_s.strip })
-        missing = REQUIRED_HEADERS - table.headers.compact
+        # Plain arrays, not CSV::Table: a table pads a short row out to the
+        # header and takes its header count from the first row, so neither a
+        # short nor a long row would show.
+        records = CSV.parse(decode, liberal_parsing: true, skip_blanks: true)
+        headers = Array(records.shift).map { |header| header.to_s.strip }
+        missing = REQUIRED_HEADERS - headers
         return failure("missing Goodreads export headers: #{missing.join(", ")}") if missing.any?
 
-        rows = table.each_with_index.map { |row, index| ExportRow.new(row_number: index + 1, fields: row.to_h) }
+        rows = records.each_with_index.map do |fields, index|
+          ExportRow.new(row_number: index + 1, fields: headers.zip(fields).to_h, misaligned: fields.size != headers.size)
+        end
         Result.new(success?: true, data: {rows: rows}, errors: [])
       rescue CSV::MalformedCSVError => e
         failure("not a readable CSV file: #{e.message}")
@@ -42,14 +51,21 @@ module Books
 
       def decode
         bytes = @bytes.start_with?(BOM) ? @bytes.byteslice(BOM.bytesize..) : @bytes
+        text_for(bytes).delete("\u0000")
+      end
+
+      # A UTF-8 file with a stray byte still holds real multibyte characters
+      # once the stray byte is scrubbed. A Windows-1252 file's accented bytes
+      # are each invalid UTF-8 on their own, so scrubbing leaves it plain
+      # ASCII: that is the sign to read it as Windows-1252 instead.
+      def text_for(bytes)
         utf8 = bytes.dup.force_encoding(Encoding::UTF_8)
         return utf8 if utf8.valid_encoding?
 
-        begin
-          bytes.encode(Encoding::UTF_8, Encoding::Windows_1252)
-        rescue EncodingError
-          utf8.scrub("")
-        end
+        scrubbed = utf8.scrub("")
+        return scrubbed unless scrubbed.ascii_only?
+
+        bytes.encode(Encoding::UTF_8, Encoding::Windows_1252, invalid: :replace, undef: :replace, replace: "")
       end
 
       def failure(message)

@@ -21,7 +21,7 @@ module Services
         # Loaded with the class, before any thread starts: autoloading inside a
         # thread while this one holds the load interlock would deadlock.
         PRELOADED = [CreateBook, ::DataImporters::ImportResult, ::Books::GoodreadsImportRecord, ::Books::BookAuthor,
-          ::Identifier, ::MatchDecision, ::SearchIndexRequest].freeze
+          ::Books::Author, ::Identifier, ::MatchDecision, ::SearchIndexRequest].freeze
 
         # Creates the book as the importer would. On its first call it reports
         # that, then waits to be released, holding its transaction (and so the
@@ -37,6 +37,7 @@ module Services
           def call(title:, goodreads_id:, **)
             first = @mutex.synchronize { (@calls += 1) == 1 }
             book = ::Books::Book.create!(title: title, provisional: true)
+            book.book_authors.create!(author: ::Books::Author.find_by!(name: "Leo Tolstoy"), position: 1)
             book.identifiers.create!(identifier_type: :books_work_goodreads_id, value: goodreads_id.first)
             if first
               @created << true
@@ -59,6 +60,7 @@ module Services
           ::Books::GoodreadsEdition.where(id: [@first.id, @second.id]).delete_all
           ::MatchDecision.where(subject_type: "Books::GoodreadsEdition", subject_id: [@first.id, @second.id]).delete_all
           ::Identifier.where(identifiable_type: "Books::Book", identifiable_id: book_ids).delete_all
+          ::Books::BookAuthor.where(book_id: book_ids).delete_all
           ::SearchIndexRequest.where(parent_type: "Books::Book", parent_id: book_ids).delete_all
           ::Books::Book.where(id: book_ids).delete_all
           ::Books::GoodreadsImport.where(id: @import.id).delete_all

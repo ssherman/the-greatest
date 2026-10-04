@@ -69,6 +69,56 @@ module Services
           assert_equal [@war_and_peace, true], [edition.reload.book, edition.match_decision.needs_review]
         end
 
+        test "an AI failure creates nothing: the edition waits for the next run and its decision leaves the review queue" do
+          ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([search_hit(@war_and_peace)])
+          task = stub("select_candidate_task")
+          task.stubs(:call).raises(RuntimeError, "OpenAI 429")
+          ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).returns(task)
+          edition = goodreads_edition(title: "War and Peace in the Garden", primary_author: "Leo Tolstoy")
+
+          assert_no_difference("::Books::Book.count") do
+            assert_raises(ResolveEdition::MatchingFailed) { ResolveEdition.call(edition: edition, import: @import) }
+          end
+
+          assert_nil edition.reload.resolved_at
+          assert_equal 0, ::MatchDecision.needing_review.where(subject: edition).count
+          assert_equal 1, @import.reload.ai_calls_count
+        end
+
+        test "a failed creation, retried, leaves only the decision that was used in the review queue" do
+          ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([search_hit(@war_and_peace)])
+          stub_matching_ai(selected_index: 0)
+          edition = goodreads_edition(title: "War and Peace in the Garden", primary_author: "Leo Tolstoy")
+          failing = Object.new
+          def failing.call(**)
+            ::DataImporters::ImportResult.new(item: ::Books::Book.new, provider_results: [], success: false)
+          end
+          assert_raises(CreateBook::CreateFailed) { ResolveEdition.call(edition: edition, import: @import, importer: failing) }
+
+          ResolveEdition.call(edition: edition.reload, import: @import)
+
+          assert_equal [edition.reload.match_decision], ::MatchDecision.needing_review.where(subject: edition).to_a
+        end
+
+        test "an edition another import resolved while this one waited leaves this import's decision out of the review queue" do
+          ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([search_hit(@war_and_peace)])
+          stub_matching_ai(selected_index: 0)
+          edition = goodreads_edition(title: "War and Peace in the Garden", primary_author: "Leo Tolstoy")
+          other = ::Books::Book.create!(title: "War and Peace in the Garden", provisional: true)
+          real = ::DataImporters::Books::Book::Finder.new
+          racing = Object.new
+          racing.define_singleton_method(:call) do |**options|
+            real.call(**options).tap do
+              ::Books::GoodreadsEdition.where(id: edition.id).update_all(book_id: other.id, resolution: 1, resolved_at: Time.current)
+            end
+          end
+
+          result = ResolveEdition.call(edition: edition, import: @import, finder: racing)
+
+          assert_equal :cached, result.data[:outcome]
+          assert_equal 0, ::MatchDecision.needing_review.where(subject: edition).count
+        end
+
         test "AI calls are counted on the import; rule decisions are not" do
           ResolveEdition.call(edition: goodreads_edition(title: "War and Peace", primary_author: "Leo Tolstoy",
             original_publication_year: 1869), import: @import)

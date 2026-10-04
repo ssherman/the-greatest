@@ -43,6 +43,17 @@ module Services
           assert_equal "no Goodreads book id", row.error
         end
 
+        test "a row that cannot be stored is kept as failed and the rest are still written" do
+          existing = goodreads_edition(goodreads_book_id: 1, title: "Other", primary_author: "Frank Herbert")
+          ::Books::GoodreadsEdition.stubs(:create_or_find_by!).raises(RuntimeError, "boom")
+
+          ParseRows.call(import: @import, rows: goodreads_rows(DUNE, DUNE.merge("Book Id" => "1", "Title" => "Other")))
+
+          first, second = @import.rows.order(:row_number).to_a
+          assert_equal [true, "row could not be stored: RuntimeError: boom"], [first.failed?, first.error]
+          assert_equal existing.id, second.goodreads_edition_id
+        end
+
         test "running it twice changes nothing" do
           rows = goodreads_rows(DUNE, DUNE.merge("Book Id" => "1", "Title" => "Other"))
           ParseRows.call(import: @import, rows: rows)

@@ -97,6 +97,18 @@ module Services
           assert_not_equal books_books(:war_and_peace), edition.reload.book
         end
 
+        test "a book left without an author is rolled back and the edition stays unresolved" do
+          ::DataImporters::Books::Author::Importer.stubs(:call).raises(RuntimeError, "author lookup down")
+          edition = goodreads_edition
+
+          assert_no_difference("::Books::Book.count") do
+            assert_raises(CreateBook::CreateFailed) do
+              CreateBook.call(edition: edition, import: @import, match: unmatched_match(subject: edition))
+            end
+          end
+          assert_nil edition.reload.resolved_at
+        end
+
         test "an importer that makes no book raises and leaves nothing behind" do
           edition = goodreads_edition
           failing = Object.new

@@ -7,10 +7,13 @@ module Services
       # its edition, creating the edition the first time any import names
       # that Goodreads id under that signature (Goodreads import spec §3, §5).
       # An edition another import created is reused as it is; its fields are
-      # never rewritten. A row that cannot be parsed is kept, failed, with the
-      # reason. Safe to run again: rows already written are skipped.
+      # never rewritten. A row that cannot be parsed, or cannot be stored, is
+      # kept, failed, with the reason; one bad row never stops the rest
+      # (spec §13). Postgres errors re-raise. Safe to run again: rows already
+      # written are skipped.
       class ParseRows
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
+        POSTGRES_ERRORS = [ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished].freeze
 
         def self.call(import:, rows:)
           new(import: import, rows: rows).call
@@ -43,6 +46,11 @@ module Services
           else
             @import.rows.create!(row.row_attributes.merge(outcome: :failed, error: row.errors.join("; ")))
           end
+        rescue *POSTGRES_ERRORS
+          raise
+        rescue => e
+          @import.rows.create!(row_number: row.row_number, outcome: :failed,
+            error: "row could not be stored: #{e.class}: #{e.message}")
         end
 
         def edition_for(row)
