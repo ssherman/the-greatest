@@ -21,7 +21,7 @@
 #
 # Indexes
 #
-#  index_external_links_on_click_count                (click_count)
+#  index_external_links_on_click_count                (click_count DESC)
 #  index_external_links_on_parent                     (parent_type,parent_id)
 #  index_external_links_on_parent_type_and_parent_id  (parent_type,parent_id)
 #  index_external_links_on_public                     (public)

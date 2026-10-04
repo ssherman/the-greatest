@@ -14,6 +14,30 @@
 # rerun_requested: set by a data-changing caller whose claim was refused
 # because a run was already in flight; the next claim clears it and the job
 # re-requests after its run.
+# == Schema Information
+#
+# Table name: csv_exports
+#
+#  id                       :bigint           not null, primary key
+#  byte_size                :bigint
+#  error_message            :text
+#  generated_at             :datetime
+#  requested_at             :datetime
+#  rerun_requested          :boolean          default(FALSE), not null
+#  row_count                :integer
+#  status                   :integer          default("pending"), not null
+#  created_at               :datetime         not null
+#  updated_at               :datetime         not null
+#  ranking_configuration_id :bigint           not null
+#
+# Indexes
+#
+#  index_csv_exports_on_ranking_configuration_id  (ranking_configuration_id) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (ranking_configuration_id => ranking_configurations.id)
+#
 class CsvExport < ApplicationRecord
   GENERATION_STALE_AFTER = 15.minutes
 

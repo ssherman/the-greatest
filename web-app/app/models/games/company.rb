@@ -13,8 +13,9 @@
 #
 # Indexes
 #
-#  index_games_companies_on_name  (name)
-#  index_games_companies_on_slug  (slug) UNIQUE
+#  index_games_companies_on_lower_name  (lower((name)::text))
+#  index_games_companies_on_name        (name)
+#  index_games_companies_on_slug        (slug) UNIQUE
 #
 class Games::Company < ApplicationRecord
   include Describable

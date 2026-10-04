@@ -4,7 +4,7 @@
 #
 #  id             :bigint           not null, primary key
 #  description    :text
-#  game_type      :integer          default(0), not null
+#  game_type      :integer          default("main_game"), not null
 #  release_year   :integer
 #  slug           :string           not null
 #  title          :string           not null
@@ -16,6 +16,7 @@
 # Indexes
 #
 #  index_games_games_on_game_type       (game_type)
+#  index_games_games_on_lower_title     (lower((title)::text))
 #  index_games_games_on_parent_game_id  (parent_game_id)
 #  index_games_games_on_release_year    (release_year)
 #  index_games_games_on_series_id       (series_id)

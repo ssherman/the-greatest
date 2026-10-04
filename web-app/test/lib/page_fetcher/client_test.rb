@@ -284,5 +284,18 @@ module PageFetcher
       assert_includes log.string, "CF-Access-Client-Id"
       assert_not_includes log.string, "s3cret"
     end
+
+    test "never writes the Access session cookie to the request log" do
+      log = StringIO.new
+      config = PageFetcher::Configuration.new(base_url: BASE_URL, access: access, logger: Logger.new(log))
+      client = PageFetcher::Client.new(config: config, breaker: @breaker)
+      stub_request(:post, FETCH_URL).to_return(status: 200, body: page_body,
+        headers: {"Set-Cookie" => "CF_Authorization=eyJhbGciOiJSUzI1NiJ9.SESSION_JWT; Expires=Mon, 05 Oct 2026 18:59:17 GMT; Path=/; Secure; HttpOnly"})
+
+      client.fetch(PAGE_URL)
+
+      assert_includes log.string, "CF_Authorization=[FILTERED]; Expires"
+      assert_not_includes log.string, "SESSION_JWT"
+    end
   end
 end

@@ -4,12 +4,12 @@
 #
 #  id           :bigint           not null, primary key
 #  country      :string
-#  format       :integer          default(0), not null
+#  format       :integer          default("vinyl"), not null
 #  labels       :string           default([]), is an Array
 #  metadata     :jsonb
 #  release_date :date
 #  release_name :string
-#  status       :integer          default(0), not null
+#  status       :integer          default("official"), not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null
 #  album_id     :bigint           not null

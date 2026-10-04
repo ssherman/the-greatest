@@ -9,7 +9,7 @@
 #  description           :text
 #  exclude_from_rankings :boolean          default(FALSE), not null
 #  gender                :integer
-#  kind                  :integer          default(0), not null
+#  kind                  :integer          default("person"), not null
 #  name                  :string           not null
 #  provisional           :boolean          default(FALSE), not null
 #  slug                  :string           not null
@@ -22,6 +22,7 @@
 #  index_books_authors_on_alternate_names  (alternate_names) USING gin
 #  index_books_authors_on_gender           (gender)
 #  index_books_authors_on_kind             (kind)
+#  index_books_authors_on_lower_name       (lower((name)::text))
 #  index_books_authors_on_provisional      (provisional) WHERE provisional
 #  index_books_authors_on_slug             (slug) UNIQUE
 #

@@ -17,6 +17,7 @@
 # Indexes
 #
 #  index_music_songs_on_isrc          (isrc) UNIQUE WHERE (isrc IS NOT NULL)
+#  index_music_songs_on_lower_title   (lower((title)::text))
 #  index_music_songs_on_release_year  (release_year)
 #  index_music_songs_on_slug          (slug) UNIQUE
 #

@@ -7,7 +7,7 @@
 #  currency                   :string           default("usd"), not null
 #  domain                     :string
 #  email                      :string
-#  status                     :integer          default(0), not null
+#  status                     :integer          default("pending"), not null
 #  created_at                 :datetime         not null
 #  updated_at                 :datetime         not null
 #  stripe_checkout_session_id :string

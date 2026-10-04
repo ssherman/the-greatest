@@ -6,7 +6,7 @@
 #  born_on        :date
 #  country        :string(2)
 #  description    :text
-#  kind           :integer          default(0), not null
+#  kind           :integer          default("person"), not null
 #  name           :string           not null
 #  slug           :string           not null
 #  year_died      :integer
@@ -17,8 +17,9 @@
 #
 # Indexes
 #
-#  index_music_artists_on_kind  (kind)
-#  index_music_artists_on_slug  (slug) UNIQUE
+#  index_music_artists_on_kind        (kind)
+#  index_music_artists_on_lower_name  (lower((name)::text))
+#  index_music_artists_on_slug        (slug) UNIQUE
 #
 require "test_helper"
 
