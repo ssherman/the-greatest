@@ -217,8 +217,9 @@ converge_host_network() {
   # Static, not DHCP: ifupdown2 treats an interface with an `inet dhcp` stanza as
   # wholly dhcp (dhcp.py:191 starts `dhclient -6`; address.py:1565 skips static
   # addresses), which drops vmbr0's static IPv6.
-  [ -n "${PVE_LAN_IPV4:-}" ] && [ -n "${PVE_LAN_GATEWAY4:-}" ] ||
+  if [ -z "${PVE_LAN_IPV4:-}" ] || [ -z "${PVE_LAN_GATEWAY4:-}" ]; then
     die "PVE_LAN_IPV4 and PVE_LAN_GATEWAY4 must be set in secrets/home-server.env"
+  fi
   if ! on_host "grep -q '^iface vmbr0 inet ' /etc/network/interfaces"; then
     network_change "vmbr0 gains static IPv4 $PVE_LAN_IPV4" add_vmbr0_ipv4
   else

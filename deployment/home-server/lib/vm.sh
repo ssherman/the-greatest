@@ -211,8 +211,9 @@ rebuild_vm() { # replace only the OS disk; the data disk is never touched (spec 
 }
 
 enable_tunnels() {
-  [ -n "${OL_TUNNEL_TOKEN:-}" ] && [ -n "${FETCHER_TUNNEL_TOKEN:-}" ] ||
+  if [ -z "${OL_TUNNEL_TOKEN:-}" ] || [ -z "${FETCHER_TUNNEL_TOKEN:-}" ]; then
     die "both tunnel tokens must be set in secrets/home-server.env first (sops secrets/home-server.env)"
+  fi
   on_host "touch $HOST_STATE/tunnels-enabled"
   TUNNELS_ENABLED=1
   local role
