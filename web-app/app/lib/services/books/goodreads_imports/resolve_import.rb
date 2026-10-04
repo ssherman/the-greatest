@@ -58,12 +58,17 @@ module Services
           @import.rows.where(goodreads_edition_id: edition.id)
         end
 
-        # created: books this import's provenance says it made. matched: every
+        # created: books this import made that still exist and that its
+        # editions still link to; a created book later merged into another, or
+        # deleted and made again, counts once as what it is now. matched: every
         # other linked edition, including books another import created.
         # flagged: linked decisions still waiting for review.
         def recount
           editions = ::Books::GoodreadsEdition.where(id: edition_ids)
-          created_book_ids = @import.records.created.where(record_type: "Books::Book").pluck(:record_id)
+          created_book_ids = ::Books::Book
+            .where(id: @import.records.created.where(record_type: "Books::Book").select(:record_id))
+            .where(id: editions.select(:book_id))
+            .pluck(:id)
           @import.update!(
             created_count: created_book_ids.size,
             matched_count: editions.where.not(book_id: nil).where.not(book_id: created_book_ids).count,

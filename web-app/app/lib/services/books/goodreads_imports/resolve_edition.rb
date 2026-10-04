@@ -46,7 +46,7 @@ module Services
           match = @finder.call(query: query, subject: @edition)
           @import.increment!(:ai_calls_count) if ai_call?(match.decision)
           outcome = resolve(match)
-          supersede(match.decision) unless @edition.match_decision_id == match.decision&.id
+          supersede_unused(match.decision)
           done(outcome)
         rescue *POSTGRES_ERRORS
           raise
@@ -73,6 +73,18 @@ module Services
 
         def supersede(decision)
           decision.update!(needs_review: false) if decision&.needs_review?
+        end
+
+        # Every flagged decision about this edition up to this run's own,
+        # except the one the edition now holds: this run's if it went unused,
+        # and any a crashed earlier run left behind (a killed worker never
+        # reaches the rescue). Later ids belong to another import still
+        # resolving the same edition, and are its to settle.
+        def supersede_unused(decision)
+          return if decision.nil?
+
+          ::MatchDecision.needing_review.where(subject: @edition).where(id: ..decision.id)
+            .where.not(id: @edition.match_decision_id).update_all(needs_review: false, updated_at: Time.current)
         end
 
         def settled?

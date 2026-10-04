@@ -119,6 +119,17 @@ module Services
           assert_equal 0, ::MatchDecision.needing_review.where(subject: edition).count
         end
 
+        test "a flagged decision orphaned by a crashed earlier run leaves the review queue once the edition resolves" do
+          edition = goodreads_edition(title: "War and Peace", primary_author: "Leo Tolstoy", original_publication_year: 1869)
+          orphan = ::MatchDecision.create!(finder: "DataImporters::Books::Book::Finder", subject: edition, outcome: :unmatched,
+            confidence: :low, decided_by: :ai, needs_review: true)
+
+          ResolveEdition.call(edition: edition, import: @import)
+
+          assert_not orphan.reload.needs_review
+          assert_equal 0, ::MatchDecision.needing_review.where(subject: edition).count
+        end
+
         test "AI calls are counted on the import; rule decisions are not" do
           ResolveEdition.call(edition: goodreads_edition(title: "War and Peace", primary_author: "Leo Tolstoy",
             original_publication_year: 1869), import: @import)

@@ -68,6 +68,26 @@ module Services
           assert_equal [1, 1], counters.first(2)
         end
 
+        test "a created book later merged into another counts as matched, not created" do
+          parse(QUIET_YEAR)
+          ResolveImport.call(import: @import)
+          ::Books::Book::Merger.call(source: @import.editions.sole.book, target: books_books(:war_and_peace))
+
+          ResolveImport.call(import: @import)
+
+          assert_equal [1, 0], counters.first(2)
+        end
+
+        test "a created book deleted and created again counts once" do
+          parse(QUIET_YEAR)
+          ResolveImport.call(import: @import)
+          @import.editions.sole.book.destroy!
+
+          ResolveImport.call(import: @import)
+
+          assert_equal [0, 1], counters.first(2)
+        end
+
         test "a Postgres error stops the import" do
           parse(QUIET_YEAR)
           broken = Object.new
