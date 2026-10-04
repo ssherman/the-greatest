@@ -133,3 +133,19 @@ jobs:
 
       - name: Run tests
         run: uv run pytest
+
+  home-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The workflow default is web-app/; these paths are from the repo root.
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # The VMs deploy their own scripts from main, so a broken deploy.sh on
+      # main would stop the next fix from arriving. Test them before merge.
+      - name: Shell tests and shellcheck
+        run: deployment/home-server/test/run.sh

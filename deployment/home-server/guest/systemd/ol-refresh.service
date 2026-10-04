@@ -1,0 +1,9 @@
+[Unit]
+Description=Build and promote the newest Open Library dump (docs/features/home-server.md)
+Wants=network-online.target
+After=network-online.target docker.service srv-ol\x2ddata.mount
+
+[Service]
+Type=oneshot
+ExecStart=/opt/the-greatest/deployment/home-server/guest/ol-refresh.sh
+TimeoutStartSec=12h

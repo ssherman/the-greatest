@@ -1,0 +1,6 @@
+[Unit]
+Description=Ping healthchecks.io when this VM's service answers
+
+[Service]
+Type=oneshot
+ExecStart=/opt/the-greatest/deployment/home-server/guest/heartbeat.sh

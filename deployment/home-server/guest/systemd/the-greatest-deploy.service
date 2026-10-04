@@ -1,0 +1,9 @@
+[Unit]
+Description=Deploy this VM's service from the repo (docs/features/home-server.md)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/the-greatest/deployment/home-server/guest/deploy.sh
+TimeoutStartSec=1h

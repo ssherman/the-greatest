@@ -7,10 +7,13 @@ module Books
     class ConfigurationTest < ActiveSupport::TestCase
       def setup
         @original_env = ENV["OPEN_LIBRARY_SERVICE_URL"]
+        @original_access = ENV.to_h.slice("CLOUDFLARE_ACCESS_CLIENT_ID", "CLOUDFLARE_ACCESS_CLIENT_SECRET")
       end
 
       def teardown
         ENV["OPEN_LIBRARY_SERVICE_URL"] = @original_env
+        %w[CLOUDFLARE_ACCESS_CLIENT_ID CLOUDFLARE_ACCESS_CLIENT_SECRET].each { |k| ENV.delete(k) }
+        @original_access.each { |k, v| ENV[k] = v }
       end
 
       test "defaults to the docker-published loopback address" do
@@ -81,6 +84,29 @@ module Books
         assert_equal 1, config.timeout
         assert_equal 2, config.open_timeout
         assert_equal 3, config.resolve_timeout
+      end
+
+      test "reads Cloudflare Access credentials from the environment" do
+        ENV["CLOUDFLARE_ACCESS_CLIENT_ID"] = "id.access"
+        ENV["CLOUDFLARE_ACCESS_CLIENT_SECRET"] = "s3cret"
+
+        assert Books::OpenLibrary::Configuration.new.access.configured?
+      end
+
+      test "an explicit access wins over the environment" do
+        ENV["CLOUDFLARE_ACCESS_CLIENT_ID"] = "id.access"
+        ENV["CLOUDFLARE_ACCESS_CLIENT_SECRET"] = "s3cret"
+        none = CloudflareAccess::Credentials.new(client_id: nil, client_secret: nil)
+
+        assert_not Books::OpenLibrary::Configuration.new(access: none).access.configured?
+      end
+
+      test "rejects half of an Access pair without echoing it" do
+        ENV["CLOUDFLARE_ACCESS_CLIENT_ID"] = ""
+        ENV["CLOUDFLARE_ACCESS_CLIENT_SECRET"] = "s3cret"
+
+        error = assert_raises(Books::OpenLibrary::Exceptions::ConfigurationError) { Books::OpenLibrary::Configuration.new }
+        assert_not_includes error.message, "s3cret"
       end
     end
   end

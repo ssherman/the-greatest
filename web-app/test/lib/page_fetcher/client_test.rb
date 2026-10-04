@@ -248,5 +248,41 @@ module PageFetcher
       assert_includes io.string, "Status 200" # positive control: the logger did write something
       refute_includes io.string, "HTML_SENTINEL"
     end
+
+    def access
+      CloudflareAccess::Credentials.new(client_id: "id.access", client_secret: "s3cret")
+    end
+
+    test "sends the Cloudflare Access headers when configured" do
+      config = PageFetcher::Configuration.new(base_url: BASE_URL, access: access)
+      client = PageFetcher::Client.new(config: config, breaker: @breaker)
+      stub_request(:post, FETCH_URL).to_return(status: 200, body: page_body)
+
+      client.fetch(PAGE_URL)
+
+      assert_requested :post, FETCH_URL, headers: {"CF-Access-Client-Id" => "id.access", "CF-Access-Client-Secret" => "s3cret"}
+    end
+
+    test "sends no Access headers when not configured" do
+      none = CloudflareAccess::Credentials.new(client_id: nil, client_secret: nil)
+      client = PageFetcher::Client.new(config: PageFetcher::Configuration.new(base_url: BASE_URL, access: none), breaker: @breaker)
+      stub_request(:post, FETCH_URL).to_return(status: 200, body: page_body)
+
+      client.fetch(PAGE_URL)
+
+      assert_requested(:post, FETCH_URL) { |req| !req.headers.key?("Cf-Access-Client-Id") && !req.headers.key?("Cf-Access-Client-Secret") }
+    end
+
+    test "never writes the Access secret to the request log" do
+      log = StringIO.new
+      config = PageFetcher::Configuration.new(base_url: BASE_URL, access: access, logger: Logger.new(log))
+      client = PageFetcher::Client.new(config: config, breaker: @breaker)
+      stub_request(:post, FETCH_URL).to_return(status: 200, body: page_body)
+
+      client.fetch(PAGE_URL)
+
+      assert_includes log.string, "CF-Access-Client-Id"
+      assert_not_includes log.string, "s3cret"
+    end
   end
 end

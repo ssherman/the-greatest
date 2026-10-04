@@ -13,15 +13,16 @@ module Books
       # well above the retrieval-call timeout above.
       DEFAULT_RESOLVE_TIMEOUT = 60
 
-      attr_accessor :base_url, :user_agent, :timeout, :open_timeout, :resolve_timeout, :logger
+      attr_accessor :base_url, :user_agent, :timeout, :open_timeout, :resolve_timeout, :logger, :access
 
-      def initialize(base_url: nil, timeout: nil, open_timeout: nil, resolve_timeout: nil, user_agent: nil, logger: nil)
+      def initialize(base_url: nil, timeout: nil, open_timeout: nil, resolve_timeout: nil, user_agent: nil, logger: nil, access: nil)
         @base_url = base_url.nil? ? ENV.fetch("OPEN_LIBRARY_SERVICE_URL", DEFAULT_URL) : base_url
         @timeout = timeout.nil? ? DEFAULT_TIMEOUT : timeout
         @open_timeout = open_timeout.nil? ? DEFAULT_OPEN_TIMEOUT : open_timeout
         @resolve_timeout = resolve_timeout.nil? ? DEFAULT_RESOLVE_TIMEOUT : resolve_timeout
         @user_agent = user_agent.nil? ? DEFAULT_USER_AGENT : user_agent
         @logger = logger.nil? ? Rails.logger : logger
+        @access = access.nil? ? CloudflareAccess::Credentials.from_env : access
 
         validate_configuration!
       end
@@ -29,6 +30,11 @@ module Books
       private
 
       def validate_configuration!
+        if access.partial?
+          raise Exceptions::ConfigurationError,
+            "CLOUDFLARE_ACCESS_CLIENT_ID and CLOUDFLARE_ACCESS_CLIENT_SECRET must both be set, or neither"
+        end
+
         raise Exceptions::ConfigurationError, "OPEN_LIBRARY_SERVICE_URL cannot be blank" if base_url.blank?
 
         uri = URI.parse(base_url)

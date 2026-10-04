@@ -6,10 +6,13 @@ module PageFetcher
   class ConfigurationTest < ActiveSupport::TestCase
     def setup
       @original_env = ENV["PAGE_FETCHER_SERVICE_URL"]
+      @original_access = ENV.to_h.slice("CLOUDFLARE_ACCESS_CLIENT_ID", "CLOUDFLARE_ACCESS_CLIENT_SECRET")
     end
 
     def teardown
       ENV["PAGE_FETCHER_SERVICE_URL"] = @original_env
+      %w[CLOUDFLARE_ACCESS_CLIENT_ID CLOUDFLARE_ACCESS_CLIENT_SECRET].each { |k| ENV.delete(k) }
+      @original_access.each { |k, v| ENV[k] = v }
     end
 
     test "defaults to the docker-published loopback address" do
@@ -58,6 +61,29 @@ module PageFetcher
       assert_raises(PageFetcher::Exceptions::ConfigurationError) do
         PageFetcher::Configuration.new(base_url: "http://bad host")
       end
+    end
+
+    test "reads Cloudflare Access credentials from the environment" do
+      ENV["CLOUDFLARE_ACCESS_CLIENT_ID"] = "id.access"
+      ENV["CLOUDFLARE_ACCESS_CLIENT_SECRET"] = "s3cret"
+
+      assert PageFetcher::Configuration.new.access.configured?
+    end
+
+    test "an explicit access wins over the environment" do
+      ENV["CLOUDFLARE_ACCESS_CLIENT_ID"] = "id.access"
+      ENV["CLOUDFLARE_ACCESS_CLIENT_SECRET"] = "s3cret"
+      none = CloudflareAccess::Credentials.new(client_id: nil, client_secret: nil)
+
+      assert_not PageFetcher::Configuration.new(access: none).access.configured?
+    end
+
+    test "rejects half of an Access pair without echoing it" do
+      ENV["CLOUDFLARE_ACCESS_CLIENT_ID"] = ""
+      ENV["CLOUDFLARE_ACCESS_CLIENT_SECRET"] = "s3cret"
+
+      error = assert_raises(PageFetcher::Exceptions::ConfigurationError) { PageFetcher::Configuration.new }
+      assert_not_includes error.message, "s3cret"
     end
   end
 end

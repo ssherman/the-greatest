@@ -42,6 +42,7 @@ def build(
     dump_date: str | None = None,
     download: bool = True,
     memory_limit: str = "8GB",
+    threads: int | None = None,
     keep_staging: bool = False,
 ) -> dict:
     if download:
@@ -54,7 +55,7 @@ def build(
     paths = ArtifactPaths(root=root, dump_date=dump_date)
     paths.ensure()
     timings = StageTimings()
-    con = connect(paths, memory_limit=memory_limit)
+    con = connect(paths, memory_limit=memory_limit, threads=threads)
 
     def stage(name: str, fn):
         started = time.time()
@@ -110,6 +111,7 @@ def main(
     dump_date: str | None = typer.Option(None, "--dump-date"),
     download: bool = typer.Option(True, "--download/--no-download"),
     memory_limit: str = typer.Option("8GB", "--memory-limit"),
+    threads: int | None = typer.Option(None, "--threads"),
     keep_staging: bool = typer.Option(False, "--keep-staging"),
 ) -> None:
     build(
@@ -117,6 +119,7 @@ def main(
         dump_date=dump_date,
         download=download,
         memory_limit=memory_limit,
+        threads=threads,
         keep_staging=keep_staging,
     )
 

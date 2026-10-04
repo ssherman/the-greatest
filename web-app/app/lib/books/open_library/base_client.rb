@@ -55,8 +55,14 @@ module Books
           conn.options.open_timeout = config.open_timeout
           conn.headers["User-Agent"] = config.user_agent
           conn.headers["Accept"] = "application/json"
+          config.access.headers.each { |name, value| conn.headers[name] = value }
 
-          conn.response :logger, config.logger, bodies: false if config.logger
+          if config.logger
+            conn.response :logger, config.logger, bodies: false do |logger|
+              # Faraday logs request headers as `Name: "value"`.
+              logger.filter(/(CF-Access-Client-Secret: )"[^"]*"/, '\1"[FILTERED]"')
+            end
+          end
 
           conn.adapter Faraday.default_adapter
         end

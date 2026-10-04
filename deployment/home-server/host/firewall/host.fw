@@ -1,0 +1,9 @@
+# Installed by deployment/home-server/provision. SSH and the web UI from the
+# house LAN only. The lockout guard is the datacenter `management` ipset in
+# cluster.fw: Proxmox's own rule allows 22/8006 from it whatever this file says.
+[OPTIONS]
+enable: 1
+
+[RULES]
+IN ACCEPT -source +lan -p tcp -dport 22 -log nolog
+IN ACCEPT -source +lan -p tcp -dport 8006 -log nolog
