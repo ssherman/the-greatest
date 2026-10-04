@@ -13,8 +13,9 @@ where they disagree.
 The host is an HP Elite Mini 800 G9: i7-12700T (12 cores, 20 threads), 62 GB usable RAM, Proxmox
 9.2. Two ZFS pools: `rpool` (1 TB, system and `local-zfs`) and `rpool2` (4 TB). ZFS's cache (the
 ARC) is capped at 8 GiB. The operator reaches it as the SSH alias `pve-mini`, defined in
-`~/.ssh/config` on the operator's machine; the repo never names the address in clear. Its LAN IPv4
-is static (192.168.1.214, reserved on the router). It has no global IPv6.
+`~/.ssh/config` on the operator's machine, and `PVE_HOST` in the secrets names only that alias, so
+the SSH target is never committed in clear. Its LAN IPv4 is static (192.168.1.214, reserved on the
+router). It has no global IPv6.
 
 The first target was a different machine (an i7-7700K), retired on 2026-10-03 before go-live.
 
@@ -38,15 +39,16 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 
 | VM | Role | vCPU | RAM | Disks | Network |
 |---|---|---|---|---|---|
-| 110 `ol` | Open Library API and dump builds | 12 | 24 GB, no ballooning | OS on `local-zfs`; 300 GB data disk on `rpool2`, ext4, mounted at `/srv/ol-data` | `vmbr0`, LAN |
-| 120 `fetcher` | Camoufox page fetcher | 4 | 4 GB, no ballooning | OS on `local-zfs` | `vmbr1`, static `10.20.0.10`, gateway `10.20.0.1` |
+| 110 `ol` | Open Library API and dump builds | 12 | 24 GB, no ballooning | 32 GB OS disk on `local-zfs`; 300 GB data disk on `rpool2`, ext4, mounted at `/srv/ol-data` | `vmbr0`, LAN |
+| 120 `fetcher` | Camoufox page fetcher | 4 | 4 GB, no ballooning | 40 GB OS disk on `local-zfs` | `vmbr1`, static `10.20.0.10`, gateway `10.20.0.1` |
 | 101 `musicbrainz` | MusicBrainz, built by hand | 8 | 16 GB | 1 TB on `rpool2` | LAN |
 
 All guests with `onboot` come back by themselves after a host reboot. VM 101 is not managed by
-`provision`: it never touches it, and `provision` asserts it is still running after a converge. Its
+`provision`, which never touches it. After a converge, and in `--verify`, provision asserts that every
+guest running beforehand other than 110 and 120 (VM 101 included) is still running. Its
 Cloudflare tunnel runs inside the VM.
 
-`vmbr1` is a private NAT bridge. The fetcher sits on it, and the Proxmox firewall drops everything
+`vmbr1` is a private NAT bridge. The fetcher sits on it, resolves DNS through 1.1.1.1 and 1.0.0.1, and the Proxmox firewall drops everything
 the fetcher sends to a private destination (`/etc/pve/firewall/120.fw`, enforced on the host so
 root inside the VM cannot change it). The Open Library data lives on its own disk, so
 `provision --rebuild ol` replaces the OS disk and keeps the data.
@@ -63,24 +65,31 @@ deployment/home-server/provision [mode]
 
 | Mode | What it does |
 |---|---|
-| (none) | Converges the host (DNS, packages, network, firewall, ZFS), creates any missing VM, installs each VM's env and units. A second run reports no changes. |
+| (none) | Converges the host (DNS, packages, network, firewall, the ZFS ARC cap), creates any missing VM, installs each VM's env and units. A second run reports no changes. It does not create ZFS pools or Proxmox storage entries. |
 | `--rebuild ol\|fetcher` | Replaces that VM's OS disk with a fresh cloud image. The data disk is kept. |
-| `--enable-tunnels` | Starts `cloudflared` on both VMs. Run it only after Cloudflare Access is in place. The flag is stored on the host, so a later `--rebuild` keeps it. |
-| `--verify [--external-from user@host] [--recovery]` | Re-runs convergence (minus package upgrades) and checks the result. `--external-from` probes the host's public address from outside the house; `--recovery` kills each service and checks it returns. |
-| `--ref <git ref>` | Sets the ref the VMs track. It is stored on the host. Default `main`. |
+| `--enable-tunnels` | Starts `cloudflared` on both VMs. It dies unless both tunnel tokens are set. Run it only after Cloudflare Access is in place. The flag is stored on the host, so a later `--rebuild` keeps it. |
+| `--verify` | Not read-only: it re-runs convergence (DNS, packages without the upgrade, network, firewall, VM creation), so it can change things, and then fails its idempotence check if anything changed. Check classes: host, VMs, egress (with positive controls, from the VM and the container), idempotence, and pre-existing guests. |
+| `--verify --external-from user@host` | Adds the exposure check: ports 22, 8006, 111 and 3128 on the host's public address, probed from that machine. |
+| `--verify --recovery` | Adds a recovery check: SIGKILLs each service's main process and expects Docker to restart it, then **reboots the host** (`systemctl reboot`), waits up to about 10 minutes, and re-runs the host, VM and egress checks. Ask before running it. |
+| `--ref <ref>` | Sets the repo ref the VMs track, stored on the host, then runs a converge. Default `main`. |
 
-The encrypted house values in `secrets/home-server.env`:
+The keys in `secrets/home-server.env` (SOPS-encrypted). Each VM receives only its own values.
 
-| Key | Meaning |
-|---|---|
-| `PVE_HOST` | What provision SSHes to (the `pve-mini` alias) |
-| `PVE_LAN_IPV4`, `PVE_LAN_GATEWAY4` | The host's static LAN address and the router |
-| `PVE_LAN_DNS` | Optional. The host's resolver. Defaults to `PVE_LAN_GATEWAY4` |
-| `VM_STORAGE` | OS disks and cloud-init drive (`local-zfs`) |
-| `DATA_STORAGE` | The `ol` data disk (`rpool2`) |
-| `IMAGE_STORAGE` | Imported cloud images (`local`) |
+| Key | Needed | Meaning |
+|---|---|---|
+| `PVE_HOST` | every run | What provision SSHes to (the `pve-mini` alias) |
+| `PVE_LAN_IPV4`, `PVE_LAN_GATEWAY4` | every run | The host's static LAN address and the router |
+| `OL_TUNNEL_TOKEN`, `FETCHER_TUNNEL_TOKEN` | `--enable-tunnels` | The two Cloudflare tunnel tokens |
+| `HC_OL_HEARTBEAT`, `HC_OL_DEPLOY`, `HC_OL_REFRESH`, `HC_FETCHER_HEARTBEAT`, `HC_FETCHER_DEPLOY` | optional | healthchecks.io ping URLs; blank means no ping |
+| `VM_STORAGE` | optional | OS disks and cloud-init drive. Default `local-lvm`; `local-zfs` here |
+| `DATA_STORAGE` | optional | The `ol` data disk. Default `VM_STORAGE`; `rpool2` here |
+| `IMAGE_STORAGE` | optional | Imported cloud images. Default `local` |
+| `PVE_LAN_DNS` | optional | The host's resolver. Default `PVE_LAN_GATEWAY4` |
+| `ARC_MAX_BYTES` | optional | ZFS ARC cap. Default 8 GiB |
 
-The file also holds the tunnel tokens, the healthchecks.io ping URLs and each VM's secrets.
+`SSH_PUBKEY_FILE` is an environment variable on the dev machine, not a secret. It defaults to
+`~/.ssh/id_ed25519.pub`, and provision dies if the file is missing. The dev machine also needs
+`sops`, `jq`, `envsubst` and the age key.
 
 Three behaviors:
 
@@ -88,11 +97,14 @@ Three behaviors:
   network kept its old resolver and could not update.
 - **IPv4 is static:** ifupdown2 can't mix `inet dhcp` with `inet6 static` on one bridge (it treats
   the whole bridge as DHCP), so the host takes `PVE_LAN_IPV4` rather than a lease.
-- **It never reboots the host:** after an upgrade that brings a new kernel or ZFS version, it stops
-  before creating or changing any VM and says to reboot. Reboot, then run it again.
+- **It never reboots the host:** if the loaded ZFS module or the running kernel is older than what
+  is installed (after an upgrade in this run or an earlier one), it stops before creating or
+  changing any VM, including before `--rebuild`, and says to reboot. Reboot, then run it again.
 
-Network and firewall changes are applied under an armed automatic revert (`confirm-or-revert`), so
-a change that cuts off SSH rolls back by itself in about two minutes.
+Network and firewall changes are applied under an armed automatic revert (`confirm-or-revert`) that
+fires in about two minutes. The network revert restores `/etc/network/interfaces` and reloads it.
+The firewall revert does not restore the old rules: it sets `enable: 0` in `cluster.fw` and stops
+`pve-firewall`, which leaves the firewall disabled until the next provision run rewrites it.
 
 ## What happens without anyone
 
@@ -100,17 +112,21 @@ a change that cuts off SSH rolls back by itself in about two minutes.
 |---|---|
 | Power cut | BIOS "Restore on AC Power Loss" boots the host. VMs with `onboot` start in order (`ol`, then `fetcher`). Docker starts at boot and every container is `restart: unless-stopped`. A build cut short runs again at the next 03:00 or boot (`ol-refresh.timer`). |
 | A container exits | `restart: unless-stopped` restarts it. |
-| Bad deploy | `the-greatest-deploy.timer` runs `deploy.sh` every 15 minutes. A failed build leaves the running container alone and the deployed SHA where it was, so the next run tries again; each failure pings `fail`. |
+| Bad deploy | `the-greatest-deploy.timer` (boot plus 2 minutes, then every 15 minutes) runs `deploy.sh` every 15 minutes. A failed build leaves the running container alone and the deployed SHA where it was, so the next run tries again; each failure pings `fail`. |
 | Bad dump | `ol-refresh.sh` promotes a version only when every gate passes. A failed build keeps the previous version serving and pings `fail`. If the new API does not report the new date in time, it writes the previous date back. |
 | Box offline | Nothing recovers it. `ol-heartbeat` and `fetcher-heartbeat` stop pinging and healthchecks.io emails Shane. |
 
-Security updates install on both VMs through `unattended-upgrades`. `reboot-if-required.timer`
-reboots a VM at 05:30 only if a reboot is pending and no build lock is held. The host is upgraded
-only by `provision`.
+Security updates install on both VMs through `unattended-upgrades`, and `reboot-if-required.timer`
+reboots a VM at 05:30 only if a reboot is pending and no build lock is held. On the host,
+`unattended-upgrades` installs Debian security updates only; Proxmox packages are upgraded only by
+`provision`, and the host never reboots itself. The one-shot `build` service has no restart policy
+(it runs with `run --rm`); a failed build is retried by the next timer run.
 
 ## Alerts
 
-healthchecks.io, free tier. A missed or failed ping emails Shane.
+healthchecks.io, free tier. A missed or failed ping emails Shane. The periods and graces below are
+settings to create on healthchecks.io; the code only sends the pings. Deploy and refresh also send a
+plain success ping with a message when they defer because a lock or build is held.
 
 | Check | Pinged by | Period / grace |
 |---|---|---|
@@ -127,16 +143,20 @@ built version.
 Whole machine:
 
 1. Install Proxmox from the ISO. Give the host a static LAN IPv4 and reserve that address on the
-   router. *(manual)*
+   router. Create the ZFS pools and the Proxmox storage entries that `VM_STORAGE` and `DATA_STORAGE`
+   name, since provision doesn't. *(manual)*
 2. In the node's Shell, append the dev machine's public key to `/root/.ssh/authorized_keys`.
    *(manual, one command)*
 3. On the dev machine, add the `pve-mini` alias to `~/.ssh/config` and make sure `PVE_HOST`,
    `PVE_LAN_IPV4`, `PVE_LAN_GATEWAY4` and the storage names in `secrets/home-server.env` match.
+   Check that the public key file exists and that `sops`, `jq` and `envsubst` are installed.
    *(manual)*
 4. Run `deployment/home-server/provision`. If it stops and says to reboot, reboot the host (guests
    with `onboot` come back by themselves) and run it again.
-5. Run `provision --enable-tunnels`, once Access is in place (below). The Open Library data
-   rebuilds itself in about 2.5 hours on the Mini.
+5. Put the tunnel tokens and ping URLs into the secrets, then run `provision --enable-tunnels` once
+   Access is in place (below). The Open Library build does not wait for this: its timer starts about
+   10 minutes after the `ol` VM boots. On a fresh box it must download the dumps first, so allow
+   longer than the 2.5 hours measured with the dumps already present.
 6. Run `provision --verify`.
 
 One VM: `provision --rebuild ol|fetcher`. The data disk is kept.
@@ -162,10 +182,11 @@ One VM: `provision --rebuild ol|fetcher`. The data disk is kept.
 If the router, subnet or its address changes, the host's static IPv4 and its DNS no longer match
 the network. Use the console (keyboard and monitor) to fix `address` and `gateway` for `vmbr0` in
 `/etc/network/interfaces`, then `ifreload -a`. Update `PVE_LAN_IPV4`, `PVE_LAN_GATEWAY4` and
-`PVE_LAN_DNS` in `secrets/home-server.env` and reserve the address on the new router. Then re-run
+`PVE_LAN_DNS` in `secrets/home-server.env`, update the `pve-mini` HostName in `~/.ssh/config`, and
+reserve the address on the new router. Then re-run
 `provision`: it resets the host's DNS and re-derives the firewall's `lan` set from the host's new
 route. Provision refuses to continue while `PVE_LAN_IPV4` and the address in
-`/etc/network/interfaces` disagree.
+`/etc/network/interfaces` disagree, but it does not notice a gateway-only change.
 
 ## Measured
 
