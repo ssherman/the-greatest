@@ -26,9 +26,10 @@ module DataImporters
             goodreads_id: :books_work_goodreads_id
           }.freeze
 
-          def initialize(client: nil, new_author_ids: [])
+          def initialize(client: nil, new_author_ids: [], provisional: false)
             @client = client
             @new_author_ids = new_author_ids
+            @provisional = provisional
           end
 
           # Lazy: building the default client constructs a CircuitBreaker
@@ -136,7 +137,7 @@ module DataImporters
             work.author_keys.zip(work.author_names).each_with_index do |(key, name), index|
               imported = ::DataImporters::Books::Author::Importer.call(
                 name: name, open_library_author_key: key, work_titles: [book.title].compact_blank,
-                providers: ::DataImporters::Books::Author::Importer::BOOK_STEP_PROVIDERS
+                providers: ::DataImporters::Books::Author::Importer::BOOK_STEP_PROVIDERS, provisional: @provisional
               )
               author = imported.item
               next unless author&.persisted?

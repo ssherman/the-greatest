@@ -7,9 +7,11 @@ module DataImporters
       # keyword but may be nil or blank for an identifier-only import (e.g. an
       # Open Library work key or ISBN with no title resolved yet).
       class ImportQuery < DataImporters::ImportQuery
-        attr_reader :title, :author_names, :year, :isbn13, :isbn10, :asin, :goodreads_id, :open_library_work_key
+        attr_reader :title, :author_names, :year, :isbn13, :isbn10, :asin, :goodreads_id, :open_library_work_key,
+          :series_name, :series_number, :context_author_names
 
-        SNAPSHOT_KEYS = %i[title author_names year isbn13 isbn10 asin goodreads_id open_library_work_key].freeze
+        SNAPSHOT_KEYS = %i[title author_names year isbn13 isbn10 asin goodreads_id open_library_work_key
+          series_name series_number context_author_names].freeze
 
         # Rebuilds a query from the hash FinderBase#query_snapshot stored on
         # match_decisions.query: one key per attribute above, string keys.
@@ -20,7 +22,12 @@ module DataImporters
           new(title: attributes[:title], **attributes.except(:title))
         end
 
-        def initialize(title:, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [], open_library_work_key: nil)
+        # series_name, series_number and context_author_names are AI context
+        # only (Goodreads import spec §4): Goodreads' Additional Authors mixes
+        # co-authors with translators and illustrators, so no rule treats
+        # those names as creators.
+        def initialize(title:, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [],
+          open_library_work_key: nil, series_name: nil, series_number: nil, context_author_names: [])
           @title = title
           @author_names = Array(author_names)
           @year = year
@@ -36,6 +43,9 @@ module DataImporters
           @asin = Array(asin).compact_blank.uniq
           @goodreads_id = Array(goodreads_id).compact_blank.uniq
           @open_library_work_key = open_library_work_key.presence
+          @series_name = series_name.presence
+          @series_number = series_number.presence
+          @context_author_names = Array(context_author_names).compact_blank.uniq
         end
 
         def valid?

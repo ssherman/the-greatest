@@ -4,11 +4,15 @@ module DataImporters
   # Base class for all importers
   # Orchestrates the import process: find existing, create new, run providers, save
   class ImporterBase
-    def self.call(query: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false)
-      new.call(query: query, item: item, force_providers: force_providers, providers: providers, subject: subject, verify: verify)
+    def self.call(query: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false, match: nil)
+      new.call(query: query, item: item, force_providers: force_providers, providers: providers, subject: subject,
+        verify: verify, match: match)
     end
 
-    def call(query: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false)
+    # match: a Match the caller already got from this importer's finder. It is
+    # used instead of asking again, so a decision is made (and an AI call paid
+    # for) once.
+    def call(query: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false, match: nil)
       # Validate input parameters
       if item.nil? && query.nil?
         raise ArgumentError, "Either item or query must be provided"
@@ -37,17 +41,16 @@ module DataImporters
           success: provider_results.any?(&:success?)
         )
       else
-        match = nil
-
         # Determine the item to work with
         if item.present?
           # Item-based import: use provided item
+          match = nil
           target_item = item
           is_existing_item = true
         else
           # Query-based import: ask the finder. It always answers, and records
           # the answer; `match.record` is nil when nothing matched.
-          match = finder.call(query: query, verify: verify, subject: subject)
+          match ||= finder.call(query: query, verify: verify, subject: subject)
           existing = match.record
           if existing && !force_providers
             return ImportResult.new(

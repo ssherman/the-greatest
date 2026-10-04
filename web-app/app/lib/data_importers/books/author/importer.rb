@@ -13,9 +13,10 @@ module DataImporters
         BOOK_STEP_PROVIDERS = %i[open_library].freeze
 
         def self.call(name: nil, open_library_author_key: nil, birth_year: nil, death_year: nil, alternate_names: [], work_titles: [],
-          item: nil, force_providers: false, providers: nil, subject: nil, verify: false)
+          item: nil, force_providers: false, providers: nil, subject: nil, verify: false, provisional: false)
+          importer = new(provisional: provisional)
           if item.present?
-            super(item: item, force_providers: force_providers, providers: providers)
+            importer.call(item: item, force_providers: force_providers, providers: providers)
           else
             query = ImportQuery.new(
               name: name,
@@ -25,8 +26,14 @@ module DataImporters
               alternate_names: alternate_names,
               work_titles: work_titles
             )
-            super(query: query, force_providers: force_providers, providers: providers, subject: subject, verify: verify)
+            importer.call(query: query, force_providers: force_providers, providers: providers, subject: subject, verify: verify)
           end
+        end
+
+        # provisional: an author this import creates is saved provisional; an
+        # author it matches is returned untouched (Goodreads import spec §9).
+        def initialize(provisional: false)
+          @provisional = provisional
         end
 
         protected
@@ -49,7 +56,8 @@ module DataImporters
             name: query.name,
             birth_year: query.birth_year,
             death_year: query.death_year,
-            alternate_names: query.alternate_names.reject { |alternate| alternate == query.name }
+            alternate_names: query.alternate_names.reject { |alternate| alternate == query.name },
+            provisional: @provisional
           )
         end
       end

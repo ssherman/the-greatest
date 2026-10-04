@@ -124,6 +124,7 @@ module Books
       def merge_all_associations
         capture_gate_state
         merge_editions
+        merge_goodreads_editions
         merge_external_links
         merge_ai_chats
         merge_enrichments
@@ -156,6 +157,14 @@ module Books
       # runs after both merge_all_associations and reconcile_scalars.
       def merge_editions
         @stats[:editions] = source_book.editions.update_all(book_id: target_book.id)
+      end
+
+      # Goodreads editions carry no book-scoped uniqueness (their key is the
+      # Goodreads id and signature), so they simply follow the book. Without
+      # this, dependent: :nullify would unlink them on destroy and every
+      # import that names them would re-resolve.
+      def merge_goodreads_editions
+        @stats[:goodreads_editions] = source_book.goodreads_editions.update_all(book_id: target_book.id)
       end
 
       def merge_external_links

@@ -353,9 +353,9 @@ module DataImporters
             book = ::Books::Book.new(title: "Hadji Murat")
             stub_resolve(resolve_response(verdict: "accept", record: work_with_authors([["OL2A", "Stephen King"], ["OL1A", "Leo Tolstoy"]])))
             ::DataImporters::Books::Author::Importer.expects(:call)
-              .with(name: "Stephen King", open_library_author_key: "OL2A", work_titles: ["Hadji Murat"], providers: [:open_library]).returns(author_result(books_authors(:king)))
+              .with(name: "Stephen King", open_library_author_key: "OL2A", work_titles: ["Hadji Murat"], providers: [:open_library], provisional: false).returns(author_result(books_authors(:king)))
             ::DataImporters::Books::Author::Importer.expects(:call)
-              .with(name: "Leo Tolstoy", open_library_author_key: "OL1A", work_titles: ["Hadji Murat"], providers: [:open_library]).returns(author_result(books_authors(:tolstoy)))
+              .with(name: "Leo Tolstoy", open_library_author_key: "OL1A", work_titles: ["Hadji Murat"], providers: [:open_library], provisional: false).returns(author_result(books_authors(:tolstoy)))
 
             result = @provider.populate(book, query: nil)
 
@@ -367,7 +367,7 @@ module DataImporters
             book = ::Books::Book.new(title: "Hadji Murat")
             stub_resolve(resolve_response(verdict: "accept", record: work_with_authors([["OL1A", nil]])))
             ::DataImporters::Books::Author::Importer.expects(:call)
-              .with(name: nil, open_library_author_key: "OL1A", work_titles: ["Hadji Murat"], providers: [:open_library]).returns(author_result(books_authors(:tolstoy)))
+              .with(name: nil, open_library_author_key: "OL1A", work_titles: ["Hadji Murat"], providers: [:open_library], provisional: false).returns(author_result(books_authors(:tolstoy)))
 
             @provider.populate(book, query: nil)
 
@@ -390,10 +390,10 @@ module DataImporters
             created = ::Books::Author.create!(name: "Anna Brenner")
             stub_resolve(resolve_response(verdict: "accept", record: work_with_authors([["OL77A", "Anna Brenner"], ["OL1A", "Leo Tolstoy"]])))
             ::DataImporters::Books::Author::Importer.expects(:call)
-              .with(name: "Anna Brenner", open_library_author_key: "OL77A", work_titles: ["Hadji Murat"], providers: [:open_library])
+              .with(name: "Anna Brenner", open_library_author_key: "OL77A", work_titles: ["Hadji Murat"], providers: [:open_library], provisional: false)
               .returns(author_result(created, created: true))
             ::DataImporters::Books::Author::Importer.expects(:call)
-              .with(name: "Leo Tolstoy", open_library_author_key: "OL1A", work_titles: ["Hadji Murat"], providers: [:open_library])
+              .with(name: "Leo Tolstoy", open_library_author_key: "OL1A", work_titles: ["Hadji Murat"], providers: [:open_library], provisional: false)
               .returns(author_result(books_authors(:tolstoy)))
 
             provider.populate(::Books::Book.new(title: "Hadji Murat"), query: nil)

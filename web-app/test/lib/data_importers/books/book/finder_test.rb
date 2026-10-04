@@ -69,6 +69,38 @@ module DataImporters
           stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: body.to_json)
         end
 
+        # ---- AI context (Goodreads import spec §4) ----------------------------
+
+        test "the AI is shown the query's series and its other credited names" do
+          query = ImportQuery.new(title: "The Final Empire", author_names: ["Brandon Sanderson"],
+            series_name: "Mistborn", series_number: "1", context_author_names: ["Ken Liu"])
+
+          assert_equal "The Final Empire | by Brandon Sanderson | series: Mistborn #1 | also credited, role unknown: Ken Liu",
+            @finder.describe_query(query)
+        end
+
+        test "the AI prompt carries that context" do
+          SEARCH.stubs(:call).returns([hit(@war_and_peace)])
+          ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new)
+            .with(has_entry(:query_line, regexp_matches(/series: Epics #2/))).returns(@task)
+          @task.stubs(:call).returns(::Services::Ai::Result.new(success: true, ai_chat: ai_chats(:general_chat),
+            data: {selected_index: 0, confidence: "high", reasoning: "no", same_entity_groups: []}))
+
+          @finder.call(query: ImportQuery.new(title: "War and Peace Retold", author_names: ["Leo Tolstoy"],
+            series_name: "Epics", series_number: "2"))
+        end
+
+        test "an other credited name never counts as a creator" do
+          SEARCH.stubs(:call).returns([hit(@war_and_peace)])
+          stub_ai(selected_index: 0, confidence: "high", reasoning: "different author", same_entity_groups: [])
+          query = ImportQuery.new(title: "War and Peace", author_names: ["Somebody Else"], year: 1869,
+            context_author_names: ["Leo Tolstoy"])
+
+          # Were Leo Tolstoy counted as a creator, rule 4 (exact title, creator
+          # and year) would match War and Peace before the AI was asked.
+          assert @finder.call(query: query).unmatched?
+        end
+
         # ---- identifiers (rule 1) ----------------------------------------------
 
         test "a corroborated Open Library key hit is a certain identifier match and stops gathering" do

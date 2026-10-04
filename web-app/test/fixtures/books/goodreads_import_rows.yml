@@ -1,0 +1,43 @@
+# == Schema Information
+#
+# Table name: books_goodreads_import_rows
+#
+#  id                   :bigint           not null, primary key
+#  applied              :jsonb            not null
+#  date_added           :date
+#  date_read            :date
+#  error                :text
+#  exclusive_shelf      :string
+#  notes                :string           default([]), not null, is an Array
+#  outcome              :integer          default("pending"), not null
+#  outcome_detail       :string
+#  rating               :integer
+#  raw                  :jsonb            not null
+#  read_count           :integer
+#  review_body          :text
+#  row_number           :integer          not null
+#  shelf_positions      :jsonb            not null
+#  shelves              :string           default([]), not null, is an Array
+#  created_at           :datetime         not null
+#  updated_at           :datetime         not null
+#  goodreads_edition_id :bigint
+#  import_id            :bigint           not null
+#
+# Indexes
+#
+#  index_books_goodreads_import_rows_on_goodreads_edition_id      (goodreads_edition_id)
+#  index_books_goodreads_import_rows_on_import_id_and_row_number  (import_id,row_number) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (goodreads_edition_id => books_goodreads_editions.id)
+#  fk_rails_...  (import_id => books_goodreads_imports.id) ON DELETE => cascade
+#
+war_and_peace_row:
+  import: regular_user_import
+  row_number: 1
+  goodreads_edition: war_and_peace_edition
+  raw: {"Book Id": "656", "Title": "War and Peace", "Author": "Leo Tolstoy"}
+  exclusive_shelf: read
+  rating: 5
+  outcome: pending

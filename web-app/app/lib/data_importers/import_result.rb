@@ -4,6 +4,9 @@ module DataImporters
   # Aggregated results from all providers for an import operation
   class ImportResult
     attr_reader :item, :provider_results, :success, :match
+    # The authors this import created (the book importer fills it), so a
+    # caller can record what it made without guessing from timestamps.
+    attr_accessor :created_author_ids
 
     def initialize(item:, provider_results:, success:, match: nil, created: false)
       @item = item
@@ -11,6 +14,7 @@ module DataImporters
       @success = success
       @match = match
       @created = created
+      @created_author_ids = []
     end
 
     def success?

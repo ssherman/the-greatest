@@ -32,6 +32,15 @@ module DataImporters
           line
         end
 
+        def describe_query(query)
+          line = super
+          if query.series_name.present?
+            line = "#{line} | series: #{[query.series_name, query.series_number && "##{query.series_number}"].compact.join(" ")}"
+          end
+          line = "#{line} | also credited, role unknown: #{query.context_author_names.join(", ")}" if query.context_author_names.any?
+          line
+        end
+
         protected
 
         def model_class = ::Books::Book
