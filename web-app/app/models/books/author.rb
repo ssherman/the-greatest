@@ -11,6 +11,7 @@
 #  gender                :integer
 #  kind                  :integer          default(0), not null
 #  name                  :string           not null
+#  provisional           :boolean          default(FALSE), not null
 #  slug                  :string           not null
 #  sort_name             :string
 #  created_at            :datetime         not null
@@ -21,6 +22,7 @@
 #  index_books_authors_on_alternate_names  (alternate_names) USING gin
 #  index_books_authors_on_gender           (gender)
 #  index_books_authors_on_kind             (kind)
+#  index_books_authors_on_provisional      (provisional) WHERE provisional
 #  index_books_authors_on_slug             (slug) UNIQUE
 #
 class Books::Author < ApplicationRecord
@@ -64,6 +66,9 @@ class Books::Author < ApplicationRecord
   validates :name, presence: true
   validates :kind, presence: true
 
+  # Same flag and contract as Books::Book.catalog.
+  scope :catalog, -> { where(provisional: false) }
+
   before_validation :normalize_name
   before_validation :normalize_alternate_names
 
@@ -71,7 +76,8 @@ class Books::Author < ApplicationRecord
     {
       name: name,
       alternate_names: alternate_names,
-      category_ids: categories.active.pluck(:id)
+      category_ids: categories.active.pluck(:id),
+      provisional: provisional
     }
   end
 

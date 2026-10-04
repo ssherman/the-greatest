@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_03_213421) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_035819) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -123,6 +123,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_03_213421) do
     t.integer "gender"
     t.integer "kind", default: 0, null: false
     t.string "name", null: false
+    t.boolean "provisional", default: false, null: false
     t.string "slug", null: false
     t.string "sort_name"
     t.datetime "updated_at", null: false
@@ -130,6 +131,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_03_213421) do
     t.index ["alternate_names"], name: "index_books_authors_on_alternate_names", using: :gin
     t.index ["gender"], name: "index_books_authors_on_gender"
     t.index ["kind"], name: "index_books_authors_on_kind"
+    t.index ["provisional"], name: "index_books_authors_on_provisional", where: "provisional"
     t.index ["slug"], name: "index_books_authors_on_slug", unique: true
   end
 
@@ -178,6 +180,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_03_213421) do
     t.integer "first_published_year"
     t.bigint "original_language_id"
     t.string "page_range"
+    t.boolean "provisional", default: false, null: false
     t.string "slug", null: false
     t.string "sort_title"
     t.string "subtitle"
@@ -190,6 +193,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_03_213421) do
     t.index ["default_edition_id"], name: "index_books_books_on_default_edition_id"
     t.index ["first_published_year"], name: "index_books_books_on_first_published_year"
     t.index ["original_language_id"], name: "index_books_books_on_original_language_id"
+    t.index ["provisional"], name: "index_books_books_on_provisional", where: "provisional"
     t.index ["slug"], name: "index_books_books_on_slug", unique: true
   end
 
