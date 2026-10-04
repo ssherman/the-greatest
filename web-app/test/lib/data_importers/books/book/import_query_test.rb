@@ -6,6 +6,16 @@ module DataImporters
   module Books
     module Book
       class ImportQueryTest < ActiveSupport::TestCase
+        test "series and context names survive a snapshot round trip" do
+          query = ImportQuery.new(title: "The Final Empire", series_name: "Mistborn", series_number: "1",
+            context_author_names: ["Ken Liu", "", "Ken Liu"])
+          snapshot = query.instance_variables.to_h { |ivar| [ivar.to_s.delete("@"), query.instance_variable_get(ivar)] }
+
+          rebuilt = ImportQuery.from_snapshot(snapshot)
+
+          assert_equal ["Mistborn", "1", ["Ken Liu"]], [rebuilt.series_name, rebuilt.series_number, rebuilt.context_author_names]
+        end
+
         test "valid with a title alone" do
           query = ImportQuery.new(title: "War and Peace")
 
