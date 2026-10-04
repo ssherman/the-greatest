@@ -62,6 +62,9 @@ module PageFetcher
           conn.response :logger, config.logger, bodies: false do |logger|
             # Faraday logs request headers as `Name: "value"`.
             logger.filter(/(CF-Access-Client-Secret: )"[^"]*"/, '\1"[FILTERED]"')
+            # Access answers with a signed CF_Authorization cookie that admits
+            # its bearer to the app for a day, without the service token.
+            logger.filter(/(CF_Authorization=)[^;"]+/, '\1[FILTERED]')
           end
         end
         conn.adapter Faraday.default_adapter
