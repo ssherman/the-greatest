@@ -31,7 +31,7 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 │   │                                    │     no IPv6, private egress   │
 │   │                                    │     dropped                   │
 │  VM 110 "ol"                        VM 120 "fetcher"                  │
-│   cloudflared ─► api:8080            cloudflared ─► fetcher:8081      │
+│   cloudflared ─► openlibrary:8080     cloudflared ─► page-fetcher:8081 │
 │   build (timer)                                                       │
 │   /srv/ol-data (own disk)           VM 101 "musicbrainz" (by hand)    │
 └────────────────────────────────────────────────────────────────────────┘
@@ -200,8 +200,9 @@ Things that look fine but are not:
 - BIOS: "Restore on AC Power Loss" set to Power On. Remove any installer USB.
 - Cloudflare (Shane's own tool, not scheduled work):
   1. Two dashboard-managed tunnels: `home-ol`, with `ol-api.thegreatestbooks.org` to
-     `http://api:8080`, and `home-fetcher`, with `page-fetcher.thegreatestbooks.org` to
-     `http://fetcher:8081`. Their tokens go in `secrets/home-server.env`.
+     `http://openlibrary:8080` (an alias on the `api` service), and `home-fetcher`, with `page-fetcher.thegreatestbooks.org` to
+     `http://page-fetcher:8081` (an alias on the `fetcher` service; both aliases live in
+     `compose.tunnel.yml`). Their tokens go in `secrets/home-server.env`.
   2. Two Access self-hosted applications on those hostnames, each with one Service Auth policy
      allowing the service token `prod-rails`. Make the token non-expiring or calendar its renewal:
      when it expires, both services fail together.

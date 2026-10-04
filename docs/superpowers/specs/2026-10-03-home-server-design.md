@@ -296,8 +296,8 @@ again at the next 03:00 or boot.
 ### Cloudflare: a checklist for Shane, not plan tasks
 
 1. Two dashboard-managed tunnels: `home-ol`, with `ol-api.thegreatestbooks.org` →
-   `http://api:8080`, and `home-fetcher`, with `page-fetcher.thegreatestbooks.org` →
-   `http://fetcher:8081`. Their tokens go in `secrets/home-server.env`.
+   `http://openlibrary:8080`, and `home-fetcher`, with `page-fetcher.thegreatestbooks.org` →
+   `http://page-fetcher:8081`. Their tokens go in `secrets/home-server.env`.
 2. Two Access self-hosted applications on those hostnames, each with a single Service Auth policy
    allowing the service token `prod-rails`. Make it non-expiring or calendar its renewal: when it
    expires, both services fail together.
@@ -402,3 +402,7 @@ productized later, separately.
   (`PVE_LAN_DNS`, default `PVE_LAN_GATEWAY4`) before apt, because a host moved from another network
   keeps its old resolver. It never reboots the host: after an upgrade that brings a new kernel or
   ZFS version it stops before creating or changing any VM and says to reboot.
+
+> Note 2026-10-04: the tunnel routes use network aliases, `openlibrary` on `api` and `page-fetcher` on
+> `fetcher` (in `compose.tunnel.yml`). Where this spec says `api:8080` or `fetcher:8081` for
+> cloudflared, read `openlibrary:8080` and `page-fetcher:8081`; the compose service names are unchanged.

@@ -27,6 +27,12 @@ t_off_by_default() { ! cfg ol | jq -e '.services | has("cloudflared")' >/dev/nul
 t_fetcher_untouched() {
   cfg fetcher | jq -e '.services.fetcher.mem_limit != null and (.services | has("cloudflared") | not)' >/dev/null
 }
+t_api_alias() {
+  cfg ol | jq -e '.services.api.networks | has("default") and (.default.aliases | index("openlibrary") != null)' >/dev/null
+}
+t_fetcher_alias() {
+  cfg fetcher | jq -e '.services.fetcher.networks | has("default") and (.default.aliases | index("page-fetcher") != null)' >/dev/null
+}
 
 if ! command -v docker >/dev/null; then echo "SKIP  docker not installed"; exit 0; fi
 check "build is capped at 10 CPUs and 8GB" t_build
@@ -34,4 +40,6 @@ check "api gets 6GB and a read-only /srv/ol-data" t_api
 check "cloudflared is a pinned version" t_pinned
 check "cloudflared is off until the tunnel profile is on" t_off_by_default
 check "the fetcher service is unchanged" t_fetcher_untouched
+check "api is on the default network with alias openlibrary" t_api_alias
+check "fetcher is on the default network with alias page-fetcher" t_fetcher_alias
 finish
