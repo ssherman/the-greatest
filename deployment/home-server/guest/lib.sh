@@ -24,10 +24,12 @@ log() { printf '%s %s\n' "$(date -Is)" "$*"; }
 
 # hc_ping <url> [start|fail] [message]: report to healthchecks.io. A blank url
 # (not configured yet) is a no-op, and an undeliverable ping is logged, never
-# fatal: an outage of the monitor must not fail the thing it monitors.
+# fatal: an outage of the monitor must not fail the thing it monitors. The URL
+# is never logged: its path is the check's credential.
 hc_ping() {
   local url="${1:-}" suffix="${2:-}" message="${3:-}"
   [ -n "$url" ] || return 0
   if [ -n "$suffix" ]; then url="$url/$suffix"; fi
-  curl -fsS -m 10 --retry 3 -o /dev/null --data-raw "$message" "$url" || log "could not ping $url"
+  curl -fsS -m 10 --retry 3 -o /dev/null --data-raw "$message" "$url" ||
+    log "could not ping healthchecks.io (${suffix:-success})"
 }

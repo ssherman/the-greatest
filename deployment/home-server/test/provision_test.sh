@@ -29,17 +29,25 @@ secrets() {
     load_secrets && env
   )
 }
+# secrets_has <plaintext> <exact line>: captured first, never piped. Under
+# pipefail, `secrets | grep -q` fails when grep exits on its match while env
+# is still writing (SIGPIPE), which a CI runner's large environment hits.
+secrets_has() {
+  local out
+  out="$(secrets "$1")" || return 1
+  grep -qxF -- "$2" <<<"$out"
+}
 t_single_trailing_equals() {
-  secrets $'PVE_HOST=pve-test\nOL_TUNNEL_TOKEN=eyJhIjoiYiJ9=\n' | grep -qx 'OL_TUNNEL_TOKEN=eyJhIjoiYiJ9='
+  secrets_has $'PVE_HOST=pve-test\nOL_TUNNEL_TOKEN=eyJhIjoiYiJ9=\n' 'OL_TUNNEL_TOKEN=eyJhIjoiYiJ9='
 }
 t_double_trailing_equals() {
-  secrets $'PVE_HOST=pve-test\nFETCHER_TUNNEL_TOKEN=eyJh==\n' | grep -qx 'FETCHER_TUNNEL_TOKEN=eyJh=='
+  secrets_has $'PVE_HOST=pve-test\nFETCHER_TUNNEL_TOKEN=eyJh==\n' 'FETCHER_TUNNEL_TOKEN=eyJh=='
 }
 t_equals_in_middle() {
-  secrets $'PVE_HOST=pve-test\nHC_OL_DEPLOY=https://hc.test/x?a=1&b=2\n' | grep -qx 'HC_OL_DEPLOY=https://hc.test/x?a=1&b=2'
+  secrets_has $'PVE_HOST=pve-test\nHC_OL_DEPLOY=https://hc.test/x?a=1&b=2\n' 'HC_OL_DEPLOY=https://hc.test/x?a=1&b=2'
 }
 t_last_line_without_newline() {
-  secrets $'PVE_HOST=pve-test\nOL_TUNNEL_TOKEN=abc=' | grep -qx 'OL_TUNNEL_TOKEN=abc='
+  secrets_has $'PVE_HOST=pve-test\nOL_TUNNEL_TOKEN=abc=' 'OL_TUNNEL_TOKEN=abc='
 }
 t_non_matching_lines_ignored() {
   local out
@@ -48,8 +56,8 @@ t_non_matching_lines_ignored() {
     ! grep -q '^NO_EQUALS_SIGN' <<<"$out" && ! grep -q 'COMMENT' <<<"$out"
 }
 t_value_is_not_shell() {
-  secrets $'PVE_HOST=pve-test\nOL_TUNNEL_TOKEN=$(touch /nonexistent/x) `id`\n' |
-    grep -qxF 'OL_TUNNEL_TOKEN=$(touch /nonexistent/x) `id`'
+  secrets_has $'PVE_HOST=pve-test\nOL_TUNNEL_TOKEN=$(touch /nonexistent/x) `id`\n' \
+    'OL_TUNNEL_TOKEN=$(touch /nonexistent/x) `id`'
 }
 t_failing_sops_dies() {
   local out rc=0

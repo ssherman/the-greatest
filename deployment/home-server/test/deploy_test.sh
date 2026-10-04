@@ -136,4 +136,11 @@ check "tunnels off and no cloudflared running: nothing is removed" t_tunnels_off
 check "tunnels on: cloudflared is brought up, never removed" t_tunnels_on_keeps_it
 check "a no-op ol deploy does not care about the build lock" t_ol_noop_ignores_lock
 check "ol does not deploy under a running build" t_ol_build_running
+# The ping URL's path is the check's credential; the journal must never see it.
+t_failed_ping_hides_url() {
+  setup; stub curl 'exit 6'
+  deploy && grep -q 'could not ping healthchecks.io (success)' "$SANDBOX/log/out" &&
+    ! grep -q 'hc\.test' "$SANDBOX/log/out"
+}
+check "an undeliverable ping is logged without its URL" t_failed_ping_hides_url
 finish
