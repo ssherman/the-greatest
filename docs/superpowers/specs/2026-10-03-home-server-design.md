@@ -126,6 +126,9 @@ reboots itself**; `provision` prints when a newer kernel is waiting.
 
 - `vmbr0` keeps its static IPv6 configuration and gains `inet dhcp`. Nothing depends on the IPv4
   address staying the same: SSH uses IPv6 and the tunnels dial out.
+  *(Superseded: IPv4 is static, `PVE_LAN_IPV4`/`PVE_LAN_GATEWAY4`, because ifupdown2 cannot mix
+  `inet dhcp` with `inet6 static` on one bridge, and SSH uses IPv4. See §12 and
+  `docs/features/home-server.md`.)*
 - `vmbr1`: a private bridge, `10.20.0.0/24`, host at `10.20.0.1`, no IPv6. The host NATs it out
   through `vmbr0`'s IPv4 address. The plan picks the mechanism (a Proxmox SDN Simple zone with SNAT,
   or a plain bridge plus a masquerade rule); the requirement is that the NAT and the filtering
@@ -395,3 +398,7 @@ productized later, separately.
 - **Guests provision didn't create are never touched.** Verify asserts that every VM running
   before it started is still running afterwards.
 - **Access:** the Mini is the SSH alias `pve-mini`, and `PVE_HOST` names it.
+- **DNS convergence and the reboot guard.** `provision` sets the host's DNS to the LAN router
+  (`PVE_LAN_DNS`, default `PVE_LAN_GATEWAY4`) before apt, because a host moved from another network
+  keeps its old resolver. It never reboots the host: after an upgrade that brings a new kernel or
+  ZFS version it stops before creating or changing any VM and says to reboot.
