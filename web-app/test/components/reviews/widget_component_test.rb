@@ -48,5 +48,13 @@ module Reviews
 
       assert_selector "button[type='button'][data-action='click->reviews--widget#open']"
     end
+
+    test "labels a review that has no rating" do
+      review = Review.new(id: 1, rating: nil, body: "<p>No stars.</p>")
+      render_inline(Reviews::WidgetComponent.new(reviewable: books_books(:got), review: review))
+
+      assert_selector "[role='img'][aria-label='Reviewed without a rating']"
+      assert_selector "[data-testid='review-widget-label']", text: "Edit your review"
+    end
   end
 end

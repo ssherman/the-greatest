@@ -205,7 +205,7 @@
                           <%= review.reviewable.title %>
                         <% end %>
                       </td>
-                      <td class="tabular-nums"><%= review.rating %></td>
+                      <td class="tabular-nums"><%= review.rating || "—" %></td>
                       <td class="max-w-xs truncate [overflow-wrap:anywhere]">
                         <%= review.title.presence || review.body&.truncate(60) || "Rating only" %>
                       </td>

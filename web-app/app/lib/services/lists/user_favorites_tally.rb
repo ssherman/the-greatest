@@ -63,12 +63,16 @@ module Services
       # list_type is looked up through the subclass because the enum integers are
       # declared per subclass; every one of them happens to use 0 for :favorites,
       # but reading it from the class keeps that from being load-bearing.
+      #
+      # Provisional imports are filtered here, before ballots are built, so they
+      # neither score nor dilute a voter's mass.
       def load_ballots
         favorites = @user_list_class.list_types.fetch("favorites")
 
-        rows = ::UserListItem
+        relation = ::UserListItem
           .joins(:user_list)
           .where(user_lists: {type: @user_list_class.name, list_type: favorites})
+        rows = @user_list_class.catalog_items(relation)
           .order(Arel.sql("user_list_items.user_list_id, user_list_items.position, user_list_items.id"))
           .pluck(
             Arel.sql("user_list_items.user_list_id"),

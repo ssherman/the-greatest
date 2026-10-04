@@ -229,5 +229,26 @@ module Books
       assert_equal [book.id], ranked_books.map(&:id)
       assert_equal 7, ranked_books.first.ranked_position
     end
+
+    test "a provisional author renders but is never indexable" do
+      @author.update!(provisional: true)
+
+      get "/author/#{@author.slug}"
+
+      assert_response :success
+      refute @controller.view_assigns["indexable"]
+    end
+
+    test "the author's book lists leave out provisional books" do
+      provisional = ::Books::Book.create!(title: "An Unapproved Tolstoy", provisional: true)
+      ::Books::BookAuthor.create!(book: provisional, author: @author, role: :author, position: 9)
+
+      get "/author/#{@author.slug}/all-books"
+
+      assert_response :success
+      book_ids = @controller.view_assigns["books"].map(&:id)
+      refute_includes book_ids, provisional.id
+      assert_includes book_ids, books_books(:war_and_peace).id
+    end
   end
 end

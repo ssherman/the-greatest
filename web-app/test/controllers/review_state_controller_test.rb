@@ -88,4 +88,17 @@ class ReviewStateControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal "He ||dies||.\n\nSecond paragraph.", response.parsed_body["review"]["body"]
   end
+
+  test "returns a null rating for a review written without one" do
+    book = books_books(:got)
+    Review.create!(user: @user, reviewable: book, body: "<p>No stars.</p>")
+    sign_in_as(@user, stub_auth: true)
+
+    get review_state_path(reviewable_type: "Books::Book", reviewable_id: book.id), as: :json
+
+    assert_response :success
+    review = response.parsed_body["review"]
+    assert_not_nil review
+    assert_nil review["rating"]
+  end
 end

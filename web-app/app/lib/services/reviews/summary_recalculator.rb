@@ -25,9 +25,12 @@ module Services
     # snapshot, so a concurrent write committing in between could insert a ghost row
     # (reviews vanished after the check) or delete a live one (a review arrived after
     # the check). Two unconditional statements have no such window.
+    #
+    # ratings_count is COUNT(rating), not COUNT(*): an unrated review is a text
+    # review, and counting it as a rating would drag every average down.
     class SummaryRecalculator
       AGGREGATES = <<~SQL.freeze
-        COUNT(*),
+        COUNT(rating),
         COALESCE(SUM(rating), 0),
         COUNT(*) FILTER (WHERE body IS NOT NULL),
         COUNT(*) FILTER (WHERE rating = 1),

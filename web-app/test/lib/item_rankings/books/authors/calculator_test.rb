@@ -171,6 +171,30 @@ module ItemRankings
           assert_not_empty result.errors
           assert_equal 0, @config.ranked_items.count
         end
+
+        test "leaves provisional authors out of the ranking" do
+          credit(books_books(:war_and_peace), @tolstoy)
+          credit(books_books(:got), @king)
+          rank_book(books_books(:war_and_peace), 100)
+          rank_book(books_books(:got), 50)
+          @king.update!(provisional: true)
+
+          @calculator.call
+
+          assert_equal [@tolstoy.id], RankedItem.where(ranking_configuration: @config).pluck(:item_id)
+        end
+
+        test "a provisional book's score does not count toward its author" do
+          credit(books_books(:war_and_peace), @tolstoy)
+          credit(books_books(:got), @king)
+          rank_book(books_books(:war_and_peace), 100)
+          rank_book(books_books(:got), 50)
+          books_books(:got).update!(provisional: true)
+
+          @calculator.call
+
+          assert_equal [@tolstoy.id], RankedItem.where(ranking_configuration: @config).pluck(:item_id)
+        end
       end
     end
   end

@@ -10,6 +10,7 @@
 #  description          :text
 #  first_published_year :integer
 #  page_range           :string
+#  provisional          :boolean          default(FALSE), not null
 #  slug                 :string           not null
 #  sort_title           :string
 #  subtitle             :string
@@ -27,6 +28,7 @@
 #  index_books_books_on_default_edition_id    (default_edition_id)
 #  index_books_books_on_first_published_year  (first_published_year)
 #  index_books_books_on_original_language_id  (original_language_id)
+#  index_books_books_on_provisional           (provisional) WHERE provisional
 #  index_books_books_on_slug                  (slug) UNIQUE
 #
 # Foreign Keys
@@ -137,6 +139,12 @@ class Books::Book < ApplicationRecord
 
   scope :selectable, -> { where(book_kind: :standalone) }
 
+  # Imported and not yet approved by an admin (Goodreads import spec §9). Every
+  # public surface reads through this; the import finder deliberately does not, so
+  # a second import of the same book finds the provisional copy instead of making
+  # another.
+  scope :catalog, -> { where(provisional: false) }
+
   def release_year
     first_published_year
   end
@@ -230,7 +238,8 @@ class Books::Book < ApplicationRecord
       country_ids: countries.map(&:id),
       book_length: self.class.book_lengths[book_length],
       ranked: list_items.any?,
-      ranked_position: primary_ranked_item&.rank
+      ranked_position: primary_ranked_item&.rank,
+      provisional: provisional
     }
   end
 

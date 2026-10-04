@@ -3,7 +3,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 const BASE_URL = 'https://dev-new.thegreatestbooks.org';
 const READING_LIST = "Books I'm Reading";
 const READ_LIST = "Books I've Read";
-const FIRST_BOOK = { path: '/book/nightmare-abbey', title: 'Nightmare Abbey' };
+const FIRST_BOOK = { path: '/book/headlong-hall', title: 'Headlong Hall' };
 const SECOND_BOOK = { path: '/book/war-and-peace', title: 'War and Peace' };
 const TARGET_COUNT = 5;
 

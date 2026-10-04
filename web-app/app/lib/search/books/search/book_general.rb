@@ -15,8 +15,9 @@ module Search
           size = options[:size] || 10
           from = options[:from] || 0
           book_kind = options.fetch(:book_kind, "standalone")
+          include_provisional = options.fetch(:include_provisional, false)
 
-          query_definition = build_query_definition(text, min_score, size, from, book_kind)
+          query_definition = build_query_definition(text, min_score, size, from, book_kind, include_provisional: include_provisional)
 
           Rails.logger.debug { "Book search query: #{query_definition.inspect}" }
 
@@ -24,7 +25,7 @@ module Search
           extract_hits_with_scores(response)
         end
 
-        def self.build_query_definition(text, min_score, size, from, book_kind = "standalone")
+        def self.build_query_definition(text, min_score, size, from, book_kind = "standalone", include_provisional: false)
           cleaned_text = ::Search::Shared::Utils.normalize_search_text(text)
 
           should_clauses = [
@@ -44,6 +45,7 @@ module Search
             query: ::Search::Shared::Utils.build_bool_query(
               should: should_clauses,
               filter: book_kind.nil? ? [] : [{term: {book_kind: book_kind}}],
+              must_not: include_provisional ? [] : [::Search::Books::BookIndex::EXCLUDE_PROVISIONAL],
               minimum_should_match: 1
             )
           }

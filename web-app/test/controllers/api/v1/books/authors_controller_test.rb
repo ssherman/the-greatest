@@ -27,6 +27,15 @@ module Api
 
         def json = response.parsed_body.deep_symbolize_keys
 
+        test "show of a provisional author is a 404 problem" do
+          @tolstoy.update!(provisional: true)
+
+          get "/api/v1/authors/#{@tolstoy.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+
+          assert_response :not_found
+        end
+
         def attach_primary_image(author)
           image = Image.new(parent: author, primary: true)
           image.file.attach(io: StringIO.new("fake image data"), filename: "#{author.slug}.jpg", content_type: "image/jpeg")

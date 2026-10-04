@@ -5,14 +5,18 @@
      data-action="click->reviews--spoiler#reveal keydown->reviews--spoiler#revealOnKey">
   <div class="card-body">
     <h2 class="card-title text-xl">Ratings &amp; Reviews</h2>
-    <p class="text-sm text-base-content/70">
-      <span class="font-semibold tabular-nums"><%= summary.rounded_average_rating %></span>
-      out of 5 · <%= pluralize(summary.ratings_count, "rating") %>
-    </p>
+    <% if summary.rated? %>
+      <p class="text-sm text-base-content/70">
+        <span class="font-semibold tabular-nums"><%= summary.rounded_average_rating %></span>
+        out of 5 · <%= pluralize(summary.ratings_count, "rating") %>
+      </p>
 
-    <div class="mt-4">
-      <%= render Reviews::HistogramComponent.new(summary: summary) %>
-    </div>
+      <div class="mt-4">
+        <%= render Reviews::HistogramComponent.new(summary: summary) %>
+      </div>
+    <% else %>
+      <p class="text-sm text-base-content/70">No ratings yet</p>
+    <% end %>
 
     <% if reviews_list.any? %>
       <div class="mt-6 space-y-4">

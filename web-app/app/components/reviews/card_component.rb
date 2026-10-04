@@ -17,7 +17,7 @@ module Reviews
     end
 
     def render?
-      summary&.rated?
+      summary&.any_reviews?
     end
 
     private

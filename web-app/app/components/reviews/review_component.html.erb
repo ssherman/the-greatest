@@ -1,6 +1,8 @@
 <article class="border-t border-base-300 pt-4 first:border-t-0 first:pt-0" data-testid="review">
   <div class="flex flex-wrap items-center justify-between gap-2">
-    <%= render Reviews::StarsComponent.new(rating: review.rating, label: stars_label) %>
+    <% if review.rating %>
+      <%= render Reviews::StarsComponent.new(rating: review.rating, label: stars_label) %>
+    <% end %>
     <time datetime="<%= review.created_at.iso8601 %>" class="text-sm text-base-content/60"><%= written_at %></time>
   </div>
 

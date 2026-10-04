@@ -5,6 +5,8 @@
   content_for :meta_description, "Books similar to #{@book.title}#{" by #{author_names}" if author_names.present?}, ranked by shared genres, subjects and settings."
 %>
 
+<%= render Books::ProvisionalNoticeComponent.new(record: @book) %>
+
 <div class="mb-6">
   <h1 class="text-3xl font-bold">Books similar to <%= @book.title %></h1>
   <p class="mt-2">

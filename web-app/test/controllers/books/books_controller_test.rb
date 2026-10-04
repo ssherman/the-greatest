@@ -543,6 +543,35 @@ module Books
     #
     # Deliberately not declared `private`, for the same reason count_queries below
     # is not.
+    test "a provisional book renders but is never indexable, even when ranked" do
+      @book.update!(provisional: true)
+      RankedItem.create!(item: @book, ranking_configuration: @rc, rank: 1, score: 100)
+
+      get "/book/#{@book.slug}"
+
+      assert_response :success
+      refute @controller.view_assigns["indexable"]
+      assert_select "meta[name=robots][content^=noindex]"
+    end
+
+    test "the similar page of a provisional book is never indexable" do
+      book = books_books(:crime_and_punishment)
+      book.update!(provisional: true)
+      RankedItem.create!(item: book, ranking_configuration: @rc, rank: 1, score: 100)
+      ::Services::Books::SimilarBooks.stubs(:call).returns(
+        ::Services::Books::SimilarBooks::Result.new(
+          success?: true,
+          data: {books: [books_books(:war_and_peace)], more_available: false},
+          errors: []
+        )
+      )
+
+      get book_similar_url(slug: book.slug)
+
+      assert_response :success
+      refute @controller.view_assigns["indexable"]
+    end
+
     def assert_unroutable(path)
       get path
 

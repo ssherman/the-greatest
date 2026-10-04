@@ -62,6 +62,7 @@ module ItemRankings
                    COUNT(*) AS book_count,
                    SUM(ri.score) AS total_score
             FROM ranked_items ri
+            JOIN books_books b ON b.id = ri.item_id
             JOIN books_book_authors ba ON ba.book_id = ri.item_id
             JOIN books_authors a ON a.id = ba.author_id
             WHERE ri.item_type = 'Books::Book'
@@ -69,6 +70,8 @@ module ItemRankings
               AND ri.score > 0
               AND ba.role = #{::Books::BookAuthor.roles[:author].to_i}
               AND a.exclude_from_rankings = FALSE
+              AND a.provisional = FALSE
+              AND b.provisional = FALSE
             GROUP BY ba.author_id
           SQL
         end
