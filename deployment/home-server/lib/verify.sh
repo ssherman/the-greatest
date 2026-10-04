@@ -75,6 +75,7 @@ verify_vms() {
     expect "$role: running" on_host "qm status $VMID | grep -q running"
     expect "$role: starts on boot" on_host "qm config $VMID | grep -qx 'onboot: 1'"
     expect "$role: cloud-init done" vm_ssh "$role" "cloud-init status | grep -q done"
+    expect "$role: cloud-init instance-id is pinned" vm_ssh "$role" "sudo grep -qx the-greatest-$role /var/lib/cloud/data/instance-id"
   done
   expect "fetcher: /health answers" vm_ssh fetcher "curl -fsS 127.0.0.1:8081/health"
   if vm_ssh ol "test -f /srv/ol-data/current-version"; then
@@ -145,6 +146,7 @@ verify_egress() {
     done
   fi
   expect "egress: fetcher has no IPv6 address" vm_ssh fetcher "! ip -6 -o addr | grep -v ' lo ' | grep -q inet6"
+  expect "egress: IPv6 is off on the fetcher's eth0" vm_ssh fetcher "grep -qx 1 /proc/sys/net/ipv6/conf/eth0/disable_ipv6"
   expect "egress: fetcher reaches the public internet" vm_ssh fetcher "curl -fsS -m 10 -o /dev/null https://www.wikipedia.org"
   expect "egress: fetcher container reaches the public internet (DNS included)" tcp_from_fetcher_container www.wikipedia.org 443
 }

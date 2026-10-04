@@ -134,6 +134,35 @@ t_runcmd_fail_fast() {
   ruby -ryaml -e 'c = YAML.load_file(ARGV[0])["runcmd"].find { |r| r.is_a?(Array) }; exit(c[0] == "bash" && c[1] =~ /e/ && c[2] == "pipefail" && c.last.include?("first-boot.sh") ? 0 : 1)' "$SANDBOX/ol.yaml"
 }
 
+t_meta_data() {
+  render_meta_data ol "$SANDBOX/ol.meta" && render_meta_data fetcher "$SANDBOX/fetcher.meta" &&
+    printf 'instance-id: the-greatest-ol\nlocal-hostname: ol\n' | cmp -s - "$SANDBOX/ol.meta" &&
+    printf 'instance-id: the-greatest-fetcher\nlocal-hostname: fetcher\n' | cmp -s - "$SANDBOX/fetcher.meta"
+}
+t_cicustom_names_both() {
+  vm_spec fetcher &&
+    [ "$(cicustom)" = "user=local:snippets/fetcher-user-data.yaml,meta=local:snippets/fetcher-meta-data.yaml" ]
+}
+# converge_vm_settings <cicustom line>: run against a VM whose config is
+# otherwise in order; prints the qm set calls it made.
+converge_with() {
+  (
+    vm_spec fetcher
+    CFG="$(printf 'cores: %s\nmemory: %s\nballoon: 0\nonboot: 1\nstartup: %s\n%s\n' "$CORES" "$MEM" "$STARTUP" "$1")"
+    # shellcheck disable=SC2317,SC2329 # called by converge_vm_settings
+    on_host() { case "$*" in "qm config"*) echo "$CFG" ;; *) echo "on_host $*" ;; esac; }
+    converge_vm_settings 2>/dev/null
+  )
+}
+t_converge_pins_instance_id() {
+  converge_with "cicustom: user=local:snippets/fetcher-user-data.yaml" |
+    grep -q -- '--cicustom user=local:snippets/fetcher-user-data.yaml,meta=local:snippets/fetcher-meta-data.yaml' &&
+    [ -z "$(converge_with "cicustom: user=local:snippets/fetcher-user-data.yaml,meta=local:snippets/fetcher-meta-data.yaml")" ]
+}
+t_clone_repeatable() {
+  grep -qF '[ -d /opt/the-greatest/.git ] || git clone --depth 1' "$SANDBOX/ol.yaml"
+}
+
 t_tmpdirs_cleaned() {
   local out
   out="$(bash -c '. "$1/lib/common.sh"; new_tmpdir a; new_tmpdir b; echo "$a $b"; die gone' _ "$HS_DIR" 2>/dev/null)"
@@ -141,6 +170,10 @@ t_tmpdirs_cleaned() {
   set -- $out
   [ -n "${1:-}" ] && [ -n "${2:-}" ] && [ ! -e "$1" ] && [ ! -e "$2" ]
 }
+check "each VM's meta-data pins a fixed instance-id" t_meta_data
+check "cicustom names both the user-data and the meta-data snippet" t_cicustom_names_both
+check "converge adds the meta-data snippet to an older VM, and leaves a current one alone" t_converge_pins_instance_id
+check "the runcmd can run again over an existing checkout" t_clone_repeatable
 check "temp dirs holding rendered secrets are removed even when provision dies" t_tmpdirs_cleaned
 check "a key comment containing ' #' stays inside the YAML string" t_key_with_comment
 check "docker, clone and first-boot run as one fail-fast script" t_runcmd_fail_fast

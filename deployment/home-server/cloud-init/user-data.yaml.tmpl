@@ -47,5 +47,7 @@ runcmd:
       DEBIAN_FRONTEND=noninteractive apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       systemctl enable --now docker
       usermod -aG docker debian
-      git clone --depth 1 --branch ${REPO_REF} https://github.com/ssherman/the-greatest /opt/the-greatest
+      # A VM whose instance-id changed runs this again over its live checkout,
+      # which deploy.sh owns from then on.
+      [ -d /opt/the-greatest/.git ] || git clone --depth 1 --branch ${REPO_REF} https://github.com/ssherman/the-greatest /opt/the-greatest
       /opt/the-greatest/deployment/home-server/guest/first-boot.sh

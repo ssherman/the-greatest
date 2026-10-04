@@ -275,3 +275,13 @@ downloaded and ended 01:36 UTC.
 - **Shell test stubs must not call themselves:** A stub that called its own command by name
   (`command chmod`) fork-bombed the dev machine. Stubs now wrap real tools with `command -p`, and
   `stub()` has a depth guard.
+- **ol's first env push arrived empty:** `vm_ssh` looks up ol's address with an ssh to the host,
+  and that ssh read the stdin meant for the VM. `vm_ip` now runs with `</dev/null`, and
+  `push_vm_env` re-hashes the installed file before it deploys.
+- **The first host reboot re-ran cloud-init over both VMs:** Proxmox derives the instance-id from
+  a hash of the cloud-init files, and the env lives in the user-data, so every env change made the
+  next boot a "new instance". Each VM now has a meta-data snippet with a fixed instance-id
+  (`the-greatest-<name>`), and the runcmd skips the clone when a checkout exists.
+- **The fetcher's IPv6 came back after a reboot:** systemd-networkd brings eth0 up with
+  link-local addressing and turns IPv6 back on, undoing the sysctl. `first-boot.sh` adds a netplan
+  file with `link-local: []`, and `--verify` checks `disable_ipv6` on eth0 itself.

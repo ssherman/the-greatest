@@ -37,7 +37,15 @@ case "$ROLE" in
     ;;
   fetcher)
     # No IPv6 at all: every device in the house has a public IPv6 address (spec §4).
-    printf 'net.ipv6.conf.all.disable_ipv6 = 1\nnet.ipv6.conf.default.disable_ipv6 = 1\n' \
+    # The sysctl alone held only until the first reboot: networkd brings eth0 up
+    # with link-local addressing and turns IPv6 back on for it. With link-local
+    # off it leaves the sysctl alone.
+    printf 'network:\n  version: 2\n  ethernets:\n    eth0:\n      link-local: []\n      accept-ra: false\n' |
+      install -m 0600 /dev/stdin /etc/netplan/90-no-ipv6.yaml
+    netplan generate
+    networkctl reload
+    networkctl reconfigure eth0
+    printf 'net.ipv6.conf.all.disable_ipv6 = 1\nnet.ipv6.conf.default.disable_ipv6 = 1\nnet.ipv6.conf.eth0.disable_ipv6 = 1\n' \
       >/etc/sysctl.d/90-no-ipv6.conf
     sysctl -q --system || log "sysctl --system failed"
     ;;

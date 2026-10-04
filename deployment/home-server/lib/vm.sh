@@ -109,11 +109,23 @@ EOF
   on_host "$script" || die "could not fetch and verify $DEBIAN_IMAGE (any previous good copy is untouched)"
 }
 
+# render_meta_data <role> <out>: a fixed instance-id. Proxmox otherwise derives
+# it from a hash of the cloud-init files, so every env change made the next
+# boot a "new instance" and re-ran first boot over the running VM.
+render_meta_data() {
+  vm_spec "$1"
+  printf 'instance-id: the-greatest-%s\nlocal-hostname: %s\n' "$NAME" "$NAME" >"$2"
+}
+
+cicustom() { echo "user=local:snippets/$NAME-user-data.yaml,meta=local:snippets/$NAME-meta-data.yaml"; }
+
 write_snippet() { # write_snippet <role>; leaves the rendered env in $ENV_RENDERED
   local tmp; new_tmpdir tmp
   render_vm_env "$1" "$tmp/env"
   render_user_data "$1" "$tmp/env" "$tmp/user-data"
+  render_meta_data "$1" "$tmp/meta-data"
   put_host "$tmp/user-data" "/var/lib/vz/snippets/$NAME-user-data.yaml" 0600
+  put_host "$tmp/meta-data" "/var/lib/vz/snippets/$NAME-meta-data.yaml" 0600
   ENV_RENDERED="$tmp/env"
 }
 
@@ -127,7 +139,7 @@ create_vm() {
   on_host "qm create $VMID --name $NAME --machine q35 --cpu host --cores $CORES --memory $MEM --balloon 0 \
     --scsihw virtio-scsi-single --net0 $NET --agent enabled=1 --onboot 1 --startup $STARTUP \
     --ostype l26 --serial0 socket --vga serial0 --ide2 $(vm_storage):cloudinit \
-    --ipconfig0 $IPCONFIG --cicustom user=local:snippets/$NAME-user-data.yaml" || die "qm create $VMID failed"
+    --ipconfig0 $IPCONFIG --cicustom $(cicustom)" || die "qm create $VMID failed"
   local half="VM $VMID ($NAME) was created but not finished and is left as it is; destroying it (qm destroy $VMID --purge) and re-running provision is Shane's call"
   if [ -n "$NAMESERVER" ]; then on_host "qm set $VMID --nameserver '$NAMESERVER' >/dev/null" || die "$half"; fi
   attach_os_disk || die "$half"
@@ -164,6 +176,12 @@ converge_vm_settings() {
   if [ "$drift" = 1 ]; then
     on_host "qm set $VMID --cores $CORES --memory $MEM --balloon 0 --onboot 1 --startup $STARTUP >/dev/null"
     note_change "VM $VMID settings (takes effect at its next restart)"
+  fi
+  # A VM created before the instance-id was pinned sees the change at its next
+  # boot as one last new instance; the user-data's runcmd is safe to repeat.
+  if ! grep -qx "cicustom: $(cicustom)" <<<"$cfg"; then
+    on_host "qm set $VMID --cicustom $(cicustom) >/dev/null"
+    note_change "VM $VMID cloud-init meta-data (fixed instance-id)"
   fi
 }
 
