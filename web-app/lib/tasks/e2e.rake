@@ -9,6 +9,10 @@ REJECT_LINK_AUTHOR = "E2E Reject Link Seed"
 REJECT_LINK_QID = "Q4115189"
 REJECT_LINK_URL = "https://en.wikipedia.org/wiki/Wikipedia:Sandbox"
 
+# The provisional book and author e2e:provisional_seed owns, found by title and name.
+PROVISIONAL_BOOK_TITLE = "E2E Provisional Seed"
+PROVISIONAL_AUTHOR_NAME = "E2E Provisional Seed Author"
+
 namespace :e2e do
   # One value from e2e/.env. Read from the file rather than ENV because these
   # tasks run from a shell that has not loaded that file, and dotenv only loads
@@ -274,5 +278,26 @@ namespace :e2e do
     decisions.each(&:destroy!)
     author&.destroy!
     puts "removed #{author ? 1 : 0} author and #{decisions.size} decision(s)"
+  end
+
+  desc "Seed a provisional book and author for e2e/tests/books/provisional.spec.ts"
+  task provisional_seed: :environment do
+    # Idempotent: a rerun finds both rows and re-flags them.
+    author = Books::Author.find_or_initialize_by(name: PROVISIONAL_AUTHOR_NAME)
+    author.update!(provisional: true, exclude_from_rankings: true)
+    book = Books::Book.find_or_initialize_by(title: PROVISIONAL_BOOK_TITLE)
+    book.update!(provisional: true)
+    Books::BookAuthor.find_or_create_by!(book: book, author: author) { |credit| credit.role = :author }
+
+    puts({book_slug: book.slug, author_slug: author.slug}.to_json)
+  end
+
+  desc "Remove the rows e2e:provisional_seed created"
+  task provisional_cleanup: :environment do
+    book = Books::Book.find_by(title: PROVISIONAL_BOOK_TITLE)
+    author = Books::Author.find_by(name: PROVISIONAL_AUTHOR_NAME)
+    book&.destroy!
+    author&.destroy!
+    puts "removed #{[book, author].compact.size} row(s)"
   end
 end
