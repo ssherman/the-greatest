@@ -13,13 +13,13 @@ require "test_helper"
 #  flagged_count    :integer          default(0), not null
 #  matched_count    :integer          default(0), not null
 #  parked_count     :integer          default(0), not null
-#  review_status    :integer          default(0), not null
+#  review_status    :integer          default("pending"), not null
 #  reviewed_at      :datetime
 #  rows_count       :integer          default(0), not null
 #  skipped_count    :integer          default(0), not null
-#  source           :integer          default(0), not null
+#  source           :integer          default("member"), not null
 #  started_at       :datetime
-#  status           :integer          default(0), not null
+#  status           :integer          default("queued"), not null
 #  created_at       :datetime         not null
 #  updated_at       :datetime         not null
 #  legacy_import_id :integer

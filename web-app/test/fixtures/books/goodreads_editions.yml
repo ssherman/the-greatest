@@ -17,7 +17,7 @@
 #  series_number             :string
 #  signature                 :string           not null
 #  title                     :string           not null
-#  verification              :integer          default(0), not null
+#  verification              :integer          default("not_needed"), not null
 #  year_published            :integer
 #  created_at                :datetime         not null
 #  updated_at                :datetime         not null

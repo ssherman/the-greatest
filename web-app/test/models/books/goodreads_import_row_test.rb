@@ -11,7 +11,7 @@ require "test_helper"
 #  error                :text
 #  exclusive_shelf      :string
 #  notes                :string           default([]), not null, is an Array
-#  outcome              :integer          default(0), not null
+#  outcome              :integer          default("pending"), not null
 #  outcome_detail       :string
 #  rating               :integer
 #  raw                  :jsonb            not null
