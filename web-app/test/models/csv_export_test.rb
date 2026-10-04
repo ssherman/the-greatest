@@ -2,6 +2,30 @@
 
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: csv_exports
+#
+#  id                       :bigint           not null, primary key
+#  byte_size                :bigint
+#  error_message            :text
+#  generated_at             :datetime
+#  requested_at             :datetime
+#  rerun_requested          :boolean          default(FALSE), not null
+#  row_count                :integer
+#  status                   :integer          default("pending"), not null
+#  created_at               :datetime         not null
+#  updated_at               :datetime         not null
+#  ranking_configuration_id :bigint           not null
+#
+# Indexes
+#
+#  index_csv_exports_on_ranking_configuration_id  (ranking_configuration_id) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (ranking_configuration_id => ranking_configurations.id)
+#
 class CsvExportTest < ActiveSupport::TestCase
   setup do
     @config = ranking_configurations(:games_secondary)

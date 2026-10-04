@@ -14,7 +14,7 @@ require "test_helper"
 #  livemode           :boolean          not null
 #  payload            :jsonb            not null
 #  processed_at       :datetime
-#  status             :integer          default(0), not null
+#  status             :integer          default("received"), not null
 #  stripe_created_at  :datetime         not null
 #  created_at         :datetime         not null
 #  updated_at         :datetime         not null

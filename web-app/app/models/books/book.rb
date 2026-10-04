@@ -5,7 +5,7 @@
 #  id                   :bigint           not null, primary key
 #  alternate_titles     :string           default([]), not null, is an Array
 #  amazon_enriched_at   :datetime
-#  book_kind            :integer          default(0), not null
+#  book_kind            :integer          default("standalone"), not null
 #  book_length          :integer
 #  description          :text
 #  first_published_year :integer
@@ -27,6 +27,7 @@
 #  index_books_books_on_book_kind             (book_kind)
 #  index_books_books_on_default_edition_id    (default_edition_id)
 #  index_books_books_on_first_published_year  (first_published_year)
+#  index_books_books_on_lower_title           (lower((title)::text))
 #  index_books_books_on_original_language_id  (original_language_id)
 #  index_books_books_on_provisional           (provisional) WHERE provisional
 #  index_books_books_on_slug                  (slug) UNIQUE

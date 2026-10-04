@@ -22,7 +22,7 @@ require "test_helper"
 #  simplified_content    :text
 #  source                :string
 #  source_country_origin :string
-#  status                :integer          default(0), not null
+#  status                :integer          default("unapproved"), not null
 #  submitted_at          :datetime
 #  submitter_email       :string
 #  submitter_ip          :string

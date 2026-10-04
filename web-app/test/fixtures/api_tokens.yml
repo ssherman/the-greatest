@@ -3,6 +3,30 @@
 # test/support/api_token_secrets.rb; only their SHA-256 digests are stored here,
 # exactly as in production.
 
+# == Schema Information
+#
+# Table name: api_tokens
+#
+#  id           :bigint           not null, primary key
+#  expires_at   :datetime
+#  last_used_at :datetime
+#  name         :string           not null
+#  scopes       :string           default([]), not null, is an Array
+#  token_digest :string           not null
+#  token_prefix :string           not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  user_id      :bigint           not null
+#
+# Indexes
+#
+#  index_api_tokens_on_token_digest  (token_digest) UNIQUE
+#  index_api_tokens_on_user_id       (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
 regular_user_token:
   user: regular_user
   name: laptop

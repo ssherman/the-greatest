@@ -6,7 +6,7 @@
 #  character_name  :string
 #  creditable_type :string           not null
 #  position        :integer
-#  role            :integer          default(0), not null
+#  role            :integer          default("director"), not null
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
 #  creditable_id   :bigint           not null

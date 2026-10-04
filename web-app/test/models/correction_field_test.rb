@@ -9,7 +9,7 @@ require "test_helper"
 #  field_name    :string           not null
 #  new_value     :jsonb
 #  old_value     :jsonb
-#  status        :integer          default(0), not null
+#  status        :integer          default("pending"), not null
 #  created_at    :datetime         not null
 #  updated_at    :datetime         not null
 #  correction_id :bigint           not null

@@ -2,6 +2,30 @@ require "test_helper"
 
 # Persistence-layer tests only. Minting, resolving a secret and recording use
 # are Services::Api::Tokens (test/lib/services/api/tokens_test.rb).
+# == Schema Information
+#
+# Table name: api_tokens
+#
+#  id           :bigint           not null, primary key
+#  expires_at   :datetime
+#  last_used_at :datetime
+#  name         :string           not null
+#  scopes       :string           default([]), not null, is an Array
+#  token_digest :string           not null
+#  token_prefix :string           not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  user_id      :bigint           not null
+#
+# Indexes
+#
+#  index_api_tokens_on_token_digest  (token_digest) UNIQUE
+#  index_api_tokens_on_user_id       (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
 class ApiTokenTest < ActiveSupport::TestCase
   setup do
     @user = users(:regular_user)

@@ -1,6 +1,43 @@
 # One AI enrichment run on one record. The audit trail and the backlog: which
 # model said what about which field, with what confidence, and whether it was
 # applied. Skipped and failed runs get a row too.
+# == Schema Information
+#
+# Table name: enrichments
+#
+#  id                :bigint           not null, primary key
+#  citations         :jsonb            not null
+#  confidence        :integer
+#  enrichable_type   :string           not null
+#  error             :text
+#  facts             :jsonb            not null
+#  kind              :string           not null
+#  mode              :integer          default("knowledge"), not null
+#  model             :string
+#  outcome           :integer          not null
+#  provider          :string
+#  reason            :string
+#  recognized        :boolean
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  ai_chat_id        :bigint
+#  enrichable_id     :bigint           not null
+#  match_decision_id :bigint
+#
+# Indexes
+#
+#  index_enrichments_on_ai_chat_id           (ai_chat_id)
+#  index_enrichments_on_enrichable           (enrichable_type,enrichable_id)
+#  index_enrichments_on_kind                 (kind)
+#  index_enrichments_on_match_decision_id    (match_decision_id)
+#  index_enrichments_on_mode_and_created_at  (mode,created_at)
+#  index_enrichments_on_outcome              (outcome)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (ai_chat_id => ai_chats.id) ON DELETE => nullify
+#  fk_rails_...  (match_decision_id => match_decisions.id) ON DELETE => nullify
+#
 class Enrichment < ApplicationRecord
   KIND_FORMAT = /\A[a-z_]+\.[a-z_]+\z/
 
