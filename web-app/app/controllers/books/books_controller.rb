@@ -32,7 +32,9 @@ class Books::BooksController < ApplicationController
     @ranked_item = if @ranking_configuration
       @ranking_configuration.ranked_items.where.not(rank: nil).find_by(item: @book)
     end
-    @indexable = @ranked_item.present?
+    # A provisional book is reachable by URL but stays out of search engines until
+    # an admin approves its import (Goodreads import spec §9).
+    @indexable = @ranked_item.present? && !@book.provisional?
     # An array of [category_type, categories] pairs rather than a Hash -- the view
     # only iterates it, and an array is the only way to pin the order.
     @categories_by_type = @book.categories.active
@@ -84,6 +86,6 @@ class Books::BooksController < ApplicationController
     # Computed after the service call, and AND'd with the results: a ranked
     # book whose similarity query returns nothing renders only "No similar
     # books found for this title" -- an empty page has no content to index.
-    @indexable = @ranked_item.present? && @similar_books.any?
+    @indexable = @ranked_item.present? && @similar_books.any? && !@book.provisional?
   end
 end

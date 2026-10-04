@@ -4,6 +4,7 @@
 %>
 
 <div class="space-y-8">
+  <%= render Books::ProvisionalNoticeComponent.new(record: @author) %>
   <%= render "books/authors/profile_header",
       author: @author, ranked_item: @ranked_item, description: @description %>
 

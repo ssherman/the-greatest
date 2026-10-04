@@ -15,7 +15,7 @@ class Books::AuthorsController < ApplicationController
 
   def show
     @ranked_item = author_ranked_item
-    @indexable = @ranked_item.present?
+    @indexable = @ranked_item.present? && !@author.provisional?
     @description = @author.primary_description
     @ranked_books = ranked_books.to_a
   end
@@ -45,9 +45,10 @@ class Books::AuthorsController < ApplicationController
   # Books the author actually wrote. Books::BookAuthor also carries :editor, and
   # both the ranking aggregation and the index's top-books query already exclude
   # it -- without the same predicate here an author's profile would list edited
-  # works as their own while their score ignored them.
+  # works as their own while their score ignored them. Provisional books are left
+  # out (Goodreads import spec §9).
   def authored_books
-    @author.books.where(books_book_authors: {role: Books::BookAuthor.roles[:author]})
+    @author.books.merge(Books::Book.catalog).where(books_book_authors: {role: Books::BookAuthor.roles[:author]})
   end
 
   def ranked_books
