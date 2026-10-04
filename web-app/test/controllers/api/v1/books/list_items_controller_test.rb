@@ -31,6 +31,16 @@ module Api
 
         def json = response.parsed_body.deep_symbolize_keys
 
+        test "a row whose book is provisional is neither counted nor served" do
+          @got.update!(provisional: true)
+
+          get "/api/v1/lists/#{@list.id}/items", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal 3, json[:meta][:total_count]
+          refute_includes json[:data].map { |row| row[:book][:slug] }, @got.slug
+        end
+
         test "index orders by position with nulls last and id as the tiebreak" do
           get "/api/v1/lists/#{@list.id}/items", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)

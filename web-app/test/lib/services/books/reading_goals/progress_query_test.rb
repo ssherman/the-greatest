@@ -139,6 +139,20 @@ module Services
           end
         end
 
+        test "catalog_only leaves out provisional books; the default keeps them" do
+          goal = reading_goal
+          kept = add_read_item(goal.user, books_books(:war_and_peace), goal.starts_on)
+          provisional = ::Books::Book.create!(title: "An Unapproved Import", provisional: true)
+          hidden = add_read_item(goal.user, provisional, goal.starts_on)
+
+          public_view = ::Services::Books::ReadingGoals::ProgressQuery.call(goal: goal, catalog_only: true)
+          owner_view = ::Services::Books::ReadingGoals::ProgressQuery.call(goal: goal)
+
+          assert_equal [kept.id], public_view.items.map(&:id)
+          assert_equal 1, public_view.count
+          assert_equal [hidden.id, kept.id].sort, owner_view.items.map(&:id).sort
+        end
+
         private
 
         def reading_goal(**attributes)

@@ -3,6 +3,11 @@
 module Search
   module Books
     class BookIndex < ::Search::Base::Index
+      # For must_not, never `filter: {term: {provisional: false}}`. Documents indexed
+      # before this field existed carry no provisional key, and a filter on false
+      # would drop every one of them from public search until a full reindex.
+      EXCLUDE_PROVISIONAL = {term: {provisional: true}}.freeze
+
       def self.model_klass
         ::Books::Book
       end
@@ -124,6 +129,9 @@ module Search
               },
               ranked_position: {
                 type: "integer"
+              },
+              provisional: {
+                type: "boolean"
               }
             }
           }

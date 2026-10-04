@@ -170,7 +170,7 @@ module Search
           excluded = [book.id.to_s]
           excluded.concat(same_series_book_ids(book)) if opts[:exclude_same_series]
 
-          must_not = [{ids: {values: excluded}}]
+          must_not = [{ids: {values: excluded}}, ::Search::Books::BookIndex::EXCLUDE_PROVISIONAL]
           opposite = opposite_type_clause(book) if opts[:exclude_opposite_book_type]
           must_not << opposite if opposite
 

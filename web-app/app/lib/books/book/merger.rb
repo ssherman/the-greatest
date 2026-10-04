@@ -470,6 +470,13 @@ module Books
         fill_blank_fields
         reconcile_first_published_year
         absorb_alternate_titles
+        reconcile_provisional
+      end
+
+      # The merged book is provisional only if both halves were. Folding a real book
+      # into an unapproved import must not hide the real one.
+      def reconcile_provisional
+        target_book.provisional = false unless source_book.provisional?
       end
 
       # default_edition_id is in BLANK_FILLABLE. Filling it here has no ordering

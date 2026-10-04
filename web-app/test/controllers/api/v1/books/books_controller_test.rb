@@ -26,6 +26,15 @@ module Api
 
         def json = response.parsed_body.deep_symbolize_keys
 
+        test "show of a provisional book is a 404 problem" do
+          @war_and_peace.update!(provisional: true)
+
+          get "/api/v1/books/#{@war_and_peace.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+
+          assert_response :not_found
+        end
+
         # --- index ---------------------------------------------------------------
 
         test "index lists ranked books best first with meta and links" do

@@ -8,6 +8,8 @@
   content_for :meta_description, "Read about #{@book.title}#{" by #{author_names}" if author_names.present?}, its ranking, categories, and the best-books lists it appears on."
 %>
 
+<%= render Books::ProvisionalNoticeComponent.new(record: @book) %>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
   <div class="lg:col-span-1">
     <div class="card bg-base-100 shadow-xl sticky top-20" data-testid="book-sidebar-card">

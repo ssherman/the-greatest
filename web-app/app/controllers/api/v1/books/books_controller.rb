@@ -25,6 +25,7 @@ module Api
           book = ::Books::Book
             .includes(:categories, :countries, :original_language, :descriptions, {book_authors: :author},
               {primary_image: {file_attachment: :blob}})
+            .catalog
             .find_by!(slug: params[:slug])
 
           render json: {data: BookResource.new(book, with_traits: :full).to_h}

@@ -356,6 +356,13 @@ module Books
       def reconcile_scalars
         fill_blank_fields
         absorb_alternate_names
+        reconcile_provisional
+      end
+
+      # The merged author is provisional only if both halves were. Folding a real
+      # author into an unapproved import must not hide the real one.
+      def reconcile_provisional
+        target_author.provisional = false unless source_author.provisional?
       end
 
       def fill_blank_fields

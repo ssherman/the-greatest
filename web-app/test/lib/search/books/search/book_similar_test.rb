@@ -244,6 +244,14 @@ module Search
           assert_equal 6, ids_for(limit: 2, over_fetch: 3).size
         end
 
+        test "leaves out provisional candidates" do
+          index_book(@book.id, genre_category_ids: [@novels], similarity_category_count: 1)
+          index_book(9001, genre_category_ids: [@novels], similarity_category_count: 1)
+          index_book(9002, genre_category_ids: [@novels], similarity_category_count: 1, provisional: true)
+
+          assert_equal ["9001"], ids_for
+        end
+
         private
 
         def cleanup_test_index

@@ -163,5 +163,20 @@ module Books
 
       assert_equal ["Flann O'Brien"], author.reload.alternate_names
     end
+
+    test "catalog excludes provisional authors and keeps the rest" do
+      provisional = Books::Author.create!(name: "A Provisional Author", provisional: true)
+
+      assert_includes Books::Author.catalog, books_authors(:tolstoy)
+      refute_includes Books::Author.catalog, provisional
+    end
+
+    test "as_indexed_json carries the provisional flag" do
+      author = books_authors(:tolstoy)
+
+      assert_equal false, author.as_indexed_json[:provisional]
+      author.provisional = true
+      assert_equal true, author.as_indexed_json[:provisional]
+    end
   end
 end

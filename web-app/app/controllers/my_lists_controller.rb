@@ -67,6 +67,7 @@ class MyListsController < ApplicationController
     end
 
     scope = @list.user_list_items.ordered.includes(listable: @list.class.listable_display_includes)
+    scope = @list.class.catalog_items(scope) unless @owner
     collection = (@sort == "ranking") ? ranking_sorted(scope.to_a) : scope
 
     respond_to do |format|

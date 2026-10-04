@@ -178,6 +178,8 @@ module Search
 
           clauses << {ids: {values: excluded_book_ids}} if excluded_book_ids.any?
 
+          clauses << ::Search::Books::BookIndex::EXCLUDE_PROVISIONAL
+
           clauses
         end
 

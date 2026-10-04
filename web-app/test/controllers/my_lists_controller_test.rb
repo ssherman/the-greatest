@@ -652,6 +652,35 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_no_match(/list-owner/, response.body)
   end
 
+  test "a provisional book on a public Books list is hidden from other viewers" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    list.update!(public: true)
+    provisional = ::Books::Book.create!(title: "An Unapproved Import", provisional: true)
+    hidden = list.user_list_items.create!(listable: provisional)
+    shown = list.user_list_items.create!(listable: books_books(:war_and_peace))
+
+    get user_list_path(list)
+
+    assert_response :success
+    item_ids = @controller.view_assigns["items"].map(&:id)
+    assert_includes item_ids, shown.id
+    refute_includes item_ids, hidden.id
+  end
+
+  test "the owner still sees their provisional book" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    provisional = ::Books::Book.create!(title: "An Unapproved Import", provisional: true)
+    item = list.user_list_items.create!(listable: provisional)
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(list)
+
+    assert_response :success
+    assert_includes @controller.view_assigns["items"].map(&:id), item.id
+  end
+
   # --- legacy /user_lists redirects ---
 
   test "legacy /user_lists index 301s to /my/lists" do

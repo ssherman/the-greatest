@@ -85,4 +85,14 @@ class Books::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
     get books_reading_goal_page_path(@private_goal, 3), headers: {"HOST" => @host}
     assert_response :not_found
   end
+
+  test "a public goal's page leaves out provisional books" do
+    Services::Books::ReadingGoals::ProgressQuery.expects(:call)
+      .with(goal: @public_goal, page: 1, catalog_only: true)
+      .returns(Services::Books::ReadingGoals::ProgressQuery::Progress.new(items: [], count: 0, percentage: 0.0, complete: false, bar_percentage: 0.0))
+
+    get books_reading_goal_path(@public_goal), headers: {"HOST" => @host}
+
+    assert_response :success
+  end
 end

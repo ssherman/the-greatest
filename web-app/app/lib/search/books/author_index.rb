@@ -70,6 +70,9 @@ module Search
               },
               category_ids: {
                 type: "keyword"
+              },
+              provisional: {
+                type: "boolean"
               }
             }
           }
