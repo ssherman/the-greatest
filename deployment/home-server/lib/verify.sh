@@ -55,12 +55,6 @@ host_global_ipv6() {
   printf '%s\n' "$list"
 }
 
-# pick_trace_ip: stdin is a Cloudflare /cdn-cgi/trace body; prints the ip= value
-# only when it is a dotted IPv4 address. Callers must never print it.
-pick_trace_ip() {
-  sed -n 's/^ip=\([0-9]\{1,3\}\(\.[0-9]\{1,3\}\)\{3\}\)$/\1/p' | head -n1
-}
-
 verify_host() {
   expect "host: apt update is clean" on_host "! apt-get update -q 2>&1 | grep -qE '^(E|Err):|401 +Unauthorized'"
   # shellcheck disable=SC2016 # the remote shell expands these
@@ -129,6 +123,27 @@ verify_egress() {
       bad "egress control: ol cannot reach the host's public IPv6 on 22, so this probe proves nothing"
     fi
   fi
+
+  # The house's public IPv4: the router hairpins it to its own admin pages, so
+  # it is a LAN destination in disguise (120.fw, set house_public). Read here,
+  # so an address the ISP has changed since the last provision run fails here.
+  # Never printed.
+  local house_ip=""
+  house_ip="$(house_public_ipv4)" || house_ip=""
+  if [ -z "$house_ip" ]; then
+    bad "egress: could not read the house's public IPv4 to probe"
+  else
+    for port in 80 443; do
+      if ! tcp_from_vm ol "$house_ip" "$port"; then
+        bad "egress control: ol cannot reach the house's public IPv4 on $port, so this probe proves nothing"; continue
+      fi
+      ok "egress control: ol reaches the house's public IPv4 on $port"
+      rc="$(probe_rc tcp_from_vm fetcher "$house_ip" "$port")"
+      expect_blocked "egress: fetcher cannot reach the house's public IPv4 on $port" "$rc"
+      rc="$(probe_rc tcp_from_fetcher_container "$house_ip" "$port")"
+      expect_blocked "egress: fetcher container cannot reach the house's public IPv4 on $port" "$rc"
+    done
+  fi
   expect "egress: fetcher has no IPv6 address" vm_ssh fetcher "! ip -6 -o addr | grep -v ' lo ' | grep -q inet6"
   expect "egress: fetcher reaches the public internet" vm_ssh fetcher "curl -fsS -m 10 -o /dev/null https://www.wikipedia.org"
   expect "egress: fetcher container reaches the public internet (DNS included)" tcp_from_fetcher_container www.wikipedia.org 443
@@ -152,7 +167,7 @@ verify_external() {
   addr="$(host_global_ipv6)" || rc6=$?
   if [ "$rc6" = 2 ]; then
     fam=-4 ctl="1.1.1.1 443" what="public IPv4"
-    addr="$(on_host "curl -4 -fsS --max-time 10 https://1.1.1.1/cdn-cgi/trace" | pick_trace_ip)" || addr=""
+    addr="$(house_public_ipv4)" || addr=""
   fi
   # The control comes first: if the external box cannot reach the internet over
   # this family at all (or ssh to it fails), nothing below means anything.
@@ -199,7 +214,16 @@ crash_service() {
   if [ "$after" -gt "$before" ] 2>/dev/null; then ok "recovery: $container restart count rose ($before -> $after)"; else bad "recovery: $container restart count did not rise ($before -> $after)"; fi
 }
 
+# verify_foreign_guests <ids> [when]: each guest that ran before still runs.
+verify_foreign_guests() {
+  local id
+  for id in $1; do
+    expect "pre-existing guest $id still running${2:+ $2}" on_host "qm status $id | grep -q running"
+  done
+}
+
 # --recovery: kills each service, then reboots the host. Ask Shane before running.
+# verify_recovery <ids of the guests that ran before provision>
 verify_recovery() {
   crash_service fetcher the-greatest-fetcher-1 "curl -fsS 127.0.0.1:8081/health"
   if vm_ssh ol "test -f /srv/ol-data/current-version"; then
@@ -215,21 +239,21 @@ verify_recovery() {
   verify_host
   verify_vms
   verify_egress
+  # A host reboot is the one thing here that touches them: they must come back.
+  verify_foreign_guests "$1" "after the reboot"
 }
 
 verify_all() {
   export VERIFY=1 # converge, but do not upgrade packages: verify changes nothing
   # Guests provision did not create are never touched: note what runs now.
-  local preexisting id
+  local preexisting
   preexisting="$(running_foreign_vmids)" || die "could not list the host's VMs"
   verify_host
   verify_vms
   verify_egress
   verify_idempotent
-  for id in $preexisting; do
-    expect "pre-existing guest $id still running" on_host "qm status $id | grep -q running"
-  done
+  verify_foreign_guests "$preexisting"
   if [ -n "$EXTERNAL_FROM" ]; then verify_external; fi
-  if [ "$RECOVERY" = 1 ]; then verify_recovery; fi
+  if [ "$RECOVERY" = 1 ]; then verify_recovery "$preexisting"; fi
   if [ "$VERIFY_FAILURES" = 0 ]; then log "verify: all passed"; else die "verify: $VERIFY_FAILURES failed"; fi
 }

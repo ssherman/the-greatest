@@ -84,6 +84,22 @@ t_cluster_fw_v4_only() {
   cat -s "$out" | cmp -s - "$out" || return 1
   [ "$(grep -c '^\[IPSET' "$out")" = 3 ]
 }
+t_fetcher_fw() {
+  local out="$SANDBOX/120.fw"
+  render_fetcher_fw "$out" 203.0.113.7 || return 1
+  ! grep -q '\${' "$out" || return 1
+  [ "$(sed -n '/^\[IPSET house_public\]/,/^$/p' "$out" | sed 1d)" = 203.0.113.7 ] || return 1
+  grep -qx 'OUT DROP -dest +guest/house_public -log nolog' "$out" &&
+    grep -qx 'OUT DROP -dest +private -log nolog' "$out" &&
+    [ "$(sed -n '/^\[IPSET ipfilter-net0\]/,/^$/p' "$out" | sed 1d)" = 10.20.0.10 ]
+}
+t_fetcher_fw_refuses_bad_ip() {
+  ! render_fetcher_fw "$SANDBOX/bad.fw" "" && ! render_fetcher_fw "$SANDBOX/bad.fw" 2001:db8::1 &&
+    ! render_fetcher_fw "$SANDBOX/bad.fw" "203.0.113.7 x"
+}
+t_fetcher_fw_not_committed_rendered() {
+  [ ! -e "$HS_DIR/host/firewall/120.fw" ] && grep -qx '${HOUSE_PUBLIC_IPV4}' "$HS_DIR/host/firewall/120.fw.tmpl"
+}
 t_reboot_reason() {
   local msg
   [ -z "$(reboot_needed_reason 2.3.4-pve1 zfs-2.3.4-pve1 6.8.1 6.8.1)" ] &&
@@ -140,6 +156,9 @@ check "the VM clones the tracked ref" t_ref
 check "unset secrets render as blanks, not errors" t_blank_secrets
 check "cluster.fw renders both LAN ranges into lan and management" t_cluster_fw
 check "cluster.fw renders IPv4-only sets with no blank or unrendered line" t_cluster_fw_v4_only
+check "120.fw renders the house's public IPv4 into house_public and drops it" t_fetcher_fw
+check "120.fw refuses an empty or non-IPv4 house address" t_fetcher_fw_refuses_bad_ip
+check "120.fw is committed only as a template" t_fetcher_fw_not_committed_rendered
 check "vm_spec sizes: ol 12 vCPU / 24 GB, fetcher unchanged" t_vm_spec_sizes
 check "storage names default to local-lvm / local and come from the secrets when set" t_storage_defaults
 check "pick_trace_ip returns only a dotted IPv4 ip= line" t_trace_ip

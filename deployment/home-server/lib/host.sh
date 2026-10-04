@@ -252,11 +252,43 @@ render_cluster_fw() {
       envsubst '${LAN_IPV4_CIDR} ${LAN_IPV6_PREFIX}' >"$1"
 }
 
+# pick_trace_ip: stdin is a Cloudflare /cdn-cgi/trace body; prints the ip= value
+# only when it is a dotted IPv4 address. Callers must never print it.
+pick_trace_ip() {
+  sed -n 's/^ip=\([0-9]\{1,3\}\(\.[0-9]\{1,3\}\)\{3\}\)$/\1/p' | head -n1
+}
+
+# house_public_ipv4: the house's public IPv4, as Cloudflare sees the host.
+# Fails rather than print nothing. Callers must never print it.
+house_public_ipv4() {
+  local ip
+  ip="$(on_host "curl -4 -fsS --max-time 10 https://1.1.1.1/cdn-cgi/trace" | pick_trace_ip)" || true
+  [ -n "$ip" ] || return 1
+  printf '%s\n' "$ip"
+}
+
+# render_fetcher_fw <out> <house public IPv4>: VM 120's rules. The router
+# hairpins the house's public address to its own admin pages, so the fetcher
+# is kept off it like any private destination. An empty or malformed address
+# fails: an empty set would block nothing.
+render_fetcher_fw() {
+  [[ "$2" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+  # shellcheck disable=SC2016 # envsubst takes the variable list literally
+  HOUSE_PUBLIC_IPV4="$2" envsubst '${HOUSE_PUBLIC_IPV4}' <"$HS_DIR/host/firewall/120.fw.tmpl" >"$1"
+}
+
 converge_host_firewall() {
-  # The rendered files hold the host's /64; remove them on any exit, die included.
+  # The rendered files hold the host's /64 and the house's public IPv4; remove
+  # them on any exit, die included.
   new_tmpdir FW_RENDERED
   render_cluster_fw "$FW_RENDERED/cluster.fw"
-  cp "$HS_DIR/host/firewall/host.fw" "$HS_DIR/host/firewall/110.fw" "$HS_DIR/host/firewall/120.fw" "$FW_RENDERED/"
+  # Re-read every run, so a new address from the ISP is picked up here (and
+  # caught by --verify's egress probe until then).
+  local house_ip
+  house_ip="$(house_public_ipv4)" ||
+    die "could not read the house's public IPv4 on the host (curl -4 https://1.1.1.1/cdn-cgi/trace); refusing to write 120.fw without it"
+  render_fetcher_fw "$FW_RENDERED/120.fw" "$house_ip" || die "could not render 120.fw"
+  cp "$HS_DIR/host/firewall/host.fw" "$HS_DIR/host/firewall/110.fw" "$FW_RENDERED/"
 
   # cluster.fw is last: it is the file that turns the firewall on.
   local pairs=("host.fw:/etc/pve/local/host.fw" "110.fw:/etc/pve/firewall/110.fw"
