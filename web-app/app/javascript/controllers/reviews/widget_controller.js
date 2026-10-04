@@ -92,7 +92,7 @@ export default class extends Controller {
   renderStars() {
     if (!this.hasStarsTarget) return
 
-    const rating = this.review ? this.review.rating : 0
+    const rating = this.review && this.review.rating != null ? this.review.rating : 0
     const clamped = Math.max(0, Math.min(5, rating))
     const fillPercentage = ((clamped / 5) * 100).toFixed(1)
 
@@ -100,10 +100,15 @@ export default class extends Controller {
     if (fill) fill.style.width = `${fillPercentage}%`
 
     const img = this.starsTarget.querySelector('[role="img"]')
-    if (img) {
-      img.setAttribute("aria-label",
-        this.review ? `Your rating: ${rating} out of 5 stars` : "Not yet rated")
-    }
+    if (img) img.setAttribute("aria-label", this.starsLabel())
+  }
+
+  // Must match Reviews::WidgetComponent#stars_label, which renders the same label
+  // server-side in the Turbo Stream that answers a save.
+  starsLabel() {
+    if (!this.review) return "Not yet rated"
+    if (this.review.rating == null) return "Reviewed without a rating"
+    return `Your rating: ${this.review.rating} out of 5 stars`
   }
 
   async open(event) {

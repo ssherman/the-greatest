@@ -59,6 +59,40 @@ module Search
           assert_includes ids, collection.id.to_s
         end
 
+        def index_doc(id, attrs = {})
+          ::Search::Base::Search.client.index(
+            index: ::Search::Books::BookIndex.index_name,
+            id: id,
+            body: {title: "Book #{id}", book_kind: "standalone", author_names: [], alternate_titles: []}.merge(attrs),
+            refresh: true
+          )
+        end
+
+        test "call leaves out provisional books" do
+          index_doc(1, title: "Quiet Harbour", provisional: false)
+          index_doc(2, title: "Quiet Harbour", provisional: true)
+
+          ids = ::Search::Books::Search::BookAutocomplete.call("Quiet Harb").map { |hit| hit[:id] }
+
+          assert_equal ["1"], ids
+        end
+
+        test "call includes provisional books when asked" do
+          index_doc(2, title: "Quiet Harbour", provisional: true)
+
+          ids = ::Search::Books::Search::BookAutocomplete.call("Quiet Harb", include_provisional: true).map { |hit| hit[:id] }
+
+          assert_equal ["2"], ids
+        end
+
+        test "a document with no provisional field is still found" do
+          index_doc(3, title: "Quiet Harbour")
+
+          ids = ::Search::Books::Search::BookAutocomplete.call("Quiet Harb").map { |hit| hit[:id] }
+
+          assert_equal ["3"], ids
+        end
+
         private
 
         def cleanup_test_index

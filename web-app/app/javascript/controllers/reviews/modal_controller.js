@@ -6,7 +6,7 @@ import { Controller } from "@hotwired/stimulus"
 export default class extends Controller {
   static targets = [
     "form", "token", "methodField", "reviewableType", "reviewableId",
-    "rating", "title", "body", "star", "remove", "heading", "error"
+    "rating", "title", "body", "star", "remove", "heading", "error", "clearRating"
   ]
 
   connect() {
@@ -66,21 +66,32 @@ export default class extends Controller {
       star.setAttribute("aria-pressed", on ? "true" : "false")
       star.querySelectorAll("svg").forEach((svg) => svg.classList.toggle("fill-current", on))
     })
+    if (this.hasClearRatingTarget) this.clearRatingTarget.classList.toggle("hidden", !value)
   }
 
-  // The one field the server actually requires. Checked on the form's own
-  // "submit" event, which fires (and can be defaultPrevented) before Turbo's
-  // document-level listener ever sees it -- Turbo only intercepts a bubbled
-  // submit that still has defaultPrevented false -- so a missing rating never
-  // reaches the network at all, and submitted() never has to guess that a 422
-  // means this. A delete carries no rating and skips this check: remove() drives
-  // its own requestSubmit() through this same form with methodField "delete".
+  // Stars are optional when there is text: Goodreads (and so an import) allows a
+  // review with none, and a reader may want to take a rating back.
+  clearRating() {
+    this.setRatingValue(null)
+    // The button hides itself, which would drop keyboard focus out of the dialog.
+    this.starTargets[0]?.focus()
+  }
+
+  // A review needs a rating or some text -- the server enforces the same rule
+  // (Review#rating_or_body_present). Checked on the form's own "submit" event,
+  // which fires (and can be defaultPrevented) before Turbo's document-level
+  // listener sees it -- Turbo only intercepts a bubbled submit that still has
+  // defaultPrevented false -- so an empty review never reaches the network, and
+  // submitted() never has to guess that a 422 means this. A delete carries
+  // neither and skips this check: remove() drives its own requestSubmit()
+  // through this same form with methodField "delete".
   validate(event) {
     if (this.methodFieldTarget.value === "delete") return
     if (this.ratingTarget.value) return
+    if (this.bodyTarget.value.trim() !== "") return
 
     event.preventDefault()
-    this.showError("Pick a rating from 1 to 5 before saving.")
+    this.showError("Pick a rating or write a review before saving.")
   }
 
   // Stash the method that was in force (patch/post) so a failed delete can be
@@ -98,7 +109,7 @@ export default class extends Controller {
   }
 
   // Turbo reports the outcome here. validate() already caught the one failure
-  // this dialog can diagnose locally (no rating), so a failure arriving here is a
+  // this dialog can diagnose locally (no rating and no text), so a failure arriving here is a
   // genuine server-side or network problem: a stale/rejected CSRF token, a 500, a
   // plain network drop, or the review having been deleted from another tab. Only
   // the last of those is distinct enough to name from the client; the rest
@@ -138,6 +149,12 @@ export default class extends Controller {
   errorMessageFor(fetchResponse) {
     if (fetchResponse && fetchResponse.statusCode === 404) {
       return "This review could not be found. It may have already been removed."
+    }
+    // validate() cannot see that the server's sanitizer reduces a body like "<br>"
+    // to nothing, so ReviewsController#render_invalid names that reason in a header
+    // -- a bare 422 could also be a rejected CSRF token.
+    if (fetchResponse && fetchResponse.header("X-Review-Error") === "rating_or_text_required") {
+      return "Pick a rating or write a review before saving."
     }
     return "Something went wrong. Please try again."
   }

@@ -33,6 +33,23 @@ module Books
         assert ::Books::Book.exists?(@source.id)
       end
 
+      test "merging a catalog book into a provisional one leaves a catalog book" do
+        @target.update!(provisional: true)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        refute @target.reload.provisional?
+      end
+
+      test "merging two provisional books leaves a provisional book" do
+        @source.update!(provisional: true)
+        @target.update!(provisional: true)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert @target.reload.provisional?
+      end
+
       test "rolls the whole merge back when a step raises" do
         ::Books::Book::Merger.any_instance.stubs(:merge_all_associations)
           .raises(StandardError.new("boom"))

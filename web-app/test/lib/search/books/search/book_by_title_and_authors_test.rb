@@ -121,6 +121,16 @@ module Search
           assert_equal 1, ::Search::Books::Search::BookByTitleAndAuthors.call(title: "Dune", size: 1).size
         end
 
+        test "finds a provisional book, because the import finder must see it" do
+          book = books_books(:war_and_peace)
+          book.update!(provisional: true)
+          index(book)
+
+          results = ::Search::Books::Search::BookByTitleAndAuthors.call(title: "War and Peace", authors: ["Leo Tolstoy"])
+
+          assert_equal [book.id.to_s], results.map { |hit| hit[:id] }
+        end
+
         private
 
         def cleanup_test_index

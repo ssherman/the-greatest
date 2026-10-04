@@ -386,6 +386,13 @@ module Search
           assert_includes filters, {term: {category_ids: 20}}
         end
 
+        test "leaves out provisional books" do
+          index_book(1)
+          index_book(2, provisional: true)
+
+          assert_equal [1], ids_for({"genre_match_mode" => "any"})
+        end
+
         private
 
         def cleanup_test_index

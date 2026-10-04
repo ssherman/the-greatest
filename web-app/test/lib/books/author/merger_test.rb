@@ -23,6 +23,23 @@ module Books
         assert_equal [], result.errors
       end
 
+      test "merging a catalog author into a provisional one leaves a catalog author" do
+        @target.update!(provisional: true)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        refute @target.reload.provisional?
+      end
+
+      test "merging two provisional authors leaves a provisional author" do
+        @source.update!(provisional: true)
+        @target.update!(provisional: true)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert @target.reload.provisional?
+      end
+
       test "destroys the source author" do
         source_id = @source.id
 

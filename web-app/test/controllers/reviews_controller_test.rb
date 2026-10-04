@@ -95,6 +95,81 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "creates a written review with no rating" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_difference "Review.count", 1 do
+      post reviews_path, params: valid_params(rating: "", body: "<p>Words only.</p>"), as: :turbo_stream
+    end
+
+    assert_response :success
+    assert_nil created_review.rating
+    assert_equal "<p>Words only.</p>", created_review.body
+  end
+
+  test "rejects a review with neither a rating nor text" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_difference "Review.count" do
+      post reviews_path, params: valid_params(rating: ""), as: :turbo_stream
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  # The dialog cannot tell this 422 apart from a rejected CSRF token by status, and
+  # its own check cannot see that the sanitizer will empty a body like "<br>" --
+  # so the server names the reason in a header.
+  test "a body the sanitizer empties, with no rating, is refused with a named reason" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_difference "Review.count" do
+      post reviews_path, params: valid_params(rating: "", body: "<br>"), as: :turbo_stream
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal "rating_or_text_required", response.headers["X-Review-Error"]
+  end
+
+  test "an out-of-range rating is refused without the rating-or-text reason" do
+    sign_in_as(@user, stub_auth: true)
+
+    post reviews_path, params: valid_params(rating: 9), as: :turbo_stream
+
+    assert_response :unprocessable_entity
+    assert_nil response.headers["X-Review-Error"]
+  end
+
+  test "clearing the rating on a review with no text names the reason" do
+    sign_in_as(@user, stub_auth: true)
+
+    patch review_path(reviews(:regular_user_crime_and_punishment)), params: {review: {rating: ""}}, as: :turbo_stream
+
+    assert_response :unprocessable_entity
+    assert_equal "rating_or_text_required", response.headers["X-Review-Error"]
+  end
+
+  test "clearing the rating on a written review keeps the review" do
+    sign_in_as(@user, stub_auth: true)
+
+    patch review_path(@own_review), params: {review: {rating: ""}}, as: :turbo_stream
+
+    assert_response :success
+    assert_nil @own_review.reload.rating
+    assert_not_nil @own_review.body
+  end
+
+  test "clearing the rating on a review with no text is refused" do
+    sign_in_as(@user, stub_auth: true)
+    rating_only = reviews(:regular_user_crime_and_punishment)
+
+    patch review_path(rating_only), params: {review: {rating: ""}}, as: :turbo_stream
+
+    assert_response :unprocessable_entity
+    assert_equal 3, rating_only.reload.rating
+  end
+
   test "rejects a rating outside one to five" do
     sign_in_as(@user, stub_auth: true)
 

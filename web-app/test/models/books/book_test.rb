@@ -394,5 +394,20 @@ module Books
 
       assert_equal "The Secret Lives", book.reload.title
     end
+
+    test "catalog excludes provisional books and keeps the rest" do
+      provisional = Books::Book.create!(title: "A Provisional Import", provisional: true)
+
+      assert_includes Books::Book.catalog, books_books(:war_and_peace)
+      refute_includes Books::Book.catalog, provisional
+    end
+
+    test "as_indexed_json carries the provisional flag" do
+      book = books_books(:war_and_peace)
+
+      assert_equal false, book.as_indexed_json[:provisional]
+      book.provisional = true
+      assert_equal true, book.as_indexed_json[:provisional]
+    end
   end
 end

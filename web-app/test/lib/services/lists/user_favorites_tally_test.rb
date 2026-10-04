@@ -244,6 +244,19 @@ module Services
         assert_equal [], result.entries
         assert_equal 0, result.ballot_count
       end
+
+      test "a provisional book casts no vote and costs the ballot no mass" do
+        a = books_books(:war_and_peace)
+        b = books_books(:got)
+        provisional = ::Books::Book.create!(title: "An Unapproved Import", provisional: true)
+        build_ballot([a, provisional, b])
+
+        result = tally
+
+        assert_nil score_for(result, provisional)
+        # Dropped before the ballot is built: two items share sqrt(2), not sqrt(3).
+        assert_in_delta Math.sqrt(2) / 2, score_for(result, a), 0.0001
+      end
     end
   end
 end

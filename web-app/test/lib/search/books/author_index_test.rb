@@ -29,6 +29,7 @@ module Search
         assert_equal "autocomplete", properties[:name][:fields][:autocomplete][:analyzer]
         assert_equal "text", properties[:alternate_names][:type]
         assert_equal "keyword", properties[:category_ids][:type]
+        assert_equal "boolean", properties[:provisional][:type]
       end
 
       test "can create and delete index" do

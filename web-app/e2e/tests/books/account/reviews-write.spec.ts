@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // A book with no migrated reviews, so this spec never disturbs real data.
-const BOOK = '/book/nightmare-abbey';
+const BOOK = '/book/headlong-hall';
 
 async function removeExistingReview(page) {
   await page.getByTestId('review-widget-label').click();
@@ -111,5 +111,59 @@ test.describe('Writing a review', () => {
     // assertion below would pass for the wrong reason.
     await expect(page.getByTestId('review')).toContainText('at the very end.');
     await expect(page.locator('.review-spoiler')).toHaveText('dies');
+  });
+
+  test('a reader can save a written review with no rating', async ({ page }) => {
+    await page.goto(BOOK);
+
+    await page.getByTestId('review-widget-label').click();
+    await expect(page.locator('#review_modal')).toBeVisible();
+
+    await page.locator('#review_modal textarea').fill('Read it, no stars from me.');
+    await page.getByRole('button', { name: 'Save' }).click();
+
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+    await expect(page.getByTestId('review-widget-label')).toHaveText('Edit your review');
+    await expect(page.getByRole('img', { name: 'Reviewed without a rating' })).toBeVisible();
+    await expect(page.locator('#review_summary_line')).toContainText('1 review');
+    await expect(page.locator('#review_card')).toContainText('No ratings yet');
+    await expect(page.locator('#review_card')).toContainText('Read it, no stars from me.');
+  });
+
+  test('a review that is only markup, with no rating, says what is missing', async ({ page }) => {
+    await page.goto(BOOK);
+
+    await page.getByTestId('review-widget-label').click();
+    await expect(page.locator('#review_modal')).toBeVisible();
+
+    // Non-blank to the dialog's own check, but the sanitizer reduces it to nothing,
+    // so only the server can refuse it -- and the message must still be specific.
+    await page.locator('#review_modal textarea').fill('<br>');
+    await page.getByRole('button', { name: 'Save' }).click();
+
+    await expect(page.locator('#review_modal [role="alert"]')).toHaveText('Pick a rating or write a review before saving.');
+    await expect(page.locator('#review_modal')).toBeVisible();
+  });
+
+  test('a rating can be cleared only when there is text', async ({ page }) => {
+    await page.goto(BOOK);
+
+    await page.getByTestId('review-widget-label').click();
+    await page.getByTestId('review-star-button').nth(2).click();
+    await expect(page.getByTestId('review-clear-rating')).toBeVisible();
+    await page.getByTestId('review-clear-rating').click();
+    await expect(page.getByTestId('review-clear-rating')).toBeHidden();
+    // The button hides itself, so focus must land somewhere inside the dialog.
+    await expect(page.getByTestId('review-star-button').first()).toBeFocused();
+
+    // No stars and no text: the modal refuses before anything is sent.
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('#review_modal [role="alert"]')).toHaveText('Pick a rating or write a review before saving.');
+    await expect(page.locator('#review_modal')).toBeVisible();
+
+    await page.locator('#review_modal textarea').fill('Text instead of stars.');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+    await expect(page.locator('#review_summary_line')).toContainText('1 review');
   });
 });

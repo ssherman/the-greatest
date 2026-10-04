@@ -38,6 +38,7 @@ module Search
         assert_equal "keyword", properties[:author_ids][:type]
         assert_equal "keyword", properties[:category_ids][:type]
         assert_equal "keyword", properties[:book_kind][:type]
+        assert_equal "boolean", properties[:provisional][:type]
       end
 
       test "can create and delete index" do

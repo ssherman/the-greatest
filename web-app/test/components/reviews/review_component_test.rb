@@ -59,5 +59,16 @@ module Reviews
       refute_includes rendered_content, @review.user.display_name
       refute_includes rendered_content, @review.user.name
     end
+
+    test "an unrated review renders its body and no stars" do
+      review = Review.new(
+        user: users(:contractor_user), reviewable: books_books(:got),
+        body: "<p>Words, no stars.</p>", created_at: Time.current
+      )
+      render_inline(Reviews::ReviewComponent.new(review: review))
+
+      assert_no_selector "[role='img']"
+      assert_selector "[data-testid='review-body']", text: "Words, no stars."
+    end
   end
 end

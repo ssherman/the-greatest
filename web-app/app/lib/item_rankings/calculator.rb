@@ -51,7 +51,19 @@ module ItemRankings
       ::List.median_list_count(type: list_type)
     end
 
+    # Listable ids that must not be ranked even when a list carries them. Base
+    # excludes nothing; Books overrides it for provisional imports.
+    def excluded_item_ids
+      Set.new
+    end
+
     private
+
+    # Memoized: prepare_items runs once per ranked list, and the set must not be
+    # re-queried for each of them.
+    def excluded_ids
+      @excluded_ids ||= excluded_item_ids
+    end
 
     def prepare_lists
       # Get ranked lists with proper eager loading for performance
@@ -76,6 +88,7 @@ module ItemRankings
       ranked_list.list.list_items.filter_map do |list_item|
         # Skip unverified items that don't have an actual listable
         next if list_item.listable_id.nil?
+        next if excluded_ids.include?(list_item.listable_id)
 
         score_penalty = calculate_score_penalty(ranked_list.list, list_item) if ranking_configuration.apply_list_dates_penalty?
 

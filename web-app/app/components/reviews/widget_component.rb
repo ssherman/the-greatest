@@ -36,6 +36,7 @@ module Reviews
 
     def stars_label
       return "Not yet rated" unless review
+      return "Reviewed without a rating" if review.rating.nil?
 
       "Your rating: #{review.rating} out of 5 stars"
     end

@@ -20,7 +20,9 @@
     <% end %>
 
     <div class="flex items-center gap-2 mt-1 text-sm">
-      <%= render Reviews::StarsComponent.new(rating: review.rating) %>
+      <% if review.rating %>
+        <%= render Reviews::StarsComponent.new(rating: review.rating) %>
+      <% end %>
       <span class="text-base-content/60"><%= time_ago_in_words(review.created_at) %> ago</span>
     </div>
 

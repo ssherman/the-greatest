@@ -9,13 +9,14 @@ module Services
           keyword_init: true
         )
 
-        def self.call(goal:, page: 1)
-          new(goal: goal, page: page).call
+        def self.call(goal:, page: 1, catalog_only: false)
+          new(goal: goal, page: page, catalog_only: catalog_only).call
         end
 
-        def initialize(goal:, page: 1)
+        def initialize(goal:, page: 1, catalog_only: false)
           @goal = goal
           @page = [page.to_i, 1].max
+          @catalog_only = catalog_only
         end
 
         def call
@@ -34,16 +35,18 @@ module Services
 
         private
 
-        attr_reader :goal, :page
+        attr_reader :goal, :page, :catalog_only
 
         def projected_items
           list = ::Books::UserList.find_by(user: goal.user, list_type: :read)
           return ::UserListItem.none if list.nil?
 
-          list.user_list_items
+          items = list.user_list_items
             .where(listable_type: "Books::Book", completed_on: goal.starts_on..goal.ends_on)
             .includes(listable: ::Books::UserList.listable_display_includes + [{primary_image: {file_attachment: :blob}}])
             .reorder(completed_on: :desc, id: :desc)
+
+          catalog_only ? ::Books::UserList.catalog_items(items) : items
         end
       end
     end
