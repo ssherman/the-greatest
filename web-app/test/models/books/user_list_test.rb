@@ -86,5 +86,17 @@ module Books
       assert_includes UserList::DEFAULT_SUBCLASSES, "Books::UserList"
       assert_equal [Books::UserList], UserList.subclasses_for(:books)
     end
+
+    test "catalog_items keeps catalog books and drops provisional ones" do
+      list = user_lists(:regular_user_books_read)
+      kept = list.user_list_items.create!(listable: books_books(:war_and_peace))
+      provisional = ::Books::Book.create!(title: "An Unapproved Import", provisional: true)
+      dropped = list.user_list_items.create!(listable: provisional)
+
+      ids = ::Books::UserList.catalog_items(list.user_list_items).pluck(:id)
+
+      assert_includes ids, kept.id
+      refute_includes ids, dropped.id
+    end
   end
 end

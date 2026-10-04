@@ -68,6 +68,10 @@ module Books
       [{book_authors: :author}, :categories, :primary_image, :descriptions]
     end
 
+    def self.catalog_items(scope)
+      scope.where(listable_id: ::Books::Book.catalog.select(:id))
+    end
+
     def self.generated_list_class
       ::Books::List
     end

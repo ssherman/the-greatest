@@ -11,9 +11,12 @@ class Books::ReadingGoalsController < ApplicationController
     canonicalize_query_page
     return if performed?
 
+    # A public goal is edge-cached and identical for every viewer, owner included,
+    # so it can only show what anyone may see.
     @progress = Services::Books::ReadingGoals::ProgressQuery.call(
       goal: @reading_goal,
-      page: params[:page] || 1
+      page: params[:page] || 1,
+      catalog_only: @reading_goal.public?
     )
     @pagy = pagy_path_count(@progress.count, limit: Services::Books::ReadingGoals::ProgressQuery::PER_PAGE)
   end

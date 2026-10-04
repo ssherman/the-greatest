@@ -159,6 +159,12 @@ class UserList < ApplicationRecord
     []
   end
 
+  # Narrows a UserListItem relation to the items anyone but the owner may see.
+  # Base hides nothing; Books hides provisional imports (Goodreads import spec §9).
+  def self.catalog_items(scope)
+    scope
+  end
+
   # Instance methods
   def default?
     list_type.to_s != "custom"
