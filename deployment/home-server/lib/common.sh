@@ -47,32 +47,45 @@ put_host() {
   host_file_matches "$src" "$dest" && return 0
   case "$dest" in
     /etc/pve/*) on_host "cat > '$dest'" <"$src" ;;
-    *) on_host "mkdir -p '$(dirname "$dest")' && cat > '$dest.new' && chmod $mode '$dest.new' && mv '$dest.new' '$dest'" <"$src" ;;
+    # Written under umask 077, so the bytes never sit in a file wider than 0600;
+    # a .new left by an earlier failed run goes first, since `>` keeps its mode.
+    *) on_host "mkdir -p '$(dirname "$dest")' && rm -f '$dest.new' && (umask 077 && cat > '$dest.new') &&
+      chmod $mode '$dest.new' && mv '$dest.new' '$dest'" <"$src" ;;
   esac
   note_change "$dest"
 }
 
 # load_secrets: secrets/home-server.env -> exported variables. Parsed, not
-# eval'ed: a value is data, never shell.
+# eval'ed: a value is data, never shell. The key ends at the first `=` and the
+# value is the rest of the line, verbatim: a tunnel token is base64 ending in
+# `=`, which `IFS='=' read` would drop.
 load_secrets() {
-  local file="$REPO_ROOT/secrets/home-server.env" key value
+  local file="$REPO_ROOT/secrets/home-server.env" line key value
   [ -f "$file" ] || die "missing $file"
   local plain
   plain="$(sops -d "$file")" || die "could not decrypt $file (is SOPS_AGE_KEY_FILE set?)"
-  while IFS='=' read -r key value; do
+  while IFS= read -r line; do
+    [[ "$line" == *=* ]] || continue
+    key="${line%%=*}" value="${line#*=}"
     if [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]]; then export "$key=$value"; fi
   done <<<"$plain"
   [ -n "${PVE_HOST:-}" ] || die "PVE_HOST is not set in $file"
 }
+
+# valid_ref <ref>: a git ref safe to put in `git clone --branch`, a remote
+# shell string, YAML and the VMs' sourced env file.
+valid_ref() { [[ "$1" =~ ^[A-Za-z0-9._/-]+$ ]] && [[ "$1" != -* ]]; }
 
 # load_host_state [ref]: the ref the VMs track and whether tunnels are on, both
 # kept on the host so any machine running provision sees the same answer.
 load_host_state() {
   on_host "mkdir -p $HOST_STATE"
   if [ -n "${1:-}" ]; then
+    valid_ref "$1" || die "invalid --ref '$1' (letters, digits and . _ / - only)"
     on_host "printf '%s\n' '$1' > $HOST_STATE/repo-ref"
   fi
   REPO_REF="$(on_host "cat $HOST_STATE/repo-ref 2>/dev/null || echo main")"
+  valid_ref "$REPO_REF" || die "$HOST_STATE/repo-ref on the host is not a valid ref; set one with --ref"
   TUNNELS_ENABLED=0
   if on_host "test -f $HOST_STATE/tunnels-enabled"; then TUNNELS_ENABLED=1; fi
   export REPO_REF TUNNELS_ENABLED

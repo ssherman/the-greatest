@@ -218,3 +218,12 @@ enable_tunnels() {
   local role
   for role in fetcher ol; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
 }
+
+# disable_tunnels: clear the flag and push TUNNELS_ENABLED=0; the forced deploy
+# that follows stops and removes cloudflared (guest/deploy.sh).
+disable_tunnels() {
+  on_host "rm -f $HOST_STATE/tunnels-enabled"
+  TUNNELS_ENABLED=0
+  local role
+  for role in fetcher ol; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
+}

@@ -18,8 +18,9 @@ setup() {
   export REPO_DIR="$SANDBOX/repo"
   git -C "$REPO_DIR" rev-parse HEAD >"$STATE_DIR/deployed-sha"
   write_env ROLE=fetcher REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
-  unset BUILD_EXIT
-  stub compose 'if [ "$1" = build ]; then exit "${BUILD_EXIT:-0}"; fi'
+  unset BUILD_EXIT TUNNEL_RUNNING
+  stub compose 'if [ "$1" = build ]; then exit "${BUILD_EXIT:-0}"; fi
+if [ "$*" = "--profile tunnel ps -q cloudflared" ] && [ -n "${TUNNEL_RUNNING:-}" ]; then echo 0123abcd; fi'
   stub install-units ''
   stub docker ''
   stub curl ''
@@ -69,7 +70,27 @@ t_ol_without_version() {
 t_ol_without_version_tunnels() {
   setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=1 HC_DEPLOY=https://hc.test/deploy
   commit data-sources/app v2
-  deploy && called '^compose up -d cloudflared$' && ! called '^compose up -d --remove-orphans$'
+  deploy && called '^compose up -d cloudflared$' && ! called '^compose up -d --remove-orphans' &&
+    ! called 'rm -sf'
+}
+t_tunnels_off_removes_running() {
+  setup; export TUNNEL_RUNNING=1; commit data-sources/app v2
+  deploy && called '^compose up -d --remove-orphans fetcher$' &&
+    called '^compose --profile tunnel rm -sf cloudflared$'
+}
+t_tunnels_off_ol_without_version() {
+  setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  export TUNNEL_RUNNING=1; commit data-sources/app v2
+  deploy && called '^compose --profile tunnel rm -sf cloudflared$'
+}
+t_tunnels_off_nothing_running() {
+  setup; commit data-sources/app v2
+  deploy && called '^compose --profile tunnel ps -q cloudflared$' && ! called 'rm -sf'
+}
+t_tunnels_on_keeps_it() {
+  setup; write_env ROLE=fetcher REPO_REF=main TUNNELS_ENABLED=1 HC_DEPLOY=https://hc.test/deploy
+  export TUNNEL_RUNNING=1; commit data-sources/app v2
+  deploy && called '^compose up -d --remove-orphans fetcher cloudflared$' && ! called 'rm -sf'
 }
 t_ol_with_version_tunnels() {
   setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=1 HC_DEPLOY=https://hc.test/deploy
@@ -109,6 +130,10 @@ check "ol with no data version builds but does not start api" t_ol_without_versi
 check "ol with no data version still starts the tunnel" t_ol_without_version_tunnels
 check "ol with a version and tunnels brings up api and cloudflared only" t_ol_with_version_tunnels
 check "the fetcher role never brings up api" t_fetcher_never_api
+check "tunnels switched off: a running cloudflared is stopped and removed" t_tunnels_off_removes_running
+check "tunnels switched off on ol with no data version: cloudflared is still removed" t_tunnels_off_ol_without_version
+check "tunnels off and no cloudflared running: nothing is removed" t_tunnels_off_nothing_running
+check "tunnels on: cloudflared is brought up, never removed" t_tunnels_on_keeps_it
 check "a no-op ol deploy does not care about the build lock" t_ol_noop_ignores_lock
 check "ol does not deploy under a running build" t_ol_build_running
 finish

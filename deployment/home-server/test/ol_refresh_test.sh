@@ -13,7 +13,7 @@ setup() {
   export PROMOTE_TIMEOUT_S=1 POLL_S=0 API_URL=http://api.test
   unset NEXT_ACTION NEXT_ACTION_FAIL BUILD_EXIT BROKEN_VERSION NOT_MOUNTED SWAP_ACTIVE MKSWAP_EXIT SWAP_SIZE
   stub swapon 'case "${1:-}" in --show*) [ -n "${SWAP_ACTIVE:-}" ] && echo "$OL_DATA/swapfile" ;; esac; true'
-  stub fallocate 'touch "${!#}"'
+  stub fallocate 'command -p touch "${!#}"'
   stub mkswap 'exit "${MKSWAP_EXIT:-0}"'
   # `command -p` searches the default PATH, never $SANDBOX/bin. A plain
   # `command chmod` finds this stub again and forks forever.
@@ -21,15 +21,15 @@ setup() {
   stub mountpoint '[ -z "${NOT_MOUNTED:-}" ]'
   stub curl 'url="${!#}"
 case "$url" in
-  */version) [ -f "$SANDBOX/serving" ] || exit 7; printf "{\"dump_date\":\"%s\"}" "$(cat "$SANDBOX/serving")" ;;
+  */version) [ -f "$SANDBOX/serving" ] || exit 7; printf "{\"dump_date\":\"%s\"}" "$(command -p cat "$SANDBOX/serving")" ;;
 esac'
   stub compose 'case "$*" in
   *"versions next-action"*) [ -z "${NEXT_ACTION_FAIL:-}" ] || exit 1; echo "$NEXT_ACTION" ;;
-  *"versions status"*) cat "$SANDBOX/status.json" ;;
+  *"versions status"*) command -p cat "$SANDBOX/status.json" ;;
   *"versions prune"*) ;;
   "run --rm --no-deps -T build") exit "${BUILD_EXIT:-0}" ;;
-  "up -d api") if [ "$OL_DATA_VERSION" = "${BROKEN_VERSION:-}" ]; then rm -f "$SANDBOX/serving"; else echo "$OL_DATA_VERSION" >"$SANDBOX/serving"; fi ;;
-  "stop api") rm -f "$SANDBOX/serving" ;;
+  "up -d api") if [ "$OL_DATA_VERSION" = "${BROKEN_VERSION:-}" ]; then command -p rm -f "$SANDBOX/serving"; else echo "$OL_DATA_VERSION" >"$SANDBOX/serving"; fi ;;
+  "stop api") command -p rm -f "$SANDBOX/serving" ;;
 esac'
   export COMPOSE="$SANDBOX/bin/compose"
 }
@@ -70,7 +70,7 @@ t_reverts() {
   setup; serving 2026-08-31; export NEXT_ACTION="build 2026-09-30" BROKEN_VERSION=2026-09-30
   status_json '{"passing":["2026-08-31","2026-09-30"],"failed":[],"incomplete":[]}'
   ! refresh && [ "$(cat "$OL_DATA/current-version")" = 2026-08-31 ] &&
-    [ "$(cat "$SANDBOX/serving")" = 2026-08-31 ] && called 'refresh/fail' && ! called 'versions prune'
+    [ "$(command -p cat "$SANDBOX/serving")" = 2026-08-31 ] && called 'refresh/fail' && ! called 'versions prune'
 }
 t_first_promotion_fails() {
   setup; export NEXT_ACTION="build 2026-09-30" BROKEN_VERSION=2026-09-30

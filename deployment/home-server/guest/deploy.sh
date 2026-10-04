@@ -67,6 +67,16 @@ else
   "$COMPOSE" up -d --remove-orphans "${up[@]}" || fail "compose up"
 fi
 
+# Tunnels switched off (provision --disable-tunnels): compose leaves a running
+# container of a disabled profile alone, --remove-orphans included, so name it.
+if [ "${TUNNELS_ENABLED:-0}" != 1 ]; then
+  tunnel="$("$COMPOSE" --profile tunnel ps -q cloudflared)" || fail "compose ps cloudflared"
+  if [ -n "$tunnel" ]; then
+    log "tunnels are off: removing cloudflared"
+    "$COMPOSE" --profile tunnel rm -sf cloudflared || fail "remove cloudflared"
+  fi
+fi
+
 echo "$target" >"$STATE_DIR/deployed-sha"
 rm -f "$STATE_DIR/force-deploy"
 docker image prune -f >/dev/null || log "image prune failed"
