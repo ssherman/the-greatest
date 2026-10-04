@@ -110,7 +110,7 @@ The firewall revert does not restore the old rules: it sets `enable: 0` in `clus
 
 | Event | What recovers it |
 |---|---|
-| Power cut | BIOS "Restore on AC Power Loss" boots the host. VMs with `onboot` start in order (`ol`, then `fetcher`). Docker starts at boot and every container is `restart: unless-stopped`. A build cut short runs again at the next 03:00 or boot (`ol-refresh.timer`). |
+| Power cut | BIOS "Restore on AC Power Loss" boots the host. VMs with `onboot` start in order (`ol`, then `fetcher`). Docker starts at boot and every container is `restart: unless-stopped`. A build cut short runs again at the next 03:00 or 10 minutes after boot (`ol-refresh.timer`). |
 | A container exits | `restart: unless-stopped` restarts it. |
 | Bad deploy | `the-greatest-deploy.timer` (boot plus 2 minutes, then every 15 minutes) runs `deploy.sh` every 15 minutes. A failed build leaves the running container alone and the deployed SHA where it was, so the next run tries again; each failure pings `fail`. |
 | Bad dump | `ol-refresh.sh` promotes a version only when every gate passes. A failed build keeps the previous version serving and pings `fail`. If the new API does not report the new date in time, it writes the previous date back. |
@@ -120,7 +120,7 @@ Security updates install on both VMs through `unattended-upgrades`, and `reboot-
 reboots a VM at 05:30 only if a reboot is pending and no build lock is held. On the host,
 `unattended-upgrades` installs Debian security updates only; Proxmox packages are upgraded only by
 `provision`, and the host never reboots itself. The one-shot `build` service has no restart policy
-(it runs with `run --rm`); a failed build is retried by the next timer run.
+(it runs with `run --rm`); a build cut short (crash, OOM, reboot) runs again at the next timer run. A build that fails its gates is not retried until a newer dump appears; delete its version directory to force a rebuild.
 
 ## Alerts
 
