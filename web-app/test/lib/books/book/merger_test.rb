@@ -85,6 +85,16 @@ module Books
         assert_equal @target.id, edition.reload.book_id
       end
 
+      test "moves Goodreads editions to the target" do
+        edition = ::Books::GoodreadsEdition.create!(goodreads_book_id: 123, title: "Crime and Punishment",
+          primary_author: "Fyodor Dostoevsky", signature: "crime", book: @source, resolution: :matched,
+          resolved_at: Time.current)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, edition.reload.book_id
+      end
+
       test "moves external links to the target" do
         link = ExternalLink.create!(
           parent: @source, name: "Wikipedia", url: "https://example.com/cp", source: :wikipedia

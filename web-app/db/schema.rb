@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_035819) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_191240) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -242,6 +242,96 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_035819) do
     t.index ["edition_type"], name: "index_books_editions_on_edition_type"
     t.index ["language_id"], name: "index_books_editions_on_language_id"
     t.index ["volume_number"], name: "index_books_editions_on_volume_number"
+  end
+
+  create_table "books_goodreads_editions", force: :cascade do |t|
+    t.string "additional_authors", default: [], null: false, array: true
+    t.string "book_format"
+    t.bigint "book_id"
+    t.datetime "created_at", null: false
+    t.bigint "goodreads_book_id", null: false
+    t.string "isbn10"
+    t.string "isbn13"
+    t.bigint "match_decision_id"
+    t.integer "original_publication_year"
+    t.integer "pages"
+    t.string "primary_author", null: false
+    t.string "publisher"
+    t.integer "resolution"
+    t.datetime "resolved_at"
+    t.string "series_name"
+    t.string "series_number"
+    t.string "signature", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.integer "verification", default: 0, null: false
+    t.integer "year_published"
+    t.index ["book_id"], name: "index_books_goodreads_editions_on_book_id"
+    t.index ["goodreads_book_id", "signature"], name: "idx_on_goodreads_book_id_signature_8e389d2d73", unique: true
+    t.index ["match_decision_id"], name: "index_books_goodreads_editions_on_match_decision_id"
+    t.index ["signature"], name: "index_books_goodreads_editions_on_signature"
+  end
+
+  create_table "books_goodreads_import_records", force: :cascade do |t|
+    t.integer "action", null: false
+    t.datetime "created_at", null: false
+    t.bigint "import_id", null: false
+    t.bigint "record_id", null: false
+    t.string "record_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["import_id", "record_type", "record_id"], name: "index_books_goodreads_import_records_uniqueness", unique: true
+    t.index ["record_type", "record_id"], name: "index_books_goodreads_import_records_on_record"
+  end
+
+  create_table "books_goodreads_import_rows", force: :cascade do |t|
+    t.jsonb "applied", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.date "date_added"
+    t.date "date_read"
+    t.text "error"
+    t.string "exclusive_shelf"
+    t.bigint "goodreads_edition_id"
+    t.bigint "import_id", null: false
+    t.string "notes", default: [], null: false, array: true
+    t.integer "outcome", default: 0, null: false
+    t.string "outcome_detail"
+    t.integer "rating"
+    t.jsonb "raw", default: {}, null: false
+    t.integer "read_count"
+    t.text "review_body"
+    t.integer "row_number", null: false
+    t.jsonb "shelf_positions", default: {}, null: false
+    t.string "shelves", default: [], null: false, array: true
+    t.datetime "updated_at", null: false
+    t.index ["goodreads_edition_id"], name: "index_books_goodreads_import_rows_on_goodreads_edition_id"
+    t.index ["import_id", "row_number"], name: "index_books_goodreads_import_rows_on_import_id_and_row_number", unique: true
+  end
+
+  create_table "books_goodreads_imports", force: :cascade do |t|
+    t.integer "ai_calls_count", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.integer "created_count", default: 0, null: false
+    t.integer "editions_count", default: 0, null: false
+    t.text "error"
+    t.datetime "finished_at"
+    t.integer "flagged_count", default: 0, null: false
+    t.integer "legacy_import_id"
+    t.integer "matched_count", default: 0, null: false
+    t.integer "parked_count", default: 0, null: false
+    t.integer "review_status", default: 0, null: false
+    t.datetime "reviewed_at"
+    t.bigint "reviewed_by_id"
+    t.integer "rows_count", default: 0, null: false
+    t.integer "skipped_count", default: 0, null: false
+    t.integer "source", default: 0, null: false
+    t.datetime "started_at"
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["legacy_import_id"], name: "index_books_goodreads_imports_on_legacy_import_id", unique: true, where: "(legacy_import_id IS NOT NULL)"
+    t.index ["reviewed_by_id"], name: "index_books_goodreads_imports_on_reviewed_by_id"
+    t.index ["user_id"], name: "index_books_goodreads_imports_on_user_id"
+    t.index ["user_id"], name: "index_books_goodreads_imports_one_in_progress_per_user", unique: true, where: "(status = ANY (ARRAY[0, 1, 2, 3, 4]))"
   end
 
   create_table "books_reading_goals", force: :cascade do |t|
@@ -1258,6 +1348,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_035819) do
   add_foreign_key "books_credits", "books_authors", column: "author_id"
   add_foreign_key "books_editions", "books_books", column: "book_id"
   add_foreign_key "books_editions", "languages"
+  add_foreign_key "books_goodreads_editions", "books_books", column: "book_id", on_delete: :nullify
+  add_foreign_key "books_goodreads_editions", "match_decisions", on_delete: :nullify
+  add_foreign_key "books_goodreads_import_records", "books_goodreads_imports", column: "import_id", on_delete: :cascade
+  add_foreign_key "books_goodreads_import_rows", "books_goodreads_editions", column: "goodreads_edition_id"
+  add_foreign_key "books_goodreads_import_rows", "books_goodreads_imports", column: "import_id", on_delete: :cascade
+  add_foreign_key "books_goodreads_imports", "users"
+  add_foreign_key "books_goodreads_imports", "users", column: "reviewed_by_id"
   add_foreign_key "books_reading_goals", "users"
   add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
   add_foreign_key "books_series_books", "books_books", column: "book_id"

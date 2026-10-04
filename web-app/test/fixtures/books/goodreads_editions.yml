@@ -1,0 +1,57 @@
+# == Schema Information
+#
+# Table name: books_goodreads_editions
+#
+#  id                        :bigint           not null, primary key
+#  additional_authors        :string           default([]), not null, is an Array
+#  book_format               :string
+#  isbn10                    :string
+#  isbn13                    :string
+#  original_publication_year :integer
+#  pages                     :integer
+#  primary_author            :string           not null
+#  publisher                 :string
+#  resolution                :integer
+#  resolved_at               :datetime
+#  series_name               :string
+#  series_number             :string
+#  signature                 :string           not null
+#  title                     :string           not null
+#  verification              :integer          default(0), not null
+#  year_published            :integer
+#  created_at                :datetime         not null
+#  updated_at                :datetime         not null
+#  book_id                   :bigint
+#  goodreads_book_id         :bigint           not null
+#  match_decision_id         :bigint
+#
+# Indexes
+#
+#  idx_on_goodreads_book_id_signature_8e389d2d73        (goodreads_book_id,signature) UNIQUE
+#  index_books_goodreads_editions_on_book_id            (book_id)
+#  index_books_goodreads_editions_on_match_decision_id  (match_decision_id)
+#  index_books_goodreads_editions_on_signature          (signature)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (book_id => books_books.id) ON DELETE => nullify
+#  fk_rails_...  (match_decision_id => match_decisions.id) ON DELETE => nullify
+#
+# signature is Books::Goodreads::ExportRow.signature(title, primary_author).
+war_and_peace_edition:
+  goodreads_book_id: 656
+  signature: ae5a8901c1ecb81ed9fe71c4bf64d33b958275d868816dbae66b3b92e45a35aa
+  title: War and Peace
+  primary_author: Leo Tolstoy
+  isbn13: "9780140447934"
+  original_publication_year: 1869
+  book: war_and_peace
+  resolution: matched
+  verification: not_needed
+  resolved_at: 2026-10-01 12:00:00
+
+unresolved_edition:
+  goodreads_book_id: 99000001
+  signature: 2a874f3fe57c971e6a4b30558e404c516c58e66a585216586a988126f88de558
+  title: The Quiet Year
+  primary_author: Anna Brenner
