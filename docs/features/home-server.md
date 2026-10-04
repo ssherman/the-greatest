@@ -14,8 +14,8 @@ The host is an HP Elite Mini 800 G9: i7-12700T (12 cores, 20 threads), 62 GB usa
 9.2. Two ZFS pools: `rpool` (1 TB, system and `local-zfs`) and `rpool2` (4 TB). ZFS's cache (the
 ARC) is capped at 8 GiB. The operator reaches it as the SSH alias `pve-mini`, defined in
 `~/.ssh/config` on the operator's machine, and `PVE_HOST` in the secrets names only that alias, so
-the SSH target is never committed in clear. Its LAN IPv4 is static (192.168.1.214, reserved on the
-router). It has no global IPv6.
+the SSH target is never committed in clear. It has a static LAN IPv4, reserved on the router; the
+value lives in `PVE_LAN_IPV4`. It has no global IPv6.
 
 The first target was a different machine (an i7-7700K), retired on 2026-10-03 before go-live.
 
@@ -46,11 +46,20 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 All guests with `onboot` come back by themselves after a host reboot. VM 101 is not managed by
 `provision`, which never touches it. After a converge, and in `--verify`, provision asserts that every
 guest running beforehand other than 110 and 120 (VM 101 included) is still running. Its
-Cloudflare tunnel runs inside the VM.
+Cloudflare tunnel runs inside the VM. VM 101's NIC has `firewall=1`, so once the host firewall is
+on its traffic passes through pve-firewall's bridge conntrack chains and the `vmbr1` CT-zone rule,
+even though no rule names it. Provision asserts only that it keeps running, not that its traffic is
+unaffected.
 
 `vmbr1` is a private NAT bridge. The fetcher sits on it, resolves DNS through 1.1.1.1 and 1.0.0.1, and the Proxmox firewall drops everything
 the fetcher sends to a private destination (`/etc/pve/firewall/120.fw`, enforced on the host so
-root inside the VM cannot change it). The Open Library data lives on its own disk, so
+root inside the VM cannot change it). It also drops the house's own public IPv4: the router answers
+on that address itself (NAT hairpin), so it would reach the router's admin pages on 80 and 443.
+`120.fw` is rendered from `host/firewall/120.fw.tmpl` with that address in the `house_public`
+ipset; the address is never committed. Provision reads it on the host from Cloudflare's
+`/cdn-cgi/trace` on every run, and dies rather than write an empty set if it can't. If Google Fiber
+changes the address, re-run `provision`; until then `--verify`'s egress probe fails, which is how
+the drift shows up. The Open Library data lives on its own disk, so
 `provision --rebuild ol` replaces the OS disk and keeps the data.
 
 ## Running provision
@@ -68,10 +77,11 @@ deployment/home-server/provision [mode]
 | (none) | Converges the host (DNS, packages, network, firewall, the ZFS ARC cap), creates any missing VM, installs each VM's env and units. A second run reports no changes. It does not create ZFS pools or Proxmox storage entries. |
 | `--rebuild ol\|fetcher` | Replaces that VM's OS disk with a fresh cloud image. The data disk is kept. |
 | `--enable-tunnels` | Starts `cloudflared` on both VMs. It dies unless both tunnel tokens are set. Run it only after Cloudflare Access is in place. The flag is stored on the host, so a later `--rebuild` keeps it. |
-| `--verify` | Not read-only: it re-runs convergence (DNS, packages without the upgrade, network, firewall, VM creation), so it can change things, and then fails its idempotence check if anything changed. Check classes: host, VMs, egress (with positive controls, from the VM and the container), idempotence, and pre-existing guests. |
+| `--disable-tunnels` | Removes the flag, pushes `TUNNELS_ENABLED=0` to both VMs and forces a deploy, which stops and removes `cloudflared`. |
+| `--verify` | Not read-only: it re-runs convergence (DNS, packages without the upgrade, network, firewall, VM creation), so it can change things, and then fails its idempotence check if anything changed. Check classes: host, VMs, egress (with positive controls, from the VM and the container, including the house's public IPv4 on 80 and 443), idempotence, and pre-existing guests. |
 | `--verify --external-from user@host` | Adds the exposure check: ports 22, 8006, 111 and 3128 on the host's public address, probed from that machine. |
-| `--verify --recovery` | Adds a recovery check: SIGKILLs each service's main process and expects Docker to restart it, then **reboots the host** (`systemctl reboot`), waits up to about 10 minutes, and re-runs the host, VM and egress checks. Ask before running it. |
-| `--ref <ref>` | Sets the repo ref the VMs track, stored on the host, then runs a converge. Default `main`. |
+| `--verify --recovery` | Adds a recovery check: SIGKILLs each service's main process and expects Docker to restart it, then **reboots the host** (`systemctl reboot`), waits up to about 10 minutes, and re-runs the host, VM, egress and pre-existing guest checks. Ask before running it. |
+| `--ref <ref>` | Sets the repo ref the VMs track, stored on the host, then runs a converge. Default `main`. Letters, digits and `. _ / -` only; anything else dies before provision does anything. |
 
 The keys in `secrets/home-server.env` (SOPS-encrypted). Each VM receives only its own values.
 
@@ -89,7 +99,8 @@ The keys in `secrets/home-server.env` (SOPS-encrypted). Each VM receives only it
 
 `SSH_PUBKEY_FILE` is an environment variable on the dev machine, not a secret. It defaults to
 `~/.ssh/id_ed25519.pub`, and provision dies if the file is missing. The dev machine also needs
-`sops`, `jq`, `envsubst` and the age key.
+`sops`, `jq`, `envsubst`, the age key, and GNU coreutils (provision uses `base64 -w0` and
+`sha256sum`; on macOS, `brew install coreutils` and put its `gnubin` directory first on `PATH`).
 
 Three behaviors:
 
@@ -149,10 +160,14 @@ Whole machine:
    *(manual, one command)*
 3. On the dev machine, add the `pve-mini` alias to `~/.ssh/config` and make sure `PVE_HOST`,
    `PVE_LAN_IPV4`, `PVE_LAN_GATEWAY4` and the storage names in `secrets/home-server.env` match.
-   Check that the public key file exists and that `sops`, `jq` and `envsubst` are installed.
-   *(manual)*
+   Check that the public key file exists and that `sops`, `jq`, `envsubst` and GNU coreutils are
+   installed. A reinstalled host has a new SSH host key: remove its old entry with
+   `ssh-keygen -R <host>` (the alias's HostName), or provision's BatchMode SSH fails on the
+   mismatch. *(manual)*
 4. Run `deployment/home-server/provision`. If it stops and says to reboot, reboot the host (guests
-   with `onboot` come back by themselves) and run it again.
+   with `onboot` come back by themselves) and run it again. If the reinstall re-imported an old
+   `rpool2`, it may still hold `vm-110-*` zvols from the previous `ol` VM, which nothing references
+   any more; `zfs list -r rpool2` shows them, and deleting them is a decision for Shane.
 5. Put the tunnel tokens and ping URLs into the secrets, then run `provision --enable-tunnels` once
    Access is in place (below). The Open Library build does not wait for this: its timer starts about
    10 minutes after the `ol` VM boots. On a fresh box it must download the dumps first, so allow
@@ -160,6 +175,25 @@ Whole machine:
 6. Run `provision --verify`.
 
 One VM: `provision --rebuild ol|fetcher`. The data disk is kept.
+
+Switch the tunnels off: run `provision --disable-tunnels`. It removes
+`/etc/the-greatest-home-server/tunnels-enabled` on the host, pushes `TUNNELS_ENABLED=0` to both
+VMs and forces a deploy, which stops and removes `cloudflared` (compose leaves a running container
+of a disabled profile alone, so `deploy.sh` removes it by name). Removing the flag by hand and
+re-running plain `provision` does the same. `--enable-tunnels` turns them back on.
+
+Going live: after the PR merges, run `provision --ref main` **before** the PR branch is deleted.
+The VMs track the ref stored on the host (the branch, until then), and fetch it every 15 minutes;
+once the branch is gone they can no longer fetch, and each deploy pings `fail` until the ref is
+changed.
+
+Things that look fine but are not:
+
+- The build's `cpus: 10` in `compose.ol.yml` must stay at or below the `ol` VM's vCPUs in `vm_spec`
+  (12). A test checks it.
+- A pinned kernel (`proxmox-boot-tool kernel pin`) would make the running kernel permanently older
+  than the newest installed one, so the reboot guard would stop every converge for good. Unpin, or
+  change the guard, before pinning.
 
 ## Done once by hand
 
