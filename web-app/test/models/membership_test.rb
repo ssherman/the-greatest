@@ -14,7 +14,7 @@ require "test_helper"
 #  interval               :integer
 #  note                   :text
 #  origin_domain          :string
-#  source                 :integer          default(0), not null
+#  source                 :integer          default("stripe"), not null
 #  status                 :integer          not null
 #  stripe_synced_at       :datetime
 #  welcome_email_sent_at  :datetime

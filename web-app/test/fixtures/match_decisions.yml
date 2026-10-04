@@ -3,6 +3,49 @@
 # FixtureSet.identify because fixture ids are hashes.
 
 # Needs review, matched by the AI at low confidence. The default queue shows it.
+# == Schema Information
+#
+# Table name: match_decisions
+#
+#  id             :bigint           not null, primary key
+#  candidates     :jsonb            not null
+#  confidence     :integer          not null
+#  decided_by     :integer          not null
+#  finder         :string           not null
+#  needs_review   :boolean          default(FALSE), not null
+#  outcome        :integer          not null
+#  query          :jsonb            not null
+#  reason         :text
+#  record_type    :string
+#  review_note    :text
+#  reviewed_at    :datetime
+#  selected_index :integer
+#  sources_failed :string           default([]), not null, is an Array
+#  subject_type   :string
+#  verdict        :integer
+#  verify         :boolean          default(FALSE), not null
+#  created_at     :datetime         not null
+#  updated_at     :datetime         not null
+#  ai_chat_id     :bigint
+#  record_id      :bigint
+#  reviewed_by_id :bigint
+#  subject_id     :bigint
+#
+# Indexes
+#
+#  index_match_decisions_on_ai_chat_id                    (ai_chat_id)
+#  index_match_decisions_on_created_at                    (created_at)
+#  index_match_decisions_on_finder                        (finder)
+#  index_match_decisions_on_needs_review_and_reviewed_at  (needs_review,reviewed_at)
+#  index_match_decisions_on_record                        (record_type,record_id)
+#  index_match_decisions_on_reviewed_by_id                (reviewed_by_id)
+#  index_match_decisions_on_subject                       (subject_type,subject_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (ai_chat_id => ai_chats.id) ON DELETE => nullify
+#  fk_rails_...  (reviewed_by_id => users.id) ON DELETE => nullify
+#
 low_confidence_book_match:
   finder: DataImporters::Books::Book::Finder
   record: war_and_peace (Books::Book)

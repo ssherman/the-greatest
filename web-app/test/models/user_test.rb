@@ -3,7 +3,7 @@
 # Table name: users
 #
 #  id                     :bigint           not null, primary key
-#  account_kind           :integer          default(0), not null
+#  account_kind           :integer          default("person"), not null
 #  auth_data              :jsonb
 #  auth_uid               :string
 #  confirmation_sent_at   :datetime
@@ -21,7 +21,7 @@
 #  original_signup_domain :string
 #  photo_url              :string
 #  provider_data          :text
-#  role                   :integer          default(0), not null
+#  role                   :integer          default("user"), not null
 #  sign_in_count          :integer
 #  created_at             :datetime         not null
 #  updated_at             :datetime         not null

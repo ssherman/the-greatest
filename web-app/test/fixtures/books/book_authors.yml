@@ -5,7 +5,7 @@
 #  id          :bigint           not null, primary key
 #  credited_as :string
 #  position    :integer
-#  role        :integer          default(0), not null
+#  role        :integer          default("author"), not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  author_id   :bigint           not null

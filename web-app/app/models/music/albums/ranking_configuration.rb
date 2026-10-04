@@ -23,7 +23,7 @@
 #  primary_mapped_list_cutoff_limit   :integer
 #  published_at                       :datetime
 #  refresh_requested_at               :datetime
-#  refresh_status                     :integer          default(0), not null
+#  refresh_status                     :integer          default("idle"), not null
 #  secondary_mapped_list_cutoff_limit :integer
 #  type                               :string           not null
 #  user_shared                        :boolean          default(FALSE), not null

@@ -5,7 +5,7 @@
 # Table name: books_author_relationships
 #
 #  id             :bigint           not null, primary key
-#  relation_type  :integer          default(0), not null
+#  relation_type  :integer          default("pseudonym_of"), not null
 #  created_at     :datetime         not null
 #  updated_at     :datetime         not null
 #  from_author_id :bigint           not null

@@ -1,5 +1,37 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: duplicate_candidates
+#
+#  id                :bigint           not null, primary key
+#  evidence          :jsonb            not null
+#  item_type         :string           not null
+#  occurrences       :integer          default(1), not null
+#  resolution_note   :text
+#  resolved_at       :datetime
+#  source            :integer          not null
+#  status            :integer          default("pending"), not null
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  item_a_id         :bigint           not null
+#  item_b_id         :bigint           not null
+#  match_decision_id :bigint
+#  resolved_by_id    :bigint
+#
+# Indexes
+#
+#  index_duplicate_candidates_on_match_decision_id      (match_decision_id)
+#  index_duplicate_candidates_on_pair                   (item_type,item_a_id,item_b_id) UNIQUE
+#  index_duplicate_candidates_on_resolved_by_id         (resolved_by_id)
+#  index_duplicate_candidates_on_status_and_created_at  (status,created_at)
+#  index_duplicate_candidates_on_type_and_b             (item_type,item_b_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (match_decision_id => match_decisions.id) ON DELETE => nullify
+#  fk_rails_...  (resolved_by_id => users.id) ON DELETE => nullify
+#
 class DuplicateCandidateTest < ActiveSupport::TestCase
   def setup
     @a = games_games(:resident_evil_4)
