@@ -14,8 +14,9 @@ module DataImporters
         # their async enrichment; one this import created is remembered in
         # new_author_ids.
         class Authors < DataImporters::ProviderBase
-          def initialize(new_author_ids: [])
+          def initialize(new_author_ids: [], provisional: false)
             @new_author_ids = new_author_ids
+            @provisional = provisional
           end
 
           def populate(book, query:, match: nil)
@@ -29,7 +30,7 @@ module DataImporters
             names.each_with_index do |name, index|
               imported = ::DataImporters::Books::Author::Importer.call(
                 name: name, work_titles: [book.title].compact_blank,
-                providers: ::DataImporters::Books::Author::Importer::BOOK_STEP_PROVIDERS
+                providers: ::DataImporters::Books::Author::Importer::BOOK_STEP_PROVIDERS, provisional: @provisional
               )
               author = imported.item
               next unless author&.persisted?

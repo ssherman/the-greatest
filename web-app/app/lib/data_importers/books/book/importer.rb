@@ -7,9 +7,11 @@ module DataImporters
       # resolve service.
       class Importer < DataImporters::ImporterBase
         def self.call(title: nil, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [],
-          open_library_work_key: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false)
+          open_library_work_key: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false,
+          match: nil, provisional: false, stamp_identifiers: false, enrich: true)
+          importer = new(provisional: provisional, stamp_identifiers: stamp_identifiers, enrich: enrich)
           if item.present?
-            super(item: item, force_providers: force_providers, providers: providers)
+            importer.call(item: item, force_providers: force_providers, providers: providers)
           else
             query = ImportQuery.new(
               title: title,
@@ -21,8 +23,27 @@ module DataImporters
               goodreads_id: goodreads_id,
               open_library_work_key: open_library_work_key
             )
-            super(query: query, force_providers: force_providers, providers: providers, subject: subject, verify: verify)
+            importer.call(query: query, force_providers: force_providers, providers: providers, subject: subject,
+              verify: verify, match: match)
           end
+        end
+
+        # provisional: the book, and any author this import creates, are saved
+        # provisional (Goodreads import spec §5, §9). stamp_identifiers: the
+        # query's identifiers are stamped whatever Open Library says, so a
+        # book made while the service is down can be found again by them.
+        # enrich: false skips AiEnrichment and AuthorEnrichment; an import's
+        # enrichment runs on admin approval instead.
+        def initialize(provisional: false, stamp_identifiers: false, enrich: true)
+          @provisional = provisional
+          @stamp_identifiers = stamp_identifiers
+          @enrich = enrich
+        end
+
+        def call(**)
+          result = super
+          result.created_author_ids = new_author_ids.dup
+          result
         end
 
         protected
@@ -39,14 +60,22 @@ module DataImporters
         # AuthorEnrichment runs last, after the deferral row is written, so it
         # starts that chain for the authors this import created -- both it
         # and AiEnrichment run after the save that follows Authors, so the
-        # chain sees this book among their titles (spec §10).
+        # chain sees this book among their titles (spec §10). QueryIdentifiers
+        # runs after Authors when stamp_identifiers is asked for; enrich: false
+        # drops the two enrichment providers.
         def providers
-          @providers ||= [
-            Providers::OpenLibrary.new(new_author_ids: new_author_ids),
-            Providers::Authors.new(new_author_ids: new_author_ids),
-            Providers::AiEnrichment.new(new_author_ids: new_author_ids),
-            Providers::AuthorEnrichment.new(new_author_ids: new_author_ids)
-          ]
+          @providers ||= begin
+            list = [
+              Providers::OpenLibrary.new(new_author_ids: new_author_ids, provisional: @provisional),
+              Providers::Authors.new(new_author_ids: new_author_ids, provisional: @provisional)
+            ]
+            list << Providers::QueryIdentifiers.new if @stamp_identifiers
+            if @enrich
+              list << Providers::AiEnrichment.new(new_author_ids: new_author_ids)
+              list << Providers::AuthorEnrichment.new(new_author_ids: new_author_ids)
+            end
+            list
+          end
         end
 
         # The authors this import created: the author steps add to it, and
@@ -63,7 +92,8 @@ module DataImporters
         def initialize_item(query)
           ::Books::Book.new(
             title: query.title,
-            first_published_year: query.year
+            first_published_year: query.year,
+            provisional: @provisional
           )
         end
       end

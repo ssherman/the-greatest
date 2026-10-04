@@ -114,6 +114,14 @@ module DataImporters
           )
         end
 
+        test "provisional saves a new author as provisional" do
+          assert Importer.call(name: "Anna Brenner", provisional: true).item.reload.provisional?
+        end
+
+        test "provisional leaves a matched author alone" do
+          assert_not Importer.call(name: "Leo Tolstoy", provisional: true).item.reload.provisional?
+        end
+
         test "the query's alternate names seed a new author, without its own name" do
           result = Importer.call(name: "Anna Brenner", alternate_names: ["Anna Brenner", "Anya Brenner"])
 

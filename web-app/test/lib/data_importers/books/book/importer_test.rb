@@ -333,6 +333,76 @@ module DataImporters
           assert_equal 1, ::Books::Author.where(name: "Anna Brenner").count
         end
 
+        test "provisional saves the new book and the author it creates as provisional" do
+          stub_resolve_down
+
+          result = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], provisional: true)
+
+          book = result.item.reload
+          assert book.provisional?
+          assert book.authors.sole.provisional?
+          assert_equal [book.authors.sole.id], result.created_author_ids
+        end
+
+        test "provisional never touches an existing author it links" do
+          stub_resolve_down
+
+          result = Importer.call(title: "Hadji Murat", author_names: ["Leo Tolstoy"], provisional: true)
+
+          assert_not books_authors(:tolstoy).reload.provisional?
+          assert_equal [], result.created_author_ids
+        end
+
+        test "without provisional, nothing is provisional" do
+          stub_resolve_down
+
+          book = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"]).item.reload
+
+          assert_equal [false, false], [book.provisional?, book.authors.sole.provisional?]
+        end
+
+        test "stamp_identifiers stamps the query's identifiers when Open Library is down" do
+          stub_resolve_down
+
+          book = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], isbn13: ["9780441013593"],
+            goodreads_id: ["234225"], stamp_identifiers: true).item.reload
+
+          assert_equal [["books_work_goodreads_id", "234225"], ["books_work_isbn13", "9780441013593"]],
+            book.identifiers.map { |identifier| [identifier.identifier_type, identifier.value] }.sort
+        end
+
+        test "without stamp_identifiers, an Open Library outage stamps nothing" do
+          stub_resolve_down
+
+          book = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], isbn13: ["9780441013593"]).item.reload
+
+          assert_equal 0, book.identifiers.count
+        end
+
+        test "enrich: false runs neither enrichment provider" do
+          stub_resolve_down
+          ::Books::EnrichBookJob.expects(:perform_async).never
+          ::Books::Authors::WikidataJob.expects(:perform_async).never
+
+          result = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], enrich: false)
+
+          assert_equal ["DataImporters::Books::Book::Providers::OpenLibrary", "DataImporters::Books::Book::Providers::Authors"],
+            result.provider_results.map(&:provider_name)
+        end
+
+        test "a supplied match is used instead of running the finder, and its decision points at the new book" do
+          stub_resolve_down
+          Finder.any_instance.expects(:call).never
+          decision = ::MatchDecision.create!(finder: "DataImporters::Books::Book::Finder", outcome: :unmatched,
+            confidence: :high, decided_by: :rule)
+          match = ::DataImporters::Match.new(outcome: :unmatched, confidence: :high, decided_by: :rule, decision: decision)
+
+          result = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], match: match)
+
+          assert result.created?
+          assert_equal result.item, decision.reload.record
+        end
+
         test "an Open Library accept links the work's authors, creating one by its key" do
           stub_open_library_client
           record = work_record_hash(title: "The Quiet Year").merge(
