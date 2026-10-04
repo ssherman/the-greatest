@@ -48,21 +48,14 @@ validates and reports. A failed gate leaves the previous version live.
 
 ### Promoting a new version
 
-Point `OL_DATA_VERSION` at the new dump date and restart the API container.
-Compose reads the version from the environment rather than a symlink, so a
-new build can be pinned without touching the compose file
-(`data-sources/docker-compose.yml`; see also `data-sources/README.md`,
-"Running the API"):
-
-    OL_DATA_VERSION=<new-date> docker compose up -d api
-
-The service refuses to boot against a version directory with no
-`manifest.json`, or one whose manifest does not record `gates_passed: true`
-("Version pinning" under "Service, measured" below), so pointing at an
-unfinished or failed build fails loudly rather than serving stale or partial
-data. Once the new version is confirmed good, delete the old version
-directory under `/home/shane/ol-data/versions/` to reclaim the ~10 GB it
-holds.
+On the home server, promotion is automatic. `ol-refresh.timer` builds the
+newest dump daily if it is new, promotes it only when every gate passes, and
+keeps two versions (see `docs/features/home-server.md`). The manual
+`OL_DATA_VERSION=<date> docker compose up -d api` still applies on a
+development machine. The service refuses to boot against a version directory
+with no `manifest.json`, or one whose manifest does not record
+`gates_passed: true` ("Version pinning" under "Service, measured" below), so
+pointing at an unfinished or failed build fails loudly.
 
 ## Measured build, 2026-07-31
 

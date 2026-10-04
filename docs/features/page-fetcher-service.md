@@ -52,17 +52,19 @@ they do not close it:
   itself be a fingerprinting signal.
 
 The fix that actually closes all of the above is a network-level egress
-block on the fetcher's container network: drop destinations in RFC 1918,
-loopback, link-local and CGNAT ranges, and allow DNS. See "Where it runs".
+block on the fetcher's network: drop destinations in RFC 1918,
+loopback, link-local and CGNAT ranges, and allow DNS. The home server has
+it; see "Where it runs".
 
 ## Where it runs
 
-On the development machine today. Neither this nor the Open Library service is
-deployed: both go to the headless home server behind a Cloudflare Tunnel, and
-**both hostnames need Cloudflare Access in front before they go live**. The
-fetcher also needs a network-level egress block on its container network
-first -- the address checks above narrow SSRF, they do not close it. Neither
-service authenticates, and an open fetcher would be a proxy on a home IP.
+It is deployed to the home server's `fetcher` VM
+(`docs/features/home-server.md`) and goes live behind Cloudflare Access, once
+Access is in place and the tunnels are switched on. The network-level egress
+block the address checks call for is in place there. It is enforced on the Proxmox host (`/etc/pve/firewall/120.fw`),
+outside the VM, and also drops the house's own public IPv4, which the router
+answers on itself. `provision --verify` tests it from inside both the VM and
+the container. Development still runs it from `data-sources/`.
 
 ## Running it
 

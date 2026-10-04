@@ -1,0 +1,12 @@
+# VM 110 `ol`, on the LAN. Nothing listens beyond SSH: its services publish on
+# loopback and leave through cloudflared.
+[OPTIONS]
+enable: 1
+policy_in: DROP
+policy_out: ACCEPT
+dhcp: 1
+ndp: 1
+radv: 0
+
+[RULES]
+IN ACCEPT -source +lan -p tcp -dport 22 -log nolog

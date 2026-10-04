@@ -1,0 +1,16 @@
+#!/bin/bash
+# Installed by deployment/home-server/provision. A change that could cut off
+# SSH is armed with a revert first; provision confirms only once it can
+# reconnect, so a lockout undoes itself.
+#   confirm-or-revert arm <name> <seconds> <revert shell command>
+#   confirm-or-revert confirm <name>
+set -euo pipefail
+case "${1:-}" in
+  arm)
+    systemctl stop "revert-$2.timer" 2>/dev/null || true
+    systemd-run --quiet --collect --unit="revert-$2" --on-active="$3" \
+      --timer-property=AccuracySec=1s /bin/sh -c "$4"
+    ;;
+  confirm) systemctl stop "revert-$2.timer" ;;
+  *) echo "usage: confirm-or-revert arm <name> <seconds> <cmd> | confirm <name>" >&2; exit 2 ;;
+esac

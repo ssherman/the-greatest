@@ -1,0 +1,24 @@
+# VM 120 `fetcher`, on vmbr1. Enforced on the host, so root inside the VM
+# cannot change it (spec §4): no private destination, no spoofed source, and
+# not the house's own public IPv4, which the router hairpins back to itself.
+# Rendered by deployment/home-server/provision, which reads that address off
+# the host at provision time; it is never committed.
+[OPTIONS]
+enable: 1
+policy_in: DROP
+policy_out: ACCEPT
+dhcp: 0
+ndp: 0
+radv: 0
+ipfilter: 1
+
+[IPSET ipfilter-net0]
+10.20.0.10
+
+[IPSET house_public] # the house's public IPv4, re-read on every provision run
+${HOUSE_PUBLIC_IPV4}
+
+[RULES]
+OUT DROP -dest +private -log nolog
+OUT DROP -dest +guest/house_public -log nolog
+IN ACCEPT -source 10.20.0.1 -p tcp -dport 22 -log nolog

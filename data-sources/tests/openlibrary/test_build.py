@@ -57,3 +57,19 @@ def test_staging_is_kept_when_asked(tmp_path, fixture_dumps):
         paths.dump(kind).write_bytes(source.read_bytes())
     build(tmp_path, dump_date="2026-07-31", download=False, memory_limit="1GB", keep_staging=True)
     assert any(paths.staging_dir.iterdir())
+
+
+def test_build_passes_threads_to_connect(tmp_path, monkeypatch):
+    class Stop(Exception):
+        pass
+
+    captured = {}
+
+    def fake_connect(paths, **kwargs):
+        captured.update(kwargs)
+        raise Stop
+
+    monkeypatch.setattr("openlibrary.pipeline.build.connect", fake_connect)
+    with pytest.raises(Stop):
+        build(tmp_path, dump_date="2026-07-31", download=False, threads=4)
+    assert captured["threads"] == 4

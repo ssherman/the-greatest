@@ -55,6 +55,17 @@ MAX_TITLE_FP_FREQ = 50
 MAX_SHELF_SIZE = 500
 TRIGRAM_MIN_SIMILARITY = 0.55
 
+# Rule 6's `jaccard` input: title_fp unchanged, except '' becomes chr(1), which
+# `jaccard` accepts. Every fingerprint character is in [a-z0-9 ], all above
+# chr(1), so `greatest` returns any non-empty fingerprint as-is and only ''
+# (which sorts below chr(1)) changes. chr(1) is outside the fingerprint
+# alphabet, so it shares no character with a query fingerprint and scores 0.0,
+# and those rows are excluded by `title_fp <> ''` anyway. `greatest` rather
+# than `regexp_replace(title_fp, '^$', ...)`, which is equally correct but
+# measured 0.7-2.3s slower per query on the 41.5M-row table. See rule 6 for
+# why the guard exists.
+_JACCARD_TITLE_FP = "greatest(title_fp, chr(1))"
+
 
 # The artifact's `editions.language_code` vocabulary is MARC (eng, ger, fre,
 # spa, ...), three lowercase letters -- not ISO 639-1 (en, de, fr, es). A
@@ -313,13 +324,26 @@ def generate_candidates(
     # forward from the v2 measurement -- that flakiness was rule 6 falling
     # back to DuckDB's arbitrary `LIMIT` ordering on an overflowing search,
     # not something inherent to the rule.
+    #
+    # `jaccard` RAISES on '' ("An argument too short!"), and ~600k works have
+    # title_fp = ''. `title_fp <> ''` below keeps those rows out of the result
+    # but cannot keep '' away from `jaccard`: when a Parquet column chunk is
+    # dictionary-encoded, DuckDB evaluates a scalar function over the whole
+    # dictionary, including entries no surviving row references (measured on
+    # 1.5.5: selecting ONE row whose title_fp is 'abcd' still raises if '' is
+    # in its chunk's dictionary). The 2026-09-30 build crashed its evaluation
+    # gate this way; 2026-07-31 passed only because the writer happened to
+    # dictionary-encode no title_fp chunk that time. So `jaccard` reads
+    # `_JACCARD_TITLE_FP`, a scalar function that is never '' for any input.
+    # A CASE or `if` guard does NOT work: it passes the original dictionary
+    # vector through when every selected row takes the same branch.
     if not result.candidates and fps.full and not suppressed_common_title:
         rows = con.execute(
             f"""
             SELECT work_key FROM '{paths.table("works")}'
             WHERE title_fp <> ''
-              AND jaccard(title_fp, ?) >= {TRIGRAM_MIN_SIMILARITY}
-            ORDER BY jaccard(title_fp, ?) DESC
+              AND jaccard({_JACCARD_TITLE_FP}, ?) >= {TRIGRAM_MIN_SIMILARITY}
+            ORDER BY jaccard({_JACCARD_TITLE_FP}, ?) DESC
             LIMIT {MAX_CANDIDATES_PER_RULE + 1}
             """,
             [fps.full, fps.full],

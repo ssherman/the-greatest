@@ -1,0 +1,9 @@
+[Unit]
+Description=Check for a new Open Library dump daily, and at boot
+
+[Timer]
+OnCalendar=*-*-* 03:00
+OnBootSec=10min
+
+[Install]
+WantedBy=timers.target
