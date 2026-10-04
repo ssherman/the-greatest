@@ -70,7 +70,9 @@ vm_ip() {
 # rebuilt VM gets new keys by design.
 vm_ssh() {
   local role=$1 ip; shift
-  ip="$(vm_ip "$role")"
+  # vm_ip's ssh to the host would otherwise read the caller's stdin, and the
+  # file meant for the VM (push_vm_env) would arrive empty.
+  ip="$(vm_ip "$role" </dev/null)"
   [ -n "$ip" ] || die "no IPv4 address for $role yet"
   ssh "${VM_SSH_OPTS[@]}" -o ProxyCommand="ssh ${SSH_OPTS[*]} -W %h:%p root@$PVE_HOST" "debian@$ip" "$@"
 }
@@ -171,6 +173,8 @@ push_vm_env() { # push_vm_env <role>: the env file, then a forced deploy if it c
   have="$(vm_ssh "$1" "sudo sha256sum /etc/the-greatest/home-server.env | cut -d' ' -f1")"
   [ "$want" = "$have" ] && return 0
   vm_ssh "$1" "sudo install -m 0600 /dev/stdin /etc/the-greatest/home-server.env" <"$ENV_RENDERED"
+  have="$(vm_ssh "$1" "sudo sha256sum /etc/the-greatest/home-server.env | cut -d' ' -f1")"
+  [ "$want" = "$have" ] || die "the env file on $1 does not match what was sent; not deploying"
   vm_ssh "$1" "sudo touch /var/lib/the-greatest/force-deploy && sudo systemctl start the-greatest-deploy.service" ||
     log "deploy on $1 failed or was deferred; it retries every 15 minutes"
   note_change "$1 env"

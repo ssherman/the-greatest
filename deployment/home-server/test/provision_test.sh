@@ -151,6 +151,30 @@ t_recovery_rechecks_guests() {
     grep -q '^FAIL  pre-existing guest 102 still running after the reboot' <<<"$out"
 }
 
+# ol's address comes from an ssh to the host; that ssh must not eat the stdin
+# meant for the VM (it once left ol with an empty env file).
+t_vm_ssh_stdin_reaches_vm() {
+  (
+    new_sandbox
+    PVE_HOST=pve-test
+    # shellcheck disable=SC2317,SC2329 # called by vm_ip, inside vm_ssh
+    on_host() { cat >/dev/null; echo '[{"name":"eth0","ip-addresses":[{"ip-address-type":"ipv4","ip-address":"192.0.2.5"}]}]'; }
+    ssh() { cat >"$SANDBOX/got"; }
+    printf 'ROLE=ol\n' | vm_ssh ol 'sudo install -m 0600 /dev/stdin /x' &&
+      [ "$(cat "$SANDBOX/got")" = ROLE=ol ]
+  )
+}
+t_push_env_refuses_a_mismatch() {
+  local out rc=0
+  out="$( (
+    new_sandbox
+    ENV_RENDERED="$SANDBOX/env" && printf 'ROLE=ol\n' >"$ENV_RENDERED"
+    vm_ssh() { case "$2" in *install*) cat >/dev/null ;; *sha256sum*) echo e3b0c44298fc ;; *) echo "vm_ssh $*" ;; esac; }
+    push_vm_env ol
+  ) 2>&1)" || rc=$?
+  [ "$rc" = 1 ] && grep -q 'does not match' <<<"$out" && ! grep -q 'systemctl start' <<<"$out"
+}
+
 # The build's CPU cap must fit inside the ol VM.
 t_build_cpus_fit_vm() {
   local cpus
@@ -173,5 +197,7 @@ check "the house's public IPv4 is read from the trace" t_house_ip_read
 check "an unreadable or non-IPv4 trace fails instead of returning nothing" t_house_ip_unreadable_fails
 check "the firewall step dies before writing anything when the public IPv4 can't be read" t_firewall_dies_without_house_ip
 check "--recovery re-checks the pre-existing guests after the reboot" t_recovery_rechecks_guests
+check "vm_ssh to ol passes its stdin to the VM, not to the host lookup" t_vm_ssh_stdin_reaches_vm
+check "an env file that lands different from what was sent stops before the deploy" t_push_env_refuses_a_mismatch
 check "the build's cpus cap fits in the ol VM's vCPUs" t_build_cpus_fit_vm
 finish
