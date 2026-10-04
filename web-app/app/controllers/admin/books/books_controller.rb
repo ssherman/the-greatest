@@ -8,7 +8,7 @@ class Admin::Books::BooksController < Admin::Books::BaseController
   end
 
   def search
-    results = ::Search::Books::Search::BookAutocomplete.call(params[:q], size: 20, book_kind: nil)
+    results = ::Search::Books::Search::BookAutocomplete.call(params[:q], size: 20, book_kind: nil, include_provisional: true)
     book_ids = results.map { |r| r[:id].to_i }
     book_ids.delete(params[:exclude_id].to_i) if params[:exclude_id].present?
 
@@ -107,7 +107,7 @@ class Admin::Books::BooksController < Admin::Books::BaseController
 
   def load_books_for_index
     if params[:q].present?
-      results = ::Search::Books::Search::BookGeneral.call(params[:q], size: 1000, book_kind: nil)
+      results = ::Search::Books::Search::BookGeneral.call(params[:q], size: 1000, book_kind: nil, include_provisional: true)
       book_ids = results.map { |r| r[:id].to_i }
 
       @books = if book_ids.empty?
