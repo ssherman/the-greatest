@@ -17,7 +17,7 @@ module Api
         def index
           # find_by!(slug:), never friendly.find: 137 books have purely numeric
           # slugs and friendly_id resolves slugs before primary keys.
-          book = ::Books::Book.find_by!(slug: params[:slug])
+          book = ::Books::Book.catalog.find_by!(slug: params[:slug])
 
           render_page(listings_for(book), path: "/api/v1/books/#{book.slug}/lists") do |items|
             counts = item_counts_for(items.map(&:list_id))

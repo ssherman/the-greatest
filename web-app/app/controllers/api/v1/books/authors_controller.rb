@@ -29,6 +29,7 @@ module Api
           # with :finders, which resolves slugs before primary keys.
           author = ::Books::Author
             .includes(:descriptions, {primary_image: {file_attachment: :blob}})
+            .catalog
             .find_by!(slug: params[:slug])
 
           render json: {data: AuthorResource.new(author, with_traits: :full).to_h}

@@ -27,6 +27,15 @@ module Api
 
         def json = response.parsed_body.deep_symbolize_keys
 
+        test "the lists of a provisional book are a 404 problem" do
+          @book.update!(provisional: true)
+
+          get "/api/v1/books/#{@book.slug}/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+
+          assert_response :not_found
+        end
+
         test "index lists the active lists the book is on, weighted first, with its position on each" do
           get "/api/v1/books/#{@book.slug}/lists", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)
