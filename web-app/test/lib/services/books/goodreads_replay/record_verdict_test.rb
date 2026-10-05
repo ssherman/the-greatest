@@ -5,8 +5,8 @@ module Services
     module GoodreadsReplay
       class RecordVerdictTest < ActiveSupport::TestCase
         def record(**overrides)
-          RecordVerdict.call(**{kind: :merge_books, subject_key: "books:1:2", payload: {"source_id" => 2, "target_id" => 1},
-            decided_by: :rule, confidence: :certain, reason: "same title, authors and ISBN"}.merge(overrides))
+          RecordVerdict.call(kind: :merge_books, subject_key: "books:1:2", payload: {"source_id" => 2, "target_id" => 1},
+            decided_by: :rule, confidence: :certain, reason: "same title, authors and ISBN", **overrides)
         end
 
         test "a new finding is proposed, or approved when the rule is certain enough to apply on its own" do

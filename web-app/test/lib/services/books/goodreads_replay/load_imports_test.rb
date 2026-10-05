@@ -16,12 +16,15 @@ module Services
         end
 
         def legacy(**attributes)
-          LoadImports::LegacyImport.new(**{id: 501, user_id: @user.id, status: "complete", error: nil,
-            blob_key: "legacy-key-501", content_type: "text/csv", filename: "goodreads_library_export.csv"}.merge(attributes))
+          LoadImports::LegacyImport.new(id: 501, user_id: @user.id, status: "complete", error: nil,
+            blob_key: "legacy-key-501", content_type: "text/csv", filename: "goodreads_library_export.csv", **attributes)
         end
 
         def load(*imports, bytes: @csv)
-          LoadImports.call(legacy_imports: imports, download: ->(key) { @downloads << key; bytes })
+          LoadImports.call(legacy_imports: imports, download: ->(key) {
+            @downloads << key
+            bytes
+          })
         end
 
         test "a completed legacy import becomes a complete replay import owned by the same user, with its file and rows" do

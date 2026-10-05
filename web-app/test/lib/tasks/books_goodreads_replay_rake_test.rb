@@ -68,4 +68,30 @@ class BooksGoodreadsReplayRakeTest < ActiveSupport::TestCase
       Rake::Task["books:goodreads_replay:apply"].invoke
     end
   end
+
+  test "report writes the markdown to the given path" do
+    REPLAY::Report.expects(:call).returns(result(markdown: "# Goodreads legacy replay\n"))
+    path = Rails.root.join("tmp", "goodreads-replay-report-test.md")
+
+    assert_output(/wrote #{Regexp.escape(path.to_s)}/) { Rake::Task["books:goodreads_replay:report"].invoke(path.to_s) }
+    assert_equal "# Goodreads legacy replay\n", File.read(path)
+  ensure
+    FileUtils.rm_f(path)
+  end
+
+  test "report prints the markdown when no path is given" do
+    REPLAY::Report.expects(:call).returns(result(markdown: "# Goodreads legacy replay\n"))
+
+    assert_output(/# Goodreads legacy replay/) { Rake::Task["books:goodreads_replay:report"].invoke }
+  end
+
+  test "sample prints the lines for the kind, and refuses an unknown kind" do
+    REPLAY::Report.expects(:sample).with(kind: "merge_books", count: 50).returns(["#1 Merge book #2 into book #3"])
+
+    assert_output(/#1 Merge book #2 into book #3/) { Rake::Task["books:goodreads_replay:sample"].invoke("merge_books") }
+    Rake::Task["books:goodreads_replay:sample"].reenable
+    assert_output(nil, /usage: books:goodreads_replay:sample/) do
+      assert_raises(SystemExit) { Rake::Task["books:goodreads_replay:sample"].invoke("bogus") }
+    end
+  end
 end

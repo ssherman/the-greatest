@@ -47,5 +47,26 @@ namespace :books do
       puts "applied verdicts: #{tally.call(result.data[:tally])}; " \
         "ranking recalculations queued: #{result.data[:ranking_configuration_ids].size}"
     end
+
+    desc "Write the replay report (spec §12.9) to a path, or print it. " \
+      "Usage: books:goodreads_replay:report[../docs/data-quality/goodreads-replay.md]"
+    task :report, [:path] => :environment do |_task, args|
+      markdown = Services::Books::GoodreadsReplay::Report.call.data[:markdown]
+      if args[:path].present?
+        File.write(args[:path], markdown)
+        puts "wrote #{args[:path]}"
+      else
+        puts markdown
+      end
+    end
+
+    desc "Print a random sample of auto-approved verdicts to hand-check before switching auto_apply on. " \
+      "Usage: books:goodreads_replay:sample[kind,count] (count defaults to 50)"
+    task :sample, [:kind, :count] => :environment do |_task, args|
+      kinds = Books::RepairVerdict.kinds.keys
+      abort "usage: books:goodreads_replay:sample[kind,count] with kind one of #{kinds.join(", ")}" unless kinds.include?(args[:kind])
+
+      puts Services::Books::GoodreadsReplay::Report.sample(kind: args[:kind], count: (args[:count].presence || 50).to_i)
+    end
   end
 end

@@ -29,7 +29,7 @@ module Books
   class RepairVerdictTest < ActiveSupport::TestCase
     def verdict(**attributes)
       RepairVerdict.create!({kind: :relink, subject_key: "user:1:book:2:goodreads:3", decided_by: :ai,
-        payload: {"user_id" => 1, "from_book_id" => 2, "to_book_id" => 4, "goodreads_book_id" => 3}}.merge(attributes))
+                             payload: {"user_id" => 1, "from_book_id" => 2, "to_book_id" => 4, "goodreads_book_id" => 3}}.merge(attributes))
     end
 
     test "subject keys are unique per kind, not across kinds" do
