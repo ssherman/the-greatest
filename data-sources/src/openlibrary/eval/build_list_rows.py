@@ -7,8 +7,8 @@ book's stored Open Library keys ride along as `hint_work_keys` for the
 researcher, never as the label.
 
 The export ranks rows by md5(list_items.id); the 2026-10-04 spike examined
-ranks 1-200, so those are skipped here and the cases are held out from the
-analysis that shaped the design.
+ranks 1-200, so those rows and every book they link to are skipped here and
+the cases are held out from the analysis that shaped the design.
 
 Like build_pool, this module must not import openlibrary.matcher.
 """
@@ -52,8 +52,11 @@ def split_authors(raw: str | list[str] | None) -> list[str]:
 def select_rows(
     rows: list[ListRow], *, skip_ranks_through: int = 200, n: int = 150
 ) -> list[ListRow]:
+    """Pick `n` rows, one per book, in rank order. Spike BOOKS are held out, not
+    only spike rows: a book the spike examined through another list item is
+    never picked."""
     picked: list[ListRow] = []
-    seen_books: set[int] = set()
+    seen_books = {r.book_id for r in rows if r.md5_rank <= skip_ranks_through}
     for row in sorted(rows, key=lambda r: r.md5_rank):
         if row.md5_rank <= skip_ranks_through or row.book_id in seen_books:
             continue

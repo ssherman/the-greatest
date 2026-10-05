@@ -1,4 +1,10 @@
-from openlibrary.eval.build_list_rows import ListRow, select_rows, split_authors, to_book
+from openlibrary.eval.build_list_rows import (
+    ListRow,
+    load_rows,
+    select_rows,
+    split_authors,
+    to_book,
+)
 
 
 def test_split_authors_splits_on_and_ampersand_and_semicolon():
@@ -42,3 +48,21 @@ def test_to_book_carries_no_identifiers_no_year_and_no_existing_keys():
     assert book.title == "THE CITY IN HISTORY: Its Origins"
     assert book.first_published_year is None
     assert book.isbn13 == [] and book.existing_ol_work_keys == []
+
+
+def test_select_rows_holds_out_a_book_the_spike_saw_through_another_row():
+    rows = [_row(1, 1, 10), _row(6, 250, 10), _row(7, 251, 11)]
+    assert [r.list_item_id for r in select_rows(rows, skip_ranks_through=200)] == [7]
+
+
+def test_load_rows_round_trips_authors_as_string_and_as_list(tmp_path):
+    path = tmp_path / "rows.jsonl"
+    path.write_text(
+        '{"list_item_id":1,"md5_rank":1,"title":"A","authors":"X Y","book_id":5,'
+        '"book_ol_work_keys":["OL1W"]}\n'
+        '{"list_item_id":2,"md5_rank":2,"title":"B","authors":["P","Q"],"book_id":6,'
+        '"book_ol_work_keys":[]}\n\n'
+    )
+    first, second = load_rows(path)
+    assert first.authors == "X Y" and first.book_ol_work_keys == ["OL1W"]
+    assert second.authors == ["P", "Q"]
