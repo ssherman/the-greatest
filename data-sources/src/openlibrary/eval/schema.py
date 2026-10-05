@@ -45,10 +45,11 @@ from pydantic import BaseModel, Field, model_validator
 # harness against this set and fails the build if any of the pinned
 # thresholds in `openlibrary/eval/thresholds.json` regresses.
 MIN_CASES = 300
-MAX_CASES = 500
+# 450 book-shaped cases + 150 list rows (2026-10-04 spec), with headroom.
+MAX_CASES = 650
 MIN_NO_MATCH_CASES = 20
 
-# stratum -> minimum number of labeled cases. Sums to 450.
+# stratum -> minimum number of labeled cases. Sums to 600.
 STRATA: dict[str, int] = {
     # The 380 work keys attached to more than one of our books. Already contains
     # real duplicates, translations, omnibus confusion and wrong data.
@@ -78,6 +79,11 @@ STRATA: dict[str, int] = {
     # Naive blocking produced nothing. The label decides whether that is a true
     # negative or a recall failure -- both outcomes are valuable.
     "no_candidates": 50,
+    # A list row exactly as a list page gives it: the title as printed
+    # (subtitle, caps and all), author names, no year, no identifiers. 438 of
+    # the first 448 cases carry identifiers, which settle most margins; list
+    # rows never do (2026-10-04 spec, "Why").
+    "list_row": 150,
 }
 
 # From the design's identity table. These are matcher OUTPUTS: the local schema
@@ -103,7 +109,9 @@ Verdict = Literal["match", "no_match", "ambiguous"]
 # ground truth" quietly becomes "precision against the tool's own opinion".
 # Absent means human: every label written before this field existed was
 # hand-made.
-Labeler = Literal["human", "agent", "agent_confirmed"]
+# `agent_researched`: an agent researched the case against the artifact alone,
+# and Shane spot-checked a seeded sample (list rows, 2026-10-04 spec section 1).
+Labeler = Literal["human", "agent", "agent_confirmed", "agent_researched"]
 
 
 class EvalBook(BaseModel):
@@ -128,6 +136,10 @@ class EvalCandidate(BaseModel):
 class EvalLabel(BaseModel):
     verdict: Verdict
     work_key: str | None = None
+    # Verified unmerged Open Library duplicates of `work_key`: an accept of
+    # any of them is correct (2026-10-04 spec, section 1). `work_key` stays
+    # the canonical choice.
+    alternate_work_keys: list[str] = Field(default_factory=list)
     identity_rule: str | None = None
     rationale: str = Field(min_length=10)
     labeled_at: datetime.date
@@ -145,6 +157,11 @@ class EvalLabel(BaseModel):
                 raise ValueError("a no_match verdict must not carry a work_key")
             if self.identity_rule != "not_in_open_library":
                 raise ValueError("a no_match verdict uses identity_rule 'not_in_open_library'")
+        if self.alternate_work_keys:
+            if self.verdict != "match":
+                raise ValueError("alternate_work_keys are only valid on a match")
+            if self.work_key in self.alternate_work_keys:
+                raise ValueError("alternate_work_keys must not repeat work_key")
         return self
 
 

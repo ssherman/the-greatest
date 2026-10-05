@@ -67,6 +67,7 @@ def test_the_strata_cover_every_failure_mode_named_in_the_design():
         "author_less_work",
         "isbn_reuse",
         "no_candidates",
+        "list_row",
     } == set(STRATA)
 
 
@@ -180,3 +181,35 @@ def test_a_label_written_before_provenance_existed_reads_as_human():
 def test_an_unrecognised_labeler_is_rejected():
     with pytest.raises(ValidationError):
         _label(labeled_by="claude-opus-5")
+
+
+def test_list_row_is_a_stratum_with_a_quota():
+    assert STRATA["list_row"] == 150
+
+
+def test_strata_quotas_still_fit_the_case_bounds_with_list_rows():
+    assert MIN_CASES <= sum(STRATA.values()) <= MAX_CASES
+
+
+def test_agent_researched_is_a_labeller():
+    label = _label(labeled_by="agent_researched")
+    assert label.labeled_by == "agent_researched"
+
+
+def test_alternate_work_keys_default_to_empty():
+    assert _label().alternate_work_keys == []
+
+
+def test_alternates_are_only_valid_on_a_match():
+    with pytest.raises(ValueError, match="alternate_work_keys"):
+        _label(
+            verdict="no_match",
+            work_key=None,
+            identity_rule="not_in_open_library",
+            alternate_work_keys=["OL2W"],
+        )
+
+
+def test_an_alternate_must_not_repeat_the_work_key():
+    with pytest.raises(ValueError, match="alternate_work_keys"):
+        _label(work_key="OL1W", alternate_work_keys=["OL1W"])

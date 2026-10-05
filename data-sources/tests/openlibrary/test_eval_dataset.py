@@ -71,6 +71,12 @@ def test_load_reads_every_jsonl_file_in_the_directory(tmp_path):
     assert {c.case_id for c in load_cases(tmp_path)} == {"a-1", "b-1"}
 
 
+def test_agent_researched_labels_are_ground_truth(tmp_path):
+    case = _case("r-1", "list_row", labeled_by="agent_researched")
+    (tmp_path / "list_rows.jsonl").write_text(case.model_dump_json() + "\n")
+    assert [c.case_id for c in load_cases(tmp_path)] == ["r-1"]
+
+
 def test_duplicate_case_ids_raise(tmp_path):
     (tmp_path / "a.jsonl").write_text(
         _case("dupe", "easy_baseline").model_dump_json()

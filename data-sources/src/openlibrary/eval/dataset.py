@@ -26,7 +26,7 @@ def load_cases(directory: Path | None = None, *, include_proposed: bool = False)
 
     A plain `agent` label is a proposal awaiting confirmation, not ground
     truth -- it is excluded unless `include_proposed=True`. The set's ground
-    truth is human labels plus `agent_confirmed` labels only. Duplicate-id
+    truth is human, `agent_confirmed` and `agent_researched` labels. Duplicate-id
     detection runs across every row read, proposals included, so a typo
     hiding behind an excluded proposal is still caught.
     """
