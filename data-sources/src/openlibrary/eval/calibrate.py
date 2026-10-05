@@ -211,8 +211,8 @@ def search_weights(
                 0.0, candidate.feature_weights[knob] + rng.uniform(-0.4, 0.4)
             )
         else:
-            low, high, step = BOUNDED_KNOBS[knob]
-            moved = getattr(candidate, knob) + rng.uniform(-step, step)
+            low, high, width = BOUNDED_KNOBS[knob]
+            moved = getattr(candidate, knob) + rng.uniform(-width, width)
             setattr(candidate, knob, min(high, max(low, moved)))
         if candidate.reject_threshold >= candidate.accept_threshold:
             continue

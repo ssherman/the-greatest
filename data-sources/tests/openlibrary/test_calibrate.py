@@ -547,17 +547,29 @@ def test_written_weights_carry_the_current_matcher_version(tmp_path):
     assert json.loads(out.read_text())["matcher_version"] == MATCHER_VERSION
 
 
-def test_the_search_keeps_new_knobs_inside_their_bounds():
-    base = equal_weights().model_copy(
-        update={"duplicate_dominance_ratio": 9.9, "subset_title_credit": 0.89}
+def test_the_search_clamps_new_knobs_at_their_bounds(monkeypatch):
+    # An objective that rewards both knobs growing: only the clamp stops them.
+    monkeypatch.setattr("openlibrary.eval.calibrate.evaluate", lambda prepared, w: (w, []))
+    monkeypatch.setattr(
+        "openlibrary.eval.calibrate.objective",
+        lambda m, *, min_accept_rate: m.duplicate_dominance_ratio + m.subset_title_credit,
     )
     best, _ = search_weights(
-        _one_clean_match_prepared(), base=base, iterations=300, seed=1, min_accept_rate=0.0
+        _one_clean_match_prepared(),
+        base=equal_weights(),
+        iterations=2000,
+        seed=1,
+        min_accept_rate=0.0,
     )
-    low, high, _ = BOUNDED_KNOBS["duplicate_dominance_ratio"]
-    assert low <= best.duplicate_dominance_ratio <= high
-    low, high, _ = BOUNDED_KNOBS["subset_title_credit"]
-    assert low <= best.subset_title_credit <= high
+    assert best.duplicate_dominance_ratio == 10.0
+    assert 0.0 <= best.subset_title_credit <= 0.9
+
+
+@pytest.mark.parametrize("knob", ["subset_title_credit", "duplicate_dominance_ratio"])
+def test_knob_bounds_are_accepted_by_the_weights_model(knob):
+    low, high, _ = BOUNDED_KNOBS[knob]
+    for value in (low, high):
+        Weights.model_validate(equal_weights().model_dump() | {knob: value})
 
 
 def test_the_new_parameters_are_search_knobs():
