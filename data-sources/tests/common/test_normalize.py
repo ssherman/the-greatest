@@ -73,3 +73,10 @@ def test_a_parenthetical_is_a_subtitle_cut_too():
 def test_a_degenerate_title_has_no_variants():
     v = query_title_variants("!!!")
     assert v.whole == frozenset() and v.derived == frozenset()
+    assert v.derived_subtitle is None
+
+
+def test_a_derived_title_keeps_its_article_when_stripping_would_be_too_short():
+    v = query_title_variants("The Ox: A Life")
+    assert v.derived == {"the ox"}
+    assert "ox" not in v.derived

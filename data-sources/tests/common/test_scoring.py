@@ -2,6 +2,7 @@ import pytest
 
 from common.scoring import (
     DERIVED_TITLE_FACTOR,
+    TitleComparison,
     compare_titles,
     fuzzy_similarity,
     identifier_agreement,
@@ -125,8 +126,17 @@ def test_full_title_match_outranks_a_subtitle_dropped_match():
 
 
 def test_an_empty_side_is_absence_not_disagreement():
-    assert _cmp("!!!", ["dune", "dune", "dune"]) == compare_titles([], [], ["dune"])
-    assert compare_titles(["dune"], [], ["", "", ""]).similarity is None
+    absent = TitleComparison(similarity=None, exact=None, containment=False)
+    assert _cmp("!!!", ["dune", "dune", "dune"]) == absent
+    assert compare_titles(["dune"], [], ["", "", ""]) == absent
+
+
+def test_containment_is_false_without_a_strict_subset():
+    assert (
+        _cmp("The Wife", ["the interestings", "the interestings", "interestings"]).containment
+        is False
+    )
+    assert _cmp("Dune", ["dune", "dune", "dune"]).containment is False
 
 
 def test_reordered_titles_still_match():
