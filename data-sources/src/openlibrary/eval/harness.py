@@ -20,18 +20,19 @@ result in pure Python in milliseconds, as many times as calibration needs.
 `write_prepared_cache`/`read_prepared_cache` (R54) persist a `prepare()` pass
 to a JSON file so a second run of either CLI against the same artifact and
 case set costs seconds instead of the ~31-minute DuckDB pass. The header
-carries five values and the file is trusted only when all five match (R60):
-dump date, `MATCHER_VERSION`, case count, `artifact_built_at` (the version
+carries six values and the file is trusted only when all six match (R60):
+dump date, `MATCHER_VERSION`, case count, `labels_sha256` (a digest of every
+case's id, stratum, key, verdict and alternates, so a relabel is detected even
+when the count is unchanged), `artifact_built_at` (the version
 directory's `manifest.json` timestamp -- a same-date REBUILD of the artifact
 produces different candidates from the same code) and `code_sha256` (over
 the bytes of `matcher/blocking.py`, `matcher/features.py`,
 `common/normalize.py`, `common/scoring.py` -- the code that determines what
 `prepare` produces). Those two fingerprints are what the first version of
 this header lacked: a stale cache is now DETECTED, not documented. What the
-header still cannot see is a change that leaves all five unchanged -- a
-relabel of the case set that keeps its count, or an edit to `prepare` /
-`load_work_views` plumbing outside those four files -- and that still needs a
-manual delete. The build gate never reads a cache implicitly at all; see
+header still cannot see is a change that leaves all six unchanged -- an edit
+to `prepare` / `load_work_views` plumbing outside those four files -- and that
+still needs a manual delete. The build gate never reads a cache implicitly at all; see
 `pipeline.gates.evaluation_gate`.
 """
 
@@ -127,6 +128,7 @@ class CaseOutcome(BaseModel):
     candidate_rank: int | None = None
     correct: bool = False
     false_merge: bool = False
+    canonical: bool = False
 
 
 class Metrics(BaseModel):
@@ -139,6 +141,12 @@ class Metrics(BaseModel):
     false_reject_rate: float = 0.0
     abstention_rate: float = 0.0
     correct_no_match_rate: float = 0.0
+    # Of the correct accepts on `match` cases, the fraction that picked the
+    # labelled (canonical) key rather than an alternate. Informational.
+    canonical_rate: float = 0.0
+    # The same two rates restricted to the `list_row` stratum (gated in Task 15).
+    list_row_abstention_rate: float = 0.0
+    list_row_false_merge_rate: float = 0.0
 
 
 def threshold_value(metrics: Metrics, attribute: str) -> float:
@@ -165,6 +173,9 @@ class PreparedCase(BaseModel):
     stratum: str
     expected_work_key: str | None
     expected_verdict: Verdict
+    # Verified duplicates of `expected_work_key` (2026-10-04 spec, section 1);
+    # an accept of any is correct, and recall counts them as the labelled work.
+    alternate_work_keys: list[str] = Field(default_factory=list)
     candidates: list[PreparedCandidate] = Field(default_factory=list)
     # R59: `BlockingResult.volume_guards_tripped` for this case -- the rules
     # that found something and refused to fetch it. With zero candidates it
@@ -201,6 +212,13 @@ def _same(resolved: dict[str, str], a: str | None, b: str | None) -> bool:
     return bool(a and b and resolved.get(a, a) == resolved.get(b, b))
 
 
+def _is_labelled_work(resolved: dict[str, str], key: str | None, case: PreparedCase) -> bool:
+    """`key` is the labelled work or one of its verified alternates."""
+    return _same(resolved, key, case.expected_work_key) or any(
+        _same(resolved, key, alternate) for alternate in case.alternate_work_keys
+    )
+
+
 def prepare(
     con: duckdb.DuckDBPyConnection,
     paths: ArtifactPaths,
@@ -232,10 +250,11 @@ def prepare(
         ]
 
         expected = case.label.work_key
+        alternates = list(case.label.alternate_work_keys)
         resolved = resolve_keys(
             con,
             paths,
-            [expected, *blocking.candidates] if expected else list(blocking.candidates),
+            [*([expected] if expected else []), *alternates, *blocking.candidates],
         )
 
         prepared.append(
@@ -244,6 +263,7 @@ def prepare(
                 stratum=case.stratum,
                 expected_work_key=expected,
                 expected_verdict=case.label.verdict,
+                alternate_work_keys=alternates,
                 candidates=candidates,
                 volume_guards_tripped=list(blocking.volume_guards_tripped),
                 resolved=resolved,
@@ -262,8 +282,6 @@ def evaluate(
     `prepare`d split, one call per weight vector Task 27's search tries.
     """
     outcomes: list[CaseOutcome] = []
-    recall_hits = dict.fromkeys(RECALL_AT, 0)
-    n_positive = 0
 
     for case in prepared:
         scored = [
@@ -278,18 +296,17 @@ def evaluate(
 
         candidate_rank: int | None = None
         if expected:
-            n_positive += 1
             for position, candidate in enumerate(ordered, start=1):
-                if _same(resolved, candidate.work_key, expected):
+                if _is_labelled_work(resolved, candidate.work_key, case):
                     candidate_rank = position
                     break
-            for k in RECALL_AT:
-                if candidate_rank is not None and candidate_rank <= k:
-                    recall_hits[k] += 1
 
+        canonical = False
         if case.expected_verdict == "match":
-            same_as_expected = _same(resolved, decision.work_key, expected)
-            correct = decision.verdict == "accept" and same_as_expected
+            correct = decision.verdict == "accept" and _is_labelled_work(
+                resolved, decision.work_key, case
+            )
+            canonical = correct and _same(resolved, decision.work_key, expected)
             false_merge = decision.verdict == "accept" and not correct
         elif case.expected_verdict == "no_match":
             correct = decision.verdict == "reject"
@@ -308,26 +325,38 @@ def evaluate(
                 candidate_rank=candidate_rank,
                 correct=correct,
                 false_merge=false_merge,
+                canonical=canonical,
             )
         )
 
+    return summarize(outcomes), outcomes
+
+
+def summarize(outcomes: list[CaseOutcome]) -> Metrics:
+    """The metrics of a set of outcomes. Pure, so per-stratum readings and the
+    comparison report compute exactly what `evaluate` reports."""
     n = len(outcomes)
     accepted = [o for o in outcomes if o.decision.verdict == "accept"]
     negatives = [o for o in outcomes if o.expected_verdict == "no_match"]
     # R53: cases the label calls a real match. A `reject` decision on one of
     # these silently turns a true match into what looks like a brand-new,
-    # unrelated book -- a false reject, distinct from (and previously
-    # invisible next to) an abstention, which at least flags itself for
-    # review.
+    # unrelated book -- a false reject, distinct from an abstention, which at
+    # least flags itself for review.
     matches = [o for o in outcomes if o.expected_verdict == "match"]
+    positives = [o for o in outcomes if o.expected_work_key is not None]
+    correct_matches = [o for o in matches if o.correct]
+    list_rows = [o for o in outcomes if o.stratum == "list_row"]
+    list_row_accepted = [o for o in list_rows if o.decision.verdict == "accept"]
 
-    metrics = Metrics(
+    def recall(k: int) -> float:
+        hits = sum(1 for o in positives if o.candidate_rank is not None and o.candidate_rank <= k)
+        return hits / len(positives) if positives else 0.0
+
+    return Metrics(
         n_cases=n,
         n_accepted=len(accepted),
         n_no_match_cases=len(negatives),
-        candidate_recall={
-            k: (recall_hits[k] / n_positive if n_positive else 0.0) for k in RECALL_AT
-        },
+        candidate_recall={k: recall(k) for k in RECALL_AT},
         precision_at_accept=(
             sum(1 for o in accepted if o.correct) / len(accepted) if accepted else 0.0
         ),
@@ -345,8 +374,22 @@ def evaluate(
         correct_no_match_rate=(
             sum(1 for o in negatives if o.correct) / len(negatives) if negatives else 0.0
         ),
+        canonical_rate=(
+            sum(1 for o in correct_matches if o.canonical) / len(correct_matches)
+            if correct_matches
+            else 0.0
+        ),
+        list_row_abstention_rate=(
+            sum(1 for o in list_rows if o.decision.verdict == "abstain") / len(list_rows)
+            if list_rows
+            else 0.0
+        ),
+        list_row_false_merge_rate=(
+            sum(1 for o in list_row_accepted if o.false_merge) / len(list_row_accepted)
+            if list_row_accepted
+            else 0.0
+        ),
     )
-    return metrics, outcomes
 
 
 def run(
@@ -390,11 +433,47 @@ def rule_recall_split(prepared: list[PreparedCase]) -> dict[str, RuleRecall]:
     return split
 
 
-def _cache_header(paths: ArtifactPaths, n_cases: int) -> dict:
+def _label_rows(rows) -> str:
+    digest = hashlib.sha256()
+    for row in sorted(rows):
+        digest.update(json.dumps(row).encode())
+    return digest.hexdigest()
+
+
+def labels_sha256(cases: list[EvalCase]) -> str:
+    """Digest of what a relabel changes: id, stratum, key, verdict, alternates.
+    The header's case count could not see a relabel that kept the count."""
+    return _label_rows(
+        (
+            c.case_id,
+            c.stratum,
+            c.label.work_key,
+            c.label.verdict,
+            sorted(c.label.alternate_work_keys),
+        )
+        for c in cases
+    )
+
+
+def _prepared_labels_sha256(prepared: list[PreparedCase]) -> str:
+    return _label_rows(
+        (
+            p.case_id,
+            p.stratum,
+            p.expected_work_key,
+            p.expected_verdict,
+            sorted(p.alternate_work_keys),
+        )
+        for p in prepared
+    )
+
+
+def _cache_header(paths: ArtifactPaths, n_cases: int, labels_digest: str) -> dict:
     return {
         "dump_date": paths.dump_date,
         "matcher_version": MATCHER_VERSION,
         "n_cases": n_cases,
+        "labels_sha256": labels_digest,
         "artifact_built_at": artifact_built_at(paths),
         "code_sha256": code_sha256(),
     }
@@ -403,12 +482,12 @@ def _cache_header(paths: ArtifactPaths, n_cases: int) -> dict:
 def write_prepared_cache(path: Path, paths: ArtifactPaths, prepared: list[PreparedCase]) -> None:
     """Persist a `prepare()` result so a later run can skip the DuckDB pass.
 
-    The header (`dump_date`, `matcher_version`, `n_cases`, `artifact_built_at`,
-    `code_sha256`) is what `read_prepared_cache` checks before trusting the
+    The header (`dump_date`, `matcher_version`, `n_cases`, `labels_sha256`,
+    `artifact_built_at`, `code_sha256`) is what `read_prepared_cache` checks before trusting the
     file -- see that function for what invalidates it.
     """
     payload = {
-        **_cache_header(paths, len(prepared)),
+        **_cache_header(paths, len(prepared), _prepared_labels_sha256(prepared)),
         "cases": [p.model_dump() for p in prepared],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -416,19 +495,20 @@ def write_prepared_cache(path: Path, paths: ArtifactPaths, prepared: list[Prepar
 
 
 def read_prepared_cache(
-    path: Path, paths: ArtifactPaths, n_cases: int
+    path: Path, paths: ArtifactPaths, cases: list[EvalCase]
 ) -> list[PreparedCase] | None:
     """Load a `write_prepared_cache` file when its header matches, else `None`.
 
     A cache is only valid for the exact dump date, matcher version, case
-    count, artifact build (R60: `manifest.json`'s `built_at` -- an in-place
-    rebuild of the same dump date yields different candidates from the same
-    code) and code fingerprint (sha256 of the four files in
-    `CODE_FINGERPRINT_FILES`) it was written under. `matcher_version` still
-    exists for a change those cannot see -- decision semantics, say -- that
-    should invalidate every cache anyway. Never raises: a missing, corrupt,
-    or mismatched file just means "rebuild", and the reason is echoed so a
-    stale-cache run isn't a silent surprise.
+    count, label digest (`labels_sha256`), artifact build (R60:
+    `manifest.json`'s `built_at` -- an in-place rebuild of the same dump date
+    yields different candidates from the same code) and code fingerprint
+    (sha256 of the four files in `CODE_FINGERPRINT_FILES`) it was written
+    under. `matcher_version` still exists for a change those cannot see --
+    decision semantics, say -- that should invalidate every cache anyway.
+    Never raises: a missing, corrupt, or mismatched file just means
+    "rebuild", and the reason is echoed so a stale-cache run isn't a silent
+    surprise.
     """
     if not path.exists():
         return None
@@ -438,7 +518,7 @@ def read_prepared_cache(
         typer.echo(f"  prepared-cache {path} unreadable ({exc}); rebuilding")
         return None
 
-    expected = _cache_header(paths, n_cases)
+    expected = _cache_header(paths, len(cases), labels_sha256(cases))
     mismatches = {
         key: (want, payload.get(key)) for key, want in expected.items() if payload.get(key) != want
     }
@@ -452,6 +532,26 @@ def read_prepared_cache(
     return [PreparedCase.model_validate(c) for c in payload["cases"]]
 
 
+def write_reading(
+    path: Path, metrics: Metrics, outcomes: list[CaseOutcome], *, label: str, weights: Weights
+) -> None:
+    """One harness run, saved so two matcher versions can be compared later
+    (`openlibrary.eval.compare`)."""
+    strata = sorted({o.stratum for o in outcomes})
+    payload = {
+        "label": label,
+        "matcher_version": MATCHER_VERSION,
+        "weights_calibrated_at": weights.calibrated_at,
+        "metrics": metrics.model_dump(),
+        "by_stratum": {
+            s: summarize([o for o in outcomes if o.stratum == s]).model_dump() for s in strata
+        },
+        "outcomes": [o.model_dump() for o in outcomes],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=1) + "\n")
+
+
 @app.command()
 def main(
     root: Path = typer.Option(Path("/home/shane/ol-data"), "--root"),  # noqa: B008
@@ -461,14 +561,16 @@ def main(
         "--prepared-cache",
         help="Cache the prepare() pass at this path across runs (~31min the "
         "first time, seconds after). The header detects an artifact rebuild or "
-        "a code change to blocking/features/normalize/scoring; a relabel that "
-        "keeps the case count still needs a manual delete.",
+        "a code change to blocking/features/normalize/scoring, and any relabel "
+        "(a digest of every label is in the header).",
     ),
+    reading_out: Path | None = typer.Option(None, "--reading-out"),  # noqa: B008
+    reading_label: str = typer.Option("unlabelled", "--reading-label"),
 ) -> None:
     paths = ArtifactPaths(root=root, dump_date=dump_date)
     cases = load_cases()
 
-    prepared = read_prepared_cache(prepared_cache, paths, len(cases)) if prepared_cache else None
+    prepared = read_prepared_cache(prepared_cache, paths, cases) if prepared_cache else None
     if prepared is not None:
         typer.echo(f"loaded {len(prepared)} prepared cases from {prepared_cache}")
     else:
@@ -481,7 +583,10 @@ def main(
             write_prepared_cache(prepared_cache, paths, prepared)
             typer.echo(f"wrote {len(prepared)} prepared cases to {prepared_cache}")
 
-    metrics, outcomes = evaluate(prepared, load_weights())
+    weights = load_weights()
+    metrics, outcomes = evaluate(prepared, weights)
+    if reading_out:
+        write_reading(reading_out, metrics, outcomes, label=reading_label, weights=weights)
 
     typer.echo(f"cases                 {metrics.n_cases}")
     for k, value in sorted(metrics.candidate_recall.items()):
@@ -496,6 +601,10 @@ def main(
         f"correct no-match      {metrics.correct_no_match_rate:.3f} "
         f"({metrics.n_no_match_cases} negatives)"
     )
+
+    typer.echo(f"canonical rate        {metrics.canonical_rate:.3f}")
+    typer.echo(f"list_row abstention   {metrics.list_row_abstention_rate:.3f}")
+    typer.echo(f"list_row false merge  {metrics.list_row_false_merge_rate:.4f}")
 
     typer.echo("\nby stratum:")
     strata = sorted({o.stratum for o in outcomes})

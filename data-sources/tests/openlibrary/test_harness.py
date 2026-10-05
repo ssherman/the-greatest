@@ -29,11 +29,14 @@ from openlibrary.eval.harness import (
     PreparedCandidate,
     PreparedCase,
     evaluate,
+    labels_sha256,
     prepare,
     read_prepared_cache,
     rule_recall_split,
     run,
+    summarize,
     write_prepared_cache,
+    write_reading,
 )
 from openlibrary.eval.schema import EvalBook, EvalCandidate, EvalCase, EvalLabel
 from openlibrary.matcher.features import FEATURES
@@ -445,7 +448,14 @@ def test_prepared_cache_round_trips_through_a_file(tmp_path):
     path = tmp_path / "cache.json"
     write_prepared_cache(path, paths, prepared)
 
-    loaded = read_prepared_cache(path, paths, n_cases=2)
+    no_match = _eval_case("c2", work_key="OL1W")
+    no_match = no_match.model_copy(
+        update={
+            "stratum": "no_candidates",
+            "label": no_match.label.model_copy(update={"work_key": None, "verdict": "no_match"}),
+        }
+    )
+    loaded = read_prepared_cache(path, paths, [_eval_case("c1", work_key="OL1W"), no_match])
 
     assert loaded is not None
     assert [p.model_dump() for p in loaded] == [p.model_dump() for p in prepared]
@@ -465,11 +475,12 @@ def test_prepared_cache_header_mismatch_returns_none(tmp_path):
     write_prepared_cache(path, paths, [])
 
     other_date = ArtifactPaths(root=tmp_path, dump_date="2026-08-31")
-    assert read_prepared_cache(path, other_date, n_cases=0) is None  # dump_date differs
-    assert read_prepared_cache(path, paths, n_cases=5) is None  # n_cases differs
-    assert read_prepared_cache(tmp_path / "missing.json", paths, n_cases=0) is None
+    assert read_prepared_cache(path, other_date, []) is None  # dump_date differs
+    # n_cases differs
+    assert read_prepared_cache(path, paths, [_eval_case("x", work_key="OL1W")]) is None
+    assert read_prepared_cache(tmp_path / "missing.json", paths, []) is None
     # The control: the same artifact, the same count, the same code -> loads.
-    assert read_prepared_cache(path, paths, n_cases=0) == []
+    assert read_prepared_cache(path, paths, []) == []
 
 
 def test_a_rebuilt_artifact_invalidates_the_prepared_cache(tmp_path):
@@ -480,12 +491,12 @@ def test_a_rebuilt_artifact_invalidates_the_prepared_cache(tmp_path):
     paths = _artifact(tmp_path, built_at="2026-09-03T06:21:00+00:00")
     path = tmp_path / "cache.json"
     write_prepared_cache(path, paths, [])
-    assert read_prepared_cache(path, paths, n_cases=0) == []
+    assert read_prepared_cache(path, paths, []) == []
 
     paths.manifest_path.write_text(
         json.dumps({"dump_date": paths.dump_date, "built_at": "2026-10-01T00:00:00+00:00"})
     )
-    assert read_prepared_cache(path, paths, n_cases=0) is None
+    assert read_prepared_cache(path, paths, []) is None
 
 
 def test_a_code_change_to_a_fingerprinted_module_invalidates_the_prepared_cache(
@@ -501,10 +512,10 @@ def test_a_code_change_to_a_fingerprinted_module_invalidates_the_prepared_cache(
     paths = _artifact(tmp_path)
     path = tmp_path / "cache.json"
     write_prepared_cache(path, paths, [])
-    assert read_prepared_cache(path, paths, n_cases=0) == []
+    assert read_prepared_cache(path, paths, []) == []
 
     module.write_text("MAX_SHELF_SIZE = 1500\n")
-    assert read_prepared_cache(path, paths, n_cases=0) is None
+    assert read_prepared_cache(path, paths, []) is None
 
 
 def test_code_sha256_covers_the_four_modules_that_shape_prepare():
@@ -609,3 +620,143 @@ def test_evaluate_with_different_weights_changes_only_scoring(fixture_artifact, 
     # report identical candidate recall, even though nothing gets accepted.
     assert starved_metrics.n_accepted == 0
     assert starved_metrics.candidate_recall == baseline_metrics.candidate_recall
+
+
+def _eval_case(case_id, *, work_key, alternates=()):
+    return EvalCase(
+        case_id=case_id,
+        stratum="easy_baseline",
+        book=EvalBook(book_id=1, title="A Title"),
+        label=EvalLabel(
+            verdict="match",
+            work_key=work_key,
+            alternate_work_keys=list(alternates),
+            identity_rule="same_work",
+            rationale="Matched by title and author.",
+            labeled_at=datetime.date(2026, 10, 4),
+            labeled_against_dump_date="2026-07-31",
+        ),
+    )
+
+
+def _prepared_from(case):
+    return PreparedCase(
+        case_id=case.case_id,
+        stratum=case.stratum,
+        expected_work_key=case.label.work_key,
+        expected_verdict=case.label.verdict,
+        alternate_work_keys=list(case.label.alternate_work_keys),
+    )
+
+
+def _weights():
+    return _equal_weights()
+
+
+def _accepting_case(case_id, *, expected, accepted, alternates=(), stratum="easy_baseline"):
+    """A prepared case whose only candidate is `accepted`, scoring 1.0: a clear
+    accept under any weights (only the two title features are present)."""
+    values = {name: None for name in FEATURES}
+    values.update(title_similarity=1.0, title_variant_exact=1.0)
+    return PreparedCase(
+        case_id=case_id,
+        stratum=stratum,
+        expected_work_key=expected,
+        expected_verdict="match",
+        alternate_work_keys=list(alternates),
+        candidates=[PreparedCandidate(work_key=accepted, rules=["title_fp"], values=values)],
+        resolved={},
+    )
+
+
+def test_accepting_a_labelled_alternate_is_correct_not_a_false_merge():
+    metrics, outcomes = evaluate(
+        [_accepting_case("c1", expected="OL1W", accepted="OL2W", alternates=["OL2W"])],
+        _weights(),
+    )
+    assert outcomes[0].correct and not outcomes[0].false_merge
+    assert outcomes[0].canonical is False
+    assert metrics.false_merge_rate == 0.0
+    assert metrics.canonical_rate == 0.0
+
+
+def test_accepting_the_labelled_key_is_canonical():
+    metrics, outcomes = evaluate(
+        [_accepting_case("c1", expected="OL1W", accepted="OL1W", alternates=["OL2W"])],
+        _weights(),
+    )
+    assert outcomes[0].canonical is True
+    assert metrics.canonical_rate == 1.0
+
+
+def test_accepting_a_key_outside_label_and_alternates_is_a_false_merge():
+    _, outcomes = evaluate(
+        [_accepting_case("c1", expected="OL1W", accepted="OL3W", alternates=["OL2W"])],
+        _weights(),
+    )
+    assert outcomes[0].false_merge
+
+
+def test_recall_counts_an_alternate_as_the_labelled_work():
+    _, outcomes = evaluate(
+        [_accepting_case("c1", expected="OL1W", accepted="OL2W", alternates=["OL2W"])],
+        _weights(),
+    )
+    assert outcomes[0].candidate_rank == 1
+
+
+def test_list_row_metrics_cover_only_list_row_cases():
+    metrics, _ = evaluate(
+        [
+            _accepting_case("a", expected="OL1W", accepted="OL9W", stratum="list_row"),
+            _accepting_case("b", expected="OL1W", accepted="OL1W", stratum="easy_baseline"),
+        ],
+        _weights(),
+    )
+    assert metrics.list_row_false_merge_rate == 1.0
+    assert metrics.list_row_abstention_rate == 0.0
+    assert metrics.false_merge_rate == 0.5
+
+
+def test_summarize_recomputes_the_same_metrics_evaluate_returns():
+    prepared = [
+        _accepting_case("a", expected="OL1W", accepted="OL1W"),
+        _accepting_case("b", expected="OL1W", accepted="OL9W"),
+    ]
+    metrics, outcomes = evaluate(prepared, _weights())
+    assert summarize(outcomes) == metrics
+
+
+def test_cache_header_changes_when_a_label_changes():  # Review Focus 4
+    case = _eval_case("c1", work_key="OL1W")
+    relabelled = _eval_case("c1", work_key="OL2W")
+    with_alternate = _eval_case("c1", work_key="OL1W", alternates=["OL3W"])
+    assert labels_sha256([case]) == labels_sha256([case])
+    assert labels_sha256([case]) != labels_sha256([relabelled])
+    assert labels_sha256([case]) != labels_sha256([with_alternate])
+
+
+def test_a_relabel_with_the_same_case_count_invalidates_the_cache(tmp_path):
+    paths = _artifact(tmp_path)
+    case = _eval_case("c1", work_key="OL1W")
+    cache = tmp_path / "prepared.json"
+    write_prepared_cache(cache, paths, [_prepared_from(case)])
+    assert read_prepared_cache(cache, paths, [case]) is not None
+    assert read_prepared_cache(cache, paths, [_eval_case("c1", work_key="OL2W")]) is None
+
+
+def test_write_reading_saves_metrics_strata_and_outcomes(tmp_path):
+    prepared = [
+        _accepting_case("a", expected="OL1W", accepted="OL1W", stratum="list_row"),
+        _accepting_case("b", expected="OL1W", accepted="OL9W"),
+    ]
+    metrics, outcomes = evaluate(prepared, _weights())
+    out = tmp_path / "nested" / "reading.json"
+    write_reading(out, metrics, outcomes, label="before", weights=_weights())
+    payload = json.loads(out.read_text())
+    assert payload["label"] == "before"
+    assert payload["matcher_version"] == MATCHER_VERSION
+    assert set(payload["by_stratum"]) == {"list_row", "easy_baseline"}
+    assert payload["by_stratum"]["list_row"]["canonical_rate"] == 1.0
+    assert [o["case_id"] for o in payload["outcomes"]] == ["a", "b"]
+    assert payload["metrics"]["false_merge_rate"] == 0.5

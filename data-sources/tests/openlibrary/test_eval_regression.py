@@ -112,7 +112,7 @@ def test_the_matcher_does_not_regress_against_the_labeled_set():
 
     con = connect(paths, memory_limit="8GB")
     try:
-        prepared = read_prepared_cache(cache_path, paths, len(cases)) if cache_path else None
+        prepared = read_prepared_cache(cache_path, paths, cases) if cache_path else None
         if prepared is not None:
             metrics, _ = evaluate(prepared, load_weights())
         else:

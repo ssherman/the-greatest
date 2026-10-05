@@ -459,7 +459,7 @@ def main(
     # PreparedCase list along the same train/test partition, so nothing
     # downstream of this line touches DuckDB again. R54: skip the pass
     # entirely when a matching prepared-cases cache is on disk.
-    prepared = read_prepared_cache(prepared_cache, paths, len(cases)) if prepared_cache else None
+    prepared = read_prepared_cache(prepared_cache, paths, cases) if prepared_cache else None
     if prepared is not None:
         typer.echo(f"loaded {len(prepared)} prepared cases from {prepared_cache}")
     else:
