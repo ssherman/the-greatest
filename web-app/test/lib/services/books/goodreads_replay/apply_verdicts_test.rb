@@ -119,6 +119,11 @@ module Services
              "strip_identifiers" => [["books_work_goodreads_id", "777"], ["books_work_goodreads_id", "777-some-slug"]],
              "stamp_identifiers" => [["books_work_goodreads_id", "777"]]})
           goodreads = ->(book) { book.identifiers.where(identifier_type: :books_work_goodreads_id).where("value LIKE '777%'").pluck(:value) }
+          # The fixture user has the wrong book on their favorites, so the relink
+          # queues the favorites rebuild and ranking jobs; Sidekiq is inline here.
+          ::BulkCalculateWeightsJob.stubs(:perform_async)
+          ::CalculateRankingsJob.stubs(:perform_in)
+          ::GenerateUserFavoritesListsJob.stubs(:perform_async)
 
           ApplyVerdicts.call(auto_apply: true)
 

@@ -22,7 +22,7 @@ module Services
           Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
           def self.call(verdict:)
-            new(verdict.payload).call
+            new(verdict).call
           end
 
           # Does another of this user's replay rows name from_book? Legacy stamped
@@ -41,38 +41,81 @@ module Services
               .where(books_goodreads_imports: {user_id: user_id}, books_goodreads_editions: {goodreads_book_id: others}).exists?
           end
 
-          def initialize(payload)
-            @payload = payload
+          def initialize(verdict)
+            @verdict = verdict
+            @payload = verdict.payload
           end
 
+          # Both books are looked up through merges (MergedBook): merges apply
+          # before relinks, and admins merge between passes.
+          #
+          # The wrong book's items are copied rather than moved in two cases:
+          # - another row of the user's still names that book;
+          # - another approved relink of the user's, applied later in this run,
+          #   still has to take them from that book to its own destination. The
+          #   last one moves them, so every destination ends up on the user's
+          #   lists.
           def call
             user = ::User.find_by(id: @payload["user_id"])
             return noop("user #{@payload["user_id"]} no longer exists") unless user
 
-            from = ::Books::Book.find_by(id: @payload["from_book_id"])
-            to = ::Books::Book.find_by(id: @payload["to_book_id"])
+            from = MergedBook.call(@payload["from_book_id"])
+            to = MergedBook.call(@payload["to_book_id"])
             missing = [[from, "from_book_id"], [to, "to_book_id"]].find { |book, _| book.nil? }
             return noop("book #{@payload[missing.last]} no longer exists") if missing
+            return noop("both books were merged into book #{to.id}") if from.id == to.id
 
-            items = ::UserListItem.joins(:user_list).where(user_lists: {user_id: user.id}, listable: from).to_a
-            keep = self.class.supported_elsewhere?(user_id: user.id, from_book: from, goodreads_book_id: @payload["goodreads_book_id"])
+            items = ::UserListItem.joins(:user_list).where(user_lists: {user_id: user.id}, listable: from).includes(:user_list).to_a
+            keep = later_sibling? ||
+              self.class.supported_elsewhere?(user_id: user.id, from_book: from, goodreads_book_id: @payload["goodreads_book_id"])
             review = keep ? nil : ::Review.find_by(user: user, reviewable: from)
             goal_urls = keep ? [] : reading_goal_urls(user, items)
+            changed_items = []
             changed = 0
             ActiveRecord::Base.transaction do
-              changed += items.count { |item| keep ? copy_item(item, to) : move_item(item, to) }
+              changed_items = items.select { |item| keep ? copy_item(item, to) : move_item(item, to) }
               move_review(review, user, to) if review
-              changed += StripIdentifier.change(book: from, remove: Array(@payload["strip_identifiers"]), add: []) +
+              changed = changed_items.size +
+                StripIdentifier.change(book: from, remove: Array(@payload["strip_identifiers"]), add: []) +
                 StripIdentifier.change(book: to, remove: [], add: Array(@payload["stamp_identifiers"]))
             end
             return noop("already applied") if review.nil? && changed.zero?
 
             ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", from.id) if review
             ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", goal_urls) if goal_urls.any?
-            Result.new(success?: true, data: {outcome: :applied}, errors: [])
+            purge_goal_pages_for_copies(user, changed_items) if keep
+            Result.new(success?: true, data: {outcome: :applied}.merge(favorites_follow_ups(changed_items, from, to)), errors: [])
           end
 
           private
+
+          # Another approved relink of this user's off the same book, with a
+          # higher id, so ApplyVerdicts applies it after this one.
+          def later_sibling?
+            ::Books::RepairVerdict.relink.approved.where("id > ?", @verdict.id.to_i)
+              .where("payload->>'user_id' = ? AND payload->>'from_book_id' = ?", @payload["user_id"].to_s, @payload["from_book_id"].to_s)
+              .exists?
+          end
+
+          # A favorite that moved or was copied changes the generated "Users'
+          # Favorite Books" list, and the rankings it feeds; the nightly rebuild
+          # does not recalculate rankings. ApplyVerdicts queues both once.
+          def favorites_follow_ups(changed_items, from, to)
+            return {} unless changed_items.any? { |item| item.user_list.is_a?(::Books::UserList) && item.user_list.favorites? }
+
+            ranked = ::RankedItem.where(item_type: "Books::Book", item_id: [from.id, to.id]).distinct.pluck(:ranking_configuration_id)
+            {follow_ups: [:user_favorites],
+             reweigh_configuration_ids: (ranked + [::Books::RankingConfiguration.default_primary&.id]).compact.uniq}
+          end
+
+          # A copied read adds to the user's count on the goal it falls in.
+          def purge_goal_pages_for_copies(user, copied)
+            copied.select { |item| item.completed_on && item.user_list.is_a?(::Books::UserList) && item.user_list.read? }
+              .each do |item|
+                ::Services::Books::ReadingGoals::CompletionChangeInvalidator.call(user: user, old_completed_on: nil,
+                  new_completed_on: item.completed_on)
+              end
+          end
 
           # True: something changed.
           def move_item(item, to)
