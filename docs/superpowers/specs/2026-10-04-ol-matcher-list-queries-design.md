@@ -229,6 +229,37 @@ representative.
 
 No Rails file changes.
 
+## Before/after evaluation
+
+"More accurate" is the claim to prove, not "more accepts". The comparison is a required
+deliverable, committed as a report in the PR and summarized in
+`docs/features/open-library-data-service.md`.
+
+1. **Baseline first.** Before any matcher change, score the expanded labelled set (existing cases
+   with alternates, plus `list_row`) with the **current** matcher (version 2, shipped weights).
+   Record it as the baseline reading. It is the same labels and the same cases the new matcher
+   will face, so the two readings differ only by the matcher.
+2. **After.** Score the same set with version 3.
+3. **Side by side**, overall and per stratum: precision@accept, false merge, false reject,
+   abstention, correct no-match, recall@10, and the new canonical rate.
+4. **Decision diff.** Every case whose verdict or accepted key changed between the two readings
+   is listed: newly accepted, newly abstained, newly rejected, key changed. Each newly accepted or
+   key-changed case is read by hand and marked right or wrong.
+5. **End to end in Rails.** Re-run the spike harness (the Rails book finder plus `/resolve`) on
+   the 200 replay rows against both matcher versions, and compare finder outcomes against our
+   linked books. More OL accepts mean more finder `certain` matches (rule 2), so this checks that
+   the stronger signal stays right.
+
+**Acceptance criteria.** All must hold to merge:
+- False merges on the expanded set are **no higher than the baseline**, not merely under the
+  0.015 gate. Precision@accept is no lower than the baseline minus 0.01.
+- `list_row` abstention falls substantially. There is no fixed target, but a drop to under half
+  the baseline is the expectation. If it doesn't fall that far, the remaining abstain reasons are
+  explained in the report.
+- No newly accepted case in the decision diff is a wrong book. A non-canonical duplicate counts as
+  right but is noted.
+- The Rails replay shows no row where the finder's answer got worse.
+
 ## Testing
 
 - **Unit tests** for each rule, in the existing test layout:
