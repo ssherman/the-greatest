@@ -58,7 +58,8 @@ Czech titles. Six of the pages are committed as fixtures in `web-app/test/fixtur
 - **Roles seen:** Author, Writer (comics), Translator, Illustrator, Editor, Introduction, Preface.
 - **Data quirks:**
   - Goodreads' own title data has an unclosed series suffix: `The Corpse in Oozak's Pond (Peter Shandy #6`.
-  - A series position can be blank or a range (`1-2`).
+  - A series position can be blank or a range (`1-2`). Every series carries a stable Goodreads
+    series id in its URL (`/series/130291-batman-2011`), on both parsing paths.
   - Names can carry double spaces (`Lei  Xu`).
   - `publicationTime` can be missing.
   - Kindle editions have an ASIN and no ISBN.
@@ -154,8 +155,11 @@ Czech titles. Six of the pages are committed as fixtures in `web-app/test/fixtur
    - prefers the edition's year and ISBNs, falling back to the page's.
 
    **Series are not linked.** `Books::Series` has no `provisional` flag, so an import-made series
-   would show on public pages. The series stays on the page row. Cost: imported books carry no
-   series until an admin or enrichment adds one.
+   would show on public pages. Instead the page row keeps **every** series the page names, as a
+   `series` jsonb list of `{goodreads_series_id, title, position}`, rather than the spec's single
+   `series_name`/`series_number`. A later series backfill (Shane, 2026-10-04) then gets Goodreads'
+   own series ids for deduplication without re-parsing stored HTML. Legacy rows carry the name and
+   position with no id. Cost: imported books carry no series until that feature exists.
 8. **A waiting edition keeps what the settle step needs:**
    - `verification: pending`;
    - its `match_decision`;
@@ -265,7 +269,7 @@ deployment/ENV.md                                           # PRIVATE_IMPORTS_ST
   - `Books::GoodreadsPage`:
     - enum `source` (`fetched`, `legacy`); enum `outcome` (`found`, `not_found`, `blocked`, `unparseable`) with `prefix: true`, so `outcome_found?`;
     - `scope :conclusive`, `#conclusive?`, `has_one_attached :html` (service `private_imports`);
-    - columns `goodreads_book_id`, `fetched_at`, `http_status`, `parser_version`, `title`, `series_name`, `series_number`, `authors` (jsonb `[{"name","role","primary"}]`), `original_publication_year`, `isbn13`, `isbn10`, `asin`.
+    - columns `goodreads_book_id`, `fetched_at`, `http_status`, `parser_version`, `title`, `series` (jsonb `[{"goodreads_series_id","title","position"}]`), `authors` (jsonb `[{"name","role","primary"}]`), `original_publication_year`, `isbn13`, `isbn10`, `asin`.
   - `Books::GoodreadsEdition`: `belongs_to :pending_import` and `scope :awaiting_goodreads`.
   - `Books::GoodreadsImport#pending_editions`.
   - Fixtures `books_goodreads_pages(:war_and_peace_page)` (656, found) and `(:invented_page)` (99999999999, not found).
@@ -291,8 +295,7 @@ class CreateBooksGoodreadsPages < ActiveRecord::Migration[8.1]
       t.integer :http_status
       t.integer :parser_version
       t.string :title
-      t.string :series_name
-      t.string :series_number
+      t.jsonb :series, null: false, default: []
       t.jsonb :authors, null: false, default: []
       t.integer :original_publication_year
       t.string :isbn13
@@ -612,7 +615,10 @@ git commit -m "Goodreads pages: cache table, pending import, private storage ser
   - `Books::Goodreads::BookPage.parse(html:, status:)` returns
     `BookPage::Parsed(outcome:, facts:)`, with `#found?`. `outcome` is one of `:found`,
     `:not_found`, `:blocked`, `:unparseable`, `:unavailable`.
-  - `BookPage::Facts(goodreads_book_id:, title:, series_name:, series_number:, contributors:, original_publication_year:, isbn13:, isbn10:, asin:)`.
+  - `BookPage::Facts(goodreads_book_id:, title:, series:, contributors:, original_publication_year:, isbn13:, isbn10:, asin:)`.
+  - `BookPage::Series(goodreads_series_id:, title:, position:)`. `series` lists every series the
+    page names; `goodreads_series_id` is read from the series URL; `position` is Goodreads' text
+    (`"6"`, `"1-2"`) or nil.
   - `BookPage::Contributor(name:, role:, primary:)` with `#creator?`.
   - `BookPage::VERSION` (1), `BookPage::CREATOR_ROLES`, `BookPage::SERIES_SUFFIX`.
 
@@ -645,8 +651,8 @@ module Books
 
         facts = parsed.facts
         assert parsed.found?
-        assert_equal [656, "War and Peace", nil, nil, 1868], [facts.goodreads_book_id, facts.title,
-          facts.series_name, facts.series_number, facts.original_publication_year]
+        assert_equal [656, "War and Peace", [], 1868], [facts.goodreads_book_id, facts.title,
+          facts.series, facts.original_publication_year]
         assert_equal ["9780192833983", "0192833987", nil], [facts.isbn13, facts.isbn10, facts.asin]
         assert_equal [["Leo Tolstoy", "Author", true], ["Aylmer Maude", "Translator", false],
           ["Louise Maude", "Translator", false]], contributors(facts)
@@ -656,7 +662,8 @@ module Books
       test "a comic's writers are its creators, its illustrators are not, and the subtitle stays" do
         facts = BookPage.parse(html: page_html("batman_writers_26067585.html.gz"), status: 200).facts
 
-        assert_equal ["Batman, Volume 8: Superheavy", "Batman (2011)", nil], [facts.title, facts.series_name, facts.series_number]
+        assert_equal "Batman, Volume 8: Superheavy", facts.title
+        assert_equal [BookPage::Series.new(goodreads_series_id: 130291, title: "Batman (2011)", position: nil)], facts.series
         assert_equal ["Scott Snyder", "Brian Azzarello"], facts.contributors.select(&:creator?).map(&:name)
         assert_equal %w[Illustrator Illustrator Illustrator], facts.contributors.reject(&:creator?).map(&:role)
       end
@@ -664,16 +671,18 @@ module Books
       test "an unclosed series suffix comes off the title and the series is read" do
         facts = BookPage.parse(html: page_html("series_unclosed_18912323.html.gz"), status: 200).facts
 
-        assert_equal ["The Corpse in Oozak's Pond", "Peter Shandy", "6", 1987],
-          [facts.title, facts.series_name, facts.series_number, facts.original_publication_year]
+        assert_equal ["The Corpse in Oozak's Pond", 1987], [facts.title, facts.original_publication_year]
+        assert_equal [BookPage::Series.new(goodreads_series_id: 45305, title: "Peter Shandy", position: "6")], facts.series
         assert_equal ["9781453278772", "145327877X", "B009S33K70"], [facts.isbn13, facts.isbn10, facts.asin]
       end
 
       test "a page without __NEXT_DATA__ is read from its markup and linked data" do
         facts = BookPage.parse(html: page_html("no_next_data_129650.html.gz"), status: 200).facts
 
-        assert_equal [129650, "Mastering the Art of French Cooking", "Mastering the Art of French Cooking", "1", 1961],
-          [facts.goodreads_book_id, facts.title, facts.series_name, facts.series_number, facts.original_publication_year]
+        assert_equal [129650, "Mastering the Art of French Cooking", 1961],
+          [facts.goodreads_book_id, facts.title, facts.original_publication_year]
+        assert_equal [BookPage::Series.new(goodreads_series_id: 77378, title: "Mastering the Art of French Cooking", position: "1")],
+          facts.series
         assert_equal ["9780375413407", "0375413405"], [facts.isbn13, facts.isbn10]
         assert_equal [["Julia Child", "Author", true], ["Sidonie Coryn", "Illustrator", false],
           ["Louisette Bertholle", "Author", false], ["Simone Beck", nil, false]], contributors(facts)
@@ -719,24 +728,28 @@ module Books
         assert_equal [:unparseable] * 3, pages.map { |html| BookPage.parse(html: html, status: 200).outcome }
       end
 
-      test "a contributor with no role is unknown, and Goodreads' spacing is folded" do
+      test "a contributor with no role is unknown, every series is kept, and Goodreads' spacing is folded" do
         apollo = {
           "ROOT_QUERY" => {%(getBookByLegacyId({"legacyId":"7"})) => {"__ref" => "Book:1"}},
           "Book:1" => {"legacyId" => 7, "title" => "Quiet", "titleComplete" => "Quiet (Calm, #2)",
                        "primaryContributorEdge" => {"node" => {"__ref" => "Contributor:1"}, "role" => "Author"},
                        "secondaryContributorEdges" => [{"node" => {"__ref" => "Contributor:2"}, "role" => nil}],
-                       "bookSeries" => [{"userPosition" => "2", "series" => {"__ref" => "Series:1"}}],
+                       "bookSeries" => [{"userPosition" => "2", "series" => {"__ref" => "Series:1"}},
+                         {"userPosition" => "", "series" => {"__ref" => "Series:2"}}],
                        "details" => {}, "work" => {"__ref" => "Work:1"}},
           "Contributor:1" => {"name" => "Lei  Xu"},
           "Contributor:2" => {"name" => " Ana Ruiz "},
-          "Series:1" => {"title" => "Calm"},
+          "Series:1" => {"title" => "Calm", "webUrl" => "https://www.goodreads.com/series/41-calm"},
+          "Series:2" => {"title" => "Quiet Books"},
           "Work:1" => {"details" => {"publicationTime" => nil}}
         }
         html = %(<script id="__NEXT_DATA__" type="application/json">#{{props: {pageProps: {apolloState: apollo}}}.to_json}</script>)
 
         facts = BookPage.parse(html: html, status: 200).facts
 
-        assert_equal ["Quiet", "Calm", "2", nil], [facts.title, facts.series_name, facts.series_number, facts.original_publication_year]
+        assert_equal ["Quiet", nil], [facts.title, facts.original_publication_year]
+        assert_equal [BookPage::Series.new(goodreads_series_id: 41, title: "Calm", position: "2"),
+          BookPage::Series.new(goodreads_series_id: nil, title: "Quiet Books", position: nil)], facts.series
         assert_equal [["Lei Xu", "Author", true], ["Ana Ruiz", nil, false]], contributors(facts)
         assert_equal ["Lei Xu"], facts.contributors.select(&:creator?).map(&:name)
       end
@@ -791,7 +804,11 @@ module Books
       Contributor = Data.define(:name, :role, :primary) do
         def creator? = CREATOR_ROLES.include?(role)
       end
-      Facts = Data.define(:goodreads_book_id, :title, :series_name, :series_number, :contributors,
+      # goodreads_series_id: from the series URL (/series/130291-batman-2011),
+      # Goodreads' own key for the series. position: as Goodreads writes it
+      # ("6", "1-2"), nil when blank.
+      Series = Data.define(:goodreads_series_id, :title, :position)
+      Facts = Data.define(:goodreads_book_id, :title, :series, :contributors,
         :original_publication_year, :isbn13, :isbn10, :asin)
       # outcome: :found (facts set), :not_found, :blocked, :unparseable, or
       # :unavailable (Goodreads' error page or a 5xx: try again later).
@@ -837,13 +854,11 @@ module Books
         return nil unless book.is_a?(Hash) && book["legacyId"]
 
         details = book["details"].to_h
-        series = Array(book["bookSeries"]).first.to_h
         isbn13, isbn10 = isbns(details["isbn13"], details["isbn"])
         Facts.new(
           goodreads_book_id: book["legacyId"].to_i,
           title: clean_title(book["titleComplete"].presence || book["title"]),
-          series_name: apollo.dig(series.dig("series", "__ref"), "title").presence,
-          series_number: series["userPosition"].presence,
+          series: next_data_series(apollo, book),
           contributors: next_data_contributors(apollo, book),
           original_publication_year: year_from_ms(apollo[book.dig("work", "__ref")].to_h.dig("details", "publicationTime")),
           isbn13: isbn13,
@@ -852,6 +867,16 @@ module Books
         )
       rescue JSON::ParserError
         nil
+      end
+
+      def next_data_series(apollo, book)
+        Array(book["bookSeries"]).filter_map { |entry|
+          record = apollo[entry.to_h.dig("series", "__ref")]
+          next unless record.is_a?(Hash) && record["title"].present?
+
+          Series.new(goodreads_series_id: series_id(record["webUrl"]), title: record["title"].strip,
+            position: entry["userPosition"].presence)
+        }.uniq
       end
 
       def next_data_contributors(apollo, book)
@@ -868,18 +893,24 @@ module Books
         heading = doc.at_css('h1[data-testid="bookTitle"]') or return nil
         linked = linked_data
         isbn13, isbn10 = isbns(linked["isbn"])
-        series_name, series_number = doc.at_css('h3 a[href*="/series/"]')&.text.to_s.strip.split(/\s+#(?=[^#]*\z)/, 2)
         Facts.new(
           goodreads_book_id: doc.at_css('link[rel="canonical"]')&.[]("href").to_s[%r{/book/show/(\d+)}, 1]&.to_i,
           title: clean_title(heading.text),
-          series_name: series_name.presence,
-          series_number: series_number.presence,
+          series: markup_series,
           contributors: markup_contributors(linked),
           original_publication_year: doc.at_css('[data-testid="publicationInfo"]')&.text.to_s[/First published.*?(\d{3,4})\s*\z/, 1]&.to_i,
           isbn13: isbn13,
           isbn10: isbn10,
           asin: nil
         )
+      end
+
+      # "Mastering the Art of French Cooking #1": the position follows the last #.
+      def markup_series
+        doc.css('h3 a[href*="/series/"]').filter_map { |link|
+          title, position = link.text.strip.split(/\s+#(?=[^#]*\z)/, 2)
+          Series.new(goodreads_series_id: series_id(link["href"]), title: title.strip, position: position.presence) if title.present?
+        }.uniq
       end
 
       # Roles come from the contributors the markup shows (an author has no
@@ -911,6 +942,8 @@ module Books
       def normalize_name(name)
         ::Services::Text::NameNormalizer.call(name.to_s).presence
       end
+
+      def series_id(url) = url.to_s[%r{/series/(\d+)}, 1]&.to_i
 
       def clean_title(title) = title.to_s.sub(SERIES_SUFFIX, "").strip.presence
 
@@ -1446,7 +1479,8 @@ module Services
           page = result.data[:page]
           assert_equal :found, result.data[:outcome]
           assert_equal ["fetched", "found", 200, 1, FETCHED_AT], [page.source, page.outcome, page.http_status, page.parser_version, page.fetched_at]
-          assert_equal ["Batman, Volume 8: Superheavy", "Batman (2011)", "9781401259693"], [page.title, page.series_name, page.isbn13]
+          assert_equal ["Batman, Volume 8: Superheavy", "9781401259693"], [page.title, page.isbn13]
+          assert_equal [{"goodreads_series_id" => 130291, "title" => "Batman (2011)", "position" => nil}], page.series
           assert_equal({"name" => "Scott Snyder", "role" => "Writer", "primary" => true}, page.authors.first)
           assert_equal ["private_imports", "application/gzip"], [page.html.blob.service_name, page.html.blob.content_type]
           assert_equal html, Zlib.gunzip(page.html.download).force_encoding(Encoding::UTF_8)
@@ -1588,7 +1622,8 @@ module Services
           page.assign_attributes(
             source: :fetched, outcome: parsed.outcome, fetched_at: fetched.fetched_at, http_status: fetched.status,
             parser_version: ::Books::Goodreads::BookPage::VERSION,
-            title: facts&.title, series_name: facts&.series_name, series_number: facts&.series_number,
+            title: facts&.title,
+            series: Array(facts&.series).map { |s| {"goodreads_series_id" => s.goodreads_series_id, "title" => s.title, "position" => s.position} },
             authors: Array(facts&.contributors).map { |c| {"name" => c.name, "role" => c.role, "primary" => c.primary} },
             original_publication_year: facts&.original_publication_year,
             isbn13: facts&.isbn13, isbn10: facts&.isbn10, asin: facts&.asin
@@ -2946,8 +2981,9 @@ for it. Matched editions never touch Goodreads.
     - a contributor with no role.
 - **Outcome** (`SettleEdition`):
   - **Agrees:** a provisional book with the page's title and its Author and Writer contributors
-    (never translators, illustrators or editors), verified. Series are not linked:
-    `Books::Series` has no provisional flag.
+    (never translators, illustrators or editors), verified. Series are not linked, because
+    `Books::Series` has no provisional flag. The page row keeps every series it names, with
+    Goodreads' series id, for a later series backfill.
   - **Not found or mismatch:** the edition is parked, its waiting rows read "not found on
     Goodreads" or "does not match its Goodreads page", and nothing is created.
   - **No page** (fetcher down, blocked, cap spent): the book is created unverified.
@@ -3064,8 +3100,8 @@ module Services
 
           page = ::Books::GoodreadsPage.find_by!(goodreads_book_id: 335131)
           assert_equal ["legacy", "found", LOOKED_UP + 1.day, nil, nil], [page.source, page.outcome, page.fetched_at, page.http_status, page.parser_version]
-          assert_equal ["The Vile Village", "A Series of Unfortunate Events", "7", 2001],
-            [page.title, page.series_name, page.series_number, page.original_publication_year]
+          assert_equal ["The Vile Village", 2001], [page.title, page.original_publication_year]
+          assert_equal [{"goodreads_series_id" => nil, "title" => "A Series of Unfortunate Events", "position" => "7"}], page.series
           assert_equal ["9780192833983", "0192833987", "B0001"], [page.isbn13, page.isbn10, page.asin]
           assert_equal [{"name" => "Lemony Snicket", "role" => nil, "primary" => false},
             {"name" => "Brett Helquist", "role" => nil, "primary" => false}], page.authors
@@ -3077,8 +3113,8 @@ module Services
             authors: ["J.R.R. Tolkien"]))
 
           page = ::Books::GoodreadsPage.find_by!(goodreads_book_id: 28854)
-          assert_equal ["The Book of Lost Tales, Part Two", "The History of Middle-earth", "2"],
-            [page.title, page.series_name, page.series_number]
+          assert_equal "The Book of Lost Tales, Part Two", page.title
+          assert_equal [{"goodreads_series_id" => nil, "title" => "The History of Middle-earth", "position" => "2"}], page.series
         end
 
         test "names are folded and duplicates dropped" do
@@ -3213,7 +3249,9 @@ module Services
             source: ::Books::GoodreadsPage.sources[:legacy],
             outcome: ::Books::GoodreadsPage.outcomes[:found],
             fetched_at: record.last_looked_up_at || record.last_refreshed_at,
-            title: title, series_name: series_name, series_number: series_number,
+            title: title,
+            # The legacy scraper kept the series name and position, never its id.
+            series: series_name ? [{"goodreads_series_id" => nil, "title" => series_name, "position" => series_number}] : [],
             authors: names.map { |name| {"name" => name, "role" => nil, "primary" => false} },
             original_publication_year: record.original_publication_year,
             isbn13: isbn&.isbn13, isbn10: isbn&.isbn10, asin: record.asin.presence
