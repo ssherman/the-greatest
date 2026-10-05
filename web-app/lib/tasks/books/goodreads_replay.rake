@@ -31,5 +31,11 @@ namespace :books do
       puts "author name groups: #{tally.call(authors[:tally])} (#{authors[:ai_calls]} AI calls)"
       puts "book pairs: #{Services::Books::GoodreadsReplay::FindBookDuplicates.call.data[:recorded]} merge verdicts"
     end
+
+    desc "Record mark_provisional verdicts for authorless books and for books every holder is relinked away from"
+    task junk: :environment do
+      counts = Services::Books::GoodreadsReplay::FindJunk.call.data
+      puts "mark_provisional verdicts: #{counts[:authorless]} authorless, #{counts[:orphaned]} with no support after relinks"
+    end
   end
 end

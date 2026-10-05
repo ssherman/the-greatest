@@ -47,4 +47,10 @@ class BooksGoodreadsReplayRakeTest < ActiveSupport::TestCase
       Rake::Task["books:goodreads_replay:duplicates"].invoke
     end
   end
+
+  test "junk reports both kinds" do
+    REPLAY::FindJunk.expects(:call).returns(result(authorless: 37, orphaned: 4))
+
+    assert_output(/mark_provisional verdicts: 37 authorless, 4 with no support after relinks/) { Rake::Task["books:goodreads_replay:junk"].invoke }
+  end
 end
