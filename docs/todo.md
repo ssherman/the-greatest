@@ -45,14 +45,9 @@ Design constraints for whoever writes this:
 - **Do not delete the old Meta app.** It is the only thing keeping this possible.
 
 ## Data importers
-
-- books DataImporter
-- authors DataImporter
 - google books integration
-- goodreads import
 
 ## Books data quality
-
 - Books Duplicate fixer
 - Authors Duplicate fixer
 - Invalid Book Finder
@@ -68,3 +63,6 @@ Design constraints for whoever writes this:
 - google ads
 - google analytics
 - move worker to a new server
+
+- Series populator
+- series UI
