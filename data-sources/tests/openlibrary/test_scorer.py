@@ -230,3 +230,27 @@ def test_a_missing_feature_weight_key_fails_to_load():
     del payload["feature_weights"]["popularity_prior"]
     with pytest.raises(ValueError, match="popularity_prior"):
         Weights.model_validate(payload)
+
+
+def test_containment_credit_raises_title_similarity_to_the_calibrated_floor():
+    weights = Weights.model_validate({**_weights_payload(), "subset_title_credit": 0.8})
+    values = {name: None for name in FEATURES}
+    values["title_similarity"] = 0.4
+    plain = score_features("OL1W", values, [], [], weights)
+    credited = score_features("OL1W", values, [], [], weights, title_containment=True)
+    assert credited.evidence["title_similarity"]["value"] == 0.8
+    assert plain.evidence["title_similarity"]["value"] == 0.4
+
+
+def test_zero_credit_leaves_a_contained_title_alone():
+    weights = Weights.model_validate(_weights_payload())
+    values = {name: None for name in FEATURES}
+    values["title_similarity"] = 0.4
+    scored = score_features("OL1W", values, [], [], weights, title_containment=True)
+    assert scored.evidence["title_similarity"]["value"] == 0.4
+
+
+def test_new_weights_fields_default_when_absent():
+    weights = Weights.model_validate(_weights_payload())
+    assert weights.subset_title_credit == 0.0
+    assert weights.duplicate_dominance_ratio == 3.0

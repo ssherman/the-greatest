@@ -29,8 +29,14 @@ import math
 import duckdb
 from pydantic import BaseModel, Field
 
-from common.normalize import fingerprint
-from common.scoring import identifier_agreement, set_overlap, title_similarity, year_agreement
+from common.normalize import fingerprint, query_title_variants
+from common.scoring import (
+    compare_titles,
+    fuzzy_similarity,
+    identifier_agreement,
+    set_overlap,
+    year_agreement,
+)
 from openlibrary.matcher.blocking import BlockingQuery
 from openlibrary.pipeline.duck import load_rows
 from openlibrary.pipeline.paths import ArtifactPaths
@@ -73,31 +79,27 @@ def extract(
     *,
     identifier_hits: frozenset[str] = frozenset(),
 ) -> dict[str, float | None]:
-    ours = fingerprint(query.title)
-    variants = {work.title_fp, work.title_fp_nosub, work.title_fp_noart}
-
-    # An empty title fingerprint is ABSENCE, not disagreement (ruling R40):
-    # protects the 30 `degenerate_title` evaluation cases and the ~1.5% of
-    # works whose title_fp is empty from scoring as if they disagreed on
-    # title. When both sides carry a fingerprint but it differs, 0.0 for
-    # title_variant_exact stands -- that IS disagreement between two present
-    # values.
-    title_score: float | None = None
-    variant_score: float | None = None
-    if ours and work.title_fp:
-        title_score = title_similarity(ours, work.title_fp)
-        variant_score = 1.0 if ours in variants else 0.0
+    # Variant-aware title comparison (2026-10-04 spec, section 2). Absence
+    # stays absence (R40): no fingerprint on either side -> None, not 0.0.
+    variants = query_title_variants(query.title)
+    comparison = compare_titles(
+        variants.whole, variants.derived, (work.title_fp, work.title_fp_nosub, work.title_fp_noart)
+    )
+    title_score = comparison.similarity
+    variant_score = comparison.exact
 
     our_authors = {fingerprint(n) for n in query.author_names if fingerprint(n)}
     their_authors = {fingerprint(n) for n in work.author_names if fingerprint(n)}
 
     author_similarity: float | None = None
     if our_authors and their_authors:
-        author_similarity = max(title_similarity(a, b) for a in our_authors for b in their_authors)
+        author_similarity = max(fuzzy_similarity(a, b) for a in our_authors for b in their_authors)
 
+    # An explicit subtitle wins; otherwise the one the title carried inline.
+    our_subtitle = query.subtitle or variants.derived_subtitle
     subtitle_score: float | None = None
-    if query.subtitle and work.subtitle:
-        subtitle_score = title_similarity(fingerprint(query.subtitle), fingerprint(work.subtitle))
+    if our_subtitle and work.subtitle:
+        subtitle_score = fuzzy_similarity(fingerprint(our_subtitle), fingerprint(work.subtitle))
 
     # See the module docstring for the 51-of-370 measurement that ruled out
     # comparing ISBN sets directly. `theirs` is always the one-element set
@@ -137,6 +139,20 @@ def extract(
         "language_agreement": language_score,
         "popularity_prior": min(popularity, 1.0),
     }
+
+
+def title_containment(query: BlockingQuery, work: WorkView) -> bool:
+    """Whether some title-variant pair is a strict token subset ("Ulysses a
+    novel" vs "Ulysses") with no exact variant match. Not a feature: the scorer turns it into the
+    calibrated `subset_title_credit`, so `extract` stays weight-independent."""
+    variants = query_title_variants(query.title)
+    comparison = compare_titles(
+        variants.whole, variants.derived, (work.title_fp, work.title_fp_nosub, work.title_fp_noart)
+    )
+    # An exact variant match is not "contained": the work's own article-stripped
+    # variant is a strict subset of its title ("great gatsby" in "the great
+    # gatsby"), which would flag every identical title.
+    return comparison.containment and not comparison.exact
 
 
 def conflicts(

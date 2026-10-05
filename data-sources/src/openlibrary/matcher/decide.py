@@ -40,16 +40,15 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from openlibrary.matcher.scorer import ScoredCandidate, Weights
+from openlibrary.matcher.scorer import (
+    IDENTIFIER_FEATURE,  # noqa: F401 (re-exported; moved to the scorer)
+    IDENTITY_FEATURES,  # noqa: F401
+    ScoredCandidate,
+    Weights,
+    has_identity_evidence,
+)
 
 PRIOR_FEATURE = "popularity_prior"
-
-# The features whose PRESENCE (any non-None value) says the two sides were
-# actually compared as books, not merely as the work of the same author.
-# `identifier_agreement` is deliberately not here: it is identity evidence
-# only when it AGREES (1.0) -- a 0.0 is a conflict, already handled first.
-IDENTITY_FEATURES = ("title_similarity", "title_variant_exact", "subtitle_agreement")
-IDENTIFIER_FEATURE = "identifier_agreement"
 
 
 class Decision(BaseModel):
@@ -60,16 +59,7 @@ class Decision(BaseModel):
     reason: str
 
 
-def _has_identity_evidence(candidate: ScoredCandidate) -> bool:
-    """True when a title feature is present or the identifier agrees (R58).
-
-    Author agreement, year, language and popularity do not count: any
-    combination of them alone -- however high the weighted mean -- abstains.
-    """
-    evidence = candidate.evidence
-    if any(evidence.get(name, {}).get("value") is not None for name in IDENTITY_FEATURES):
-        return True
-    return evidence.get(IDENTIFIER_FEATURE, {}).get("value") == 1.0
+_has_identity_evidence = has_identity_evidence
 
 
 def rank(candidates: list[ScoredCandidate]) -> list[ScoredCandidate]:

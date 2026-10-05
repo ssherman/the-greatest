@@ -56,9 +56,6 @@ def fuzzy_similarity(left: str, right: str) -> float | None:
     )
 
 
-# Task 10 removes this alias once matcher/features.py switches to the new name.
-title_similarity = fuzzy_similarity
-
 # A match through a query variant that only exists after the subtitle cut
 # counts for at most this: the colon may be part of the title ("Star Wars: A
 # New Hope"), and a full-title match must outrank it (2026-10-04 spec, section 2).

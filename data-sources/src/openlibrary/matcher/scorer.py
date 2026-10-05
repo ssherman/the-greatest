@@ -20,7 +20,13 @@ from pathlib import Path
 from pydantic import BaseModel, Field, model_validator
 
 from openlibrary.matcher.blocking import BlockingQuery
-from openlibrary.matcher.features import FEATURES, WorkView, conflicts, extract
+from openlibrary.matcher.features import (
+    FEATURES,
+    WorkView,
+    conflicts,
+    extract,
+    title_containment,
+)
 
 # 2 (final review of Increment 3): R58 and R59 changed what the same candidates
 # and the same weights DECIDE, and R41 changed what rule 1 returns; every
@@ -41,6 +47,12 @@ class Weights(BaseModel):
     accept_threshold: float
     reject_threshold: float
     margin_threshold: float
+    # Calibrated title credit for a strict token-subset title pair (spec section 2);
+    # 0.0 = containment earns nothing beyond its token_sort ratio.
+    subset_title_credit: float = 0.0
+    # How many times the next member's edition count a duplicate cluster's
+    # top member needs before it represents the cluster (spec section 4).
+    duplicate_dominance_ratio: float = 3.0
 
     # A typo in weights.json (Task 27 rewrites this file after every
     # calibration run) must fail LOUDLY at load time. Silently defaulting an
@@ -75,6 +87,26 @@ class ScoredCandidate(BaseModel):
     conflicts: list[str] = Field(default_factory=list)
 
 
+# The features whose PRESENCE (any non-None value) says the two sides were
+# actually compared as books, not merely as the work of the same author.
+# `identifier_agreement` is deliberately not here: it is identity evidence
+# only when it AGREES (1.0) -- a 0.0 is a conflict, already handled first.
+IDENTITY_FEATURES = ("title_similarity", "title_variant_exact", "subtitle_agreement")
+IDENTIFIER_FEATURE = "identifier_agreement"
+
+
+def has_identity_evidence(candidate: ScoredCandidate) -> bool:
+    """True when a title feature is present or the identifier agrees (R58).
+
+    Author agreement, year, language and popularity do not count: any
+    combination of them alone -- however high the weighted mean -- abstains.
+    """
+    evidence = candidate.evidence
+    if any(evidence.get(name, {}).get("value") is not None for name in IDENTITY_FEATURES):
+        return True
+    return evidence.get(IDENTIFIER_FEATURE, {}).get("value") == 1.0
+
+
 def load_weights(path: Path | None = None) -> Weights:
     return Weights.model_validate(json.loads(Path(path or WEIGHTS_PATH).read_text()))
 
@@ -85,6 +117,8 @@ def score_features(
     found_conflicts: list[str],
     rules: list[str],
     weights: Weights,
+    *,
+    title_containment: bool = False,
 ) -> ScoredCandidate:
     """The weighted-mean-minus-penalties arithmetic, on already-extracted inputs.
 
@@ -94,6 +128,11 @@ def score_features(
     this, pure Python, thousands of times per weight vector without touching
     DuckDB again.
     """
+    if title_containment and values.get("title_similarity") is not None:
+        values = {
+            **values,
+            "title_similarity": max(values["title_similarity"], weights.subset_title_credit),
+        }
     numerator = 0.0
     denominator = 0.0
     evidence: dict[str, dict] = {}
@@ -130,4 +169,11 @@ def score_candidate(
 ) -> ScoredCandidate:
     values = extract(query, work, identifier_hits=identifier_hits)
     found_conflicts = conflicts(query, work, identifier_hits=identifier_hits)
-    return score_features(work.work_key, values, found_conflicts, rules, weights)
+    return score_features(
+        work.work_key,
+        values,
+        found_conflicts,
+        rules,
+        weights,
+        title_containment=title_containment(query, work),
+    )

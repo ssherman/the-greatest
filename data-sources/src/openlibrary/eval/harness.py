@@ -54,7 +54,7 @@ from openlibrary.eval.dataset import load_cases, resolve_keys
 from openlibrary.eval.schema import EvalCase, Verdict
 from openlibrary.matcher.blocking import RULES, BlockingQuery, generate_candidates
 from openlibrary.matcher.decide import Decision, decide, rank
-from openlibrary.matcher.features import conflicts, extract, load_work_views
+from openlibrary.matcher.features import conflicts, extract, load_work_views, title_containment
 from openlibrary.matcher.scorer import MATCHER_VERSION, Weights, load_weights, score_features
 from openlibrary.pipeline.paths import ArtifactPaths
 
@@ -166,6 +166,7 @@ class PreparedCandidate(BaseModel):
     rules: list[str] = Field(default_factory=list)
     values: dict[str, float | None] = Field(default_factory=dict)
     conflicts: list[str] = Field(default_factory=list)
+    title_containment: bool = False
 
 
 class PreparedCase(BaseModel):
@@ -244,6 +245,7 @@ def prepare(
                 rules=rules,
                 values=extract(query, views[key], identifier_hits=identifier_hits),
                 conflicts=conflicts(query, views[key], identifier_hits=identifier_hits),
+                title_containment=title_containment(query, views[key]),
             )
             for key, rules in blocking.candidates.items()
             if key in views
@@ -285,7 +287,14 @@ def evaluate(
 
     for case in prepared:
         scored = [
-            score_features(c.work_key, c.values, c.conflicts, c.rules, weights)
+            score_features(
+                c.work_key,
+                c.values,
+                c.conflicts,
+                c.rules,
+                weights,
+                title_containment=c.title_containment,
+            )
             for c in case.candidates
         ]
         ordered = rank(scored)
