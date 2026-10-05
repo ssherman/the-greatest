@@ -553,3 +553,34 @@ def test_top_candidate_margin_matches_the_decision_margin_with_several_candidate
     candidates = data["candidates"]
     assert len(candidates) >= 2
     assert candidates[0]["margin"] == pytest.approx(data["decision"]["margin"])
+
+
+def test_margins_ignore_a_titleless_candidate_that_outscores_the_titled_one(
+    client, a_title_with_multiple_candidates, monkeypatch
+):
+    """rank() puts the titled candidate (0.885) above the title-less one (0.913);
+    a margin taken against the NEXT-ranked candidate by score would go negative
+    or disagree with the decision."""
+    import openlibrary.api.resolve as resolve_module
+
+    real = resolve_module.score_candidate
+    calls = []
+
+    def stubbed(*args, **kwargs):
+        scored = real(*args, **kwargs)
+        calls.append(scored.work_key)
+        if len(calls) == 1:
+            evidence = {"title_similarity": {"value": 0.9, "weight": 1.0, "contribution": 0.885}}
+            return scored.model_copy(update={"score": 0.885, "evidence": evidence, "conflicts": []})
+        evidence = {"author_overlap": {"value": 1.0, "weight": 1.0, "contribution": 0.913}}
+        return scored.model_copy(update={"score": 0.913, "evidence": evidence, "conflicts": []})
+
+    monkeypatch.setattr(resolve_module, "score_candidate", stubbed)
+    data = client.post(
+        "/resolve", json={"title": a_title_with_multiple_candidates, "limit": 50}
+    ).json()["data"]
+    candidates = data["candidates"]
+    assert len(candidates) >= 2
+    assert candidates[0]["key"]["key"] == calls[0]
+    assert candidates[0]["margin"] == pytest.approx(data["decision"]["margin"])
+    assert all(c["margin"] >= 0 for c in candidates)
