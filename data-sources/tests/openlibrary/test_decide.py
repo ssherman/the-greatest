@@ -276,3 +276,22 @@ def test_margins_skip_titleless_candidates_below():
     # OL2W have no titled candidate below them, so each margin is its own score.
     assert [c.work_key for c in ordered] == ["OL1W", "OL3W", "OL2W"]
     assert margins(ordered) == pytest.approx([0.17, 0.80, 0.913])
+
+
+def test_all_titleless_abstain_reports_the_best_score_as_margin():
+    decision = decide([_titleless("OL1W", 0.95), _titleless("OL2W", 0.5)], _equal_weights())
+    assert decision.margin == pytest.approx(0.95)
+
+
+def test_margin_abstain_names_the_titled_runner_up_not_the_titleless_one():
+    decision = decide(
+        [_c("OL1W", 0.95), _titleless("OLXW", 0.94), _c("OL2W", 0.93)], _equal_weights()
+    )
+    assert decision.verdict == "abstain"
+    assert "runner-up scores 0.930" in decision.reason
+
+
+def test_equal_titled_scores_give_zero_margin_in_work_key_order():
+    ordered = rank([_c("OL2W", 0.9), _c("OL1W", 0.9)])
+    assert [c.work_key for c in ordered] == ["OL1W", "OL2W"]
+    assert margins(ordered) == pytest.approx([0.0, 0.9])

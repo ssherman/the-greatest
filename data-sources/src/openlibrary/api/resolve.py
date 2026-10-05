@@ -32,7 +32,7 @@ from common.schemas import DiffEntry, DiffKind, Envelope, SourceKey, classify_di
 from openlibrary.api.deps import ArtifactState, cursor, get_state
 from openlibrary.api.retrieval import WorkRecord, fetch_works
 from openlibrary.matcher.blocking import BlockingQuery, generate_candidates
-from openlibrary.matcher.decide import Decision, decide, rank
+from openlibrary.matcher.decide import Decision, decide, margins, rank
 from openlibrary.matcher.features import load_work_views
 from openlibrary.matcher.scorer import ScoredCandidate, Weights, score_candidate
 
@@ -107,12 +107,15 @@ class ResolveCandidate(BaseModel):
     `"reject"` when its score is below `weights.reject_threshold`, else
     `"abstain"` -- so a non-top candidate is never `"accept"` (ruling R73).
 
-    `margin` is this candidate's score minus the NEXT-ranked candidate's
-    score, computed over the full ranking before `limit` truncates what is
-    returned. A candidate with no next-ranked candidate to compare against
-    -- including the top candidate when it is the only one -- has its own
-    score as its margin: the same convention `decide()` uses for an absent
-    runner-up (`runner_up = 0.0`). That convention is what makes
+    Candidates come in `decide.rank()` order: identity-bearing candidates
+    (a title or identifier signal) first, then by score, then work_key.
+
+    `margin` is this candidate's score minus the best identity-bearing
+    candidate ranked below it, computed over the full ranking before
+    `limit` truncates what is returned. With no such candidate -- including
+    the top candidate when it is the only one -- it is the candidate's own
+    score: the same convention `decide()` uses for an absent runner-up.
+    That convention is what makes
     `candidates[0].margin == decision.margin` hold whenever the top
     candidate is present in the response (ruling R85).
 
@@ -283,22 +286,16 @@ def resolve(
     ranked = rank(scored)
     decision = decide(scored, weights, volume_guards_tripped=blocking.volume_guards_tripped)
 
-    # Per-candidate margin to the next-ranked candidate, computed over the
-    # FULL ranking before `limit` truncates the returned list: a candidate's
-    # margin is a fact about the field it was found in, not an artifact of
-    # how many results the caller asked to see. A candidate with no
-    # next-ranked candidate -- the last in the ranking, including a lone
-    # candidate -- has its OWN score as its margin: the same "absent
-    # runner-up counts as 0.0" convention `decide()` uses for
-    # `decision.margin` (ruling R85), which is exactly what keeps
+    # Per-candidate margin, computed over the FULL ranking before `limit`
+    # truncates the returned list: a candidate's margin is a fact about the
+    # field it was found in. It is the candidate's score minus the best
+    # identity-bearing candidate ranked below it (0.0 if none), the same
+    # `margins()` that `decide()` uses (ruling R85), which keeps
     # `candidates[0].margin == decision.margin`.
-    margins = [
-        ranked[i].score - (ranked[i + 1].score if i + 1 < len(ranked) else 0.0)
-        for i in range(len(ranked))
-    ]
+    candidate_margins = margins(ranked)
 
     truncated = ranked[: request.limit]
-    truncated_margins = margins[: request.limit]
+    truncated_margins = candidate_margins[: request.limit]
 
     # R72: exactly one fetch_works call, over the RETURNED keys only. R90:
     # the same record rides on the candidate, so the caller never needs a

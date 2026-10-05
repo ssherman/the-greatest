@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from openlibrary.api.deps import Settings, open_artifact
 from openlibrary.api.main import create_app
+from openlibrary.matcher.scorer import ScoredCandidate, has_identity_evidence
 
 
 @pytest.fixture(scope="module")
@@ -127,14 +128,25 @@ def test_every_candidate_carries_its_key_score_rules_margin_verdict_evidence_and
     assert first["key"]["source"] == "openlibrary"
 
 
-def test_candidates_are_ordered_by_score_descending(client, a_resolvable_title):
-    scores = [
-        c["score"]
-        for c in client.post("/resolve", json={"title": a_resolvable_title}).json()["data"][
-            "candidates"
-        ]
+def test_candidates_are_ordered_as_decide_rank_orders_them(client, a_resolvable_title):
+    """Identity-bearing candidates first, then score descending, then work_key."""
+    candidates = client.post("/resolve", json={"title": a_resolvable_title}).json()["data"][
+        "candidates"
     ]
-    assert scores == sorted(scores, reverse=True)
+
+    def has_identity(c):
+        return has_identity_evidence(
+            ScoredCandidate(
+                work_key=c["key"]["key"],
+                score=c["score"],
+                rules=c["rules"],
+                evidence=c["evidence"],
+                conflicts=c["conflicts"],
+            )
+        )
+
+    order = [(not has_identity(c), -c["score"], c["key"]["key"]) for c in candidates]
+    assert order == sorted(order)
 
 
 def test_top_candidate_margin_matches_the_decision_margin(client, a_resolvable_title):
@@ -530,3 +542,14 @@ def test_a_request_carrying_description_and_subjects_resolves_end_to_end(client)
         json={"title": "anything", "description": "words", "subjects": ["Fiction"]},
     )
     assert response.status_code == 200
+
+
+def test_top_candidate_margin_matches_the_decision_margin_with_several_candidates(
+    client, a_title_with_multiple_candidates
+):
+    data = client.post(
+        "/resolve", json={"title": a_title_with_multiple_candidates, "limit": 50}
+    ).json()["data"]
+    candidates = data["candidates"]
+    assert len(candidates) >= 2
+    assert candidates[0]["margin"] == pytest.approx(data["decision"]["margin"])

@@ -92,21 +92,22 @@ def rank(candidates: list[ScoredCandidate], clusters=None) -> list[ScoredCandida
     return sorted(candidates, key=key)
 
 
+def _margin_at(ranked: list[ScoredCandidate], i: int, clusters) -> float:
+    cid, best, _ = _group(ranked[i], clusters)
+    below = [
+        c.score
+        for c in ranked[i + 1 :]
+        if has_identity_evidence(c) and _group(c, clusters)[0] != cid
+    ]
+    return best - max(below, default=0.0)
+
+
 def margins(ranked: list[ScoredCandidate], clusters=None) -> list[float]:
     """Per candidate: its group's best score minus the best score among
     identity-bearing candidates ranked below it in a different group (0.0 if
     none). A candidate that could not itself be accepted never sets another's
     margin. margins(...)[0] is the decision's margin (R85)."""
-    out = []
-    for i, candidate in enumerate(ranked):
-        cid, best, _ = _group(candidate, clusters)
-        below = [
-            c.score
-            for c in ranked[i + 1 :]
-            if has_identity_evidence(c) and _group(c, clusters)[0] != cid
-        ]
-        out.append(best - max(below, default=0.0))
-    return out
+    return [_margin_at(ranked, i, clusters) for i in range(len(ranked))]
 
 
 def decide(
@@ -137,7 +138,7 @@ def decide(
 
     ordered = rank(candidates, clusters)
     best = ordered[0]
-    margin = margins(ordered, clusters)[0]
+    margin = _margin_at(ordered, 0, clusters)
     runner_up = best.score - margin
 
     if best.conflicts:
