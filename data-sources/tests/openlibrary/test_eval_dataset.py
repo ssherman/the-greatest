@@ -423,6 +423,41 @@ def test_a_short_case_title_needs_an_equal_raw_alternate_title():
     assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="S.") == [TITLE_PROBLEM]
 
 
+def test_a_case_title_does_not_match_on_its_subtitle_stripped_form():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="other", noart="other"),
+        "OL2W": _facts("OL2W", title_fp="harry potter series 1 4", noart="harry potter series 1 4"),
+    }
+    problems = alternate_problems("OL1W", "OL2W", facts, {}, case_title="Harry Potter: Series 1-7")
+    assert problems == [TITLE_PROBLEM]
+
+
+def test_a_case_title_prefix_before_the_colon_is_not_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="other", noart="other"),
+        "OL2W": _facts("OL2W", title_fp="dune", noart="dune"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="Dune: Messiah") == [
+        TITLE_PROBLEM
+    ]
+
+
+def test_a_case_title_noart_form_matches_the_alternates_full_fingerprint():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="other", noart="other"),
+        "OL2W": _facts("OL2W", title_fp="namesake", noart="namesake"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="The Namesake") == []
+
+
+def test_a_four_character_fingerprint_matches_even_when_the_raw_titles_differ():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="abcd", noart="abcd", title="Abcd!"),
+        "OL2W": _facts("OL2W", title_fp="abcd", noart="abcd", title="Abcd?"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == []
+
+
 def test_an_empty_title_fingerprint_never_matches():
     facts = {
         "OL1W": _facts("OL1W", title_fp="", noart=""),
@@ -507,4 +542,18 @@ def test_check_alternates_accepts_a_true_duplicate(fixture_artifact):
     case = _match_case(DUPLICATE_LABEL, [DUPLICATE_ALTERNATE])
     con = connect(fixture_artifact, memory_limit="1GB")
     with contextlib.closing(con):
+        assert check_alternates(con, fixture_artifact, [case]) == []
+
+
+def test_check_alternates_uses_the_case_book_title(fixture_artifact):
+    # OL100077W ("Wyvernhail: The Kiesha'ra") and OL999999101W ("Selected Poems") share an author
+    # but no title, so only the case's own book title can make the alternate verify.
+    label, alternate = "OL100077W", "OL999999101W"
+    con = connect(fixture_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        case = _match_case(label, [alternate])
+        assert check_alternates(con, fixture_artifact, [case]) == [
+            ("alt-001", alternate, TITLE_PROBLEM)
+        ]
+        case.book.title = "Selected Poems"
         assert check_alternates(con, fixture_artifact, [case]) == []
