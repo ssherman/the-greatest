@@ -107,6 +107,31 @@ module Services
           assert ::Books::GoodreadsImport.exists?(legacy_import_id: 502)
         end
 
+        test "a blob the legacy bucket no longer has fails that import only; the rest still load" do
+          download = ->(key) { (key == "gone") ? raise(LoadImports::MissingBlob, "gone") : @csv }
+
+          result = LoadImports.call(legacy_imports: [legacy(blob_key: "gone"), legacy(id: 502)], download: download)
+
+          missing = ::Books::GoodreadsImport.find_by!(legacy_import_id: 501)
+          assert_equal({missing_file: 1, loaded: 1}, result.data[:tally])
+          assert_predicate missing, :failed?
+          assert_equal "legacy upload is missing from the legacy bucket (key gone)", missing.error
+          refute missing.file.attached?
+          assert_equal 2, ::Books::GoodreadsImport.find_by!(legacy_import_id: 502).rows.count
+        end
+
+        test "the legacy bucket's NoSuchKey becomes MissingBlob" do
+          r2 = ::Services::BooksMigration::LegacyR2 # loads aws-sdk-s3 (require: false in the Gemfile)
+          client = mock("legacy_r2")
+          client.stubs(:get_object).raises(Aws::S3::Errors::NoSuchKey.new(nil, "The specified key does not exist."))
+          r2.stubs(:client).returns(client)
+          r2.stubs(:bucket).returns("legacy-bucket")
+
+          result = LoadImports.call(legacy_imports: [legacy])
+
+          assert_equal({missing_file: 1}, result.data[:tally])
+        end
+
         test "a legacy import with no blob is counted and left unattached" do
           result = load(legacy(blob_key: nil))
 

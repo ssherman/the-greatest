@@ -18,6 +18,9 @@ module Services
       class LoadImports
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         LegacyImport = Data.define(:id, :user_id, :status, :error, :blob_key, :content_type, :filename)
+        # The legacy bucket no longer holds the upload's blob (measured: a
+        # development load met one). That import fails; the rest still load.
+        MissingBlob = Class.new(StandardError)
         CSV_TYPE = "text/csv"
 
         # The legacy imports, oldest first, each with its upload's blob.
@@ -62,7 +65,14 @@ module Services
           return :not_csv unless legacy.content_type == CSV_TYPE
           return :missing_file if legacy.blob_key.blank? && !import.file.attached?
 
-          parsed = ::Books::Goodreads::ExportFile.parse(bytes_for(import, legacy))
+          begin
+            bytes = bytes_for(import, legacy)
+          rescue MissingBlob
+            import.update!(status: :failed, error: "legacy upload is missing from the legacy bucket (key #{legacy.blob_key})")
+            return :missing_file
+          end
+
+          parsed = ::Books::Goodreads::ExportFile.parse(bytes)
           unless parsed.success?
             import.update!(status: :failed, error: "legacy upload unreadable: #{parsed.errors.join("; ")}")
             return :unreadable
@@ -93,6 +103,8 @@ module Services
         def download_from_legacy_r2(key)
           r2 = ::Services::BooksMigration::LegacyR2
           r2.client.get_object(bucket: r2.bucket, key: key).body.read
+        rescue Aws::S3::Errors::NoSuchKey => e
+          raise MissingBlob, e.message
         end
       end
     end
