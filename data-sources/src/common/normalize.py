@@ -75,6 +75,39 @@ def title_fingerprints(title: str | None) -> TitleFingerprints:
     return TitleFingerprints(full=full, nosub=nosub, noart=noart)
 
 
+@dataclass(frozen=True)
+class QueryTitleVariants:
+    """A query title's fingerprints for comparison against a work's stored
+    variants (2026-10-04 spec, section 2).
+
+    `whole`: the title as given, with and without a leading article.
+    `derived`: the same after the subtitle cut, only where that differs from
+    `whole` -- a match through these counts for less (scoring.DERIVED_TITLE_FACTOR),
+    since the colon may be part of the title. `derived_subtitle`: the raw text
+    the cut removed, for subtitle agreement when the query has no subtitle.
+    Computed at query time only; stored fingerprints are unchanged.
+    """
+
+    whole: frozenset[str]
+    derived: frozenset[str]
+    derived_subtitle: str | None
+
+
+def query_title_variants(title: str | None) -> QueryTitleVariants:
+    fps = title_fingerprints(title)
+    whole = frozenset(v for v in (fps.full, fps.noart) if v)
+    derived: frozenset[str] = frozenset()
+    derived_subtitle = None
+    if fps.nosub and fps.nosub != fps.full:
+        stripped = _LEADING_ARTICLE.sub("", fps.nosub)
+        candidates = {fps.nosub, stripped if len(stripped) >= MIN_BLOCKING_FP_LENGTH else fps.nosub}
+        derived = frozenset(candidates - whole)
+        head = _SUBTITLE_CUT.match(title or "").group(1)
+        rest = (title or "")[len(head) + 1 :].strip().rstrip(")").strip()
+        derived_subtitle = rest if fingerprint(rest) else None
+    return QueryTitleVariants(whole=whole, derived=derived, derived_subtitle=derived_subtitle)
+
+
 def name_fingerprint(name: str | None) -> str:
     return fingerprint(name)
 

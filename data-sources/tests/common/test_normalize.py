@@ -6,7 +6,7 @@ canonicalization has to happen before the exact-equality join.
 
 from __future__ import annotations
 
-from common.normalize import identifier_pairs
+from common.normalize import identifier_pairs, query_title_variants
 
 
 def test_a_hyphenated_isbn10_contributes_both_forms():
@@ -48,3 +48,28 @@ def test_duplicate_values_collapse_to_one_pair():
         ("isbn10", "0306406152"),
         ("isbn13", "9780306406157"),
     ]
+
+
+def test_a_plain_title_has_no_derived_variants():
+    v = query_title_variants("The Great Gatsby")
+    assert v.whole == {"the great gatsby", "great gatsby"}
+    assert v.derived == frozenset()
+    assert v.derived_subtitle is None
+
+
+def test_an_inline_subtitle_yields_a_derived_title_and_subtitle():
+    v = query_title_variants("THE CITY IN HISTORY: Its Origins, Its Transformations")
+    assert "the city in history" in v.derived
+    assert "city in history" in v.derived
+    assert v.derived_subtitle == "Its Origins, Its Transformations"
+
+
+def test_a_parenthetical_is_a_subtitle_cut_too():
+    v = query_title_variants("Fahrenheit 451 (Ballantine)")
+    assert v.derived == {"fahrenheit 451"}
+    assert v.derived_subtitle == "Ballantine"
+
+
+def test_a_degenerate_title_has_no_variants():
+    v = query_title_variants("!!!")
+    assert v.whole == frozenset() and v.derived == frozenset()
