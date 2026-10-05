@@ -121,6 +121,17 @@ module Services
           assert edition.reload.verification_not_needed?
         end
 
+        test "a released edition's flagged decision leaves the review queue" do
+          edition = goodreads_edition
+          decision = ::MatchDecision.create!(finder: "DataImporters::Books::Book::Finder", subject: edition, outcome: :unmatched,
+            confidence: :high, decided_by: :ai, needs_review: true)
+          edition.update!(verification: :pending, match_decision: decision)
+
+          assert_equal :released, SettleEdition.call(edition: edition, page: nil).data[:outcome]
+
+          assert_not decision.reload.needs_review
+        end
+
         test "settling twice makes one book, and parking twice parks once" do
           created = waiting_edition(goodreads_book_id: 90_000_001)
           parked = waiting_edition(goodreads_book_id: 90_000_002)

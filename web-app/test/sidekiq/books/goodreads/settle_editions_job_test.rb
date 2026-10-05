@@ -46,6 +46,17 @@ class Books::Goodreads::SettleEditionsJobTest < ActiveSupport::TestCase
     assert_equal ["verification failed: RuntimeError: boom", nil], [first.import_rows.sole.error, second.import_rows.sole.error]
   end
 
+  test "an edition that failed and then settles on a later run leaves no error on its rows" do
+    edition = waiting_edition
+    SETTLE.stubs(:call).raises(RuntimeError, "boom")
+    Books::Goodreads::SettleEditionsJob.new.perform(90_000_001)
+    SETTLE.unstub(:call)
+
+    Books::Goodreads::SettleEditionsJob.new.perform(90_000_001)
+
+    assert_equal [true, nil], [edition.reload.created?, edition.import_rows.sole.error]
+  end
+
   test "a book created unverified and then deleted is left for the finder, not created again" do
     book = Books::Book.create!(title: "The Quiet Year", provisional: true)
     edition = goodreads_edition(goodreads_book_id: 90_000_001, book: book, resolution: :created, verification: :unverified,

@@ -111,7 +111,8 @@ for it. Matched editions never touch Goodreads.
 - **Fetching.** `FetchPageJob` runs on the `goodreads_fetch` capsule, one at a time, through
   `PageFetcher::Client` with `wait_for_selector: "h1"`. `Books::Goodreads::FetchGate` (Redis)
   hands out start times at least `fetch_interval` apart (15 s) and caps a UTC day at
-  `daily_fetch_cap` (1,500). A job waits for its turn by rescheduling itself, and a turn that came
+  `daily_fetch_cap` (1,500), each fetch counted against the day it starts on, so a line that runs
+  past midnight fills the next day's cap. A job waits for its turn by rescheduling itself, and a turn that came
   due late (after a deploy or a slow fetch) still waits out `fetch_interval` since the last fetch
   actually began. A page with no title or no contributors is unparseable, never found. A 403, a challenge or
   an unrecognizable page blocks all fetching for `block_cooldown` (6 h). Goodreads' own 503 page

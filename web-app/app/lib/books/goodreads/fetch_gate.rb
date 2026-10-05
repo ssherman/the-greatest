@@ -5,9 +5,9 @@ module Books
     # When the next Goodreads page fetch may start (Goodreads import spec §6,
     # "Politeness"). Held in Redis so every worker sees one line. Each
     # reservation takes the next start time, fetch_interval after the last one
-    # handed out, and counts against the UTC day's cap; a block refuses every
-    # reservation until it ends. The caller waits for its start time by
-    # rescheduling itself, never by sleeping.
+    # handed out, and counts against the cap of the UTC day it starts on; a
+    # block refuses every reservation until it ends. The caller waits for its
+    # start time by rescheduling itself, never by sleeping.
     #
     # Hash commands only, so CI's FakeRedis can stand in. Read-then-write is
     # not atomic; it needs no lock because only the goodreads_fetch capsule,
@@ -30,12 +30,16 @@ module Books
         state = read
         return refuse(:blocked) if state["blocked_until"].to_i > now
 
-        today = Time.current.utc.strftime("%Y%m%d")
-        count = (state["day"] == today) ? state["day_count"].to_i : 0
+        # Counted against the UTC day the fetch starts on, not the day it was
+        # reserved: a line that runs past midnight fills the next day's cap,
+        # rather than letting that day take a full cap of its own on top.
+        # Starts only move forward, so one day's count is all there is to keep.
+        start = [now, state["next_start"].to_i].max
+        day = Time.at(start).utc.strftime("%Y%m%d")
+        count = (state["day"] == day) ? state["day_count"].to_i : 0
         return refuse(:daily_cap) if count >= @config.daily_fetch_cap
 
-        start = [now, state["next_start"].to_i].max
-        write("next_start" => start + @config.fetch_interval, "day" => today, "day_count" => count + 1)
+        write("next_start" => start + @config.fetch_interval, "day" => day, "day_count" => count + 1)
         Reservation.new(wait: start - now, refusal: nil)
       end
 

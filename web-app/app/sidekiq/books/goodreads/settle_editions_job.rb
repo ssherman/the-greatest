@@ -18,6 +18,9 @@ class Books::Goodreads::SettleEditionsJob
     page = ::Books::GoodreadsPage.conclusive.find_by(goodreads_book_id: goodreads_book_id)
     ::Books::GoodreadsEdition.awaiting_goodreads.where(goodreads_book_id: goodreads_book_id).order(:id).each do |edition|
       ::Services::Books::GoodreadsImports::SettleEdition.call(edition: edition, page: page)
+      # A run that failed before left its error on the rows; settled, it no
+      # longer applies (ResolveImport clears its own the same way).
+      edition.import_rows.where.not(error: nil).update_all(error: nil, updated_at: Time.current)
     rescue *POSTGRES_ERRORS
       raise
     rescue => e

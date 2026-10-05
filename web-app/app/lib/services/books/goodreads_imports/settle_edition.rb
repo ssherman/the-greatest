@@ -109,8 +109,11 @@ module Services
             ::Books::GoodreadsImport.where(id: @edition.import_rows.select(:import_id)).order(:id).last
         end
 
+        # Nothing waits for the edition, so its decision has nothing left to
+        # review; as when parking, it leaves the queue.
         def release
           @edition.update!(verification: :not_needed, pending_import: nil)
+          @edition.match_decision.update!(needs_review: false) if @edition.match_decision&.needs_review?
           done(:released)
         end
 

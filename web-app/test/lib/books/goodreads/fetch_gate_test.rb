@@ -33,6 +33,16 @@ module Books
         assert @gate.reserve.granted?
       end
 
+      test "a fetch counts against the UTC day it starts on, so a line past midnight cannot double the next day" do
+        travel_to Time.utc(2026, 10, 5, 23, 59, 30)
+        starts = 3.times.map { Time.current + @gate.reserve.wait }
+        travel_to Time.utc(2026, 10, 6, 0, 0, 1)
+        3.times { (reservation = @gate.reserve).granted? && starts << Time.current + reservation.wait }
+
+        assert_equal 3, starts.count { |start| start.utc.to_date == Date.new(2026, 10, 6) }
+        assert_equal :daily_cap, @gate.reserve.refusal
+      end
+
       test "a block stops every fetch for the cooldown" do
         @gate.block!
 
