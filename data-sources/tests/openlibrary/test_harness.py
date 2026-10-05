@@ -576,6 +576,39 @@ def test_rule_recall_split_credits_reached_and_only(tmp_path):
     assert set(split) == set(harness.RULES)
 
 
+def test_rule_recall_split_credits_a_rule_that_reaches_only_an_alternate():
+    """A verified duplicate is the labelled work: the rule that uniquely reaches
+    the alternate is credited, and `only` is computed over the pooled set."""
+    prepared = [
+        PreparedCase(
+            case_id="alt",
+            stratum="s",
+            expected_work_key="OL1W",
+            expected_verdict="match",
+            alternate_work_keys=["OL2W"],
+            candidates=[
+                PreparedCandidate(work_key="OL1W", rules=["title_fp"]),
+                PreparedCandidate(work_key="OL2W", rules=["author_shelf"]),
+                PreparedCandidate(work_key="OL9W", rules=["trigram"]),
+            ],
+            resolved={},
+        ),
+        PreparedCase(
+            case_id="alt-only-shelf",
+            stratum="s",
+            expected_work_key="OL3W",
+            expected_verdict="match",
+            alternate_work_keys=["OL4W"],
+            candidates=[PreparedCandidate(work_key="OL4W", rules=["author_shelf"])],
+            resolved={},
+        ),
+    ]
+    split = rule_recall_split(prepared)
+    assert (split["title_fp"].reached, split["title_fp"].only) == (1, 0)
+    assert (split["author_shelf"].reached, split["author_shelf"].only) == (2, 1)
+    assert (split["trigram"].reached, split["trigram"].only) == (0, 0)
+
+
 # The whole point of the prepare/evaluate split (Task 27's calibration search
 # calls prepare once per split and evaluate thousands of times) is that it
 # must not change what run() measures. This is the equivalence pin.

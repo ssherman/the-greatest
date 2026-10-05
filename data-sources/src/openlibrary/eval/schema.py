@@ -180,12 +180,15 @@ class EvalCase(BaseModel):
 
     @property
     def found_outside_blocking(self) -> bool:
-        """True when the labeler entered a work key that no blocking rule produced.
+        """True when neither the labelled work nor a verified alternate was shown.
 
+        The labeler entered a work key that no blocking rule produced. A shown
+        alternate counts as the labelled work, so it is not a recall failure.
         These cases are the most valuable in the set: they are the only evidence
         of a candidate-recall failure. Without them, recall measured on this set
         is 100% by construction.
         """
         if self.label.verdict != "match" or not self.label.work_key:
             return False
-        return self.label.work_key not in {c.work_key for c in self.candidates_shown}
+        shown = {c.work_key for c in self.candidates_shown}
+        return shown.isdisjoint({self.label.work_key, *self.label.alternate_work_keys})

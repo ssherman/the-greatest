@@ -131,6 +131,28 @@ def test_found_outside_blocking_is_false_when_the_label_was_shown():
     assert case.found_outside_blocking is False
 
 
+def test_found_outside_blocking_is_false_when_only_an_alternate_was_shown():
+    case = EvalCase(
+        case_id="list-row-alt",
+        stratum="list_row",
+        book=_book(),
+        candidates_shown=[EvalCandidate(work_key="OL5W", rules=["author_title_fp"])],
+        label=_label(work_key="OL8384219W", alternate_work_keys=["OL5W"]),
+    )
+    assert case.found_outside_blocking is False
+
+
+def test_found_outside_blocking_is_true_when_neither_key_nor_alternate_was_shown():
+    case = EvalCase(
+        case_id="list-row-alt-missed",
+        stratum="list_row",
+        book=_book(),
+        candidates_shown=[EvalCandidate(work_key="OL9W", rules=["author_title_fp"])],
+        label=_label(work_key="OL8384219W", alternate_work_keys=["OL5W"]),
+    )
+    assert case.found_outside_blocking is True
+
+
 def test_found_outside_blocking_is_false_for_a_no_match():
     case = EvalCase(
         case_id="none-1",

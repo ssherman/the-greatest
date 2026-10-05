@@ -433,8 +433,9 @@ def rule_recall_split(prepared: list[PreparedCase]) -> dict[str, RuleRecall]:
     """Which blocking rules actually find the labelled works (R62).
 
     For every case whose label names a work, the rules on every candidate
-    that resolves to that work are pooled; a rule is credited with `reached`
-    when it is in the pool and with `only` when it is the whole pool. `only`
+    that resolves to that work or one of its verified alternates are pooled;
+    a rule is credited with `reached` when it is in the pool and with `only`
+    when it is the whole pool. `only`
     is the load-bearing number: a rule with `reached` > 0 and `only` == 0
     never found anything another rule did not, and Increment 4 can retire it
     without losing a labelled work. Pure Python over prepared cases, so it
@@ -447,7 +448,7 @@ def rule_recall_split(prepared: list[PreparedCase]) -> dict[str, RuleRecall]:
             continue
         pool: set[str] = set()
         for candidate in case.candidates:
-            if _same(case.resolved, candidate.work_key, expected):
+            if _is_labelled_work(case.resolved, candidate.work_key, case):
                 pool.update(candidate.rules)
         for rule in pool:
             split[rule].reached += 1
