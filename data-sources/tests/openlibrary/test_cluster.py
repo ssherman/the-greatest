@@ -215,3 +215,42 @@ def test_a_year_difference_of_exactly_the_divergence_still_clusters():
 def test_empty_fingerprints_never_cluster():
     idx = _pair(_in("", noart="", raw=""), _in("", noart="", raw=""))
     assert idx.of["OLA"] != idx.of["OLB"]
+
+
+def _reps(editions, *, ratio=1.5, identifier=None):
+    keys = [f"OL{i}W" for i in range(len(editions))]
+    cands = [_c(k, 0.95, identifier=identifier.get(k) if identifier else None) for k in keys]
+    idx = build_clusters(
+        cands,
+        {k: _in(editions=e) for k, e in zip(keys, editions, strict=True)},
+        _weights(ratio=ratio),
+    )
+    return idx, keys
+
+
+def test_a_two_versus_one_cluster_has_no_representative():  # Ruling 23: Chekhov's five "Stories"
+    idx, keys = _reps([2, 1, 1, 1, 0])
+    assert idx.representative[idx.of[keys[0]]] is None
+
+
+def test_three_versus_one_still_dominates_at_a_ratio_of_one_and_a_half():  # Ruling 23
+    idx, keys = _reps([3, 1])
+    assert idx.representative[idx.of[keys[0]]] == keys[0]
+
+
+def test_a_single_member_cluster_represents_itself_whatever_its_edition_count():  # Ruling 23
+    idx = build_clusters([_c("OLA", 0.95)], {"OLA": _in(editions=0)}, _weights())
+    assert idx.representative[idx.of["OLA"]] == "OLA"
+
+
+def test_the_identifier_agreeing_member_represents_even_with_one_edition():  # Ruling 23
+    idx, keys = _reps([1, 1], identifier={"OL0W": 1.0})
+    assert idx.representative[idx.of[keys[0]]] == keys[0]
+
+
+def test_one_lossy_title_is_enough_to_need_equal_raw_titles():
+    lossy = _in("harry potter", raw="ハリー Harry Potter")
+    plain = _in("harry potter", raw="Harry Potter")
+    for a, b in ((lossy, plain), (plain, lossy)):
+        idx = _pair(a, b)
+        assert idx.of["OLA"] != idx.of["OLB"]

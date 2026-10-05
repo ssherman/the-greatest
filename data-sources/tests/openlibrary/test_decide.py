@@ -335,6 +335,15 @@ def test_a_cluster_without_a_representative_abstains():
     assert set([decision.work_key, *decision.duplicates]) == {"OLA", "OLB"}
 
 
+def test_a_two_versus_one_cluster_abstains_for_want_of_a_dominant_member():  # Ruling 23
+    cands = [_c("OLA", 0.95), _c("OLB", 0.95), _c("OLC", 0.94)]
+    inputs = {"OLA": _dup_inputs(2), "OLB": _dup_inputs(1), "OLC": _dup_inputs(1)}
+    weights = _equal_weights().model_copy(update={"duplicate_dominance_ratio": 1.5})
+    decision = decide(cands, weights, clusters=build_clusters(cands, inputs, weights))
+    assert decision.verdict == "abstain"
+    assert decision.reason.startswith("duplicate cluster with no dominant member")
+
+
 def test_the_reject_band_uses_the_cluster_score_not_the_representatives():
     cands = [_c("OLSTUB", 0.42), _c("OLREAL", 0.39)]
     inputs = {"OLSTUB": _dup_inputs(1), "OLREAL": _dup_inputs(100)}

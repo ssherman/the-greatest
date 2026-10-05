@@ -49,6 +49,8 @@ prolific authors (*George Washington*, *X-Men*). Their margins sit 0.001 and 0.0
 threshold. Two false merges would still pass the global 0.015 gate, so only this report records
 how close they are. See "The false merges the margin holds back".
 
+A live probe found a third shape: `{"title": "Stories", "author_names": ["Anton Chekhov"]}` accepted `OL39885463W`, a cluster of five separate Chekhov "Stories" records (editions 2, 1, 1, 1, 0). 2 against 1 clears the 1.5 dominance ratio, and both volume guards had tripped, so nothing outside the cluster set a margin (margin equals score). v2 abstained. Controller Ruling 23 added `MIN_DOMINANT_EDITIONS = 3` to the dominance rule, so a representative needs at least three editions as well as the ratio. The measured cost is three correct accepts (`isbn_reuse-004`, `list_row-022`, `high_frequency_title-004`); false merges stay at 0.
+
 Three strata lost more than one correct case. None is a code defect. The `non_latin_title`
 losses do point at a gap worth a follow-up (see "Strata that lost more than one correct case").
 
@@ -392,8 +394,9 @@ close to the threshold:
 merges in about 230 accepts is 0.009, under the 0.015 bound. Only the list-row false-merge gate
 is zero, and these are not list rows. A future recalibration that lowers `margin_threshold`
 below about 0.203 would bring back at least the first one, and nothing in CI or the build gate would
-notice. One way to guard it: pin these two cases in `test_eval_regression.py` as "must not
-accept".
+notice. `test_eval_regression.py` now pins both as `MUST_NOT_ACCEPT` (an artifact test).
+
+**A third case, held back by an edition floor instead of the margin.** A live probe found a third shape: `{"title": "Stories", "author_names": ["Anton Chekhov"]}` accepted `OL39885463W`, a cluster of five separate Chekhov "Stories" records (editions 2, 1, 1, 1, 0). 2 against 1 clears the 1.5 dominance ratio, and both volume guards had tripped, so nothing outside the cluster set a margin (margin equals score). v2 abstained. Controller Ruling 23 added `MIN_DOMINANT_EDITIONS = 3` to the dominance rule, so a representative needs at least three editions as well as the ratio. The measured cost is three correct accepts (`isbn_reuse-004`, `list_row-022`, `high_frequency_title-004`); false merges stay at 0.
 
 ## Rails replay
 
@@ -503,6 +506,15 @@ supply what it needs: the wizard would have to resolve the local keys (for examp
 `/works/batch`) or have the service return incoming redirects. `duplicates` is evidence, not
 proof (see "Duplicate clusters" in the feature doc), so a holder found that way should go to
 review rather than be merged automatically. This task changed no Rails code.
+
+**Safe today, a hard precondition tomorrow.** `OpenLibrarySource#local_holders` ignores
+`decision.duplicates`, and its redirect check never fires on `/resolve` output. That is safe
+now because no production caller creates or merges from an accept without a human: Goodreads
+reaches `/resolve` only through the rolled-back DryRun, and the duplicate sweep runs with
+`verify: true`. It is a HARD PRECONDITION for Goodreads increment 3 going live and for the
+books list wizard (spec 2). Rails must read `decision.duplicates`, not the candidate list
+(with `limit: 5`, cluster members past rank 5 never reach Rails), and must resolve its stored
+keys through redirects.
 
 ## Label provenance
 

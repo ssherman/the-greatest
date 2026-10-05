@@ -87,6 +87,41 @@ def test_every_threshold_has_a_measured_sibling_within_its_headroom():
             assert bound >= value, f"{key}: pinned {bound} below its own measured {value}"
 
 
+# Generic-title clusters that are held back only by the margin (see the before/after report);
+# a change that lets either through is a false-merge risk even if the gates stay green.
+MUST_NOT_ACCEPT = ("high_frequency_title-034", "shared_key_collision-036")
+
+
+@pytest.mark.artifact
+def test_the_near_misses_are_not_accepted():
+    root = os.environ.get("OL_DATA_ROOT")
+    dump_date = os.environ.get("OL_DATA_VERSION")
+    if not (root and dump_date):
+        pytest.skip("set OL_DATA_ROOT and OL_DATA_VERSION")
+
+    paths = ArtifactPaths(root=Path(root), dump_date=dump_date)
+    cases = load_cases()
+    cache_env = os.environ.get("OL_PREPARED_CACHE")
+    default_cache = paths.tmp_dir / f"prepared-{dump_date}.json"
+    cache_path = (
+        Path(cache_env) if cache_env else (default_cache if default_cache.exists() else None)
+    )
+
+    con = connect(paths, memory_limit="8GB")
+    try:
+        prepared = read_prepared_cache(cache_path, paths, cases) if cache_path else None
+        if prepared is not None:
+            _, outcomes = evaluate(prepared, load_weights())
+        else:
+            _, outcomes = run(con, paths, cases, load_weights())
+    finally:
+        con.close()
+
+    verdicts = {o.case_id: o.decision.verdict for o in outcomes}
+    assert set(MUST_NOT_ACCEPT) <= set(verdicts), "a pinned case id is missing from the label set"
+    assert [c for c in MUST_NOT_ACCEPT if verdicts[c] == "accept"] == []
+
+
 @pytest.mark.artifact
 def test_the_matcher_does_not_regress_against_the_labeled_set():
     root = os.environ.get("OL_DATA_ROOT")

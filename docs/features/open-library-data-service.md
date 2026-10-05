@@ -460,14 +460,18 @@ missing evidence. That is the one follow-up the investigation recommends. Case b
   after NFKC, casefolding and whitespace removal. That keeps "エマ 6" and "シャーリー 6" apart,
   though both fingerprint to "6". Clusters are connected components. The representative is the
   single member whose identifier agrees with the query. Failing that, it is the member with the
-  most editions, provided it has at least `duplicate_dominance_ratio` times the next member's
-  editions (calibrated: 1.5, the floor of its search range). Failing that, the cluster has no
+  most editions, provided it has at least `MIN_DOMINANT_EDITIONS` (3) editions and at least
+  `duplicate_dominance_ratio` times the next member's editions (calibrated: 1.5, the floor of
+  its search range). Failing that, the cluster has no
   representative, and a multi-member winning cluster with none abstains: "duplicate cluster with
   no dominant member". This is the Dickinson *Poems* case: 16 works, none dominant. The
   representative carries the cluster's best score, and `decision.duplicates` lists the other
   members. That field is evidence only. It can include a different text that shares the title
   and an author (a graphic-novel adaptation, an omnibus), so nothing may stamp it as duplicate
   keys without checking each entry.
+  Authors chain transitively, and a placeholder author fingerprint ("anonymous", "various", or
+  a publisher credited as author, such as "Marvel Comics") can chain clusters across
+  different books.
 - **Duplicate-aware labels (R122).** A label carries `alternate_work_keys`: verified unmerged
   duplicates of its work. The harness counts an accept of the work or of any alternate as
   correct, and reports `canonical_rate` (how often an accept picked the labelled key) as
@@ -478,7 +482,10 @@ missing evidence. That is the one follow-up the investigation recommends. Case b
   list rows carry a new provenance, `agent_researched`. Shane spot-checked samples (30 list rows; 15 + 15
   alternate rows; the big clusters); agents re-verified every alternate edition by edition; 796
   remain. Two gates were added: `list_row` abstention
-  and `list_row` false merges (= 0).
+  and `list_row` false merges (= 0). The false-merge gate will fail a future dump refresh when
+  Open Library gains a new duplicate that our labels do not list as an alternate. That is
+  fail-safe (the old version keeps serving); the expected fix is a relabel step that adds the
+  alternate.
 - **The label digest in the cache header (R123).** The prepared-cache header gained
   `labels_sha256`, a digest of every case's id, stratum, key, verdict and alternates. A relabel
   that keeps the case count used to reuse a stale cache silently. It is now detected. The header
@@ -493,7 +500,10 @@ search raised `margin_threshold` from 0.175 to 0.204. That costs nine list-row a
 where a record credited only to Louise Simonson joined through a co-credited record: cluster
 authors chain transitively, so a member need not share an author with the query. Both sit
 within 0.01 of the threshold, and two false merges would still pass the global 0.015 gate, so a
-later recalibration that lowers the margin must re-check these two by hand.
+later recalibration that lowers the margin must re-check these two by hand. Both are now pinned
+as `MUST_NOT_ACCEPT` in `test_eval_regression.py`.
+
+A third case needed an edition floor, not the margin. A live probe found a third shape: `{"title": "Stories", "author_names": ["Anton Chekhov"]}` accepted `OL39885463W`, a cluster of five separate Chekhov "Stories" records (editions 2, 1, 1, 1, 0). 2 against 1 clears the 1.5 dominance ratio, and both volume guards had tripped, so nothing outside the cluster set a margin (margin equals score). v2 abstained. Controller Ruling 23 added `MIN_DOMINANT_EDITIONS = 3` to the dominance rule, so a representative needs at least three editions as well as the ratio. The measured cost is three correct accepts (`isbn_reuse-004`, `list_row-022`, `high_frequency_title-004`); false merges stay at 0.
 
 **An accept can name a key no local book holds, even when one of our books is that work.** The
 v3 Rails replay over the 200 spike rows accepted 80 keys. 10 differed from the key our linked
@@ -510,6 +520,14 @@ only by rule 4's exact title-and-author match. Anything that creates books from 
 the books list wizard first, must count a local holder of the accepted key, of any
 `decision.duplicates` key, or of any key that redirects to one of them as a match before it
 creates anything. Details in "Rails replay" in `docs/data-quality/ol-matcher-v3-before-after.md`.
+
+This is safe today: no production caller creates or merges from an accept without a human
+(Goodreads reaches `/resolve` only through the rolled-back DryRun; the duplicate sweep runs
+with `verify: true`). It is a HARD PRECONDITION for Goodreads increment 3 going live and for
+the books list wizard (spec 2). `OpenLibrarySource#local_holders` ignores `decision.duplicates`
+and its redirect check never fires on `/resolve` output. Rails must read `decision.duplicates`,
+not the candidate list (with `limit: 5`, cluster members past rank 5 never reach Rails), and
+must resolve its stored keys through redirects.
 
 ### Recall by blocking rule (reading 7)
 

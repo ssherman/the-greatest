@@ -10,8 +10,9 @@ share a subtitle-stripped title), an author fingerprint is shared, and their
 year agreement with the query does not diverge. A fingerprint shorter than
 `MIN_BLOCKING_FP_LENGTH` (a non-Latin title shrunk to "6") counts only when
 the raw titles are also equal. A cluster is represented by the member whose
-identifier agrees, else by the member with the most editions when it
-dominates the next by `duplicate_dominance_ratio`; real duplicates are stubs
+identifier agrees, else by the member with the most editions when it has at
+least `MIN_DOMINANT_EDITIONS` and dominates the next by
+`duplicate_dominance_ratio`; real duplicates are stubs
 beside one dominant work (Dune 160/3/1/1, Hamlet 2377/81/55), while different
 books that share a title do not dominate (Dickinson's "Poems": 14/10/10).
 
@@ -32,6 +33,11 @@ from openlibrary.matcher.features import WorkView
 from openlibrary.matcher.scorer import ScoredCandidate, Weights, has_identity_evidence
 
 YEAR_DIVERGENCE = 0.5
+
+# A cluster is only trusted to have one dominant member when the top member has at least
+# this many editions. Five separate Chekhov "Stories" records (editions 2, 1, 1, 1, 0)
+# cleared the 1.5 ratio at 2 vs 1 and were accepted as one work (Ruling 23).
+MIN_DOMINANT_EDITIONS = 3
 
 
 class ClusterInputs(BaseModel):
@@ -116,7 +122,7 @@ def _representative(
         return agreeing[0]
     ordered = sorted(members, key=lambda k: (-inputs[k].edition_count, k))
     top, second = inputs[ordered[0]].edition_count, inputs[ordered[1]].edition_count
-    if top > second and top >= ratio * second:
+    if top >= MIN_DOMINANT_EDITIONS and top > second and top >= ratio * second:
         return ordered[0]
     return None
 

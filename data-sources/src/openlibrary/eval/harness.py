@@ -27,11 +27,11 @@ when the count is unchanged), `artifact_built_at` (the version
 directory's `manifest.json` timestamp -- a same-date REBUILD of the artifact
 produces different candidates from the same code) and `code_sha256` (over
 the bytes of `matcher/blocking.py`, `matcher/features.py`,
-`common/normalize.py`, `common/scoring.py` -- the code that determines what
+`matcher/cluster.py`, `common/normalize.py`, `common/scoring.py` -- the code that determines what
 `prepare` produces). Those two fingerprints are what the first version of
 this header lacked: a stale cache is now DETECTED, not documented. What the
 header still cannot see is a change that leaves all six unchanged -- an edit
-to `prepare` / `load_work_views` plumbing outside those four files -- and that
+to `prepare` / `load_work_views` plumbing outside those five files -- and that
 still needs a manual delete. The build gate never reads a cache implicitly at all; see
 `pipeline.gates.evaluation_gate`.
 """
@@ -526,7 +526,7 @@ def read_prepared_cache(
     count, label digest (`labels_sha256`), artifact build (R60:
     `manifest.json`'s `built_at` -- an in-place rebuild of the same dump date
     yields different candidates from the same code) and code fingerprint
-    (sha256 of the four files in `CODE_FINGERPRINT_FILES`) it was written
+    (sha256 of the five files in `CODE_FINGERPRINT_FILES`) it was written
     under. `matcher_version` still exists for a change those cannot see --
     decision semantics, say -- that should invalidate every cache anyway.
     Never raises: a missing, corrupt, or mismatched file just means

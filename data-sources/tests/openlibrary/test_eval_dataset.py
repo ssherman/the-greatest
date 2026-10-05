@@ -357,6 +357,16 @@ def test_a_shared_subtitle_stripped_title_is_not_a_duplicate_title():
     assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == [TITLE_PROBLEM]
 
 
+def test_one_lossy_title_is_enough_to_need_equal_raw_titles():
+    lossy, plain = "ハリー Harry Potter", "Harry Potter"
+    for a, b in ((lossy, plain), (plain, lossy)):
+        facts = {
+            "OL1W": _facts("OL1W", title_fp="harry potter", noart="harry potter", title=a),
+            "OL2W": _facts("OL2W", title_fp="harry potter", noart="harry potter", title=b),
+        }
+        assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == [TITLE_PROBLEM]
+
+
 def _mislabelled_label_facts(alt_authors=("frank herbert",)):
     return {
         "OL1W": _facts("OL1W", title_fp="el buen nombre lingua franca", noart="buen nombre"),
