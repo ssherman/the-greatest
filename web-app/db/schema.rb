@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_05_003352) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_05_140829) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -305,8 +305,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_003352) do
     t.jsonb "applied", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "replay_finding"
+    t.bigint "legacy_book_id"
     t.index ["goodreads_edition_id"], name: "index_books_goodreads_import_rows_on_goodreads_edition_id"
     t.index ["import_id", "row_number"], name: "index_books_goodreads_import_rows_on_import_id_and_row_number", unique: true
+    t.index ["replay_finding"], name: "index_books_goodreads_import_rows_on_replay_finding"
   end
 
   create_table "books_goodreads_imports", force: :cascade do |t|
@@ -369,6 +372,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_003352) do
     t.index ["user_id"], name: "index_books_reading_goals_on_user_id"
     t.check_constraint "ends_on >= starts_on", name: "books_reading_goals_dates_ordered"
     t.check_constraint "target_count > 0", name: "books_reading_goals_target_count_positive"
+  end
+
+  create_table "books_repair_verdicts", force: :cascade do |t|
+    t.integer "kind", null: false
+    t.string "subject_key", null: false
+    t.jsonb "payload", default: {}, null: false
+    t.integer "decided_by", null: false
+    t.integer "confidence"
+    t.integer "status", default: 0, null: false
+    t.text "reason"
+    t.bigint "ai_chat_id"
+    t.bigint "decided_by_user_id"
+    t.datetime "reviewed_at"
+    t.datetime "applied_at"
+    t.text "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["kind", "subject_key"], name: "index_books_repair_verdicts_on_kind_and_subject_key", unique: true
+    t.index ["status", "kind"], name: "index_books_repair_verdicts_on_status_and_kind"
   end
 
   create_table "books_series", force: :cascade do |t|

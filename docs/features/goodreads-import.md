@@ -12,12 +12,13 @@ catalog's bad data; this one is built so that it cannot. Spec:
 | 1 | Optional review ratings | shipped |
 | 2 | Provisional books and authors (`docs/features/books-provisional-records.md`) | shipped |
 | 3 | Resolver core: parsing, tables, edition resolution, dry run | shipped |
-| 4 | Goodreads page fetcher and verification | this doc |
-| 5 | Legacy replay | not started |
+| 4 | Goodreads page fetcher and verification | shipped |
+| 5 | Legacy replay | this doc |
 | 6 | Member upload, library write, admin approval | not started |
 | 7 | Finishing failed legacy imports | not started |
 
-Nothing in production calls the resolver yet. The only entry point is the dry-run rake.
+No member flow calls the resolver yet. The entry points are the dry-run rake and the legacy replay's rakes ("Legacy
+replay" below).
 
 ## Parsing
 
@@ -158,6 +159,57 @@ export-derived rows are skipped. The legacy writers merged translators, illustra
 row's own author into one `authors` array, so every legacy name has no role: any of them backs an
 edition, and only the one that agreed becomes an author. A cached id is never overwritten, so the
 task can run again after each migration pass.
+
+## Legacy replay
+
+Spec §12. The legacy app's 803 imports are replayed against the new resolver to measure it and to find the bad data
+legacy left behind. Every finding is a `Books::RepairVerdict` (`books_repair_verdicts`, no foreign keys, keyed by
+preserved ids): **never truncate that table**, the launch sequence relies on it. Nothing changes the catalog except
+`books:goodreads_replay:apply`, which refuses to run while `config.x.goodreads_replay.auto_apply` is false (the default).
+
+A pass, after every books migration pass and in the launch sequence:
+
+```bash
+bin/rails books:goodreads_replay:load        # legacy imports, uploads (legacy R2, LEGACY_R2_*), rows
+bin/rails books:goodreads_replay:fix_slugs   # 543 slug-form Goodreads ids -> strip_identifier (rule, approved)
+bin/rails books:goodreads_replay:apply       # re-applies every approved verdict from earlier passes (gated)
+bin/rails books:goodreads_replay:resolve     # queues pass one (low) and pass two (serial); re-run until both are 0
+bin/rails books:goodreads_replay:duplicates  # one AI check per author name group, then the book-pair rule
+bin/rails books:goodreads_replay:junk        # authorless books, books relinks leave unsupported
+bin/rails books:goodreads_replay:apply
+bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.md]"
+```
+
+- **Load** is slow the first time: about 2.5 hours on development for ~388k rows, because rows are written one at a
+  time. Each upload is downloaded once and kept on the private bucket. A blob the legacy bucket no longer holds fails
+  that import only.
+- **Resolve** runs the books finder in `verify: true`. Pass one uses the fast sources, with Open Library's identifier
+  lookup in place of `/resolve`. Pass two adds `/resolve`, only for editions pass one disagreed on or could not match.
+  Each replay row gets a `replay_finding` (agrees, duplicate, disagrees, unmatched, no legacy choice). Legacy's
+  choice is the book holding the row's Goodreads id that is on that user's lists. Matches that agree with legacy warm
+  the edition cache; a disagreement does not, because it is a relink an admin may reject.
+  The replay never creates books and never fetches Goodreads pages; it only reads cached ones.
+- **Relinks are all AI-decided.** Measured 2026-10-05: under `verify: true`, legacy's book always holds the row's
+  Goodreads id, and that hit blocks the exact-match rule for any other book. So no rule ever decides a disagreement.
+  Relinks are proposed, and the admin queue approves them in bulk. A relink also moves the row's identifiers when
+  legacy's book contradicts the row on title and author.
+- **Authors** are grouped by name with punctuation and spaces removed, and each group gets one `fast` AI call that
+  clusters it into people (`Services::Ai::Tasks::Books::GroupSameAuthorsTask`). A merge is auto-approved only when the
+  AI is highly confident and there is no year or external-identifier conflict.
+- **Books** in a pending duplicate pair are auto-merged only with an equal title, identical authors and a shared
+  identifier. Every other pair stays in the Duplicates queue.
+- **Junk:** an authorless book is auto-flagged provisional unless it is on a curated list, in which case it is only
+  proposed: curated list pages are not filtered. Flagging uses `update!`, so the book is reindexed, and apply queues a
+  ranking recalculation for every configuration that ranked it, plus the default one, which cascades to authors.
+- **Admin:** Books → Repair Verdicts filters by kind, status, decider and confidence, approves or rejects, and approves in
+  bulk. Approval never applies; the next `apply` does. Rejecting an applied `mark_provisional` reverts it. Rejecting an
+  applied merge or relink undoes nothing now, but stops it being applied again after the next books re-migration.
+- **A relink copies instead of moving** when another of the user's replay rows still names legacy's book: the right book
+  is added beside it, and the legacy book keeps the item and the review. Junk detection treats such a book as supported.
+- **Apply batches the follow-ups.** Merges run with `defer_rankings: true`, and one run queues each ranking
+  recalculation, the favorites rebuild and the author rankings once, not once per merge.
+- **Before auto-apply:** hand-check 50 auto verdicts per kind with `books:goodreads_replay:sample[kind]`, then set
+  `auto_apply: true` in `config/initializers/goodreads_replay.rb`.
 
 ## Dry run
 

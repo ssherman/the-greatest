@@ -88,5 +88,9 @@ module Books
       assert_nil edition.reload.pending_import_id
       assert edition.verification_pending?
     end
+
+    test "keeps the upload on the private imports service" do
+      assert_equal :private_imports, Books::GoodreadsImport.reflect_on_attachment(:file).options[:service_name]
+    end
   end
 end

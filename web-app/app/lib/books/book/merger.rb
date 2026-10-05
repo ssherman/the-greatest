@@ -21,15 +21,20 @@ module Books
         description original_language_id default_edition_id
       ].freeze
 
-      attr_reader :source_book, :target_book, :stats
+      attr_reader :source_book, :target_book, :stats, :affected_ranking_configurations
 
-      def self.call(source:, target:)
-        new(source: source, target: target).call
+      def self.call(source:, target:, defer_rankings: false)
+        new(source: source, target: target, defer_rankings: defer_rankings).call
       end
 
-      def initialize(source:, target:)
+      # defer_rankings: a bulk caller (the Goodreads replay's apply step) merges
+      # many books in one run and queues each ranking recalculation and the
+      # favorites rebuild once at the end, from affected_ranking_configurations,
+      # instead of once per merge.
+      def initialize(source:, target:, defer_rankings: false)
         @source_book = source
         @target_book = target
+        @defer_rankings = defer_rankings
         @source_book_id = source.id
         # Every count in @stats means "transferred/affected by this merge" --
         # rows that ended up moved, updated, or newly linked onto the target --
@@ -566,8 +571,10 @@ module Books
       # pre-existing follow-ups fails after the merge has committed.
       def run_existing_post_commit_steps
         reindex_target_book
-        schedule_ranking_recalculation
-        regenerate_user_favorites_list
+        unless @defer_rankings
+          schedule_ranking_recalculation
+          regenerate_user_favorites_list
+        end
       rescue => error
         record_post_commit_error(error)
       end

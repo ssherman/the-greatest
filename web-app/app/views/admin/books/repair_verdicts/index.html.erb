@@ -1,0 +1,80 @@
+<%# web-app/app/views/admin/books/repair_verdicts/index.html.erb %>
+<% content_for :title, "Repair Verdicts" %>
+
+<div class="space-y-4">
+  <h1 class="text-2xl font-bold">Repair Verdicts</h1>
+  <p class="text-sm text-base-content/70">
+    Findings from the legacy Goodreads replay. Approving queues a verdict for the next
+    <code>books:goodreads_replay:apply</code>; nothing changes until then.
+  </p>
+
+  <%= form_with url: admin_books_repair_verdicts_path, method: :get, class: "flex flex-wrap items-end gap-3", data: {testid: "verdict-filters"} do |form| %>
+    <%= hidden_field_tag :status, @status %>
+    <% [["kind", "Kind", Admin::Books::RepairVerdictsController::KINDS],
+        ["decided_by", "Decided by", Admin::Books::RepairVerdictsController::DECIDED_BY],
+        ["confidence", "Confidence", Admin::Books::RepairVerdictsController::CONFIDENCES]].each do |key, label, values| %>
+      <div>
+        <%= form.label key, label, class: "label text-xs" %>
+        <%= form.select key, options_for_select([["All", ""]] + values.map { |value| [value.humanize, value] }, params[key]), {}, class: "select select-sm" %>
+      </div>
+    <% end %>
+    <%= form.submit "Filter", class: "btn btn-sm" %>
+    <%= link_to "Reset", admin_books_repair_verdicts_path, class: "btn btn-sm btn-ghost" %>
+  <% end %>
+
+  <div role="tablist" class="tabs tabs-border">
+    <% Admin::Books::RepairVerdictsController::STATUSES.each do |status| %>
+      <%= link_to admin_books_repair_verdicts_path(filter_params(status: status)), role: "tab",
+            class: "tab #{"tab-active" if @status == status}", data: {testid: "status-tab-#{status}"} do %>
+        <%= status.humanize %>
+        <span class="badge badge-sm ml-2" data-testid="status-count-<%= status %>"><%= @counts[status].to_i %></span>
+      <% end %>
+    <% end %>
+  </div>
+
+  <% if @verdicts.any? %>
+    <%= form_with url: bulk_approve_admin_books_repair_verdicts_path(filter_params), method: :post, data: {testid: "bulk-approve-form"} do |form| %>
+      <div class="overflow-x-auto">
+        <table class="table bg-base-100">
+          <thead>
+            <tr><th></th><th>Finding</th><th>Kind</th><th>Decided by</th><th>Confidence</th><th>Updated</th></tr>
+          </thead>
+          <tbody>
+            <% @verdicts.each do |verdict| %>
+              <tr data-testid="verdict-row" data-verdict-id="<%= verdict.id %>" data-kind="<%= verdict.kind %>">
+                <td>
+                  <% if verdict.proposed? && current_user_can_delete? %>
+                    <%= check_box_tag "ids[]", verdict.id, false, id: "verdict_#{verdict.id}", class: "checkbox checkbox-sm", aria: {label: "Select verdict #{verdict.id}"} %>
+                  <% end %>
+                </td>
+                <td class="[overflow-wrap:anywhere]"><%= link_to verdict.summary, admin_books_repair_verdict_path(verdict), class: "link" %></td>
+                <td><span class="badge badge-ghost badge-sm"><%= verdict.kind.humanize %></span></td>
+                <td><%= verdict.decided_by.humanize %></td>
+                <td><%= verdict.confidence&.humanize %></td>
+                <td class="whitespace-nowrap"><%= verdict.updated_at.strftime("%Y-%m-%d %H:%M") %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+      <% if @status == "proposed" && current_user_can_delete? %>
+        <div class="flex flex-wrap gap-2 mt-3">
+          <%= form.submit "Approve selected", class: "btn btn-sm btn-primary" %>
+        </div>
+      <% end %>
+    <% end %>
+
+    <% if @status == "proposed" && current_user_can_delete? %>
+      <%= button_to "Approve all #{@counts["proposed"].to_i} proposed matching this filter",
+            bulk_approve_admin_books_repair_verdicts_path(filter_params(all_matching: "1")), method: :post,
+            class: "btn btn-sm btn-outline",
+            form: {data: {testid: "approve-all-form", turbo_confirm: "Approve every proposed verdict this filter shows? They are applied on the next apply run."}} %>
+    <% end %>
+  <% else %>
+    <p class="text-center text-base-content/70 py-8">No <%= @status %> verdicts.</p>
+  <% end %>
+
+  <% if @pagy.pages > 1 %>
+    <div class="mt-4 flex justify-center"><%== @pagy.series_nav %></div>
+  <% end %>
+</div>

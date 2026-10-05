@@ -108,6 +108,14 @@ This document lists all environment variables required for production deployment
 - **Required**: No; defaults to `STORAGE_ENDPOINT` (the same R2 account)
 - **Used By**: web, worker
 
+### Legacy bucket (read-only)
+
+#### LEGACY_R2_ACCOUNT_ID / LEGACY_R2_BUCKET / LEGACY_R2_ACCESS_KEY / LEGACY_R2_SECRET_KEY
+- **Description**: Read-only access to the old TheGreatestBooks R2 bucket. `books:goodreads_replay:load` downloads the legacy Goodreads uploads from it (onto the private imports bucket above), as the one-time `data_migration:book_images` did for covers. The endpoint is `https://<LEGACY_R2_ACCOUNT_ID>.r2.cloudflarestorage.com`.
+- **Required**: Only to run the replay loader; unset, it fails on its first download. Nothing else needs them.
+- **Used By**: rake (worker container)
+- **Security**: Never commit; lives in `secrets/.env.production`. Use a read-only token.
+
 ### SSL Certificate Configuration
 
 #### CLOUDFLARE_API_TOKEN
