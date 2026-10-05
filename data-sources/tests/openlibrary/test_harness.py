@@ -518,9 +518,9 @@ def test_a_code_change_to_a_fingerprinted_module_invalidates_the_prepared_cache(
     assert read_prepared_cache(path, paths, []) is None
 
 
-def test_code_sha256_covers_the_four_modules_that_shape_prepare():
+def test_code_sha256_covers_the_modules_that_shape_prepare():
     names = [p.name for p in harness.CODE_FINGERPRINT_FILES]
-    assert names == ["blocking.py", "features.py", "normalize.py", "scoring.py"]
+    assert names == ["blocking.py", "features.py", "cluster.py", "normalize.py", "scoring.py"]
     assert all(p.exists() for p in harness.CODE_FINGERPRINT_FILES)
     assert len(harness.code_sha256()) == 64
 
@@ -760,3 +760,29 @@ def test_write_reading_saves_metrics_strata_and_outcomes(tmp_path):
     assert payload["by_stratum"]["list_row"]["canonical_rate"] == 1.0
     assert [o["case_id"] for o in payload["outcomes"]] == ["a", "b"]
     assert payload["metrics"]["false_merge_rate"] == 0.5
+
+
+def test_title_containment_reaches_the_score_in_evaluate():
+    values = {name: None for name in FEATURES}
+    values.update(title_similarity=0.4, title_variant_exact=0.0)
+    weights = _equal_weights().model_copy(update={"subset_title_credit": 0.8})
+
+    def decision_score(contained):
+        case = PreparedCase(
+            case_id="c",
+            stratum="easy_baseline",
+            expected_work_key="OL1W",
+            expected_verdict="match",
+            candidates=[
+                PreparedCandidate(
+                    work_key="OL1W",
+                    rules=["title_fp"],
+                    values=values,
+                    title_containment=contained,
+                )
+            ],
+        )
+        _, outcomes = evaluate([case], weights)
+        return outcomes[0].decision.score
+
+    assert decision_score(True) > decision_score(False)

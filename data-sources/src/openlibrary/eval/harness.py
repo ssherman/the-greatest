@@ -49,10 +49,12 @@ from pydantic import BaseModel, Field
 import common.normalize
 import common.scoring
 import openlibrary.matcher.blocking
+import openlibrary.matcher.cluster
 import openlibrary.matcher.features
 from openlibrary.eval.dataset import load_cases, resolve_keys
 from openlibrary.eval.schema import EvalCase, Verdict
 from openlibrary.matcher.blocking import RULES, BlockingQuery, generate_candidates
+from openlibrary.matcher.cluster import ClusterInputs, build_clusters, cluster_inputs
 from openlibrary.matcher.decide import Decision, decide, rank
 from openlibrary.matcher.features import conflicts, extract, load_work_views, title_containment
 from openlibrary.matcher.scorer import MATCHER_VERSION, Weights, load_weights, score_features
@@ -91,6 +93,7 @@ THRESHOLD_CHECKS: tuple[tuple[str, str, str, str], ...] = (
 CODE_FINGERPRINT_FILES: tuple[Path, ...] = (
     Path(openlibrary.matcher.blocking.__file__),
     Path(openlibrary.matcher.features.__file__),
+    Path(openlibrary.matcher.cluster.__file__),
     Path(common.normalize.__file__),
     Path(common.scoring.__file__),
 )
@@ -167,6 +170,7 @@ class PreparedCandidate(BaseModel):
     values: dict[str, float | None] = Field(default_factory=dict)
     conflicts: list[str] = Field(default_factory=list)
     title_containment: bool = False
+    cluster: ClusterInputs | None = None
 
 
 class PreparedCase(BaseModel):
@@ -246,6 +250,7 @@ def prepare(
                 values=extract(query, views[key], identifier_hits=identifier_hits),
                 conflicts=conflicts(query, views[key], identifier_hits=identifier_hits),
                 title_containment=title_containment(query, views[key]),
+                cluster=cluster_inputs(views[key]),
             )
             for key, rules in blocking.candidates.items()
             if key in views
@@ -297,8 +302,15 @@ def evaluate(
             )
             for c in case.candidates
         ]
-        ordered = rank(scored)
-        decision = decide(scored, weights, volume_guards_tripped=case.volume_guards_tripped)
+        inputs = {c.work_key: c.cluster for c in case.candidates if c.cluster is not None}
+        clusters = build_clusters(scored, inputs, weights)
+        ordered = rank(scored, clusters)
+        decision = decide(
+            scored,
+            weights,
+            volume_guards_tripped=case.volume_guards_tripped,
+            clusters=clusters,
+        )
 
         expected = case.expected_work_key
         resolved = case.resolved

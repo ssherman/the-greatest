@@ -1,5 +1,6 @@
 import pytest
 
+from openlibrary.matcher.cluster import ClusterInputs, build_clusters
 from openlibrary.matcher.decide import decide, margins, rank
 from openlibrary.matcher.features import FEATURES
 from openlibrary.matcher.scorer import MATCHER_VERSION, ScoredCandidate, Weights
@@ -295,3 +296,49 @@ def test_equal_titled_scores_give_zero_margin_in_work_key_order():
     ordered = rank([_c("OL2W", 0.9), _c("OL1W", 0.9)])
     assert [c.work_key for c in ordered] == ["OL1W", "OL2W"]
     assert margins(ordered) == pytest.approx([0.0, 0.9])
+
+
+def _dup_inputs(editions, fp="dune", raw="Dune"):
+    return ClusterInputs(
+        title_fp=fp,
+        title_fp_noart=fp,
+        title_raw=raw,
+        author_fps=["frank herbert"],
+        edition_count=editions,
+    )
+
+
+def test_a_dominant_duplicate_cluster_accepts_its_representative_with_duplicates_listed():
+    cands = [_c("OLSTUB", 0.964), _c("OLREAL", 0.951), _c("OLOTHER", 0.70)]
+    inputs = {
+        "OLSTUB": _dup_inputs(3),
+        "OLREAL": _dup_inputs(160),
+        "OLOTHER": _dup_inputs(90, fp="children of dune", raw="Children of Dune"),
+    }
+    weights = _equal_weights()
+    clusters = build_clusters(cands, inputs, weights)
+    decision = decide(cands, weights, clusters=clusters)
+    assert decision.verdict == "accept"
+    assert decision.work_key == "OLREAL"
+    assert decision.score == pytest.approx(0.964)
+    assert decision.margin == pytest.approx(0.964 - 0.70)
+    assert decision.duplicates == ["OLSTUB"]
+
+
+def test_a_cluster_without_a_representative_abstains():
+    cands = [_c("OLA", 0.95), _c("OLB", 0.95)]
+    inputs = {"OLA": _dup_inputs(14), "OLB": _dup_inputs(10)}
+    weights = _equal_weights()
+    decision = decide(cands, weights, clusters=build_clusters(cands, inputs, weights))
+    assert decision.verdict == "abstain"
+    assert decision.reason.startswith("duplicate cluster with no dominant member")
+    assert set([decision.work_key, *decision.duplicates]) == {"OLA", "OLB"}
+
+
+def test_an_identifier_conflict_on_the_representative_still_abstains():
+    cands = [_c("OLA", 0.95, conflicts=["identifier"]), _c("OLB", 0.60)]
+    inputs = {"OLA": _dup_inputs(100), "OLB": _dup_inputs(1)}
+    weights = _equal_weights()
+    decision = decide(cands, weights, clusters=build_clusters(cands, inputs, weights))
+    assert decision.verdict == "abstain"
+    assert decision.reason.startswith("identifier conflict")
