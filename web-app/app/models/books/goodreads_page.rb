@@ -46,5 +46,14 @@ module Books
     def conclusive?
       outcome_found? || outcome_not_found?
     end
+
+    # authors: [{"name", "role", "primary"}]. role nil is unknown: legacy
+    # rows, and names a page lists without one.
+    def contributors
+      authors.map do |author|
+        ::Books::Goodreads::BookPage::Contributor.new(name: author["name"].to_s, role: author["role"].presence,
+          primary: author["primary"] == true)
+      end
+    end
   end
 end

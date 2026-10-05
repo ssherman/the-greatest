@@ -53,5 +53,13 @@ module Books
       assert_equal "private_imports", page.html.blob.service_name
       assert_equal "<html>656</html>", Zlib.gunzip(page.html.download)
     end
+
+    test "contributors read the authors column; a missing role is unknown" do
+      page = GoodreadsPage.new(authors: [{"name" => "Leo Tolstoy", "role" => "Author", "primary" => true},
+        {"name" => "Brett Helquist", "role" => nil, "primary" => false}])
+
+      assert_equal [["Leo Tolstoy", "Author", true], ["Brett Helquist", nil, false]],
+        page.contributors.map { |contributor| [contributor.name, contributor.role, contributor.primary] }
+    end
   end
 end
