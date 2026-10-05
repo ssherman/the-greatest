@@ -1,3 +1,4 @@
+from common.normalize import name_fingerprint
 from openlibrary.matcher.cluster import ClusterInputs, build_clusters, cluster_inputs
 from openlibrary.matcher.features import FEATURES, WorkView
 from openlibrary.matcher.scorer import MATCHER_VERSION, ScoredCandidate, Weights
@@ -54,8 +55,11 @@ def test_cluster_inputs_come_from_the_work_view_and_never_the_subtitle_stripped_
     assert inputs.title_fp_noart == "dune part one"
     assert inputs.title_raw == "The Dune: Part One"
     assert inputs.edition_count == 7
-    assert inputs.author_fps
-    assert 'the dune"' not in inputs.model_dump_json()
+    assert inputs.author_fps == sorted(
+        [name_fingerprint("Frank Herbert"), name_fingerprint("Herbert, Frank")]
+    )
+    assert inputs.author_fps == ["frank herbert", "herbert frank"]
+    assert "the dune" not in inputs.model_dump().values()
 
 
 def test_same_title_and_author_form_one_cluster_with_the_dominant_representative():
@@ -87,7 +91,7 @@ def test_tied_edition_counts_have_no_representative():  # Review Focus 2
     idx = build_clusters(
         [_c("OLA", 0.95), _c("OLB", 0.95)],
         {"OLA": _in(editions=5), "OLB": _in(editions=5)},
-        _weights(ratio=1.5),
+        _weights(ratio=1.0),
     )
     assert idx.representative[idx.of["OLA"]] is None
 
@@ -172,6 +176,39 @@ def test_a_short_fingerprint_with_different_raw_titles_does_not_cluster():  # Ru
 
 def test_a_short_fingerprint_with_equal_raw_titles_clusters():  # Ruling 9
     idx = _pair(_in("q a", raw="Q&a", editions=20), _in("q a", raw="Q & A"))
+    assert idx.of["OLA"] == idx.of["OLB"]
+
+
+def test_a_lossy_fingerprint_over_the_length_floor_needs_equal_raw_titles():  # Ruling 9
+    idx = _pair(_in("vol 6", raw="エマ vol 6"), _in("vol 6", raw="シャーリー vol. 6"))
+    assert idx.of["OLA"] != idx.of["OLB"]
+
+
+def test_a_lossy_fingerprint_with_equal_raw_titles_clusters():  # Ruling 9
+    idx = _pair(_in("odz", raw="Łódź", editions=20), _in("odz", raw="Łódź"))
+    assert idx.of["OLA"] == idx.of["OLB"]
+
+
+def test_accents_fold_and_are_not_lossy():  # Ruling 9
+    idx = _pair(_in("cafe", raw="Café", editions=20), _in("cafe", raw="Cafe"))
+    assert idx.of["OLA"] == idx.of["OLB"]
+
+
+def test_two_identifier_agreeing_members_fall_back_to_edition_dominance():
+    idx = build_clusters(
+        [_c("OLA", 0.95, identifier=1.0), _c("OLB", 0.95, identifier=1.0)],
+        {"OLA": _in(editions=1), "OLB": _in(editions=500)},
+        _weights(),
+    )
+    assert idx.representative[idx.of["OLA"]] == "OLB"
+
+
+def test_a_year_difference_of_exactly_the_divergence_still_clusters():
+    idx = build_clusters(
+        [_c("OLA", 0.95, year=1.0), _c("OLB", 0.9, year=0.5)],
+        {"OLA": _in(), "OLB": _in()},
+        _weights(),
+    )
     assert idx.of["OLA"] == idx.of["OLB"]
 
 

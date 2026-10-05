@@ -66,10 +66,23 @@ def _raw(title: str) -> str:
     return "".join(unicodedata.normalize("NFKC", title).casefold().split())
 
 
+def _lossy(title: str) -> bool:
+    """True when the fingerprint dropped letters: after folding accents, some
+    alphabetic character is outside a-z (non-Latin scripts, l-stroke, o-slash...).
+    Keep in step with the private copy in openlibrary/eval/dataset.py."""
+    return any(
+        c.isalpha() and not ("a" <= c.lower() <= "z")
+        for c in unicodedata.normalize("NFD", title)
+        if not unicodedata.combining(c)
+    )
+
+
 def _same_title(fp_a: str, fp_b: str, a: ClusterInputs, b: ClusterInputs) -> bool:
+    """Keep in step with openlibrary/eval/dataset.py. A short or lossy
+    fingerprint needs equal raw titles."""
     if not fp_a or fp_a != fp_b:
         return False
-    if len(fp_a) >= MIN_BLOCKING_FP_LENGTH:
+    if len(fp_a) >= MIN_BLOCKING_FP_LENGTH and not (_lossy(a.title_raw) or _lossy(b.title_raw)):
         return True
     raw = _raw(a.title_raw)
     return bool(raw) and raw == _raw(b.title_raw)

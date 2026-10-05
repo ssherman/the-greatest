@@ -335,6 +335,31 @@ def test_a_cluster_without_a_representative_abstains():
     assert set([decision.work_key, *decision.duplicates]) == {"OLA", "OLB"}
 
 
+def test_the_reject_band_uses_the_cluster_score_not_the_representatives():
+    cands = [_c("OLSTUB", 0.42), _c("OLREAL", 0.39)]
+    inputs = {"OLSTUB": _dup_inputs(1), "OLREAL": _dup_inputs(100)}
+    weights = _equal_weights()
+    decision = decide(cands, weights, clusters=build_clusters(cands, inputs, weights))
+    assert decision.verdict == "abstain"
+    assert decision.work_key == "OLREAL"
+    assert decision.reason.startswith("score 0.420 between reject and accept")
+
+
+def test_the_margin_check_uses_the_cluster_score_not_the_representatives():
+    cands = [_c("OLSTUB", 0.95), _c("OLREAL", 0.85), _c("OLOTHER", 0.93)]
+    inputs = {
+        "OLSTUB": _dup_inputs(1),
+        "OLREAL": _dup_inputs(100),
+        "OLOTHER": _dup_inputs(50, fp="children of dune", raw="Children of Dune"),
+    }
+    weights = _equal_weights()
+    decision = decide(cands, weights, clusters=build_clusters(cands, inputs, weights))
+    assert decision.verdict == "abstain"
+    assert decision.work_key == "OLREAL"
+    assert decision.margin == pytest.approx(0.02)
+    assert decision.reason.startswith("margin 0.020 below threshold")
+
+
 def test_an_identifier_conflict_on_the_representative_still_abstains():
     cands = [_c("OLA", 0.95, conflicts=["identifier"]), _c("OLB", 0.60)]
     inputs = {"OLA": _dup_inputs(100), "OLB": _dup_inputs(1)}

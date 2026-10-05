@@ -179,13 +179,26 @@ def _raw_title(title: str | None) -> str:
     return "".join(unicodedata.normalize("NFKC", title or "").casefold().split())
 
 
+def _lossy(title: str | None) -> bool:
+    """True when the fingerprint dropped letters: after folding accents, some
+    alphabetic character is outside a-z (non-Latin scripts, l-stroke, o-slash...).
+    Keep in step with the private copy in openlibrary/matcher/cluster.py."""
+    decomposed = unicodedata.normalize("NFD", title or "")
+    return any(
+        c.isalpha() and not ("a" <= c.lower() <= "z")
+        for c in decomposed
+        if not unicodedata.combining(c)
+    )
+
+
 def _same_title(fp_a: str | None, fp_b: str | None, raw_a: str | None, raw_b: str | None) -> bool:
-    """Equal fingerprints; one shorter than MIN_BLOCKING_FP_LENGTH also needs equal raw titles."""
+    """Equal fingerprints; one shorter than MIN_BLOCKING_FP_LENGTH, or lossy for either title,
+    also needs equal raw titles. Keep in step with openlibrary/matcher/cluster.py."""
     if not fp_a or fp_a != fp_b:
         return False
-    return len(fp_a) >= MIN_BLOCKING_FP_LENGTH or (
-        bool(raw_a) and bool(raw_b) and _raw_title(raw_a) == _raw_title(raw_b)
-    )
+    if len(fp_a) >= MIN_BLOCKING_FP_LENGTH and not (_lossy(raw_a) or _lossy(raw_b)):
+        return True
+    return bool(_raw_title(raw_a)) and _raw_title(raw_a) == _raw_title(raw_b)
 
 
 def alternate_problems(

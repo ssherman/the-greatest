@@ -458,6 +458,30 @@ def test_a_four_character_fingerprint_matches_even_when_the_raw_titles_differ():
     assert alternate_problems("OL1W", "OL2W", facts, {}) == []
 
 
+def test_a_lossy_fingerprint_over_the_length_floor_needs_equal_raw_titles():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="vol 6", noart="vol 6", title="エマ vol 6"),
+        "OL2W": _facts("OL2W", title_fp="vol 6", noart="vol 6", title="シャーリー vol. 6"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == [TITLE_PROBLEM]
+
+
+def test_a_lossy_fingerprint_with_equal_raw_titles_is_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="odz", noart="odz", title="Łódź"),
+        "OL2W": _facts("OL2W", title_fp="odz", noart="odz", title="Łódź"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == []
+
+
+def test_accented_latin_is_not_lossy():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="cafe", noart="cafe", title="Café"),
+        "OL2W": _facts("OL2W", title_fp="cafe", noart="cafe", title="Cafe"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == []
+
+
 def test_an_empty_title_fingerprint_never_matches():
     facts = {
         "OL1W": _facts("OL1W", title_fp="", noart=""),
