@@ -9,6 +9,7 @@ a phantom regression.
 from __future__ import annotations
 
 import collections
+import unicodedata
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -173,8 +174,17 @@ def fetch_work_facts(
     }
 
 
-def _long_enough(fingerprint: str | None) -> bool:
-    return bool(fingerprint) and len(fingerprint) >= MIN_BLOCKING_FP_LENGTH
+def _raw_title(title: str | None) -> str:
+    return " ".join(unicodedata.normalize("NFKC", title or "").casefold().split())
+
+
+def _same_title(fp_a: str | None, fp_b: str | None, raw_a: str | None, raw_b: str | None) -> bool:
+    """Equal fingerprints; one shorter than MIN_BLOCKING_FP_LENGTH also needs equal raw titles."""
+    if not fp_a or fp_a != fp_b:
+        return False
+    return len(fp_a) >= MIN_BLOCKING_FP_LENGTH or (
+        bool(raw_a) and bool(raw_b) and _raw_title(raw_a) == _raw_title(raw_b)
+    )
 
 
 def alternate_problems(
@@ -189,8 +199,9 @@ def alternate_problems(
 
     The title check passes on the labelled work's title (full or article-stripped) or on the
     case's own book title: Open Library's canonical work sometimes carries a variant title, and
-    the list row asserts the real one. A fingerprint shorter than MIN_BLOCKING_FP_LENGTH never
-    counts, so non-Latin titles that fingerprint to a digit do not match by accident."""
+    the list row asserts the real one. A fingerprint shorter than MIN_BLOCKING_FP_LENGTH counts
+    only when the raw titles are also equal, so non-Latin titles that fingerprint to a digit
+    do not match by accident."""
     if alternate == label_key:
         return ["alternate is the labelled key"]
     if resolved.get(alternate, alternate) == resolved.get(label_key, label_key):
@@ -201,13 +212,15 @@ def alternate_problems(
     if label is None:
         return ["labelled work not in works"]
     problems = []
-    alt_fps = {alt.title_fp, alt.title_fp_noart}
-    targets = {(label.title_fp, alt.title_fp), (label.title_fp_noart, alt.title_fp_noart)}
-    same_title = any(_long_enough(a) and a == b for a, b in targets)
+    same_title = _same_title(label.title_fp, alt.title_fp, label.title, alt.title) or _same_title(
+        label.title_fp_noart, alt.title_fp_noart, label.title, alt.title
+    )
     if not same_title and case_title:
         case_fps = title_fingerprints(case_title)
         same_title = any(
-            _long_enough(fp) and fp in alt_fps for fp in (case_fps.full, case_fps.noart)
+            _same_title(case_fp, alt_fp, case_title, alt.title)
+            for case_fp in (case_fps.full, case_fps.noart)
+            for alt_fp in (alt.title_fp, alt.title_fp_noart)
         )
     if not same_title:
         problems.append("shares no title with the labelled work or the case title")

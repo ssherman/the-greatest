@@ -287,10 +287,10 @@ TITLE_PROBLEM = "shares no title with the labelled work or the case title"
 AUTHOR_PROBLEM = "shares no author with the labelled work"
 
 
-def _facts(key, title_fp="dune", noart="dune", authors=("frank herbert",), editions=1):
+def _facts(key, title_fp="dune", noart="dune", authors=("frank herbert",), editions=1, title=None):
     return WorkFacts(
         work_key=key,
-        title=key,
+        title=title or key,
         title_fp=title_fp,
         title_fp_noart=noart,
         author_names=list(authors),
@@ -381,20 +381,38 @@ def test_a_case_title_match_still_needs_a_shared_author():
     assert problems == [AUTHOR_PROBLEM]
 
 
-def test_a_one_character_shared_title_fingerprint_is_not_a_match():
+def test_a_short_shared_fingerprint_with_different_raw_titles_is_not_a_match():
     facts = {
-        "OL1W": _facts("OL1W", title_fp="6", noart="6"),
-        "OL2W": _facts("OL2W", title_fp="6", noart="6"),
+        "OL1W": _facts("OL1W", title_fp="6", noart="6", title="エマ 6"),
+        "OL2W": _facts("OL2W", title_fp="6", noart="6", title="シャーリー 6"),
     }
     assert alternate_problems("OL1W", "OL2W", facts, {}) == [TITLE_PROBLEM]
 
 
-def test_a_short_case_title_fingerprint_is_not_a_match():
+def test_a_short_shared_fingerprint_with_equal_raw_titles_is_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="q a", noart="q a", title="Q & A"),
+        "OL2W": _facts("OL2W", title_fp="q a", noart="q a", title="Q  &  A"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == []
+
+
+def test_a_short_fingerprint_with_raw_titles_that_differ_is_not_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="q a", noart="q a", title="Q & A"),
+        "OL2W": _facts("OL2W", title_fp="q a", noart="q a", title="Q / A"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == [TITLE_PROBLEM]
+
+
+def test_a_short_case_title_needs_an_equal_raw_alternate_title():
     facts = {
         "OL1W": _facts("OL1W", title_fp="other", noart="other"),
-        "OL2W": _facts("OL2W", title_fp="6", noart="6"),
+        "OL2W": _facts("OL2W", title_fp="s", noart="s", title="S."),
     }
-    assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="6") == [TITLE_PROBLEM]
+    assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="S.") == []
+    facts["OL2W"] = _facts("OL2W", title_fp="s", noart="s", title="S!")
+    assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="S.") == [TITLE_PROBLEM]
 
 
 def test_an_empty_title_fingerprint_never_matches():
