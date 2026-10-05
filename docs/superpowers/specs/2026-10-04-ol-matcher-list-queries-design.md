@@ -75,7 +75,9 @@ still the right book.
 
 The set must be fixed before the matcher, or the matcher is graded against the wrong answers.
 
-**New stratum `list_row`** (in `eval/schema.py`, assigned in `build_pool.assign_strata`):
+**New stratum `list_row`** (declared in `eval/schema.py`; its pool is built by a new
+`eval/build_list_rows.py` from a list-item export, since `build_pool.assign_strata` draws its
+cases from books, not list items):
 - ~150 cases sampled from the 948 legacy books list items with original list text.
 - The 200 rows already examined in the 2026-10-04 spike are excluded, so the cases are held out
   from the analysis that shaped this design.
@@ -117,6 +119,10 @@ Replace `common.scoring.title_similarity` with a variant-aware, length-sensitive
 - **`title_similarity`** = the maximum over all (query variant, work variant) pairs of
   `fuzz.token_sort_ratio / 100`. That ratio ignores word order but is length-sensitive, so
   "the road" vs "the road to wigan pier" scores 0.53, not 1.0.
+- **Subtitle-dropped pairs** (a query no-subtitle variant that differs from the full title) count
+  at most 0.95 (`DERIVED_TITLE_FACTOR`). Without the cap, "Star Wars: A New Hope" would score its
+  own work and a plain "Star Wars" work identically on title. The cap makes a full-title match
+  outrank a subtitle-dropped one.
 - **Containment credit:** when one variant's tokens are a strict subset of the other's, the pair
   scores `max(token_sort, subset_title_credit)`. `subset_title_credit` is a new calibrated
   parameter in `weights.json`, searched in [0, 0.9]. The data decides whether containment
