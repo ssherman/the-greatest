@@ -1,7 +1,7 @@
 """Source-agnostic comparators.
 
-The NUMERIC comparators (`title_similarity`, `set_overlap`, `year_agreement`)
-return a value in [0, 1] when both sides carry information, and None when
+The NUMERIC comparators (`fuzzy_similarity`, `compare_titles`, `set_overlap`,
+`year_agreement`) return a value in [0, 1] when both sides carry information, and None when
 either does not; `identifier_agreement` returns an `Agreement` literal
 instead, with `"absent"` playing the same role. None (or "absent") means
 NEUTRAL and must never be coerced to a disagreement score by a caller:
@@ -12,6 +12,8 @@ enough that the difference decides most matches.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Literal
 
 from rapidfuzz import fuzz
@@ -22,7 +24,7 @@ Agreement = Literal["agree", "conflict", "absent"]
 YEAR_DECAY = 10.0
 
 
-def title_similarity(left: str, right: str) -> float | None:
+def fuzzy_similarity(left: str, right: str) -> float | None:
     """Best-of-three rapidfuzz ratio, in [0, 1], or None when either
     fingerprint is empty.
 
@@ -37,6 +39,10 @@ def title_similarity(left: str, right: str) -> float | None:
     An empty fingerprint is ABSENCE, not disagreement (ruling R40): a
     punctuation-only title fingerprints to "", and scoring that as 0.0 would
     read as strong disagreement rather than as no title information at all.
+
+    No longer used for titles (see `compare_titles`); it serves author names
+    and subtitles, where token-set's subset credit is wanted ("tolkien" vs
+    "j r r tolkien").
     """
     if not left or not right:
         return None
@@ -47,6 +53,56 @@ def title_similarity(left: str, right: str) -> float | None:
             fuzz.WRatio(left, right),
         )
         / 100.0
+    )
+
+
+# A match through a query variant that only exists after the subtitle cut
+# counts for at most this: the colon may be part of the title ("Star Wars: A
+# New Hope"), and a full-title match must outrank it (2026-10-04 spec, section 2).
+DERIVED_TITLE_FACTOR = 0.95
+
+
+@dataclass(frozen=True)
+class TitleComparison:
+    similarity: float | None
+    exact: float | None
+    containment: bool
+
+
+def _strictly_contains(a: str, b: str) -> bool:
+    left, right = set(a.split()), set(b.split())
+    return left != right and (left < right or right < left)
+
+
+def compare_titles(
+    whole: Iterable[str], derived: Iterable[str], work_variants: Iterable[str]
+) -> TitleComparison:
+    """Variant-aware, length-sensitive title comparison (replaces the
+    token-set/WRatio max for titles: "Dune" vs "Children of Dune" was 1.0, and
+    any shared word was 0.855 -- 2026-10-04 spec, D1).
+
+    `similarity`: the best token_sort ratio over (query variant, work variant)
+    pairs, derived pairs scaled by DERIVED_TITLE_FACTOR. `exact`: 1.0 when any
+    query variant equals any work variant, else 0.0. `containment`: some pair
+    is a strict token subset -- the scorer may grant it calibrated credit.
+    None/None/False when either side has no fingerprint (R40: absence).
+    """
+    works = {w for w in work_variants if w}
+    whole_set, derived_set = set(whole), set(derived)
+    ours = whole_set | derived_set
+    if not works or not ours:
+        return TitleComparison(similarity=None, exact=None, containment=False)
+    best = 0.0
+    for q in whole_set:
+        for w in works:
+            best = max(best, fuzz.token_sort_ratio(q, w) / 100.0)
+    for q in derived_set:
+        for w in works:
+            best = max(best, DERIVED_TITLE_FACTOR * fuzz.token_sort_ratio(q, w) / 100.0)
+    return TitleComparison(
+        similarity=best,
+        exact=1.0 if ours & works else 0.0,
+        containment=any(_strictly_contains(q, w) for q in ours for w in works),
     )
 
 

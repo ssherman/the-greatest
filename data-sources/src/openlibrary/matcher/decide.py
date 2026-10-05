@@ -31,25 +31,36 @@ threshold means "not found" only when the search was allowed to look, so a
 tripped volume guard turns the reject band into an abstain too. Accept and
 the middle band are untouched: a clear winner among the candidates that
 WERE fetched is still a clear winner.
+
+Identity first (2026-10-04 list-queries spec, section 3). A title-less
+candidate -- a translation whose non-Latin title fingerprints to "" -- matched
+on the author alone, so it can neither outrank a candidate that has a title or
+identifier nor set the margin of one. `rank` puts identity-bearing candidates
+first and `margins` ignores title-less candidates below; with nothing but
+title-less candidates the decision still abstains for no identity evidence.
+Measured in the 2026-10-04 spike: 26 margin abstains and 8 displaced top
+candidates came from this.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from openlibrary.matcher.scorer import ScoredCandidate, Weights
+from openlibrary.matcher.scorer import (
+    IDENTIFIER_FEATURE,  # noqa: F401 (re-exported; moved to the scorer)
+    IDENTITY_FEATURES,  # noqa: F401
+    ScoredCandidate,
+    Weights,
+    has_identity_evidence,
+)
+
+if TYPE_CHECKING:
+    from openlibrary.matcher.cluster import ClusterIndex
 
 PRIOR_FEATURE = "popularity_prior"
-
-# The features whose PRESENCE (any non-None value) says the two sides were
-# actually compared as books, not merely as the work of the same author.
-# `identifier_agreement` is deliberately not here: it is identity evidence
-# only when it AGREES (1.0) -- a 0.0 is a conflict, already handled first.
-IDENTITY_FEATURES = ("title_similarity", "title_variant_exact", "subtitle_agreement")
-IDENTIFIER_FEATURE = "identifier_agreement"
 
 
 class Decision(BaseModel):
@@ -58,23 +69,52 @@ class Decision(BaseModel):
     score: float | None = None
     margin: float | None = None
     reason: str
+    # The other members of the winning duplicate cluster (2026-10-04 spec, section 4).
+    duplicates: list[str] = Field(default_factory=list)
 
 
-def _has_identity_evidence(candidate: ScoredCandidate) -> bool:
-    """True when a title feature is present or the identifier agrees (R58).
-
-    Author agreement, year, language and popularity do not count: any
-    combination of them alone -- however high the weighted mean -- abstains.
-    """
-    evidence = candidate.evidence
-    if any(evidence.get(name, {}).get("value") is not None for name in IDENTITY_FEATURES):
-        return True
-    return evidence.get(IDENTIFIER_FEATURE, {}).get("value") == 1.0
+_has_identity_evidence = has_identity_evidence
 
 
-def rank(candidates: list[ScoredCandidate]) -> list[ScoredCandidate]:
-    """Highest score first; ties broken by work_key so the order is deterministic."""
-    return sorted(candidates, key=lambda c: (-c.score, c.work_key))
+def _group(candidate: ScoredCandidate, clusters: ClusterIndex | None) -> tuple[str, float, bool]:
+    """(group id, group best score, is representative) -- a singleton group
+    when unclustered."""
+    if clusters is None or candidate.work_key not in clusters.of:
+        return candidate.work_key, candidate.score, True
+    cid = clusters.of[candidate.work_key]
+    return cid, clusters.best_score[cid], clusters.representative.get(cid) == candidate.work_key
+
+
+def rank(
+    candidates: list[ScoredCandidate], clusters: ClusterIndex | None = None
+) -> list[ScoredCandidate]:
+    """Identity-bearing candidates first (2026-10-04 spec, section 3), then by
+    their group's best score, groups kept together with the representative
+    first, then score, then work_key -- deterministic."""
+
+    def key(c: ScoredCandidate):
+        cid, best, is_rep = _group(c, clusters)
+        return (not has_identity_evidence(c), -best, cid, not is_rep, -c.score, c.work_key)
+
+    return sorted(candidates, key=key)
+
+
+def _margin_at(ranked: list[ScoredCandidate], i: int, clusters: ClusterIndex | None) -> float:
+    cid, best, _ = _group(ranked[i], clusters)
+    below = [
+        c.score
+        for c in ranked[i + 1 :]
+        if has_identity_evidence(c) and _group(c, clusters)[0] != cid
+    ]
+    return best - max(below, default=0.0)
+
+
+def margins(ranked: list[ScoredCandidate], clusters: ClusterIndex | None = None) -> list[float]:
+    """Per candidate: its group's best score minus the best score among
+    identity-bearing candidates ranked below it in a different group (0.0 if
+    none). A candidate that could not itself be accepted never sets another's
+    margin. margins(...)[0] is the decision's margin (R85)."""
+    return [_margin_at(ranked, i, clusters) for i in range(len(ranked))]
 
 
 def decide(
@@ -82,6 +122,7 @@ def decide(
     weights: Weights,
     *,
     volume_guards_tripped: Sequence[str] = (),
+    clusters: ClusterIndex | None = None,
 ) -> Decision:
     """accept / abstain / reject over already-scored candidates.
 
@@ -102,70 +143,97 @@ def decide(
             )
         return Decision(verdict="reject", reason="no candidates")
 
-    ordered = rank(candidates)
+    ordered = rank(candidates, clusters)
     best = ordered[0]
-    runner_up = ordered[1].score if len(ordered) > 1 else 0.0
-    margin = best.score - runner_up
+    margin = _margin_at(ordered, 0, clusters)
 
-    if best.conflicts:
-        return Decision(
-            verdict="abstain",
-            work_key=best.work_key,
-            score=best.score,
-            margin=margin,
-            reason=f"identifier conflict on the best candidate: {', '.join(best.conflicts)}",
-        )
-
-    if not _has_identity_evidence(best):
-        return Decision(
-            verdict="abstain",
-            work_key=best.work_key,
-            score=best.score,
-            margin=margin,
-            reason="no identity evidence: only author/year/language/popularity are present",
-        )
-
-    if best.score < weights.reject_threshold:
-        below = f"best score {best.score:.3f} below reject threshold {weights.reject_threshold:.3f}"
-        if volume_guards_tripped:
+    cid = clusters.of.get(best.work_key) if clusters else None
+    group = clusters.members.get(cid, [best.work_key]) if clusters and cid else [best.work_key]
+    if len(group) > 1 and has_identity_evidence(best):
+        rep_key = clusters.representative.get(cid)
+        if rep_key is None:
             return Decision(
                 verdict="abstain",
                 work_key=best.work_key,
-                score=best.score,
+                score=clusters.best_score[cid],
+                margin=margin,
+                reason="duplicate cluster with no dominant member: " + ", ".join(group),
+                duplicates=[k for k in group if k != best.work_key],
+            )
+        representative = next(c for c in ordered if c.work_key == rep_key)
+        score = clusters.best_score[cid]
+        duplicates = [k for k in group if k != rep_key]
+    else:
+        representative, score, duplicates = best, best.score, []
+    runner_up = score - margin
+
+    if representative.conflicts:
+        return Decision(
+            verdict="abstain",
+            work_key=representative.work_key,
+            score=score,
+            margin=margin,
+            reason="identifier conflict on the best candidate: "
+            + ", ".join(representative.conflicts),
+            duplicates=duplicates,
+        )
+
+    if not _has_identity_evidence(representative):
+        return Decision(
+            verdict="abstain",
+            work_key=representative.work_key,
+            score=score,
+            margin=margin,
+            reason="no identity evidence: only author/year/language/popularity are present",
+            duplicates=duplicates,
+        )
+
+    if score < weights.reject_threshold:
+        below = f"best score {score:.3f} below reject threshold {weights.reject_threshold:.3f}"
+        if volume_guards_tripped:
+            return Decision(
+                verdict="abstain",
+                work_key=representative.work_key,
+                score=score,
                 margin=margin,
                 reason=f"{below}; search refused for volume: {', '.join(volume_guards_tripped)}",
+                duplicates=duplicates,
             )
         return Decision(
             verdict="reject",
-            work_key=best.work_key,
-            score=best.score,
+            work_key=representative.work_key,
+            score=score,
             margin=margin,
             reason=below,
+            duplicates=duplicates,
         )
 
-    if best.score >= weights.accept_threshold and margin >= weights.margin_threshold:
+    if score >= weights.accept_threshold and margin >= weights.margin_threshold:
         return Decision(
             verdict="accept",
-            work_key=best.work_key,
-            score=best.score,
+            work_key=representative.work_key,
+            score=score,
             margin=margin,
-            reason=f"score {best.score:.3f} with margin {margin:.3f}",
+            reason=f"score {score:.3f} with margin {margin:.3f}",
+            duplicates=duplicates,
         )
 
-    if best.score >= weights.accept_threshold:
+    if score >= weights.accept_threshold:
         return Decision(
             verdict="abstain",
-            work_key=best.work_key,
-            score=best.score,
+            work_key=representative.work_key,
+            score=score,
             margin=margin,
             reason=f"margin {margin:.3f} below threshold {weights.margin_threshold:.3f}; "
             f"runner-up scores {runner_up:.3f}",
+            duplicates=duplicates,
         )
 
     return Decision(
         verdict="abstain",
-        work_key=best.work_key,
-        score=best.score,
+        work_key=representative.work_key,
+        score=score,
         margin=margin,
-        reason=f"score {best.score:.3f} between reject and accept thresholds",
+        reason=f"score {score:.3f} between reject and accept thresholds",
+        duplicates=duplicates,
     )

@@ -85,6 +85,10 @@ class PoolEntry(BaseModel):
     # is not misrecorded as a recall failure. Do NOT collapse this back into
     # `candidates`; see label.py's `candidates_shown_for`.
     all_generated: list[GeneratedCandidateKey] = Field(default_factory=list)
+    # Open Library keys our catalog already stores for this case's book. A
+    # research HINT only (they are untrusted: see schema.py), never passed to
+    # the matcher and never the label by default.
+    hint_work_keys: list[str] = Field(default_factory=list)
 
 
 def load_books(path: Path) -> list[EvalBook]:

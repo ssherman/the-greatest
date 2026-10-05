@@ -1,5 +1,12 @@
 from openlibrary.matcher.blocking import BlockingQuery
-from openlibrary.matcher.features import FEATURES, WorkView, conflicts, extract, load_work_views
+from openlibrary.matcher.features import (
+    FEATURES,
+    WorkView,
+    conflicts,
+    extract,
+    load_work_views,
+    title_containment,
+)
 from openlibrary.pipeline.duck import connect
 
 
@@ -203,3 +210,48 @@ def test_load_work_views_returns_one_view_per_wanted_key_with_aggregates(fixture
         assert view.edition_count == expected_edition_count
     finally:
         con.close()
+
+
+def test_a_sequel_title_is_no_longer_a_perfect_title_similarity():
+    """D1: the old fuzzy title scored a subset title ("Dune" vs "Children of Dune") 1.0."""
+    values = extract(
+        BlockingQuery(title="Dune"),
+        _work(
+            title="Children of Dune",
+            title_fp="children of dune",
+            title_fp_nosub="children of dune",
+            title_fp_noart="children of dune",
+        ),
+    )
+    assert values["title_similarity"] < 0.6
+    assert values["title_variant_exact"] == 0.0
+
+
+def test_an_inline_query_subtitle_matches_exactly_and_feeds_subtitle_agreement():
+    values = extract(
+        BlockingQuery(title="The Great Gatsby: A Novel"),
+        _work(subtitle="A Novel"),
+    )
+    assert values["title_variant_exact"] == 1.0
+    assert values["subtitle_agreement"] == 1.0
+
+
+def test_an_explicit_subtitle_wins_over_a_derived_one():
+    values = extract(
+        BlockingQuery(title="The Great Gatsby: A Novel", subtitle="Something Else"),
+        _work(subtitle="A Novel"),
+    )
+    assert values["subtitle_agreement"] < 1.0
+
+
+def test_title_containment_flags_a_strict_subset_pair():
+    assert title_containment(
+        BlockingQuery(title="Ulysses A Novel"),
+        _work(
+            title="Ulysses",
+            title_fp="ulysses",
+            title_fp_nosub="ulysses",
+            title_fp_noart="ulysses",
+        ),
+    )
+    assert not title_containment(BlockingQuery(title="The Great Gatsby"), _work())

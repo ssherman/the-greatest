@@ -90,6 +90,17 @@ def feature_presence(prepared: list[PreparedCase]) -> dict[str, float]:
     return {name: (counts[name] / total if total else 0.0) for name in FEATURES}
 
 
+# (low, high, step) per non-feature knob. Thresholds keep their [0, 1] range;
+# the two 2026-10-04 parameters get their own (spec section 5).
+BOUNDED_KNOBS: dict[str, tuple[float, float, float]] = {
+    "accept_threshold": (0.0, 1.0, 0.08),
+    "reject_threshold": (0.0, 1.0, 0.08),
+    "margin_threshold": (0.0, 1.0, 0.08),
+    "subset_title_credit": (0.0, 0.9, 0.08),
+    "duplicate_dominance_ratio": (1.5, 10.0, 0.5),
+}
+
+
 def equal_weights() -> Weights:
     """The design's placeholder `Weights`, built in code (R55).
 
@@ -110,6 +121,8 @@ def equal_weights() -> Weights:
         accept_threshold=0.9,
         reject_threshold=0.4,
         margin_threshold=0.05,
+        subset_title_credit=0.0,
+        duplicate_dominance_ratio=3.0,
     )
 
 
@@ -184,9 +197,7 @@ def search_weights(
             best.feature_weights[name] = 0.0
     knobs = [
         *(name for name in FEATURES if presence[name] > 0.0),
-        "accept_threshold",
-        "reject_threshold",
-        "margin_threshold",
+        *BOUNDED_KNOBS,
     ]
 
     best_metrics, _ = evaluate(prepared_train, best)
@@ -200,11 +211,9 @@ def search_weights(
                 0.0, candidate.feature_weights[knob] + rng.uniform(-0.4, 0.4)
             )
         else:
-            setattr(
-                candidate,
-                knob,
-                min(1.0, max(0.0, getattr(candidate, knob) + rng.uniform(-0.08, 0.08))),
-            )
+            low, high, width = BOUNDED_KNOBS[knob]
+            moved = getattr(candidate, knob) + rng.uniform(-width, width)
+            setattr(candidate, knob, min(high, max(low, moved)))
         if candidate.reject_threshold >= candidate.accept_threshold:
             continue
 
@@ -282,6 +291,9 @@ def calibration_write_gate(
         )
         return False
 
+    # A `--base` warm start copies the previous file's version; the file this
+    # run writes is a product of the current matcher.
+    chosen.matcher_version = MATCHER_VERSION
     chosen.calibrated = True
     chosen.calibrated_at = datetime.datetime.now(datetime.UTC).isoformat()
     chosen.method = label
@@ -459,7 +471,7 @@ def main(
     # PreparedCase list along the same train/test partition, so nothing
     # downstream of this line touches DuckDB again. R54: skip the pass
     # entirely when a matching prepared-cases cache is on disk.
-    prepared = read_prepared_cache(prepared_cache, paths, len(cases)) if prepared_cache else None
+    prepared = read_prepared_cache(prepared_cache, paths, cases) if prepared_cache else None
     if prepared is not None:
         typer.echo(f"loaded {len(prepared)} prepared cases from {prepared_cache}")
     else:

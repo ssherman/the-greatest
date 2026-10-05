@@ -15,7 +15,12 @@ import os
 
 import pytest
 
+from common.normalize import name_fingerprint
 from openlibrary.eval.dataset import (
+    WorkFacts,
+    alternate_problems,
+    check_alternates,
+    fetch_work_facts,
     load_cases,
     resolve_keys,
     same_work,
@@ -69,6 +74,12 @@ def test_load_reads_every_jsonl_file_in_the_directory(tmp_path):
     (tmp_path / "a.jsonl").write_text(_case("a-1", "easy_baseline").model_dump_json() + "\n")
     (tmp_path / "b.jsonl").write_text(_case("b-1", "easy_baseline").model_dump_json() + "\n")
     assert {c.case_id for c in load_cases(tmp_path)} == {"a-1", "b-1"}
+
+
+def test_agent_researched_labels_are_ground_truth(tmp_path):
+    case = _case("r-1", "list_row", labeled_by="agent_researched")
+    (tmp_path / "list_rows.jsonl").write_text(case.model_dump_json() + "\n")
+    assert [c.case_id for c in load_cases(tmp_path)] == ["r-1"]
 
 
 def test_duplicate_case_ids_raise(tmp_path):
@@ -255,3 +266,328 @@ def test_every_labeled_key_exists_in_the_real_artifact():
     with contextlib.closing(con):
         unknown = unknown_labeled_keys(con, paths, load_cases())
     assert unknown == [], f"labeled work keys that do not exist: {unknown}"
+
+
+@pytest.mark.artifact
+def test_every_alternate_is_a_verified_duplicate_in_the_real_artifact():
+    root = os.environ.get("OL_DATA_ROOT")
+    dump_date = os.environ.get("OL_DATA_VERSION")
+    if not (root and dump_date):
+        pytest.skip("set OL_DATA_ROOT and OL_DATA_VERSION")
+    from pathlib import Path
+
+    paths = ArtifactPaths(root=Path(root), dump_date=dump_date)
+    con = connect(paths, memory_limit="4GB")
+    with contextlib.closing(con):
+        problems = check_alternates(con, paths, load_cases())
+    assert problems == [], f"alternates that are not verified duplicates: {problems}"
+
+
+TITLE_PROBLEM = "shares no title with the labelled work or the case title"
+AUTHOR_PROBLEM = "shares no author with the labelled work"
+
+
+def _facts(key, title_fp="dune", noart="dune", authors=("frank herbert",), editions=1, title=None):
+    return WorkFacts(
+        work_key=key,
+        title=title or key,
+        title_fp=title_fp,
+        title_fp_noart=noart,
+        author_names=list(authors),
+        author_fps=list(authors),
+        edition_count=editions,
+    )
+
+
+def test_a_true_duplicate_has_no_problems():
+    facts = {"OL1W": _facts("OL1W"), "OL2W": _facts("OL2W")}
+    assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == []
+
+
+def test_an_alternate_that_redirects_to_the_label_is_a_problem():
+    facts = {"OL1W": _facts("OL1W"), "OL2W": _facts("OL2W")}
+    problems = alternate_problems("OL1W", "OL2W", facts, resolved={"OL2W": "OL1W"})
+    assert problems == ["redirects to the labelled work; not a duplicate"]
+
+
+def test_an_alternate_missing_from_works_is_a_problem():
+    assert alternate_problems("OL1W", "OL9W", {"OL1W": _facts("OL1W")}, resolved={}) == [
+        "not in works"
+    ]
+
+
+def test_an_alternate_with_another_title_or_author_is_a_problem():
+    facts = {
+        "OL1W": _facts("OL1W"),
+        "OL2W": _facts(
+            "OL2W",
+            title_fp="children of dune",
+            noart="children of dune",
+            authors=("brian herbert",),
+        ),
+    }
+    assert sorted(alternate_problems("OL1W", "OL2W", facts, resolved={})) == sorted(
+        [TITLE_PROBLEM, AUTHOR_PROBLEM]
+    )
+
+
+def test_matching_title_with_different_authors_is_only_an_author_problem():
+    facts = {"OL1W": _facts("OL1W"), "OL2W": _facts("OL2W", authors=("brian herbert",))}
+    assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == [AUTHOR_PROBLEM]
+
+
+def test_matching_author_with_different_title_is_only_a_title_problem():
+    facts = {"OL1W": _facts("OL1W"), "OL2W": _facts("OL2W", title_fp="messiah", noart="messiah")}
+    assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == [TITLE_PROBLEM]
+
+
+def test_an_article_stripped_title_match_is_enough():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="the dune", noart="dune"),
+        "OL2W": _facts("OL2W", title_fp="dune", noart="dune"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == []
+
+
+def test_a_shared_subtitle_stripped_title_is_not_a_duplicate_title():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="harry potter series 1 7", noart="harry potter series 1 7"),
+        "OL2W": _facts("OL2W", title_fp="harry potter series 1 4", noart="harry potter series 1 4"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == [TITLE_PROBLEM]
+
+
+def test_one_lossy_title_is_enough_to_need_equal_raw_titles():
+    lossy, plain = "ハリー Harry Potter", "Harry Potter"
+    for a, b in ((lossy, plain), (plain, lossy)):
+        facts = {
+            "OL1W": _facts("OL1W", title_fp="harry potter", noart="harry potter", title=a),
+            "OL2W": _facts("OL2W", title_fp="harry potter", noart="harry potter", title=b),
+        }
+        assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == [TITLE_PROBLEM]
+
+
+def _mislabelled_label_facts(alt_authors=("frank herbert",)):
+    return {
+        "OL1W": _facts("OL1W", title_fp="el buen nombre lingua franca", noart="buen nombre"),
+        "OL2W": _facts("OL2W", title_fp="the namesake", noart="namesake", authors=alt_authors),
+    }
+
+
+def test_an_alternate_equal_to_the_case_title_is_a_duplicate():
+    problems = alternate_problems(
+        "OL1W", "OL2W", _mislabelled_label_facts(), {}, case_title="The Namesake"
+    )
+    assert problems == []
+
+
+def test_the_same_alternate_without_a_case_title_has_a_title_problem():
+    assert alternate_problems("OL1W", "OL2W", _mislabelled_label_facts(), {}) == [TITLE_PROBLEM]
+
+
+def test_a_case_title_match_still_needs_a_shared_author():
+    facts = _mislabelled_label_facts(alt_authors=("jhumpa lahiri",))
+    problems = alternate_problems("OL1W", "OL2W", facts, {}, case_title="The Namesake")
+    assert problems == [AUTHOR_PROBLEM]
+
+
+def test_a_short_shared_fingerprint_with_different_raw_titles_is_not_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="6", noart="6", title="エマ 6"),
+        "OL2W": _facts("OL2W", title_fp="6", noart="6", title="シャーリー 6"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == [TITLE_PROBLEM]
+
+
+def test_raw_titles_differing_only_in_whitespace_are_equal():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="q a", noart="q a", title="Q&a"),
+        "OL2W": _facts("OL2W", title_fp="q a", noart="q a", title="Q & A"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == []
+
+
+def test_a_short_shared_fingerprint_with_equal_raw_titles_is_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="q a", noart="q a", title="Q & A"),
+        "OL2W": _facts("OL2W", title_fp="q a", noart="q a", title="Q  &  A"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == []
+
+
+def test_a_short_fingerprint_with_raw_titles_that_differ_is_not_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="q a", noart="q a", title="Q & A"),
+        "OL2W": _facts("OL2W", title_fp="q a", noart="q a", title="Q / A"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == [TITLE_PROBLEM]
+
+
+def test_a_short_case_title_needs_an_equal_raw_alternate_title():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="other", noart="other"),
+        "OL2W": _facts("OL2W", title_fp="s", noart="s", title="S."),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="S.") == []
+    facts["OL2W"] = _facts("OL2W", title_fp="s", noart="s", title="S!")
+    assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="S.") == [TITLE_PROBLEM]
+
+
+def test_a_case_title_does_not_match_on_its_subtitle_stripped_form():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="other", noart="other"),
+        "OL2W": _facts("OL2W", title_fp="harry potter series 1 4", noart="harry potter series 1 4"),
+    }
+    problems = alternate_problems("OL1W", "OL2W", facts, {}, case_title="Harry Potter: Series 1-7")
+    assert problems == [TITLE_PROBLEM]
+
+
+def test_a_case_title_prefix_before_the_colon_is_not_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="other", noart="other"),
+        "OL2W": _facts("OL2W", title_fp="dune", noart="dune"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="Dune: Messiah") == [
+        TITLE_PROBLEM
+    ]
+
+
+def test_a_case_title_noart_form_matches_the_alternates_full_fingerprint():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="other", noart="other"),
+        "OL2W": _facts("OL2W", title_fp="namesake", noart="namesake"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="The Namesake") == []
+
+
+def test_a_four_character_fingerprint_matches_even_when_the_raw_titles_differ():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="abcd", noart="abcd", title="Abcd!"),
+        "OL2W": _facts("OL2W", title_fp="abcd", noart="abcd", title="Abcd?"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == []
+
+
+def test_a_lossy_fingerprint_over_the_length_floor_needs_equal_raw_titles():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="vol 6", noart="vol 6", title="エマ vol 6"),
+        "OL2W": _facts("OL2W", title_fp="vol 6", noart="vol 6", title="シャーリー vol. 6"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == [TITLE_PROBLEM]
+
+
+def test_a_lossy_fingerprint_with_equal_raw_titles_is_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="odz", noart="odz", title="Łódź"),
+        "OL2W": _facts("OL2W", title_fp="odz", noart="odz", title="Łódź"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == []
+
+
+def test_accented_latin_is_not_lossy():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="cafe", noart="cafe", title="Café"),
+        "OL2W": _facts("OL2W", title_fp="cafe", noart="cafe", title="Cafe"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == []
+
+
+def test_an_empty_title_fingerprint_never_matches():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="", noart=""),
+        "OL2W": _facts("OL2W", title_fp="", noart=""),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == [TITLE_PROBLEM]
+
+
+def test_an_alternate_with_no_authors_is_an_author_problem():
+    facts = {"OL1W": _facts("OL1W"), "OL2W": _facts("OL2W", authors=())}
+    assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == [AUTHOR_PROBLEM]
+
+
+def test_a_label_that_redirects_to_the_alternate_is_a_problem():
+    facts = {"OL1W": _facts("OL1W"), "OL2W": _facts("OL2W")}
+    problems = alternate_problems("OL1W", "OL2W", facts, resolved={"OL1W": "OL2W"})
+    assert problems == ["redirects to the labelled work; not a duplicate"]
+
+
+def test_an_alternate_equal_to_the_label_key_says_so():
+    facts = {"OL1W": _facts("OL1W")}
+    assert alternate_problems("OL1W", "OL1W", facts, resolved={}) == [
+        "alternate is the labelled key"
+    ]
+
+
+def test_fetch_work_facts_reads_titles_and_authors(fixture_artifact, fixture_labelled_works):
+    con = connect(fixture_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        (key, title, authors), (key2, title2, authors2) = fixture_labelled_works[:2]
+        facts = fetch_work_facts(con, fixture_artifact, [key, key2])
+    assert set(facts) == {key, key2}
+    for k, t, names in ((key, title, authors), (key2, title2, authors2)):
+        assert facts[k].title == t
+        assert facts[k].title_fp
+        assert set(facts[k].author_names) == set(names)
+        assert facts[k].author_fps == sorted({name_fingerprint(n) for n in names})
+
+
+def _match_case(work_key, alternates):
+    return EvalCase(
+        case_id="alt-001",
+        stratum="easy_baseline",
+        book=EvalBook(book_id=1, title="Whatever"),
+        candidates_shown=[],
+        label=EvalLabel(
+            verdict="match",
+            work_key=work_key,
+            alternate_work_keys=alternates,
+            identity_rule="same_work",
+            rationale="Constructed from the artifact for the alternate test.",
+            labeled_at=datetime.date(2026, 10, 4),
+            labeled_against_dump_date="2026-07-31",
+        ),
+    )
+
+
+def test_check_alternates_reports_each_problem_per_alternate(
+    fixture_artifact, fixture_labelled_works
+):
+    label_key = fixture_labelled_works[0][0]
+    unrelated = fixture_labelled_works[1][0]
+    case = _match_case(label_key, [unrelated, "OL999999999W"])
+    con = connect(fixture_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        problems = check_alternates(con, fixture_artifact, [case])
+    assert sorted(problems) == sorted(
+        [
+            ("alt-001", unrelated, TITLE_PROBLEM),
+            ("alt-001", unrelated, AUTHOR_PROBLEM),
+            ("alt-001", "OL999999999W", "not in works"),
+        ]
+    )
+
+
+# Synthetic fixture works with the same title_fp ("selected poems") and a shared
+# author fingerprint ("amelia atwater rhodes"): a true duplicate pair.
+DUPLICATE_LABEL, DUPLICATE_ALTERNATE = "OL999999101W", "OL999999151W"
+
+
+def test_check_alternates_accepts_a_true_duplicate(fixture_artifact):
+    case = _match_case(DUPLICATE_LABEL, [DUPLICATE_ALTERNATE])
+    con = connect(fixture_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        assert check_alternates(con, fixture_artifact, [case]) == []
+
+
+def test_check_alternates_uses_the_case_book_title(fixture_artifact):
+    # OL100077W ("Wyvernhail: The Kiesha'ra") and OL999999101W ("Selected Poems") share an author
+    # but no title, so only the case's own book title can make the alternate verify.
+    label, alternate = "OL100077W", "OL999999101W"
+    con = connect(fixture_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        case = _match_case(label, [alternate])
+        assert check_alternates(con, fixture_artifact, [case]) == [
+            ("alt-001", alternate, TITLE_PROBLEM)
+        ]
+        case.book.title = "Selected Poems"
+        assert check_alternates(con, fixture_artifact, [case]) == []
