@@ -7,7 +7,8 @@ module DataImporters
       # Match (see FinderBase). Four sources, in order: identifiers (Open
       # Library work key, ISBN-13, ISBN-10, ASIN, Goodreads id), an exact
       # normalized title-plus-author lookup, the OpenSearch title-plus-
-      # authors query, and the Open Library resolve service.
+      # authors query, and the Open Library resolve service (or, by mode, its
+      # identifier lookup, or both).
       class Finder < DataImporters::FinderBase
         IDENTIFIER_LOOKUPS = [
           [:open_library_work_key, :books_work_openlibrary_id],
@@ -19,11 +20,18 @@ module DataImporters
         OPENSEARCH_SIZE = 5
         OPEN_LIBRARY_LIMIT = 5
         EXACT_LIMIT = 5
+        # Which Open Library sources run: :resolve (the /resolve service, the
+        # default), :identifiers (the fast identifier lookup only; the Goodreads
+        # replay's pass one) or :all (both; its pass two).
+        OPEN_LIBRARY_MODES = %i[resolve identifiers all].freeze
 
         # open_library_client: injected by tests; nil builds the real client
-        # lazily inside OpenLibrarySource.
-        def initialize(open_library_client: nil)
+        # lazily inside the Open Library sources.
+        def initialize(open_library_client: nil, open_library: :resolve)
+          raise ArgumentError, "unknown open_library mode: #{open_library.inspect}" unless OPEN_LIBRARY_MODES.include?(open_library)
+
           @open_library_client = open_library_client
+          @open_library = open_library
         end
 
         def describe_candidate(candidate)
@@ -59,9 +67,8 @@ module DataImporters
               params: search_params(query),
               size: OPENSEARCH_SIZE,
               includes: [:authors, :identifiers]
-            ),
-            OpenLibrarySource.new(query: query, client: @open_library_client, limit: OPEN_LIBRARY_LIMIT)
-          ]
+            )
+          ] + open_library_sources(query)
         end
 
         def domain_guidance
@@ -83,6 +90,13 @@ module DataImporters
         end
 
         private
+
+        def open_library_sources(query)
+          sources = []
+          sources << OpenLibraryIdentifierSource.new(query: query, client: @open_library_client) unless @open_library == :resolve
+          sources << OpenLibrarySource.new(query: query, client: @open_library_client, limit: OPEN_LIBRARY_LIMIT) unless @open_library == :identifiers
+          sources
+        end
 
         def identifier_lookups(query)
           IDENTIFIER_LOOKUPS.flat_map do |field, identifier_type|
