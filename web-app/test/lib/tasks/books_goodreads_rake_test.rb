@@ -43,4 +43,25 @@ class BooksGoodreadsRakeTest < ActiveSupport::TestCase
 
     assert_output(nil, /missing Goodreads export headers/) { assert_raises(SystemExit) { @task.invoke(@path) } }
   end
+
+  test "verify_unverified queues the sweep, with a limit when one is given" do
+    task = Rake::Task["books:goodreads:verify_unverified"]
+    Books::Goodreads::VerifyUnverifiedJob.expects(:perform_async).with
+    Books::Goodreads::VerifyUnverifiedJob.expects(:perform_async).with(50)
+
+    assert_output(/queued Books::Goodreads::VerifyUnverifiedJob/) { task.invoke }
+    task.reenable
+    assert_output(/limit 50/) { task.invoke("50") }
+  ensure
+    task&.reenable
+  end
+
+  test "seed_legacy_pages prints what it loaded" do
+    seed = Services::Books::GoodreadsPages::SeedLegacyPages
+    seed.expects(:call).returns(seed::Result.new(success?: true, data: {inserted: 3, already_present: 1, skipped: 2}, errors: []))
+
+    assert_output(/inserted 3, already present 1, skipped 2/) { Rake::Task["books:goodreads:seed_legacy_pages"].invoke }
+  ensure
+    Rake::Task["books:goodreads:seed_legacy_pages"].reenable
+  end
 end

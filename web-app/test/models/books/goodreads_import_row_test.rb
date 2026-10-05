@@ -16,6 +16,7 @@ require "test_helper"
 #  rating               :integer
 #  raw                  :jsonb            not null
 #  read_count           :integer
+#  replay_finding       :integer
 #  review_body          :text
 #  row_number           :integer          not null
 #  shelf_positions      :jsonb            not null
@@ -24,11 +25,13 @@ require "test_helper"
 #  updated_at           :datetime         not null
 #  goodreads_edition_id :bigint
 #  import_id            :bigint           not null
+#  legacy_book_id       :bigint
 #
 # Indexes
 #
 #  index_books_goodreads_import_rows_on_goodreads_edition_id      (goodreads_edition_id)
 #  index_books_goodreads_import_rows_on_import_id_and_row_number  (import_id,row_number) UNIQUE
+#  index_books_goodreads_import_rows_on_replay_finding            (replay_finding)
 #
 # Foreign Keys
 #
@@ -49,6 +52,12 @@ module Books
       existing = books_goodreads_import_rows(:war_and_peace_row)
 
       assert_not GoodreadsImportRow.new(import: existing.import, row_number: existing.row_number).valid?
+    end
+
+    test "replay findings use the replay_ prefix" do
+      assert_equal %w[agrees duplicate disagrees unmatched no_legacy_choice awaiting_full_pass],
+        GoodreadsImportRow.replay_findings.keys
+      assert_respond_to GoodreadsImportRow.new, :replay_agrees?
     end
   end
 end

@@ -548,6 +548,17 @@ module Books
         assert_equal 0, SearchIndexRequest.where(parent_type: "Books::Book").count
       end
 
+      test "defer_rankings leaves the author ranking recalculation to the caller" do
+        ::Books::CalculateAuthorRankingsJob.expects(:perform_async).never
+
+        merger = ::Books::Author::Merger.new(source: @source, target: @target, defer_rankings: true)
+        result = merger.call
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_nil merger.stats[:post_commit_error],
+          "a violated Mocha expectation in a post-commit step is swallowed into this key"
+      end
+
       test "schedules the author ranking recalculation" do
         ::Books::CalculateAuthorRankingsJob.expects(:perform_async).once
 

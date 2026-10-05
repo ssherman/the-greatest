@@ -6,18 +6,21 @@ module Services
       # Resolves one Goodreads edition (Goodreads import spec §5):
       #
       # 1. Cache: an edition already resolved to a book that still exists (or
-      #    parked) is reused. The merger moves editions, so merges are
-      #    followed; a deleted book nullifies book_id and the edition is
-      #    resolved again.
+      #    parked) is reused, and one waiting for its Goodreads page is left to
+      #    wait. The merger moves editions, so merges are followed; a deleted
+      #    book nullifies book_id and the edition is resolved again.
       # 2. Finder: the full books finder, with the edition as its subject and
       #    the series and other credited names as AI context.
       # 3. Outcome: a match links (the finder flags medium, low and fallback
-      #    decisions). No match creates a provisional book through CreateBook.
-      #    An AI "none of these" creates too, and is flagged here; nothing
-      #    ever falls back to the top search hit. A failed AI call (the
-      #    finder's fallback decision) is not an answer: it raises, and the
-      #    edition waits for the next run instead of creating a duplicate of a
-      #    book the AI never got to judge.
+      #    decisions). No match goes to Goodreads verification (spec §6): with
+      #    the edition's page already cached, SettleEdition creates or parks
+      #    at once; otherwise the edition waits (verification: pending) and a
+      #    fetch is queued once that commits, so a rolled-back dry run queues
+      #    nothing. An AI "none of these" is flagged here and goes the same
+      #    way; nothing ever falls back to the top search hit. A failed AI call
+      #    (the finder's fallback decision) is not an answer: it raises, and
+      #    the edition waits for the next run instead of creating a duplicate
+      #    of a book the AI never got to judge.
       #
       # A decision that does not end up as the edition's (the run failed, or
       # another import resolved the edition first) is taken out of the review
@@ -42,8 +45,9 @@ module Services
 
         def call
           return done(:cached) if settled?
+          return done(:pending) if @edition.verification_pending?
 
-          match = @finder.call(query: query, subject: @edition)
+          match = @finder.call(query: EditionQuery.call(@edition), subject: @edition)
           @import.increment!(:ai_calls_count) if ai_call?(match.decision)
           outcome = resolve(match)
           supersede_unused(match.decision)
@@ -68,7 +72,29 @@ module Services
           end
 
           match.decision&.update!(needs_review: true) if match.decided_by == :ai
-          CreateBook.call(edition: @edition, import: @import, match: match, importer: @importer).data[:outcome]
+          page = ::Books::GoodreadsPage.conclusive.find_by(goodreads_book_id: @edition.goodreads_book_id)
+          if page
+            return SettleEdition.call(edition: @edition, page: page, match: match, import: @import, importer: @importer).data[:outcome]
+          end
+
+          await_verification(match)
+        end
+
+        # Under the signature lock CreateBook takes, so an edition another
+        # import resolved or sent to Goodreads while this one ran the finder
+        # is left as that import left it.
+        def await_verification(match)
+          ActiveRecord::Base.transaction(requires_new: true) do
+            CreateBook.lock(@edition)
+            @edition.reload
+            next :pending if @edition.verification_pending?
+            next :cached if settled?
+
+            @edition.update!(verification: :pending, match_decision: match.decision, pending_import: @import)
+            goodreads_book_id = @edition.goodreads_book_id
+            ActiveRecord.after_all_transactions_commit { ::Books::Goodreads::FetchPageJob.perform_async(goodreads_book_id) }
+            :pending
+          end
         end
 
         def supersede(decision)
@@ -89,20 +115,6 @@ module Services
 
         def settled?
           @edition.resolved_at.present? && (@edition.book_id.present? || @edition.parked?)
-        end
-
-        def query
-          ::DataImporters::Books::Book::ImportQuery.new(
-            title: @edition.title,
-            author_names: [@edition.primary_author],
-            year: @edition.original_publication_year || @edition.year_published,
-            isbn13: [@edition.isbn13],
-            isbn10: [@edition.isbn10],
-            goodreads_id: [@edition.goodreads_book_id.to_s],
-            series_name: @edition.series_name,
-            series_number: @edition.series_number,
-            context_author_names: @edition.additional_authors
-          )
         end
 
         # A fallback decision only comes from an AI call that failed, which

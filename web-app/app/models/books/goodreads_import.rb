@@ -45,6 +45,11 @@ module Books
     has_many :records, class_name: "Books::GoodreadsImportRecord", foreign_key: :import_id, inverse_of: :import,
       dependent: :delete_all
     has_many :editions, -> { distinct }, through: :rows, source: :goodreads_edition
+    has_many :pending_editions, class_name: "Books::GoodreadsEdition", foreign_key: :pending_import_id,
+      inverse_of: :pending_import, dependent: :nullify
+    # The upload as received, Private Notes included, so it lives on the
+    # private service only (spec §3). Rows store the parsed fields without it.
+    has_one_attached :file, service: :private_imports
 
     enum :source, {member: 0, legacy_replay: 1}
     enum :status, {queued: 0, parsing: 1, resolving: 2, verifying: 3, writing: 4, complete: 5, failed: 6}

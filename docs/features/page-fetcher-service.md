@@ -153,8 +153,13 @@ page = PageFetcher::Client.new.fetch(
 )
 page.status          # the SITE's status: a 403 is still a successful fetch
 page.selector_found  # false when the selector never appeared
-page.html            # never logged, and never stored -- store what you parse
+page.html            # never logged; store what you parse (one exception below)
 ```
+
+The one exception is Goodreads book pages. The Goodreads import keeps each page's HTML gzipped in
+private storage, so a parser fix can re-read it without fetching again. These are public pages,
+stored for internal parsing and never served (`docs/features/goodreads-import.md`, "Goodreads
+verification").
 
 Every failure is a `PageFetcher::Exceptions::Error`:
 

@@ -45,8 +45,9 @@ that one rule: ranked pages and filters, browse counts, the global canon, top bo
 and the API's ranked endpoints.
 
 **Whoever flags an existing book provisional must queue a books ranking recalculation, then an
-author ranking recalculation** (the legacy replay's `mark_provisional`, increment 5). Until then,
-the book keeps its old rank.
+author ranking recalculation.** Until then, the book keeps its old rank. The legacy replay's apply
+step does this: one `CalculateRankingsJob` per configuration that ranked the book, plus the default
+one, whose job cascades to the author rankings.
 
 ## Surfaces
 
@@ -64,7 +65,9 @@ the book keeps its old rank.
 | Sitemaps | none exist yet. When built, they must read through `catalog` |
 
 Curated list pages (`Books::ListsController#show`) are not filtered: imports never write curated
-list items.
+list items, and the legacy replay never flags a book on a curated list provisional on its own. Such
+a book's `mark_provisional` is only proposed, for an admin (`docs/features/goodreads-import.md`,
+"Legacy replay").
 
 ## Show pages
 

@@ -17,15 +17,34 @@ module Services
           report = DryRun.call(bytes: @bytes, user: users(:regular_user)).data[:report]
 
           assert_match "Goodreads dry run: 3 rows, 2 editions. Nothing was saved.", report
-          assert_match "matched 1 | created 1 | flagged 0 | failed rows 1 | AI calls 0", report
+          assert_match "matched 1 | created 0 | waiting 1 | parked 0 | flagged 0 | failed rows 1 | AI calls 0", report
           assert_match %(row 1: gr 12345678 "War and Peace" by Leo Tolstoy -> matched Books::Book##{books_books(:war_and_peace).id}), report
-          assert_match %r{row 2: gr 90000001 "The Quiet Year" by Anna Brenner -> created provisional Books::Book#\d+ "The Quiet Year" \(unverified\)}, report
+          assert_match %(row 2: gr 90000001 "The Quiet Year" by Anna Brenner -> waiting for Goodreads verification), report
           assert_match "row 3: failed: no Goodreads book id", report
+        end
+
+        test "a cached page settles the edition in the report" do
+          goodreads_page(goodreads_book_id: 90_000_001)
+
+          report = DryRun.call(bytes: @bytes, user: users(:regular_user)).data[:report]
+
+          assert_match %r{row 2: gr 90000001 "The Quiet Year" by Anna Brenner -> created provisional Books::Book#\d+ "The Quiet Year" \(verified\)}, report
+        end
+
+        test "a cached not-found page parks the edition in the report" do
+          goodreads_page(goodreads_book_id: 90_000_001, outcome: :not_found)
+
+          report = DryRun.call(bytes: @bytes, user: users(:regular_user)).data[:report]
+
+          assert_match %(row 2: gr 90000001 "The Quiet Year" by Anna Brenner -> parked: not found on Goodreads), report
+          assert_match "matched 1 | created 0 | waiting 0 | parked 1 |", report
         end
 
         test "saves nothing" do
           counted = ["::Books::Book.count", "::Books::Author.count", "::Books::GoodreadsImport.count",
-            "::Books::GoodreadsEdition.count", "::Books::GoodreadsImportRow.count", "::MatchDecision.count", "::Identifier.count"]
+            "::Books::GoodreadsEdition.count", "::Books::GoodreadsImportRow.count", "::MatchDecision.count", "::Identifier.count",
+            "::Books::GoodreadsPage.count"]
+          ::Books::Goodreads::FetchPageJob.expects(:perform_async).never
 
           assert_no_difference(counted) { DryRun.call(bytes: @bytes, user: users(:regular_user)) }
         end

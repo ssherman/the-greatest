@@ -77,5 +77,20 @@ module Books
       assert_equal [0, 0, 0], [GoodreadsImport.where(id: import.id).count,
         GoodreadsImportRow.where(import_id: import.id).count, GoodreadsImportRecord.where(import_id: import.id).count]
     end
+
+    test "deleting an import leaves the editions it was waiting on, with nobody waiting" do
+      import = GoodreadsImport.create!(user: users(:regular_user), status: :resolving)
+      edition = books_goodreads_editions(:unresolved_edition)
+      edition.update!(verification: :pending, pending_import: import)
+
+      import.destroy!
+
+      assert_nil edition.reload.pending_import_id
+      assert edition.verification_pending?
+    end
+
+    test "keeps the upload on the private imports service" do
+      assert_equal :private_imports, Books::GoodreadsImport.reflect_on_attachment(:file).options[:service_name]
+    end
   end
 end

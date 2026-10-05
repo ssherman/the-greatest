@@ -361,6 +361,16 @@ module DataImporters
           assert_equal ["Voyna i mir"], summary[:alternate_titles]
           assert summary.key?(:ranked_position)
         end
+
+        test "open_library mode chooses which Open Library sources run" do
+          query = ImportQuery.new(title: "Dune", author_names: ["Frank Herbert"])
+          names = ->(mode) { Finder.new(open_library: mode).send(:candidate_sources, query).map(&:name) }
+
+          assert_equal %i[identifier exact opensearch open_library], Finder.new.send(:candidate_sources, query).map(&:name)
+          assert_equal %i[identifier exact opensearch open_library_identifier], names.call(:identifiers)
+          assert_equal %i[identifier exact opensearch open_library_identifier open_library], names.call(:all)
+          assert_raises(ArgumentError) { Finder.new(open_library: :sometimes) }
+        end
       end
     end
   end

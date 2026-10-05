@@ -772,6 +772,22 @@ module Books
         assert result.success?, "Merger failed: #{result.errors.inspect}"
       end
 
+      test "defer_rankings leaves the ranking and favorites jobs to the caller, and names the configurations" do
+        config = ranking_configurations(:books_global)
+        RankedItem.create!(item: @source, ranking_configuration: config, rank: 5)
+        BulkCalculateWeightsJob.expects(:perform_async).never
+        CalculateRankingsJob.expects(:perform_in).never
+        GenerateUserFavoritesListsJob.expects(:perform_async).never
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target, defer_rankings: true)
+        result = merger.call
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_nil merger.stats[:post_commit_error],
+          "a violated Mocha expectation in a post-commit step is swallowed into this key"
+        assert_equal [config.id], merger.affected_ranking_configurations
+      end
+
       test "collects the source's ranking configurations before the destroy cascade" do
         config = ranking_configurations(:books_global)
         # Only the SOURCE is ranked. If the ids were collected after the destroy,

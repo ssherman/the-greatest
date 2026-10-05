@@ -24,6 +24,8 @@ module GoodreadsImportHelper
     ::Search::Books::Search::AuthorByName.stubs(:call).returns([])
     ::Books::EnrichBookJob.stubs(:perform_async)
     ::Books::Authors::WikidataJob.stubs(:perform_async)
+    # Sidekiq runs inline in tests; a test that cares asserts on this.
+    ::Books::Goodreads::FetchPageJob.stubs(:perform_async)
   end
 
   def open_library_abstain
@@ -67,6 +69,17 @@ module GoodreadsImportHelper
       goodreads_book_id: 90_000_000 + ::Books::GoodreadsEdition.count,
       signature: ::Books::Goodreads::ExportRow.signature(title, author),
       title: title, primary_author: author
+    }.merge(attributes))
+  end
+
+  # A cached Goodreads page. authors: [name, role] pairs, the first credited
+  # as primary. The defaults back goodreads_edition's defaults.
+  def goodreads_page(goodreads_book_id:, title: "The Quiet Year", authors: [["Anna Brenner", "Author"]], outcome: :found, **attributes)
+    found = outcome.to_sym == :found
+    ::Books::GoodreadsPage.create!({
+      goodreads_book_id: goodreads_book_id, source: :fetched, outcome: outcome, fetched_at: Time.current,
+      title: (title if found),
+      authors: found ? authors.each_with_index.map { |(name, role), index| {"name" => name, "role" => role, "primary" => index.zero?} } : []
     }.merge(attributes))
   end
 

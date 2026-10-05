@@ -11,13 +11,14 @@ catalog's bad data; this one is built so that it cannot. Spec:
 |---|---|---|
 | 1 | Optional review ratings | shipped |
 | 2 | Provisional books and authors (`docs/features/books-provisional-records.md`) | shipped |
-| 3 | Resolver core: parsing, tables, edition resolution, dry run | this doc |
-| 4 | Goodreads page fetcher and verification | not started |
-| 5 | Legacy replay | not started |
+| 3 | Resolver core: parsing, tables, edition resolution, dry run | shipped |
+| 4 | Goodreads page fetcher and verification | shipped |
+| 5 | Legacy replay | this doc |
 | 6 | Member upload, library write, admin approval | not started |
 | 7 | Finishing failed legacy imports | not started |
 
-Nothing in production calls the resolver yet. The only entry point is the dry-run rake.
+No member flow calls the resolver yet. The entry points are the dry-run rake and the legacy replay's rakes ("Legacy
+replay" below).
 
 ## Parsing
 
@@ -71,8 +72,7 @@ is intended: the replay rebuilds them.
    edition as the match decision's subject. The finder does not filter provisional books, so a
    later import links to an earlier import's provisional book instead of making another.
 3. **Outcome.** A match links. The finder flags medium, low and fallback decisions. No match
-   creates a provisional book through `CreateBook`. An AI "none of these" creates too, and is
-   flagged. Nothing falls back to the top search hit. A failed AI call (the finder's `fallback`
+   goes to Goodreads verification (below). An AI "none of these" goes there too, and is flagged. Nothing falls back to the top search hit. A failed AI call (the finder's `fallback`
    decision) is not an answer: the edition is left unresolved for the next run, so an AI outage
    cannot fill the catalog with duplicates. A decision that does not end up as the edition's
    (the run failed, or another import resolved the edition first) is taken out of the review
@@ -91,12 +91,125 @@ considered), and otherwise creates through `DataImporters::Books::Book::Importer
 A book that comes out of the importer with no author is rolled back (`CreateFailed`) and the
 edition retried later: an authorless book cannot be found by any later author-aware search.
 
-Every creation is `verification: unverified` until increment 4 adds the Goodreads fetch.
-
 Counters (`matched`, `created`, `flagged`, `parked`) are recomputed from state after each run, so a
 retry is safe. `ai_calls_count` counts calls as they happen. Matching AI is not capped. A failing
 edition records its error on its rows and stays unresolved for the next run; Postgres errors
 re-raise.
+
+## Goodreads verification
+
+An edition the finder cannot match is checked against its Goodreads page before a book is made
+for it. Matched editions never touch Goodreads.
+
+- **Cache.** `books_goodreads_pages` holds one row per Goodreads id. A `found` or `not_found` page
+  is the answer for good. A `blocked` or `unparseable` page keeps its HTML for a later look and is
+  fetched again. HTML is gzipped on the private `private_imports` storage service
+  (`PRIVATE_IMPORTS_STORAGE_*`, `deployment/ENV.md`) and never served; nothing generates a URL
+  for it.
+- **Waiting.** With the page cached, `SettleEdition` decides at once. Otherwise the edition waits
+  (`verification: pending`, with the waiting import in `pending_import_id`), and
+  `Books::Goodreads::FetchPageJob` is queued once that commits.
+- **Fetching.** `FetchPageJob` runs on the `goodreads_fetch` capsule, one at a time, through
+  `PageFetcher::Client` with `wait_for_selector: "h1"`. `Books::Goodreads::FetchGate` (Redis)
+  hands out start times at least `fetch_interval` apart (15 s) and caps a UTC day at
+  `daily_fetch_cap` (1,500), each fetch counted against the day it starts on, so a line that runs
+  past midnight fills the next day's cap. A job waits for its turn by rescheduling itself, and a turn that came
+  due late (after a deploy or a slow fetch) still waits out `fetch_interval` since the last fetch
+  actually began. A page with no title or no contributors is unparseable, never found. A 403, a challenge or
+  an unrecognizable page blocks all fetching for `block_cooldown` (6 h). Goodreads' own 503 page
+  and timeouts are retried through the line up to `fetch_attempts` (3). Settings:
+  `config/initializers/goodreads.rb`.
+- **Reading.** `Books::Goodreads::BookPage` reads `__NEXT_DATA__`, or the markup and `ld+json`
+  when a page has none (1 page in 20, measured). It reads title, series, contributors with roles,
+  original year, ISBNs and ASIN, and never descriptions. An unknown id is a 200 titled "Page not
+  found".
+- **Agreement** (`Books::Goodreads::Agreement`):
+  - Main titles must match. A main title is normalized, with no series suffix, no subtitle and no
+    punctuation.
+  - The edition's primary author must be one of these, as a fuller or shorter form of the same
+    name:
+    - the page's primary contributor;
+    - an Author or Writer;
+    - a contributor with no role.
+- **Outcome** (`SettleEdition`):
+  - **Agrees:** a provisional book with the page's title and its Author and Writer contributors
+    (never translators, illustrators or editors), verified. Series are not linked, because
+    `Books::Series` has no provisional flag. The page row keeps every series it names, with
+    Goodreads' series id, for a later series backfill.
+  - **Not found or mismatch:** the edition is parked, its waiting rows read "not found on
+    Goodreads" or "does not match its Goodreads page", and nothing is created.
+  - **No page** (fetcher down, blocked, cap spent): the book is created unverified.
+- **Sweep.** `bin/rails "books:goodreads:verify_unverified[limit]"` queues a check for every
+  provisional book created unverified, and for editions stuck waiting longer than a full day's
+  fetch line (cap × interval, about 6.25 h) plus an hour. An edition whose created book was since
+  deleted is left alone: the next resolution sends it back to the finder. A later
+  `not_found` or `mismatch` is recorded on the edition and left for the admin page
+  (increment 6). The book is not touched.
+
+Moving an import through `verifying` and recounting it after a late settle belong to the import
+job (increment 6).
+
+### Legacy seed
+
+    bin/rails books:goodreads:seed_legacy_pages
+
+Loads the legacy app's scraped `goodreads_books` rows into the cache as found pages with
+`source: legacy` and no HTML. There are about 12k page lookups and 27k search results; the
+export-derived rows are skipped. The legacy writers merged translators, illustrators and an export
+row's own author into one `authors` array, so every legacy name has no role: any of them backs an
+edition, and only the one that agreed becomes an author. A cached id is never overwritten, so the
+task can run again after each migration pass.
+
+## Legacy replay
+
+Spec §12. The legacy app's 803 imports are replayed against the new resolver to measure it and to find the bad data
+legacy left behind. Every finding is a `Books::RepairVerdict` (`books_repair_verdicts`, no foreign keys, keyed by
+preserved ids): **never truncate that table**, the launch sequence relies on it. Nothing changes the catalog except
+`books:goodreads_replay:apply`, which refuses to run while `config.x.goodreads_replay.auto_apply` is false (the default).
+
+A pass, after every books migration pass and in the launch sequence:
+
+```bash
+bin/rails books:goodreads_replay:load        # legacy imports, uploads (legacy R2, LEGACY_R2_*), rows
+bin/rails books:goodreads_replay:fix_slugs   # 543 slug-form Goodreads ids -> strip_identifier (rule, approved)
+bin/rails books:goodreads_replay:apply       # re-applies every approved verdict from earlier passes (gated)
+bin/rails books:goodreads_replay:resolve     # queues pass one (low) and pass two (serial); re-run until both are 0
+bin/rails books:goodreads_replay:duplicates  # one AI check per author name group, then the book-pair rule
+bin/rails books:goodreads_replay:junk        # authorless books, books relinks leave unsupported
+bin/rails books:goodreads_replay:apply
+bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.md]"
+```
+
+- **Load** is slow the first time: about 2.5 hours on development for ~388k rows, because rows are written one at a
+  time. Each upload is downloaded once and kept on the private bucket. A blob the legacy bucket no longer holds fails
+  that import only.
+- **Resolve** runs the books finder in `verify: true`. Pass one uses the fast sources, with Open Library's identifier
+  lookup in place of `/resolve`. Pass two adds `/resolve`, only for editions pass one disagreed on or could not match.
+  Each replay row gets a `replay_finding` (agrees, duplicate, disagrees, unmatched, no legacy choice). Legacy's
+  choice is the book holding the row's Goodreads id that is on that user's lists. Matches that agree with legacy warm
+  the edition cache; a disagreement does not, because it is a relink an admin may reject.
+  The replay never creates books and never fetches Goodreads pages; it only reads cached ones.
+- **Relinks are all AI-decided.** Measured 2026-10-05: under `verify: true`, legacy's book always holds the row's
+  Goodreads id, and that hit blocks the exact-match rule for any other book. So no rule ever decides a disagreement.
+  Relinks are proposed, and the admin queue approves them in bulk. A relink also moves the row's identifiers when
+  legacy's book contradicts the row on title and author.
+- **Authors** are grouped by name with punctuation and spaces removed, and each group gets one `fast` AI call that
+  clusters it into people (`Services::Ai::Tasks::Books::GroupSameAuthorsTask`). A merge is auto-approved only when the
+  AI is highly confident and there is no year or external-identifier conflict.
+- **Books** in a pending duplicate pair are auto-merged only with an equal title, identical authors and a shared
+  identifier. Every other pair stays in the Duplicates queue.
+- **Junk:** an authorless book is auto-flagged provisional unless it is on a curated list, in which case it is only
+  proposed: curated list pages are not filtered. Flagging uses `update!`, so the book is reindexed, and apply queues a
+  ranking recalculation for every configuration that ranked it, plus the default one, which cascades to authors.
+- **Admin:** Books → Repair Verdicts filters by kind, status, decider and confidence, approves or rejects, and approves in
+  bulk. Approval never applies; the next `apply` does. Rejecting an applied `mark_provisional` reverts it. Rejecting an
+  applied merge or relink undoes nothing now, but stops it being applied again after the next books re-migration.
+- **A relink copies instead of moving** when another of the user's replay rows still names legacy's book: the right book
+  is added beside it, and the legacy book keeps the item and the review. Junk detection treats such a book as supported.
+- **Apply batches the follow-ups.** Merges run with `defer_rankings: true`, and one run queues each ranking
+  recalculation, the favorites rebuild and the author rankings once, not once per merge.
+- **Before auto-apply:** hand-check 50 auto verdicts per kind with `books:goodreads_replay:sample[kind]`, then set
+  `auto_apply: true` in `config/initializers/goodreads_replay.rb`.
 
 ## Dry run
 
@@ -104,7 +217,8 @@ re-raise.
     bin/rails "books:goodreads:resolve_file[/path/to/export.csv,USER_ID]"
 
 Parses and resolves the file exactly as an import would, prints one line per edition (matched book,
-created book, flagged reason, failed sources) and rolls everything back. Open Library requests and
+created book, flagged reason, failed sources) and rolls everything back. A dry run fetches no Goodreads page: an unmatched edition whose page is
+not cached reports "waiting for Goodreads verification". Open Library requests and
 matching AI calls are real and are paid for. To reach the deployed Open Library service,
 `web-app/.env` needs `OPEN_LIBRARY_SERVICE_URL` and the Cloudflare Access pair
 (`CLOUDFLARE_ACCESS_CLIENT_ID`, `CLOUDFLARE_ACCESS_CLIENT_SECRET`); without them every decision
