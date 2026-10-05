@@ -11,5 +11,10 @@ namespace :books do
     task load: :environment do
       puts "legacy Goodreads imports: #{tally.call(Services::Books::GoodreadsReplay::LoadImports.call.data[:tally])}"
     end
+
+    desc "Record a strip_identifier verdict for every slug-form Goodreads id (applied by books:goodreads_replay:apply)"
+    task fix_slugs: :environment do
+      puts "slug-form Goodreads ids: #{Services::Books::GoodreadsReplay::FixSlugIdentifiers.call.data[:recorded]} verdicts"
+    end
   end
 end

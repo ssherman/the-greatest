@@ -25,4 +25,10 @@ class BooksGoodreadsReplayRakeTest < ActiveSupport::TestCase
 
     assert_output(/loaded 795, not_csv 8/) { Rake::Task["books:goodreads_replay:load"].invoke }
   end
+
+  test "fix_slugs prints how many slug ids it recorded" do
+    REPLAY::FixSlugIdentifiers.expects(:call).returns(result(recorded: 543))
+
+    assert_output(/slug-form Goodreads ids: 543 verdicts/) { Rake::Task["books:goodreads_replay:fix_slugs"].invoke }
+  end
 end
