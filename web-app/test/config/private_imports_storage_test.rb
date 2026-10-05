@@ -9,8 +9,20 @@ require "test_helper"
 class PrivateImportsStorageTest < ActiveSupport::TestCase
   VARIABLES = %w[PRIVATE_IMPORTS_STORAGE_BUCKET PRIVATE_IMPORTS_STORAGE_ENDPOINT
     PRIVATE_IMPORTS_STORAGE_ACCESS_KEY_ID PRIVATE_IMPORTS_STORAGE_SECRET_ACCESS_KEY].freeze
+  # With no keys configured the AWS SDK walks its credential chain: AWS_*
+  # variables, then ~/.aws files, then the instance metadata endpoint (an
+  # HTTP call WebMock refuses on CI). Each test is a host with none of them,
+  # so it runs the same on a laptop with ~/.aws as on CI.
+  AWS_VARIABLES = %w[AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE
+    AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE AWS_EC2_METADATA_DISABLED].freeze
 
-  setup { @saved = VARIABLES.to_h { |name| [name, ENV[name]] } }
+  setup do
+    @saved = (VARIABLES + AWS_VARIABLES).to_h { |name| [name, ENV[name]] }
+    AWS_VARIABLES.each { |name| ENV[name] = nil }
+    ENV["AWS_SHARED_CREDENTIALS_FILE"] = ENV["AWS_CONFIG_FILE"] = "/nonexistent/aws"
+    ENV["AWS_EC2_METADATA_DISABLED"] = "true"
+  end
+
   teardown { @saved.each { |name, value| ENV[name] = value } }
 
   def service_for(environment, **variables)
