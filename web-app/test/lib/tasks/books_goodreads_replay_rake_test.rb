@@ -31,4 +31,10 @@ class BooksGoodreadsReplayRakeTest < ActiveSupport::TestCase
 
     assert_output(/slug-form Goodreads ids: 543 verdicts/) { Rake::Task["books:goodreads_replay:fix_slugs"].invoke }
   end
+
+  test "resolve queues both passes and says how many" do
+    Books::GoodreadsReplay::ResolveEditionJob.expects(:enqueue_pending).returns({first_pass: 12, full_pass: 3})
+
+    assert_output(/queued 12 editions for pass one and 3 for the full pass/) { Rake::Task["books:goodreads_replay:resolve"].invoke }
+  end
 end

@@ -16,5 +16,12 @@ namespace :books do
     task fix_slugs: :environment do
       puts "slug-form Goodreads ids: #{Services::Books::GoodreadsReplay::FixSlugIdentifiers.call.data[:recorded]} verdicts"
     end
+
+    desc "Queue replay editions: pass one (fast sources) for rows without a finding, pass two (with Open Library " \
+      "/resolve, on serial) for rows awaiting it. Re-run until both counts are 0."
+    task resolve: :environment do
+      counts = Books::GoodreadsReplay::ResolveEditionJob.enqueue_pending
+      puts "queued #{counts[:first_pass]} editions for pass one and #{counts[:full_pass]} for the full pass"
+    end
   end
 end
