@@ -489,10 +489,27 @@ cache and pinned threshold is stale. `weights.json` was recalibrated with `--bas
 vector, which under v3 semantics was the floor to beat (TEST objective 0.9333 -> 0.9383). The
 search raised `margin_threshold` from 0.175 to 0.204. That costs nine list-row accepts, but at
 0.175 two generic-title cases elsewhere become false merges: Freeman's *George Washington*
-(margin 0.203) and a cluster of 18 different Claremont books all titled "X-Men" (margin
-0.195), where a record credited only to Louise Simonson joined through a co-credited record:
-cluster authors chain transitively, so a member need not share an author with the query. Both sit within 0.01 of the threshold, and two false merges would still pass the global
-0.015 gate, so a later recalibration that lowers the margin must re-check these two by hand.
+(margin 0.203) and an 18-member cluster of Claremont records titled "X-Men" (margin 0.195),
+where a record credited only to Louise Simonson joined through a co-credited record: cluster
+authors chain transitively, so a member need not share an author with the query. Both sit
+within 0.01 of the threshold, and two false merges would still pass the global 0.015 gate, so a
+later recalibration that lowers the margin must re-check these two by hand.
+
+**An accept can name a key no local book holds, even when one of our books is that work.** The
+v3 Rails replay over the 200 spike rows accepted 80 keys. 10 differed from the key our linked
+book stores, and none of the 10 is a wrong pick. In two, our key is a member of
+`decision.duplicates`. In six, our key is one Open Library has since redirected into the
+accepted work. Redirected keys never appear in `duplicates`, and `/resolve` candidates always
+carry an empty `redirected_from`, so the redirect branch of `OpenLibrarySource#local_holders`
+never fires on them. In the other two our own data is wrong. Only one of the 10 accepted keys is
+held locally. When nothing local holds the accepted key, the finder's rules 1 and 2 cannot
+fire. An `unmatched` answer then makes the importer create a new book and stamp it with the
+accepted key, a duplicate of the book we already have. In the replay this happened once (*My
+Kind of Place*: the AI answered `unmatched`; rule 5 itself never fired). The other eight were saved
+only by rule 4's exact title-and-author match. Anything that creates books from these answers,
+the books list wizard first, must count a local holder of the accepted key, of any
+`decision.duplicates` key, or of any key that redirects to one of them as a match before it
+creates anything. Details in "Rails replay" in `docs/data-quality/ol-matcher-v3-before-after.md`.
 
 ### Recall by blocking rule (reading 7)
 

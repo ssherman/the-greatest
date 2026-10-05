@@ -52,7 +52,11 @@ how close they are. See "The false merges the margin holds back".
 Three strata lost more than one correct case. None is a code defect. The `non_latin_title`
 losses do point at a gap worth a follow-up (see "Strata that lost more than one correct case").
 
-The Rails replay (spec item 5) is still running. Its section below is a placeholder.
+The Rails replay (spec item 5) leaves the finder correct on 195 of 200 rows in both runs, and
+Open Library's accepts rise from 7 to 80. None of the 10 accepts that differ from our stored key
+is a wrong book. They do expose a hazard for anything that creates books from these answers. A
+local copy of the work can hold a duplicate or redirected key that the finder never looks up,
+so an import creates a second copy. See "The hazard: an accept no local book holds".
 
 ## Acceptance criteria
 
@@ -64,7 +68,7 @@ From the spec's "Before/after evaluation". All must hold to merge.
 | Precision at accept no lower than baseline minus 0.01 | 1.0000 | 1.0000 | **Met** |
 | `list_row` abstention under half the baseline (below 0.463), or the remaining reasons explained | 0.927 | 0.507 | Halving: **not met** (0.507 against 0.463). Fallback: **met**, the reasons are explained in "Remaining abstains on list rows" |
 | No newly accepted case is a wrong book (a non-canonical duplicate counts as right, noted) | -- | 0 wrong of 89 | **Met.** 3 non-canonical duplicates |
-| The Rails replay shows no row where the finder's answer got worse | -- | -- | **Pending.** See "Rails replay (pending)" |
+| The Rails replay shows no row where the finder's answer got worse | 195 of 200 correct | 195 of 200 correct | **Met.** 0 rows worse, no pick changed; 64 rows now `matched certain` by identifier. Three wrong `unmatched` rows lost their review flag (see "Rails replay") |
 
 ## Hand review of the decision diff
 
@@ -376,8 +380,8 @@ close to the threshold:
 - `shared_key_collision-036`, Claremont's *X-Men: The Dark Phoenix Saga*. Margin **0.195**. Different
   Claremont collections all titled "X-Men" cluster as "duplicates": 18 members in the prepared
   cache behind reading 8 (counts through the live API can differ slightly). The dominance rule
-  picks `OL461810W` (14 editions) because the next-largest member, `OL14928020W` (7 editions),
-  is under half its size. That 7-edition record is credited to Louise Simonson (and Louise Jones)
+  picks `OL461810W` because it has 14 editions against 7 for the next-largest member,
+  `OL14928020W`, which clears the 1.5 dominance ratio. That 7-edition record is credited to Louise Simonson (and Louise Jones)
   only. It shares no author with the query. It joined the cluster through a co-credited record,
   `OL25324064W` (Claremont and Simonson among others). Clusters are connected components, so
   authors chain from one member to the next, and that chaining is part of the risk. The pick is
@@ -391,12 +395,114 @@ below about 0.203 would bring back at least the first one, and nothing in CI or 
 notice. One way to guard it: pin these two cases in `test_eval_regression.py` as "must not
 accept".
 
-## Rails replay (pending)
+## Rails replay
 
-*The controller fills this section in once the v3 replay against the 200 spike rows finishes
-(`/home/shane/ol-data/spot-checks/replay-v3.jsonl`). The v2 replay
-(`/home/shane/ol-data/spot-checks/replay-v2.jsonl`) found the finder correct on 195 of 200
-rows. Open Library abstained on 193 and accepted 7.*
+The 200 spike rows went through the Rails book finder and `POST /resolve` twice: against the
+docker v2 service on :8080 (`/home/shane/ol-data/spot-checks/replay-v2.jsonl`) and against a v3
+API started from this branch on :8095 (`replay-v3.jsonl`). The script is step 4 of
+"Regenerating". Each row is graded against the book its list item links to. That link is the
+label here, and it is wrong at least once (*The Sparrow*, below).
+
+| | v2 | v3 |
+|---|---:|---:|
+| Open Library accepts | 7 | **80** |
+| Open Library abstains | 193 | 120 |
+| Accepts that equal our book's stored key | 5 | 69 |
+| Accepts that differ from it | 2 | 10 |
+| Accepts where our book stores no key | 0 | 1 |
+| Finder correct | 195 | **195** |
+| Finder `matched certain` (identifier) | 5 | 69 |
+| Finder `matched high` | 191 | 127 |
+| Finder `unmatched` | 4 | 4 |
+| Decided by rule / AI / identifier | 154 / 41 / 5 | 99 / 32 / 69 |
+| Flagged `needs_review` | 4 | 1 |
+| Finder or service errors | 0 | 0 |
+
+**What changed.** 68 finder answers changed, and none of them changed which book was picked. No
+row the finder had right in v2 is wrong in v3, and no wrong row became right.
+
+- **64 rows moved from `matched high` to `matched certain` by identifier.** The same book each
+  time. Before, 55 were settled by rule 4 (exact title and author) and 9 by the AI. Now Open
+  Library accepts a key the linked book holds, so rule 2 settles them first. That is 9 fewer AI
+  calls per 200 rows.
+- **4 `unmatched` rows changed only their confidence.** *My Kind of Place*, *The City in
+  History* and *Against the American Grain* went from medium to high, and *Love and Rockets*
+  from low to medium. All four are wrong in both runs: our book exists and the finder did not
+  pick it. The first three also **lost their `needs_review` flag**, which is the only sense in
+  which anything got worse: three wrong answers are now stated with more confidence. The AI makes
+  that call, not the matcher. In the v2 run the AI's reasons say the Open Library candidates
+  showed only work ids. In the v3 run its reasons quote their titles and authors. The replay
+  does not record the candidate lines, so this report does not establish why.
+
+The fifth wrong row is *The Sparrow*. It is the same answer in both runs: the finder picks Mary
+Doria Russell's book (5743), which is right for the row. The list item links Enid Blyton's
+*The Sparrow* (5477), a legacy mislink.
+
+### The 10 accepts that differ from our stored key
+
+Each row was re-sent to `POST /resolve` on :8095 to read `decision.duplicates`, and every key was
+looked up with `GET /works/{key}`. Classes: (a) our key is in `decision.duplicates`; (b) our key
+is an Open Library duplicate of the accepted work but not in the cluster; (c) our key is a
+different book, an error in our data; (d) the accepted key is wrong, a matcher error.
+
+| Row | Query | Accepted | Our book's stored key | Class | Finder (v3) |
+|---|---|---|---|---|---|
+| 41284 | *REDEPLOYMENT*, Phil Klay | `OL19996565W`, 5 editions | `OL17094207W`, "Redeployment", 1 edition. In `duplicates`, with `OL19351813W` | (a) | matched high, rule 4, book 3538 |
+| 41189 | *Vessel*, Sarah Beth Durst | `OL31901858W`, 2 editions | `OL16461711W`, "Vessel", 1 edition. In `duplicates` | (a) | matched high, rule 4, book 5338 |
+| 41231 | *THE TOPEKA SCHOOL*, Ben Lerner | `OL20253296W`, 12 editions | `OL20921350W`, **redirects** to the accepted work | (b) | matched high, rule 4, book 5379 |
+| 40946 | *My Kind of Place: Travel Stories from a Woman Who's Been Everywhere*, Susan Orlean | `OL14860213W`, 8 editions | `OL14860219W`, **redirects** to the accepted work | (b) | **unmatched high, AI** |
+| 41002 | *A Relative Stranger*, Charles Baxter | `OL114041W`, 8 editions | `OL114044W`, **redirects** to the accepted work | (b) | matched high, rule 4, book 4925 |
+| 41422 | *Rosewater*, Tade Thompson | `OL19763347W`, "Rosewater", 7 editions | `OL20159158W`, *The Rosewater Insurrection* (the sequel). Our book 12550, which *is* the sequel, holds the same key | (c) | matched high, rule 4, book 5493 |
+| 41401 | *The Sparrow*, Mary Doria Russell | `OL2732491W`, 19 editions. Held by our book 5743 (Russell) | `OL25131836W`, not in the artifact (404). Our book 5477 is Enid Blyton's *The Sparrow* | (c) | matched certain, identifier, book 5743 |
+| 41369 | *THE PLACES IN BETWEEN*, Rory Stewart | `OL13197719W`, 13 editions | `OL15854480W`, **redirects** to the accepted work | (b) | matched high, rule 4, book 5459 |
+| 40797 | *Mason & Dixon*, Thomas Pynchon | `OL2636672W`, 20 editions | `OL34536314W`, **redirects** to the accepted work | (b) | matched high, rule 4, book 3033 |
+| 41090 | *We Wish To Inform You That Tomorrow We Will Be Killed With Our Families*, Philip Gourevitch | `OL1894071W`, 29 editions | `OL1894074W`, **redirects** to the accepted work | (b) | matched high, rule 4, book 507 |
+
+**(a) 2, (b) 6, (c) 2, (d) 0. No accepted key is a wrong book.** The two (a) rows are what
+clustering is for: the representative is the member with the most editions, and our book holds
+a smaller member. All six (b) rows are redirects, which are merges Open Library has already
+made. A redirected key is no longer a work in the artifact, so blocking never returns it as a
+candidate and it cannot join a cluster. `GET /works/{key}` follows the redirect and names the
+old key in `redirected_from`. *My Kind of Place*'s accepted work carries the title "My Kind of
+Place: Unabridged Selections", taken from its audio CD edition, but 7 of its 8 editions are the
+full book. That title is probably what the AI turned down.
+
+### The hazard: an accept no local book holds
+
+Only one of the 10 accepted keys is held by a local book (`OL2732491W`, by 5743). For the
+other nine, the finder's identifier rules (1 and 2) cannot fire, even though in all nine our
+linked book is the accepted work. In eight it holds a duplicate or redirected key, and in
+*Rosewater* a wrong one. Two things keep the rules from seeing the first eight. `OpenLibrarySource#local_holders`
+looks up only the accepted key and the record's `redirected_from`, never `decision.duplicates`.
+And `/resolve` candidates always carry an empty `redirected_from` (it is filled only for the key
+a `/works` request named), so the redirect branch never fires on resolve output.
+
+What happens next depends on the finder's answer. Rule 5 answers `unmatched`, carrying the
+accepted work, when there is no local candidate at all. The AI can also answer `unmatched` while
+Open Library accepts. Either way, `ImporterBase#call` creates a new book for an `unmatched` match.
+`Providers::OpenLibrary` reuses the finder's resolution for it and, on an accept, stamps the
+accepted key. The result is a second copy of a book we already hold, stamped with a key that our
+original does not carry.
+
+**In this replay that happened once: *My Kind of Place* (40946).** The finder answered
+`unmatched high` through the AI, with no review flag. An import would create a second *My Kind
+of Place* stamped `OL14860213W` next to book 2221, whose `OL14860219W` redirects to that same
+work. Rule 5 itself fired on no row. The other eight rows with an unheld accepted key were saved
+only by rule 4's exact match on normalized title and author. A list row with a subtitle, a
+variant spelling or a different name form sends the same book to the AI, or to rule 5 if neither
+the exact lookup nor OpenSearch finds it. *The City in History* shows the same pattern: our key
+`OL1879248W` redirects to the work Open Library ranked first. That row avoided the stamp only
+because the service abstained, and the finder's `unmatched` would still create a new book.
+
+**What the books list wizard (spec 2) must do:** before it creates a book from an `unmatched`
+answer that carries an accept, it must treat a local book holding the accepted key, **any**
+`decision.duplicates` key, or any key that redirects to one of those as a match. It should
+send the row to review rather than create. The `duplicates` check alone would have caught 2 of
+the 8 same-book rows here. The redirect check catches the other 6, and `/resolve` does not
+supply what it needs: the wizard would have to resolve the local keys (for example with
+`/works/batch`) or have the service return incoming redirects. `duplicates` is evidence, not
+proof (see "Duplicate clusters" in the feature doc), so a holder found that way should go to
+review rather than be merged automatically. This task changed no Rails code.
 
 ## Label provenance
 
