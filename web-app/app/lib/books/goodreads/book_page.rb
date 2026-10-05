@@ -60,7 +60,7 @@ module Books
         return verdict(:blocked) if [401, 403, 429].include?(@status)
         return verdict(:unavailable) if @status >= 500
 
-        facts = from_next_data || from_markup
+        facts = usable(from_next_data) || usable(from_markup)
         return Parsed.new(outcome: :found, facts: facts) if facts
         return verdict(:not_found) if doc.at_css("title")&.text.to_s.strip == NOT_FOUND_TITLE
         return verdict(:unavailable) if doc.at_css("h1")&.text.to_s.strip == ERROR_HEADING
@@ -71,6 +71,14 @@ module Books
       private
 
       def verdict(outcome) = Parsed.new(outcome: outcome, facts: nil)
+
+      # Facts with no title or no contributors mean the page's shape changed
+      # under the parser. Stored as found they would be a permanent mismatch
+      # that parks every edition naming the id; unparseable keeps the HTML,
+      # stops fetching, and gets the page fetched again after a fix.
+      def usable(facts)
+        facts if facts&.title.present? && facts.contributors.any?
+      end
 
       def doc = (@doc ||= Nokogiri::HTML(@html))
 

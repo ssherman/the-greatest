@@ -59,8 +59,10 @@ module Books
       prefix: true
 
     # Editions a Goodreads page settles: waiting to be created or parked, or
-    # created before their page could be read.
-    scope :awaiting_goodreads, -> { verification_pending.or(created.verification_unverified) }
+    # created before their page could be read. One whose created book was
+    # since deleted is not among them: it goes back to the finder on the next
+    # resolution, so a deletion sticks.
+    scope :awaiting_goodreads, -> { verification_pending.or(created.verification_unverified.where.not(book_id: nil)) }
 
     validates :goodreads_book_id, :signature, :title, :primary_author, presence: true
     validates :signature, uniqueness: {scope: :goodreads_book_id}

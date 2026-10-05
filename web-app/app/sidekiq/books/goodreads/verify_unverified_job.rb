@@ -11,7 +11,10 @@ class Books::Goodreads::VerifyUnverifiedJob
 
   sidekiq_options queue: :low, retry: 0
 
-  STUCK_AFTER = 1.hour
+  # Past the longest legitimate wait: a full day's line (daily_fetch_cap
+  # turns, fetch_interval apart) plus this margin. Sooner, the sweep would
+  # queue a second fetch for editions still waiting their turn.
+  STUCK_MARGIN = 1.hour
 
   def perform(limit = nil)
     limit ||= Rails.application.config.x.goodreads.daily_fetch_cap
@@ -34,6 +37,8 @@ class Books::Goodreads::VerifyUnverifiedJob
   end
 
   def stuck
-    ::Books::GoodreadsEdition.verification_pending.where(updated_at: ...STUCK_AFTER.ago)
+    config = Rails.application.config.x.goodreads
+    stuck_after = (config.daily_fetch_cap * config.fetch_interval).seconds + STUCK_MARGIN
+    ::Books::GoodreadsEdition.verification_pending.where(updated_at: ...stuck_after.ago)
   end
 end

@@ -43,6 +43,17 @@ module Books
         read["blocked_until"].to_i > now
       end
 
+      # Seconds until fetch_interval has passed since the last fetch actually
+      # began. A turn only promises a start time: jobs held up by a deploy or
+      # a slow fetch come due together, and this keeps them apart.
+      def spacing_wait
+        [read["last_start"].to_i + @config.fetch_interval - now, 0].max
+      end
+
+      def started!
+        write("last_start" => now)
+      end
+
       def block!
         Rails.logger.warn("#{self.class.name}: Goodreads blocked a fetch or served an unrecognizable page; " \
           "no fetches for #{@config.block_cooldown}s")

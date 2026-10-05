@@ -111,7 +111,9 @@ for it. Matched editions never touch Goodreads.
 - **Fetching.** `FetchPageJob` runs on the `goodreads_fetch` capsule, one at a time, through
   `PageFetcher::Client` with `wait_for_selector: "h1"`. `Books::Goodreads::FetchGate` (Redis)
   hands out start times at least `fetch_interval` apart (15 s) and caps a UTC day at
-  `daily_fetch_cap` (1,500). A job waits for its turn by rescheduling itself. A 403, a challenge or
+  `daily_fetch_cap` (1,500). A job waits for its turn by rescheduling itself, and a turn that came
+  due late (after a deploy or a slow fetch) still waits out `fetch_interval` since the last fetch
+  actually began. A page with no title or no contributors is unparseable, never found. A 403, a challenge or
   an unrecognizable page blocks all fetching for `block_cooldown` (6 h). Goodreads' own 503 page
   and timeouts are retried through the line up to `fetch_attempts` (3). Settings:
   `config/initializers/goodreads.rb`.
@@ -136,7 +138,9 @@ for it. Matched editions never touch Goodreads.
     Goodreads" or "does not match its Goodreads page", and nothing is created.
   - **No page** (fetcher down, blocked, cap spent): the book is created unverified.
 - **Sweep.** `bin/rails "books:goodreads:verify_unverified[limit]"` queues a check for every
-  provisional book created unverified, and for editions stuck waiting over an hour. A later
+  provisional book created unverified, and for editions stuck waiting longer than a full day's
+  fetch line (cap × interval, about 6.25 h) plus an hour. An edition whose created book was since
+  deleted is left alone: the next resolution sends it back to the finder. A later
   `not_found` or `mismatch` is recorded on the edition and left for the admin page
   (increment 6). The book is not touched.
 

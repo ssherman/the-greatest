@@ -43,6 +43,17 @@ module Books
         assert_equal [true, false], [@gate.reserve.granted?, @gate.blocked?]
       end
 
+      test "a fetch that came due late still waits out the gap since the last one actually began" do
+        assert_equal 0, @gate.spacing_wait
+
+        @gate.started!
+        travel 10.seconds
+
+        assert_equal 5, @gate.spacing_wait
+        travel 5.seconds
+        assert_equal 0, @gate.spacing_wait
+      end
+
       test "the defaults are the spec's" do
         config = Rails.application.config.x.goodreads
 

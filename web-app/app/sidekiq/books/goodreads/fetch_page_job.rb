@@ -28,6 +28,12 @@ class Books::Goodreads::FetchPageJob
     end
     return settle(goodreads_book_id) if gate.blocked?
 
+    # A turn that came due late (a deploy, a slow fetch before it) still
+    # waits out the gap since the last fetch began, without a new turn.
+    spacing = gate.spacing_wait
+    return self.class.perform_in(spacing, goodreads_book_id, true, attempt) if spacing.positive?
+
+    gate.started!
     outcome = ::Services::Books::GoodreadsPages::FetchPage.call(goodreads_book_id: goodreads_book_id).data[:outcome]
     gate.block! if %i[blocked unparseable].include?(outcome)
     if outcome == :unavailable && attempt < Rails.application.config.x.goodreads.fetch_attempts

@@ -46,6 +46,19 @@ class Books::Goodreads::SettleEditionsJobTest < ActiveSupport::TestCase
     assert_equal ["verification failed: RuntimeError: boom", nil], [first.import_rows.sole.error, second.import_rows.sole.error]
   end
 
+  test "a book created unverified and then deleted is left for the finder, not created again" do
+    book = Books::Book.create!(title: "The Quiet Year", provisional: true)
+    edition = goodreads_edition(goodreads_book_id: 90_000_001, book: book, resolution: :created, verification: :unverified,
+      resolved_at: 1.day.ago)
+    @import.rows.create!(row_number: 1, goodreads_edition: edition)
+    goodreads_page(goodreads_book_id: 90_000_001)
+    book.destroy!
+
+    assert_no_difference("Books::Book.count") { Books::Goodreads::SettleEditionsJob.new.perform(90_000_001) }
+
+    assert_nil edition.reload.book_id
+  end
+
   test "a Postgres error re-raises" do
     waiting_edition
     SETTLE.stubs(:call).raises(ActiveRecord::StatementInvalid, "connection lost")

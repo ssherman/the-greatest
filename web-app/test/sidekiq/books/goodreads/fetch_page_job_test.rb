@@ -15,6 +15,9 @@ class Books::Goodreads::FetchPageJobTest < ActiveSupport::TestCase
     @gate = Books::Goodreads::FetchGate.new(redis: Books::OpenLibrary::FakeRedis.new, config: config)
     Books::Goodreads::FetchGate.stubs(:new).returns(@gate)
     Books::Goodreads::SettleEditionsJob.stubs(:perform_async)
+    # Run inline, a rescheduled job would run again at once, under a frozen
+    # clock, forever.
+    Books::Goodreads::FetchPageJob.stubs(:perform_in)
     @edition = goodreads_edition(verification: :pending)
     @id = @edition.goodreads_book_id
   end
@@ -34,6 +37,17 @@ class Books::Goodreads::FetchPageJobTest < ActiveSupport::TestCase
     Books::Goodreads::SettleEditionsJob.expects(:perform_async).with(@id)
 
     Books::Goodreads::FetchPageJob.new.perform(@id)
+
+    assert_equal 15, @gate.spacing_wait
+  end
+
+  test "a job whose turn came late still waits out the gap since the last fetch began" do
+    @gate.started!
+    travel 5.seconds
+    FETCH.expects(:call).never
+    Books::Goodreads::FetchPageJob.expects(:perform_in).with(10, @id, true, 1)
+
+    Books::Goodreads::FetchPageJob.new.perform(@id, true)
   end
 
   test "a busy line reschedules the job for its turn instead of waiting in a thread" do
@@ -89,6 +103,7 @@ class Books::Goodreads::FetchPageJobTest < ActiveSupport::TestCase
 
   test "a challenge or an unrecognizable page stops all fetching for the cooldown" do
     [:blocked, :unparseable].each do |outcome|
+      travel 15.seconds
       @gate.stubs(:blocked?).returns(false)
       FETCH.stubs(:call).returns(fetched(outcome))
       @gate.expects(:block!)
@@ -105,6 +120,7 @@ class Books::Goodreads::FetchPageJobTest < ActiveSupport::TestCase
     Books::Goodreads::FetchPageJob.new.perform(@id, true, 1)
 
     Books::Goodreads::SettleEditionsJob.expects(:perform_async).with(@id)
+    travel 15.seconds
     Books::Goodreads::FetchPageJob.new.perform(@id, true, 3)
     assert_not @gate.blocked?
   end

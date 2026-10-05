@@ -80,6 +80,10 @@ module Books
       GoodreadsEdition.create!(goodreads_book_id: 4, signature: "d", title: "D", primary_author: "X",
         resolution: :matched, verification: :not_needed, book: books_books(:war_and_peace), resolved_at: Time.current)
 
+      # Created unverified, then its book deleted: the finder's to resolve again.
+      GoodreadsEdition.create!(goodreads_book_id: 5, signature: "e", title: "E", primary_author: "X",
+        resolution: :created, verification: :unverified, book: nil, resolved_at: Time.current)
+
       assert_equal [waiting, unverified].sort_by(&:id), GoodreadsEdition.awaiting_goodreads.order(:id).to_a
     end
   end

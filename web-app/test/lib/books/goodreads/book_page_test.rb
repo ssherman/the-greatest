@@ -71,6 +71,30 @@ module Books
           ["Louise Maude", "Translator", false]], contributors(facts)
       end
 
+      test "__NEXT_DATA__ that lost its contributors (a renamed field) falls back to the markup" do
+        html = page_html("war_and_peace_656.html.gz")
+          .gsub('"primaryContributorEdge"', '"renamedPrimaryEdge"').gsub('"secondaryContributorEdges"', '"renamedSecondaryEdges"')
+
+        facts = BookPage.parse(html: html, status: 200).facts
+
+        assert_equal [["Leo Tolstoy", "Author", true], ["Aylmer Maude", "Translator", false],
+          ["Louise Maude", "Translator", false]], contributors(facts)
+      end
+
+      # Stored as found, such a page would be a permanent mismatch that parks
+      # every edition naming its id.
+      test "a book with no title or no contributors is unparseable, never found" do
+        book = {"legacyId" => 7, "title" => "Quiet", "details" => {},
+                "primaryContributorEdge" => {"node" => {"__ref" => "Contributor:1"}, "role" => "Author"}}
+        pages = [book.except("primaryContributorEdge"), book.merge("title" => "", "titleComplete" => nil)].map do |variant|
+          apollo = {"ROOT_QUERY" => {%(getBookByLegacyId({"legacyId":"7"})) => {"__ref" => "Book:1"}}, "Book:1" => variant,
+                    "Contributor:1" => {"name" => "Lei Xu"}}
+          %(<script id="__NEXT_DATA__" type="application/json">#{{props: {pageProps: {apolloState: apollo}}}.to_json}</script>)
+        end
+
+        assert_equal [:unparseable, :unparseable], pages.map { |html| BookPage.parse(html: html, status: 200).outcome }
+      end
+
       test "an unknown id is not found even though Goodreads answers 200" do
         parsed = BookPage.parse(html: page_html("not_found_99999999999.html.gz"), status: 200)
 
