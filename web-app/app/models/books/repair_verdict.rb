@@ -44,6 +44,20 @@ module Books
       reviewed_at.present?
     end
 
+    def book_ids
+      ids = case kind
+      when "relink" then [payload["from_book_id"], payload["to_book_id"]]
+      when "merge_books" then [payload["source_id"], payload["target_id"]]
+      when "strip_identifier", "mark_provisional" then [payload["book_id"]]
+      else []
+      end
+      ids.compact
+    end
+
+    def author_ids
+      merge_authors? ? [payload["source_id"], payload["target_id"]].compact : []
+    end
+
     def summary
       case kind
       when "relink"

@@ -65,6 +65,15 @@ module Books
       assert_equal [pending.id], RepairVerdict.unapplied.where(id: [applied.id, pending.id]).pluck(:id)
     end
 
+    test "names the books and authors each kind is about" do
+      assert_equal [2, 4], verdict.book_ids
+      assert_equal [8, 9], verdict(kind: :merge_books, subject_key: "books:8:9", payload: {"source_id" => 8, "target_id" => 9}).book_ids
+      merge = verdict(kind: :merge_authors, subject_key: "authors:5:6", payload: {"source_id" => 5, "target_id" => 6})
+      assert_equal [[], [5, 6]], [merge.book_ids, merge.author_ids]
+      assert_equal [7], verdict(kind: :mark_provisional, subject_key: "book:7", payload: {"book_id" => 7}).book_ids
+      assert_empty verdict(subject_key: "user:2:book:3:goodreads:4").author_ids
+    end
+
     test "the replay never applies by default" do
       refute Rails.configuration.x.goodreads_replay.auto_apply
       assert_equal 80, Rails.configuration.x.goodreads_replay.max_author_group

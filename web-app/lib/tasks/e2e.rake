@@ -227,6 +227,25 @@ namespace :e2e do
     puts "removed #{pairs.size} pair(s) and #{decisions.size} decision(s)"
   end
 
+  desc "Seed one proposed relink verdict for e2e/tests/books/admin/repair-verdicts.spec.ts (E2E_BOOK_A, E2E_BOOK_B override the slugs)"
+  task repair_verdicts_seed: :environment do
+    # A verdict names records by id only; rejecting it (what the spec does)
+    # changes no catalog data, and approving would not either until an apply
+    # run. Idempotent: resets the one e2e verdict.
+    from = Books::Book.find_by!(slug: ENV.fetch("E2E_BOOK_A", "headlong-hall"))
+    to = Books::Book.find_by!(slug: ENV.fetch("E2E_BOOK_B", "war-and-peace"))
+    verdict = Books::RepairVerdict.find_or_initialize_by(kind: :relink, subject_key: "e2e:relink")
+    verdict.update!(status: :proposed, decided_by: :ai, confidence: :high, reason: "E2E repair verdicts spec",
+      decided_by_user_id: nil, reviewed_at: nil, applied_at: nil, error: nil,
+      payload: {user_id: 0, from_book_id: from.id, to_book_id: to.id, goodreads_book_id: 0, rows: []})
+    puts({verdict_id: verdict.id}.to_json)
+  end
+
+  desc "Remove the verdict e2e:repair_verdicts_seed created"
+  task repair_verdicts_cleanup: :environment do
+    puts "removed #{Books::RepairVerdict.where("subject_key LIKE 'e2e:%'").delete_all} verdict(s)"
+  end
+
   desc "Seed a placeholder author with one matched Wikidata link for e2e/tests/books/admin/reject-link.spec.ts"
   task reject_link_seed: :environment do
     # A placeholder (exclude_from_rankings), so the Wikidata run the reject

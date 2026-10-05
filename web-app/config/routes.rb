@@ -768,6 +768,16 @@ Rails.application.routes.draw do
           post :dismiss
         end
       end
+      # The Goodreads replay's findings (Goodreads import spec §12.7).
+      resources :repair_verdicts, only: [:index, :show] do
+        member do
+          post :approve
+          post :reject
+        end
+        collection do
+          post :bulk_approve
+        end
+      end
 
       resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
         member do

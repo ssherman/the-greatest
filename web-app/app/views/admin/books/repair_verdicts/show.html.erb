@@ -1,0 +1,91 @@
+<%# web-app/app/views/admin/books/repair_verdicts/show.html.erb %>
+<% content_for :title, "Repair Verdict ##{@verdict.id}" %>
+
+<div class="space-y-4">
+  <%= link_to "← Repair Verdicts", admin_books_repair_verdicts_path(kind: @verdict.kind, status: @verdict.status), class: "link text-sm" %>
+  <h1 class="text-2xl font-bold [overflow-wrap:anywhere]"><%= @verdict.summary %></h1>
+
+  <div class="flex flex-wrap gap-2">
+    <span class="badge"><%= @verdict.kind.humanize %></span>
+    <span class="badge badge-outline" data-testid="verdict-status"><%= @verdict.status.humanize %></span>
+    <span class="badge badge-ghost">Decided by <%= @verdict.decided_by %></span>
+    <% if @verdict.confidence %><span class="badge badge-ghost"><%= @verdict.confidence %> confidence</span><% end %>
+    <% if @verdict.applied_at %><span class="badge badge-success">Applied <%= @verdict.applied_at.strftime("%Y-%m-%d") %></span><% end %>
+  </div>
+
+  <% if @verdict.reason.present? %><p class="[overflow-wrap:anywhere]"><%= @verdict.reason %></p><% end %>
+  <% if @verdict.error.present? %><div role="alert" class="alert alert-error"><%= @verdict.error %></div><% end %>
+
+  <div class="card bg-base-100">
+    <div class="card-body">
+      <h2 class="card-title text-base">Records</h2>
+      <ul class="list-disc ml-5">
+        <% @verdict.book_ids.each do |id| %>
+          <li>
+            <% if (book = @books[id]) %>
+              <%= link_to "Book ##{id}: #{book.title}", admin_books_book_path(book), class: "link" %>
+              <% if book.provisional %><span class="badge badge-warning badge-sm ml-1">provisional</span><% end %>
+            <% else %>
+              Book #<%= id %> (no longer exists)
+            <% end %>
+          </li>
+        <% end %>
+        <% @verdict.author_ids.each do |id| %>
+          <li>
+            <% if (author = @authors[id]) %>
+              <%= link_to "Author ##{id}: #{author.name}", admin_books_author_path(author), class: "link" %>
+            <% else %>
+              Author #<%= id %> (no longer exists)
+            <% end %>
+          </li>
+        <% end %>
+        <% if @decision %><li><%= link_to "Match decision ##{@decision.id}", admin_books_match_decision_path(@decision), class: "link" %></li><% end %>
+      </ul>
+    </div>
+  </div>
+
+  <% if @source_rows.any? %>
+    <div class="overflow-x-auto">
+      <h2 class="font-semibold mb-2">Source rows</h2>
+      <table class="table bg-base-100">
+        <thead><tr><th>Legacy import</th><th>Row</th><th>Title</th><th>Author</th><th>Shelf</th><th>Finding</th></tr></thead>
+        <tbody>
+          <% @source_rows.each do |row| %>
+            <tr data-testid="source-row">
+              <td><%= row.import.legacy_import_id %></td>
+              <td><%= row.row_number %></td>
+              <td class="[overflow-wrap:anywhere]"><%= row.raw["Title"] %></td>
+              <td class="[overflow-wrap:anywhere]"><%= row.raw["Author"] %></td>
+              <td><%= row.exclusive_shelf %></td>
+              <td><%= row.replay_finding&.humanize %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+
+  <% if (page = @verdict.payload["goodreads_page"]) %>
+    <div class="card bg-base-100">
+      <div class="card-body">
+        <h2 class="card-title text-base">Cached Goodreads page</h2>
+        <p class="[overflow-wrap:anywhere]"><%= page["outcome"] %>: <%= page["title"] %> by <%= Array(page["authors"]).join(", ") %></p>
+      </div>
+    </div>
+  <% end %>
+
+  <details class="collapse collapse-arrow bg-base-100">
+    <summary class="collapse-title font-semibold">Payload</summary>
+    <div class="collapse-content"><pre class="text-xs [overflow-wrap:anywhere] whitespace-pre-wrap"><%= JSON.pretty_generate(@verdict.payload) %></pre></div>
+  </details>
+
+  <div class="flex flex-wrap gap-2">
+    <% if @verdict.proposed? && current_user_can_delete? %>
+      <%= button_to "Approve", approve_admin_books_repair_verdict_path(@verdict), method: :post, class: "btn btn-sm btn-primary" %>
+    <% end %>
+    <% if !@verdict.rejected? && current_user_can_write? && (@verdict.applied_at.nil? || @verdict.mark_provisional?) %>
+      <%= button_to "Reject", reject_admin_books_repair_verdict_path(@verdict), method: :post, class: "btn btn-sm btn-error",
+            form: {data: {testid: "reject-form"}} %>
+    <% end %>
+  </div>
+</div>
