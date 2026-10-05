@@ -1,5 +1,24 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: goodreads_imports
+#
+#  id         :bigint           not null, primary key
+#  error      :text
+#  status     :integer          default(0), not null
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#  user_id    :bigint           not null
+#
+# Indexes
+#
+#  index_goodreads_imports_on_user_id  (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
 module LegacyBooks
   class GoodreadsImportTest < ActiveSupport::TestCase
     # .allocate, not .new: .new introspects a table the test database lacks

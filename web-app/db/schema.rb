@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_05_140134) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_05_140829) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -305,8 +305,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_140134) do
     t.jsonb "applied", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "replay_finding"
+    t.bigint "legacy_book_id"
     t.index ["goodreads_edition_id"], name: "index_books_goodreads_import_rows_on_goodreads_edition_id"
     t.index ["import_id", "row_number"], name: "index_books_goodreads_import_rows_on_import_id_and_row_number", unique: true
+    t.index ["replay_finding"], name: "index_books_goodreads_import_rows_on_replay_finding"
   end
 
   create_table "books_goodreads_imports", force: :cascade do |t|

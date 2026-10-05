@@ -47,7 +47,7 @@ module Services
           return done(:cached) if settled?
           return done(:pending) if @edition.verification_pending?
 
-          match = @finder.call(query: query, subject: @edition)
+          match = @finder.call(query: EditionQuery.call(@edition), subject: @edition)
           @import.increment!(:ai_calls_count) if ai_call?(match.decision)
           outcome = resolve(match)
           supersede_unused(match.decision)
@@ -115,20 +115,6 @@ module Services
 
         def settled?
           @edition.resolved_at.present? && (@edition.book_id.present? || @edition.parked?)
-        end
-
-        def query
-          ::DataImporters::Books::Book::ImportQuery.new(
-            title: @edition.title,
-            author_names: [@edition.primary_author],
-            year: @edition.original_publication_year || @edition.year_published,
-            isbn13: [@edition.isbn13],
-            isbn10: [@edition.isbn10],
-            goodreads_id: [@edition.goodreads_book_id.to_s],
-            series_name: @edition.series_name,
-            series_number: @edition.series_number,
-            context_author_names: @edition.additional_authors
-          )
         end
 
         # A fallback decision only comes from an AI call that failed, which

@@ -1,3 +1,22 @@
+# == Schema Information
+#
+# Table name: goodreads_imports
+#
+#  id         :bigint           not null, primary key
+#  error      :text
+#  status     :integer          default(0), not null
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#  user_id    :bigint           not null
+#
+# Indexes
+#
+#  index_goodreads_imports_on_user_id  (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
 module LegacyBooks
   # A legacy member's Goodreads upload (the legacy app's GoodreadsImport, with
   # has_one_attached :file). Read by the replay loader (Goodreads import spec
