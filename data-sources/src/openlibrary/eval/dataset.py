@@ -118,7 +118,8 @@ def unknown_labeled_keys(
 class WorkFacts(BaseModel):
     work_key: str
     title: str | None = None
-    title_variants: list[str] = Field(default_factory=list)
+    title_fp: str = ""
+    title_fp_noart: str = ""
     author_names: list[str] = Field(default_factory=list)
     author_fps: list[str] = Field(default_factory=list)
     edition_count: int = 0
@@ -136,7 +137,7 @@ def fetch_work_facts(
     rows = con.execute(
         f"""
         WITH w AS (
-          SELECT w.work_key, w.title, w.title_fp, w.title_fp_nosub, w.title_fp_noart
+          SELECT w.work_key, w.title, w.title_fp, w.title_fp_noart
           FROM facts_keys k JOIN '{paths.table("works")}' w USING (work_key)
         ),
         a AS (
@@ -152,7 +153,7 @@ def fetch_work_facts(
           SELECT p.work_key, p.edition_count
           FROM facts_keys k JOIN '{paths.table("popularity")}' p USING (work_key)
         )
-        SELECT w.work_key, w.title, w.title_fp, w.title_fp_nosub, w.title_fp_noart,
+        SELECT w.work_key, w.title, w.title_fp, w.title_fp_noart,
                COALESCE(a.names, []), COALESCE(a.fps, []), COALESCE(p.edition_count, 0)
         FROM w LEFT JOIN a USING (work_key) LEFT JOIN p USING (work_key)
         """
@@ -161,10 +162,11 @@ def fetch_work_facts(
         r[0]: WorkFacts(
             work_key=r[0],
             title=r[1],
-            title_variants=sorted({v for v in (r[2], r[3], r[4]) if v}),
-            author_names=list(r[5]),
-            author_fps=[fp for fp in r[6] if fp],
-            edition_count=r[7],
+            title_fp=r[2] or "",
+            title_fp_noart=r[3] or "",
+            author_names=list(r[4]),
+            author_fps=[fp for fp in r[5] if fp],
+            edition_count=r[6],
         )
         for r in rows
     }
@@ -174,6 +176,8 @@ def alternate_problems(
     label_key: str, alternate: str, facts: dict[str, WorkFacts], resolved: dict[str, str]
 ) -> list[str]:
     """Why `alternate` is not a verified duplicate of `label_key` ([] when it is)."""
+    if alternate == label_key:
+        return ["alternate is the labelled key"]
     if resolved.get(alternate, alternate) == resolved.get(label_key, label_key):
         return ["redirects to the labelled work; not a duplicate"]
     if alternate not in facts:
@@ -182,8 +186,11 @@ def alternate_problems(
     if label is None:
         return ["labelled work not in works"]
     problems = []
-    if not set(label.title_variants) & set(alt.title_variants):
-        problems.append("shares no title variant with the labelled work")
+    same_title = (label.title_fp and label.title_fp == alt.title_fp) or (
+        label.title_fp_noart and label.title_fp_noart == alt.title_fp_noart
+    )
+    if not same_title:
+        problems.append("shares no title with the labelled work (full or article-stripped)")
     if not set(label.author_fps) & set(alt.author_fps):
         problems.append("shares no author with the labelled work")
     return problems
