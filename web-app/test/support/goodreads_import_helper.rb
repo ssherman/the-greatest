@@ -70,6 +70,17 @@ module GoodreadsImportHelper
     }.merge(attributes))
   end
 
+  # A cached Goodreads page. authors: [name, role] pairs, the first credited
+  # as primary. The defaults back goodreads_edition's defaults.
+  def goodreads_page(goodreads_book_id:, title: "The Quiet Year", authors: [["Anna Brenner", "Author"]], outcome: :found, **attributes)
+    found = outcome.to_sym == :found
+    ::Books::GoodreadsPage.create!({
+      goodreads_book_id: goodreads_book_id, source: :fetched, outcome: outcome, fetched_at: Time.current,
+      title: (title if found),
+      authors: found ? authors.each_with_index.map { |(name, role), index| {"name" => name, "role" => role, "primary" => index.zero?} } : []
+    }.merge(attributes))
+  end
+
   def unmatched_match(subject:, candidates: [], decided_by: :rule)
     decision = ::MatchDecision.create!(finder: "DataImporters::Books::Book::Finder", subject: subject,
       outcome: :unmatched, confidence: :high, decided_by: decided_by)

@@ -122,6 +122,23 @@ module Services
           assert_nil edition.reload.resolved_at
           assert_equal 0, @import.records.count
         end
+
+        test "with its Goodreads page, the book takes the page's title and authors, and the edition is verified" do
+          edition = goodreads_edition(goodreads_book_id: 90_000_001, original_publication_year: 1977, pending_import: @import,
+            verification: :pending)
+          page = goodreads_page(goodreads_book_id: 90_000_001, title: "The Quiet Year: A Novel", isbn13: "9780441013593")
+
+          CreateBook.call(edition: edition, import: @import, match: unmatched_match(subject: edition), page: page,
+            author_names: ["Anna Brenner", "Jo Ray"])
+
+          edition.reload
+          book = edition.book
+          assert_equal ["The Quiet Year: A Novel", 1977, true], [book.title, book.first_published_year, book.provisional?]
+          assert_equal ["Anna Brenner", "Jo Ray"], book.authors.map(&:name).sort
+          assert_includes book.identifiers.map { |identifier| [identifier.identifier_type, identifier.value] },
+            ["books_work_isbn13", "9780441013593"]
+          assert_equal [true, true, nil], [edition.created?, edition.verification_verified?, edition.pending_import_id]
+        end
       end
     end
   end
