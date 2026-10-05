@@ -1,4 +1,11 @@
-from openlibrary.eval.compare import decision_diff, metric_rows, render_markdown
+import json
+
+from openlibrary.eval.compare import (
+    decision_diff,
+    load_reading,
+    metric_rows,
+    render_markdown,
+)
 
 
 def _outcome(case_id, verdict, key, *, expected="OL1W", correct=False, stratum="list_row"):
@@ -22,9 +29,9 @@ def _outcome(case_id, verdict, key, *, expected="OL1W", correct=False, stratum="
     }
 
 
-def _reading(outcomes, abstention):
+def _reading(outcomes, abstention, label="x"):
     return {
-        "label": "x",
+        "label": label,
         "matcher_version": 2,
         "weights_calibrated_at": None,
         "metrics": {"abstention_rate": abstention, "false_merge_rate": 0.0},
@@ -74,8 +81,29 @@ def test_metric_rows_pairs_before_and_after_values():
 
 
 def test_markdown_names_both_readings_and_every_changed_case():
-    before = _reading([_outcome("a", "abstain", None)], 1.0)
-    after = _reading([_outcome("a", "accept", "OL1W", correct=True)], 0.0)
+    before = _reading([_outcome("a", "abstain", None)], 1.0, label="old-reading")
+    after = _reading([_outcome("a", "accept", "OL1W", correct=True)], 0.0, label="new-reading")
     text = render_markdown(before, after)
     assert "| abstention_rate |" in text
-    assert "a" in text and "newly_accepted" in text
+    assert "old-reading" in text and "new-reading" in text
+    assert "| a | list_row | newly_accepted |" in text
+
+
+def test_metric_rows_include_recall_at_10_from_a_json_round_tripped_reading(tmp_path):
+    def saved(recall):
+        reading = _reading([], 0.0)
+        reading["metrics"]["candidate_recall"] = {1: recall - 0.1, 10: recall}
+        reading["by_stratum"]["list_row"]["candidate_recall"] = {10: recall}
+        path = tmp_path / f"r{recall}.json"
+        path.write_text(json.dumps(reading))
+        return load_reading(path)
+
+    before, after = saved(0.5), saved(0.8)
+    assert ("recall_at_10", 0.5, 0.8) in metric_rows(before, after)
+    assert ("recall_at_10", 0.5, 0.8) in metric_rows(before, after, stratum="list_row")
+
+
+def test_decision_diff_ignores_a_changed_key_on_a_non_accept_verdict():
+    before = _reading([_outcome("a", "abstain", "OL5W")], 1.0)
+    after = _reading([_outcome("a", "abstain", "OL6W")], 1.0)
+    assert decision_diff(before, after) == []

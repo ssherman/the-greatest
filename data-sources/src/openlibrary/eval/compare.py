@@ -27,7 +27,7 @@ METRICS = (
     "list_row_false_merge_rate",
 )
 
-Change = Literal["newly_accepted", "newly_abstained", "newly_rejected", "key_changed", "other"]
+Change = Literal["newly_accepted", "newly_abstained", "newly_rejected", "key_changed"]
 
 
 class DiffRow(BaseModel):
@@ -46,13 +46,23 @@ def load_reading(path: Path) -> dict:
     return json.loads(Path(path).read_text())
 
 
+def _values(source: dict) -> dict[str, float]:
+    values = {name: source[name] for name in METRICS if name in source}
+    recall = source.get("candidate_recall", {})
+    if "10" in recall or 10 in recall:
+        values["recall_at_10"] = recall.get("10", recall.get(10, 0.0))
+    return values
+
+
 def metric_rows(
     before: dict, after: dict, *, stratum: str | None = None
 ) -> list[tuple[str, float, float]]:
-    b = before["by_stratum"].get(stratum, {}) if stratum else before["metrics"]
-    a = after["by_stratum"].get(stratum, {}) if stratum else after["metrics"]
+    b = _values(before["by_stratum"].get(stratum, {}) if stratum else before["metrics"])
+    a = _values(after["by_stratum"].get(stratum, {}) if stratum else after["metrics"])
     return [
-        (name, b.get(name, 0.0), a.get(name, 0.0)) for name in METRICS if name in b or name in a
+        (name, b.get(name, 0.0), a.get(name, 0.0))
+        for name in (*METRICS, "recall_at_10")
+        if name in b or name in a
     ]
 
 
@@ -64,9 +74,7 @@ def _change(before: dict, after: dict) -> Change:
             "abstain": "newly_abstained",
             "reject": "newly_rejected",
         }[av]
-    if av == "accept" and before["decision"]["work_key"] != after["decision"]["work_key"]:
-        return "key_changed"
-    return "other"
+    return "key_changed"
 
 
 def decision_diff(before: dict, after: dict) -> list[DiffRow]:
@@ -78,7 +86,7 @@ def decision_diff(before: dict, after: dict) -> list[DiffRow]:
             continue
         same_verdict = prior["decision"]["verdict"] == later["decision"]["verdict"]
         same_key = prior["decision"]["work_key"] == later["decision"]["work_key"]
-        if same_verdict and same_key:
+        if same_verdict and (later["decision"]["verdict"] != "accept" or same_key):
             continue
         rows.append(
             DiffRow(
