@@ -1,4 +1,6 @@
-from openlibrary.matcher.decide import decide, rank
+import pytest
+
+from openlibrary.matcher.decide import decide, margins, rank
 from openlibrary.matcher.features import FEATURES
 from openlibrary.matcher.scorer import MATCHER_VERSION, ScoredCandidate, Weights
 
@@ -238,3 +240,39 @@ def test_a_disagreeing_identifier_is_not_identity_evidence():
     decision = decide([_c("OL1W", 0.95, evidence=evidence)], _equal_weights())
     assert decision.verdict == "abstain"
     assert "identity" in decision.reason
+
+
+def _titleless(work_key, score):
+    return _c(
+        work_key,
+        score,
+        evidence={
+            "author_overlap": {"value": 1.0, "weight": 1.0, "contribution": 1.0},
+            "title_similarity": {"value": None, "weight": 1.0, "contribution": 0.0},
+        },
+    )
+
+
+def test_a_titleless_translation_cannot_outrank_the_titled_work():
+    ordered = rank([_titleless("OLHEBW", 0.913), _c("OLREALW", 0.885)])
+    assert [c.work_key for c in ordered] == ["OLREALW", "OLHEBW"]
+
+
+def test_a_titleless_runner_up_does_not_set_the_margin():
+    decision = decide([_c("OLREALW", 0.974), _titleless("OLHEBW", 0.913)], _equal_weights())
+    assert decision.verdict == "accept"
+    assert decision.margin == pytest.approx(0.974)
+
+
+def test_with_only_titleless_candidates_it_still_abstains_for_no_identity():
+    decision = decide([_titleless("OL1W", 0.95), _titleless("OL2W", 0.5)], _equal_weights())
+    assert decision.verdict == "abstain"
+    assert decision.reason.startswith("no identity evidence")
+
+
+def test_margins_skip_titleless_candidates_below():
+    ordered = rank([_c("OL1W", 0.97), _titleless("OL2W", 0.913), _c("OL3W", 0.80)])
+    # The title-less candidate ranks last. OL1W's margin is to OL3W; OL3W and
+    # OL2W have no titled candidate below them, so each margin is its own score.
+    assert [c.work_key for c in ordered] == ["OL1W", "OL3W", "OL2W"]
+    assert margins(ordered) == pytest.approx([0.17, 0.80, 0.913])

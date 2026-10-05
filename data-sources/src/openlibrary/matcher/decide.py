@@ -31,6 +31,15 @@ threshold means "not found" only when the search was allowed to look, so a
 tripped volume guard turns the reject band into an abstain too. Accept and
 the middle band are untouched: a clear winner among the candidates that
 WERE fetched is still a clear winner.
+
+Identity first (2026-10-04 list-queries spec, section 3). A title-less
+candidate -- a translation whose non-Latin title fingerprints to "" -- matched
+on the author alone, so it can neither outrank a candidate that has a title or
+identifier nor set the margin of one. `rank` puts identity-bearing candidates
+first and `margins` ignores title-less candidates below; with nothing but
+title-less candidates the decision still abstains for no identity evidence.
+Measured in the 2026-10-04 spike: 26 margin abstains and 8 displaced top
+candidates came from this.
 """
 
 from __future__ import annotations
@@ -62,9 +71,42 @@ class Decision(BaseModel):
 _has_identity_evidence = has_identity_evidence
 
 
-def rank(candidates: list[ScoredCandidate]) -> list[ScoredCandidate]:
-    """Highest score first; ties broken by work_key so the order is deterministic."""
-    return sorted(candidates, key=lambda c: (-c.score, c.work_key))
+def _group(candidate: ScoredCandidate, clusters) -> tuple[str, float, bool]:
+    """(group id, group best score, is representative) -- a singleton group
+    when unclustered."""
+    if clusters is None or candidate.work_key not in clusters.of:
+        return candidate.work_key, candidate.score, True
+    cid = clusters.of[candidate.work_key]
+    return cid, clusters.best_score[cid], clusters.representative.get(cid) == candidate.work_key
+
+
+def rank(candidates: list[ScoredCandidate], clusters=None) -> list[ScoredCandidate]:
+    """Identity-bearing candidates first (2026-10-04 spec, section 3), then by
+    their group's best score, groups kept together with the representative
+    first, then score, then work_key -- deterministic."""
+
+    def key(c: ScoredCandidate):
+        cid, best, is_rep = _group(c, clusters)
+        return (not has_identity_evidence(c), -best, cid, not is_rep, -c.score, c.work_key)
+
+    return sorted(candidates, key=key)
+
+
+def margins(ranked: list[ScoredCandidate], clusters=None) -> list[float]:
+    """Per candidate: its group's best score minus the best score among
+    identity-bearing candidates ranked below it in a different group (0.0 if
+    none). A candidate that could not itself be accepted never sets another's
+    margin. margins(...)[0] is the decision's margin (R85)."""
+    out = []
+    for i, candidate in enumerate(ranked):
+        cid, best, _ = _group(candidate, clusters)
+        below = [
+            c.score
+            for c in ranked[i + 1 :]
+            if has_identity_evidence(c) and _group(c, clusters)[0] != cid
+        ]
+        out.append(best - max(below, default=0.0))
+    return out
 
 
 def decide(
@@ -72,6 +114,7 @@ def decide(
     weights: Weights,
     *,
     volume_guards_tripped: Sequence[str] = (),
+    clusters=None,
 ) -> Decision:
     """accept / abstain / reject over already-scored candidates.
 
@@ -92,10 +135,10 @@ def decide(
             )
         return Decision(verdict="reject", reason="no candidates")
 
-    ordered = rank(candidates)
+    ordered = rank(candidates, clusters)
     best = ordered[0]
-    runner_up = ordered[1].score if len(ordered) > 1 else 0.0
-    margin = best.score - runner_up
+    margin = margins(ordered, clusters)[0]
+    runner_up = best.score - margin
 
     if best.conflicts:
         return Decision(
