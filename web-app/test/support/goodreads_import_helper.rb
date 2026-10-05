@@ -24,6 +24,8 @@ module GoodreadsImportHelper
     ::Search::Books::Search::AuthorByName.stubs(:call).returns([])
     ::Books::EnrichBookJob.stubs(:perform_async)
     ::Books::Authors::WikidataJob.stubs(:perform_async)
+    # Sidekiq runs inline in tests; a test that cares asserts on this.
+    ::Books::Goodreads::FetchPageJob.stubs(:perform_async)
   end
 
   def open_library_abstain

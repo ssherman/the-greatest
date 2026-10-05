@@ -17,6 +17,8 @@ module Services
         setup do
           stub_resolution_services
           @import = ::Books::GoodreadsImport.create!(user: users(:editor_user), status: :resolving)
+          # QUIET_YEAR's page is cached, so its book is created at once.
+          goodreads_page(goodreads_book_id: 90_000_001)
         end
 
         def parse(*rows)
@@ -106,6 +108,15 @@ module Services
           assert_no_difference(["::Books::Book.count", "::MatchDecision.count"]) { ResolveImport.call(import: @import, finder: finder) }
 
           assert_equal before, counters
+        end
+
+        test "an edition waiting on Goodreads is neither matched nor created yet" do
+          parse({"Book Id" => "90000002", "Title" => "The Loud Year", "Author" => "Anna Brenner"})
+
+          result = ResolveImport.call(import: @import)
+
+          assert_equal 1, result.data[:outcomes][:pending]
+          assert_equal [0, 0, 0, 0, 0], counters
         end
       end
     end

@@ -34,21 +34,90 @@ module Services
           assert_equal [@war_and_peace, "certain"], [edition.reload.book, edition.match_decision.confidence]
         end
 
-        test "nothing found creates a provisional book, unflagged" do
+        test "nothing found and no page yet: the edition waits for Goodreads, unflagged, and a fetch is queued" do
           edition = goodreads_edition
+          ::Books::Goodreads::FetchPageJob.expects(:perform_async).with(edition.goodreads_book_id)
+
+          result = ResolveEdition.call(edition: edition, import: @import)
+
+          edition.reload
+          assert_equal :pending, result.data[:outcome]
+          assert_equal [true, @import, nil], [edition.verification_pending?, edition.pending_import, edition.book]
+          assert_equal false, edition.match_decision.needs_review
+        end
+
+        test "nothing found with its page cached creates a provisional, verified book at once" do
+          edition = goodreads_edition
+          goodreads_page(goodreads_book_id: edition.goodreads_book_id)
+          ::Books::Goodreads::FetchPageJob.expects(:perform_async).never
 
           result = ResolveEdition.call(edition: edition, import: @import)
 
           edition.reload
           assert_equal :created, result.data[:outcome]
-          assert edition.book.provisional?
-          assert_equal false, edition.match_decision.needs_review
+          assert_equal [true, true], [edition.book.provisional?, edition.verification_verified?]
+        end
+
+        test "nothing found with a not-found page cached parks the edition" do
+          edition = goodreads_edition
+          goodreads_page(goodreads_book_id: edition.goodreads_book_id, outcome: :not_found)
+
+          assert_no_difference("::Books::Book.count") do
+            assert_equal :parked, ResolveEdition.call(edition: edition, import: @import).data[:outcome]
+          end
+        end
+
+        test "a waiting edition is not resolved again" do
+          edition = goodreads_edition(verification: :pending)
+          finder = mock("finder")
+          finder.expects(:call).never
+
+          assert_equal :pending, ResolveEdition.call(edition: edition, import: @import, finder: finder).data[:outcome]
+        end
+
+        test "a rolled-back resolution queues no fetch" do
+          edition = goodreads_edition
+          ::Books::Goodreads::FetchPageJob.expects(:perform_async).never
+
+          ActiveRecord::Base.transaction(requires_new: true) do
+            ResolveEdition.call(edition: edition, import: @import)
+            raise ActiveRecord::Rollback
+          end
+
+          assert edition.reload.verification_not_needed?
+        end
+
+        test "an edition another import sent to Goodreads while this one ran the finder keeps that import's decision" do
+          ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([search_hit(@war_and_peace)])
+          stub_matching_ai(selected_index: 0)
+          edition = goodreads_edition(title: "War and Peace in the Garden", primary_author: "Leo Tolstoy")
+          other_import = ::Books::GoodreadsImport.create!(user: users(:regular_user), status: :resolving)
+          other_decision = ::MatchDecision.create!(finder: "DataImporters::Books::Book::Finder", subject: edition,
+            outcome: :unmatched, confidence: :high, decided_by: :rule)
+          real = ::DataImporters::Books::Book::Finder.new
+          racing = Object.new
+          racing.define_singleton_method(:call) do |**options|
+            real.call(**options).tap do
+              ::Books::GoodreadsEdition.where(id: edition.id).update_all(verification: 1, match_decision_id: other_decision.id,
+                pending_import_id: other_import.id)
+            end
+          end
+          ::Books::Goodreads::FetchPageJob.expects(:perform_async).never
+
+          result = ResolveEdition.call(edition: edition, import: @import, finder: racing)
+
+          edition.reload
+          assert_equal :pending, result.data[:outcome]
+          assert_equal [other_decision, other_import], [edition.match_decision, edition.pending_import]
+          assert_equal 0, ::MatchDecision.needing_review.where(subject: edition).count
         end
 
         test "an AI 'none of these' creates a book and flags it; it never takes the top search hit" do
           ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([search_hit(@war_and_peace)])
           stub_matching_ai(selected_index: 0)
           edition = goodreads_edition(title: "War and Peace in the Garden", primary_author: "Leo Tolstoy")
+          goodreads_page(goodreads_book_id: edition.goodreads_book_id, title: "War and Peace in the Garden",
+            authors: [["Leo Tolstoy", "Author"]])
 
           result = ResolveEdition.call(edition: edition, import: @import)
 
@@ -89,6 +158,8 @@ module Services
           ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([search_hit(@war_and_peace)])
           stub_matching_ai(selected_index: 0)
           edition = goodreads_edition(title: "War and Peace in the Garden", primary_author: "Leo Tolstoy")
+          goodreads_page(goodreads_book_id: edition.goodreads_book_id, title: "War and Peace in the Garden",
+            authors: [["Leo Tolstoy", "Author"]])
           failing = Object.new
           def failing.call(**)
             ::DataImporters::ImportResult.new(item: ::Books::Book.new, provider_results: [], success: false)
@@ -156,6 +227,7 @@ module Services
         test "an edition whose book was deleted is resolved again" do
           gone = ::Books::Book.create!(title: "The Quiet Year")
           edition = goodreads_edition(book: gone, resolution: :matched, resolved_at: 1.day.ago)
+          goodreads_page(goodreads_book_id: edition.goodreads_book_id)
           gone.destroy!
 
           result = ResolveEdition.call(edition: edition.reload, import: @import)
@@ -166,6 +238,7 @@ module Services
 
         test "a later import finds the provisional book an earlier one created instead of making another" do
           first = goodreads_edition(goodreads_book_id: 90_000_001)
+          goodreads_page(goodreads_book_id: 90_000_001)
           ResolveEdition.call(edition: first, import: @import)
           later_import = ::Books::GoodreadsImport.create!(user: users(:regular_user), status: :resolving)
           second = goodreads_edition(goodreads_book_id: 90_000_002)

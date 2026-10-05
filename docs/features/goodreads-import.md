@@ -11,8 +11,8 @@ catalog's bad data; this one is built so that it cannot. Spec:
 |---|---|---|
 | 1 | Optional review ratings | shipped |
 | 2 | Provisional books and authors (`docs/features/books-provisional-records.md`) | shipped |
-| 3 | Resolver core: parsing, tables, edition resolution, dry run | this doc |
-| 4 | Goodreads page fetcher and verification | not started |
+| 3 | Resolver core: parsing, tables, edition resolution, dry run | shipped |
+| 4 | Goodreads page fetcher and verification | this doc |
 | 5 | Legacy replay | not started |
 | 6 | Member upload, library write, admin approval | not started |
 | 7 | Finishing failed legacy imports | not started |
@@ -71,8 +71,7 @@ is intended: the replay rebuilds them.
    edition as the match decision's subject. The finder does not filter provisional books, so a
    later import links to an earlier import's provisional book instead of making another.
 3. **Outcome.** A match links. The finder flags medium, low and fallback decisions. No match
-   creates a provisional book through `CreateBook`. An AI "none of these" creates too, and is
-   flagged. Nothing falls back to the top search hit. A failed AI call (the finder's `fallback`
+   goes to Goodreads verification (below). An AI "none of these" goes there too, and is flagged. Nothing falls back to the top search hit. A failed AI call (the finder's `fallback`
    decision) is not an answer: the edition is left unresolved for the next run, so an AI outage
    cannot fill the catalog with duplicates. A decision that does not end up as the edition's
    (the run failed, or another import resolved the edition first) is taken out of the review
@@ -91,12 +90,58 @@ considered), and otherwise creates through `DataImporters::Books::Book::Importer
 A book that comes out of the importer with no author is rolled back (`CreateFailed`) and the
 edition retried later: an authorless book cannot be found by any later author-aware search.
 
-Every creation is `verification: unverified` until increment 4 adds the Goodreads fetch.
-
 Counters (`matched`, `created`, `flagged`, `parked`) are recomputed from state after each run, so a
 retry is safe. `ai_calls_count` counts calls as they happen. Matching AI is not capped. A failing
 edition records its error on its rows and stays unresolved for the next run; Postgres errors
 re-raise.
+
+## Goodreads verification
+
+An edition the finder cannot match is checked against its Goodreads page before a book is made
+for it. Matched editions never touch Goodreads.
+
+- **Cache.** `books_goodreads_pages` holds one row per Goodreads id. A `found` or `not_found` page
+  is the answer for good. A `blocked` or `unparseable` page keeps its HTML for a later look and is
+  fetched again. HTML is gzipped on the private `private_imports` storage service
+  (`PRIVATE_IMPORTS_STORAGE_*`, `deployment/ENV.md`) and never served; nothing generates a URL
+  for it.
+- **Waiting.** With the page cached, `SettleEdition` decides at once. Otherwise the edition waits
+  (`verification: pending`, with the waiting import in `pending_import_id`), and
+  `Books::Goodreads::FetchPageJob` is queued once that commits.
+- **Fetching.** `FetchPageJob` runs on the `goodreads_fetch` capsule, one at a time, through
+  `PageFetcher::Client` with `wait_for_selector: "h1"`. `Books::Goodreads::FetchGate` (Redis)
+  hands out start times at least `fetch_interval` apart (15 s) and caps a UTC day at
+  `daily_fetch_cap` (1,500). A job waits for its turn by rescheduling itself. A 403, a challenge or
+  an unrecognizable page blocks all fetching for `block_cooldown` (6 h). Goodreads' own 503 page
+  and timeouts are retried through the line up to `fetch_attempts` (3). Settings:
+  `config/initializers/goodreads.rb`.
+- **Reading.** `Books::Goodreads::BookPage` reads `__NEXT_DATA__`, or the markup and `ld+json`
+  when a page has none (1 page in 20, measured). It reads title, series, contributors with roles,
+  original year, ISBNs and ASIN, and never descriptions. An unknown id is a 200 titled "Page not
+  found".
+- **Agreement** (`Books::Goodreads::Agreement`):
+  - Main titles must match. A main title is normalized, with no series suffix, no subtitle and no
+    punctuation.
+  - The edition's primary author must be one of these, as a fuller or shorter form of the same
+    name:
+    - the page's primary contributor;
+    - an Author or Writer;
+    - a contributor with no role.
+- **Outcome** (`SettleEdition`):
+  - **Agrees:** a provisional book with the page's title and its Author and Writer contributors
+    (never translators, illustrators or editors), verified. Series are not linked, because
+    `Books::Series` has no provisional flag. The page row keeps every series it names, with
+    Goodreads' series id, for a later series backfill.
+  - **Not found or mismatch:** the edition is parked, its waiting rows read "not found on
+    Goodreads" or "does not match its Goodreads page", and nothing is created.
+  - **No page** (fetcher down, blocked, cap spent): the book is created unverified.
+- **Sweep.** `bin/rails "books:goodreads:verify_unverified[limit]"` queues a check for every
+  provisional book created unverified, and for editions stuck waiting over an hour. A later
+  `not_found` or `mismatch` is recorded on the edition and left for the admin page
+  (increment 6). The book is not touched.
+
+Moving an import through `verifying` and recounting it after a late settle belong to the import
+job (increment 6).
 
 ## Dry run
 
@@ -104,7 +149,8 @@ re-raise.
     bin/rails "books:goodreads:resolve_file[/path/to/export.csv,USER_ID]"
 
 Parses and resolves the file exactly as an import would, prints one line per edition (matched book,
-created book, flagged reason, failed sources) and rolls everything back. Open Library requests and
+created book, flagged reason, failed sources) and rolls everything back. A dry run fetches no Goodreads page: an unmatched edition whose page is
+not cached reports "waiting for Goodreads verification". Open Library requests and
 matching AI calls are real and are paid for. To reach the deployed Open Library service,
 `web-app/.env` needs `OPEN_LIBRARY_SERVICE_URL` and the Cloudflare Access pair
 (`CLOUDFLARE_ACCESS_CLIENT_ID`, `CLOUDFLARE_ACCESS_CLIENT_SECRET`); without them every decision
