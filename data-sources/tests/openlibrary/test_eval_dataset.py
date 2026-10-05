@@ -389,6 +389,14 @@ def test_a_short_shared_fingerprint_with_different_raw_titles_is_not_a_match():
     assert alternate_problems("OL1W", "OL2W", facts, {}) == [TITLE_PROBLEM]
 
 
+def test_raw_titles_differing_only_in_whitespace_are_equal():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="q a", noart="q a", title="Q&a"),
+        "OL2W": _facts("OL2W", title_fp="q a", noart="q a", title="Q & A"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == []
+
+
 def test_a_short_shared_fingerprint_with_equal_raw_titles_is_a_match():
     facts = {
         "OL1W": _facts("OL1W", title_fp="q a", noart="q a", title="Q & A"),

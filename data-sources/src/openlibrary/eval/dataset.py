@@ -174,8 +174,9 @@ def fetch_work_facts(
     }
 
 
+# NFKC, casefolded, all whitespace removed: "Q&a" and "Q & A" are the same raw title.
 def _raw_title(title: str | None) -> str:
-    return " ".join(unicodedata.normalize("NFKC", title or "").casefold().split())
+    return "".join(unicodedata.normalize("NFKC", title or "").casefold().split())
 
 
 def _same_title(fp_a: str | None, fp_b: str | None, raw_a: str | None, raw_b: str | None) -> bool:
