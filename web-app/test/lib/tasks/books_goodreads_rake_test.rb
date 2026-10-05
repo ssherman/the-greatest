@@ -55,4 +55,13 @@ class BooksGoodreadsRakeTest < ActiveSupport::TestCase
   ensure
     task&.reenable
   end
+
+  test "seed_legacy_pages prints what it loaded" do
+    seed = Services::Books::GoodreadsPages::SeedLegacyPages
+    seed.expects(:call).returns(seed::Result.new(success?: true, data: {inserted: 3, already_present: 1, skipped: 2}, errors: []))
+
+    assert_output(/inserted 3, already present 1, skipped 2/) { Rake::Task["books:goodreads:seed_legacy_pages"].invoke }
+  ensure
+    Rake::Task["books:goodreads:seed_legacy_pages"].reenable
+  end
 end

@@ -143,6 +143,17 @@ for it. Matched editions never touch Goodreads.
 Moving an import through `verifying` and recounting it after a late settle belong to the import
 job (increment 6).
 
+### Legacy seed
+
+    bin/rails books:goodreads:seed_legacy_pages
+
+Loads the legacy app's scraped `goodreads_books` rows into the cache as found pages with
+`source: legacy` and no HTML. There are about 12k page lookups and 27k search results; the
+export-derived rows are skipped. The legacy writers merged translators, illustrators and an export
+row's own author into one `authors` array, so every legacy name has no role: any of them backs an
+edition, and only the one that agreed becomes an author. A cached id is never overwritten, so the
+task can run again after each migration pass.
+
 ## Dry run
 
     bin/rails "books:goodreads:resolve_file[/path/to/goodreads_library_export.csv]"

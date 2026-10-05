@@ -21,5 +21,13 @@ namespace :books do
       Books::Goodreads::VerifyUnverifiedJob.perform_async(*[limit].compact)
       puts "queued Books::Goodreads::VerifyUnverifiedJob#{" (limit #{limit})" if limit}"
     end
+
+    desc "Load the legacy app's scraped Goodreads rows (page lookups and search results) into the page " \
+      "cache. Idempotent; never overwrites a cached page. Reads the legacy_books database."
+    task seed_legacy_pages: :environment do
+      counts = Services::Books::GoodreadsPages::SeedLegacyPages.call.data
+      puts "legacy Goodreads pages: inserted #{counts[:inserted]}, already present #{counts[:already_present]}, " \
+        "skipped #{counts[:skipped]}"
+    end
   end
 end
