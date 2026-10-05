@@ -95,6 +95,19 @@ This document lists all environment variables required for production deployment
 - **Used By**: web, worker
 - **Security**: Never commit; lives in `secrets/.env.production`
 
+### Private import storage
+
+#### PRIVATE_IMPORTS_STORAGE_BUCKET / PRIVATE_IMPORTS_STORAGE_ACCESS_KEY_ID / PRIVATE_IMPORTS_STORAGE_SECRET_ACCESS_KEY
+- **Description**: The private R2 bucket behind the `private_imports` service in `config/storage.yml`: Goodreads page HTML now, uploaded Goodreads exports from import increment 6. Never the public `cloudflare` bucket, because exports carry members' reviews. Use an R2 token scoped to this bucket only.
+- **Required**: Yes, before anything fetches Goodreads pages in production. Unset, the app still boots, but every page store fails.
+- **Used By**: web, worker
+- **Security**: Never commit; lives in `secrets/.env.production`
+
+#### PRIVATE_IMPORTS_STORAGE_ENDPOINT
+- **Description**: The bucket's S3 endpoint
+- **Required**: No; defaults to `STORAGE_ENDPOINT` (the same R2 account)
+- **Used By**: web, worker
+
 ### SSL Certificate Configuration
 
 #### CLOUDFLARE_API_TOKEN

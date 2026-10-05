@@ -18,6 +18,13 @@ Sidekiq.configure_server do |config|
     cap.queues = %w[serial]
   end
 
+  # Goodreads page fetches, one at a time across the app (production runs one
+  # Sidekiq process), paced by Books::Goodreads::FetchGate.
+  config.capsule("goodreads_fetch") do |cap|
+    cap.concurrency = 1
+    cap.queues = %w[goodreads_fetch]
+  end
+
   # Load cron jobs
   schedule_file = "config/schedule.yml"
 

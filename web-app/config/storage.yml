@@ -16,6 +16,29 @@ cloudflare:
   request_checksum_calculation: "when_required"
   response_checksum_validation: "when_required"
   public: true
+
+# Private: Goodreads page HTML, and later uploaded Goodreads exports
+# (Goodreads import spec §3, "Storage"). Its own R2 bucket, never public. The
+# bucket falls back to a placeholder because has_one_attached builds this
+# service when a model loads: an unset variable must fail an upload, not a
+# production boot. Test, and a development checkout without the variables,
+# use the disk.
+private_imports:
+<% if Rails.env.test? || (Rails.env.development? && ENV["PRIVATE_IMPORTS_STORAGE_BUCKET"].blank?) %>
+  service: Disk
+  root: <%= Rails.root.join(Rails.env.test? ? "tmp/storage/private_imports" : "storage/private_imports") %>
+<% else %>
+  service: S3
+  endpoint: <%= ENV.fetch("PRIVATE_IMPORTS_STORAGE_ENDPOINT", ENV["STORAGE_ENDPOINT"]) %>
+  access_key_id: <%= ENV["PRIVATE_IMPORTS_STORAGE_ACCESS_KEY_ID"] %>
+  secret_access_key: <%= ENV["PRIVATE_IMPORTS_STORAGE_SECRET_ACCESS_KEY"] %>
+  region: auto
+  bucket: <%= ENV["PRIVATE_IMPORTS_STORAGE_BUCKET"].presence || "private-imports-unconfigured" %>
+  request_checksum_calculation: "when_required"
+  response_checksum_validation: "when_required"
+  public: false
+<% end %>
+
 # Use bin/rails credentials:edit to set the AWS secrets (as aws:access_key_id|secret_access_key)
 # amazon:
 #   service: S3

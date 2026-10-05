@@ -53,8 +53,9 @@ module Services
 
           lines = [
             "Goodreads dry run: #{import.rows_count} rows, #{import.editions_count} editions. Nothing was saved.",
-            "matched #{import.matched_count} | created #{import.created_count} | flagged #{import.flagged_count} | " \
-              "failed rows #{rows.count(&:failed?)} | AI calls #{import.ai_calls_count}",
+            "matched #{import.matched_count} | created #{import.created_count} | " \
+              "waiting #{editions.values.count(&:verification_pending?)} | parked #{import.parked_count} | " \
+              "flagged #{import.flagged_count} | failed rows #{rows.count(&:failed?)} | AI calls #{import.ai_calls_count}",
             ""
           ]
           rows.group_by(&:goodreads_edition_id).each do |edition_id, group|
@@ -69,8 +70,11 @@ module Services
 
         def describe(edition, created_ids, group)
           source = %(gr #{edition.goodreads_book_id} "#{edition.title}" by #{edition.primary_author})
+          return "#{source} -> waiting for Goodreads verification" if edition.verification_pending?
           return "#{source} -> failed: #{group.filter_map(&:error).first}" if edition.resolved_at.nil?
-          return "#{source} -> parked" if edition.book.nil?
+          if edition.parked?
+            return "#{source} -> parked: #{SettleEdition::PARKED_DETAIL.fetch(edition.verification.to_sym, edition.verification)}"
+          end
 
           book = edition.book
           outcome = if created_ids.include?(book.id)

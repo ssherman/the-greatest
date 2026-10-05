@@ -19,8 +19,10 @@ module Services
       #
       # The book goes through the book importer with the finder's match (no
       # second finder run), provisional, with the edition's identifiers
-      # stamped and no enrichment; enrichment runs on admin approval. With no
-      # Goodreads fetcher yet (increment 4), every creation is unverified.
+      # stamped and no enrichment; enrichment runs on admin approval. A book
+      # backed by its Goodreads page (SettleEdition) takes the page's title and
+      # the authors the page agreed on, and is verified; any other is
+      # unverified.
       class CreateBook
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         CreateFailed = Class.new(StandardError)
@@ -29,24 +31,32 @@ module Services
         # pg_advisory_xact_lock returns void (see Services::Billing::ReconcileCustomer).
         LOCK_SQL = "SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext($1)::bigint)) AS lock_taken"
 
-        def self.call(edition:, import:, match:, importer: ::DataImporters::Books::Book::Importer)
-          new(edition: edition, import: import, match: match, importer: importer).call
+        def self.call(edition:, import:, match:, importer: ::DataImporters::Books::Book::Importer, page: nil, author_names: nil)
+          new(edition: edition, import: import, match: match, importer: importer, page: page, author_names: author_names).call
         end
 
-        def initialize(edition:, import:, match:, importer:)
+        # Held until the caller's transaction ends. SettleEdition parks and
+        # ResolveEdition marks an edition pending under the same lock.
+        def self.lock(edition)
+          ActiveRecord::Base.connection.exec_query(LOCK_SQL, "goodreads-create-lock", ["goodreads-edition:#{edition.signature}"])
+        end
+
+        def initialize(edition:, import:, match:, importer:, page:, author_names:)
           @edition = edition
           @import = import
           @match = match
           @importer = importer
+          @page = page
+          @author_names = author_names
         end
 
         # requires_new: inside a caller's transaction (the dry run, a test, a
-        # future job) a CreateFailed must still roll back what the providers
-        # already saved -- a book with no author, a new author -- rather than
-        # leave it for the next edition to find.
+        # job) a CreateFailed must still roll back what the providers already
+        # saved -- a book with no author, a new author -- rather than leave it
+        # for the next edition to find.
         def call
           ActiveRecord::Base.transaction(requires_new: true) do
-            acquire_lock
+            self.class.lock(@edition)
             @edition.reload
             next done(:cached) if settled?
 
@@ -58,10 +68,6 @@ module Services
         end
 
         private
-
-        def acquire_lock
-          ActiveRecord::Base.connection.exec_query(LOCK_SQL, "goodreads-create-lock", ["goodreads-edition:#{@edition.signature}"])
-        end
 
         def settled?
           @edition.resolved_at.present? && (@edition.book_id.present? || @edition.parked?)
@@ -85,11 +91,11 @@ module Services
 
         def create
           result = @importer.call(
-            title: @edition.title,
-            author_names: [@edition.primary_author],
-            year: @edition.original_publication_year || @edition.year_published,
-            isbn13: [@edition.isbn13].compact,
-            isbn10: [@edition.isbn10].compact,
+            title: @page&.title.presence || @edition.title,
+            author_names: @author_names.presence || [@edition.primary_author],
+            year: @edition.original_publication_year || @page&.original_publication_year || @edition.year_published,
+            isbn13: [@edition.isbn13 || @page&.isbn13].compact,
+            isbn10: [@edition.isbn10 || @page&.isbn10].compact,
             goodreads_id: [@edition.goodreads_book_id.to_s],
             subject: @edition,
             match: @match,
@@ -109,7 +115,7 @@ module Services
           end
 
           record_provenance(book, result.created_author_ids)
-          resolve!(book, :created, :unverified)
+          resolve!(book, :created, @page ? :verified : :unverified)
           done(:created)
         end
 
@@ -123,7 +129,7 @@ module Services
 
         def resolve!(book, resolution, verification)
           @edition.update!(book: book, resolution: resolution, verification: verification,
-            match_decision: @match.decision, resolved_at: Time.current)
+            match_decision: @match.decision, resolved_at: Time.current, pending_import: nil)
         end
 
         def done(outcome)

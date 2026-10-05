@@ -26,18 +26,21 @@ require "test_helper"
 #  book_id                   :bigint
 #  goodreads_book_id         :bigint           not null
 #  match_decision_id         :bigint
+#  pending_import_id         :bigint
 #
 # Indexes
 #
 #  idx_on_goodreads_book_id_signature_8e389d2d73        (goodreads_book_id,signature) UNIQUE
 #  index_books_goodreads_editions_on_book_id            (book_id)
 #  index_books_goodreads_editions_on_match_decision_id  (match_decision_id)
+#  index_books_goodreads_editions_on_pending_import_id  (pending_import_id)
 #  index_books_goodreads_editions_on_signature          (signature)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (book_id => books_books.id) ON DELETE => nullify
 #  fk_rails_...  (match_decision_id => match_decisions.id) ON DELETE => nullify
+#  fk_rails_...  (pending_import_id => books_goodreads_imports.id) ON DELETE => nullify
 #
 module Books
   class GoodreadsEditionTest < ActiveSupport::TestCase
@@ -66,6 +69,22 @@ module Books
       book.destroy!
 
       assert_nil edition.reload.book_id
+    end
+
+    test "awaiting_goodreads: editions waiting for their page, and those created before it could be read" do
+      waiting = GoodreadsEdition.create!(goodreads_book_id: 1, signature: "a", title: "A", primary_author: "X", verification: :pending)
+      unverified = GoodreadsEdition.create!(goodreads_book_id: 2, signature: "b", title: "B", primary_author: "X",
+        resolution: :created, verification: :unverified, book: books_books(:war_and_peace), resolved_at: Time.current)
+      GoodreadsEdition.create!(goodreads_book_id: 3, signature: "c", title: "C", primary_author: "X",
+        resolution: :created, verification: :verified, book: books_books(:war_and_peace), resolved_at: Time.current)
+      GoodreadsEdition.create!(goodreads_book_id: 4, signature: "d", title: "D", primary_author: "X",
+        resolution: :matched, verification: :not_needed, book: books_books(:war_and_peace), resolved_at: Time.current)
+
+      # Created unverified, then its book deleted: the finder's to resolve again.
+      GoodreadsEdition.create!(goodreads_book_id: 5, signature: "e", title: "E", primary_author: "X",
+        resolution: :created, verification: :unverified, book: nil, resolved_at: Time.current)
+
+      assert_equal [waiting, unverified].sort_by(&:id), GoodreadsEdition.awaiting_goodreads.order(:id).to_a
     end
   end
 end
