@@ -423,7 +423,8 @@ missing evidence. That is the one follow-up the investigation recommends. Case b
   derived at query time with the same rules as the stored fingerprints) and a stored work variant
   (`title_fp`, `title_fp_nosub`, `title_fp_noart`), of `token_sort_ratio / 100`. That ratio
   ignores word order but not length, so "the road" against "the road to wigan pier" is 0.53, not
-  1.0. `WRatio` and `token_set_ratio` are gone. A pair that uses a subtitle the query dropped
+  1.0. `WRatio` and `token_set_ratio` are gone from title comparison (`fuzzy_similarity` still uses
+  them for author names and subtitles). A pair that uses a subtitle the query dropped
   counts at most `DERIVED_TITLE_FACTOR` (0.95), so a full-title match outranks a subtitle-dropped
   one. `title_variant_exact` is 1.0 when any query variant equals any work variant, which is
   what lets "THE CITY IN HISTORY: Its Origins..." match `the city in history`. A subtitle derived
@@ -474,8 +475,9 @@ missing evidence. That is the one follow-up the investigation recommends. Case b
   article-stripped, matches either the labelled work's title or the case's own title as printed
   (the case-title path, for canonical works stored under another title, such as "El Buen Nombre",
   the Spanish published title of *The Namesake*), and it always requires a shared author. The
-  list rows carry a new provenance, `agent_researched`. Every alternate was spot-checked by Shane
-  and re-verified edition by edition; 796 remain. Two gates were added: `list_row` abstention
+  list rows carry a new provenance, `agent_researched`. Shane spot-checked samples (30 list rows; 15 + 15
+  alternate rows; the big clusters); agents re-verified every alternate edition by edition; 796
+  remain. Two gates were added: `list_row` abstention
   and `list_row` false merges (= 0).
 - **The label digest in the cache header (R123).** The prepared-cache header gained
   `labels_sha256`, a digest of every case's id, stratum, key, verdict and alternates. A relabel
@@ -487,8 +489,9 @@ cache and pinned threshold is stale. `weights.json` was recalibrated with `--bas
 vector, which under v3 semantics was the floor to beat (TEST objective 0.9333 -> 0.9383). The
 search raised `margin_threshold` from 0.175 to 0.204. That costs nine list-row accepts, but at
 0.175 two generic-title cases elsewhere become false merges: Freeman's *George Washington*
-(margin 0.203) and a cluster of a dozen different Claremont books all titled "X-Men" (margin
-0.195). Both sit within 0.01 of the threshold, and two false merges would still pass the global
+(margin 0.203) and a cluster of 18 different Claremont books all titled "X-Men" (margin
+0.195), where a record credited only to Louise Simonson joined through a co-credited record:
+cluster authors chain transitively, so a member need not share an author with the query. Both sit within 0.01 of the threshold, and two false merges would still pass the global
 0.015 gate, so a later recalibration that lowers the margin must re-check these two by hand.
 
 ### Recall by blocking rule (reading 7)
@@ -711,8 +714,7 @@ representative is `OL468431W` (1,179 editions, dominant), and the cluster
 scores ~0.979. The margin is ~0.113, below the 0.204 threshold, and the runner-up at ~0.866
 is `OL34381078W` "Great Gatsby" (14 editions), the same book again. It
 stays out of the cluster because its year agreement (0.07) diverges from the
-cluster's (1.0) by more than 0.5. That is the year split doing its job on
-dated catalogue noise. Without the year, the cluster grows to 54 members and the
+cluster's (1.0) by more than 0.5, so the year rule keeps it apart. Without the year, the cluster grows to 54 members and the
 request still abstains, with margin ~0.057 against a runner-up at ~0.920. That
 is the "title plus a tail" pattern described in the before/after report, the most
 common reason a list row still abstains. Neither result is a bug:
