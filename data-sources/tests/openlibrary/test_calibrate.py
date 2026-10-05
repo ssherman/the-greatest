@@ -12,7 +12,11 @@ after search must be strictly better than before, which can only happen if
 import datetime
 import json
 
+import pytest
+from pydantic import ValidationError
+
 from openlibrary.eval.calibrate import (
+    BOUNDED_KNOBS,
     calibration_write_gate,
     equal_weights,
     feature_presence,
@@ -24,7 +28,7 @@ from openlibrary.eval.calibrate import (
 from openlibrary.eval.harness import Metrics, PreparedCandidate, PreparedCase, evaluate
 from openlibrary.eval.schema import EvalBook, EvalCase, EvalLabel
 from openlibrary.matcher.features import FEATURES
-from openlibrary.matcher.scorer import Weights
+from openlibrary.matcher.scorer import MATCHER_VERSION, WEIGHTS_PATH, Weights, load_weights
 
 
 def _case(case_id: str, stratum: str) -> EvalCase:
@@ -513,3 +517,60 @@ def test_splink_weights_returns_none_when_the_extra_is_unavailable_or_the_shape_
     could select from both sides of the pair. Either way the caller sees a
     plain `None`, never a crash."""
     assert splink_weights(_forced_false_merge_prepared()) is None
+
+
+def test_a_v2_weights_file_loads_with_defaults(tmp_path):
+    v2 = json.loads(WEIGHTS_PATH.read_text())
+    v2.pop("subset_title_credit", None)
+    v2.pop("duplicate_dominance_ratio", None)
+    v2["matcher_version"] = 2
+    path = tmp_path / "v2.json"
+    path.write_text(json.dumps(v2))
+    weights = load_weights(path)
+    assert weights.subset_title_credit == 0.0 and weights.duplicate_dominance_ratio == 3.0
+
+
+def test_written_weights_carry_the_current_matcher_version(tmp_path):
+    out = tmp_path / "weights.json"
+    chosen = equal_weights().model_copy(update={"matcher_version": MATCHER_VERSION - 1})
+    written = calibration_write_gate(
+        [],
+        equal_score=-1.0,
+        base_score=-1.0,
+        chosen=chosen,
+        chosen_score=0.5,
+        train_score=0.5,
+        label="random-search",
+        out=out,
+    )
+    assert written
+    assert json.loads(out.read_text())["matcher_version"] == MATCHER_VERSION
+
+
+def test_the_search_keeps_new_knobs_inside_their_bounds():
+    base = equal_weights().model_copy(
+        update={"duplicate_dominance_ratio": 9.9, "subset_title_credit": 0.89}
+    )
+    best, _ = search_weights(
+        _one_clean_match_prepared(), base=base, iterations=300, seed=1, min_accept_rate=0.0
+    )
+    low, high, _ = BOUNDED_KNOBS["duplicate_dominance_ratio"]
+    assert low <= best.duplicate_dominance_ratio <= high
+    low, high, _ = BOUNDED_KNOBS["subset_title_credit"]
+    assert low <= best.subset_title_credit <= high
+
+
+def test_the_new_parameters_are_search_knobs():
+    assert {"subset_title_credit", "duplicate_dominance_ratio"} <= set(BOUNDED_KNOBS)
+
+
+def test_a_subset_title_credit_at_the_derived_factor_fails_validation():
+    payload = equal_weights().model_dump() | {"subset_title_credit": 0.95}
+    with pytest.raises(ValidationError):
+        Weights.model_validate(payload)
+
+
+def test_a_duplicate_dominance_ratio_below_one_fails_validation():
+    payload = equal_weights().model_dump() | {"duplicate_dominance_ratio": 0.5}
+    with pytest.raises(ValidationError):
+        Weights.model_validate(payload)

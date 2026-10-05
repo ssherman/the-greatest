@@ -48,11 +48,12 @@ class Weights(BaseModel):
     reject_threshold: float
     margin_threshold: float
     # Calibrated title credit for a strict token-subset title pair (spec section 2);
-    # 0.0 = containment earns nothing beyond its token_sort ratio.
-    subset_title_credit: float = 0.0
+    # 0.0 = containment earns nothing beyond its token_sort ratio. Capped below
+    # DERIVED_TITLE_FACTOR (0.95): the containment suppression in features relies on it.
+    subset_title_credit: float = Field(default=0.0, ge=0.0, le=0.9)
     # How many times the next member's edition count a duplicate cluster's
     # top member needs before it represents the cluster (spec section 4).
-    duplicate_dominance_ratio: float = 3.0
+    duplicate_dominance_ratio: float = Field(default=3.0, ge=1.0)
 
     # A typo in weights.json (Task 27 rewrites this file after every
     # calibration run) must fail LOUDLY at load time. Silently defaulting an
