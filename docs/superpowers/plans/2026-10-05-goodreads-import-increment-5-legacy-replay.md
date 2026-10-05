@@ -40,6 +40,8 @@ What the numbers decide:
 2. **About half of all editions need a matching AI call.** At ~188k editions, that is roughly 94k `fast` calls per full replay pass, before pass two. The spec puts no cap on matching AI; the report counts the calls.
 3. **Initials miss the author check.** "J.D. Salinger" fails `creators_agree?` against "J. D. Salinger". This is a finder normalization gap and is out of scope here (a follow-up). The author grouping key below removes punctuation and spaces, so those two do group together.
 
+**Running it:** an improved Open Library matcher, on branch `worktree-books-list-wizard`, was in progress when this plan was written. It changes `data-sources/` only (the `/resolve` matcher) and keeps the service interface. This plan calls that service through the existing client and does not depend on its internals. Pass two (`/resolve`) gets better once the new matcher ships. Run the production replay after that matcher is deployed to the home server, so pass two and the report measure it. The measurement above ran with Open Library disabled, so it is unaffected.
+
 ## Rulings made while planning
 
 - **R1.** The legacy bucket credentials are the existing `LEGACY_R2_*` (`Services::BooksMigration::LegacyR2`), not the spec's `LEGACY_STORAGE_*`, because they already exist and the image migration uses them. Production needs all four in SOPS.
