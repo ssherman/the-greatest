@@ -40,7 +40,7 @@ What the numbers decide:
 2. **About half of all editions need a matching AI call.** At ~188k editions, that is roughly 94k `fast` calls per full replay pass, before pass two. The spec puts no cap on matching AI; the report counts the calls.
 3. **Initials miss the author check.** "J.D. Salinger" fails `creators_agree?` against "J. D. Salinger". This is a finder normalization gap and is out of scope here (a follow-up). The author grouping key below removes punctuation and spaces, so those two do group together.
 
-**Running it:** an improved Open Library matcher, on branch `worktree-books-list-wizard`, was in progress when this plan was written. It changes `data-sources/` only (the `/resolve` matcher) and keeps the service interface. This plan calls that service through the existing client and does not depend on its internals. Pass two (`/resolve`) gets better once the new matcher ships. Run the production replay after that matcher is deployed to the home server, so pass two and the report measure it. The measurement above ran with Open Library disabled, so it is unaffected.
+**Running it:** the improved Open Library matcher is already deployed on the home server (Shane, 2026-10-05). Production and development both reach it there, through the existing client and interface, so pass two (`/resolve`) uses it wherever the replay runs. No extra sequencing is needed. The measurement above ran with Open Library disabled and is unaffected.
 
 ## Rulings made while planning
 
