@@ -2362,7 +2362,9 @@ class ClusterInputs(BaseModel):
 
 def cluster_inputs(work: WorkView) -> ClusterInputs:
     return ClusterInputs(
-        title_variants=sorted({v for v in (work.title_fp, work.title_fp_nosub, work.title_fp_noart) if v}),
+        # Full and article-stripped only -- never title_fp_nosub (ruling 7:
+        # "LotR: The Two Towers" and the LotR omnibus share it).
+        title_variants=sorted({v for v in (work.title_fp, work.title_fp_noart) if v}),
         author_fps=sorted({fp for fp in (name_fingerprint(n) for n in work.author_names) if fp}),
         edition_count=work.edition_count,
     )

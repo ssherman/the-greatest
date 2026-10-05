@@ -155,7 +155,11 @@ A new stage, `matcher/cluster.py`, runs between scoring and deciding, over the s
 and `WorkView`s.
 
 **Cluster membership.** Two candidates belong to the same cluster when all of these hold:
-- any title variant of one equals any title variant of the other (non-empty);
+- their full title fingerprints (`title_fp`) are equal, or their article-stripped fingerprints
+  (`title_fp_noart`) are (non-empty). The subtitle-stripped variant is deliberately excluded:
+  "The Lord of the Rings: The Two Towers" and the "Lord of the Rings" omnibus share
+  `title_fp_nosub`, and the dominance rule would then accept the omnibus, a false merge (ruling
+  during implementation, 2026-10-04);
 - they share an author `name_fp` (primary or alternate name, the same fingerprints blocking uses);
 - their `year_agreement` values with the query do not diverge by more than 0.5. Both `None`
   passes. When the query has a year and only one member matches it, they are kept apart.
