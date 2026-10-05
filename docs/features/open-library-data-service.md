@@ -271,7 +271,7 @@ needs revisiting.
 
 ## Matcher, measured
 
-Task 27 calibrated the matcher's weight vector against the 448-case labelled set (`data-sources/src/openlibrary/eval/cases/`) and, separately, made one bounded attempt to have Splink do that instead; the whole-branch review of Increment 3 then changed the decision stage (matcher v2, below); the PR #308 review then found rule 6 was not volume-guarded like every other blocking rule (R64, below). Seven readings, same 448 cases, same real 2026-07-31 artifact:
+Task 27 calibrated the matcher's weight vector against the 448-case labelled set (`data-sources/src/openlibrary/eval/cases/`) and, separately, made one bounded attempt to have Splink do that instead; the whole-branch review of Increment 3 then changed the decision stage (matcher v2, below); the PR #308 review then found rule 6 was not volume-guarded like every other blocking rule (R64, below). Seven readings, same 448 cases, same real 2026-07-31 artifact, plus reading 8 (matcher v3, below), which is measured on the expanded 598-case set:
 
 | Reading | recall@5 | recall@10 | recall@50 | precision@accept | FALSE MERGE | false reject | abstention | correct no-match |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -281,13 +281,16 @@ Task 27 calibrated the matcher's weight vector against the 448-case labelled set
 | 4. Calibration, final (amended objective) -- matcher v1 as shipped | 0.886 | 0.922 | 0.943 | 0.980 | 0.0201 | 0.0027 | 0.643 | 0.134 |
 | 5. Matcher v2 decision rules, reading 4's weights, before the R59 reject-band extension | 0.886 | 0.922 | 0.943 | 0.993 | 0.0068 | 0.0027 | 0.658 | 0.090 |
 | 6. Matcher v2 (v2 rules, reading 4's vector re-validated, `language_agreement` 0.0) | 0.886 | 0.922 | 0.943 | 0.993 | 0.0068 | 0.0000 | 0.661 | 0.090 |
-| 7. **Matcher v2 + R64, shipped** (rule 6 volume-guards itself; same vector re-validated again) | 0.886 | 0.922 | 0.943 | **0.993** | **0.0068** | **0.0000** | 0.665 | 0.060 |
+| 7. Matcher v2 + R64 (rule 6 volume-guards itself; same vector re-validated again) | 0.886 | 0.922 | 0.943 | 0.993 | 0.0068 | 0.0000 | 0.665 | 0.060 |
+| 8. **Matcher v3, shipped** (list-query spec; 598 cases incl. 150 `list_row`, duplicate-aware labels) | 0.931 | 0.948 | 0.963 | **1.000** | **0.0000** | **0.0000** | 0.614 | 0.060 |
 
-`recall misses (positives)` is **16 of 370 in all seven rows**, unchanged -- it is a property of blocking, never of weights or decision rules (see the R45/R46 invariant in Task 26b). Readings 1 and 2 predate `false_reject_rate` (added in reading 4's fix round); reading 3's held-out-split value, computed retroactively against the same code, is in the TEST table below.
+`recall misses (positives)` is **16 of 370 in all of readings 1-7**, unchanged -- it is a property of blocking, never of weights or decision rules (see the R45/R46 invariant in Task 26b). Reading 8 has 520 positives on the larger set and still misses the same 16: v3 did not touch blocking. Readings 1 and 2 predate `false_reject_rate` (added in reading 4's fix round); reading 3's held-out-split value, computed retroactively against the same code, is in the TEST table below.
 
 Reading 3 looks like the best row on every column it reports -- precision 0.966, false merge 0.0345, abstention *down* to 0.094 -- and that is exactly the trap: it bought that abstention rate by silently converting true matches into rejects, which reading 3's own objective could not see. Reading 4 was matcher v1 as shipped at the end of Task 28. Reading 6 shipped as matcher v2: the same weight vector under the v2 decision rules, which took the false-merge rate from 3 accepts in 149 to 1 in 146 and the false rejects to zero. The remaining false merge is `high_frequency_title-017`, whose label is a recorded **contested tiebreak** -- the matcher accepted the work carrying the book's exact ISBN; the labeller chose a duplicate work on contamination grounds and wrote "flip to OL19760957W if identifier-first should hold". The cost of v2 is three correct no-matches (9 -> 6 of 67) and one correct accept: `no_candidates-036` is R59 working as ruled (a frequency-suppressed title with nothing else to look up now abstains); `shared_key_collision-080` is an R58 cost (its best candidate carried author evidence only and a score under the reject threshold -- v1 rejected it on the score, v2 abstains for want of identity evidence, because the identity guard runs before the threshold bands); `degenerate_title-015` is the correct accept R58 was predicted to lose (a `match` v1 accepted on author agreement alone); and one no-match is rule 6's arbitrary fallbacks landing on the other side of the reject threshold this rebuild (see "Why rule 6 was noise" below). R59 also turned `degenerate_title-007` (labelled `ambiguous`, shelf refused) from a wrong reject into a correct abstain. Re-scoring the v2 cache under the v1 decision rules isolates the rules from the rebuild: the rules alone move exactly eight decisions -- the seven named here plus `no_candidates-030` -- and account for false merge 0.0201 -> 0.0068, false reject 0.0054 -> 0.0000, correct no-match 0.119 -> 0.090.
 
-Reading 7 is what ships now: PR #308's review (Codex, confirmed by the controller as R64) found rule 6 was the one blocking rule that queried a bare `LIMIT MAX_CANDIDATES_PER_RULE` and never recorded a volume guard, so an overflowing fuzzy search (more than 200 works tied at jaccard 1.0 -- see "Why rule 6 was noise" below) silently admitted an arbitrary 200 of the ties instead of saying the search was incomplete. Rule 6 now follows rules 1, 3, 4 and 5: query for cap + 1, and when more come back, admit nothing and record `volume_guards_tripped`. The prepared cache was rebuilt against the fixed `blocking.py` (R60: its `code_sha256` covers that file); re-scoring the same shipped vector under it moves nothing but `correct_no_match_rate` (0.0896 -> 0.0597, 6/67 -> 4/67) and, by less than 0.005, `abstention_rate`. The two cases that move are `no_candidates-001` ("Merian Thailand") and `no_candidates-012` ("If Only Happiness Was A No Brainer") -- both genuinely absent from Open Library, both previously landed in the reject band on rule 6's arbitrary (and, before this fix, undetectable) 200-fallback overflow, best scores 0.399 and 0.361 against the 0.400 reject threshold. Under the fix, rule 6 admits nothing for either (the search overflows, so it is suppressed) and `decide` abstains -- "no candidates; search refused for volume: trigram" -- rather than asserting a refused search had confirmed a non-match. That is the fix working as intended: an abstention costs a review, which is cheaper than a decision an incomplete search was never entitled to make. Re-calibration was attempted (the correct-no-match move is over the ~0.01 trigger) and confirmed the shipped vector still wins -- see "The v2 calibration" below.
+Reading 7 shipped as matcher v2: PR #308's review (Codex, confirmed by the controller as R64) found rule 6 was the one blocking rule that queried a bare `LIMIT MAX_CANDIDATES_PER_RULE` and never recorded a volume guard, so an overflowing fuzzy search (more than 200 works tied at jaccard 1.0 -- see "Why rule 6 was noise" below) silently admitted an arbitrary 200 of the ties instead of saying the search was incomplete. Rule 6 now follows rules 1, 3, 4 and 5: query for cap + 1, and when more come back, admit nothing and record `volume_guards_tripped`. The prepared cache was rebuilt against the fixed `blocking.py` (R60: its `code_sha256` covers that file); re-scoring the same shipped vector under it moves nothing but `correct_no_match_rate` (0.0896 -> 0.0597, 6/67 -> 4/67) and, by less than 0.005, `abstention_rate`. The two cases that move are `no_candidates-001` ("Merian Thailand") and `no_candidates-012` ("If Only Happiness Was A No Brainer") -- both genuinely absent from Open Library, both previously landed in the reject band on rule 6's arbitrary (and, before this fix, undetectable) 200-fallback overflow, best scores 0.399 and 0.361 against the 0.400 reject threshold. Under the fix, rule 6 admits nothing for either (the search overflows, so it is suppressed) and `decide` abstains -- "no candidates; search refused for volume: trigram" -- rather than asserting a refused search had confirmed a non-match. That is the fix working as intended: an abstention costs a review, which is cheaper than a decision an incomplete search was never entitled to make. Re-calibration was attempted (the correct-no-match move is over the ~0.01 trigger) and confirmed the shipped vector still wins -- see "The v2 calibration" below.
+
+Reading 8 is what ships now: **matcher v3**, from the 2026-10-04 list-query spec (`docs/superpowers/specs/2026-10-04-ol-matcher-list-queries-design.md`). A list row gives a title and author names and almost never an identifier, and on those inputs v2 almost never decided: 193 of 200 spike rows abstained, against a documented 0.665 that came from a labelled set where 438 of 448 cases carry identifiers. v3 changes four things, each a ruling below. Titles are compared variant against variant with a length-sensitive ratio (R119), so "Dune" no longer scores 1.0 against "Children of Dune". Candidates with no comparable title can neither outrank nor set the margin of one that has a title (R120). Unmerged Open Library duplicates of one book form a cluster that is decided as one candidate (R121). The labels gained verified duplicates (R122), so an accept of any of them counts as right. Reading 8 is measured on 598 cases: the 448, plus 150 `list_row` cases built exactly as a list row arrives. The v2 matcher on the same 598 cases and labels (the baseline reading) scores recall@5/10/50 0.915/0.940/0.958, precision 1.000, false merge 0.0000, false reject 0.0000, abstention 0.731 and correct no-match 0.060. Reading 7's lone false merge (`high_frequency_title-017`) is correct under the duplicate-aware labels: the matcher had accepted a verified duplicate. Against that baseline, v3 takes list-row abstention from 0.927 to 0.507 (correct list rows 11 -> 74) with no false merge anywhere. All 89 new accepts were read by hand and none is a wrong book; three picked a non-canonical duplicate of the right one. `MATCHER_VERSION` is 3 and `weights.json` was recalibrated under v3 semantics. The full before/after, the hand review, the three strata that lost correct cases and why, and the remaining list-row abstains by reason are in `docs/data-quality/ol-matcher-v3-before-after.md`.
 
 ### Baseline 2, by stratum (equal weights, alternate names)
 
@@ -360,6 +363,134 @@ Against reading 4: `degenerate_title` and `pseudonym_or_alt_name` each lose thei
 
 Reading 7 (R64) moves exactly one line of this table from reading 6: `no_candidates` `correct` 2 -> 0 (`no_candidates-001` and `no_candidates-012`, both now abstentions instead of correct rejects -- see "Matcher, measured" above). Every other stratum, in every reading in this file, is unchanged.
 
+### Matcher v3, by stratum (reading 8)
+
+The v2 baseline on the expanded set (same 598 cases and labels as reading 8):
+
+```
+anthology_or_collection    n=30   correct=7    false_merges=0    recall_miss=0
+author_less_work           n=19   correct=11   false_merges=0    recall_miss=0
+degenerate_title           n=20   correct=6    false_merges=0    recall_miss=3
+easy_baseline              n=60   correct=38   false_merges=0    recall_miss=0
+high_frequency_title       n=40   correct=28   false_merges=0    recall_miss=0
+isbn_reuse                 n=30   correct=2    false_merges=0    recall_miss=0
+list_row                   n=150  correct=11   false_merges=0    recall_miss=0
+no_candidates              n=50   correct=0    false_merges=0    recall_miss=5
+no_popularity_signal       n=30   correct=11   false_merges=0    recall_miss=0
+non_latin_title            n=30   correct=4    false_merges=0    recall_miss=2
+pseudonym_or_alt_name      n=29   correct=13   false_merges=0    recall_miss=2
+shared_key_collision       n=80   correct=20   false_merges=0    recall_miss=4
+stale_ol_key               n=30   correct=21   false_merges=0    recall_miss=0
+```
+
+Matcher v3 (reading 8):
+
+```
+anthology_or_collection    n=30   correct=4    false_merges=0    recall_miss=0
+author_less_work           n=19   correct=9    false_merges=0    recall_miss=0
+degenerate_title           n=20   correct=6    false_merges=0    recall_miss=3
+easy_baseline              n=60   correct=39   false_merges=0    recall_miss=0
+high_frequency_title       n=40   correct=28   false_merges=0    recall_miss=0
+isbn_reuse                 n=30   correct=8    false_merges=0    recall_miss=0
+list_row                   n=150  correct=74   false_merges=0    recall_miss=0
+no_candidates              n=50   correct=0    false_merges=0    recall_miss=5
+no_popularity_signal       n=30   correct=15   false_merges=0    recall_miss=0
+non_latin_title            n=30   correct=1    false_merges=0    recall_miss=2
+pseudonym_or_alt_name      n=29   correct=13   false_merges=0    recall_miss=2
+shared_key_collision       n=80   correct=22   false_merges=0    recall_miss=4
+stale_ol_key               n=30   correct=23   false_merges=0    recall_miss=0
+```
+
+`list_row` is new in this reading: 150 legacy books list items that still carry the original list
+text, sampled with the 200 spike rows (and every book they link to) excluded, queried with the
+list's title as given, the authors split into names, and no year or identifiers. The baseline's
+`high_frequency_title` count is 28 rather than reading 6's 27 because of the one re-graded case above.
+
+Three strata lost more than one correct case: `anthology_or_collection` 7 -> 4,
+`author_less_work` 11 -> 9, `non_latin_title` 4 -> 1. Seven of the eight lost cases were
+accepts carried by our identifiers that v2 scored just over 0.9. v3's stricter title measure (a
+subset or a shared volume number no longer scores 1.0, and an inverted or "&" title no longer
+matches exactly), together with the heavier exact-title weight, puts them in the middle band. The eighth (`author_less_work-003`) abstains between two records of the same
+book. None is a code defect. The three `non_latin_title` cases are a lossy fingerprint (only
+the volume digit of a Japanese title survives) being scored as title *disagreement* instead of
+missing evidence. That is the one follow-up the investigation recommends. Case by case in
+`docs/data-quality/ol-matcher-v3-before-after.md`.
+
+### Why v3: the list-query rulings (R119-R123)
+
+- **Variant title comparison (R119; spec defects D1 and D4).** `title_similarity` is the maximum,
+  over every pair of a query variant (full, no-subtitle, no-article, no-subtitle-no-article,
+  derived at query time with the same rules as the stored fingerprints) and a stored work variant
+  (`title_fp`, `title_fp_nosub`, `title_fp_noart`), of `token_sort_ratio / 100`. That ratio
+  ignores word order but not length, so "the road" against "the road to wigan pier" is 0.53, not
+  1.0. `WRatio` and `token_set_ratio` are gone. A pair that uses a subtitle the query dropped
+  counts at most `DERIVED_TITLE_FACTOR` (0.95), so a full-title match outranks a subtitle-dropped
+  one. `title_variant_exact` is 1.0 when any query variant equals any work variant, which is
+  what lets "THE CITY IN HISTORY: Its Origins..." match `the city in history`. A subtitle derived
+  from the raw title is compared with the work's subtitle when the request sends none. The
+  containment credit (`subset_title_credit`) is a calibrated parameter. Calibration left it at
+  0.0, so containment earns nothing on this set. Absence stays neutral (R40): an empty
+  fingerprint on either side is `None`. Only query-side helpers were added to
+  `common/normalize.py`. Stored fingerprints, their SQL twins and `NORMALIZER_VERSION` are
+  unchanged, so no artifact rebuild was needed. The one gap this leaves: the cap applies to
+  subtitles the *query* drops, and a work whose stored title is the query plus a tail (a series
+  tag, an edition note, other contents) matches its no-subtitle variant at full credit. Most of
+  the remaining list-row margin abstains come from that.
+- **Identity first (R120; D2).** R58 already said a candidate with no title feature and no
+  agreeing identifier can never be accepted. Ranking and margin now agree with it. Such a
+  candidate ranks below every candidate that has identity evidence, and it is never the
+  runner-up that sets another candidate's margin. A translation whose non-Latin title
+  fingerprints to "" can no longer outrank the work it translates (8 times in the spike) or block
+  its margin (about 34 abstains in the spike). With no identity-bearing candidate at all the
+  answer is unchanged: abstain, "no identity evidence". Each candidate's `margin` is its group's
+  best score minus the best identity-bearing candidate ranked below it outside its group, so
+  `candidates[0].margin == decision.margin` (R85) still holds.
+- **Duplicate clusters (R121; D3).** `matcher/cluster.py` runs between scoring and deciding. Two
+  identity-bearing candidates join a cluster when all of these hold:
+  - their full title fingerprints are equal, or their article-stripped ones are. The comparison
+    is never across kinds and never on the subtitle-stripped variant: "The Lord of the Rings: The
+    Two Towers" and the omnibus share `title_fp_nosub`, and the dominance rule would then accept
+    the omnibus;
+  - they share an author name fingerprint;
+  - their year agreements differ by no more than 0.5, where one missing value never blocks.
+
+  A fingerprint shorter than 4 characters, or a lossy one (an alphabetic character outside a-z
+  after accents are stripped: non-Latin scripts, ł, ø, ß), also needs the raw titles to be equal
+  after NFKC, casefolding and whitespace removal. That keeps "エマ 6" and "シャーリー 6" apart,
+  though both fingerprint to "6". Clusters are connected components. The representative is the
+  single member whose identifier agrees with the query. Failing that, it is the member with the
+  most editions, provided it has at least `duplicate_dominance_ratio` times the next member's
+  editions (calibrated: 1.5, the floor of its search range). Failing that, the cluster has no
+  representative, and a multi-member winning cluster with none abstains: "duplicate cluster with
+  no dominant member". This is the Dickinson *Poems* case: 16 works, none dominant. The
+  representative carries the cluster's best score, and `decision.duplicates` lists the other
+  members. That field is evidence only. It can include a different text that shares the title
+  and an author (a graphic-novel adaptation, an omnibus), so nothing may stamp it as duplicate
+  keys without checking each entry.
+- **Duplicate-aware labels (R122).** A label carries `alternate_work_keys`: verified unmerged
+  duplicates of its work. The harness counts an accept of the work or of any alternate as
+  correct, and reports `canonical_rate` (how often an accept picked the labelled key) as
+  information, not a gate. The verifier accepts an alternate whose title, full or
+  article-stripped, matches either the labelled work's title or the case's own title as printed
+  (the case-title path, for canonical works stored under another title, such as "El Buen Nombre",
+  the Spanish published title of *The Namesake*), and it always requires a shared author. The
+  list rows carry a new provenance, `agent_researched`. Every alternate was spot-checked by Shane
+  and re-verified edition by edition; 796 remain. Two gates were added: `list_row` abstention
+  and `list_row` false merges (= 0).
+- **The label digest in the cache header (R123).** The prepared-cache header gained
+  `labels_sha256`, a digest of every case's id, stratum, key, verdict and alternates. A relabel
+  that keeps the case count used to reuse a stale cache silently. It is now detected. The header
+  carries six values (see "Gate and cache policy").
+
+`MATCHER_VERSION` is 3: R119-R121 change what the same candidates decide, so every v2 prepared
+cache and pinned threshold is stale. `weights.json` was recalibrated with `--base` from the v2
+vector, which under v3 semantics was the floor to beat (TEST objective 0.9333 -> 0.9383). The
+search raised `margin_threshold` from 0.175 to 0.204. That costs nine list-row accepts, but at
+0.175 two generic-title cases elsewhere become false merges: Freeman's *George Washington*
+(margin 0.203) and a cluster of a dozen different Claremont books all titled "X-Men" (margin
+0.195). Both sit within 0.01 of the threshold, and two false merges would still pass the global
+0.015 gate, so a later recalibration that lowers the margin must re-check these two by hand.
+
 ### Recall by blocking rule (reading 7)
 
 For each blocking rule, how many of the 370 labelled works a candidate carrying that rule reached, and how many were reached by **no other rule** (`harness.rule_recall_split`, printed by the harness CLI). Increment 4 needs this to decide what blocking can shed. Identical to reading 6 -- R64 changes rule 6's admission when the fuzzy search overflows, not which works any rule reaches, and rule 6 never overflows for a labelled case on this artifact:
@@ -396,7 +527,7 @@ The corrected handback diagnosis, while on the subject of the objective: the ~64
 
 That near-miss is now closed structurally (ruling R65), not just avoided by a human reading the numbers this one time: `calibrate.main`'s write gate folds a third candidate into the floor whenever `--out` already exists and is itself `calibrated` -- that file's own TEST score, evaluated fresh against the same split -- so `floor_score = max(equal, base, current_out)`. A bare cold start can no longer overwrite a better vector than itself just because it beat equal weights; the "not written" message now names which of the three floors actually won. `weights.json` is unchanged by all of this: reading 7 ships the same vector as reading 6, `calibrated_at` unmoved, only re-validated against the R64-fixed cache and (twice) against a fresh calibration search that failed to beat it.
 
-**Gate and cache policy.** The build gate evaluates the labelled set against the artifact it is gating and never reads a prepared cache on its own (R60); the cache header now fingerprints the artifact build and the four modules whose code determines what `prepare` produces, so a stale cache is refused with the mismatch printed rather than documented as a hazard. The thresholds in `thresholds.json` are re-pinned from reading 7 with the same headroom policy as Task 28; the file carries each bound beside its `measured` value and a `source` line naming the run, and the per-bound reasoning is here (see also `tests/openlibrary/test_pipeline_gates.py`): recall@10 >= 0.90, false merge <= 0.015 (two merges in 146 accepts pass, three fail), precision >= 0.98, abstention <= 0.70, correct no-match >= 0.04 (loosened from 0.05 under R64: two `no_candidates` cases that used to land in the reject band on rule 6's now-suppressed overflow correctly abstain instead, so the measured rate moved 0.090 -> 0.060 -- a real change in what "correct no-match" means for those two cases, not a flicker to paper over), false reject <= 0.005 (one passes, two fail).
+**Gate and cache policy.** The build gate evaluates the labelled set against the artifact it is gating and never reads a prepared cache on its own (R60). The cache header fingerprints the artifact build, the label set and the five modules whose code determines what `prepare` produces, so a stale cache is refused with the mismatch printed rather than documented as a hazard. It carries six values, and the file is trusted only when all six match: `dump_date`, `matcher_version`, `n_cases`, `labels_sha256` (R123), `artifact_built_at` and `code_sha256` (over `matcher/blocking.py`, `matcher/features.py`, `matcher/cluster.py`, `common/normalize.py` and `common/scoring.py`). The thresholds in `thresholds.json` are re-pinned from reading 8 (matcher v3, 598 cases) with the same headroom policy as Task 28. The file carries each bound beside its `measured` value and a `source` line naming the run, and the per-bound reasoning is here (see also `tests/openlibrary/test_pipeline_gates.py`). The four quality bounds are unchanged from v2: recall@10 >= 0.90, false merge <= 0.015 (about three merges in 227 accepts pass, four fail), precision >= 0.98 and false reject <= 0.005. Abstention is <= 0.65 (measured 0.614, rounded up to the next 0.05; it was 0.70 under v2). Correct no-match is >= 0.05 (measured 0.0597, rounded down to the next 0.01; it was 0.04 under R64). Two gates are new in v3: **`list_row` abstention <= 0.55** (measured 0.507, rounded up to the next 0.05) and **`list_row` false merges <= 0.0**. A single wrong accept on a list row fails the build. That is deliberate: list rows are the query shape the wizard sends, they carry no identifier to catch a bad title match, and the global 0.015 bound would let two or three of them through unseen. The global bound is also why the two near-threshold generic-title cases named under "Why v3" need a hand re-check whenever the margin moves: two false merges outside the list rows would pass it.
 
 ### The split, the objective, and why it changed mid-task
 
@@ -441,7 +572,7 @@ Splink 4.0.16 (the `calibration` extra) is a record-linkage model: `Linker` take
 
 `harness.prepare` measured at ~4.5s/case across all 448 cases (33m25s on the first full run, 31m9s on a rebuild) -- almost entirely un-indexed Parquet scans in blocking rules 1-5 (`identifiers` alone is 120M rows, scanned fresh per case) plus roughly 1.5s of `load_work_views`. Weights never touch this: `prepare` runs it once, `evaluate` re-scores the result in pure Python in milliseconds, which is what makes a 2000-iteration search over 268 cases finish in minutes rather than the ~90 hours a naive per-iteration `prepare` would cost.
 
-R54 adds a cache on top of that split: `write_prepared_cache`/`read_prepared_cache` (in `harness.py`) persist a `prepare()` result to a JSON file. Both CLIs take `--prepared-cache PATH`; the artifact-side copy used for this task lives at `/home/shane/ol-data/tmp/prepared-2026-07-31.json` (scratch space on the artifact host, **not** committed to the repo). The first run against a given path writes it (~31 minutes); every run after loads it in seconds. The header carries five values and the file is trusted only when all five match (R60): `dump_date`, `matcher_version`, `n_cases`, `artifact_built_at` (the version directory's `manifest.json` timestamp, so a same-date rebuild of the artifact invalidates it) and `code_sha256` (over the bytes of `matcher/blocking.py`, `matcher/features.py`, `common/normalize.py` and `common/scoring.py`, so a code change to any of the four invalidates it). The header detects an artifact rebuild or a code change to those four modules; other changes that alter what `prepare` produces without moving any of the five -- a relabel of the case set that keeps its count, an edit to `harness.prepare` or `dataset.resolve_keys` -- still need a manual delete. (`decide.py` and `scorer.py` do not: they run on top of the cached candidates in `evaluate`, which is the whole point of the split.)
+R54 adds a cache on top of that split: `write_prepared_cache`/`read_prepared_cache` (in `harness.py`) persist a `prepare()` result to a JSON file. Both CLIs take `--prepared-cache PATH`; the artifact-side copy used for this task lives at `/home/shane/ol-data/tmp/prepared-2026-07-31.json` (scratch space on the artifact host, **not** committed to the repo). The first run against a given path writes it (~31 minutes); every run after loads it in seconds. The header carries six values, and the file is trusted only when all six match (R60, R123): `dump_date`, `matcher_version`, `n_cases`, `labels_sha256` (a digest of every case's id, stratum, key, verdict and alternates, added in v3), `artifact_built_at` (the version directory's `manifest.json` timestamp, so a same-date rebuild of the artifact invalidates it) and `code_sha256` (over the bytes of `matcher/blocking.py`, `matcher/features.py`, `matcher/cluster.py`, `common/normalize.py` and `common/scoring.py`, so a code change to any of the five invalidates it). The header detects an artifact rebuild, a relabel (even one that keeps the case count) or a code change to those five modules. Other changes that alter what `prepare` produces without moving any of the six, such as an edit to `harness.prepare` or `dataset.resolve_keys`, still need a manual delete. The caches behind the v3 before/after report are `/home/shane/ol-data/tmp/prepared-v2-expanded.json` (the baseline) and `prepared-v3-expanded.json`. (`decide.py` and `scorer.py` do not: they run on top of the cached candidates in `evaluate`, which is the whole point of the split.)
 
 ### Increment 3 is complete
 
@@ -571,15 +702,23 @@ Rails is not local.
 
 **The Gatsby example, as the shape of an abstain.** `POST /resolve` with
 `{"title": "The Great Gatsby", "author_names": ["F. Scott Fitzgerald"],
-"year": 1925}` against the real artifact returns `verdict: "abstain"`, top
-candidate `OL468431W`, score ~0.986, margin ~0.028 -- a runner-up scores
-~0.957, close enough that the calibrated matcher declines to call it rather
-than guess. This is not a bug: `weights.json`'s `accept_threshold`/
-`reject_threshold`/margin gap are the calibrated matcher's real, measured
-behaviour on this title (see "Matcher, measured" above), and the accept
-threshold is a deliberately deferred dial -- tightening or loosening it is a
-calibration decision for whoever operates the service, not something this
-task changes.
+"year": 1925}` against the real artifact still returns `verdict: "abstain"`
+under matcher v3 (measured 2026-10-05), but for a narrower reason. Under v2 the
+top candidate `OL468431W` scored ~0.986 with margin ~0.028: a runner-up at
+~0.957 was another Open Library record of the same book. v3 clusters six
+same-title Fitzgerald records, so `decision.duplicates` lists five keys. The
+representative is `OL468431W` (1,179 editions, dominant), and the cluster
+scores ~0.979. The margin is ~0.113, below the 0.204 threshold, and the runner-up at ~0.866
+is `OL34381078W` "Great Gatsby" (14 editions), the same book again. It
+stays out of the cluster because its year agreement (0.07) diverges from the
+cluster's (1.0) by more than 0.5. That is the year split doing its job on
+dated catalogue noise. Without the year, the cluster grows to 54 members and the
+request still abstains, with margin ~0.057 against a runner-up at ~0.920. That
+is the "title plus a tail" pattern described in the before/after report, the most
+common reason a list row still abstains. Neither result is a bug:
+`weights.json`'s thresholds and margin are the calibrated matcher's real,
+measured behaviour (see "Matcher, measured" above). Tightening or loosening
+them is a calibration decision for whoever operates the service.
 
 ## Rails client (Increment 5)
 
