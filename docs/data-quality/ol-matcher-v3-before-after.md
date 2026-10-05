@@ -22,24 +22,28 @@ of the decision diff.
 
 | | Before (v2) | After (v3) |
 |---|---:|---:|
-| List-row abstention | 0.927 (139 of 150) | **0.507** (76 of 150) |
-| List rows decided correctly | 11 | **74** |
+| List-row abstention | 0.927 (139 of 150) | **0.513** (77 of 150) |
+| List rows decided correctly | 11 | **73** |
 | False merges, whole set | 0 | **0** |
 | Precision at accept | 1.000 | **1.000** |
-| Accepts, whole set | 157 | 227 |
-| Correct decisions, whole set | 172 | 242 |
-| Abstention, whole set | 0.731 | 0.614 |
+| Accepts, whole set | 157 | 224 |
+| Correct decisions, whole set | 172 | 239 |
+| Abstention, whole set | 0.731 | 0.619 |
 | Recall@10 | 0.940 | 0.948 |
-| Canonical rate (informational) | 0.994 | 0.982 |
-| Wrong books among the 89 new accepts | -- | **0** |
+| Canonical rate (informational) | 0.994 | 0.987 |
+| Wrong books among the 86 new accepts | -- | **0** |
 
-108 decisions changed: 89 newly accepted, 19 newly abstained. No decision became a reject, and
-no accept moved to a different key. Every one of the 89 new accepts was read by hand against the
-artifact: **none is a wrong book**. Three picked a non-canonical duplicate of the right book
-(`isbn_reuse-014`, `list_row-022`, `list_row-068`), which is why the canonical rate dipped.
+The after reading includes the dominance floor (Ruling 23, `MIN_DOMINANT_EDITIONS = 3`; see
+"One risk" below), which cost three correct accepts against the reading this report first
+showed (list rows 74 to 73, abstention 0.507 to 0.513).
 
-List-row abstention fell by 45%, not the 50% the spec expected. The remaining 76 abstains are
-explained below. In 70 of them the right work is already ranked first. 61 abstain on the
+105 decisions changed: 86 newly accepted, 19 newly abstained. No decision became a reject, and
+no accept moved to a different key. Every one of the 86 new accepts was read by hand against the
+artifact: **none is a wrong book**. Two picked a non-canonical duplicate of the right book
+(`isbn_reuse-014`, `list_row-068`), which is why the canonical rate dipped.
+
+List-row abstention fell by 45%, not the 50% the spec expected. The remaining 77 abstains are
+explained below. In 71 of them the right work is already ranked first. 60 abstain on the
 margin, and 9 of those would have been accepted at v2's margin threshold (0.175). The
 recalibration raised it to 0.204, which also holds back two false merges on the rest of the
 set.
@@ -49,7 +53,7 @@ prolific authors (*George Washington*, *X-Men*). Their margins sit 0.001 and 0.0
 threshold. Two false merges would still pass the global 0.015 gate, so only this report records
 how close they are. See "The false merges the margin holds back".
 
-A live probe found a third shape: `{"title": "Stories", "author_names": ["Anton Chekhov"]}` accepted `OL39885463W`, a cluster of five separate Chekhov "Stories" records (editions 2, 1, 1, 1, 0). 2 against 1 clears the 1.5 dominance ratio, and both volume guards had tripped, so nothing outside the cluster set a margin (margin equals score). v2 abstained. Controller Ruling 23 added `MIN_DOMINANT_EDITIONS = 3` to the dominance rule, so a representative needs at least three editions as well as the ratio. The measured cost is three correct accepts (`isbn_reuse-004`, `list_row-022`, `high_frequency_title-004`); false merges stay at 0.
+A live probe found a third shape: `{"title": "Stories", "author_names": ["Anton Chekhov"]}` accepted `OL39885463W`, a cluster of five separate Chekhov "Stories" records (editions 2, 1, 1, 1, 0). 2 against 1 clears the 1.5 dominance ratio, and both volume guards had tripped, so nothing outside the cluster set a margin (margin equals score). v2 abstained. Controller Ruling 23 added `MIN_DOMINANT_EDITIONS = 3` to the dominance rule, so a representative needs at least three editions as well as the ratio. The measured cost is three correct accepts (`isbn_reuse-004`, `list_row-022`, `high_frequency_title-004`); false merges stay at 0. On the final code the same live probe abstains: "duplicate cluster with no dominant member".
 
 Three strata lost more than one correct case. None is a code defect. The `non_latin_title`
 losses do point at a gap worth a follow-up (see "Strata that lost more than one correct case").
@@ -60,6 +64,9 @@ is a wrong book. They do expose a hazard for anything that creates books from th
 local copy of the work can hold a duplicate or redirected key that the finder never looks up,
 so an import creates a second copy. See "The hazard: an accept no local book holds".
 
+The replay was run before the dominance floor. The floor only removes accepts, so no replay
+row can get worse; the after reading above includes it.
+
 ## Acceptance criteria
 
 From the spec's "Before/after evaluation". All must hold to merge.
@@ -68,13 +75,13 @@ From the spec's "Before/after evaluation". All must hold to merge.
 |---|---:|---:|---|
 | False merges no higher than the baseline | 0.0000 | 0.0000 | **Met** |
 | Precision at accept no lower than baseline minus 0.01 | 1.0000 | 1.0000 | **Met** |
-| `list_row` abstention under half the baseline (below 0.463), or the remaining reasons explained | 0.927 | 0.507 | Halving: **not met** (0.507 against 0.463). Fallback: **met**, the reasons are explained in "Remaining abstains on list rows" |
-| No newly accepted case is a wrong book (a non-canonical duplicate counts as right, noted) | -- | 0 wrong of 89 | **Met.** 3 non-canonical duplicates |
+| `list_row` abstention under half the baseline (below 0.463), or the remaining reasons explained | 0.927 | 0.513 | Halving: **not met** (0.513 against 0.463). Fallback: **met**, the reasons are explained in "Remaining abstains on list rows" |
+| No newly accepted case is a wrong book (a non-canonical duplicate counts as right, noted) | -- | 0 wrong of 86 | **Met.** 2 non-canonical duplicates |
 | The Rails replay shows no row where the finder's answer got worse | 195 of 200 correct | 195 of 200 correct | **Met.** 0 rows worse, no pick changed; 64 rows now `matched certain` by identifier. Three wrong `unmatched` rows lost their review flag (see "Rails replay") |
 
 ## Hand review of the decision diff
 
-Every `newly_accepted` row (89) was read against the artifact through the v3 API's
+Every `newly_accepted` row (86) was read against the artifact through the v3 API's
 `POST /works/batch`. For each row the reviewer compared the query's title and authors with the
 accepted work's title, authors, edition count and first year, read the label's rationale, and
 read the labelled work as well where it differed from the accepted one. There are no
@@ -83,13 +90,10 @@ table. The 19 `newly_abstained` rows carry "n/a (no accept after)": an abstain c
 book. They are covered in the next two sections.
 
 - **Wrong books: none.**
-- **Non-canonical duplicates (3):**
+- **Non-canonical duplicates (2):**
   - `isbn_reuse-014`, Eisler's *The Chalice and the Blade*. It accepted `OL271806W` (8 editions)
     over the labelled `OL2041228W` (5 editions). Both are the book. The accepted record is
     arguably the better canonical choice.
-  - `list_row-022`, Momaday's *The Names*. It accepted `OL276931W` ("Names", 2 editions). The
-    canonical `OL25929W` is mistitled "Why did you do it" after one stray edition, so no title
-    comparison can reach it.
   - `list_row-068`, Murakami's *The Wind-Up Bird Chronicle*. It accepted `OL25111252W`, the
     2-edition English record. The canonical `OL2625412W` is the 34-edition Japanese record, whose
     title fingerprints to nothing comparable.
@@ -210,24 +214,24 @@ duplicate clusters, which the ranking keeps together. Candidate blocking is unch
 
 ## Remaining abstains on list rows
 
-76 of 150 list rows still abstain. In 70 of them the labelled work, or one of its verified
+77 of 150 list rows still abstain. In 71 of them the labelled work, or one of its verified
 duplicates, is already ranked first.
 
 | Reason | Rows | Right work ranked first |
 |---|---:|---:|
-| Margin below 0.204 | 61 | 60 |
-| Duplicate cluster with no dominant member | 8 | 7 |
+| Margin below 0.204 | 60 | 59 |
+| Duplicate cluster with no dominant member | 10 | 9 |
 | Score in the middle band (0.4 to 0.9) | 7 | 3 |
-| **Total** | **76** | **70** |
+| **Total** | **77** | **71** |
 
-### Margin (61)
+### Margin (60)
 
 Grouped by what the runner-up is:
 
 | Margin | Runner-up | Rows |
 |---|---|---:|
 | below 0.07 | Same author, with a stored title that is the query plus a tail | 23 |
-| 0.10 to 0.175 | A record with **no author at all** and the same title | 26 |
+| 0.10 to 0.175 | A record with **no author at all** and the same title | 25 |
 | 0.10 to 0.175 | Same author, different or variant title | 3 |
 | 0.175 to 0.204 | Same author, different or misspelled title | 9 |
 
@@ -252,7 +256,7 @@ and `list_row-085` "Will in the World How Shakespeare Became Shakespeare". Absta
 right outcome here until the matcher can tell those two kinds apart. Lowering the margin would
 not help: these margins sit far below any plausible threshold.
 
-**0.10 to 0.175: an authorless same-title record (26 rows).** The runner-up is an Open Library
+**0.10 to 0.175: an authorless same-title record (25 rows).** The runner-up is an Open Library
 work with no author at all and the identical title: "The Forever War", "Middlesex", "Lord of
 the Rings", "American Gods" and so on. Absence is neutral (R40), so a record with only a title
 scores about 0.816 on title and popularity alone, against about 0.95 for the real work. Most of
@@ -283,17 +287,23 @@ under its Spanish title, "Autobiografía Malcolm X", which ranks second with mar
 margin threshold below 0.141 this row becomes a false merge. That is the same title-plus-tail
 weakness, seen from the other side.
 
-### Duplicate cluster with no dominant member (8)
+### Duplicate cluster with no dominant member (10)
 
 `list_row-009` *The Wood Wife* (1 and 1 editions), `-012` *The Child Garden* (2, 2, 1, 1),
+`-022` *The Names* (2 and 1), `-117` *The Namesake* (2, 1, 1),
 `-049` *The Water Is Wide* (15 and 13: under the 1.5 ratio), `-052` *The Collected Stories of
 Amy Hempel* (1, 1, 1), `-072` *The Posthumous Memoirs of Brás Cubas* (1 and 1; its score, 0.707,
 is below the accept threshold anyway), `-096` *Fear and Loathing on the Campaign Trail '72* (2, 2,
 1), `-110` *The Three Musketeers* (48 small English-titled records, none above 5 editions) and
 `-127` *The Emperor's Babe* (3, 3, 1).
 
+`-022` and `-117` are the floor's doing (Ruling 23): a top member with fewer than three editions
+no longer represents a cluster, however well it clears the 1.5 ratio. `-022` was an accept of a
+non-canonical duplicate; `-117` was a margin abstain (0.108) and now abstains on the cluster
+instead.
+
 This is the spec's Dickinson rule working as designed: when Open Library holds several records
-of similar size, there is no defensible canonical one. In seven of the eight, every cluster
+of similar size, there is no defensible canonical one. In nine of the ten, every cluster
 member is the book, so any pick would be right but would not be canonical. In `-110` the
 canonical work is the French-titled `OL36861W` "Les Trois Mousquetaires" (1,104 editions), which
 no English title comparison reaches.
@@ -320,7 +330,7 @@ no English title comparison reaches.
 By cause. None of these is in this branch, and each needs its own measurement.
 
 1. The objective, or the margin. Nine rows sit between 0.175 and 0.204. See "Calibration".
-2. Authorless runner-ups setting the margin: 26 rows. A policy question, discussed above.
+2. Authorless runner-ups setting the margin: 25 rows. A policy question, discussed above.
 3. Title plus a tail: 23 rows. This needs the matcher to tell a junk subtitle from different
    contents. That is hard, and a lower margin is not the answer.
 4. "&" against "and" in the fingerprint: 2 list rows (`-133`, and `-017` *Metaphor & Memory*,
@@ -360,12 +370,12 @@ What the margin buys, re-scored on the same prepared cache with only `margin_thr
 
 | `margin_threshold` | False merges (whole set) | Precision | List-row abstention | List rows correct |
 |---:|---|---:|---:|---:|
-| **0.204 (shipped v3)** | 0 | 1.000 | 0.507 | 74 |
-| 0.19 | 2 (`high_frequency_title-034`, `shared_key_collision-036`) | 0.992 | 0.480 | 78 |
-| 0.175 (v2's value) | 2 (the same two) | 0.992 | 0.447 | 83 |
-| 0.15 | 3 (adds `shared_key_collision-046`) | 0.988 | 0.407 | 89 |
+| **0.204 (shipped v3)** | 0 | 1.000 | 0.513 | 73 |
+| 0.19 | 2 (`high_frequency_title-034`, `shared_key_collision-036`) | 0.991 | 0.487 | 77 |
+| 0.175 (v2's value) | 2 (the same two) | 0.992 | 0.453 | 82 |
+| 0.15 | 3 (adds `shared_key_collision-046`) | 0.988 | 0.413 | 88 |
 
-At v2's margin, list-row abstention would clear the spec's halving expectation (0.447). The price
+At v2's margin, list-row abstention would clear the spec's halving expectation (0.453). The price
 is two false merges on the rest of the set. That breaks the first acceptance criterion (no false
 merges above the baseline's zero). The shipped value is the only row in this table that meets
 every criterion except the halving.
@@ -396,7 +406,7 @@ is zero, and these are not list rows. A future recalibration that lowers `margin
 below about 0.203 would bring back at least the first one, and nothing in CI or the build gate would
 notice. `test_eval_regression.py` now pins both as `MUST_NOT_ACCEPT` (an artifact test).
 
-**A third case, held back by an edition floor instead of the margin.** A live probe found a third shape: `{"title": "Stories", "author_names": ["Anton Chekhov"]}` accepted `OL39885463W`, a cluster of five separate Chekhov "Stories" records (editions 2, 1, 1, 1, 0). 2 against 1 clears the 1.5 dominance ratio, and both volume guards had tripped, so nothing outside the cluster set a margin (margin equals score). v2 abstained. Controller Ruling 23 added `MIN_DOMINANT_EDITIONS = 3` to the dominance rule, so a representative needs at least three editions as well as the ratio. The measured cost is three correct accepts (`isbn_reuse-004`, `list_row-022`, `high_frequency_title-004`); false merges stay at 0.
+**A third case, held back by an edition floor instead of the margin.** A live probe found a third shape: `{"title": "Stories", "author_names": ["Anton Chekhov"]}` accepted `OL39885463W`, a cluster of five separate Chekhov "Stories" records (editions 2, 1, 1, 1, 0). 2 against 1 clears the 1.5 dominance ratio, and both volume guards had tripped, so nothing outside the cluster set a margin (margin equals score). v2 abstained. Controller Ruling 23 added `MIN_DOMINANT_EDITIONS = 3` to the dominance rule, so a representative needs at least three editions as well as the ratio. The measured cost is three correct accepts (`isbn_reuse-004`, `list_row-022`, `high_frequency_title-004`); false merges stay at 0. On the final code the same live probe abstains: "duplicate cluster with no dominant member".
 
 ## Rails replay
 
@@ -717,7 +727,7 @@ for the margin table. They need no artifact access, only the two prepared caches
 *Everything below this line is generated by `openlibrary.eval.compare`, except the "hand
 review" column.*
 
-## Before: `v2 baseline, expanded set` (matcher 2) · After: `v3 after, expanded set` (matcher 3)
+## Before: `v2 baseline, expanded set` (matcher 2) · After: `v3 after (with dominance floor), expanded set` (matcher 3)
 
 ### Overall
 | metric | before | after |
@@ -725,10 +735,10 @@ review" column.*
 | precision_at_accept | 1.0000 | 1.0000 |
 | false_merge_rate | 0.0000 | 0.0000 |
 | false_reject_rate | 0.0000 | 0.0000 |
-| abstention_rate | 0.7308 | 0.6137 |
+| abstention_rate | 0.7308 | 0.6187 |
 | correct_no_match_rate | 0.0597 | 0.0597 |
-| canonical_rate | 0.9936 | 0.9824 |
-| list_row_abstention_rate | 0.9267 | 0.5067 |
+| canonical_rate | 0.9936 | 0.9866 |
+| list_row_abstention_rate | 0.9267 | 0.5133 |
 | list_row_false_merge_rate | 0.0000 | 0.0000 |
 | recall_at_10 | 0.9404 | 0.9481 |
 
@@ -790,9 +800,9 @@ review" column.*
 | precision_at_accept | 1.0000 | 1.0000 |
 | false_merge_rate | 0.0000 | 0.0000 |
 | false_reject_rate | 0.0000 | 0.0000 |
-| abstention_rate | 0.3500 | 0.3500 |
+| abstention_rate | 0.3500 | 0.3750 |
 | correct_no_match_rate | 0.0000 | 0.0000 |
-| canonical_rate | 0.9615 | 0.9615 |
+| canonical_rate | 0.9615 | 0.9600 |
 | list_row_abstention_rate | 0.0000 | 0.0000 |
 | list_row_false_merge_rate | 0.0000 | 0.0000 |
 | recall_at_10 | 1.0000 | 1.0000 |
@@ -803,9 +813,9 @@ review" column.*
 | precision_at_accept | 1.0000 | 1.0000 |
 | false_merge_rate | 0.0000 | 0.0000 |
 | false_reject_rate | 0.0000 | 0.0000 |
-| abstention_rate | 0.9333 | 0.7333 |
+| abstention_rate | 0.9333 | 0.7667 |
 | correct_no_match_rate | 0.0000 | 0.0000 |
-| canonical_rate | 1.0000 | 0.8750 |
+| canonical_rate | 1.0000 | 0.8571 |
 | list_row_abstention_rate | 0.0000 | 0.0000 |
 | list_row_false_merge_rate | 0.0000 | 0.0000 |
 | recall_at_10 | 1.0000 | 1.0000 |
@@ -816,10 +826,10 @@ review" column.*
 | precision_at_accept | 1.0000 | 1.0000 |
 | false_merge_rate | 0.0000 | 0.0000 |
 | false_reject_rate | 0.0000 | 0.0000 |
-| abstention_rate | 0.9267 | 0.5067 |
+| abstention_rate | 0.9267 | 0.5133 |
 | correct_no_match_rate | 0.0000 | 0.0000 |
-| canonical_rate | 1.0000 | 0.9730 |
-| list_row_abstention_rate | 0.9267 | 0.5067 |
+| canonical_rate | 1.0000 | 0.9863 |
+| list_row_abstention_rate | 0.9267 | 0.5133 |
 | list_row_false_merge_rate | 0.0000 | 0.0000 |
 | recall_at_10 | 0.9867 | 0.9933 |
 
@@ -901,7 +911,7 @@ review" column.*
 | list_row_false_merge_rate | 0.0000 | 0.0000 |
 | recall_at_10 | 1.0000 | 1.0000 |
 
-### Decision diff (108 cases)
+### Decision diff (105 cases)
 
 | case | stratum | change | before | after | labelled | correct after | hand review |
 |---|---|---|---|---|---|---|---|
@@ -929,9 +939,7 @@ review" column.*
 | easy_baseline-046 | easy_baseline | newly_accepted | abstain OL42436185W | accept OL42436185W | OL42436185W | True | right: Triana's novel, single work |
 | easy_baseline-047 | easy_baseline | newly_accepted | abstain OL37827830W | accept OL37827830W | OL37827830W | True | right: McGuire's Marvel novel, same title and author |
 | high_frequency_title-002 | high_frequency_title | newly_accepted | abstain OL37863976W | accept OL37863976W | OL37863976W | True | right: Emerson's Exposure, holds the Soho print ISBN |
-| high_frequency_title-004 | high_frequency_title | newly_accepted | abstain OL19718846W | accept OL21086887W | OL21086887W | True | right: Mendelsohn's An Odyssey; three cluster members carry our identifiers, so the identifier rule does not decide, and this record (2 eds, holds our ISBN) wins on dominance over 1-edition members |
 | high_frequency_title-033 | high_frequency_title | newly_accepted | abstain OL37826293W | accept OL37826293W | OL37826293W | True | right: Harari's Nexus, 10 editions with our ISBN |
-| isbn_reuse-004 | isbn_reuse | newly_accepted | abstain OL3361061W | accept OL3361061W | OL3361061W | True | right: Zeman's Gilgamesh, 2-edition record over a 1-edition duplicate |
 | isbn_reuse-007 | isbn_reuse | newly_accepted | abstain OL18982920W | accept OL15326W | OL15326W | True | right: Calvino's Fantastic Tales, the labelled 3-edition record |
 | isbn_reuse-014 | isbn_reuse | newly_accepted | abstain OL2041228W | accept OL271806W | OL2041228W | True | right (non-canonical duplicate): Eisler's Chalice and the Blade; picked the 8-edition record over the labelled 5-edition one |
 | isbn_reuse-018 | isbn_reuse | newly_accepted | abstain OL2044128W | accept OL2044128W | OL2044128W | True | right: McTaggart's The Intention Experiment |
@@ -945,7 +953,6 @@ review" column.*
 | list_row-019 | list_row | newly_accepted | abstain OL2756415W | accept OL2756415W | OL2756415W | True | right: Selzer's 1986 essays |
 | list_row-020 | list_row | newly_accepted | abstain OL1971359W | accept OL1971359W | OL1971359W | True | right: Lennon's Mailman, 6 editions |
 | list_row-021 | list_row | newly_accepted | abstain OL14858406W | accept OL14858406W | OL14858406W | True | right: Willis's Doomsday Book, 11 editions |
-| list_row-022 | list_row | newly_accepted | abstain OL276931W | accept OL276931W | OL25929W | True | right (non-canonical duplicate): Momaday's The Names; picked a 2-edition 'Names' record, the canonical one is mistitled 'Why did you do it' |
 | list_row-023 | list_row | newly_accepted | abstain OL2046145W | accept OL2046145W | OL2046145W | True | right: Brackett's novel, only work |
 | list_row-027 | list_row | newly_accepted | abstain OL15380640W | accept OL15380640W | OL15380640W | True | right: Wilkerson's book, 13 editions |
 | list_row-035 | list_row | newly_accepted | abstain OL2919674W | accept OL2919674W | OL2919674W | True | right: Cramer's What It Takes, 6 editions |

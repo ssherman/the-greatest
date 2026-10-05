@@ -1,10 +1,10 @@
 {
- "label": "v3 after, expanded set",
+ "label": "v3 after (with dominance floor), expanded set",
  "matcher_version": 3,
  "weights_calibrated_at": "2026-10-05T19:05:36.151506+00:00",
  "metrics": {
   "n_cases": 598,
-  "n_accepted": 227,
+  "n_accepted": 224,
   "n_no_match_cases": 67,
   "candidate_recall": {
    "5": 0.9307692307692308,
@@ -14,10 +14,10 @@
   "precision_at_accept": 1.0,
   "false_merge_rate": 0.0,
   "false_reject_rate": 0.0,
-  "abstention_rate": 0.6137123745819398,
+  "abstention_rate": 0.6187290969899666,
   "correct_no_match_rate": 0.05970149253731343,
-  "canonical_rate": 0.9823788546255506,
-  "list_row_abstention_rate": 0.5066666666666667,
+  "canonical_rate": 0.9866071428571429,
+  "list_row_abstention_rate": 0.5133333333333333,
   "list_row_false_merge_rate": 0.0
  },
  "by_stratum": {
@@ -95,7 +95,7 @@
   },
   "high_frequency_title": {
    "n_cases": 40,
-   "n_accepted": 26,
+   "n_accepted": 25,
    "n_no_match_cases": 0,
    "candidate_recall": {
     "5": 1.0,
@@ -105,15 +105,15 @@
    "precision_at_accept": 1.0,
    "false_merge_rate": 0.0,
    "false_reject_rate": 0.0,
-   "abstention_rate": 0.35,
+   "abstention_rate": 0.375,
    "correct_no_match_rate": 0.0,
-   "canonical_rate": 0.9615384615384616,
+   "canonical_rate": 0.96,
    "list_row_abstention_rate": 0.0,
    "list_row_false_merge_rate": 0.0
   },
   "isbn_reuse": {
    "n_cases": 30,
-   "n_accepted": 8,
+   "n_accepted": 7,
    "n_no_match_cases": 0,
    "candidate_recall": {
     "5": 1.0,
@@ -123,15 +123,15 @@
    "precision_at_accept": 1.0,
    "false_merge_rate": 0.0,
    "false_reject_rate": 0.0,
-   "abstention_rate": 0.7333333333333333,
+   "abstention_rate": 0.7666666666666667,
    "correct_no_match_rate": 0.0,
-   "canonical_rate": 0.875,
+   "canonical_rate": 0.8571428571428571,
    "list_row_abstention_rate": 0.0,
    "list_row_false_merge_rate": 0.0
   },
   "list_row": {
    "n_cases": 150,
-   "n_accepted": 74,
+   "n_accepted": 73,
    "n_no_match_cases": 0,
    "candidate_recall": {
     "5": 0.9866666666666667,
@@ -141,10 +141,10 @@
    "precision_at_accept": 1.0,
    "false_merge_rate": 0.0,
    "false_reject_rate": 0.0,
-   "abstention_rate": 0.5066666666666667,
+   "abstention_rate": 0.5133333333333333,
    "correct_no_match_rate": 0.0,
-   "canonical_rate": 0.972972972972973,
-   "list_row_abstention_rate": 0.5066666666666667,
+   "canonical_rate": 0.9863013698630136,
+   "list_row_abstention_rate": 0.5133333333333333,
    "list_row_false_merge_rate": 0.0
   },
   "no_candidates": {
@@ -1448,7 +1448,7 @@
     "work_key": "OL4965462W",
     "score": 0.669381350542809,
     "margin": 0.0,
-    "reason": "score 0.669 between reject and accept thresholds",
+    "reason": "duplicate cluster with no dominant member: OL4965327W, OL4965462W",
     "duplicates": [
      "OL4965327W"
     ]
@@ -1726,7 +1726,7 @@
     "work_key": "OL488918W",
     "score": 0.7529073529703569,
     "margin": 0.02227023754421331,
-    "reason": "score 0.753 between reject and accept thresholds",
+    "reason": "duplicate cluster with no dominant member: OL26531103W, OL488918W",
     "duplicates": [
      "OL26531103W"
     ]
@@ -1964,7 +1964,7 @@
     "work_key": "OL4328119W",
     "score": 0.6971644474070758,
     "margin": 0.00282250855782773,
-    "reason": "score 0.697 between reject and accept thresholds",
+    "reason": "duplicate cluster with no dominant member: OL15463531W, OL4328119W",
     "duplicates": [
      "OL15463531W"
     ]
@@ -2342,19 +2342,19 @@
    "expected_work_key": "OL3361061W",
    "expected_verdict": "match",
    "decision": {
-    "verdict": "accept",
+    "verdict": "abstain",
     "work_key": "OL3361061W",
     "score": 0.9519259408347035,
     "margin": 0.7790272031823849,
-    "reason": "score 0.952 with margin 0.779",
+    "reason": "duplicate cluster with no dominant member: OL3361046W, OL3361061W",
     "duplicates": [
      "OL3361046W"
     ]
    },
    "candidate_rank": 1,
-   "correct": true,
+   "correct": false,
    "false_merge": false,
-   "canonical": true
+   "canonical": false
   },
   {
    "case_id": "isbn_reuse-005",
@@ -4487,17 +4487,17 @@
    "expected_work_key": "OL25929W",
    "expected_verdict": "match",
    "decision": {
-    "verdict": "accept",
+    "verdict": "abstain",
     "work_key": "OL276931W",
     "score": 0.9218790772918283,
     "margin": 0.2767595470095907,
-    "reason": "score 0.922 with margin 0.277",
+    "reason": "duplicate cluster with no dominant member: OL276931W, OL34458924W",
     "duplicates": [
      "OL34458924W"
     ]
    },
    "candidate_rank": 1,
-   "correct": true,
+   "correct": false,
    "false_merge": false,
    "canonical": false
   },
@@ -6534,12 +6534,12 @@
    "expected_verdict": "match",
    "decision": {
     "verdict": "abstain",
-    "work_key": "OL27442324W",
+    "work_key": "OL37520919W",
     "score": 0.9315433873064053,
     "margin": 0.10822473941553534,
-    "reason": "margin 0.108 below threshold 0.204; runner-up scores 0.823",
+    "reason": "duplicate cluster with no dominant member: OL27442324W, OL37520919W, OL43348002W",
     "duplicates": [
-     "OL37520919W",
+     "OL27442324W",
      "OL43348002W"
     ]
    },
@@ -7675,13 +7675,13 @@
    "expected_verdict": "match",
    "decision": {
     "verdict": "abstain",
-    "work_key": "OL21751851W",
+    "work_key": "OL16345802W",
     "score": 0.9527809852471634,
     "margin": 0.150045892015368,
-    "reason": "identifier conflict on the best candidate: identifier",
+    "reason": "duplicate cluster with no dominant member: OL16176226W, OL16345802W, OL21751851W, OL27071382W",
     "duplicates": [
      "OL16176226W",
-     "OL16345802W",
+     "OL21751851W",
      "OL27071382W"
     ]
    },
@@ -8134,21 +8134,21 @@
    "expected_work_key": "OL21086887W",
    "expected_verdict": "match",
    "decision": {
-    "verdict": "accept",
-    "work_key": "OL21086887W",
+    "verdict": "abstain",
+    "work_key": "OL19718846W",
     "score": 0.9491556393809775,
     "margin": 0.2997729374301721,
-    "reason": "score 0.949 with margin 0.300",
+    "reason": "duplicate cluster with no dominant member: OL19718846W, OL20175721W, OL21086887W, OL31492377W",
     "duplicates": [
-     "OL19718846W",
      "OL20175721W",
+     "OL21086887W",
      "OL31492377W"
     ]
    },
    "candidate_rank": 1,
-   "correct": true,
+   "correct": false,
    "false_merge": false,
-   "canonical": true
+   "canonical": false
   },
   {
    "case_id": "high_frequency_title-005",
@@ -9164,7 +9164,7 @@
     "work_key": "OL24147205W",
     "score": 0.7159517293106332,
     "margin": 0.011229963553949007,
-    "reason": "score 0.716 between reject and accept thresholds",
+    "reason": "duplicate cluster with no dominant member: OL24147205W, OL24147206W, OL24147207W",
     "duplicates": [
      "OL24147206W",
      "OL24147207W"
