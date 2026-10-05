@@ -623,3 +623,66 @@ def test_resolve_hands_one_cluster_index_to_rank_decide_and_margins(
     client.post("/resolve", json={"title": a_title_with_multiple_candidates})
     assert all(seen[name] is not None for name in ("rank", "decide", "margins"))
     assert seen["rank"] is seen["decide"] is seen["margins"]
+
+
+def _force_one_cluster(monkeypatch, keys, edition_counts):
+    """Make `keys` share a title and an author through the real clusterer, so
+    they land in ONE cluster; every other work keeps its real inputs."""
+    import openlibrary.api.resolve as resolve_module
+    from openlibrary.matcher.cluster import ClusterInputs
+
+    real = resolve_module.cluster_inputs
+
+    def patched(view):
+        if view.work_key not in keys:
+            return real(view)
+        return ClusterInputs(
+            title_fp="onesharedtitleforthecluster",
+            title_fp_noart="onesharedtitleforthecluster",
+            title_raw="One Shared Title For The Cluster",
+            author_fps=["onesharedauthor"],
+            edition_count=edition_counts[view.work_key],
+        )
+
+    monkeypatch.setattr(resolve_module, "cluster_inputs", patched)
+
+
+def _two_best_keys(client, title):
+    candidates = client.post("/resolve", json={"title": title, "limit": 50}).json()["data"][
+        "candidates"
+    ]
+    assert len(candidates) >= 2
+    return candidates[0]["key"]["key"], candidates[1]["key"]["key"]
+
+
+def test_a_cluster_whose_representative_is_the_lower_scorer_is_decided_as_one_candidate(
+    client, a_title_with_multiple_candidates, monkeypatch
+):
+    top, other = _two_best_keys(client, a_title_with_multiple_candidates)
+    _force_one_cluster(monkeypatch, {top, other}, {top: 1, other: 1000})
+    data = client.post(
+        "/resolve", json={"title": a_title_with_multiple_candidates, "limit": 50}
+    ).json()["data"]
+    decision, candidates = data["decision"], data["candidates"]
+    assert decision["key"] == candidates[0]["key"] == {"source": "openlibrary", "key": other}
+    assert decision["duplicates"] == [{"source": "openlibrary", "key": top}]
+    assert candidates[0]["margin"] == pytest.approx(decision["margin"])
+    assert candidates[0]["verdict"] == decision["verdict"]
+    by_key = {c["key"]["key"]: c for c in candidates}
+    assert by_key[top]["verdict"] in ("abstain", "reject")
+    assert all(c["verdict"] in ("abstain", "reject") for c in candidates[1:])
+
+
+def test_a_cluster_with_no_dominant_member_abstains_and_lists_the_other_member(
+    client, a_title_with_multiple_candidates, monkeypatch
+):
+    top, other = _two_best_keys(client, a_title_with_multiple_candidates)
+    _force_one_cluster(monkeypatch, {top, other}, {top: 5, other: 5})
+    data = client.post(
+        "/resolve", json={"title": a_title_with_multiple_candidates, "limit": 50}
+    ).json()["data"]
+    decision = data["decision"]
+    assert decision["verdict"] == "abstain"
+    assert decision["reason"].startswith("duplicate cluster with no dominant member")
+    assert decision["duplicates"] == [{"source": "openlibrary", "key": other}]
+    assert data["candidates"][0]["margin"] == pytest.approx(decision["margin"])

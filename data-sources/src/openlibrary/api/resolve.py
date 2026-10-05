@@ -89,6 +89,11 @@ class ResolveDecision(BaseModel):
     `work_key` never appears here or anywhere else in this module's
     responses -- see `ResolveCandidate.verdict` for how a non-chosen
     candidate's own `verdict` is derived instead (ruling R73/R74).
+
+    `duplicates` lists the other members of the winning duplicate cluster
+    (empty when the winner is in none). `score` is the cluster's best score,
+    which can exceed `candidates[0].score` when the representative is not
+    the top scorer.
     """
 
     verdict: Literal["accept", "abstain", "reject"]
@@ -271,7 +276,8 @@ def resolve(
     -> `identifier_hits` -> `load_work_views` over the candidate keys ->
     `score_candidate` for every key that has a view (a candidate blocking
     found but that has no view -- a stale key absent from `works` -- is
-    skipped, same as the harness) -> `rank` -> `decide`, with
+    skipped, same as the harness) -> `build_clusters` -> `rank(scored, clusters)`
+    -> `decide(..., clusters=clusters)` -> `margins(ranked, clusters)`, with
     `volume_guards_tripped` passed through from the SAME `BlockingResult`.
     """
     paths = state.paths
