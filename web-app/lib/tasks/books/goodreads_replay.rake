@@ -23,5 +23,13 @@ namespace :books do
       counts = Books::GoodreadsReplay::ResolveEditionJob.enqueue_pending
       puts "queued #{counts[:first_pass]} editions for pass one and #{counts[:full_pass]} for the full pass"
     end
+
+    desc "Record merge verdicts: one AI check per author name group, then the rule over pending book pairs. " \
+      "Run after the resolve jobs finish."
+    task duplicates: :environment do
+      authors = Services::Books::GoodreadsReplay::FindAuthorDuplicates.call.data
+      puts "author name groups: #{tally.call(authors[:tally])} (#{authors[:ai_calls]} AI calls)"
+      puts "book pairs: #{Services::Books::GoodreadsReplay::FindBookDuplicates.call.data[:recorded]} merge verdicts"
+    end
   end
 end

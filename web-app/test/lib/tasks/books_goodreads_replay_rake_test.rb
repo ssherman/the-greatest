@@ -37,4 +37,14 @@ class BooksGoodreadsReplayRakeTest < ActiveSupport::TestCase
 
     assert_output(/queued 12 editions for pass one and 3 for the full pass/) { Rake::Task["books:goodreads_replay:resolve"].invoke }
   end
+
+  test "duplicates runs the author check, then the book rule, and reports both" do
+    order = sequence("duplicates")
+    REPLAY::FindAuthorDuplicates.expects(:call).in_sequence(order).returns(result(tally: {checked: 3188}, ai_calls: 3188))
+    REPLAY::FindBookDuplicates.expects(:call).in_sequence(order).returns(result(recorded: 41))
+
+    assert_output(/author name groups: checked 3188 \(3188 AI calls\)\nbook pairs: 41 merge verdicts/) do
+      Rake::Task["books:goodreads_replay:duplicates"].invoke
+    end
+  end
 end
