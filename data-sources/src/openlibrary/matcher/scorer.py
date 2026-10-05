@@ -31,7 +31,10 @@ from openlibrary.matcher.features import (
 # 2 (final review of Increment 3): R58 and R59 changed what the same candidates
 # and the same weights DECIDE, and R41 changed what rule 1 returns; every
 # prepared cache and every pinned threshold from version 1 is stale.
-MATCHER_VERSION = 2
+# 3 (2026-10-04 list-query spec): variant title comparison, identity-first
+# ranking and margin, duplicate clusters; every prepared cache and pinned
+# threshold from version 2 is stale.
+MATCHER_VERSION = 3
 WEIGHTS_PATH = Path(__file__).parent / "weights.json"
 
 

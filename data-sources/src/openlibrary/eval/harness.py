@@ -83,6 +83,8 @@ THRESHOLD_CHECKS: tuple[tuple[str, str, str, str], ...] = (
     ("abstention", "max", "abstention_rate", "max_abstention_rate"),
     ("correct no-match", "min", "correct_no_match_rate", "min_correct_no_match_rate"),
     ("false-reject", "max", "false_reject_rate", "max_false_reject_rate"),
+    ("list-row abstention", "max", "list_row_abstention_rate", "max_list_row_abstention_rate"),
+    ("list-row false-merge", "max", "list_row_false_merge_rate", "max_list_row_false_merge_rate"),
 )
 
 
