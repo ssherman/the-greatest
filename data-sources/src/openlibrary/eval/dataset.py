@@ -15,6 +15,7 @@ from pathlib import Path
 import duckdb
 from pydantic import BaseModel, Field
 
+from common.normalize import MIN_BLOCKING_FP_LENGTH, title_fingerprints
 from openlibrary.eval.schema import EvalCase
 from openlibrary.pipeline.duck import load_rows
 from openlibrary.pipeline.paths import ArtifactPaths
@@ -172,10 +173,24 @@ def fetch_work_facts(
     }
 
 
+def _long_enough(fingerprint: str | None) -> bool:
+    return bool(fingerprint) and len(fingerprint) >= MIN_BLOCKING_FP_LENGTH
+
+
 def alternate_problems(
-    label_key: str, alternate: str, facts: dict[str, WorkFacts], resolved: dict[str, str]
+    label_key: str,
+    alternate: str,
+    facts: dict[str, WorkFacts],
+    resolved: dict[str, str],
+    *,
+    case_title: str | None = None,
 ) -> list[str]:
-    """Why `alternate` is not a verified duplicate of `label_key` ([] when it is)."""
+    """Why `alternate` is not a verified duplicate of `label_key` ([] when it is).
+
+    The title check passes on the labelled work's title (full or article-stripped) or on the
+    case's own book title: Open Library's canonical work sometimes carries a variant title, and
+    the list row asserts the real one. A fingerprint shorter than MIN_BLOCKING_FP_LENGTH never
+    counts, so non-Latin titles that fingerprint to a digit do not match by accident."""
     if alternate == label_key:
         return ["alternate is the labelled key"]
     if resolved.get(alternate, alternate) == resolved.get(label_key, label_key):
@@ -186,11 +201,16 @@ def alternate_problems(
     if label is None:
         return ["labelled work not in works"]
     problems = []
-    same_title = (label.title_fp and label.title_fp == alt.title_fp) or (
-        label.title_fp_noart and label.title_fp_noart == alt.title_fp_noart
-    )
+    alt_fps = {alt.title_fp, alt.title_fp_noart}
+    targets = {(label.title_fp, alt.title_fp), (label.title_fp_noart, alt.title_fp_noart)}
+    same_title = any(_long_enough(a) and a == b for a, b in targets)
+    if not same_title and case_title:
+        case_fps = title_fingerprints(case_title)
+        same_title = any(
+            _long_enough(fp) and fp in alt_fps for fp in (case_fps.full, case_fps.noart)
+        )
     if not same_title:
-        problems.append("shares no title with the labelled work (full or article-stripped)")
+        problems.append("shares no title with the labelled work or the case title")
     if not set(label.author_fps) & set(alt.author_fps):
         problems.append("shares no author with the labelled work")
     return problems
@@ -209,6 +229,10 @@ def check_alternates(
         for case in with_alternates
         for alternate in case.label.alternate_work_keys
         for problem in alternate_problems(
-            case.label.work_key, alternate, facts_by_original, resolved
+            case.label.work_key,
+            alternate,
+            facts_by_original,
+            resolved,
+            case_title=case.book.title,
         )
     ]

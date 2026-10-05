@@ -283,7 +283,7 @@ def test_every_alternate_is_a_verified_duplicate_in_the_real_artifact():
     assert problems == [], f"alternates that are not verified duplicates: {problems}"
 
 
-TITLE_PROBLEM = "shares no title with the labelled work (full or article-stripped)"
+TITLE_PROBLEM = "shares no title with the labelled work or the case title"
 AUTHOR_PROBLEM = "shares no author with the labelled work"
 
 
@@ -355,6 +355,46 @@ def test_a_shared_subtitle_stripped_title_is_not_a_duplicate_title():
         "OL2W": _facts("OL2W", title_fp="harry potter series 1 4", noart="harry potter series 1 4"),
     }
     assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == [TITLE_PROBLEM]
+
+
+def _mislabelled_label_facts(alt_authors=("frank herbert",)):
+    return {
+        "OL1W": _facts("OL1W", title_fp="el buen nombre lingua franca", noart="buen nombre"),
+        "OL2W": _facts("OL2W", title_fp="the namesake", noart="namesake", authors=alt_authors),
+    }
+
+
+def test_an_alternate_equal_to_the_case_title_is_a_duplicate():
+    problems = alternate_problems(
+        "OL1W", "OL2W", _mislabelled_label_facts(), {}, case_title="The Namesake"
+    )
+    assert problems == []
+
+
+def test_the_same_alternate_without_a_case_title_has_a_title_problem():
+    assert alternate_problems("OL1W", "OL2W", _mislabelled_label_facts(), {}) == [TITLE_PROBLEM]
+
+
+def test_a_case_title_match_still_needs_a_shared_author():
+    facts = _mislabelled_label_facts(alt_authors=("jhumpa lahiri",))
+    problems = alternate_problems("OL1W", "OL2W", facts, {}, case_title="The Namesake")
+    assert problems == [AUTHOR_PROBLEM]
+
+
+def test_a_one_character_shared_title_fingerprint_is_not_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="6", noart="6"),
+        "OL2W": _facts("OL2W", title_fp="6", noart="6"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}) == [TITLE_PROBLEM]
+
+
+def test_a_short_case_title_fingerprint_is_not_a_match():
+    facts = {
+        "OL1W": _facts("OL1W", title_fp="other", noart="other"),
+        "OL2W": _facts("OL2W", title_fp="6", noart="6"),
+    }
+    assert alternate_problems("OL1W", "OL2W", facts, {}, case_title="6") == [TITLE_PROBLEM]
 
 
 def test_an_empty_title_fingerprint_never_matches():
