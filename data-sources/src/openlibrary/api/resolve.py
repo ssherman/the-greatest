@@ -4,8 +4,8 @@ The resolution half of the service. This is the harness's own per-case loop
 (`eval.harness.prepare` + `evaluate`, read there first) run once per request,
 on the request's own cursor: `generate_candidates` -> `identifier_hits` ->
 `load_work_views` -> `score_candidate` for every key that has a view ->
-`rank` -> `decide(..., volume_guards_tripped=...)`. The matcher's scratch
-tables are TEMP and cursor-local (R82), so concurrent requests never collide.
+`build_clusters` -> `rank` -> `decide(..., volume_guards_tripped=..., clusters=...)`.
+The matcher's scratch tables are TEMP and cursor-local (R82), so concurrent requests never collide.
 
 R75: scoring and `decide` see EVERY candidate blocking produced; `limit`
 (on `ResolveRequest`) only truncates the candidate list actually returned,
@@ -32,6 +32,7 @@ from common.schemas import DiffEntry, DiffKind, Envelope, SourceKey, classify_di
 from openlibrary.api.deps import ArtifactState, cursor, get_state
 from openlibrary.api.retrieval import WorkRecord, fetch_works
 from openlibrary.matcher.blocking import BlockingQuery, generate_candidates
+from openlibrary.matcher.cluster import build_clusters, cluster_inputs
 from openlibrary.matcher.decide import Decision, decide, margins, rank
 from openlibrary.matcher.features import load_work_views
 from openlibrary.matcher.scorer import ScoredCandidate, Weights, score_candidate
@@ -95,6 +96,7 @@ class ResolveDecision(BaseModel):
     score: float | None = None
     margin: float | None = None
     reason: str
+    duplicates: list[SourceKey] = Field(default_factory=list)
 
 
 class ResolveCandidate(BaseModel):
@@ -108,11 +110,13 @@ class ResolveCandidate(BaseModel):
     `"abstain"` -- so a non-top candidate is never `"accept"` (ruling R73).
 
     Candidates come in `decide.rank()` order: identity-bearing candidates
-    (a title or identifier signal) first, then by score, then work_key.
+    (a title or identifier signal) first, then by duplicate-group best
+    score with each group kept together, representative first, then score,
+    then work_key.
 
-    `margin` is this candidate's score minus the best identity-bearing
-    candidate ranked below it, computed over the full ranking before
-    `limit` truncates what is returned. With no such candidate -- including
+    `margin` is this candidate's duplicate-group best score minus the best
+    identity-bearing candidate ranked below it outside its group, computed over the full ranking
+    before `limit` truncates what is returned. With no such candidate -- including
     the top candidate when it is the only one -- it is the candidate's own
     score: the same convention `decide()` uses for an absent runner-up.
     That convention is what makes
@@ -283,16 +287,23 @@ def resolve(
         for key, rules in blocking.candidates.items()
         if key in views
     ]
-    ranked = rank(scored)
-    decision = decide(scored, weights, volume_guards_tripped=blocking.volume_guards_tripped)
+    clusters = build_clusters(
+        scored,
+        {key: cluster_inputs(views[key]) for key in blocking.candidates if key in views},
+        weights,
+    )
+    ranked = rank(scored, clusters)
+    decision = decide(
+        scored, weights, volume_guards_tripped=blocking.volume_guards_tripped, clusters=clusters
+    )
 
     # Per-candidate margin, computed over the FULL ranking before `limit`
     # truncates the returned list: a candidate's margin is a fact about the
-    # field it was found in. It is the candidate's score minus the best
-    # identity-bearing candidate ranked below it (0.0 if none), the same
-    # `margins()` that `decide()` uses (ruling R85), which keeps
-    # `candidates[0].margin == decision.margin`.
-    candidate_margins = margins(ranked)
+    # field it was found in. It is the candidate's duplicate-group best score minus the best
+    # identity-bearing candidate ranked below it outside its duplicate group
+    # (0.0 if none), the same cluster-aware `margins()` that `decide()` uses
+    # (ruling R85), which keeps `candidates[0].margin == decision.margin`.
+    candidate_margins = margins(ranked, clusters)
 
     truncated = ranked[: request.limit]
     truncated_margins = candidate_margins[: request.limit]
@@ -326,6 +337,7 @@ def resolve(
             score=decision.score,
             margin=decision.margin,
             reason=decision.reason,
+            duplicates=[_key(k) for k in decision.duplicates],
         ),
         guards_tripped=blocking.guards_tripped,
         volume_guards_tripped=blocking.volume_guards_tripped,

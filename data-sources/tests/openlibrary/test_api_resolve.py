@@ -584,3 +584,42 @@ def test_margins_ignore_a_titleless_candidate_that_outscores_the_titled_one(
     assert candidates[0]["key"]["key"] == calls[0]
     assert candidates[0]["margin"] == pytest.approx(data["decision"]["margin"])
     assert all(c["margin"] >= 0 for c in candidates)
+
+
+def test_the_decision_carries_a_duplicates_list_of_keys(client, a_title_with_multiple_candidates):
+    data = client.post("/resolve", json={"title": a_title_with_multiple_candidates}).json()["data"]
+    duplicates = data["decision"]["duplicates"]
+    assert isinstance(duplicates, list)
+    assert all(set(d) == {"source", "key"} for d in duplicates)
+
+
+def test_r85_holds_with_cluster_aware_margins_across_several_candidates(
+    client, a_title_with_multiple_candidates
+):
+    data = client.post("/resolve", json={"title": a_title_with_multiple_candidates}).json()["data"]
+    assert len(data["candidates"]) >= 2
+    assert data["candidates"][0]["margin"] == pytest.approx(data["decision"]["margin"])
+
+
+def test_resolve_hands_one_cluster_index_to_rank_decide_and_margins(
+    client, a_title_with_multiple_candidates, monkeypatch
+):
+    import openlibrary.api.resolve as resolve_module
+
+    seen = {}
+
+    def spy(name, clusters_of):
+        real = getattr(resolve_module, name)
+
+        def wrapper(*args, **kwargs):
+            seen[name] = clusters_of(args, kwargs)
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(resolve_module, name, wrapper)
+
+    spy("rank", lambda a, k: a[1] if len(a) > 1 else k.get("clusters"))
+    spy("margins", lambda a, k: a[1] if len(a) > 1 else k.get("clusters"))
+    spy("decide", lambda a, k: k.get("clusters"))
+    client.post("/resolve", json={"title": a_title_with_multiple_candidates})
+    assert all(seen[name] is not None for name in ("rank", "decide", "margins"))
+    assert seen["rank"] is seen["decide"] is seen["margins"]
