@@ -16,6 +16,10 @@ import os
 import pytest
 
 from openlibrary.eval.dataset import (
+    WorkFacts,
+    alternate_problems,
+    check_alternates,
+    fetch_work_facts,
     load_cases,
     resolve_keys,
     same_work,
@@ -261,3 +265,69 @@ def test_every_labeled_key_exists_in_the_real_artifact():
     with contextlib.closing(con):
         unknown = unknown_labeled_keys(con, paths, load_cases())
     assert unknown == [], f"labeled work keys that do not exist: {unknown}"
+
+
+@pytest.mark.artifact
+def test_every_alternate_is_a_verified_duplicate_in_the_real_artifact():
+    root = os.environ.get("OL_DATA_ROOT")
+    dump_date = os.environ.get("OL_DATA_VERSION")
+    if not (root and dump_date):
+        pytest.skip("set OL_DATA_ROOT and OL_DATA_VERSION")
+    from pathlib import Path
+
+    paths = ArtifactPaths(root=Path(root), dump_date=dump_date)
+    con = connect(paths, memory_limit="4GB")
+    with contextlib.closing(con):
+        problems = check_alternates(con, paths, load_cases())
+    assert problems == [], f"alternates that are not verified duplicates: {problems}"
+
+
+def _facts(key, variants=("dune",), authors=("frank herbert",), editions=1):
+    return WorkFacts(
+        work_key=key,
+        title=key,
+        title_variants=list(variants),
+        author_names=list(authors),
+        author_fps=list(authors),
+        edition_count=editions,
+    )
+
+
+def test_a_true_duplicate_has_no_problems():
+    facts = {"OL1W": _facts("OL1W"), "OL2W": _facts("OL2W")}
+    assert alternate_problems("OL1W", "OL2W", facts, resolved={}) == []
+
+
+def test_an_alternate_that_redirects_to_the_label_is_a_problem():
+    facts = {"OL1W": _facts("OL1W"), "OL2W": _facts("OL2W")}
+    problems = alternate_problems("OL1W", "OL2W", facts, resolved={"OL2W": "OL1W"})
+    assert problems == ["redirects to the labelled work; not a duplicate"]
+
+
+def test_an_alternate_missing_from_works_is_a_problem():
+    assert alternate_problems("OL1W", "OL9W", {"OL1W": _facts("OL1W")}, resolved={}) == [
+        "not in works"
+    ]
+
+
+def test_an_alternate_with_another_title_or_author_is_a_problem():
+    facts = {
+        "OL1W": _facts("OL1W"),
+        "OL2W": _facts("OL2W", variants=("children of dune",), authors=("brian herbert",)),
+    }
+    assert set(alternate_problems("OL1W", "OL2W", facts, resolved={})) == {
+        "shares no title variant with the labelled work",
+        "shares no author with the labelled work",
+    }
+
+
+def test_fetch_work_facts_reads_title_variants_and_authors(
+    fixture_artifact, fixture_labelled_works
+):
+    con = connect(fixture_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        key, title, authors = fixture_labelled_works[0]
+        facts = fetch_work_facts(con, fixture_artifact, [key])
+    assert facts[key].title == title
+    assert facts[key].title_variants
+    assert facts[key].author_fps

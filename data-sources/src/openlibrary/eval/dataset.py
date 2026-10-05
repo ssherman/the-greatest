@@ -13,6 +13,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import duckdb
+from pydantic import BaseModel, Field
 
 from openlibrary.eval.schema import EvalCase
 from openlibrary.pipeline.duck import load_rows
@@ -112,3 +113,95 @@ def unknown_labeled_keys(
     ).fetchall()
     found_bad = {row[1] for row in rows}
     return [(cid, key) for cid, key in labeled if resolved.get(key, key) in found_bad]
+
+
+class WorkFacts(BaseModel):
+    work_key: str
+    title: str | None = None
+    title_variants: list[str] = Field(default_factory=list)
+    author_names: list[str] = Field(default_factory=list)
+    author_fps: list[str] = Field(default_factory=list)
+    edition_count: int = 0
+
+
+def fetch_work_facts(
+    con: duckdb.DuckDBPyConnection, paths: ArtifactPaths, keys: Iterable[str]
+) -> dict[str, WorkFacts]:
+    """Title variants, author names/fingerprints and edition count per work --
+    what a duplicate claim is checked against and what a reviewer reads."""
+    wanted = [k for k in dict.fromkeys(keys) if k]
+    if not wanted:
+        return {}
+    load_rows(con, "facts_keys", [("work_key", "VARCHAR")], [(k,) for k in wanted])
+    rows = con.execute(
+        f"""
+        WITH w AS (
+          SELECT w.work_key, w.title, w.title_fp, w.title_fp_nosub, w.title_fp_noart
+          FROM facts_keys k JOIN '{paths.table("works")}' w USING (work_key)
+        ),
+        a AS (
+          SELECT wa.work_key, list(DISTINCT an.name ORDER BY an.name) AS names,
+                 list(DISTINCT an.name_fp ORDER BY an.name_fp) AS fps
+          FROM facts_keys k
+          JOIN '{paths.table("work_authors")}' wa USING (work_key)
+          JOIN '{paths.table("author_names")}' an USING (author_key)
+          WHERE an.name IS NOT NULL
+          GROUP BY wa.work_key
+        ),
+        p AS (
+          SELECT p.work_key, p.edition_count
+          FROM facts_keys k JOIN '{paths.table("popularity")}' p USING (work_key)
+        )
+        SELECT w.work_key, w.title, w.title_fp, w.title_fp_nosub, w.title_fp_noart,
+               COALESCE(a.names, []), COALESCE(a.fps, []), COALESCE(p.edition_count, 0)
+        FROM w LEFT JOIN a USING (work_key) LEFT JOIN p USING (work_key)
+        """
+    ).fetchall()
+    return {
+        r[0]: WorkFacts(
+            work_key=r[0],
+            title=r[1],
+            title_variants=sorted({v for v in (r[2], r[3], r[4]) if v}),
+            author_names=list(r[5]),
+            author_fps=[fp for fp in r[6] if fp],
+            edition_count=r[7],
+        )
+        for r in rows
+    }
+
+
+def alternate_problems(
+    label_key: str, alternate: str, facts: dict[str, WorkFacts], resolved: dict[str, str]
+) -> list[str]:
+    """Why `alternate` is not a verified duplicate of `label_key` ([] when it is)."""
+    if resolved.get(alternate, alternate) == resolved.get(label_key, label_key):
+        return ["redirects to the labelled work; not a duplicate"]
+    if alternate not in facts:
+        return ["not in works"]
+    label, alt = facts.get(label_key), facts[alternate]
+    if label is None:
+        return ["labelled work not in works"]
+    problems = []
+    if not set(label.title_variants) & set(alt.title_variants):
+        problems.append("shares no title variant with the labelled work")
+    if not set(label.author_fps) & set(alt.author_fps):
+        problems.append("shares no author with the labelled work")
+    return problems
+
+
+def check_alternates(
+    con: duckdb.DuckDBPyConnection, paths: ArtifactPaths, cases: Iterable[EvalCase]
+) -> list[tuple[str, str, str]]:
+    with_alternates = [c for c in cases if c.label.alternate_work_keys]
+    keys = [k for c in with_alternates for k in (c.label.work_key, *c.label.alternate_work_keys)]
+    resolved = resolve_keys(con, paths, keys)
+    facts = fetch_work_facts(con, paths, [resolved.get(k, k) for k in keys])
+    facts_by_original = {k: facts[resolved.get(k, k)] for k in keys if resolved.get(k, k) in facts}
+    return [
+        (case.case_id, alternate, problem)
+        for case in with_alternates
+        for alternate in case.label.alternate_work_keys
+        for problem in alternate_problems(
+            case.label.work_key, alternate, facts_by_original, resolved
+        )
+    ]
