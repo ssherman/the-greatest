@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_191240) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_05_003352) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -266,9 +266,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_191240) do
     t.integer "verification", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "pending_import_id"
     t.index ["book_id"], name: "index_books_goodreads_editions_on_book_id"
     t.index ["goodreads_book_id", "signature"], name: "idx_on_goodreads_book_id_signature_8e389d2d73", unique: true
     t.index ["match_decision_id"], name: "index_books_goodreads_editions_on_match_decision_id"
+    t.index ["pending_import_id"], name: "index_books_goodreads_editions_on_pending_import_id"
     t.index ["signature"], name: "index_books_goodreads_editions_on_signature"
   end
 
@@ -332,6 +334,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_191240) do
     t.index ["reviewed_by_id"], name: "index_books_goodreads_imports_on_reviewed_by_id"
     t.index ["user_id"], name: "index_books_goodreads_imports_on_user_id"
     t.index ["user_id"], name: "index_books_goodreads_imports_one_in_progress_per_user", unique: true, where: "(status = ANY (ARRAY[0, 1, 2, 3, 4]))"
+  end
+
+  create_table "books_goodreads_pages", force: :cascade do |t|
+    t.bigint "goodreads_book_id", null: false
+    t.integer "source", default: 0, null: false
+    t.integer "outcome", null: false
+    t.datetime "fetched_at", null: false
+    t.integer "http_status"
+    t.integer "parser_version"
+    t.string "title"
+    t.jsonb "series", default: [], null: false
+    t.jsonb "authors", default: [], null: false
+    t.integer "original_publication_year"
+    t.string "isbn13"
+    t.string "isbn10"
+    t.string "asin"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["goodreads_book_id"], name: "index_books_goodreads_pages_on_goodreads_book_id", unique: true
   end
 
   create_table "books_reading_goals", force: :cascade do |t|
@@ -1349,6 +1370,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_191240) do
   add_foreign_key "books_editions", "books_books", column: "book_id"
   add_foreign_key "books_editions", "languages"
   add_foreign_key "books_goodreads_editions", "books_books", column: "book_id", on_delete: :nullify
+  add_foreign_key "books_goodreads_editions", "books_goodreads_imports", column: "pending_import_id", on_delete: :nullify
   add_foreign_key "books_goodreads_editions", "match_decisions", on_delete: :nullify
   add_foreign_key "books_goodreads_import_records", "books_goodreads_imports", column: "import_id", on_delete: :cascade
   add_foreign_key "books_goodreads_import_rows", "books_goodreads_editions", column: "goodreads_edition_id"
