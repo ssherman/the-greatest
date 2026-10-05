@@ -8,7 +8,8 @@ module Books
     # - Pass two, with Open Library /resolve (5-6 s), runs one at a time on
     #   serial, and only for editions pass one could not settle.
     # Re-running is safe: pass one skips an edition whose replay rows all have
-    # findings, and every write is an upsert of a finding or a verdict.
+    # findings, pass two one with no row still awaiting it, and every write is
+    # an upsert of a finding or a verdict.
     class ResolveEditionJob
       include Sidekiq::Job
 
@@ -32,7 +33,11 @@ module Books
       def perform(edition_id, pass = 1)
         edition = ::Books::GoodreadsEdition.find_by(id: edition_id)
         return unless edition
-        return if pass == 1 && !self.class.replay_rows.where(goodreads_edition_id: edition.id, replay_finding: nil).exists?
+        # Each pass runs only while a row still waits for it: a re-run of the rake
+        # can queue a pass two that pass one already queued, and that duplicate
+        # must not pay for another /resolve and AI call.
+        waiting = (pass == 1) ? nil : :awaiting_full_pass
+        return unless self.class.replay_rows.where(goodreads_edition_id: edition.id, replay_finding: waiting).exists?
 
         result = ::Services::Books::GoodreadsReplay::ResolveEdition.call(edition: edition, pass: pass)
         self.class.set(queue: :serial).perform_async(edition.id, 2) if pass == 1 && result.data[:needs_full_pass]

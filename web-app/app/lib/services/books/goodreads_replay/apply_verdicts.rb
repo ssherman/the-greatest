@@ -42,22 +42,40 @@ module Services
           end
 
           tally = Hash.new(0)
-          configurations = Set.new
+          @rankings = Set.new
+          @reweigh = Set.new
+          @follow_ups = Set.new
           HANDLERS.each do |kind, handler|
             ::Books::RepairVerdict.approved.where(kind: kind).find_each do |verdict|
-              tally["#{kind} #{apply(verdict, handler, configurations)}"] += 1
+              tally["#{kind} #{apply(verdict, handler)}"] += 1
             end
           end
-          configurations.each { |id| ::CalculateRankingsJob.perform_async(id) }
-          Result.new(success?: true, data: {tally: tally.to_h, ranking_configuration_ids: configurations.to_a}, errors: [])
+          queue_follow_ups
+          Result.new(success?: true, data: {tally: tally.to_h, ranking_configuration_ids: (@rankings | @reweigh).to_a}, errors: [])
         end
 
         private
 
-        def apply(verdict, handler, configurations)
+        # The merges defer their per-merge jobs, so a run of thousands of merges
+        # queues each recalculation once. A configuration a merge touched is
+        # reweighed first, then recalculated, as Books::Book::Merger does; one
+        # only a provisional flag touched is just recalculated.
+        def queue_follow_ups
+          @reweigh.each do |id|
+            ::BulkCalculateWeightsJob.perform_async(id)
+            ::CalculateRankingsJob.perform_in(5.minutes, id)
+          end
+          (@rankings - @reweigh).each { |id| ::CalculateRankingsJob.perform_async(id) }
+          ::GenerateUserFavoritesListsJob.perform_async("Books::UserList") if @follow_ups.include?(:user_favorites)
+          ::Books::CalculateAuthorRankingsJob.perform_async if @follow_ups.include?(:author_rankings)
+        end
+
+        def apply(verdict, handler)
           result = handler.call(verdict: verdict)
           outcome = result.data[:outcome]
-          configurations.merge(Array(result.data[:ranking_configuration_ids]))
+          @rankings.merge(Array(result.data[:ranking_configuration_ids]))
+          @reweigh.merge(Array(result.data[:reweigh_configuration_ids]))
+          @follow_ups.merge(Array(result.data[:follow_ups]))
           verdict.update!(applied_at: (outcome == :applied) ? Time.current : verdict.applied_at, error: nil)
           outcome
         rescue *POSTGRES_ERRORS

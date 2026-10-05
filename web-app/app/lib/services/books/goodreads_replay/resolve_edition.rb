@@ -15,10 +15,14 @@ module Services
       #   pass one disagreed or found nothing.
       #
       # Never creates a book. A match that needs no further pass is recorded on
-      # the edition, which warms the cache for members' imports, unless an
-      # import already settled the edition or is waiting on it. A failed AI call
-      # raises (as in member resolution), so the job retries instead of
-      # recording a non-answer.
+      # the edition, which warms the cache for members' imports. Three cases
+      # leave the cache alone:
+      # - an import already settled the edition, or is waiting on it;
+      # - the match disagrees with legacy: that is a relink an admin may reject,
+      #   and members' imports resolve the edition themselves.
+      # A failed AI call raises (as in member resolution), so the job retries
+      # instead of recording a non-answer; its decision leaves the review queue
+      # first.
       class ResolveEdition
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         MatchingFailed = Class.new(StandardError)
@@ -36,11 +40,11 @@ module Services
         def call
           query = ::Services::Books::GoodreadsImports::EditionQuery.call(@edition)
           match = finder.call(query: query, verify: true, subject: @edition)
+          match.decision.update!(needs_review: false) if match.decision&.needs_review?
           raise MatchingFailed, "matching failed for Goodreads edition #{@edition.id}: #{match.reason}" if match.decided_by == :fallback
 
-          match.decision.update!(needs_review: false) if match.decision&.needs_review?
           compared = CompareEdition.call(edition: @edition, match: match, finder: finder, query: query, final: @pass == 2).data
-          warm_cache(match) if match.matched? && !compared[:needs_full_pass]
+          warm_cache(match) if match.matched? && !compared[:needs_full_pass] && !compared[:tally].key?(:disagrees)
           Result.new(success?: true, data: {match: match, needs_full_pass: compared[:needs_full_pass], tally: compared[:tally]}, errors: [])
         end
 

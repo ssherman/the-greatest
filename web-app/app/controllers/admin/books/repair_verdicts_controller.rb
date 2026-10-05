@@ -47,16 +47,20 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
       redirect_to admin_books_repair_verdict_path(@verdict), alert: "This verdict is already rejected."
       return
     end
+    # An applied merge or relink cannot be taken back here, but rejecting it
+    # still matters: every replay pass re-applies approved verdicts after a
+    # books re-migration, and a rejected one is never applied again.
+    notice = "Rejected."
     if @verdict.applied_at.present?
-      unless @verdict.mark_provisional?
-        redirect_to admin_books_repair_verdict_path(@verdict), alert: "Already applied; it cannot be undone here."
-        return
+      if @verdict.mark_provisional?
+        revert_provisional
+      else
+        notice = "Rejected. What it already changed is not undone; it will not be applied again after a books re-migration."
       end
-      revert_provisional
     end
 
     review!(@verdict, :rejected)
-    redirect_to admin_books_repair_verdict_path(@verdict), notice: "Rejected."
+    redirect_to admin_books_repair_verdict_path(@verdict), notice: notice
   end
 
   def bulk_approve

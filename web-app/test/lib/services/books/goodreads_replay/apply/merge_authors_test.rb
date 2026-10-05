@@ -15,11 +15,14 @@ module Services
               decided_by: :ai, status: :approved, payload: {"source_id" => source_id, "target_id" => target_id})
           end
 
-          test "merges the source into the target through the author merger" do
-            ::Books::Author::Merger.expects(:call).with(source: @source, target: @target)
+          test "merges the source into the target through the author merger, leaving the ranking job to the run" do
+            ::Books::Author::Merger.expects(:call).with(source: @source, target: @target, defer_rankings: true)
               .returns(::Books::Author::Merger::Result.new(success?: true, data: @target, errors: []))
 
-            assert_equal :applied, MergeAuthors.call(verdict: verdict).data[:outcome]
+            result = MergeAuthors.call(verdict: verdict)
+
+            assert_equal :applied, result.data[:outcome]
+            assert_equal [:author_rankings], result.data[:follow_ups]
           end
 
           test "a source already merged away is a no-op" do

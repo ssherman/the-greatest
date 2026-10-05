@@ -66,10 +66,24 @@ module Services
         test "a failed AI call raises so the job retries, and records no findings" do
           import = ::Books::GoodreadsImport.create!(user: users(:regular_user), source: :legacy_replay, status: :complete, legacy_import_id: 9)
           row = import.rows.create!(row_number: 1, goodreads_edition: @edition)
-          finder_answers(nil, decided_by: :fallback, confidence: :low)
+          match = finder_answers(nil, decided_by: :fallback, confidence: :low)
 
           assert_raises(ResolveEdition::MatchingFailed) { ResolveEdition.call(edition: @edition, pass: 1, finder: @finder) }
           assert_nil row.reload.replay_finding
+          refute match.decision.reload.needs_review, "a failed AI call must not leave a decision in the review queue"
+        end
+
+        test "a final-pass disagreement with legacy does not warm the cache, so rejecting the relink leaves members unaffected" do
+          import = ::Books::GoodreadsImport.create!(user: users(:regular_user), source: :legacy_replay, status: :complete, legacy_import_id: 10)
+          import.rows.create!(row_number: 1, goodreads_edition: @edition)
+          ::Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: @edition.goodreads_book_id.to_s)
+          finder_answers(books_books(:crime_and_punishment))
+
+          result = ResolveEdition.call(edition: @edition, pass: 2, finder: @finder)
+
+          assert_equal({disagrees: 1}, result.data[:tally])
+          assert_nil @edition.reload.resolved_at
+          assert_nil @edition.book_id
         end
 
         test "pass one uses the fast Open Library lookup and pass two adds /resolve" do

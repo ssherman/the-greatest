@@ -63,6 +63,18 @@ module Services
           assert_nil verdict_for(@orphan)
         end
 
+        test "a book the relinked user's other row still names is not junk" do
+          ::Identifier.create!(identifiable: @orphan, identifier_type: :books_work_goodreads_id, value: "111")
+          import = ::Books::GoodreadsImport.create!(user: @user, source: :legacy_replay, status: :complete, legacy_import_id: 78)
+          agreeing = ::Books::GoodreadsEdition.create!(goodreads_book_id: 111, signature: "s111", title: "Wrongly Matched Book", primary_author: "Stephen King")
+          import.rows.create!(row_number: 1, goodreads_edition: agreeing)
+          approved_relink
+
+          FindJunk.call
+
+          assert_nil verdict_for(@orphan)
+        end
+
         test "a proposed relink is not enough" do
           approved_relink.update!(status: :proposed, reviewed_at: nil)
 

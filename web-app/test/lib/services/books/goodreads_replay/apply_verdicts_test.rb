@@ -46,6 +46,28 @@ module Services
           assert_nil relink.reload.applied_at
         end
 
+        test "queues each follow-up once per run, however many merges asked for it" do
+          first = verdict(:merge_books, "books:1:2")
+          second = verdict(:merge_books, "books:3:4")
+          authors = verdict(:merge_authors, "authors:5:6")
+          more_authors = verdict(:merge_authors, "authors:7:8")
+          flagged = verdict(:mark_provisional, "book:9")
+          Apply::MergeBooks.stubs(:call).with(verdict: first).returns(answer(:applied, reweigh_configuration_ids: [1, 2], follow_ups: [:user_favorites]))
+          Apply::MergeBooks.stubs(:call).with(verdict: second).returns(answer(:applied, reweigh_configuration_ids: [2], follow_ups: [:user_favorites]))
+          Apply::MergeAuthors.stubs(:call).with(verdict: authors).returns(answer(:applied, follow_ups: [:author_rankings]))
+          Apply::MergeAuthors.stubs(:call).with(verdict: more_authors).returns(answer(:applied, follow_ups: [:author_rankings]))
+          Apply::MarkProvisional.stubs(:call).with(verdict: flagged).returns(answer(:applied, ranking_configuration_ids: [2, 3]))
+          ::BulkCalculateWeightsJob.expects(:perform_async).with(1).once
+          ::BulkCalculateWeightsJob.expects(:perform_async).with(2).once
+          ::CalculateRankingsJob.expects(:perform_in).with(5.minutes, 1).once
+          ::CalculateRankingsJob.expects(:perform_in).with(5.minutes, 2).once
+          ::CalculateRankingsJob.expects(:perform_async).with(3).once
+          ::GenerateUserFavoritesListsJob.expects(:perform_async).with("Books::UserList").once
+          ::Books::CalculateAuthorRankingsJob.expects(:perform_async).once
+
+          ApplyVerdicts.call(auto_apply: true)
+        end
+
         test "a failing verdict records its error and the rest still apply; a later success clears it" do
           broken = verdict(:merge_books, "books:1:2")
           fine = verdict(:merge_books, "books:3:4")
@@ -83,6 +105,25 @@ module Services
           assert_equal({"merge_authors applied" => 1, "merge_authors noop" => 1}, result.data[:tally])
           refute ::Books::Author.exists?(b.id)
           assert ::Books::Author.exists?(a.id), "A's target was merged away first; the next pass re-derives A with C"
+        end
+
+        test "a slug fix-up and a relink on the same book end with the bare id on the right book only" do
+          wrong = books_books(:war_and_peace)
+          right = books_books(:of_mice_and_men)
+          user = users(:regular_user)
+          ::Identifier.create!(identifiable: wrong, identifier_type: :books_work_goodreads_id, value: "777-some-slug")
+          verdict(:strip_identifier, "book:#{wrong.id}:books_work_goodreads_id:777-some-slug",
+            {"book_id" => wrong.id, "remove" => [["books_work_goodreads_id", "777-some-slug"]], "add" => [["books_work_goodreads_id", "777"]]})
+          verdict(:relink, "user:#{user.id}:book:#{wrong.id}:goodreads:777",
+            {"user_id" => user.id, "from_book_id" => wrong.id, "to_book_id" => right.id, "goodreads_book_id" => 777,
+             "strip_identifiers" => [["books_work_goodreads_id", "777"], ["books_work_goodreads_id", "777-some-slug"]],
+             "stamp_identifiers" => [["books_work_goodreads_id", "777"]]})
+          goodreads = ->(book) { book.identifiers.where(identifier_type: :books_work_goodreads_id).where("value LIKE '777%'").pluck(:value) }
+
+          ApplyVerdicts.call(auto_apply: true)
+
+          assert_empty goodreads.call(wrong)
+          assert_equal ["777"], goodreads.call(right)
         end
 
         test "applying the same verdicts twice leaves the same state" do

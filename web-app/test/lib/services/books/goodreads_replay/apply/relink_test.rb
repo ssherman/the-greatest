@@ -18,7 +18,7 @@ module Services
             ::Books::RepairVerdict.create!(kind: :relink, subject_key: "user:#{user_id}:book:#{from.id}:goodreads:1",
               decided_by: :ai, status: :approved,
               payload: {"user_id" => user_id, "from_book_id" => from.id, "to_book_id" => to.id, "goodreads_book_id" => 1,
-                        "strip_identifiers" => strip})
+                        "strip_identifiers" => strip, "stamp_identifiers" => strip})
           end
 
           test "moves the user's list items and review from the wrong book to the right one" do
@@ -69,6 +69,24 @@ module Services
 
             refute @from.identifiers.exists?(identifier_type: :books_work_goodreads_id, value: "777")
             assert @to.identifiers.exists?(identifier_type: :books_work_goodreads_id, value: "777")
+          end
+
+          test "when another of the user's rows still names the wrong book, the right one is added and the wrong one kept" do
+            ::Identifier.create!(identifiable: @from, identifier_type: :books_work_goodreads_id, value: "111")
+            import = ::Books::GoodreadsImport.create!(user: @user, source: :legacy_replay, status: :complete, legacy_import_id: 77)
+            agreeing = ::Books::GoodreadsEdition.create!(goodreads_book_id: 111, signature: "s111", title: "War and Peace", primary_author: "Leo Tolstoy")
+            import.rows.create!(row_number: 1, goodreads_edition: agreeing)
+            item = UserListItem.create!(user_list: @read, listable: @from, completed_on: Date.new(2025, 3, 1))
+            review = Review.create!(user: @user, reviewable: @from, rating: 4)
+
+            relink = verdict
+            result = Relink.call(verdict: relink)
+
+            assert_equal :applied, result.data[:outcome]
+            assert_equal @from, item.reload.listable
+            assert_equal Date.new(2025, 3, 1), UserListItem.find_by!(user_list: @read, listable: @to).completed_on
+            assert_equal @from, review.reload.reviewable
+            assert_equal :noop, Relink.call(verdict: relink).data[:outcome]
           end
 
           test "applying twice does nothing the second time" do

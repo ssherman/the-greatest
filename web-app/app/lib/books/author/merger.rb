@@ -22,13 +22,17 @@ module Books
 
       attr_reader :source_author, :target_author, :stats, :affected_book_ids
 
-      def self.call(source:, target:)
-        new(source: source, target: target).call
+      def self.call(source:, target:, defer_rankings: false)
+        new(source: source, target: target, defer_rankings: defer_rankings).call
       end
 
-      def initialize(source:, target:)
+      # defer_rankings: a bulk caller (the Goodreads replay's apply step) merges
+      # many authors in one run and queues the author ranking recalculation once
+      # at the end instead of once per merge.
+      def initialize(source:, target:, defer_rankings: false)
         @source_author = source
         @target_author = target
+        @defer_rankings = defer_rankings
         @source_author_id = source.id
         @stats = {}
         @affected_book_ids = []
@@ -405,7 +409,7 @@ module Books
       def run_post_commit_steps
         reindex_target_author
         reindex_affected_books
-        schedule_ranking_recalculation
+        schedule_ranking_recalculation unless @defer_rankings
       rescue => error
         Rails.logger.error(
           "Books::Author::Merger: merge of #{source_author.id} into #{target_author.id} " \

@@ -54,6 +54,15 @@ module Services
             assert_predicate pair, :raised_by_identifier_collision?
           end
 
+          test "a slug something else already removed is not replaced with the bare id" do
+            ::Identifier.where(identifiable: @book, value: "656-war-and-peace").delete_all
+
+            result = StripIdentifier.call(verdict: verdict)
+
+            assert_equal :noop, result.data[:outcome]
+            assert_empty goodreads_ids(@book)
+          end
+
           test "a book that no longer exists is a no-op with a reason" do
             result = StripIdentifier.call(verdict: verdict(book_id: 0))
 

@@ -48,6 +48,11 @@ module Services
 
             moved = verdicts.map { |verdict| verdict.payload["user_id"] }.uniq.sort
             next if curated_list_ids(book).any?
+            # A relinked user whose other row still names the book keeps it (Apply::Relink copies).
+            next if verdicts.any? do |verdict|
+              Apply::Relink.supported_elsewhere?(user_id: verdict.payload["user_id"], from_book: book,
+                goodreads_book_id: verdict.payload["goodreads_book_id"])
+            end
             next if ::UserListItem.joins(:user_list).where(listable: book).where.not(user_lists: {user_id: moved}).exists?
             next if ::Review.where(reviewable: book).where.not(user_id: moved).exists?
 

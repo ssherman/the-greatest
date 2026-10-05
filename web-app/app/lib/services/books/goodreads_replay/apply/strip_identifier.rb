@@ -10,6 +10,11 @@ module Services
         # another. An added identifier another book already holds flags the two
         # as a suspected duplicate pair, as the finder does for a collision.
         # Idempotent: what is already gone, or already there, is left alone.
+        #
+        # A verdict that both removes and adds is a replacement (a slug for its
+        # bare id): when nothing it names is left to remove, the identifier was
+        # already replaced or moved elsewhere (a relink took it to the right
+        # book), so nothing is added either.
         class StripIdentifier
           Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -17,7 +22,13 @@ module Services
             book = ::Books::Book.find_by(id: verdict.payload["book_id"])
             return noop("book #{verdict.payload["book_id"]} no longer exists") unless book
 
-            changed = change(book: book, remove: verdict.payload["remove"], add: verdict.payload["add"])
+            remove = Array(verdict.payload["remove"])
+            add = Array(verdict.payload["add"])
+            if remove.any? && add.any? && remove.none? { |type, value| book.identifiers.exists?(identifier_type: type, value: value) }
+              return noop("nothing left to replace")
+            end
+
+            changed = change(book: book, remove: remove, add: add)
             changed.zero? ? noop("already applied") : Result.new(success?: true, data: {outcome: :applied}, errors: [])
           end
 

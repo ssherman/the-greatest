@@ -87,14 +87,17 @@ module Admin
         assert_equal @admin.id, @relink.decided_by_user_id
       end
 
-      test "an applied merge cannot be rejected" do
-        @merge.update!(applied_at: Time.current)
+      test "rejecting an applied merge undoes nothing now but stops it being re-applied after a re-migration" do
+        applied_at = 1.day.ago.change(usec: 0)
+        @merge.update!(applied_at: applied_at)
         sign_in_as(@admin, stub_auth: true)
 
         post reject_admin_books_repair_verdict_path(@merge)
 
-        assert_predicate @merge.reload, :approved?
+        assert_predicate @merge.reload, :rejected?
+        assert_equal applied_at, @merge.applied_at
         assert_redirected_to admin_books_repair_verdict_path(@merge)
+        assert_match(/not undone/, flash[:notice])
       end
 
       test "rejecting an applied mark_provisional reverts it" do

@@ -27,6 +27,7 @@ module Books
           job = ResolveEditionJob.jobs.sole
           assert_equal "serial", job["queue"]
           assert_equal [@edition.id, 2], job["args"]
+          @row.update!(replay_finding: :awaiting_full_pass) # what pass one's compare writes
           ResolveEditionJob.drain
         end
       end
@@ -36,6 +37,13 @@ module Books
         RESOLVE.expects(:call).never
 
         ResolveEditionJob.new.perform(@edition.id, 1)
+      end
+
+      test "pass two is skipped once no replay row awaits it, so a duplicate queued by a re-run costs nothing" do
+        @row.update!(replay_finding: :disagrees)
+        RESOLVE.expects(:call).never
+
+        ResolveEditionJob.new.perform(@edition.id, 2)
       end
 
       test "a missing edition is nothing to do" do

@@ -77,6 +77,7 @@ module Services
           assert_equal({"user_id" => @user.id, "from_book_id" => @legacy.id, "to_book_id" => @resolved.id,
                         "goodreads_book_id" => @edition.goodreads_book_id, "rows" => [[501, 3]],
                         "match_decision_id" => decision_match.decision.id, "strip_identifiers" => [],
+                        "stamp_identifiers" => [],
                         "row" => {"title" => "War and Peace", "author" => "Leo Tolstoy"}}, verdict.payload)
         end
 
@@ -96,6 +97,18 @@ module Services
 
           assert_equal [["books_work_goodreads_id", @edition.goodreads_book_id.to_s], ["books_work_isbn13", "9780140447934"]],
             ::Books::RepairVerdict.relink.sole.payload["strip_identifiers"]
+        end
+
+        test "a slug-form id on legacy's book is stripped in every form and stamped on the right book bare" do
+          id = @edition.goodreads_book_id.to_s
+          ::Identifier.where(identifiable: @legacy, identifier_type: :books_work_goodreads_id).update_all(value: "#{id}-war-and-peace")
+
+          compare(match(@resolved), query: contradicting_query)
+
+          payload = ::Books::RepairVerdict.relink.sole.payload
+          assert_equal [["books_work_goodreads_id", id], ["books_work_goodreads_id", "#{id}-war-and-peace"], ["books_work_isbn13", "9780140447934"]],
+            payload["strip_identifiers"]
+          assert_equal [["books_work_goodreads_id", id], ["books_work_isbn13", "9780140447934"]], payload["stamp_identifiers"]
         end
 
         test "legacy's book and the resolver's already being a duplicate pair is a duplicate finding, not a relink" do

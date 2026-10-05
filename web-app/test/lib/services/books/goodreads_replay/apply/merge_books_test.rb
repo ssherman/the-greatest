@@ -15,22 +15,31 @@ module Services
               decided_by: :rule, status: :approved, payload: {"source_id" => source_id, "target_id" => target_id})
           end
 
-          test "merges through the book merger" do
-            ::Books::Book::Merger.expects(:call).with(source: @source, target: @target)
-              .returns(::Books::Book::Merger::Result.new(success?: true, data: @target, errors: []))
+          def merger(success: true, errors: [], configurations: [])
+            stub("merger", call: ::Books::Book::Merger::Result.new(success?: success, data: @target, errors: errors),
+              affected_ranking_configurations: configurations)
+          end
 
-            assert_equal :applied, MergeBooks.call(verdict: verdict).data[:outcome]
+          test "merges through the book merger, leaving its ranking and favorites jobs to the run" do
+            ::Books::Book::Merger.expects(:new).with(source: @source, target: @target, defer_rankings: true)
+              .returns(merger(configurations: [7]))
+
+            result = MergeBooks.call(verdict: verdict)
+
+            assert_equal :applied, result.data[:outcome]
+            assert_equal [7], result.data[:reweigh_configuration_ids]
+            assert_equal [:user_favorites], result.data[:follow_ups]
           end
 
           test "either book gone is a no-op" do
-            ::Books::Book::Merger.expects(:call).never
+            ::Books::Book::Merger.expects(:new).never
 
             assert_equal "book 0 no longer exists", MergeBooks.call(verdict: verdict(source_id: 0)).data[:reason]
             assert_equal "book 0 no longer exists", MergeBooks.call(verdict: verdict(target_id: 0)).data[:reason]
           end
 
           test "a merger failure raises with its errors" do
-            ::Books::Book::Merger.stubs(:call).returns(::Books::Book::Merger::Result.new(success?: false, data: nil, errors: ["locked"]))
+            ::Books::Book::Merger.stubs(:new).returns(merger(success: false, errors: ["locked"]))
 
             assert_raises(Failed) { MergeBooks.call(verdict: verdict) }
           end

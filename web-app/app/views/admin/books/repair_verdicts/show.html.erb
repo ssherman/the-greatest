@@ -83,9 +83,11 @@
     <% if @verdict.proposed? && current_user_can_delete? %>
       <%= button_to "Approve", approve_admin_books_repair_verdict_path(@verdict), method: :post, class: "btn btn-sm btn-primary" %>
     <% end %>
-    <% if !@verdict.rejected? && current_user_can_write? && (@verdict.applied_at.nil? || @verdict.mark_provisional?) %>
+    <% if !@verdict.rejected? && current_user_can_write? %>
+      <% undo_free = @verdict.applied_at.nil? || @verdict.mark_provisional? %>
       <%= button_to "Reject", reject_admin_books_repair_verdict_path(@verdict), method: :post, class: "btn btn-sm btn-error",
-            form: {data: {testid: "reject-form"}} %>
+            form: {data: {testid: "reject-form",
+                          turbo_confirm: (undo_free ? nil : "This was already applied. Rejecting does not undo it; it only stops it being applied again after a books re-migration.")}.compact} %>
     <% end %>
   </div>
 </div>

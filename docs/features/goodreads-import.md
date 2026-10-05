@@ -186,7 +186,8 @@ bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.m
 - **Resolve** runs the books finder in `verify: true`. Pass one uses the fast sources, with Open Library's identifier
   lookup in place of `/resolve`. Pass two adds `/resolve`, only for editions pass one disagreed on or could not match.
   Each replay row gets a `replay_finding` (agrees, duplicate, disagrees, unmatched, no legacy choice). Legacy's
-  choice is the book holding the row's Goodreads id that is on that user's lists. Matches warm the edition cache.
+  choice is the book holding the row's Goodreads id that is on that user's lists. Matches that agree with legacy warm
+  the edition cache; a disagreement does not, because it is a relink an admin may reject.
   The replay never creates books and never fetches Goodreads pages; it only reads cached ones.
 - **Relinks are all AI-decided.** Measured 2026-10-05: under `verify: true`, legacy's book always holds the row's
   Goodreads id, and that hit blocks the exact-match rule for any other book. So no rule ever decides a disagreement.
@@ -201,8 +202,12 @@ bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.m
   proposed: curated list pages are not filtered. Flagging uses `update!`, so the book is reindexed, and apply queues a
   ranking recalculation for every configuration that ranked it, plus the default one, which cascades to authors.
 - **Admin:** Books → Repair Verdicts filters by kind, status, decider and confidence, approves or rejects, and approves in
-  bulk. Approval never applies; the next `apply` does. An applied merge or relink cannot be rejected. Rejecting an
-  applied `mark_provisional` reverts it.
+  bulk. Approval never applies; the next `apply` does. Rejecting an applied `mark_provisional` reverts it. Rejecting an
+  applied merge or relink undoes nothing now, but stops it being applied again after the next books re-migration.
+- **A relink copies instead of moving** when another of the user's replay rows still names legacy's book: the right book
+  is added beside it, and the legacy book keeps the item and the review. Junk detection treats such a book as supported.
+- **Apply batches the follow-ups.** Merges run with `defer_rankings: true`, and one run queues each ranking
+  recalculation, the favorites rebuild and the author rankings once, not once per merge.
 - **Before auto-apply:** hand-check 50 auto verdicts per kind with `books:goodreads_replay:sample[kind]`, then set
   `auto_apply: true` in `config/initializers/goodreads_replay.rb`.
 

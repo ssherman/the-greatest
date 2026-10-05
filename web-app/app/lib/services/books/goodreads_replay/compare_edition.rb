@@ -93,7 +93,8 @@ module Services
             kind: :relink, subject_key: "user:#{user_id}:book:#{legacy.id}:goodreads:#{@edition.goodreads_book_id}",
             payload: base_payload(user_id, rows).merge(
               from_book_id: legacy.id, to_book_id: @resolved.id,
-              strip_identifiers: contradicts?(legacy) ? held_identifiers(legacy) : []
+              strip_identifiers: contradicts?(legacy) ? held_identifiers(legacy) : [],
+              stamp_identifiers: contradicts?(legacy) ? stamp_identifiers(legacy) : []
             ),
             decided_by: decider, confidence: @match.confidence, reason: @match.reason,
             ai_chat_id: @match.decision&.ai_chat_id, auto: decider == :rule && %i[certain high].include?(@match.confidence)
@@ -120,16 +121,26 @@ module Services
           !@finder.titles_agree?(@query, book) && !@finder.creators_agree?(@query, book)
         end
 
-        # The row's own identifiers that the book holds: its Goodreads id (bare or
-        # slug form) and its ISBNs.
+        # What to take off the wrong book: the row's Goodreads id in every form
+        # the book holds, plus the bare form (the slug fix-up may turn a slug into
+        # it before this is applied), and the row's ISBNs the book holds.
         def held_identifiers(book)
           id = @edition.goodreads_book_id.to_s
-          goodreads = book.identifiers.where(identifier_type: :books_work_goodreads_id).pluck(:value)
-            .select { |value| value[/\A\d+/] == id }.sort.map { |value| ["books_work_goodreads_id", value] }
-          isbns = [["books_work_isbn13", @edition.isbn13], ["books_work_isbn10", @edition.isbn10]].select do |type, value|
+          forms = book.identifiers.where(identifier_type: :books_work_goodreads_id).pluck(:value)
+            .select { |value| value[/\A\d+/] == id }
+          (forms + [id]).uniq.sort.map { |value| ["books_work_goodreads_id", value] } + held_isbns(book)
+        end
+
+        # What to put on the right book: the bare Goodreads id, never a slug no
+        # lookup finds, and the same ISBNs.
+        def stamp_identifiers(book)
+          [["books_work_goodreads_id", @edition.goodreads_book_id.to_s]] + held_isbns(book)
+        end
+
+        def held_isbns(book)
+          [["books_work_isbn13", @edition.isbn13], ["books_work_isbn10", @edition.isbn10]].select do |type, value|
             value.present? && book.identifiers.exists?(identifier_type: type, value: value)
           end
-          goodreads + isbns
         end
 
         def page_facts
