@@ -37,5 +37,15 @@ namespace :books do
       counts = Services::Books::GoodreadsReplay::FindJunk.call.data
       puts "mark_provisional verdicts: #{counts[:authorless]} authorless, #{counts[:orphaned]} with no support after relinks"
     end
+
+    desc "Apply every approved replay verdict (author merges, book merges, relinks, identifier strips, provisional). " \
+      "Refuses while config.x.goodreads_replay.auto_apply is false. Idempotent; re-run after every books migration pass."
+    task apply: :environment do
+      result = Services::Books::GoodreadsReplay::ApplyVerdicts.call
+      abort result.errors.join("; ") unless result.success?
+
+      puts "applied verdicts: #{tally.call(result.data[:tally])}; " \
+        "ranking recalculations queued: #{result.data[:ranking_configuration_ids].size}"
+    end
   end
 end
