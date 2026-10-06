@@ -9,6 +9,7 @@ module Services
         setup do
           ::Books::EnrichBookJob.stubs(:perform_async)
           ::Books::Authors::WikidataJob.stubs(:perform_async)
+          ::Books::PurgeShowPagesJob.stubs(:perform_async)
           ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
           @user = User.create!(email: "approve@example.com", role: :user, email_verified: false)
           @reviewer = users(:admin_user)

@@ -74,7 +74,8 @@ a book's `mark_provisional` is only proposed, for an admin (`docs/features/goodr
 A provisional book or author still loads by URL. `@indexable` is false, so the page renders
 `noindex`, and `Books::ProvisionalNoticeComponent` shows "Added from a Goodreads import; not yet
 reviewed or enriched." The notice depends only on the record, so edge-cached HTML stays the same
-for every visitor. Approving a record has to purge its cached page (increment 6).
+for every visitor. Promoting a record (`Services::Books::GoodreadsImports::PromoteRecords`) purges its
+cached page through `Books::PurgeShowPagesJob`.
 
 ## Merges
 

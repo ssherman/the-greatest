@@ -29,6 +29,8 @@ module Services
           authors = (@authors + @books.flat_map(&:authors)).uniq.select(&:provisional?)
           author_ids = authors.map(&:id).to_set
           enrich_now = []
+          goal_urls = []
+          on_favorites = false
           ActiveRecord::Base.transaction(requires_new: true) do
             authors.each { |author| author.update!(provisional: false) }
             @books.each do |book|
@@ -38,11 +40,23 @@ module Services
               else
                 enrich_now << book.id
               end
+              # Public goal pages count catalog books only, so a promoted
+              # book's readers' pages change; at the new count these URLs
+              # cover the old pages too.
+              goal_urls.concat(::Services::Books::ReadingGoals::DestructionInvalidator.for_book(book: book))
             end
+            on_favorites = @books.any? &&
+              ::UserListItem.joins(:user_list).merge(::Books::UserList.favorites).where(listable: @books).exists?
           end
           ActiveRecord.after_all_transactions_commit do
             author_ids.each { |id| ::Books::Authors::WikidataJob.perform_async(id) }
             enrich_now.each { |id| ::Books::EnrichBookJob.perform_async(id) }
+            if @books.any? || author_ids.any?
+              ::Books::PurgeShowPagesJob.perform_async(@books.map(&:id), author_ids.to_a)
+            end
+            ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", goal_urls.uniq) if goal_urls.any?
+            # The generated users' favorites list skips provisional books.
+            ::GenerateUserFavoritesListsJob.perform_async("Books::UserList") if on_favorites
           end
           Result.new(success?: true, data: {book_ids: @books.map(&:id), author_ids: author_ids.to_a}, errors: [])
         end

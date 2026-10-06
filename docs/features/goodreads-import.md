@@ -201,6 +201,9 @@ queues `Books::Goodreads::RunImportJob`.
   - It promotes every provisional book the import created or its rows point at, with the book's provisional authors,
     then queues enrichment. A book credited to a newly promoted author waits for that author's chain, as the importer
     does.
+  - Promotion also purges the records' cached show pages (which carried `noindex` and the notice) and the public goal
+    pages of the book's readers. It regenerates the users' favorites list when a promoted book is on anyone's
+    favorites.
 - **Reject** (`Revert`):
   - It deletes the list items and reviews in `applied`, plus the provisional books and authors the import created
     that no other import, list, review or curated list uses.

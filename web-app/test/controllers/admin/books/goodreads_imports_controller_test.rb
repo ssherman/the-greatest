@@ -15,6 +15,7 @@ module Admin
         @import.records.create!(record: @book, action: :created)
         ::Books::EnrichBookJob.stubs(:perform_async)
         ::Books::Authors::WikidataJob.stubs(:perform_async)
+        ::Books::PurgeShowPagesJob.stubs(:perform_async)
         ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
       end
 
