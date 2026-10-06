@@ -1,11 +1,25 @@
 import { test, expect } from "@playwright/test";
+import { execSync } from "node:child_process";
+import path from "node:path";
 
 // Books list wizard spec §10: the whole flow on a three-row list, with the
 // real parser and finder (a few cents of AI per run). Needs Sidekiq running
-// against THIS checkout and the Open Library service reachable; a failed
-// Open Library source caps a match at medium, which flags it.
+// against THIS checkout and the Open Library service reachable. A row whose
+// match had a failed source is retried (up to 3 attempts) before it is
+// flagged, so the Match wait below allows for the retries.
+const WEB_APP = path.resolve(__dirname, "..", "..", "..", "..");
+const cleanup = () => execSync("bin/rails e2e:list_wizard_cleanup", { cwd: WEB_APP, encoding: "utf8" });
+
 test.describe("Books admin — list wizard", () => {
   test.setTimeout(480_000);
+
+  // Sweep orphans from earlier failed runs, and guarantee removal after this one.
+  test.beforeAll(() => {
+    cleanup();
+  });
+  test.afterEach(() => {
+    cleanup();
+  });
 
   test("parses, matches, reviews, imports and finishes a three-row list", async ({ page }) => {
     const name = `E2E Wizard List ${Date.now()}`;
@@ -33,6 +47,8 @@ test.describe("Books admin — list wizard", () => {
     await page.getByRole("button", { name: "Review →" }).click();
 
     // The default view is flagged rows only: the two famous books matched.
+    // A failure on this count usually means Open Library data or availability
+    // (the home-server service must be reachable), not app code.
     const rows = page.getByTestId("review-row");
     await expect(rows).toHaveCount(1);
     const madeUp = rows.filter({ hasText: "Glass Orchard" });
