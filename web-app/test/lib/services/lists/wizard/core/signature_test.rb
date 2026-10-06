@@ -23,6 +23,14 @@ module Services
             assert_nil Signature.normalize(nil)
             assert_equal ["emma", ["jane austen"]], Signature.call("Emma", ["Jane Austen", "", nil])
           end
+
+          test "year accepts an Integer or a one-to-four digit string and nothing else" do
+            assert_equal 1984, Signature.year(1984)
+            assert_equal 1984, Signature.year(" 1984 ")
+            assert_nil Signature.year("circa 2011")
+            assert_nil Signature.year("20111")
+            assert_nil Signature.year(nil)
+          end
         end
       end
     end

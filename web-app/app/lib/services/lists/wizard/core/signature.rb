@@ -14,6 +14,14 @@ module Services
             ::Services::Text::NameNormalizer.call(::Services::Text::QuoteNormalizer.call(text.to_s)).downcase
           end
 
+          # A year a person typed or a parser guessed: an Integer, or a string of
+          # one to four digits. Anything else is not a year.
+          def self.year(value)
+            return value if value.is_a?(Integer)
+
+            value.to_s.strip.match?(/\A\d{1,4}\z/) ? value.to_s.strip.to_i : nil
+          end
+
           def self.call(title, creators)
             [normalize(title).to_s, Array(creators).map { |name| normalize(name) }.compact_blank.sort]
           end
