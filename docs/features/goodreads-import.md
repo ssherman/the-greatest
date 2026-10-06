@@ -304,8 +304,9 @@ imports.
   the import and its file. The next run restarts it, pending review again. One with rows has already run and is left
   alone. One an admin rejected stays rejected.
 - `IDS=` only narrows what is started: a picked import still defers to a newer unfinished import of the same user.
-- Each import fetches Goodreads pages for the books it would create, on the fetch line member uploads use. Run it in
-  batches (`[5]`), and let each batch finish before the next: running imports are skipped, not counted.
+- Run it one import at a time (`[1]`), and let each finish before the next: running imports are skipped, not
+  counted. Four at once overloaded the Open Library service on 2026-10-06 (`docs/launch-todo.md`, section 2, item 9).
+  Each import also fetches Goodreads pages for the books it would create, on the fetch line member uploads use.
 - Measured on the 2026-10-05 development load (a dry run): 46 unfinished legacy imports. 10 have a later completed
   import, 12 have no file (missing from the legacy bucket, or not a CSV), and 1 has no Goodreads header. That leaves
   23, all stuck in `pending`, with 40,345 rows between them.

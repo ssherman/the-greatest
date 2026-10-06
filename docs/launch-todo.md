@@ -64,12 +64,22 @@ Run these in this order after each migration pass.
      Books → Goodreads Imports (that removes what it wrote), then delete those finishing imports, or
      the rejection keeps them from running on the final pass.
    - On the final pass, after the replay's `load`: `DRY_RUN=1 bin/rails books:goodreads_replay:finish_legacy`
-     lists what it would do. Then run `bin/rails "books:goodreads_replay:finish_legacy[5]"`, and wait until
-     none of that batch is still in progress before running the next one. Running imports are skipped,
-     not counted, so starting batches back to back queues them all at once. Each import fetches
+     lists what it would do. Then run `bin/rails "books:goodreads_replay:finish_legacy[1]"`, one import at
+     a time, and wait until it is no longer in progress before running the next. Running imports are
+     skipped, not counted, so starting them back to back queues them all at once. Four at once
+     overloaded the Open Library VM on 2026-10-06 (see the next item). Each import also fetches
      Goodreads pages on the line member uploads use.
    - Approve or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`,
      "Finishing legacy imports".
+
+9. **Before launch: limit concurrent `/resolve` calls in the Open Library service.** Not a manual step
+   but a code change in `data-sources/`, listed here because launch depends on it. On 2026-10-06 four
+   Goodreads imports resolving at once filled the ol VM's 24 GiB and pinned its 12 cores. A lone
+   `/resolve` then timed out at 60 s for 25 minutes, until the API container was restarted. The
+   database connection has an 8 GB cap (`OL_API_MEMORY_LIMIT`), but nothing caps how many requests
+   run at once. Member uploads after launch can arrive in parallel too. The fix: one or two `/resolve`
+   requests at a time, answering busy at once beyond that (the Rails client treats that as a failure
+   and flags the row), plus an explicit DuckDB thread count.
 
 ### Decide at launch
 
