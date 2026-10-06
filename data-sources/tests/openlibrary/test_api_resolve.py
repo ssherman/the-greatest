@@ -772,6 +772,38 @@ def test_the_decision_lists_the_old_keys_of_every_duplicate(
     assert data["candidates"][0]["redirect_sources"] == [{"source": "openlibrary", "key": "OL3W"}]
 
 
+def test_fetch_redirect_sources_reads_the_reverse_of_redirects(tmp_path):
+    """Hard-coded rows, so the filter is pinned rather than restated: a chain
+    (OL1W -> OL2W -> OL3W, stored transitively), a cycle, a dangling row and an
+    author redirect all point at OL3W, and only the work redirects that end
+    there are listed."""
+    from openlibrary.api.retrieval import fetch_redirect_sources
+
+    table = tmp_path / "redirects.parquet"
+    con = _con()
+    con.execute(
+        f"""
+        COPY (SELECT * FROM (VALUES
+            ('OL1W', 'OL3W', 'work', 2, false, false),
+            ('OL2W', 'OL3W', 'work', 1, false, false),
+            ('OL4W', 'OL3W', 'work', 1, true, false),
+            ('OL5W', 'OL3W', 'work', 1, false, true),
+            ('OL6A', 'OL3W', 'author', 1, false, false),
+            ('OL7W', 'OL8W', 'work', 1, false, false)
+        ) t(source_key, terminal_key, entity, depth, is_cycle, is_dangling)) TO '{table}'
+        """
+    )
+
+    class Paths:
+        def table(self, name):
+            assert name == "redirects"
+            return table
+
+    sources = fetch_redirect_sources(con, Paths(), ["OL3W", "OL9W", "OL3W", ""])
+    con.close()
+    assert sources == {"OL3W": ["OL1W", "OL2W"], "OL9W": []}
+
+
 def test_a_decision_with_no_duplicates_lists_no_duplicate_redirect_sources(
     client, a_redirect_target_with_a_resolvable_title
 ):

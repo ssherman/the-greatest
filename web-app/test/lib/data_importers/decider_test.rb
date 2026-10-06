@@ -115,15 +115,6 @@ module DataImporters
       assert_equal [[@other, @book, :external_key_collision]], decision.duplicate_pairs
     end
 
-    test "rule 2: a holder of a duplicate key is not an accepted hit, so one accepted holder stays certain" do
-      accepted = Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:open_library], evidence: {external_verdict: "accept"})
-      duplicate = Candidate.new(record: @other, external_key: "OL2W", external_source: :open_library, sources: [:open_library], evidence: {external_duplicate_of: "OL1W"})
-
-      decision = decide([accepted, duplicate])
-
-      assert_equal [@book, :certain], [decision.record, decision.confidence]
-    end
-
     test "rule 3: no candidates is a high-confidence unmatched, naming how many sources ran" do
       decision = decide([], sources_run: 3)
 

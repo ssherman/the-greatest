@@ -52,7 +52,8 @@ and points the decision at a record it creates.
    `external`; else the AI. Rule 2
    also picks among several local candidates holding the accepted key with the same
    ranked/most-lists/oldest preference and flags the rest as
-   `external_key_collision` pairs; that pick is medium, not certain, so it needs review.
+   `external_key_collision` pairs; that pick is medium, not certain, so it needs review
+   (authors included: the `Decider` is shared).
    Rules 0–2 never fire under `verify`. Any two local candidates sharing an external key,
    or one holding a key the source calls a duplicate of the other's
    (`evidence[:external_duplicate_of]`), are flagged as `external_key_collision` whatever

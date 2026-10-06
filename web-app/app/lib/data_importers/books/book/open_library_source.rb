@@ -73,8 +73,18 @@ module DataImporters
             [build(ol_candidate, external.merge(title: work&.title, creators: Array(work&.author_names), year: year_of(work)))]
           else
             evidence = external.merge(external_title: work&.title, external_creators: Array(work&.author_names), external_year: year_of(work))
+            duplicate_of = duplicate_of(ol_candidate.work_key)
+            evidence[:external_duplicate_of] = duplicate_of if duplicate_of
             holders.map { |book| build(ol_candidate, evidence, record: book) }
           end
+        end
+
+        # The accepted work's key when this work is one of its duplicates. A
+        # duplicate usually ranks just below the work it duplicates, so it is
+        # returned as a candidate of its own far more often than it is not.
+        def duplicate_of(work_key)
+          accepted = @resolution.accepted
+          accepted.work_key if accepted && @resolution.decision.duplicates.include?(work_key)
         end
 
         def build(ol_candidate, evidence, record: nil)

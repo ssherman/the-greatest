@@ -188,6 +188,28 @@ module DataImporters
           assert_equal "Crime and Punishment", holder.evidence[:external_title]
         end
 
+        test "a local book holding a duplicate the service also returned keeps that candidate's verdict and names the accepted work" do
+          accepted = candidate_hash(key: "OL1000W", verdict: "accept", score: 0.9, record: work_record(key: "OL1000W", title: "Crime and Punishment"))
+          returned = candidate_hash(key: @held_key, verdict: "abstain", score: 0.8, record: work_record(key: @held_key, title: "Crime and Punishment"))
+          body = resolve_response(verdict: "accept", key: "OL1000W", candidates: [accepted, returned])
+          body["data"]["decision"]["duplicates"] = [{"source" => "openlibrary", "key" => @held_key}]
+          stub_resolve(body)
+
+          candidates = source(query).call
+
+          assert_equal [nil, books_books(:crime_and_punishment)], candidates.map(&:record)
+          holder = candidates.last
+          assert_equal [@held_key, "abstain", "OL1000W"], [holder.external_key, holder.external_verdict, holder.evidence[:external_duplicate_of]]
+        end
+
+        test "a candidate that is not a duplicate of the accepted work names no accepted work" do
+          accepted = candidate_hash(key: "OL1000W", verdict: "accept", score: 0.9, record: work_record(key: "OL1000W", title: "Crime and Punishment"))
+          other = candidate_hash(key: @held_key, verdict: "abstain", score: 0.5, record: work_record(key: @held_key, title: "Crime and Punishment"))
+          stub_resolve(resolve_response(verdict: "accept", key: "OL1000W", candidates: [accepted, other]))
+
+          assert_nil source(query).call.last.evidence[:external_duplicate_of]
+        end
+
         test "a local book holding an old key of a duplicate is a duplicate holder too" do
           record = work_record(key: "OL1000W", title: "Crime and Punishment")
           body = resolve_response(verdict: "accept", key: "OL1000W", candidates: [candidate_hash(key: "OL1000W", verdict: "accept", score: 0.9, record: record)])

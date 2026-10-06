@@ -528,7 +528,8 @@ keys through redirects.
 
 **Since fixed** by the local-holders fix, which came after this report. `/resolve` returns
 `redirect_sources` on each candidate and `duplicate_redirect_sources` on the decision. Rails
-treats a holder of a duplicate key as a candidate for review, never as an accept. See
+treats a holder of a duplicate key as a candidate, never as an accept, so it can no longer
+let the finder create a second copy. See
 "Duplicate clusters" in `docs/features/open-library-data-service.md`.
 
 ## Label provenance

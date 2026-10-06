@@ -531,15 +531,18 @@ The `redirects` table is transitive, so a chain A -> B -> C lists A under C.
 is always the terminal one.
 
 Rails (`OpenLibrarySource`) treats each kind of holder differently:
-- A book holding the candidate's key or one of its `redirect_sources` is a holder of that work,
-  so an accepted one is still rule 2's certain match.
-- A book holding an accepted decision's `duplicates` key, or one of their old keys, becomes a
-  candidate under the key it holds, with no verdict. `duplicates` is evidence, not proof, so
-  holding one is never an accept. It does block rule 5 from creating a book, and
-  `external_duplicate_of` makes the finder flag it with the accepted key's holder as an
-  `external_key_collision` pair.
-- Several books holding the accepted key itself still give rule 2's pick, but at medium
-  confidence, so the match needs review.
+- A book holding the candidate's key or one of its `redirect_sources` is a holder of that work.
+  When the work is accepted and that book is its only holder, rule 2 matches it at certain.
+- A book holding an accepted decision's `duplicates` key, or one of their old keys, is never
+  an accept: `duplicates` is evidence, not proof. Such a book is a candidate under the key it
+  holds, keeping that candidate's own verdict when the duplicate was also returned and carrying
+  none otherwise. It blocks rule 5 from creating a book, and its `external_duplicate_of` (the
+  accepted key) makes the finder flag it with the accepted key's holders as an
+  `external_key_collision` pair. Rule 4 or the AI can still match it.
+- Several books holding the accepted work (its key or a redirect source) still give rule 2's
+  pick, but at medium confidence, so the match needs review. The `Decider` is shared, so this
+  holds for authors too: two local authors behind one Open Library author key are a medium
+  match and a flagged pair.
 
 ### Recall by blocking rule (reading 7)
 

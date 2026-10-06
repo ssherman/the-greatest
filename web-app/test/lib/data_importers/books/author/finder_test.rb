@@ -213,6 +213,20 @@ module DataImporters
           assert_equal [@tolstoy, :certain, :identifier], [match.record, match.confidence, match.decided_by]
         end
 
+        test "two local authors holding keys the service redirects from: rule 2 picks one, flags the pair and needs review" do
+          twin = ::Books::Author.create!(name: "Leo Tolstoy")
+          @tolstoy.identifiers.create!(identifier_type: :books_author_openlibrary_id, value: "OL1A")
+          twin.identifiers.create!(identifier_type: :books_author_openlibrary_id, value: "OL1A")
+          stub_author("OL2A", redirected_from: ["OL1A"])
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(name: "Leo Tolstoy", open_library_author_key: "OL2A"))
+
+          assert_equal [:matched, :medium, :identifier], [match.outcome, match.confidence, match.decided_by]
+          assert match.needs_review?
+          assert ::DuplicateCandidate.raised_by_external_key_collision.exists?(item_type: "Books::Author", item_a_id: [@tolstoy.id, twin.id].min, item_b_id: [@tolstoy.id, twin.id].max)
+        end
+
         test "an Open Library 404 is not a failed source" do
           stub_author("OL404A", status: 404)
 
