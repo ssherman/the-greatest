@@ -156,6 +156,17 @@ module Services
           assert_equal "flagged", Core::RowState.new(item.reload).bucket
         end
 
+        test "a stale exhaustion cannot flag a row the newer run re-marked pending, even if an unlocked check passed" do
+          item = wizard_row(@list, position: 1, title: "Emma")
+          start("match", "new-run")
+          # An unlocked check made just before the newer run started would have passed.
+          ::Services::Lists::Wizard::StateManager.any_instance.stubs(:run_current?).returns(true)
+
+          ::Lists::Wizard::MatchRowJob.sidekiq_retries_exhausted_block.call({"args" => [item.id, false, 3, "old-run"]}, StandardError.new("boom"))
+
+          assert_equal "pending", Core::RowState.new(item.reload).bucket
+        end
+
         test "progress from a stale run does not complete the step" do
           start("match", "new-run")
 

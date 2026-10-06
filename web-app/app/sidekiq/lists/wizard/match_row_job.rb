@@ -12,13 +12,20 @@ class Lists::Wizard::MatchRowJob
   sidekiq_retries_exhausted do |msg, exception|
     list_item_id, single_row, _attempt, run_id = msg["args"]
     item = ::ListItem.find_by(id: list_item_id)
-    if item && (single_row || item.list.wizard_manager.run_current?("match", run_id))
-      state = ::Services::Lists::Wizard::Core::RowState.new(item)
-      if state.pending?
-        state.merge(::Services::Lists::Wizard::Core::MatchRow.failure_attributes(exception.message))
-        state.flag!("match_failed")
+    if item
+      fence_id = single_row ? nil : run_id
+      # The check and the flag share the list lock, so a newer run cannot
+      # re-mark the row between them.
+      flagged = item.list.wizard_manager.fenced("match", fence_id) do
+        fresh = ::ListItem.find_by(id: list_item_id)
+        state = fresh && ::Services::Lists::Wizard::Core::RowState.new(fresh)
+        if state&.pending?
+          state.merge(::Services::Lists::Wizard::Core::MatchRow.failure_attributes(exception.message))
+          state.flag!("match_failed")
+        end
+        true
       end
-      ::Services::Lists::Wizard::Core::MatchProgress.call(list: item.list, single_row: single_row || false, run_id: single_row ? nil : run_id)
+      ::Services::Lists::Wizard::Core::MatchProgress.call(list: item.list, single_row: single_row || false, run_id: fence_id) if flagged
     end
   end
 

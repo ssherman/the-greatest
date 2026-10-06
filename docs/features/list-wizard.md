@@ -108,7 +108,9 @@ lock before each mutation (Parse's row replacement, a Match row's result and pro
 and a superseded or restarted run logs one line and writes nothing. `ParseJob`, `MatchJob` and
 `ImportJob` set `retry: false`, so a failure is a failed step and the admin's retry starts a new run;
 `MatchRowJob` keeps `retry: 5`, and its retries-exhausted handler respects the same fence. Single-row
-re-matches carry no run id; their "row still pending" re-read is the fence.
+re-matches carry no run id; their "row still pending" re-read is the fence. A superseded Import can
+still create or link the one row it was working on when it was superseded (reachable only after a stall
+or a failed old run lets a second Import start); the per-row re-check covers every other case.
 
 Jobs write wizard state through `StateManager#write_step!` (row lock, re-read, one step's entry); the
 controller moves steps through `#go_to_step!`. The books `StateManager` timestamps every step write. A

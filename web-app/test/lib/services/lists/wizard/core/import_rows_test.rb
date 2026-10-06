@@ -121,7 +121,7 @@ module Services
           end
 
           test "the claim alone leaves the step stamped, so a running Import is not read as stalled" do
-            @list.wizard_manager.write_step!(step: "import", status: "running", metadata: {"run_id" => "run-1"})
+            @list.update!(wizard_state: {"steps" => {"import" => {"status" => "running", "metadata" => {"run_id" => "run-1"}}}})
             ::Services::Lists::Wizard::Books::StateManager.any_instance.stubs(:write_step!)
 
             ImportRows.call(list: @list, adapter: @adapter, run_id: "run-1")
