@@ -16,6 +16,7 @@ module Services
           end
 
           def link(record)
+            return busy if busy?
             return failure("That book was not found.") if record.nil?
 
             holder = RowState.holder_of(@item.list, record, except: @item)
@@ -27,11 +28,15 @@ module Services
               state.link!(record)
             end
             success("Row linked.")
-          rescue ::ActiveRecord::RecordNotUnique, ::ActiveRecord::RecordInvalid
+          rescue ::ActiveRecord::RecordNotUnique, ::ActiveRecord::RecordInvalid => e
+            raise if e.is_a?(::ActiveRecord::RecordInvalid) && !@item.errors.include?(:listable_id)
+
             failure("That book is already on this list.")
           end
 
           def create_from_external(external_key)
+            return busy if busy?
+
             snapshots = candidates.select { |snapshot| snapshot["external_key"] == external_key }
             return failure("That work is not one of this row's candidates.") if snapshots.empty?
             if snapshots.none? { |snapshot| snapshot["record_id"].nil? }
@@ -51,6 +56,8 @@ module Services
           # The admin chose the row's own text over any Open Library work, so the
           # Match-time keys go: Import must neither stamp nor resolve them.
           def create_from_text
+            return busy if busy?
+
             ::ActiveRecord::Base.transaction do
               agreed = decision.present? && decision.record_id.nil? && decision.selected_candidate.nil?
               record_review(verdict: agreed ? :confirmed : :rejected, note: "Create from the row's text in the list wizard")
@@ -62,6 +69,8 @@ module Services
           end
 
           def edit_and_rematch(title:, subtitle:, authors:, year:)
+            return busy if busy?
+
             title = title.to_s.strip
             return failure("Title can't be blank.") if title.empty?
 
@@ -82,6 +91,8 @@ module Services
 
           # Unlinked and unverified, so RowState.holder_of never counts it.
           def remove
+            return busy if busy?
+
             ::ActiveRecord::Base.transaction do
               record_review(verdict: :rejected, note: "Removed from the list in the list wizard")
               settle("bucket" => "removed", "reasons" => [])
@@ -93,6 +104,11 @@ module Services
           private
 
           def state = RowState.new(@item)
+
+          # A pending row is being matched: its decision is about to be replaced.
+          def busy? = state.pending?
+
+          def busy = failure("This row is still being matched. Try again in a moment.")
 
           def decision
             return @decision if defined?(@decision)

@@ -72,7 +72,8 @@ module Services
 
           test "create_from_external moves the row to create with that work" do
             work = ol_candidate("OL9W")
-            with_decision(outcome: :unmatched, decided_by: :ai, external: work, candidates: [local_candidate(@other), work])
+            decision = with_decision(outcome: :unmatched, decided_by: :ai, external: work, candidates: [local_candidate(@other), work])
+            decision.update!(selected_index: 2)
 
             result = actions.create_from_external("OL9W")
 
@@ -80,6 +81,7 @@ module Services
             state = RowState.new(@row.reload)
             assert_equal ["create", "OL9W", true], [state.bucket, state.ol_work_key, state.settled?]
             assert_includes state.ol_keys, "OL9W"
+            assert decision.reload.verdict_confirmed?
           end
 
           test "create_from_external refuses a work that is not a candidate, and one a book we hold carries" do
@@ -105,6 +107,43 @@ module Services
             assert_equal ["create", nil, [], true], [state.bucket, state.ol_work_key, state.ol_keys, state.settled?]
           end
 
+          test "create_from_text confirms a decision where the finder picked nothing, rejects one where it picked a record" do
+            decision = with_decision(outcome: :unmatched, decided_by: :rule, candidates: [])
+            actions.create_from_text
+            assert_equal [true, @admin.id], [decision.reload.verdict_confirmed?, decision.reviewed_by_id]
+
+            row = wizard_row(@list, position: 3, title: "Emma", wizard: {bucket: "flagged"})
+            picked = wizard_match(subject: row, outcome: :matched, record: @other, confidence: :medium).decision
+            RowState.new(row).merge("match_decision_id" => picked.id)
+            row.save!
+            RowActions.new(list_item: row, user: @admin).create_from_text
+            assert picked.reload.verdict_rejected?
+          end
+
+          test "link reports a race for the book as a clash" do
+            wizard_row(@list, position: 2, title: "War and Peace", listable: @book, wizard: {bucket: "matched"})
+            RowState.stubs(:holder_of).returns(nil)
+
+            result = actions.link(@book)
+
+            assert_not result.success?
+            assert_nil @row.reload.listable_id
+          end
+
+          test "a pending row refuses every action" do
+            RowState.new(@row).merge("bucket" => "pending")
+            @row.save!
+            ::Lists::Wizard::MatchRowJob.expects(:perform_async).never
+            a = actions
+
+            results = [a.link(@book), a.create_from_external("OL1W"), a.create_from_text, a.remove,
+              a.edit_and_rematch(title: "X", subtitle: nil, authors: "", year: nil)]
+
+            assert results.none?(&:success?)
+            assert_equal "pending", RowState.new(@row.reload).bucket
+            assert_not RowState.new(@row).settled?
+          end
+
           test "edit_and_rematch saves the new text, settles the row, queues a single-row re-match and rejects the old decision" do
             decision = with_decision(outcome: :unmatched, decided_by: :rule, candidates: [])
             ::Lists::Wizard::MatchRowJob.expects(:perform_async).with(@row.id, true)
@@ -116,6 +155,8 @@ module Services
             assert_equal ["A Novel", ["Leo Tolstoy", "Louise Maude"], 1869], @row.metadata.values_at("subtitle", "authors", "year")
             assert_equal ["pending", true], [RowState.new(@row).bucket, RowState.new(@row).settled?]
             assert decision.reload.verdict_rejected?
+            state = RowState.new(@row)
+            assert_equal [nil, nil, nil, [], nil, nil], [state.match_decision_id, state.decided_by, state.data["confidence"], state.ol_keys, state.data["matched_at"], state.import_result]
           end
 
           test "edit cleans the year and the author lines, and refuses a blank title" do
@@ -124,9 +165,13 @@ module Services
             actions.edit_and_rematch(title: " Emma ", subtitle: "", authors: "\n Jane Austen \n\n", year: " 1815 ")
             assert_equal ["Emma", nil, ["Jane Austen"], 1815], @row.reload.metadata.values_at("title", "subtitle", "authors", "year")
 
+            RowState.new(@row).merge("bucket" => "flagged")
+            @row.save!
             actions.edit_and_rematch(title: "Emma", subtitle: nil, authors: "Jane Austen", year: "early 1800s")
             assert_nil @row.reload.metadata["year"]
 
+            RowState.new(@row).merge("bucket" => "flagged")
+            @row.save!
             result = actions.edit_and_rematch(title: "  ", subtitle: nil, authors: "Jane Austen", year: nil)
             assert_not result.success?
             assert_equal "Emma", @row.reload.metadata["title"]
@@ -134,8 +179,10 @@ module Services
 
           test "remove hides the row as removed, settled and unlinked, and it no longer holds a book" do
             @row.update!(listable: @book, verified: true)
+            decision = with_decision(outcome: :matched, record: @book, confidence: :medium)
 
             assert actions.remove.success?
+            assert_equal [true, @admin.id], [decision.reload.verdict_rejected?, decision.reviewed_by_id]
 
             @row.reload
             assert_nil @row.listable_id

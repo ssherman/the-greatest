@@ -21,7 +21,8 @@ module Services
           }.freeze
           INITIAL = {"bucket" => "pending", "reasons" => [], "settled" => false}.freeze
           PENDING = {"bucket" => "pending", "reasons" => [], "target_record_id" => nil, "ol_work_key" => nil,
-                     "import_error" => nil, "error" => nil}.freeze
+                     "import_error" => nil, "error" => nil, "match_decision_id" => nil, "decided_by" => nil,
+                     "confidence" => nil, "ol_keys" => [], "matched_at" => nil, "import_result" => nil}.freeze
 
           attr_reader :item
 
