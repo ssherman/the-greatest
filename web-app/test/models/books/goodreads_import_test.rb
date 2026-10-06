@@ -89,6 +89,25 @@ module Books
       assert edition.verification_pending?
     end
 
+    test "stuck means in progress for longer than stuck_after" do
+      import = GoodreadsImport.create!(user: users(:editor_user), status: :resolving, started_at: 3.hours.ago)
+
+      assert import.stuck?
+      assert_not import.stuck?(import.started_at + 1.hour)
+      import.update!(status: :complete)
+      assert_not import.stuck?
+    end
+
+    test "applied_ids gathers one key across every row" do
+      import = GoodreadsImport.create!(user: users(:editor_user), status: :complete)
+      import.rows.create!(row_number: 1, applied: {"list_item_ids" => [3, 4], "review_id" => 9})
+      import.rows.create!(row_number: 2, applied: {"list_item_ids" => [5]})
+      import.rows.create!(row_number: 3)
+
+      assert_equal [3, 4, 5], import.applied_ids("list_item_ids").sort
+      assert_equal [9], import.applied_ids("review_id")
+    end
+
     test "keeps the upload on the private imports service" do
       assert_equal :private_imports, Books::GoodreadsImport.reflect_on_attachment(:file).options[:service_name]
     end
