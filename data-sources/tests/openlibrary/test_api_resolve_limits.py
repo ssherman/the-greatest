@@ -63,8 +63,9 @@ def test_a_resolve_beyond_the_cap_is_answered_busy_at_once(fixture_artifact, mon
             first.join(10)
 
     assert response.status_code == 503
-    assert response.headers["retry-after"]
-    assert "busy" in response.json()["detail"]
+    assert response.headers["retry-after"] == "2"
+    # The Rails client tells busy from any other 503 by this prefix.
+    assert response.json()["detail"].startswith("busy:")
     assert elapsed < 1
     assert statuses == [200]
 

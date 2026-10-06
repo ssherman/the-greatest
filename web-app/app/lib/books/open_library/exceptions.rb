@@ -32,6 +32,19 @@ module Books
 
       class ServerError < HttpError; end
 
+      # The service's 503 busy: it is already running as many /resolve calls
+      # as it allows and turned this one away at once. The service is up, so
+      # the breaker ignores it. `retry_after` is the service's Retry-After in
+      # seconds, nil when absent or unparseable.
+      class BusyError < ServerError
+        attr_reader :retry_after
+
+        def initialize(message, status_code, response_body = nil, retry_after: nil)
+          super(message, status_code, response_body)
+          @retry_after = retry_after
+        end
+      end
+
       class NotFoundError < ClientError; end
 
       class ParseError < Error

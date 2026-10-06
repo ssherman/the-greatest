@@ -853,10 +853,23 @@ window, and a 4xx is a completed exchange with a live, healthy service; the occa
 mixed run is still visible to the caller as a failure result even though it never accumulates
 toward opening the circuit.
 
-The service's busy 503 and deadline 504 ("Load limits on `/resolve`" above) count like any other
-5xx. Two callers resolving at once is enough to open the breaker: the one turned away fails five
-times within a second, and then every Open Library call, including the one holding the slot's next
-call, fails with `CircuitOpenError` for 60 s.
+The service's busy 503 ("Load limits on `/resolve`" above) is the exception. `BaseClient` raises it
+as `BusyError`, recognized by a JSON `detail` that starts `busy:`, and `CircuitBreaker#call(ignore:)`
+lets it pass without counting it or resetting the count: a busy reply proves the service is up, and
+it says nothing about whether the last real failure was a fluke. Any other 503 (Cloudflare's HTML
+page when the tunnel is down) is an ordinary `ServerError`, and the deadline 504 counts like any
+5xx.
+
+`Client#resolve` waits out busy replies instead of failing. Nothing retries a failed source: the
+finder records it (`finder_base.rb`), drops a high-confidence match to medium, and the row ends up
+flagged or with a provisional book. So a second caller, such as another import or the duplicate
+sweep, would otherwise degrade every row it touched. The wait sleeps for the service's `Retry-After`
+(2 s) stretched by up to half again, so waiting callers do not retry in step. It stays inside
+`resolve_timeout`, with each attempt given what is left of it, and it stops once less than
+`RESOLVE_MIN_ATTEMPT` (20 s; one resolve takes 12-13 s) would remain. Then the `BusyError` surfaces
+as a failed source, as before. A waiting caller holds its Sidekiq thread for up to 60 s, the same
+as a timeout. Callers poll, they do not queue, so the order in which waiters get the slot is not
+fair.
 
 ### The `/resolve` body is an allow-list
 

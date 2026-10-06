@@ -378,8 +378,12 @@ def resolve(
 # ----------------------------------------------------------------------------- route
 
 
-# How long a caller turned away as busy should wait: about one resolve.
-BUSY_RETRY_AFTER_S = 10
+# How long a caller turned away as busy should wait before asking again.
+# Short, because callers poll rather than queue (a busy answer costs a few
+# milliseconds): a long wait would leave the slot idle after it frees up.
+# The Rails client (Books::OpenLibrary::BaseClient#busy?) recognizes busy by
+# the detail's "busy:" prefix, which `limits.Busy` supplies.
+BUSY_RETRY_AFTER_S = 2
 
 
 @router.post("/resolve", response_model=Envelope[ResolveResponse])

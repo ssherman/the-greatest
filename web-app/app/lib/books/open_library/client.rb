@@ -9,12 +9,23 @@ module Books
     class Client
       MAX_BATCH = 500
       IDENTIFIER_TYPES = %w[isbn13 isbn10 oclc lccn asin goodreads].freeze
+      # A busy /resolve is retried only while at least this much of
+      # config.resolve_timeout is left: one resolve takes 12-13 s on the home
+      # server (docs/features/home-server.md).
+      RESOLVE_MIN_ATTEMPT = 20
+      # Used when a busy reply carries no Retry-After.
+      DEFAULT_BUSY_WAIT = 2.0
 
       attr_reader :config, :base_client
 
-      def initialize(config: nil, breaker: nil, base_client: nil)
+      # `clock` and `sleeper` exist for tests: a busy /resolve waits, and a
+      # test should not.
+      def initialize(config: nil, breaker: nil, base_client: nil,
+        clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) }, sleeper: ->(seconds) { sleep(seconds) })
         @config = config || Configuration.new
         @base_client = base_client || BaseClient.new(@config, breaker: breaker)
+        @clock = clock
+        @sleeper = sleeper
       end
 
       def work(key)
@@ -85,7 +96,7 @@ module Books
         body[:subjects] = subjects if subjects.present?
         body[:limit] = limit if limit.present?
 
-        Resolution.from_response(post("/resolve", body, timeout: config.resolve_timeout))
+        Resolution.from_response(post_resolve(body))
       end
 
       # The one unenveloped response -- read by humans/ops, not parsed
@@ -102,6 +113,28 @@ module Books
 
       def post(path, body, timeout: nil)
         base_client.post(path, body, timeout: timeout)[:data]
+      end
+
+      # The service runs a fixed number of resolves at once and answers the
+      # rest with an immediate 503 busy. Waiting that out here keeps a second
+      # caller (another import, the duplicate sweep) from failing the source,
+      # which the finder would record as a flagged row nothing retries. The
+      # whole wait, attempts included, stays inside config.resolve_timeout;
+      # each attempt gets whatever is left of it. The Retry-After wait is
+      # stretched by up to half again so waiting callers do not retry in step.
+      def post_resolve(body)
+        started = @clock.call
+        timeout = config.resolve_timeout
+        loop do
+          return post("/resolve", body, timeout: timeout)
+        rescue Exceptions::BusyError => e
+          wait = (e.retry_after || DEFAULT_BUSY_WAIT) * (1 + rand * 0.5)
+          remaining = config.resolve_timeout - (@clock.call - started) - wait
+          raise if remaining < RESOLVE_MIN_ATTEMPT
+
+          @sleeper.call(wait)
+          timeout = remaining
+        end
       end
     end
   end
