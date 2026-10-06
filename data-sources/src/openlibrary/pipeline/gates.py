@@ -242,7 +242,7 @@ def evaluation_gate(
     thresholds = json.loads(THRESHOLDS_PATH.read_text())
 
     started = time.monotonic()
-    prepared = read_prepared_cache(prepared_cache, paths, len(cases)) if prepared_cache else None
+    prepared = read_prepared_cache(prepared_cache, paths, cases) if prepared_cache else None
     from_cache = prepared is not None
     if prepared is None:
         prepared = prepare(con, paths, cases)

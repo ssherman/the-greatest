@@ -1,4 +1,7 @@
-from openlibrary.matcher.decide import decide, rank
+import pytest
+
+from openlibrary.matcher.cluster import ClusterInputs, build_clusters
+from openlibrary.matcher.decide import decide, margins, rank
 from openlibrary.matcher.features import FEATURES
 from openlibrary.matcher.scorer import MATCHER_VERSION, ScoredCandidate, Weights
 
@@ -238,3 +241,138 @@ def test_a_disagreeing_identifier_is_not_identity_evidence():
     decision = decide([_c("OL1W", 0.95, evidence=evidence)], _equal_weights())
     assert decision.verdict == "abstain"
     assert "identity" in decision.reason
+
+
+def _titleless(work_key, score):
+    return _c(
+        work_key,
+        score,
+        evidence={
+            "author_overlap": {"value": 1.0, "weight": 1.0, "contribution": 1.0},
+            "title_similarity": {"value": None, "weight": 1.0, "contribution": 0.0},
+        },
+    )
+
+
+def test_a_titleless_translation_cannot_outrank_the_titled_work():
+    ordered = rank([_titleless("OLHEBW", 0.913), _c("OLREALW", 0.885)])
+    assert [c.work_key for c in ordered] == ["OLREALW", "OLHEBW"]
+
+
+def test_a_titleless_runner_up_does_not_set_the_margin():
+    decision = decide([_c("OLREALW", 0.974), _titleless("OLHEBW", 0.913)], _equal_weights())
+    assert decision.verdict == "accept"
+    assert decision.margin == pytest.approx(0.974)
+
+
+def test_with_only_titleless_candidates_it_still_abstains_for_no_identity():
+    decision = decide([_titleless("OL1W", 0.95), _titleless("OL2W", 0.5)], _equal_weights())
+    assert decision.verdict == "abstain"
+    assert decision.reason.startswith("no identity evidence")
+
+
+def test_margins_skip_titleless_candidates_below():
+    ordered = rank([_c("OL1W", 0.97), _titleless("OL2W", 0.913), _c("OL3W", 0.80)])
+    # The title-less candidate ranks last. OL1W's margin is to OL3W; OL3W and
+    # OL2W have no titled candidate below them, so each margin is its own score.
+    assert [c.work_key for c in ordered] == ["OL1W", "OL3W", "OL2W"]
+    assert margins(ordered) == pytest.approx([0.17, 0.80, 0.913])
+
+
+def test_all_titleless_abstain_reports_the_best_score_as_margin():
+    decision = decide([_titleless("OL1W", 0.95), _titleless("OL2W", 0.5)], _equal_weights())
+    assert decision.margin == pytest.approx(0.95)
+
+
+def test_margin_abstain_names_the_titled_runner_up_not_the_titleless_one():
+    decision = decide(
+        [_c("OL1W", 0.95), _titleless("OLXW", 0.94), _c("OL2W", 0.93)], _equal_weights()
+    )
+    assert decision.verdict == "abstain"
+    assert "runner-up scores 0.930" in decision.reason
+
+
+def test_equal_titled_scores_give_zero_margin_in_work_key_order():
+    ordered = rank([_c("OL2W", 0.9), _c("OL1W", 0.9)])
+    assert [c.work_key for c in ordered] == ["OL1W", "OL2W"]
+    assert margins(ordered) == pytest.approx([0.0, 0.9])
+
+
+def _dup_inputs(editions, fp="dune", raw="Dune"):
+    return ClusterInputs(
+        title_fp=fp,
+        title_fp_noart=fp,
+        title_raw=raw,
+        author_fps=["frank herbert"],
+        edition_count=editions,
+    )
+
+
+def test_a_dominant_duplicate_cluster_accepts_its_representative_with_duplicates_listed():
+    cands = [_c("OLSTUB", 0.964), _c("OLREAL", 0.951), _c("OLOTHER", 0.70)]
+    inputs = {
+        "OLSTUB": _dup_inputs(3),
+        "OLREAL": _dup_inputs(160),
+        "OLOTHER": _dup_inputs(90, fp="children of dune", raw="Children of Dune"),
+    }
+    weights = _equal_weights()
+    clusters = build_clusters(cands, inputs, weights)
+    decision = decide(cands, weights, clusters=clusters)
+    assert decision.verdict == "accept"
+    assert decision.work_key == "OLREAL"
+    assert decision.score == pytest.approx(0.964)
+    assert decision.margin == pytest.approx(0.964 - 0.70)
+    assert decision.duplicates == ["OLSTUB"]
+
+
+def test_a_cluster_without_a_representative_abstains():
+    cands = [_c("OLA", 0.95), _c("OLB", 0.95)]
+    inputs = {"OLA": _dup_inputs(14), "OLB": _dup_inputs(10)}
+    weights = _equal_weights()
+    decision = decide(cands, weights, clusters=build_clusters(cands, inputs, weights))
+    assert decision.verdict == "abstain"
+    assert decision.reason.startswith("duplicate cluster with no dominant member")
+    assert set([decision.work_key, *decision.duplicates]) == {"OLA", "OLB"}
+
+
+def test_a_two_versus_one_cluster_abstains_for_want_of_a_dominant_member():  # Ruling 23
+    cands = [_c("OLA", 0.95), _c("OLB", 0.95), _c("OLC", 0.94)]
+    inputs = {"OLA": _dup_inputs(2), "OLB": _dup_inputs(1), "OLC": _dup_inputs(1)}
+    weights = _equal_weights().model_copy(update={"duplicate_dominance_ratio": 1.5})
+    decision = decide(cands, weights, clusters=build_clusters(cands, inputs, weights))
+    assert decision.verdict == "abstain"
+    assert decision.reason.startswith("duplicate cluster with no dominant member")
+
+
+def test_the_reject_band_uses_the_cluster_score_not_the_representatives():
+    cands = [_c("OLSTUB", 0.42), _c("OLREAL", 0.39)]
+    inputs = {"OLSTUB": _dup_inputs(1), "OLREAL": _dup_inputs(100)}
+    weights = _equal_weights()
+    decision = decide(cands, weights, clusters=build_clusters(cands, inputs, weights))
+    assert decision.verdict == "abstain"
+    assert decision.work_key == "OLREAL"
+    assert decision.reason.startswith("score 0.420 between reject and accept")
+
+
+def test_the_margin_check_uses_the_cluster_score_not_the_representatives():
+    cands = [_c("OLSTUB", 0.95), _c("OLREAL", 0.85), _c("OLOTHER", 0.93)]
+    inputs = {
+        "OLSTUB": _dup_inputs(1),
+        "OLREAL": _dup_inputs(100),
+        "OLOTHER": _dup_inputs(50, fp="children of dune", raw="Children of Dune"),
+    }
+    weights = _equal_weights()
+    decision = decide(cands, weights, clusters=build_clusters(cands, inputs, weights))
+    assert decision.verdict == "abstain"
+    assert decision.work_key == "OLREAL"
+    assert decision.margin == pytest.approx(0.02)
+    assert decision.reason.startswith("margin 0.020 below threshold")
+
+
+def test_an_identifier_conflict_on_the_representative_still_abstains():
+    cands = [_c("OLA", 0.95, conflicts=["identifier"]), _c("OLB", 0.60)]
+    inputs = {"OLA": _dup_inputs(100), "OLB": _dup_inputs(1)}
+    weights = _equal_weights()
+    decision = decide(cands, weights, clusters=build_clusters(cands, inputs, weights))
+    assert decision.verdict == "abstain"
+    assert decision.reason.startswith("identifier conflict")

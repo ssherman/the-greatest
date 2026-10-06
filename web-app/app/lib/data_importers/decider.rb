@@ -52,7 +52,8 @@ module DataImporters
 
     # Rule 2: the external source accepted a key a local record holds.
     # Several local records holding it: prefer ranked, then most lists, then
-    # oldest; the rest are external-key collisions.
+    # oldest; the rest are external-key collisions, and the match needs
+    # review, because the key cannot say which of our duplicates is right.
     def external_accept_decision
       hits = @candidates.select { |c| c.local? && c.external_accepted? && @finder.corroborated?(@query, c) }
       return nil if hits.empty?
@@ -60,7 +61,7 @@ module DataImporters
       chosen, *rest = preferred(hits)
       pairs = rest.map { |c| [chosen.record, c.record, :external_key_collision] }
       matched(
-        chosen.record, :certain, :identifier,
+        chosen.record, rest.empty? ? :certain : :medium, :identifier,
         "#{chosen.external_source} accepted #{chosen.external_key}, held by #{label(chosen)}",
         external: chosen, duplicate_pairs: pairs
       )

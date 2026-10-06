@@ -1,23 +1,25 @@
 {
-  "matcher_version": 2,
+  "matcher_version": 3,
   "calibrated": true,
-  "calibrated_at": "2026-09-14T05:27:09.847557+00:00",
+  "calibrated_at": "2026-10-05T19:05:36.151506+00:00",
   "method": "random-search",
   "feature_weights": {
-    "title_similarity": 1.0,
-    "title_variant_exact": 0.3269387239193572,
+    "title_similarity": 1.0511691349093417,
+    "title_variant_exact": 0.6446356869536324,
     "subtitle_agreement": 1.0,
-    "author_overlap": 1.0,
-    "author_name_similarity": 1.7711736066637014,
-    "year_agreement": 0.7799508222069782,
-    "identifier_agreement": 1.3105033624209699,
+    "author_overlap": 0.9714396010910612,
+    "author_name_similarity": 1.5557113652190817,
+    "year_agreement": 0.5014851607628268,
+    "identifier_agreement": 1.6997178039693774,
     "language_agreement": 0.0,
-    "popularity_prior": 0.2810214083059436
+    "popularity_prior": 0.41162159783041197
   },
   "conflict_penalties": {
     "identifier": 0.35
   },
   "accept_threshold": 0.9,
   "reject_threshold": 0.4,
-  "margin_threshold": 0.17548398069653787
+  "margin_threshold": 0.20397161572518469,
+  "subset_title_credit": 0.0,
+  "duplicate_dominance_ratio": 1.5
 }

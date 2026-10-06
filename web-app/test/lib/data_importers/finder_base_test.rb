@@ -409,5 +409,17 @@ module DataImporters
       assert pair.raised_by_external_key_collision?
       assert_equal match.decision, pair.match_decision
     end
+
+    test "a local candidate holding a duplicate of another local candidate's external key is flagged with it" do
+      holder = Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:open_library])
+      duplicate = Candidate.new(record: @other, external_key: "OL2W", external_source: :open_library, sources: [:open_library], evidence: {external_duplicate_of: "OL1W"})
+      @finder.sources = [FakeSource.new(:open_library, candidates: [holder, duplicate])]
+      stub_ai({selected_index: 0, confidence: "low", reasoning: "", same_entity_groups: []})
+
+      @finder.call(query: @query)
+
+      pair = DuplicateCandidate.find_by(item_type: "Books::Book", item_a_id: [@book.id, @other.id].min, item_b_id: [@book.id, @other.id].max)
+      assert pair&.raised_by_external_key_collision?
+    end
   end
 end
