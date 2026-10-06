@@ -48,4 +48,16 @@ class E2eGoodreadsImportRakeTest < ActiveSupport::TestCase
     assert_equal [0, 0, 0, 0], seed_records
     assert Books::GoodreadsImport.exists?(books_goodreads_imports(:regular_user_import).id)
   end
+
+  test "cleanup also removes an upload of the fixture that no worker ever parsed" do
+    queued = @user.goodreads_imports.create!(status: :queued)
+    queued.file.attach(io: StringIO.new("Book Id\n"), filename: "goodreads_export.csv", content_type: "text/csv", identify: false)
+    other = @user.goodreads_imports.create!(status: :complete)
+    other.file.attach(io: StringIO.new("Book Id\n"), filename: "my_real_export.csv", content_type: "text/csv", identify: false)
+
+    capture_io { Rake::Task["e2e:goodreads_import_cleanup"].invoke }
+
+    assert_not Books::GoodreadsImport.exists?(queued.id)
+    assert Books::GoodreadsImport.exists?(other.id)
+  end
 end

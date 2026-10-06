@@ -18,6 +18,8 @@ PROVISIONAL_AUTHOR_NAME = "E2E Provisional Seed Author"
 GOODREADS_SEED_ID = 999_000_001
 GOODREADS_SEED_TITLE = "E2E Goodreads Import Seed"
 GOODREADS_SEED_AUTHOR = "E2E Goodreads Import Author"
+# The filename of e2e/fixtures/goodreads_export.csv, as the upload stores it.
+E2E_GOODREADS_FIXTURE = "goodreads_export.csv"
 
 namespace :e2e do
   # One value from e2e/.env. Read from the file rather than ENV because these
@@ -352,8 +354,13 @@ namespace :e2e do
   desc "Remove what e2e:goodreads_import_seed and the Goodreads import E2E upload created"
   task goodreads_import_cleanup: :environment do
     edition_ids = Books::GoodreadsEdition.where(goodreads_book_id: GOODREADS_SEED_ID).pluck(:id)
-    imports = Books::GoodreadsImport.where(id: Books::GoodreadsImportRow.where(goodreads_edition_id: edition_ids).select(:import_id))
-    imports.find_each do |import|
+    named = Books::GoodreadsImport.where(id: Books::GoodreadsImportRow.where(goodreads_edition_id: edition_ids).select(:import_id))
+    # An upload no worker parsed has no rows yet; it is found by the
+    # fixture's filename on the Playwright account.
+    user = User.find_by(email: ENV.fetch("E2E_GOODREADS_EMAIL") { playwright_email })
+    unparsed = user ? user.goodreads_imports.joins(file_attachment: :blob)
+      .where(active_storage_blobs: {filename: E2E_GOODREADS_FIXTURE}) : Books::GoodreadsImport.none
+    Books::GoodreadsImport.where(id: named.select(:id)).or(Books::GoodreadsImport.where(id: unparsed.select(:id))).find_each do |import|
       # A worker may have run the upload: take back what it wrote first.
       if import.member? && !import.review_rejected? && !import.in_progress?
         Services::Books::GoodreadsImports::Revert.call(import: import, reviewer: import.user)
