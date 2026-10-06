@@ -102,7 +102,7 @@ module DataImporters
       assert_nil decide([candidate], verify: true)
     end
 
-    test "rule 2: several locals holding the accepted key prefer the ranked one and flag the rest as external key collisions" do
+    test "rule 2: several locals holding the accepted key prefer the ranked one, flag the rest as external key collisions, and need review" do
       first = Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:open_library], evidence: {external_verdict: "accept"})
       second = Candidate.new(record: @other, external_key: "OL1W", external_source: :open_library, sources: [:open_library], evidence: {external_verdict: "accept"})
       finder = FakeFinder.new(ranked_ids: [@other.id])
@@ -110,6 +110,7 @@ module DataImporters
       decision = decide([first, second], finder: finder)
 
       assert_equal @other, decision.record
+      assert_equal :medium, decision.confidence
       assert_equal second, decision.external
       assert_equal [[@other, @book, :external_key_collision]], decision.duplicate_pairs
     end

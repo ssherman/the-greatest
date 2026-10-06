@@ -344,10 +344,13 @@ module DataImporters
     end
 
     # Two local records carrying the same external key are a suspected pair
-    # whatever the rules decided about the incoming item.
+    # whatever the rules decided about the incoming item. So are two
+    # carrying keys the external source calls duplicates of one record:
+    # `external_duplicate_of` names the key the candidate's own key
+    # duplicates.
     def collision_pairs(candidates)
       candidates.select { |c| c.local? && c.external? }
-        .group_by { |c| [c.external_source, c.external_key] }
+        .group_by { |c| [c.external_source, c.evidence[:external_duplicate_of] || c.external_key] }
         .values.select { |group| group.size > 1 }
         .flat_map { |group| group.combination(2).map { |a, b| [a.record, b.record, :external_key_collision] } }
     end

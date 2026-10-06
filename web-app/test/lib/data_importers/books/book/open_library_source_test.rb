@@ -160,6 +160,92 @@ module DataImporters
           assert_equal [books_books(:crime_and_punishment)], candidates.map(&:record)
         end
 
+        test "a local book holding an old key the service lists in redirect_sources holds the accepted work" do
+          record = work_record(key: "OL1000W", title: "Crime and Punishment")
+          stub_resolve(resolve_response(verdict: "accept", key: "OL1000W",
+            candidates: [candidate_hash(key: "OL1000W", verdict: "accept", score: 0.9, record: record).merge("redirect_sources" => [{"source" => "openlibrary", "key" => @held_key}])]))
+
+          candidates = source(query).call
+
+          assert_equal [books_books(:crime_and_punishment)], candidates.map(&:record)
+          assert_equal ["OL1000W"], candidates.map(&:external_key)
+          assert candidates.first.external_accepted?
+        end
+
+        test "a local book holding a duplicate of the accepted work is a candidate under the key it holds, never an accepted one" do
+          record = work_record(key: "OL1000W", title: "Crime and Punishment")
+          body = resolve_response(verdict: "accept", key: "OL1000W", candidates: [candidate_hash(key: "OL1000W", verdict: "accept", score: 0.9, record: record)])
+          body["data"]["decision"]["duplicates"] = [{"source" => "openlibrary", "key" => @held_key}]
+          stub_resolve(body)
+
+          candidates = source(query).call
+
+          assert_equal [nil, books_books(:crime_and_punishment)], candidates.map(&:record)
+          holder = candidates.last
+          assert_equal @held_key, holder.external_key
+          assert_not holder.external_accepted?
+          assert_equal "OL1000W", holder.evidence[:external_duplicate_of]
+          assert_equal "Crime and Punishment", holder.evidence[:external_title]
+        end
+
+        test "a local book holding a duplicate the service also returned keeps that candidate's verdict and names the accepted work" do
+          accepted = candidate_hash(key: "OL1000W", verdict: "accept", score: 0.9, record: work_record(key: "OL1000W", title: "Crime and Punishment"))
+          returned = candidate_hash(key: @held_key, verdict: "abstain", score: 0.8, record: work_record(key: @held_key, title: "Crime and Punishment"))
+          body = resolve_response(verdict: "accept", key: "OL1000W", candidates: [accepted, returned])
+          body["data"]["decision"]["duplicates"] = [{"source" => "openlibrary", "key" => @held_key}]
+          stub_resolve(body)
+
+          candidates = source(query).call
+
+          assert_equal [nil, books_books(:crime_and_punishment)], candidates.map(&:record)
+          holder = candidates.last
+          assert_equal [@held_key, "abstain", "OL1000W"], [holder.external_key, holder.external_verdict, holder.evidence[:external_duplicate_of]]
+        end
+
+        test "a candidate that is not a duplicate of the accepted work names no accepted work" do
+          accepted = candidate_hash(key: "OL1000W", verdict: "accept", score: 0.9, record: work_record(key: "OL1000W", title: "Crime and Punishment"))
+          other = candidate_hash(key: @held_key, verdict: "abstain", score: 0.5, record: work_record(key: @held_key, title: "Crime and Punishment"))
+          stub_resolve(resolve_response(verdict: "accept", key: "OL1000W", candidates: [accepted, other]))
+
+          assert_nil source(query).call.last.evidence[:external_duplicate_of]
+        end
+
+        test "a local book holding an old key of a duplicate is a duplicate holder too" do
+          record = work_record(key: "OL1000W", title: "Crime and Punishment")
+          body = resolve_response(verdict: "accept", key: "OL1000W", candidates: [candidate_hash(key: "OL1000W", verdict: "accept", score: 0.9, record: record)])
+          body["data"]["decision"]["duplicates"] = [{"source" => "openlibrary", "key" => "OL2000W"}]
+          body["data"]["decision"]["duplicate_redirect_sources"] = [{"source" => "openlibrary", "key" => @held_key}]
+          stub_resolve(body)
+
+          holder = source(query).call.last
+
+          assert_equal books_books(:crime_and_punishment), holder.record
+          assert_equal @held_key, holder.external_key
+          assert_equal "OL1000W", holder.evidence[:external_duplicate_of]
+        end
+
+        test "a book holding both the accepted key and a duplicate key is one accepted candidate" do
+          books_books(:crime_and_punishment).identifiers.create!(identifier_type: :books_work_openlibrary_id, value: "OL1000W")
+          record = work_record(key: "OL1000W", title: "Crime and Punishment")
+          body = resolve_response(verdict: "accept", key: "OL1000W", candidates: [candidate_hash(key: "OL1000W", verdict: "accept", score: 0.9, record: record)])
+          body["data"]["decision"]["duplicates"] = [{"source" => "openlibrary", "key" => @held_key}]
+          stub_resolve(body)
+
+          candidates = source(query).call
+
+          assert_equal [books_books(:crime_and_punishment)], candidates.map(&:record)
+          assert candidates.first.external_accepted?
+        end
+
+        test "duplicates are ignored unless the service accepted a work" do
+          record = work_record(key: "OL1000W", title: "Crime and Punishment")
+          body = resolve_response(verdict: "abstain", key: "OL1000W", candidates: [candidate_hash(key: "OL1000W", verdict: "abstain", score: 0.6, record: record)])
+          body["data"]["decision"]["duplicates"] = [{"source" => "openlibrary", "key" => @held_key}]
+          stub_resolve(body)
+
+          assert_equal [nil], source(query).call.map(&:record)
+        end
+
         test "keeps the whole resolution for the provider" do
           stub_resolve(resolve_response(verdict: "reject", reason: "no candidate"))
           s = source(query)

@@ -686,3 +686,128 @@ def test_a_cluster_with_no_dominant_member_abstains_and_lists_the_other_member(
     assert decision["reason"].startswith("duplicate cluster with no dominant member")
     assert decision["duplicates"] == [{"source": "openlibrary", "key": other}]
     assert data["candidates"][0]["margin"] == pytest.approx(decision["margin"])
+
+
+# ------------------------------------------------------------ redirect sources
+
+
+def _redirect_sources(fixture_artifact, terminal: str) -> list[dict]:
+    con = _con()
+    rows = con.execute(
+        f"""
+        SELECT source_key FROM '{fixture_artifact.table("redirects")}'
+        WHERE terminal_key = ? AND entity = 'work' AND NOT is_cycle AND NOT is_dangling
+        ORDER BY source_key
+        """,
+        [terminal],
+    ).fetchall()
+    con.close()
+    return [{"source": "openlibrary", "key": key} for (key,) in rows]
+
+
+@pytest.fixture(scope="module")
+def a_redirect_target_with_a_resolvable_title(fixture_artifact) -> tuple[str, str]:
+    """A uniquely-titled work that at least one old key redirects to."""
+    con = _con()
+    row = con.execute(
+        f"""
+        SELECT w.title, w.work_key FROM '{fixture_artifact.table("works")}' w
+        WHERE length(w.title_fp) >= 4 AND w.title_fp_freq = 1
+          AND EXISTS (
+            SELECT 1 FROM '{fixture_artifact.table("redirects")}' r
+            WHERE r.terminal_key = w.work_key AND r.entity = 'work'
+              AND NOT r.is_cycle AND NOT r.is_dangling
+          )
+        ORDER BY w.work_key LIMIT 1
+        """
+    ).fetchone()
+    con.close()
+    assert row is not None, "fixture corpus lost its uniquely-titled redirect target"
+    return row
+
+
+def test_every_candidate_lists_the_old_keys_that_redirect_to_it(
+    client, fixture_artifact, a_redirect_target_with_a_resolvable_title
+):
+    """Rails finds a local book stored under a stale key through this list.
+    `record.redirected_from` names only the REQUESTED key, so it is always
+    empty here: /resolve candidates are terminal keys."""
+    title, work_key = a_redirect_target_with_a_resolvable_title
+    candidates = client.post("/resolve", json={"title": title}).json()["data"]["candidates"]
+    candidate = next(c for c in candidates if c["key"]["key"] == work_key)
+    expected = _redirect_sources(fixture_artifact, work_key)
+    assert expected
+    assert candidate["redirect_sources"] == expected
+    for other in candidates:
+        assert other["redirect_sources"] == _redirect_sources(fixture_artifact, other["key"]["key"])
+
+
+def test_the_decision_lists_the_old_keys_of_every_duplicate(
+    client, a_title_with_multiple_candidates, monkeypatch
+):
+    """A local book holding a stale key of a duplicate holds the book the
+    matcher chose, and a duplicate can sit past `limit`, so the decision
+    carries those keys itself rather than leaving them to the candidates."""
+    import openlibrary.api.resolve as resolve_module
+
+    top, other = _two_best_keys(client, a_title_with_multiple_candidates)
+    _force_one_cluster(monkeypatch, {top, other}, {top: 1, other: 1000})
+    fake = {top: ["OL1W", "OL2W"], other: ["OL3W"]}
+    monkeypatch.setattr(
+        resolve_module,
+        "fetch_redirect_sources",
+        lambda cur, paths, keys: {k: fake.get(k, []) for k in keys},
+    )
+    data = client.post(
+        "/resolve", json={"title": a_title_with_multiple_candidates, "limit": 1}
+    ).json()["data"]
+    decision = data["decision"]
+    assert decision["key"]["key"] == other
+    assert decision["duplicates"] == [{"source": "openlibrary", "key": top}]
+    assert decision["duplicate_redirect_sources"] == [
+        {"source": "openlibrary", "key": "OL1W"},
+        {"source": "openlibrary", "key": "OL2W"},
+    ]
+    assert [c["key"]["key"] for c in data["candidates"]] == [other]
+    assert data["candidates"][0]["redirect_sources"] == [{"source": "openlibrary", "key": "OL3W"}]
+
+
+def test_fetch_redirect_sources_reads_the_reverse_of_redirects(tmp_path):
+    """Hard-coded rows, so the filter is pinned rather than restated: a chain
+    (OL1W -> OL2W -> OL3W, stored transitively), a cycle, a dangling row and an
+    author redirect all point at OL3W, and only the work redirects that end
+    there are listed."""
+    from openlibrary.api.retrieval import fetch_redirect_sources
+
+    table = tmp_path / "redirects.parquet"
+    con = _con()
+    con.execute(
+        f"""
+        COPY (SELECT * FROM (VALUES
+            ('OL1W', 'OL3W', 'work', 2, false, false),
+            ('OL2W', 'OL3W', 'work', 1, false, false),
+            ('OL4W', 'OL3W', 'work', 1, true, false),
+            ('OL5W', 'OL3W', 'work', 1, false, true),
+            ('OL6A', 'OL3W', 'author', 1, false, false),
+            ('OL7W', 'OL8W', 'work', 1, false, false)
+        ) t(source_key, terminal_key, entity, depth, is_cycle, is_dangling)) TO '{table}'
+        """
+    )
+
+    class Paths:
+        def table(self, name):
+            assert name == "redirects"
+            return table
+
+    sources = fetch_redirect_sources(con, Paths(), ["OL3W", "OL9W", "OL3W", ""])
+    con.close()
+    assert sources == {"OL3W": ["OL1W", "OL2W"], "OL9W": []}
+
+
+def test_a_decision_with_no_duplicates_lists_no_duplicate_redirect_sources(
+    client, a_redirect_target_with_a_resolvable_title
+):
+    title, _work_key = a_redirect_target_with_a_resolvable_title
+    decision = client.post("/resolve", json={"title": title}).json()["data"]["decision"]
+    assert decision["duplicates"] == []
+    assert decision["duplicate_redirect_sources"] == []

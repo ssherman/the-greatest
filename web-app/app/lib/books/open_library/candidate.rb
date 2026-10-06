@@ -11,9 +11,13 @@ module Books
     # DiffEntry can be a real nested constant -- Standard's
     # Lint/ConstantDefinitionInBlock rejects a constant assigned inside a
     # `Data.define do ... end` block.
+    #
+    # `redirect_sources` are the old keys that redirect to this work, as bare
+    # strings (empty from a service older than the field). `record`'s own
+    # `redirected_from` names only a requested key, so it is empty here.
     class Candidate < Data.define(
       :work_key, :source, :score, :rules, :margin, :verdict,
-      :evidence, :conflicting_features, :diff, :record
+      :evidence, :conflicting_features, :diff, :record, :redirect_sources
     )
       # One row of the work-level diff between the query and this
       # candidate's record. `kind` is kept as the server's raw string rather
@@ -36,7 +40,8 @@ module Books
           evidence: (record["evidence"] || {}).deep_symbolize_keys,
           conflicting_features: record["conflicts"] || [],
           diff: diff,
-          record: record["record"] && Work.from_record(record["record"], source_version: source_version)
+          record: record["record"] && Work.from_record(record["record"], source_version: source_version),
+          redirect_sources: (record["redirect_sources"] || []).map { |key| key["key"] }
         )
       end
 
