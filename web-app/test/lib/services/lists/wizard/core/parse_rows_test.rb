@@ -48,6 +48,39 @@ module Services
             assert_equal ["Emma"], @list.list_items.reload.map { |item| item.metadata["title"] }
           end
 
+          test "re-parsing the same paste re-creates an unsettled row instead of dropping it" do
+            old = wizard_row(@list, position: 1, title: "Emma", authors: ["Jane Austen"])
+            parsed(row("Emma", ["Jane Austen"]))
+
+            assert_equal 1, ParseRows.call(list: @list, adapter: @adapter)
+
+            emmas = @list.list_items.reload.select { |item| item.metadata["title"] == "Emma" }
+            assert_equal 1, emmas.size
+            assert_not_equal old.id, emmas.first.id
+          end
+
+          test "a parse that finds no books fails and keeps the unsettled rows" do
+            old = wizard_row(@list, position: 1, title: "Old Row")
+            parsed
+
+            assert_nil ParseRows.call(list: @list, adapter: @adapter)
+
+            assert ::ListItem.exists?(old.id)
+            manager = @list.reload.wizard_manager
+            assert_equal ["failed", "The parser found no books"], [manager.step_status("parse"), manager.step_error("parse")]
+          end
+
+          test "batch mode with blank simplified content fails and keeps the unsettled rows" do
+            old = wizard_row(@list, position: 1, title: "Old Row")
+            @list.update_columns(simplified_content: " \n\n", wizard_state: {"batch_mode" => true})
+            @adapter.expects(:parse).never
+
+            assert_nil ParseRows.call(list: @list, adapter: @adapter)
+
+            assert ::ListItem.exists?(old.id)
+            assert_equal "failed", @list.reload.wizard_manager.step_status("parse")
+          end
+
           test "a settled or removed row is kept, and a parsed row equal to it is not added again" do
             settled = wizard_row(@list, position: 1, title: "Emma", authors: ["Jane Austen"], wizard: {bucket: "matched", settled: true})
             removed = wizard_row(@list, position: 2, title: "Persuasion", authors: ["Jane Austen"], wizard: {bucket: "removed", settled: true})

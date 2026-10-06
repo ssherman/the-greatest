@@ -27,6 +27,7 @@ module Services
 
             rows = batch_mode? ? parse_in_batches : parse_once
             return if rows.nil?
+            return fail!("The parser found no books") if rows.empty?
 
             added = replace_rows(rows)
             manager.write_step!(step: STEP, status: "completed", progress: 100,
