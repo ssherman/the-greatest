@@ -3,6 +3,21 @@
 class Lists::Wizard::MatchRowJob
   include Sidekiq::Job
 
+  # Out of retries: flag the row so the step can finish instead of staying
+  # "running" for good (which would block every wizard action).
+  sidekiq_retries_exhausted do |msg, exception|
+    list_item_id, single_row = msg["args"]
+    item = ::ListItem.find_by(id: list_item_id)
+    if item
+      state = ::Services::Lists::Wizard::Core::RowState.new(item)
+      if state.pending?
+        state.merge(::Services::Lists::Wizard::Core::MatchRow.failure_attributes(exception.message))
+        state.flag!("match_failed")
+      end
+      ::Services::Lists::Wizard::Core::MatchProgress.call(list: item.list, single_row: single_row || false)
+    end
+  end
+
   def perform(list_item_id, single_row = false)
     item = ::ListItem.find_by(id: list_item_id)
     return if item.nil?

@@ -150,6 +150,31 @@ module Services
             assert_equal "completed", @list.reload.wizard_manager.step_status("match")
           end
 
+          test "a failed re-match of a decided row clears the earlier run's decision" do
+            RowState.new(@row).merge("bucket" => "pending", "match_decision_id" => 99, "decided_by" => "ai", "confidence" => "high",
+              "ol_keys" => ["OL1W"], "ol_work_key" => "OL1W", "target_record_id" => @book.id)
+            @row.save!
+            finder = Object.new
+            def finder.call(**) = raise(StandardError, "open library timed out")
+            @adapter.stubs(:finder).returns(finder)
+
+            MatchRow.call(list_item: @row, adapter: @adapter)
+
+            data = RowState.new(@row.reload).data
+            assert_equal [nil] * 6, data.values_at("match_decision_id", "decided_by", "confidence", "ol_work_key", "target_record_id", "import_error")
+            assert_equal [], data["ol_keys"]
+          end
+
+          test "a failure while building the decision (recheck_keys raising) leaves the row flagged and unlinked" do
+            answer(outcome: :matched, record: @book, confidence: :certain, decided_by: :identifier)
+            @adapter.stubs(:recheck_keys).raises(StandardError, "boom")
+
+            MatchRow.call(list_item: @row, adapter: @adapter)
+
+            assert_nil @row.reload.listable_id
+            assert_equal ["flagged", ["match_failed"]], [RowState.new(@row).bucket, RowState.new(@row).reasons]
+          end
+
           test "a re-match replaces an earlier link" do
             @row.update!(listable: books_books(:crime_and_punishment), verified: true)
             answer(outcome: :unmatched, confidence: :high, decided_by: :rule, candidates: [])

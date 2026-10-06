@@ -18,4 +18,29 @@ class Lists::Wizard::MatchRowJobTest < ActiveSupport::TestCase
 
     Lists::Wizard::MatchRowJob.new.perform(0)
   end
+
+  test "a row whose retries ran out is flagged match_failed and progress runs, so the step can finish" do
+    list = wizard_list
+    list.wizard_manager.write_step!(step: "match", status: "running")
+    row = wizard_row(list, position: 1, title: "Emma")
+
+    Lists::Wizard::MatchRowJob.sidekiq_retries_exhausted_block.call({"args" => [row.id, false]}, StandardError.new("db gone"))
+
+    state = ::Services::Lists::Wizard::Core::RowState.new(row.reload)
+    assert_equal ["flagged", ["match_failed"], "db gone"], [state.bucket, state.reasons, state.error]
+    assert_equal "completed", list.reload.wizard_manager.step_status("match")
+  end
+
+  test "retries exhausted leaves a row the admin already settled alone" do
+    list = wizard_list
+    row = wizard_row(list, position: 1, title: "Emma", wizard: {bucket: "removed", settled: true})
+
+    Lists::Wizard::MatchRowJob.sidekiq_retries_exhausted_block.call({"args" => [row.id]}, StandardError.new("x"))
+
+    assert_equal "removed", ::Services::Lists::Wizard::Core::RowState.new(row.reload).bucket
+  end
+
+  test "retries exhausted for a deleted row does nothing" do
+    Lists::Wizard::MatchRowJob.sidekiq_retries_exhausted_block.call({"args" => [0]}, StandardError.new("x"))
+  end
 end
