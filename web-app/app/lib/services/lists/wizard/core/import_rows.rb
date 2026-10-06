@@ -22,28 +22,33 @@ module Services
             @failed = 0
           end
 
-          # nil when another run owns the step (it is running under a different
-          # run_id): two Import runs never overlap.
+          # nil when this run does not own the step: another run holds it, or a
+          # newer run has replaced it (even a completed one), or a restart wiped
+          # it. A run that is superseded midway stops before its next row.
           def call
             return nil unless claim
 
             rows = @list.list_items.ordered.to_a.select { |item| creatable?(item) }
-            manager.write_step!(step: STEP, status: "running", progress: 0, error: nil,
+            return nil unless write(status: "running", progress: 0, error: nil,
               metadata: {"total_items" => rows.size, "processed_items" => 0, "failed_count" => 0})
 
             rows.each_with_index do |item, index|
+              return nil unless manager.run_current?(STEP, @run_id)
+
               import_row(item)
-              manager.write_step!(step: STEP, status: "running", progress: (index + 1) * 100 / rows.size,
+              return nil unless write(status: "running", progress: (index + 1) * 100 / rows.size,
                 metadata: {"processed_items" => index + 1, "failed_count" => @failed})
             end
 
-            delete_removed_rows
-            manager.write_step!(step: STEP, status: "completed", progress: 100,
-              metadata: {"total_items" => rows.size, "processed_items" => rows.size, "failed_count" => @failed,
-                         "imported_at" => Time.current.iso8601})
-            rows.size
+            manager.fenced(STEP, @run_id) do
+              delete_removed_rows
+              manager.write_step!(step: STEP, status: "completed", progress: 100,
+                metadata: {"total_items" => rows.size, "processed_items" => rows.size, "failed_count" => @failed,
+                           "imported_at" => Time.current.iso8601})
+              rows.size
+            end
           rescue => e
-            manager.write_step!(step: STEP, status: "failed", progress: 0, error: e.message)
+            write(status: "failed", progress: 0, error: e.message)
             raise
           end
 
@@ -51,15 +56,35 @@ module Services
 
           def manager = @list.wizard_manager
 
-          # Under the list's row lock: a step already running under another run
-          # id belongs to that run. Otherwise this run takes it.
+          # One step write, only while this run is current. nil when it is not.
+          def write(**attributes)
+            manager.fenced(STEP, @run_id) do
+              manager.write_step!(step: STEP, **attributes)
+              true
+            end
+          end
+
+          # Under the list's row lock. A run that carries an id must find that id
+          # on the step, whatever the step's status: the controller wrote it when
+          # it started this run, and anything else means a newer run or a restart.
+          # A run with no id (a direct call) takes the step unless another run
+          # is running it, and gives itself one so the checks above can follow it.
           def claim
             @list.with_lock do
               owner = manager.step_metadata(STEP)["run_id"]
-              next false if manager.step_status(STEP) == "running" && owner.present? && owner != @run_id
+              if @run_id
+                unless owner == @run_id
+                  Rails.logger.info("List wizard import run #{@run_id} for list #{@list.id} is superseded; skipping")
+                  next false
+                end
+              elsif manager.step_status(STEP) == "running" && owner.present?
+                next false
+              else
+                @run_id = SecureRandom.uuid
+              end
 
               manager.update_step_status!(step: STEP, status: "running", progress: 0, error: nil,
-                metadata: {"run_id" => @run_id || SecureRandom.uuid})
+                metadata: {"run_id" => @run_id})
               true
             end
           end

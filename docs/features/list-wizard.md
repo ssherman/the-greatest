@@ -101,6 +101,15 @@ another, to restart, or to run a row action while one runs. Import also claims i
 so a double start cannot run twice, and is refused while any row is still pending. A Match row job
 re-reads its row before applying the answer and leaves a row the admin settled meanwhile alone.
 
+Every start of Parse, Match or Import writes a fresh `run_id` into that step's metadata and hands it to
+the job (Match passes it on to each row job and its source retries). A job, and the service it calls,
+acts only while the step's current `run_id` is its own: it checks at the start and again under the list
+lock before each mutation (Parse's row replacement, a Match row's result and progress, each Import row),
+and a superseded or restarted run logs one line and writes nothing. `ParseJob`, `MatchJob` and
+`ImportJob` set `retry: false`, so a failure is a failed step and the admin's retry starts a new run;
+`MatchRowJob` keeps `retry: 5`, and its retries-exhausted handler respects the same fence. Single-row
+re-matches carry no run id; their "row still pending" re-read is the fence.
+
 Jobs write wizard state through `StateManager#write_step!` (row lock, re-read, one step's entry); the
 controller moves steps through `#go_to_step!`. The books `StateManager` timestamps every step write. A
 step "running" whose last write is more than 30 minutes old (`STALLED_AFTER`), or has no timestamp,

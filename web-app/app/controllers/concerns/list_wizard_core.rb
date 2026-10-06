@@ -160,16 +160,14 @@ module ListWizardCore
     {"parse" => ::Lists::Wizard::ParseJob, "match" => ::Lists::Wizard::MatchJob, "import" => ::Lists::Wizard::ImportJob}.fetch(step)
   end
 
-  # Import gets a run id, so a second ImportJob (a double start, a retry
-  # racing a new start) can tell the step is not its own (ImportRows#claim).
+  # Every start is a new generation: a fresh run id, written under the lock
+  # and handed to the job. A job (and its row jobs) acts only while the
+  # step's current run id is its own, so an older job still queued or
+  # retrying cannot touch what this run produces.
   def start_job(step)
     run_id = SecureRandom.uuid
     wizard_entity.wizard_manager.write_step!(step: step, status: "running", progress: 0, error: nil, metadata: {"run_id" => run_id})
-    if step == "import"
-      job_for(step).perform_async(wizard_entity.id, run_id)
-    else
-      job_for(step).perform_async(wizard_entity.id)
-    end
+    job_for(step).perform_async(wizard_entity.id, run_id)
   end
 
   # A step is running while its status says so and it has written lately.

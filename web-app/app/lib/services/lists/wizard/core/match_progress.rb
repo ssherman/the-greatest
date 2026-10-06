@@ -11,17 +11,20 @@ module Services
         class MatchProgress
           STEP = "match"
 
-          def self.call(list:, single_row: false)
-            new(list, single_row).call
+          # run_id is the match generation of a full-match row job; progress
+          # from a superseded run is dropped. Single-row re-matches pass none.
+          def self.call(list:, single_row: false, run_id: nil)
+            new(list, single_row, run_id).call
           end
 
-          def initialize(list, single_row)
+          def initialize(list, single_row, run_id = nil)
             @list = list
             @single_row = single_row
+            @run_id = run_id
           end
 
           def call
-            @list.with_lock do
+            @list.wizard_manager.fenced(STEP, @run_id) do
               # Counted in SQL: no row is instantiated while the list is locked.
               # Rows with no wizard key (from before the wizard) are not counted.
               scope = @list.list_items

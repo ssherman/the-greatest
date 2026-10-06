@@ -59,7 +59,7 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
 
   test "saving content starts the parse and moves to Parse; blank content is refused" do
     sign_in_as(@admin, stub_auth: true)
-    ::Lists::Wizard::ParseJob.expects(:perform_async).with(@list.id).once
+    ::Lists::Wizard::ParseJob.expects(:perform_async).with(@list.id, instance_of(String)).once
 
     post wizard(:save_content), params: {raw_content: "1. Emma by Jane Austen"}
 
@@ -84,7 +84,7 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
 
   test "Next from Paste parses the saved content; with none saved it is refused" do
     sign_in_as(@admin, stub_auth: true)
-    ::Lists::Wizard::ParseJob.expects(:perform_async).with(@list.id).once
+    ::Lists::Wizard::ParseJob.expects(:perform_async).with(@list.id, instance_of(String)).once
 
     post wizard(:advance_step, step: "paste")
     assert_redirected_to step("parse")
@@ -109,7 +109,7 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
   test "Next from a completed Parse starts Match" do
     sign_in_as(@admin, stub_auth: true)
     @list.wizard_manager.write_step!(step: "parse", status: "completed")
-    ::Lists::Wizard::MatchJob.expects(:perform_async).with(@list.id).once
+    ::Lists::Wizard::MatchJob.expects(:perform_async).with(@list.id, instance_of(String)).once
 
     post wizard(:advance_step, step: "parse")
 
@@ -150,6 +150,21 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to step("import")
     assert @list.reload.wizard_manager.step_metadata("import")["run_id"].present?
+  end
+
+  test "every job start writes a fresh run id and hands it to the job" do
+    sign_in_as(@admin, stub_auth: true)
+    ids = []
+    ::Lists::Wizard::ParseJob.stubs(:perform_async).with { |_list_id, run_id| ids << run_id }
+
+    post wizard(:save_content), params: {raw_content: "1. Emma by Jane Austen"}
+    first = @list.reload.wizard_manager.step_metadata("parse")["run_id"]
+    @list.wizard_manager.write_step!(step: "parse", status: "failed")
+    post wizard(:reparse)
+    second = @list.reload.wizard_manager.step_metadata("parse")["run_id"]
+
+    assert_equal [first, second], ids
+    assert_equal 2, [first, second].uniq.size
   end
 
   test "finishing Review with nothing flagged needs no confirmation" do
@@ -209,8 +224,8 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
 
   test "re-parse and re-match start their jobs" do
     sign_in_as(@admin, stub_auth: true)
-    ::Lists::Wizard::ParseJob.expects(:perform_async).with(@list.id)
-    ::Lists::Wizard::MatchJob.expects(:perform_async).with(@list.id)
+    ::Lists::Wizard::ParseJob.expects(:perform_async).with(@list.id, instance_of(String))
+    ::Lists::Wizard::MatchJob.expects(:perform_async).with(@list.id, instance_of(String))
 
     post wizard(:reparse)
     assert_redirected_to step("parse")
@@ -269,7 +284,7 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
       @list.wizard_manager.write_step!(step: "match", status: "running")
     end
     @list.wizard_manager.write_step!(step: "parse", status: "completed")
-    ::Lists::Wizard::MatchJob.expects(:perform_async).with(@list.id).once
+    ::Lists::Wizard::MatchJob.expects(:perform_async).with(@list.id, instance_of(String)).once
 
     get step("match")
     assert_response :success
@@ -283,7 +298,7 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
     travel_to 31.minutes.ago do
       @list.wizard_manager.write_step!(step: "match", status: "running")
     end
-    ::Lists::Wizard::MatchJob.expects(:perform_async).with(@list.id).once
+    ::Lists::Wizard::MatchJob.expects(:perform_async).with(@list.id, instance_of(String)).once
 
     post wizard(:advance_step, step: "match")
 
@@ -296,7 +311,7 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
     travel_to 31.minutes.ago do
       @list.wizard_manager.write_step!(step: "parse", status: "running")
     end
-    ::Lists::Wizard::ParseJob.expects(:perform_async).with(@list.id).once
+    ::Lists::Wizard::ParseJob.expects(:perform_async).with(@list.id, instance_of(String)).once
 
     post wizard(:reparse)
     assert_redirected_to step("parse")

@@ -147,6 +147,32 @@ module Services
           end
         end
 
+        # The run fence: a job acts only while its step's current run id is its
+        # own. Read under the list's row lock (which re-reads the row), so a
+        # run that was superseded, or wiped by a restart, finds out at once.
+        # A nil run id is a direct call with no generation to compare.
+        def run_current?(step, run_id)
+          return true if run_id.nil?
+
+          current = list.with_lock { step_metadata(step)["run_id"] == run_id }
+          Rails.logger.info("List wizard #{step} run #{run_id} for list #{list.id} is superseded; skipping") unless current
+          current
+        end
+
+        # Runs the block under the list's row lock, only if the run is still
+        # current; otherwise logs one line and returns nil. For a mutation
+        # that must not land from a superseded run.
+        def fenced(step, run_id)
+          list.with_lock do
+            if run_id.nil? || step_metadata(step)["run_id"] == run_id
+              yield
+            else
+              Rails.logger.info("List wizard #{step} run #{run_id} for list #{list.id} is superseded; skipping")
+              nil
+            end
+          end
+        end
+
         STALLED_AFTER = 30.minutes
 
         # A "running" step whose last write is older than STALLED_AFTER, or that

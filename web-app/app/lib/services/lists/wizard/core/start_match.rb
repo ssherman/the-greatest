@@ -10,33 +10,55 @@ module Services
         class StartMatch
           STEP = "match"
 
-          def self.call(list:)
-            new(list).call
+          # run_id is the generation the job was started with. A run that is no
+          # longer current marks, writes and queues nothing (nil).
+          def self.call(list:, run_id: nil)
+            new(list, run_id).call
           end
 
-          def initialize(list)
+          def initialize(list, run_id = nil)
             @list = list
+            @run_id = run_id
           end
 
           def call
+            # Marking and the step write share the lock that checks the run.
+            rows = manager.fenced(STEP, @run_id) { mark_pending }
+            return if rows.nil?
+
+            if rows.empty?
+              MatchProgress.call(list: @list, run_id: @run_id)
+            else
+              rows.each { |item| enqueue(item) }
+            end
+            rows.size
+          rescue => e
+            manager.fenced(STEP, @run_id) { manager.write_step!(step: STEP, status: "failed", progress: 0, error: e.message) }
+            raise
+          end
+
+          private
+
+          def manager = @list.wizard_manager
+
+          def mark_pending
             rows = RowState.matchable(@list).sort_by { |item| [item.position || 0, item.id] }
             rows.each do |item|
               RowState.new(item).merge(RowState::PENDING)
               RowState.unlink(item)
               item.save!
             end
-            @list.wizard_manager.write_step!(step: STEP, status: "running", progress: 0, error: nil,
+            manager.write_step!(step: STEP, status: "running", progress: 0, error: nil,
               metadata: {"total_items" => rows.size, "processed_items" => 0})
+            rows
+          end
 
-            if rows.empty?
-              MatchProgress.call(list: @list)
+          def enqueue(item)
+            if @run_id
+              ::Lists::Wizard::MatchRowJob.perform_async(item.id, false, 1, @run_id)
             else
-              rows.each { |item| ::Lists::Wizard::MatchRowJob.perform_async(item.id) }
+              ::Lists::Wizard::MatchRowJob.perform_async(item.id)
             end
-            rows.size
-          rescue => e
-            @list.wizard_manager.write_step!(step: STEP, status: "failed", progress: 0, error: e.message)
-            raise
           end
         end
       end

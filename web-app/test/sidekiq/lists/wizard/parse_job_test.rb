@@ -8,6 +8,6 @@ class Lists::Wizard::ParseJobTest < ActiveSupport::TestCase
     ::Services::Lists::Wizard::Core::ParseRows.expects(:call)
       .with(has_entries(list: list, adapter: instance_of(::Services::Lists::Wizard::Books::Adapter))).returns(0)
 
-    Lists::Wizard::ParseJob.new.perform(list.id)
+    Lists::Wizard::ParseJob.new.perform(list.id, "run-1")
   end
 end
