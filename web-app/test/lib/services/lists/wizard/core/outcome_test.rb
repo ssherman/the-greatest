@@ -49,6 +49,14 @@ module Services
             assert_equal ["create", [], "OL9W"], [result.bucket, result.reasons, result.external_key]
           end
 
+          test "rule 5 capped to medium by a failed source is flagged unsure, never create" do
+            work = ol_candidate("OL9W")
+            result = classify(outcome: :unmatched, confidence: :medium, decided_by: :rule, external: work, candidates: [work])
+
+            assert_equal ["flagged", ["unsure"]], [result.bucket, result.reasons]
+            assert_nil result.external_key
+          end
+
           test "no candidates at all is flagged not_found" do
             result = classify(outcome: :unmatched, confidence: :high, decided_by: :rule, candidates: [])
 
