@@ -122,6 +122,77 @@ module Services
             assert_equal({title: "Sapiens", subtitle: "A Brief History", authors: ["Yuval Noah Harari"], year: 2011}, @adapter.row_display(row))
             assert_equal({title: "War and Peace", authors: ["Leo Tolstoy"], year: 1869}, @adapter.record_display(books_books(:war_and_peace)))
           end
+
+          test "recheck finds a book holding the chosen work or any key saved at Match" do
+            held = books_books(:crime_and_punishment) # holds OL262758W (fixture)
+            chosen = wizard_row(@list, position: 1, title: "Crime and Punishment", wizard: {bucket: "create", ol_work_key: "OL262758W"})
+            saved = wizard_row(@list, position: 2, title: "Crime and Punishment", wizard: {bucket: "create", ol_work_key: "OL1W", ol_keys: ["OL1W", "OL262758W"]})
+            missing = wizard_row(@list, position: 3, title: "Dune", wizard: {bucket: "create", ol_work_key: "OL2W", ol_keys: ["OL2W"]})
+
+            assert_equal held, @adapter.recheck(chosen)
+            assert_equal held, @adapter.recheck(saved)
+            assert_nil @adapter.recheck(missing)
+          end
+
+          test "recheck for a text row finds a book with the same title and an agreeing author created after its match" do
+            row = wizard_row(@list, position: 1, title: "A Winter of Crows", authors: ["Wren Halloway"],
+              wizard: {bucket: "create", matched_at: 1.hour.ago.iso8601})
+            author = ::Books::Author.create!(name: "Wren Halloway")
+            book = ::Books::Book.create!(title: "A Winter of Crows")
+            book.book_authors.create!(author: author, position: 1)
+
+            assert_equal book, @adapter.recheck(row)
+          end
+
+          test "recheck for a text row ignores a book made before its match, or by someone else" do
+            row = wizard_row(@list, position: 1, title: "A Winter of Crows", authors: ["Wren Halloway"],
+              wizard: {bucket: "create", matched_at: 1.hour.from_now.iso8601})
+            author = ::Books::Author.create!(name: "Wren Halloway")
+            ::Books::Book.create!(title: "A Winter of Crows").book_authors.create!(author: author, position: 1)
+            later = wizard_row(@list, position: 2, title: "A Winter of Crows", authors: ["Somebody Else"],
+              wizard: {bucket: "create", matched_at: 1.hour.ago.iso8601})
+
+            assert_nil @adapter.recheck(row)
+            assert_nil @adapter.recheck(later)
+          end
+
+          test "create sends a chosen work, trusted, as a normal enriched book with the rebuilt match" do
+            book = books_books(:war_and_peace)
+            row = wizard_row(@list, position: 1, title: "War and Peace", subtitle: "A Novel", authors: ["Leo Tolstoy"], year: 1869)
+            decision = wizard_match(subject: row, outcome: :unmatched, candidates: [local_candidate(books_books(:got))]).decision
+            row.update!(metadata: row.metadata.deep_merge("wizard" => {"bucket" => "create", "ol_work_key" => "OL5W", "match_decision_id" => decision.id}))
+            importer = mock("importer")
+            importer.expects(:call).with { |**kw|
+              kw.values_at(:title, :subtitle, :author_names, :year, :open_library_work_key, :trust_work_key, :provisional, :enrich, :subject) ==
+                ["War and Peace", "A Novel", ["Leo Tolstoy"], 1869, "OL5W", true, false, true, row] &&
+                kw[:match].decision == decision && kw[:match].candidates.map(&:record) == [books_books(:got)] && !kw.key?(:providers)
+            }.returns(::DataImporters::ImportResult.new(item: book, provider_results: [], success: true, created: true))
+
+            assert_equal book, @adapter.create(row, importer: importer)
+          end
+
+          test "create for a text row skips the Open Library provider" do
+            row = wizard_row(@list, position: 1, title: "War and Peace", authors: ["Leo Tolstoy"], wizard: {bucket: "create"})
+            importer = mock("importer")
+            importer.expects(:call).with { |**kw| kw[:providers] == Adapter::TEXT_PROVIDERS && !kw.key?(:open_library_work_key) }
+              .returns(::DataImporters::ImportResult.new(item: books_books(:war_and_peace), provider_results: [], success: true, created: true))
+
+            @adapter.create(row, importer: importer)
+          end
+
+          test "create raises when nothing was created, and rolls back a book left with no author" do
+            row = wizard_row(@list, position: 1, title: "Nobody's Book", wizard: {bucket: "create"})
+            failed = mock("importer")
+            failed.stubs(:call).returns(::DataImporters::ImportResult.new(item: ::Books::Book.new(title: "x"), provider_results: [], success: false))
+            authorless = Object.new
+            def authorless.call(**)
+              ::DataImporters::ImportResult.new(item: ::Books::Book.create!(title: "Nobody's Book"), provider_results: [], success: true, created: true)
+            end
+
+            assert_raises(Adapter::CreateFailed) { @adapter.create(row, importer: failed) }
+            assert_raises(Adapter::CreateFailed) { @adapter.create(row, importer: authorless) }
+            assert_not ::Books::Book.exists?(title: "Nobody's Book")
+          end
         end
       end
     end

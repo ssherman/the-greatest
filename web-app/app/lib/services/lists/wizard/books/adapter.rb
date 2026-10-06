@@ -10,6 +10,11 @@ module Services
           Result = Struct.new(:success?, :data, :errors, keyword_init: true)
           LISTABLE_TYPE = "Books::Book"
 
+          # A row created from its own text has no Open Library work: the
+          # Open Library provider is left out, so a re-resolve cannot attach one.
+          TEXT_PROVIDERS = %i[authors ai_enrichment author_enrichment].freeze
+          CreateFailed = Class.new(StandardError)
+
           def listable_type = LISTABLE_TYPE
 
           def listable_includes = [:authors]
@@ -90,7 +95,88 @@ module Services
             {title: book.title, authors: book.authors.map(&:name), year: book.first_published_year}
           end
 
+          # Spec §6: the Import re-check. A chosen work: a book holding it or any
+          # key saved at Match. A text row: a book with the same normalized title
+          # and an agreeing author, created after the row's Match.
+          def recheck(item)
+            state = ::Services::Lists::Wizard::Core::RowState.new(item)
+            return book_holding(([state.ol_work_key] + state.ol_keys).compact_blank.uniq) if state.ol_work_key
+
+            book_created_from_text_since_match(item, state)
+          end
+
+          # A normal book (provisional: false, enrich: true) with the row as the
+          # subject and the match rebuilt from the row's decision, so the finder
+          # does not run again. Rolled back when it ends up with no author.
+          def create(item, importer: ::DataImporters::Books::Book::Importer)
+            state = ::Services::Lists::Wizard::Core::RowState.new(item)
+            metadata = item.metadata || {}
+            arguments = {
+              title: metadata["title"], subtitle: metadata["subtitle"], author_names: Array(metadata["authors"]),
+              year: year_of(metadata), subject: item, provisional: false, enrich: true,
+              match: match_from_decision(::MatchDecision.find_by(id: state.match_decision_id))
+            }
+            arguments = if state.ol_work_key
+              arguments.merge(open_library_work_key: state.ol_work_key, trust_work_key: true)
+            else
+              arguments.merge(providers: TEXT_PROVIDERS)
+            end
+
+            ::ActiveRecord::Base.transaction(requires_new: true) do
+              result = importer.call(**arguments)
+              book = result.item
+              raise CreateFailed, "no book created: #{result.all_errors.join("; ")}" unless result.created? && book&.persisted?
+              raise CreateFailed, "the new book got no author: #{result.all_errors.join("; ")}" unless ::Books::BookAuthor.exists?(book: book)
+
+              book
+            end
+          end
+
           private
+
+          def book_holding(keys)
+            return nil if keys.empty?
+
+            ::Books::Book.joins(:identifiers)
+              .where(identifiers: {identifier_type: ::Identifier.identifier_types[:books_work_openlibrary_id], value: keys})
+              .order(:id).first
+          end
+
+          def book_created_from_text_since_match(item, state)
+            metadata = item.metadata || {}
+            title = ::Services::Lists::Wizard::Core::Signature.normalize(metadata["title"])
+            names = Array(metadata["authors"]).map { |name| ::Services::Lists::Wizard::Core::Signature.normalize(name) }.compact_blank
+            return nil if title.blank? || names.empty?
+
+            # SQL narrows to books created since the row's Match that have an
+            # author (a handful during one run); the comparison is in Ruby with
+            # the wizard's own normalization, which SQL LOWER() cannot match
+            # (curly quotes, Unicode width, spacing).
+            ::Books::Book
+              .where("books_books.created_at > ?", state.matched_at || item.created_at)
+              .where(id: ::Books::BookAuthor.select(:book_id))
+              .includes(:authors).order(:id)
+              .find do |book|
+                ::Services::Lists::Wizard::Core::Signature.normalize(book.title) == title &&
+                  book.authors.flat_map { |author| [author.name, *Array(author.alternate_names)] }
+                    .map { |name| ::Services::Lists::Wizard::Core::Signature.normalize(name) }.intersect?(names)
+              end
+          end
+
+          # As Services::Books::GoodreadsImports::SettleEdition#match_from_decision:
+          # the books the finder considered, and its decision.
+          def match_from_decision(decision)
+            considered = Array(decision&.candidates).filter_map do |snapshot|
+              next unless snapshot["record_type"] == "Books::Book"
+
+              book = ::Books::Book.find_by(id: snapshot["record_id"])
+              ::DataImporters::Candidate.new(record: book) if book
+            end
+            ::DataImporters::Match.new(
+              outcome: :unmatched, record: nil, confidence: decision&.confidence&.to_sym,
+              decided_by: decision&.decided_by&.to_sym, reason: decision&.reason, candidates: considered, decision: decision
+            )
+          end
 
           def year_of(metadata)
             ::Services::Lists::Wizard::Core::Signature.year(metadata["year"])

@@ -1,0 +1,10 @@
+# frozen_string_literal: true
+
+class Lists::Wizard::ImportJob
+  include Sidekiq::Job
+
+  def perform(list_id, run_id = nil)
+    list = ::List.find(list_id)
+    ::Services::Lists::Wizard::Core::ImportRows.call(list: list, adapter: ::Services::Lists::Wizard::Core::Adapters.for(list), run_id: run_id)
+  end
+end

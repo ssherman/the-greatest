@@ -8,8 +8,9 @@ module DataImporters
       class Importer < DataImporters::ImporterBase
         def self.call(title: nil, subtitle: nil, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [],
           open_library_work_key: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false,
-          match: nil, provisional: false, stamp_identifiers: false, enrich: true)
-          importer = new(provisional: provisional, stamp_identifiers: stamp_identifiers, enrich: enrich)
+          match: nil, provisional: false, stamp_identifiers: false, enrich: true, trust_work_key: false)
+          importer = new(provisional: provisional, stamp_identifiers: stamp_identifiers, enrich: enrich,
+            trust_work_key: trust_work_key)
           if item.present?
             importer.call(item: item, force_providers: force_providers, providers: providers)
           else
@@ -34,11 +35,14 @@ module DataImporters
         # query's identifiers are stamped whatever Open Library says, so a
         # book made while the service is down can be found again by them.
         # enrich: false skips AiEnrichment and AuthorEnrichment; an import's
-        # enrichment runs on admin approval instead.
-        def initialize(provisional: false, stamp_identifiers: false, enrich: true)
+        # enrichment runs on admin approval instead. trust_work_key: the
+        # query's Open Library work key wins over the service's decision (a
+        # person confirmed it; the list wizard).
+        def initialize(provisional: false, stamp_identifiers: false, enrich: true, trust_work_key: false)
           @provisional = provisional
           @stamp_identifiers = stamp_identifiers
           @enrich = enrich
+          @trust_work_key = trust_work_key
         end
 
         def call(**)
@@ -67,7 +71,7 @@ module DataImporters
         def providers
           @providers ||= begin
             list = [
-              Providers::OpenLibrary.new(new_author_ids: new_author_ids, provisional: @provisional),
+              Providers::OpenLibrary.new(new_author_ids: new_author_ids, provisional: @provisional, trust_work_key: @trust_work_key),
               Providers::Authors.new(new_author_ids: new_author_ids, provisional: @provisional)
             ]
             list << Providers::QueryIdentifiers.new if @stamp_identifiers
