@@ -339,6 +339,14 @@
               <div class="stat-value text-primary"><%= list.list_items.count %></div>
             </div>
 
+            <% if show_unlinked_rows? %>
+              <div class="stat" data-stat="unlinked">
+                <div class="stat-title">Unlinked rows</div>
+                <div class="stat-value text-warning"><%= unlinked_rows_count %></div>
+                <div class="stat-desc">Finish them in the wizard's Review step</div>
+              </div>
+            <% end %>
+
             <% if list.penalties.any? %>
               <div class="stat">
                 <div class="stat-title">Penalties</div>
