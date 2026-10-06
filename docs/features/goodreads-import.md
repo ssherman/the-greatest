@@ -310,6 +310,10 @@ imports.
 - Measured on the 2026-10-05 development load (a dry run): 46 unfinished legacy imports. 10 have a later completed
   import, 12 have no file (missing from the legacy bucket, or not a CSV), and 1 has no Goodreads header. That leaves
   23, all stuck in `pending`, with 40,345 rows between them.
+- Measured on development on 2026-10-06, one import alone, with the `/resolve` limit and the client's busy retry in
+  place (legacy import 732, 167 rows): 153 matched, 14 created, 14 flagged (8%), none parked, and 79 skipped as
+  already on the user's lists. It made 15 AI calls and took about 12 minutes with Goodreads verification. Seven
+  earlier test imports ran while Open Library was failing, and flagged 17–44% of their rows. They were rejected.
 
 ## Dry run
 
