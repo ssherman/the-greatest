@@ -201,6 +201,78 @@ module Services
 
           WriteLibrary.call(import: @import)
         end
+
+        test "a rating with text becomes a review, Goodreads breaks as newlines" do
+          winner = row(@book, rating: 4, review_body: "Long.<br/><br/>Worth it.", date_read: Date.new(2024, 5, 3))
+
+          WriteLibrary.call(import: @import)
+
+          review = ::Review.find_by!(user: @user, reviewable: @book)
+          assert_equal [4, "Long.\n\nWorth it."], [review.rating, review.body]
+          assert_equal Date.new(2024, 5, 3), review.created_at.to_date
+          assert_equal review.id, winner.reload.applied["review_id"]
+        end
+
+        test "rating 0 with text is an unrated review; rating 0 and no text is nothing" do
+          row(@book, rating: 0, review_body: "No stars from me.")
+          row(@other, rating: 0, review_body: nil)
+
+          WriteLibrary.call(import: @import)
+
+          assert_nil ::Review.find_by!(user: @user, reviewable: @book).rating
+          assert_not ::Review.exists?(user: @user, reviewable: @other)
+        end
+
+        test "an existing review is left untouched" do
+          existing = ::Review.create!(user: @user, reviewable: @book, rating: 2, body: "Mine.")
+          row(@book, rating: 5, review_body: "Imported.")
+
+          WriteLibrary.call(import: @import)
+
+          assert_equal [2, "Mine."], [existing.reload.rating, existing.body]
+        end
+
+        test "two rows for one book: the rated row, then the latest read, then the lowest row number wins" do
+          row(@book, number: 1, rating: 0, review_body: "Text only.", date_read: Date.new(2025, 1, 1))
+          row(@book, number: 2, rating: 3, review_body: "Older.", date_read: Date.new(2020, 1, 1))
+          row(@book, number: 3, rating: 5, review_body: "Newer.", date_read: Date.new(2022, 1, 1))
+          row(@other, number: 4, rating: 4, review_body: "First.")
+          row(@other, number: 5, rating: 2, review_body: "Second.")
+
+          WriteLibrary.call(import: @import)
+
+          assert_equal "Newer.", ::Review.find_by!(user: @user, reviewable: @book).body
+          assert_equal "First.", ::Review.find_by!(user: @user, reviewable: @other).body
+        end
+
+        test "a review that fails validation is not written; the row says why and keeps its list items" do
+          long = row(@book, rating: 5, review_body: "x" * (::Review::MAX_BODY_LENGTH + 1))
+
+          WriteLibrary.call(import: @import)
+
+          assert_not ::Review.exists?(user: @user, reviewable: @book)
+          assert_match(/review not imported/, long.reload.error)
+          assert long.applied?
+        end
+
+        test "summaries are recalculated once per reviewed book, not per review callback" do
+          row(@book, rating: 4)
+          row(@book, rating: 2)
+          ::Services::Reviews::SummaryRecalculator.expects(:recalculate).with("Books::Book", @book.id).once
+
+          WriteLibrary.call(import: @import)
+        end
+
+        test "a row that only wrote a review is applied" do
+          ::Services::UserLists::EnsureDefaults.call(user: @user, domain: :books, existing: [])
+          list(:read).user_list_items.create!(listable: @book)
+          reviewed = row(@book, rating: 4)
+
+          WriteLibrary.call(import: @import)
+
+          assert reviewed.reload.applied?
+          assert_equal [], Array(reviewed.applied["list_item_ids"])
+        end
       end
     end
   end

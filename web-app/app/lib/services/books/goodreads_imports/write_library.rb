@@ -31,6 +31,7 @@ module Services
         DEFAULT_SHELVES = {"read" => :read, "to-read" => :want_to_read, "currently-reading" => :reading}.freeze
         SKIPPED_DETAIL = "already on your lists"
         UNMATCHED_ERROR = "could not be matched to a book"
+        REVIEW_BREAK = %r{<br\s*/?>}i
 
         # One list item this import wants: the list, the book, the rows behind
         # it (the lowest-numbered one records it), and the shelf it came from.
@@ -46,6 +47,7 @@ module Services
           @written = Hash.new { |hash, row_id| hash[row_id] = {"list_item_ids" => []} }
           @completion_changed = false
           @touched_list_ids = Set.new
+          @touched_book_ids = Set.new
         end
 
         def call
@@ -55,6 +57,7 @@ module Services
             rows = writable_rows
             by_book = rows.group_by { |row| row.goodreads_edition.book_id }
             write_items(by_book) if by_book.any?
+            write_reviews(by_book)
             finish(rows, by_book)
             ::UserList.where(id: @touched_list_ids.to_a).touch_all if @touched_list_ids.any?
             purge_urls = ::Services::Books::ReadingGoals::DestructionInvalidator.for_user(user: @user) if @completion_changed
@@ -62,6 +65,7 @@ module Services
           if purge_urls.any?
             ActiveRecord.after_all_transactions_commit { ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", purge_urls) }
           end
+          @touched_book_ids.each { |book_id| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book_id) }
           @import.update!(skipped_count: @import.rows.skipped.count)
           Result.new(success?: true, data: @import.rows.group(:outcome).count.symbolize_keys.merge(purge_urls: purge_urls), errors: [])
         end
@@ -189,6 +193,42 @@ module Services
             @completion_changed ||= completed_on(want).present?
           end
           @touched_list_ids << user_list.id if inserted.rows.any?
+        end
+
+        # One deterministic review per book (spec §7): the row with a rating,
+        # then the latest Date Read, then the lowest row number. Rating 0 with
+        # text is an unrated review; rating 0 and no text is nothing. An
+        # existing review by the user is left as it is. Validated as a model
+        # (the sanitizer and the length rule run) and inserted in bulk, so the
+        # per-review summary callback does not fire; `call` recalculates once
+        # per book instead.
+        def write_reviews(by_book)
+          reviewed = ::Review.where(user: @user, reviewable_type: "Books::Book", reviewable_id: by_book.keys).pluck(:reviewable_id).to_set
+          by_book.each do |book_id, rows|
+            next if reviewed.include?(book_id)
+
+            winner = rows.select { |row| row.rating.to_i.positive? || row.review_body.present? }
+              .min_by { |row| [row.rating.to_i.positive? ? 0 : 1, -(row.date_read&.jd || 0), row.row_number] }
+            write_review(book_id, winner) if winner
+          end
+        end
+
+        def write_review(book_id, row)
+          review = ::Review.new(user: @user, reviewable_type: "Books::Book", reviewable_id: book_id,
+            rating: (row.rating if row.rating.to_i.positive?), body: row.review_body&.gsub(REVIEW_BREAK, "\n"))
+          unless review.valid?
+            row.update!(error: "review not imported: #{review.errors.full_messages.to_sentence}")
+            return
+          end
+
+          now = Time.current
+          attributes = review.attributes.slice("user_id", "reviewable_type", "reviewable_id", "rating", "body", "title")
+            .merge("created_at" => (row.date_read || row.date_added)&.in_time_zone || @import.created_at, "updated_at" => now)
+          inserted = ::Review.insert_all([attributes], unique_by: :index_reviews_on_user_and_reviewable, returning: %w[id])
+          return if inserted.rows.empty?
+
+          @written[row.id]["review_id"] = inserted.rows.first.first
+          @touched_book_ids << book_id
         end
 
         def finish(rows, by_book)
