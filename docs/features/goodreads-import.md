@@ -13,12 +13,12 @@ catalog's bad data; this one is built so that it cannot. Spec:
 | 2 | Provisional books and authors (`docs/features/books-provisional-records.md`) | shipped |
 | 3 | Resolver core: parsing, tables, edition resolution, dry run | shipped |
 | 4 | Goodreads page fetcher and verification | shipped |
-| 5 | Legacy replay | this doc |
-| 6 | Member upload, library write, admin approval | not started |
+| 5 | Legacy replay | shipped |
+| 6 | Member upload, library write, admin approval | this doc |
 | 7 | Finishing failed legacy imports | not started |
 
-No member flow calls the resolver yet. The entry points are the dry-run rake and the legacy replay's rakes ("Legacy
-replay" below).
+Members import at `/my/goodreads-import` ("Member import" below). The dry-run rake and the legacy replay's rakes are
+the other entry points.
 
 ## Parsing
 
@@ -86,7 +86,7 @@ considered), and otherwise creates through `DataImporters::Books::Book::Importer
 - `provisional: true`, for the book and any author it creates;
 - `stamp_identifiers: true`, so the edition's Goodreads id and ISBNs are on the book even when Open
   Library is down;
-- `enrich: false`, because enrichment runs on admin approval (increment 6).
+- `enrich: false`, because enrichment runs on admin approval ("Member import" below).
 
 A book that comes out of the importer with no author is rolled back (`CreateFailed`) and the
 edition retried later: an authorless book cannot be found by any later author-aware search.
@@ -143,11 +143,79 @@ for it. Matched editions never touch Goodreads.
   provisional book created unverified, and for editions stuck waiting longer than a full day's
   fetch line (cap × interval, about 6.25 h) plus an hour. An edition whose created book was since
   deleted is left alone: the next resolution sends it back to the finder. A later
-  `not_found` or `mismatch` is recorded on the edition and left for the admin page
-  (increment 6). The book is not touched.
+  `not_found` or `mismatch` is recorded on the edition and shown on the import's admin page
+  (Created tab, verification column). The book is not touched.
 
-Moving an import through `verifying` and recounting it after a late settle belong to the import
-job (increment 6).
+An import waiting on pages sits in `verifying` until they settle ("Member import" below).
+
+## Member import
+
+Spec §7, §10, §11. A signed-in user (any account, not only paying members) uploads their export at
+`/my/goodreads-import`, linked from the My Books menu.
+
+**Upload.** `ValidateUpload` refuses, before any import row exists:
+- a missing file, or one over 10 MB;
+- anything that is not a Goodreads export with rows (an xlsx renamed `.csv` included);
+- an upload while the user has an import in progress (also a database index);
+- a fourth member import in 24 hours.
+
+Settings are in `config/initializers/goodreads_imports.rb`. `StartImport` stores the file on `private_imports` and
+queues `Books::Goodreads::RunImportJob`.
+
+**The run** (`Services::Books::GoodreadsImports::RunImport`) goes parse → resolve → verify → write → complete.
+- Every phase can run again. The run claims the import with a conditional `UPDATE` from `queued` or `verifying`, so
+  however many triggers ask for a run, only one does it.
+- An import with editions waiting on Goodreads stops in `verifying`. `SettleEditionsJob` resumes it once nothing it
+  names is pending, and the verify sweep resumes any whose resume was lost.
+- A failure fails the import with its error. The admin page's Rerun puts the unwritten failed rows back to pending
+  and runs it again.
+- Each member import, complete or failed, sends `AdminMailer#goodreads_import_finished` to `notify_to`
+  (contact@thegreatestbooks.org).
+
+**WriteLibrary** writes in bulk under the user's row lock, the lock the list-item controller takes.
+- Shelves:
+  - `read`, `to-read` and `currently-reading` go to the default lists.
+  - Every other shelf goes to a custom list, matched case-insensitively with hyphens read as spaces. A `favorites`
+    shelf is a custom list, never the favorites list type.
+  - A read book leaves the reading list, and Date Read is never replaced with today.
+- Items are appended in shelf-position order, with `created_at` set to Date Added.
+- An existing item only has a blank `completed_on` filled. The same file twice writes nothing, and its rows come
+  back `skipped` ("already on your lists").
+- One review per book is written: rated row first, then the latest read, then the lowest row number. Goodreads
+  `<br/>` becomes newlines, and the user's existing review is left alone. Summaries are recalculated once per book.
+- The user's public goal pages are purged once, when a completion date changed.
+- Each row's `applied` holds the list item ids and the review id it wrote.
+
+**Admin: Books → Goodreads Imports.**
+- The index filters by source (member by default), status and review status. It marks imports in progress past
+  2 hours as stuck, and has Approve selected.
+- The show page has four tabs:
+  - Created: books and authors, with each edition's verification and its match decision;
+  - Flagged decisions;
+  - Parked rows;
+  - Raw rows.
+- Gates, as Repair Verdicts: approve, promote and rerun need write access; reject, delete and an approve that
+  unticks records need delete access.
+- **Approve** (`Approve`, `PromoteRecords`):
+  - It deletes unticked records the import created, when nothing else uses them.
+  - It promotes every provisional book the import created or its rows point at, with the book's provisional authors,
+    then queues enrichment. A book credited to a newly promoted author waits for that author's chain, as the importer
+    does.
+- **Reject** (`Revert`):
+  - It deletes the list items and reviews in `applied`, plus the provisional books and authors the import created
+    that no other import, list, review or curated list uses.
+  - It removes stamped identifiers, recalculates summaries and purges goal pages.
+  - It does not restore a reading item a read row replaced, or clear a date it filled.
+  - A stuck import is failed as it is rejected, freeing the member to upload again.
+- Per record: promote, or delete while provisional (`DeleteProvisional`). It acts only on records the import created.
+- Replay imports are listed but never approved, rejected or rerun here; increment 7 runs the failed ones through
+  this pipeline.
+
+Provisional books show normally to their importer and are hidden from everyone else's view of the user's lists (spec
+§9, `Books::UserList.catalog_items`).
+
+E2E: `e2e/tests/books/account/goodreads-import.spec.ts` and `e2e/tests/books/admin/goodreads-imports.spec.ts`, with
+`e2e:goodreads_import_seed` / `e2e:goodreads_import_cleanup`.
 
 ### Legacy seed
 
