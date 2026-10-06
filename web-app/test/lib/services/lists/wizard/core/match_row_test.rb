@@ -138,6 +138,13 @@ module Services
             assert_equal "completed", @list.reload.wizard_manager.step_status("match")
           end
 
+          # Jitter spreads rows that failed together: delay..2*delay seconds out.
+          def assert_retry_delay_within(delay, job)
+            wait = job["at"] - Time.now.to_f
+            assert_operator wait, :>=, delay - 2
+            assert_operator wait, :<=, 2 * delay + 2
+          end
+
           def failed_source_answer(**attributes)
             answer(outcome: :matched, record: @book, confidence: :medium, decided_by: :rule, candidates: [local_candidate(@book)],
               sources_failed: ["open_library"], **attributes)
@@ -153,7 +160,7 @@ module Services
 
               job = ::Lists::Wizard::MatchRowJob.jobs.last
               assert_equal [@row.id, true, 2], job["args"]
-              assert_in_delta MatchRow::RETRY_DELAYS.first, job["at"] - Time.now.to_f, 5
+              assert_retry_delay_within MatchRow::RETRY_DELAYS.first, job
             end
 
             state = RowState.new(@row.reload)
@@ -162,6 +169,17 @@ module Services
             assert_nil state.match_decision_id
             assert_nil state.decided_by
             assert_equal decision_count + 1, ::MatchDecision.count # the finder wrote one for the attempt
+          end
+
+          test "the retry delay is jittered by up to the delay itself" do
+            failed_source_answer
+            MatchRow.any_instance.stubs(:rand).with(0..20).returns(20)
+
+            Sidekiq::Testing.fake! do
+              ::Lists::Wizard::MatchRowJob.jobs.clear
+              MatchRow.call(list_item: @row, adapter: @adapter)
+              assert_in_delta 40, ::Lists::Wizard::MatchRowJob.jobs.last["at"] - Time.now.to_f, 2
+            end
           end
 
           test "attempt 2 failing again schedules attempt 3 after the longer delay" do
@@ -173,7 +191,7 @@ module Services
 
               job = ::Lists::Wizard::MatchRowJob.jobs.last
               assert_equal [@row.id, false, 3], job["args"]
-              assert_in_delta MatchRow::RETRY_DELAYS.last, job["at"] - Time.now.to_f, 5
+              assert_retry_delay_within MatchRow::RETRY_DELAYS.last, job
             end
           end
 
@@ -224,6 +242,26 @@ module Services
             end
 
             assert_equal "running", @list.reload.wizard_manager.step_status("match")
+          end
+
+          test "scheduling a retry still writes a progress heartbeat for a full Match" do
+            wizard_row(@list, position: 2, title: "Emma", wizard: {bucket: "matched"})
+            failed_source_answer
+
+            Sidekiq::Testing.fake! { MatchRow.call(list_item: @row, adapter: @adapter) }
+
+            manager = @list.reload.wizard_manager
+            assert_equal ["running", 1, 2], [manager.step_status("match"), manager.step_metadata("match")["processed_items"],
+              manager.step_metadata("match")["total_items"]]
+          end
+
+          test "scheduling a single-row retry never flips a completed step back to running" do
+            @list.wizard_manager.write_step!(step: "match", status: "completed", progress: 100)
+            failed_source_answer
+
+            Sidekiq::Testing.fake! { MatchRow.call(list_item: @row, adapter: @adapter, single_row: true) }
+
+            assert_equal "completed", @list.reload.wizard_manager.step_status("match")
           end
 
           test "a finder error flags the row match_failed and the step can still finish" do

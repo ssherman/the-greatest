@@ -11,8 +11,10 @@ module Services
           # A match whose finder lost a source (Open Library under load answers
           # 503) is capped to medium, which would flag the row "unsure" for a
           # transient fault. So it is retried: three attempts in all, the first
-          # run plus two retries waiting RETRY_DELAYS seconds. Only the last
-          # attempt's result is applied, with the failed source in the row's error.
+          # run plus two retries. Each waits its RETRY_DELAYS entry plus up to the
+          # same again in random jitter, so rows that failed together do not
+          # retry as one burst. A result with a failed source is applied only on
+          # the last attempt, with the failed source in the row's error.
           MAX_ATTEMPTS = 3
           RETRY_DELAYS = [20, 60].freeze
 
@@ -55,12 +57,13 @@ module Services
             if fresh && RowState.new(fresh).pending?
               @item = fresh
               if retry_source?
-                # Stay pending and skip progress: the step must not finish with
-                # this row undecided.
-                ::Lists::Wizard::MatchRowJob.perform_in(RETRY_DELAYS.fetch(@attempt - 1), @item.id, @single_row, @attempt + 1)
-                return
+                # Stay pending. Progress still runs: it cannot complete the step
+                # while this row is pending, and it keeps the heartbeat alive.
+                delay = RETRY_DELAYS.fetch(@attempt - 1)
+                ::Lists::Wizard::MatchRowJob.perform_in(delay + rand(0..delay), @item.id, @single_row, @attempt + 1)
+              else
+                save(attributes)
               end
-              save(attributes)
             end
             MatchProgress.call(list: list, single_row: @single_row)
           end
