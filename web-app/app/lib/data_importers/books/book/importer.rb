@@ -6,7 +6,7 @@ module DataImporters
       # Main importer for single ::Books::Book records via the Open Library
       # resolve service.
       class Importer < DataImporters::ImporterBase
-        def self.call(title: nil, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [],
+        def self.call(title: nil, subtitle: nil, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [],
           open_library_work_key: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false,
           match: nil, provisional: false, stamp_identifiers: false, enrich: true)
           importer = new(provisional: provisional, stamp_identifiers: stamp_identifiers, enrich: enrich)
@@ -15,6 +15,7 @@ module DataImporters
           else
             query = ImportQuery.new(
               title: title,
+              subtitle: subtitle,
               author_names: author_names,
               year: year,
               isbn13: isbn13,
@@ -92,6 +93,7 @@ module DataImporters
         def initialize_item(query)
           ::Books::Book.new(
             title: query.title,
+            subtitle: query.subtitle,
             first_published_year: query.year,
             provisional: @provisional
           )

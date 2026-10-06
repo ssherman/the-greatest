@@ -480,6 +480,18 @@ module DataImporters
 
           assert_includes result.summary[:data_populated], :ai_enrichment_queued
         end
+
+        test "a new book is seeded with the query's subtitle, and the finder sends it to /resolve" do
+          stub_open_library_client
+          stub_request(:post, "#{BASE_URL}/resolve")
+            .with { |request| JSON.parse(request.body)["subtitle"] == "A Brief History of Humankind" }
+            .to_return(status: 200, body: accept_response(diff: []).to_json)
+
+          result = Importer.call(title: "Sapiens", subtitle: "A Brief History of Humankind", author_names: ["Yuval Noah Harari"])
+
+          assert result.item.persisted?
+          assert_equal "A Brief History of Humankind", result.item.subtitle
+        end
       end
     end
   end

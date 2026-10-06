@@ -7,10 +7,10 @@ module DataImporters
       # keyword but may be nil or blank for an identifier-only import (e.g. an
       # Open Library work key or ISBN with no title resolved yet).
       class ImportQuery < DataImporters::ImportQuery
-        attr_reader :title, :author_names, :year, :isbn13, :isbn10, :asin, :goodreads_id, :open_library_work_key,
+        attr_reader :title, :subtitle, :author_names, :year, :isbn13, :isbn10, :asin, :goodreads_id, :open_library_work_key,
           :series_name, :series_number, :context_author_names
 
-        SNAPSHOT_KEYS = %i[title author_names year isbn13 isbn10 asin goodreads_id open_library_work_key
+        SNAPSHOT_KEYS = %i[title subtitle author_names year isbn13 isbn10 asin goodreads_id open_library_work_key
           series_name series_number context_author_names].freeze
 
         # Rebuilds a query from the hash FinderBase#query_snapshot stored on
@@ -26,9 +26,13 @@ module DataImporters
         # only (Goodreads import spec §4): Goodreads' Additional Authors mixes
         # co-authors with translators and illustrators, so no rule treats
         # those names as creators.
-        def initialize(title:, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [],
+        def initialize(title:, subtitle: nil, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [],
           open_library_work_key: nil, series_name: nil, series_number: nil, context_author_names: [])
           @title = title
+          # The list wizard parser splits it out of the title (books list wizard
+          # spec section 2). Only /resolve reads it; Exact and OpenSearch keep
+          # matching on the title.
+          @subtitle = subtitle.presence
           @author_names = Array(author_names)
           @year = year
           # R115: normalize ONCE, here, at the root -- a blank or duplicate
