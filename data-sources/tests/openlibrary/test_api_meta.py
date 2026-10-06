@@ -245,6 +245,10 @@ def test_an_empty_thread_count_is_the_default(monkeypatch):
         ("OL_API_RESOLVE_CONCURRENCY", "0"),
         ("OL_API_RESOLVE_DEADLINE_S", "0"),
         ("OL_API_RESOLVE_DEADLINE_S", "soon"),
+        # float() accepts both. NaN would expire every deadline at once;
+        # infinity overflows the timer thread and leaves no deadline at all.
+        ("OL_API_RESOLVE_DEADLINE_S", "nan"),
+        ("OL_API_RESOLVE_DEADLINE_S", "inf"),
     ],
 )
 def test_from_env_names_a_bad_limit(monkeypatch, name, value):

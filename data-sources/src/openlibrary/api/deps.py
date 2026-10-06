@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import tempfile
 from dataclasses import dataclass, field
@@ -122,8 +123,10 @@ class Settings:
 
 
 def _positive_env(name, parse, default):
-    """A positive number from the environment. Unset or empty is `default`:
-    Compose forwards a variable the host does not set as an empty string."""
+    """A positive, finite number from the environment. Unset or empty is
+    `default`: Compose forwards a variable the host does not set as an empty
+    string. `float()` accepts "nan" and "inf", hence the finite check: a NaN
+    deadline expires at once, an infinite one overflows the timer thread."""
     raw = os.environ.get(name, "")
     if raw == "":
         return default
@@ -131,7 +134,7 @@ def _positive_env(name, parse, default):
         value = parse(raw)
     except ValueError:
         value = None
-    if value is None or value <= 0:
+    if value is None or not math.isfinite(value) or value <= 0:
         raise ConfigurationError(f"{name} must be a positive number, not {raw!r}")
     return value
 
