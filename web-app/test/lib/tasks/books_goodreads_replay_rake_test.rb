@@ -94,4 +94,32 @@ class BooksGoodreadsReplayRakeTest < ActiveSupport::TestCase
       assert_raises(SystemExit) { Rake::Task["books:goodreads_replay:sample"].invoke("bogus") }
     end
   end
+
+  def with_env(values)
+    saved = values.keys.index_with { |key| ENV[key] }
+    values.each { |key, value| ENV[key] = value }
+    yield
+  ensure
+    saved.each { |key, value| ENV[key] = value }
+  end
+
+  test "finish_legacy passes the limit, IDS and DRY_RUN, then prints each outcome and the tally" do
+    REPLAY::FinishLegacyImports.expects(:call).with(limit: 3, ids: [73, 285], dry_run: true)
+      .returns(result(outcomes: {285 => :would_start, 73 => :no_file}, tally: {would_start: 1, no_file: 1}))
+
+    with_env("IDS" => "73 285", "DRY_RUN" => "1") do
+      assert_output(/legacy import 285: would_start\nlegacy import 73: no_file\nlegacy imports to finish: would_start 1, no_file 1/) do
+        Rake::Task["books:goodreads_replay:finish_legacy"].invoke("3")
+      end
+    end
+  end
+
+  test "finish_legacy with no arguments finishes every eligible import" do
+    REPLAY::FinishLegacyImports.expects(:call).with(limit: nil, ids: nil, dry_run: false)
+      .returns(result(outcomes: {}, tally: {}))
+
+    with_env("IDS" => nil, "DRY_RUN" => nil) do
+      assert_output(/legacy imports to finish: nothing/) { Rake::Task["books:goodreads_replay:finish_legacy"].invoke }
+    end
+  end
 end
