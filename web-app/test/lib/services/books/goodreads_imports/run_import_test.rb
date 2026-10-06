@@ -85,6 +85,18 @@ module Services
           assert_equal :complete, RunImport.call(import: import).data[:outcome]
         end
 
+        test "a run whose import was taken from it (rejected or rerun) stops without writing or overwriting" do
+          import = start(goodreads_csv(cached_row(@book)))
+          # An admin rejects the stuck import while this run is resolving.
+          ResolveImport.stubs(:call).with { |**| import.class.where(id: import.id).update_all(status: import.class.statuses[:failed]) }
+          WriteLibrary.expects(:call).never
+
+          assert_no_enqueued_emails do
+            assert_equal :superseded, RunImport.call(import: import).data[:outcome]
+          end
+          assert_equal "failed", import.reload.status
+        end
+
         test "a replay import sends no email" do
           import = start(goodreads_csv(cached_row(@book)))
           import.update!(source: :legacy_replay, legacy_import_id: 4242)

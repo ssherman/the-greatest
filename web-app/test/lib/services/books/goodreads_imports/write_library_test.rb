@@ -202,6 +202,17 @@ module Services
           WriteLibrary.call(import: @import)
         end
 
+        test "an import rejected or no longer writing writes nothing" do
+          written = row(@book, exclusive_shelf: "read", rating: 4)
+          @import.update!(status: :failed, review_status: :rejected)
+
+          WriteLibrary.call(import: @import)
+
+          assert_empty ::UserListItem.where(listable: @book, user_list: ::Books::UserList.where(user: @user))
+          assert_not ::Review.exists?(user: @user, reviewable: @book)
+          assert written.reload.pending?
+        end
+
         test "a rating with text becomes a review, Goodreads breaks as newlines" do
           winner = row(@book, rating: 4, review_body: "Long.<br/><br/>Worth it.", date_read: Date.new(2024, 5, 3))
 

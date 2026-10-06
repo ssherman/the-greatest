@@ -26,7 +26,9 @@ module Services
           ActiveRecord::Base.transaction do
             @import.rows.failed.where.not(goodreads_edition_id: nil).where("applied = '{}'::jsonb")
               .update_all(outcome: ::Books::GoodreadsImportRow.outcomes[:pending], error: nil, updated_at: Time.current)
-            @import.update!(status: :queued, error: nil, finished_at: nil)
+            # started_at restarts with the new run, so the import is not
+            # flagged stuck (and re-offered for rerun or reject) at once.
+            @import.update!(status: :queued, error: nil, started_at: nil, finished_at: nil)
           end
           ::Books::Goodreads::RunImportJob.perform_async(@import.id)
           Result.new(success?: true, data: {import: @import}, errors: [])

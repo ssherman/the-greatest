@@ -53,6 +53,11 @@ module Services
         def call
           purge_urls = []
           @user.with_lock do
+            # Revert takes this same user lock: an import it rejected (or an
+            # admin reran) while this waited is not this run's to write.
+            @import.reload
+            next unless @import.writing? && !@import.review_rejected?
+
             settle_unwritable_rows
             rows = writable_rows
             by_book = rows.group_by { |row| row.goodreads_edition.book_id }

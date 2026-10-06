@@ -36,6 +36,15 @@ module Services
           assert_not Rerun.call(import: @import).success?
         end
 
+        test "a rerun import starts its clock again, so it is not stuck the moment it is queued" do
+          ::Books::Goodreads::RunImportJob.stubs(:perform_async)
+          @import.update!(started_at: 3.hours.ago)
+
+          Rerun.call(import: @import)
+
+          assert_not @import.reload.stuck?
+        end
+
         test "a failed import cannot rerun while the member has another in progress" do
           @user.goodreads_imports.create!(status: :parsing)
           ::Books::Goodreads::RunImportJob.expects(:perform_async).never
