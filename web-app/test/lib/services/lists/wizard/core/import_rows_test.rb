@@ -219,6 +219,15 @@ module Services
 
             assert_equal 1, ::Books::Author.where(name: "Wren Halloway").count
           end
+
+          test "rows that are not in the create bucket are never sent to create" do
+            wizard_row(@list, position: 1, title: "Flagged One", authors: ["A B"], wizard: {bucket: "flagged", reasons: ["ai_only_pick"]})
+            wizard_row(@list, position: 2, title: "Pending One", authors: ["C D"], wizard: {bucket: "pending"})
+            @adapter.expects(:create).never
+            @adapter.expects(:recheck).never
+
+            assert_equal 0, ImportRows.call(list: @list, adapter: @adapter)
+          end
         end
       end
     end

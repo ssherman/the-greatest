@@ -108,6 +108,30 @@ module DataImporters
 
             assert_equal [:ai_enrichment_queued], provider.populate(@book, query: @query).data_populated
           end
+
+          test "the job is not queued while the surrounding transaction is open, only once it commits" do
+            ::Sidekiq::Testing.fake! do
+              ::Books::EnrichBookJob.clear
+              ::ActiveRecord::Base.transaction(requires_new: true) do
+                @provider.populate(@book, query: @query)
+                assert_empty ::Books::EnrichBookJob.jobs
+              end
+
+              assert_equal 1, ::Books::EnrichBookJob.jobs.size
+            end
+          end
+
+          test "a transaction that rolls back queues no job" do
+            ::Sidekiq::Testing.fake! do
+              ::Books::EnrichBookJob.clear
+              ::ActiveRecord::Base.transaction(requires_new: true) do
+                @provider.populate(@book, query: @query)
+                raise ::ActiveRecord::Rollback
+              end
+
+              assert_empty ::Books::EnrichBookJob.jobs
+            end
+          end
         end
       end
     end
