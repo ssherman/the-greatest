@@ -1,35 +1,154 @@
-# List Wizard Infrastructure
+# List Wizard
 
 ## Summary
 
-Multi-step wizard framework for importing and processing list data in admin interfaces. Provides reusable ViewComponents for wizard UI, a controller concern for step management, and integration patterns for background job processing. Implemented for Music (Songs, Albums) and Games domains.
+Multi-step admin wizards that turn a pasted list into list items. Two generations live side by side:
 
-## Architecture Overview
+- **The wizard core** (`app/lib/services/lists/wizard/core/`), with **books** as its first and only user.
+  Steps: Paste → Parse → Match → Review → Import → Done. Only rows that might be wrong reach a human.
+  Spec: `docs/superpowers/specs/2026-10-06-books-list-wizard-design.md`.
+- **The old wizards** for music (songs, albums) and games: source → parse → enrich → validate → review →
+  import → complete, every row verified by hand. They move onto the core later, one spec each. Their
+  reference material is below, under "Music and games (old wizard code)".
 
-The wizard infrastructure consists of five layers:
+## The wizard core
 
-1. **Generic ViewComponents** (`app/components/wizard/`) - Reusable UI components
-2. **WizardController Concern** - Base controller behavior for step navigation
-3. **BaseListWizardController Concern** - Shared list wizard logic (7-step flow, job dispatching)
-4. **Domain-Specific Controllers** - Implementation for each list type
-5. **Background Jobs** - Async processing with progress tracking via `wizard_state`
+### Pieces
 
-### Data Flow
+| Piece | Where |
+|---|---|
+| Row state (`list_items.metadata["wizard"]`) | `Services::Lists::Wizard::Core::RowState` |
+| Bucket and reason rules | `Core::Outcome` |
+| Rows on the same book or work | `Core::OnListTwice` |
+| Parse, Match, Import | `Core::ParseRows`, `Core::StartMatch` + `Core::MatchRow` + `Core::MatchProgress`, `Core::ImportRows` |
+| Review actions | `Core::RowActions` |
+| Review data, counts | `Core::ReviewRows` (paginated, 100 rows per page), `Core::Summary` |
+| Jobs (default queue) | `Lists::Wizard::ParseJob`, `MatchJob`, `MatchRowJob` (one per row), `ImportJob` (one per list) |
+| Controller | `ListWizardCore` concern (`app/controllers/concerns/`); `Admin::Books::ListWizardController` |
+| Screens | `Wizard::Core::{PasteStep,JobStep,ReviewStep,ReviewRow,DoneStep}Component` + `app/views/admin/list_wizard_core/show_step.html.erb` |
+| Steps | `Services::Lists::Wizard::Books::StateManager` (`paste parse match review import done`) |
+| Domain adapter | `Services::Lists::Wizard::Books::Adapter`, picked by `Core::Adapters.for(list)` |
 
-```
-User Action -> Controller -> wizard_state update -> Background Job
-                                                         |
-                                                         v
-User Poll <- step_status JSON <- wizard_state <- Job Progress Update
-```
+The wizard is refused on auto-generated lists (`auto_generated?`).
 
-### wizard_state JSON Storage
+### Row state
 
-All wizard state is stored in the `wizard_state` JSONB column on the List model. This enables:
-- Persistence across requests
-- Progress tracking for background jobs
-- Step-specific metadata storage
-- Wizard restart/resume capability
+Every wizard row carries `metadata["wizard"]`:
+
+- `bucket`: `pending`, `matched`, `create`, `flagged` or `removed`; `reasons`: array of reason keys.
+- `settled`, `settled_by_id`, `settled_at`: set by any Review action, and by Import.
+- `match_decision_id`, `decided_by`, `confidence`: from the finder's answer.
+- `ol_keys`, `ol_work_key`: Open Library keys saved at Match, for the Import re-check and creation.
+- `target_record_id`: the book the row resolves to.
+- `matched_at`, `import_result` (`created` / `linked_existing`).
+- `error`: a failed finder source, or the lookup failure message; `import_error`: why creation failed.
+
+The finder's full answer stays on the row's `MatchDecision` (`subject` = the list item). A row without a
+`wizard` key predates the wizard and is treated as settled. Match attempt counts are not stored on the
+row; they travel in the job arguments.
+
+### Buckets
+
+`matched`: a matched finder answer at certain or high confidence, not needing review — linked and
+verified at once (AI-decided high matches included; the Review "AI-decided" filter spot-checks them).
+`create`: unmatched, decided by rule 5 (Open Library accepted a work nobody holds) — created at Import.
+`flagged`: everything else, with reasons `unsure`, `not_found`, `ai_only_pick`, `on_list_twice`,
+`match_failed`, `import_failed`, plus `changed_since_match` (informational, set when Import links an
+existing book that appeared after Match). A flagged row with no specific reason is `unsure`.
+
+### Match retries
+
+A row whose finder answer had a failed source (for example Open Library returning 503) is not applied.
+It stays `pending` and `MatchRowJob` re-enqueues itself (3 attempts in total, delays of 20 s and 60 s
+plus up to the same again in random jitter). Each such run still calls `MatchProgress`, so the step's
+timestamp keeps moving. After the third attempt the capped answer is applied (usually `unsure`). If
+Sidekiq's own retries run out on an exception, the row is flagged `match_failed` and progress runs.
+
+### Protecting decisions
+
+Every Review action settles the row and records verdict, reviewer and time on its `MatchDecision`.
+Row actions refuse a pending row ("still being matched"). A `listable_id` clash (another row took the
+book) is reported as already on this list; any other validation error is raised.
+Re-parse, re-match and restart never change or delete a settled row; restart deletes only unsettled
+rows, atomically with the step reset. Re-parse skips a parsed row whose normalized title and authors
+equal a kept row's. Removed rows are kept (hidden) until Import finishes and then deleted, so a re-parse
+after Import may add a removed row back.
+
+### Large lists
+
+The Paste step's "Large plain-text list (1000+ lines)" box sets `wizard_state["batch_mode"]`. Parse then
+splits `simplified_content` into batches of 100 non-blank lines, calls the parser once per batch, and
+numbers rows strictly in order (AI ranks ignored). A failed batch, or a parse that yields zero rows,
+fails the parse and deletes nothing.
+
+### Verified
+
+`verified` is true exactly when a row is linked to a book (matched, created or linked by Import, linked
+by an admin). Every unlinked row, settled or not, is unverified.
+
+### Done counts
+
+"New duplicate pairs raised" counts `DuplicateCandidate` pairs on the rows' current decisions; a
+pre-existing pair that was raised again (its count bumped) is not counted.
+
+### Concurrency and recovery
+
+Only one wizard job (Parse, Match, Import) runs per list at a time; the controller refuses to start
+another, to restart, or to run a row action while one runs. Import also claims its step with a run id,
+so a double start cannot run twice, and is refused while any row is still pending. A Match row job
+re-reads its row before applying the answer and leaves a row the admin settled meanwhile alone.
+
+Jobs write wizard state through `StateManager#write_step!` (row lock, re-read, one step's entry); the
+controller moves steps through `#go_to_step!`. The books `StateManager` timestamps every step write. A
+step "running" whose last write is more than 30 minutes old (`STALLED_AFTER`), or has no timestamp,
+counts as stalled: re-run, restart and re-parse are allowed again, and the step screen says it seems to
+have stopped. Each Match row job calls `MatchProgress` under the list's row lock; the job that finds no
+pending rows runs the on-list-twice pass and completes the step, once. Import creates rows one after
+another in one job, so a second book by a new author finds the author the first one created — the old
+wizards' job-per-creation raced and duplicated authors. The enrichment jobs Import triggers are pushed
+after the outermost transaction commits (`ActiveRecord.after_all_transactions_commit`, in the shared
+providers).
+
+### Review and Import prompts
+
+Moving to Import goes through one confirmation whenever unlinked rows remain (the idle Start button
+included); an unconfirmed attempt redirects back to Review with the prompt. Refusals use 303.
+
+### Books adapter
+
+Parser: `Services::Ai::Tasks::Lists::Books::RawParserTask` (splits a subtitle out of the title).
+Query: `DataImporters::Books::Book::ImportQuery` (title, subtitle, authors, year); the subtitle goes to
+`/resolve` only. Finder: `DataImporters::Books::Book::Finder`. Import re-check: a book holding the
+chosen work key or any key saved at Match; for a row created from its text, a book with the same
+normalized title and an agreeing author created after the row's Match (compared in Ruby with the
+wizard's normalization). Creation:
+`DataImporters::Books::Book::Importer` with `provisional: false`, `enrich: true`, the row as subject and
+the match rebuilt from the row's decision; an admin-chosen work goes in with `trust_work_key: true` so
+the book carries that key even if the service did not accept it; a text row runs without the Open
+Library provider.
+
+### Permissions
+
+`Admin::DomainScopedAuth`: viewers may look, writers may run every action, deleters may restart.
+
+### Admin wiring
+
+Routes: `/admin/lists/:list_id/wizard/...` in the `admin_books` namespace. The list page's "Launch
+Wizard" button links there and, for books lists only, the page shows how many rows are unlinked.
+
+### E2E
+
+`e2e/tests/books/admin/list-wizard.spec.ts` holds the wizard flow on a three-row list. It needs this checkout's own server and
+Sidekiq; if another worktree's Sidekiq shares the default Redis DB, start both with a separate
+`REDIS_URL` (for example `redis://localhost:6379/5`). `bin/rails e2e:list_wizard_cleanup` removes
+leftover "E2E Wizard List" lists. The Open Library service has returned 503 under about five
+concurrent `/resolve` calls; the wizard tolerates it through the Match retries.
+
+## Music and games (old wizard code)
+
+Everything below describes the old wizards. Two fixes from the books list wizard spec apply to them:
+restart deletes only unverified items, and AI re-validation skips rows marked `manual_link`,
+`manual_musicbrainz_link` or `manual_igdb_link`.
 
 ## Generic Components
 
@@ -136,7 +255,7 @@ Provides generic wizard behavior: step navigation, validation, status polling, a
 | `step_status` | GET | JSON status for AJAX polling |
 | `advance_step` | POST | Move to next step |
 | `back_step` | POST | Move to previous step |
-| `restart` | POST | Reset wizard to beginning |
+| `restart` | POST | Reset wizard to beginning (deletes unverified items only) |
 
 **Abstract methods** (subclasses must implement):
 
@@ -250,6 +369,8 @@ Song/album leaf controllers implement `list_class`, `entity_id_key`, `enrichment
 | import | Create song/album records | `WizardImportSongsJob` / `WizardImportAlbumsJob` |
 | complete | Summary display | No |
 
+Rows linked by hand (`manual_link`, `manual_musicbrainz_link`, `manual_igdb_link`) are never re-validated.
+
 **Review step item actions** (Music):
 
 | Action | Purpose |
@@ -281,6 +402,8 @@ Games includes `BaseListWizardController` directly (no intermediate base class).
 | review | Manual verification | No |
 | import | Create game records via IGDB importer | `Games::WizardImportGamesJob` |
 | complete | Summary display | No |
+
+Rows linked by hand (`manual_link`, `manual_musicbrainz_link`, `manual_igdb_link`) are never re-validated.
 
 **Review step item actions** (Games):
 
