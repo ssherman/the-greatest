@@ -300,9 +300,9 @@ imports.
   review again. One with rows has already run this pass and is left alone. One an admin rejected stays rejected.
 - Each import fetches Goodreads pages for the books it would create, on the fetch line member uploads use. Run it in
   batches (`[5]`).
-- Measured on the 2026-10-05 development load: 46 unfinished legacy imports. 10 have a later completed import, and
-  14 have no usable file (missing from the legacy bucket, not a CSV, or no Goodreads header). That leaves 22, all stuck
-  in `pending`, with 40,345 rows between them.
+- Measured on the 2026-10-05 development load (a dry run): 46 unfinished legacy imports. 10 have a later completed
+  import, 12 have no file (missing from the legacy bucket, or not a CSV), and 1 has no Goodreads header. That leaves
+  23, all stuck in `pending`, with 40,345 rows between them.
 
 ## Dry run
 
