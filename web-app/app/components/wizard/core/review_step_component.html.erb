@@ -9,11 +9,11 @@
       <% end %>
     </div>
 
-    <div role="tablist" class="tabs tabs-box mb-4">
+    <nav aria-label="Review filters" class="tabs tabs-box mb-4">
       <% FILTER_LABELS.each do |name, label| %>
-        <%= link_to label, filter_path(name), role: "tab", class: class_names("tab", "tab-active" => name == filter) %>
+        <%= link_to label, filter_path(name), class: class_names("tab", "tab-active" => name == filter), aria: {current: (name == filter ? "page" : nil)} %>
       <% end %>
-    </div>
+    </nav>
 
     <% if rows.empty? %>
       <p class="text-base-content/70" data-testid="review-empty">Nothing to review in this view.</p>

@@ -66,6 +66,18 @@ module Services
             end
           end
 
+          test "only the page's listables are loaded" do
+            list = wizard_list
+            %i[war_and_peace crime_and_punishment got clash].each_with_index { |name, n| wizard_row(list, position: n + 1, title: "Row #{n}", listable: books_books(name), wizard: {bucket: "flagged"}) }
+
+            review = ReviewRows.new(list: list, filter: "all", per_page: 2, listable_includes: [:authors])
+            page_rows = review.rows
+            assert_equal [true, true], page_rows.map { |row| row.item.association(:listable).loaded? }
+            assert_equal [true, true], page_rows.map { |row| row.item.listable.association(:authors).loaded? }
+            others = review.send(:pairs).map(&:first) - page_rows.map(&:item)
+            assert_equal [false, false], others.map { |item| item.association(:listable).loaded? }
+          end
+
           test "the page is clamped into range and defaults to 100 rows" do
             list = wizard_list
             (1..3).each { |n| wizard_row(list, position: n, title: "Row #{n}", wizard: {bucket: "flagged"}) }

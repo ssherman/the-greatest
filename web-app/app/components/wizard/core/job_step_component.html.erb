@@ -6,7 +6,7 @@
            data-wizard-step-step-url-value="<%= step_path %>">
         <div class="flex justify-between items-center mb-2">
           <span class="text-sm font-medium" data-wizard-step-target="statusText">Working…</span>
-          <span class="text-sm text-base-content/70"><%= progress %>%</span>
+          <span class="text-sm text-base-content/70" data-wizard-step-target="percentText"><%= progress %>%</span>
         </div>
         <progress class="progress progress-primary w-full" value="<%= progress %>" max="100" data-wizard-step-target="progressBar"></progress>
       </div>

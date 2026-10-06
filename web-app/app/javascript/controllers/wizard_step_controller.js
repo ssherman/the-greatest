@@ -7,7 +7,7 @@ export default class extends Controller {
     stepUrl: String
   }
 
-  static targets = ["progressBar", "statusText", "nextButton"]
+  static targets = ["progressBar", "statusText", "percentText", "nextButton"]
 
   connect() {
     this.pollTimer = null
@@ -78,6 +78,10 @@ export default class extends Controller {
       // (style.width doesn't work for native progress elements)
       this.progressBarTarget.value = percent
       this.progressBarTarget.setAttribute('aria-valuenow', percent)
+    }
+
+    if (this.hasPercentTextTarget) {
+      this.percentTextTarget.textContent = `${percent}%`
     }
 
     if (this.hasStatusTextTarget && metadata) {

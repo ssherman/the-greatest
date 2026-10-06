@@ -39,6 +39,8 @@ module Services
           # One page of rows; decisions are fetched for this page only.
           def rows
             slice = pairs.slice((page - 1) * per_page, per_page) || []
+            # Listables are loaded for this page's rows only.
+            ::ActiveRecord::Associations::Preloader.new(records: slice.map(&:first), associations: {listable: @listable_includes}).call
             decisions = ::MatchDecision.where(id: slice.filter_map { |_item, state| state.match_decision_id }).index_by(&:id)
             slice.map do |item, state|
               decision = decisions[state.match_decision_id]
@@ -49,7 +51,7 @@ module Services
           private
 
           def pairs
-            @pairs ||= @list.list_items.includes(listable: @listable_includes).order(:position, :id).to_a
+            @pairs ||= @list.list_items.order(:position, :id).to_a
               .map { |item| [item, RowState.new(item)] }.select { |_item, state| keep?(state) }
           end
 

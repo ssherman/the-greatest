@@ -23,7 +23,10 @@ class Wizard::Core::ReviewStepComponent < ViewComponent::Base
   # Pagy builds its links from the request, so the filter parameter rides along
   # with the page number.
   def pagination_nav
-    Pagy::Offset.new(count: @review.total, page: @review.page, limit: @review.per_page, request: request).series_nav
+    # Not the live request: its parameters would carry the route's own params
+    # (controller, action, list_id) and, on a row action's POST, the CSRF token.
+    pagy_request = {base_url: "", path: @adapter.wizard_path(:step, @list, step: "review"), params: {"filter" => filter}}
+    Pagy::Offset.new(count: @review.total, page: @review.page, limit: @review.per_page, request: Pagy::Request.new(request: pagy_request)).series_nav
   end
 
   private

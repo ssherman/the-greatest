@@ -19,6 +19,7 @@ class Wizard::Core::JobStepComponentTest < ViewComponent::TestCase
 
     assert_selector "[data-controller=wizard-step][data-wizard-step-status-url-value='#{@adapter.wizard_path(:step_status, @list, step: "match")}'][data-wizard-step-step-url-value='#{@adapter.wizard_path(:step, @list, step: "match")}']"
     assert_selector "progress[data-wizard-step-target=progressBar][value='40']"
+    assert_selector "[data-wizard-step-target=percentText]", text: "40%"
   end
 
   test "an idle step offers to start it, a failed one shows its error and offers to retry" do
