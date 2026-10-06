@@ -95,13 +95,23 @@ module Services
           return :running if existing&.in_progress?
           return :already_run if existing&.rows&.exists?
 
-          bytes = replay.file.download
+          bytes = upload(replay)
+          return :no_file unless bytes
+
           parsed = ::Books::Goodreads::ExportFile.parse(bytes)
           return :unreadable unless parsed.success? && parsed.data[:rows].any?
           return :user_busy if user.goodreads_imports.in_progress.exists?
           return :would_start if @dry_run
 
           start(user, legacy, existing, replay, bytes)
+        end
+
+        # The replay's copy of the upload, or nil when storage no longer has
+        # it; that import is skipped and the rest still run.
+        def upload(replay)
+          replay.file.download
+        rescue ActiveStorage::FileNotFoundError
+          nil
         end
 
         def start(user, legacy, existing, replay, bytes)

@@ -109,6 +109,16 @@ module Services
           assert_nil finishing
         end
 
+        test "an upload missing from storage is skipped, and the batch goes on" do
+          other = User.create!(email: "finisher-two@example.com", role: :user, email_verified: false)
+          missing = replay(legacy_id: 602, user: other)
+          missing.file.blob.service.delete(missing.file.key)
+          replay
+          newer = legacy(id: 602, user_id: other.id, created_at: Time.zone.local(2026, 6, 1))
+
+          assert_equal({602 => :no_file, 601 => :started}, finish(legacy, newer))
+        end
+
         test "a legacy import whose user is gone is skipped" do
           assert_equal({601 => :missing_user}, finish(legacy(user_id: 0)))
         end
