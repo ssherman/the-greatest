@@ -41,6 +41,10 @@ class Lists::Wizard::MatchRowJobTest < ActiveSupport::TestCase
   end
 
   test "retries exhausted for a deleted row does nothing" do
-    Lists::Wizard::MatchRowJob.sidekiq_retries_exhausted_block.call({"args" => [0]}, StandardError.new("x"))
+    ::Services::Lists::Wizard::Core::MatchProgress.expects(:call).never
+
+    assert_no_changes -> { ::ListItem.pluck(:id, :metadata, :listable_id) } do
+      Lists::Wizard::MatchRowJob.sidekiq_retries_exhausted_block.call({"args" => [0]}, StandardError.new("x"))
+    end
   end
 end

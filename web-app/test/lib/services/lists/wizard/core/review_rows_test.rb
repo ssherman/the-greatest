@@ -11,7 +11,7 @@ module Services
 
           setup do
             @list = wizard_list
-            @matched = wizard_row(@list, position: 1, title: "Matched", listable: books_books(:war_and_peace), wizard: {bucket: "matched", decided_by: "rule"})
+            @matched = wizard_row(@list, position: 1, title: "Matched", listable: books_books(:war_and_peace), wizard: {bucket: "matched", decided_by: "ai"})
             @flagged = wizard_row(@list, position: 2, title: "Flagged", wizard: {bucket: "flagged", reasons: ["unsure"], decided_by: "ai"})
             @create = wizard_row(@list, position: 3, title: "Create", wizard: {bucket: "create", decided_by: "rule"})
             @removed = wizard_row(@list, position: 4, title: "Removed", wizard: {bucket: "removed", settled: true})
@@ -28,7 +28,7 @@ module Services
           test "the filters: all rows, rows to create, AI-decided rows; removed rows never show" do
             assert_equal [@matched.id, @flagged.id, @create.id], ids("all")
             assert_equal [@create.id], ids("create")
-            assert_equal [@flagged.id], ids("ai")
+            assert_equal [@matched.id, @flagged.id], ids("ai")
           end
 
           test "each row carries its decision and its top candidates from the snapshot" do

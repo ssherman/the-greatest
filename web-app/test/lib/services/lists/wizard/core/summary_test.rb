@@ -23,6 +23,8 @@ module Services
             wizard_row(@list, position: 6, title: "To create", wizard: {bucket: "create"})
             wizard_row(@list, position: 7, title: "Removed", wizard: {bucket: "removed", settled: true})
             @list.list_items.create!(listable: books_books(:of_mice_and_men), position: 8)
+            # A row from before the wizard: no wizard key, no book.
+            @list.list_items.create!(listable_type: "Books::Book", position: 9)
           end
 
           test "review counts buckets and settled rows, leaving out removed rows and rows from before the wizard" do
@@ -31,7 +33,7 @@ module Services
           end
 
           test "unlinked count is rows with no book, leaving out removed rows" do
-            assert_equal 2, Summary.new(@list).unlinked_count
+            assert_equal 3, Summary.new(@list).unlinked_count
           end
 
           test "done counts what the wizard did, and duplicate pairs raised by the rows' decisions" do
@@ -44,7 +46,7 @@ module Services
               ids: [books_books(:war_and_peace).id, books_books(:crime_and_punishment).id],
               source: :ai, evidence: {}, match_decision: decision)
 
-            assert_equal({"matched" => 1, "created" => 1, "admin_linked" => 1, "unlinked" => 2, "changed_since_match" => 1, "duplicate_pairs" => 1},
+            assert_equal({"matched" => 1, "created" => 1, "admin_linked" => 1, "unlinked" => 3, "changed_since_match" => 1, "duplicate_pairs" => 1},
               Summary.new(@list).done_counts)
           end
         end
