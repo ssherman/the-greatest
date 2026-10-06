@@ -68,22 +68,18 @@ class Admin::Games::ListWizardControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, @list.wizard_manager.current_step
   end
 
-  test "should restart wizard and delete list items" do
-    @list.update!(wizard_state: {
-      "current_step" => 5,
-      "completed_at" => Time.current.iso8601
-    })
-    # Ensure list has items to delete
+  test "restart deletes unverified list items and keeps verified ones" do
+    @list.update!(wizard_state: {"current_step" => 5, "completed_at" => Time.current.iso8601})
     @list.list_items.destroy_all
-    ListItem.create!(list: @list, listable_type: "Games::Game", position: 1, metadata: {"title" => "Test Game"})
-    assert @list.list_items.count > 0
+    kept = ListItem.create!(list: @list, listable_type: "Games::Game", position: 1, verified: true, metadata: {"title" => "Kept Game"})
+    ListItem.create!(list: @list, listable_type: "Games::Game", position: 2, verified: false, metadata: {"title" => "Dropped Game"})
 
     post restart_admin_games_list_wizard_path(list_id: @list.id)
 
     @list.reload
     assert_equal 0, @list.wizard_manager.current_step
     assert_nil @list.wizard_state["completed_at"]
-    assert_equal 0, @list.list_items.count
+    assert_equal [kept.id], @list.list_items.pluck(:id)
     assert_redirected_to admin_games_list_wizard_path(list_id: @list.id)
   end
 
