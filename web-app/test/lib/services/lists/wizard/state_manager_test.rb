@@ -381,6 +381,32 @@ module Services
             [@list.wizard_manager.step_status("parse"), @list.wizard_manager.step_progress("parse"), @list.wizard_manager.step_metadata("parse")]
         end
 
+        test "#write_step! stamps the entry, and #step_stalled? is true only for a running step untouched for 30 minutes" do
+          @list.update!(wizard_state: {"current_step" => 1, "steps" => {}})
+          manager = @list.wizard_manager
+
+          manager.write_step!(step: "parse", status: "running")
+          assert_not manager.step_stalled?("parse")
+
+          travel_to 29.minutes.from_now do
+            assert_not List.find(@list.id).wizard_manager.step_stalled?("parse")
+          end
+          travel_to 31.minutes.from_now do
+            assert List.find(@list.id).wizard_manager.step_stalled?("parse")
+          end
+
+          manager.write_step!(step: "parse", status: "completed")
+          travel_to 31.minutes.from_now do
+            assert_not List.find(@list.id).wizard_manager.step_stalled?("parse")
+          end
+        end
+
+        test "#step_stalled? treats a running step with no stamp as stalled" do
+          @list.update!(wizard_state: {"steps" => {"parse" => {"status" => "running"}}})
+
+          assert @list.wizard_manager.step_stalled?("parse")
+        end
+
         test "#go_to_step! re-reads the list, so a job's step write made meanwhile survives" do
           @list.update!(wizard_state: {"current_step" => 1, "steps" => {}})
           stale = List.find(@list.id)

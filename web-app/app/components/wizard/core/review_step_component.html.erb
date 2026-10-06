@@ -20,7 +20,7 @@
     <% else %>
       <div class="space-y-4">
         <% rows.each do |row| %>
-          <%= render(Wizard::Core::ReviewRowComponent.new(row: row, list: list, adapter: adapter, filter: filter)) %>
+          <%= render(Wizard::Core::ReviewRowComponent.new(row: row, list: list, adapter: adapter, filter: filter, page: @review.page)) %>
         <% end %>
       </div>
       <% if paged? %>

@@ -47,6 +47,14 @@ class Wizard::Core::ReviewRowComponentTest < ViewComponent::TestCase
     assert_selector "[data-testid=row-reasons] li", count: 1
   end
 
+  test "on a later page, every action's URL carries the page, so the admin returns to it" do
+    render_inline(Wizard::Core::ReviewRowComponent.new(row: first_row, list: @list, adapter: @adapter, filter: "ai", page: 3))
+
+    %i[link_row create_row_from_text edit_row remove_row].each do |action|
+      assert_selector "form[action='#{@adapter.wizard_path(action, @list, row_id: @item.id, page: 3)}']", visible: :all
+    end
+  end
+
   test "rendering a row never asks its decision for the record or the AI chat (no per-row queries)" do
     row = first_row
     row.decision.expects(:record).never

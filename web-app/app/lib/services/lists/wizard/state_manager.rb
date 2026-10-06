@@ -118,7 +118,7 @@ module Services
         # @param error [String, nil] error message
         # @param metadata [Hash] additional metadata to merge
         # @return [Boolean] true if update succeeded
-        def update_step_status!(step:, status:, progress: nil, error: nil, metadata: {})
+        def update_step_status!(step:, status:, progress: nil, error: nil, metadata: {}, stamp: false)
           step_key = step.to_s
           current_step_state = step_data(step_key)
 
@@ -128,6 +128,7 @@ module Services
             "error" => error,
             "metadata" => current_step_state.fetch("metadata", {}).merge(metadata.stringify_keys)
           }
+          new_step_state["updated_at"] = Time.current.iso8601 if stamp
 
           steps_data = wizard_steps_data.merge(step_key => new_step_state)
           new_state = safe_wizard_state.merge("steps" => steps_data)
@@ -138,10 +139,29 @@ module Services
         # The list wizard core's write (books list wizard spec section 7): lock
         # the list row, re-read it, and write only this step's entry, so a Back
         # or Next click made while a job ran is not overwritten by a stale copy.
+        # Each entry it writes carries the time of the write, which is how a
+        # step stuck on "running" (a job that died) is told from one still working.
         def write_step!(step:, status:, progress: nil, error: nil, metadata: {})
           list.with_lock do
-            update_step_status!(step: step, status: status, progress: progress, error: error, metadata: metadata)
+            update_step_status!(step: step, status: status, progress: progress, error: error, metadata: metadata, stamp: true)
           end
+        end
+
+        STALLED_AFTER = 30.minutes
+
+        # A "running" step whose last write is older than STALLED_AFTER, or that
+        # carries no stamp at all: its job is not coming back, so the wizard may
+        # run it again instead of waiting for ever.
+        def step_stalled?(step_name)
+          return false unless step_status(step_name) == "running"
+
+          stamp = step_data(step_name)["updated_at"]
+          written = begin
+            Time.zone.parse(stamp.to_s)
+          rescue ArgumentError
+            nil
+          end
+          written.nil? || written < STALLED_AFTER.ago
         end
 
         # The controller's half of the same rule: move the current step without

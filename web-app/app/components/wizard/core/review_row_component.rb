@@ -5,11 +5,12 @@ class Wizard::Core::ReviewRowComponent < ViewComponent::Base
 
   attr_reader :filter
 
-  def initialize(row:, list:, adapter:, filter:)
+  def initialize(row:, list:, adapter:, filter:, page: nil)
     @row = row
     @list = list
     @adapter = adapter
     @filter = filter
+    @page = (page.to_i > 1) ? page.to_i : nil
   end
 
   def item = @row.item
@@ -36,5 +37,6 @@ class Wizard::Core::ReviewRowComponent < ViewComponent::Base
 
   def field_id(name) = "row_#{item.id}_#{name}"
 
-  def path(name) = @adapter.wizard_path(name, @list, row_id: item.id)
+  # The page rides in the query string, so an action sends the admin back to it.
+  def path(name) = @adapter.wizard_path(name, @list, **{row_id: item.id, page: @page}.compact)
 end
