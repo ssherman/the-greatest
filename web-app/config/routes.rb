@@ -662,6 +662,11 @@ Rails.application.routes.draw do
       constraints: {id: /\d+/}
     delete "my/reading-goals/:id", to: "books/my/reading_goals#destroy", constraints: {id: /\d+/}
 
+    get "my/goodreads-import", to: "books/my/goodreads_imports#index", as: :books_my_goodreads_imports
+    post "my/goodreads-import", to: "books/my/goodreads_imports#create"
+    get "my/goodreads-import/:id", to: "books/my/goodreads_imports#show", as: :books_my_goodreads_import,
+      constraints: {id: /\d+/}
+
     get "reading_goal_state/:id", to: "books/reading_goal_state#show", as: :books_reading_goal_state,
       constraints: {id: /\d+/}
     get "reading_goals", to: redirect("/my/reading-goals", status: 301)

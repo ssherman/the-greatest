@@ -1,0 +1,82 @@
+<% content_for :page_title, "Import from Goodreads | The Greatest Books" %>
+<% running = @imports.any?(&:in_progress?) %>
+
+<div class="max-w-3xl space-y-10">
+  <header>
+    <h1 class="text-3xl sm:text-4xl font-bold">Import from Goodreads</h1>
+    <p class="mt-2 text-base-content/70">
+      Bring your Goodreads shelves, read dates, ratings and reviews here.
+    </p>
+  </header>
+
+  <section class="space-y-3" aria-labelledby="how-to-export">
+    <h2 id="how-to-export" class="text-2xl font-bold">Get your export from Goodreads</h2>
+    <ol class="list-decimal list-inside space-y-1">
+      <li>On Goodreads, open <strong>My Books</strong>.</li>
+      <li>Under <strong>Tools</strong>, choose <strong>Import and export</strong>.</li>
+      <li>Click <strong>Export Library</strong>, wait for the link, and download the CSV file.</li>
+    </ol>
+    <p class="text-sm text-base-content/70">
+      Your shelves become lists here, and your ratings and reviews come along. Books we don't
+      have yet are added for you right away; other readers see them once we've checked them.
+    </p>
+  </section>
+
+  <section class="space-y-4" aria-labelledby="upload">
+    <h2 id="upload" class="text-2xl font-bold">Upload</h2>
+
+    <% if @errors.present? %>
+      <div role="alert" class="alert alert-error">
+        <span><%= @errors.to_sentence %></span>
+      </div>
+    <% end %>
+
+    <% if running %>
+      <div role="status" class="alert alert-info alert-soft">
+        <span>An import is running. You can upload another when it finishes.</span>
+      </div>
+    <% else %>
+      <%= form_with url: books_my_goodreads_imports_path, scope: :goodreads_import, multipart: true,
+            class: "flex flex-wrap items-end gap-3" do |f| %>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Goodreads export (CSV)</legend>
+          <%= f.file_field :file, accept: ".csv,text/csv", required: true, class: "file-input",
+                aria: {label: "Goodreads export file"} %>
+        </fieldset>
+        <%= f.submit "Upload", class: "btn btn-primary" %>
+      <% end %>
+    <% end %>
+  </section>
+
+  <section class="space-y-4" aria-labelledby="past-imports">
+    <h2 id="past-imports" class="text-2xl font-bold">Your imports</h2>
+
+    <% if @imports.any? %>
+      <div class="overflow-x-auto">
+        <table class="table bg-base-100">
+          <thead>
+            <tr><th>Started</th><th>Status</th><th>Books</th><th>Matched</th><th>New</th><th>Not found</th></tr>
+          </thead>
+          <tbody>
+            <% @imports.each do |import| %>
+              <tr>
+                <td class="whitespace-nowrap">
+                  <%= link_to import.created_at.strftime("%B %-d, %Y"), books_my_goodreads_import_path(import), class: "link" %>
+                </td>
+                <td><%= import.status.humanize %></td>
+                <td><%= import.rows_count %></td>
+                <td><%= import.matched_count %></td>
+                <td><%= import.created_count %></td>
+                <td><%= import.parked_count %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="rounded-box border border-base-300 bg-base-100 p-6 text-base-content/70">
+        You haven't imported anything yet.
+      </div>
+    <% end %>
+  </section>
+</div>
