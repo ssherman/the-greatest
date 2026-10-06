@@ -39,6 +39,8 @@ module Services
             Services::Lists::Wizard::Music::Songs::StateManager
           when "Music::Albums::List"
             Services::Lists::Wizard::Music::Albums::StateManager
+          when "Books::List"
+            Services::Lists::Wizard::Books::StateManager
           when "Games::List"
             self # Games uses the default steps (same as base)
           else
@@ -131,6 +133,25 @@ module Services
           new_state = safe_wizard_state.merge("steps" => steps_data)
 
           list.update!(wizard_state: new_state)
+        end
+
+        # The list wizard core's write (books list wizard spec section 7): lock
+        # the list row, re-read it, and write only this step's entry, so a Back
+        # or Next click made while a job ran is not overwritten by a stale copy.
+        def write_step!(step:, status:, progress: nil, error: nil, metadata: {})
+          list.with_lock do
+            update_step_status!(step: step, status: status, progress: progress, error: error, metadata: metadata)
+          end
+        end
+
+        # The controller's half of the same rule: move the current step without
+        # overwriting a step entry a job wrote meanwhile.
+        def go_to_step!(index, completed: false)
+          list.with_lock do
+            changes = {"current_step" => index}
+            changes["completed_at"] = Time.current.iso8601 if completed
+            list.update!(wizard_state: safe_wizard_state.merge(changes))
+          end
         end
 
         # Resets a single step to its initial state.
