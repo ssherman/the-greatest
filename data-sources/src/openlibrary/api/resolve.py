@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from common.normalize import fingerprint, name_fingerprint
 from common.schemas import DiffEntry, DiffKind, Envelope, SourceKey, classify_diff
 from openlibrary.api.deps import ArtifactState, cursor, get_state
-from openlibrary.api.retrieval import WorkRecord, fetch_works
+from openlibrary.api.retrieval import WorkRecord, fetch_redirect_sources, fetch_works
 from openlibrary.matcher.blocking import BlockingQuery, generate_candidates
 from openlibrary.matcher.cluster import build_clusters, cluster_inputs
 from openlibrary.matcher.decide import Decision, decide, margins, rank
@@ -94,6 +94,12 @@ class ResolveDecision(BaseModel):
     (empty when the winner is in none). `score` is the cluster's best score,
     which can exceed `candidates[0].score` when the representative is not
     the top scorer.
+
+    `duplicate_redirect_sources` lists every old key that redirects to any
+    of `duplicates`, sorted. A caller asking "do we already hold this book?"
+    checks `key`, its candidate's `redirect_sources`, `duplicates` and these.
+    It rides on the decision because a duplicate can sit past `limit`, where
+    no returned candidate carries its keys.
     """
 
     verdict: Literal["accept", "abstain", "reject"]
@@ -102,6 +108,7 @@ class ResolveDecision(BaseModel):
     margin: float | None = None
     reason: str
     duplicates: list[SourceKey] = Field(default_factory=list)
+    duplicate_redirect_sources: list[SourceKey] = Field(default_factory=list)
 
 
 class ResolveCandidate(BaseModel):
@@ -134,6 +141,11 @@ class ResolveCandidate(BaseModel):
     candidate can fill title, description, year evidence and authors from
     it with no follow-up request. None only if that fetch missed (a
     candidate key with no `works` row), in which case `diff` is `[]` too.
+
+    `redirect_sources` lists every old key that redirects to this work,
+    sorted, so a caller can find a record it stored under a stale key.
+    `record.redirected_from` cannot do that job: it names only the key that
+    was requested, and a candidate's key is always the terminal one.
     """
 
     key: SourceKey
@@ -145,6 +157,7 @@ class ResolveCandidate(BaseModel):
     conflicts: list[str]
     diff: list[DiffEntry]
     record: WorkRecord | None = None
+    redirect_sources: list[SourceKey] = Field(default_factory=list)
 
 
 class ResolveResponse(BaseModel):
@@ -318,6 +331,11 @@ def resolve(
     # the same record rides on the candidate, so the caller never needs a
     # follow-up GET /works/{key}.
     records = fetch_works(cur, paths, [candidate.work_key for candidate in truncated])
+    # One reverse-redirect query covers the returned candidates and every
+    # duplicate, returned or not.
+    redirect_sources = fetch_redirect_sources(
+        cur, paths, [candidate.work_key for candidate in truncated] + list(decision.duplicates)
+    )
 
     candidates = []
     for scored_candidate, margin in zip(truncated, truncated_margins, strict=True):
@@ -333,6 +351,7 @@ def resolve(
                 conflicts=scored_candidate.conflicts,
                 diff=build_diff(request, record) if record is not None else [],
                 record=record,
+                redirect_sources=[_key(k) for k in redirect_sources[scored_candidate.work_key]],
             )
         )
 
@@ -344,6 +363,10 @@ def resolve(
             margin=decision.margin,
             reason=decision.reason,
             duplicates=[_key(k) for k in decision.duplicates],
+            duplicate_redirect_sources=[
+                _key(k)
+                for k in sorted({s for d in decision.duplicates for s in redirect_sources[d]})
+            ],
         ),
         guards_tripped=blocking.guards_tripped,
         volume_guards_tripped=blocking.volume_guards_tripped,

@@ -509,9 +509,9 @@ A third case needed an edition floor, not the margin. A live probe found a third
 v3 Rails replay over the 200 spike rows accepted 80 keys. 10 differed from the key our linked
 book stores, and none of the 10 is a wrong pick. In two, our key is a member of
 `decision.duplicates`. In six, our key is one Open Library has since redirected into the
-accepted work. Redirected keys never appear in `duplicates`, and `/resolve` candidates always
-carry an empty `redirected_from`, so the redirect branch of `OpenLibrarySource#local_holders`
-never fires on them. In the other two our own data is wrong. Only one of the 10 accepted keys is
+accepted work. Redirected keys never appear in `duplicates`, and `/resolve` candidates carried
+an empty `redirected_from`, so before the local-holders fix the redirect branch of
+`OpenLibrarySource#local_holders` never fired on them. In the other two our own data is wrong. Only one of the 10 accepted keys is
 held locally. When nothing local holds the accepted key, the finder's rules 1 and 2 cannot
 fire. An `unmatched` answer then makes the importer create a new book and stamp it with the
 accepted key, a duplicate of the book we already have. In the replay this happened once (*My
@@ -521,13 +521,25 @@ the books list wizard first, must count a local holder of the accepted key, of a
 `decision.duplicates` key, or of any key that redirects to one of them as a match before it
 creates anything. Details in "Rails replay" in `docs/data-quality/ol-matcher-v3-before-after.md`.
 
-This is safe today: no production caller creates or merges from an accept without a human
-(Goodreads reaches `/resolve` only through the rolled-back DryRun; the duplicate sweep runs
-with `verify: true`). It is a HARD PRECONDITION for Goodreads increment 3 going live and for
-the books list wizard (spec 2). `OpenLibrarySource#local_holders` ignores `decision.duplicates`
-and its redirect check never fires on `/resolve` output. Rails must read `decision.duplicates`,
-not the candidate list (with `limit: 5`, cluster members past rank 5 never reach Rails), and
-must resolve its stored keys through redirects.
+**Fixed (the local-holders fix).** `/resolve` now returns the keys a holder can sit under:
+- each candidate's `redirect_sources`: every old key that redirects to it;
+- `decision.duplicate_redirect_sources`: every old key that redirects to any of
+  `decision.duplicates`.
+
+The `redirects` table is transitive, so a chain A -> B -> C lists A under C.
+`record.redirected_from` cannot carry these: it names only a requested key, and a candidate's key
+is always the terminal one.
+
+Rails (`OpenLibrarySource`) treats each kind of holder differently:
+- A book holding the candidate's key or one of its `redirect_sources` is a holder of that work,
+  so an accepted one is still rule 2's certain match.
+- A book holding an accepted decision's `duplicates` key, or one of their old keys, becomes a
+  candidate under the key it holds, with no verdict. `duplicates` is evidence, not proof, so
+  holding one is never an accept. It does block rule 5 from creating a book, and
+  `external_duplicate_of` makes the finder flag it with the accepted key's holder as an
+  `external_key_collision` pair.
+- Several books holding the accepted key itself still give rule 2's pick, but at medium
+  confidence, so the match needs review.
 
 ### Recall by blocking rule (reading 7)
 

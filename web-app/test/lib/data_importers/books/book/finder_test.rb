@@ -286,6 +286,31 @@ module DataImporters
           assert_equal "OL999W", match.decision.candidates.first["external_key"]
         end
 
+        test "an Open Library accept on a new key that an old key held locally redirects to is a certain match" do
+          held = identifiers(:crime_and_punishment_openlibrary).value
+          candidate = ol_candidate(key: "OL1000W", verdict: "accept", score: 0.95, record: work_record(key: "OL1000W", title: "Crime and Punishment"))
+            .merge("redirect_sources" => [{"source" => "openlibrary", "key" => held}])
+          stub_resolve(resolve_response(verdict: "accept", key: "OL1000W", candidates: [candidate]))
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(title: "Crime and Punishment", author_names: ["Fyodor Dostoevsky"]))
+
+          assert_equal [@crime, :certain, :identifier], [match.record, match.confidence, match.decided_by]
+        end
+
+        test "an Open Library accept on a key nobody holds is no reason to create when a local book holds a duplicate of it" do
+          held = identifiers(:crime_and_punishment_openlibrary).value
+          body = resolve_response(verdict: "accept", key: "OL999W",
+            candidates: [ol_candidate(key: "OL999W", verdict: "accept", score: 0.95, record: work_record(key: "OL999W", title: "Crime & Punishment (Penguin Classics)", authors: ["Fyodor Dostoevsky"]))])
+          body["data"]["decision"]["duplicates"] = [{"source" => "openlibrary", "key" => held}]
+          stub_resolve(body)
+          stub_ai({selected_index: 1, confidence: "high", reasoning: "Same novel.", same_entity_groups: []})
+
+          match = @finder.call(query: ImportQuery.new(title: "Crime & Punishment (Penguin Classics)", author_names: ["Fyodor Dostoevsky"]))
+
+          assert_equal [:matched, @crime, :ai], [match.outcome, match.record, match.decided_by]
+        end
+
         test "an Open Library abstain with candidates alongside a local exact match: the exact rule still decides and the externals are recorded" do
           stub_resolve(resolve_response(verdict: "abstain", candidates: [ol_candidate(key: "OL5W", verdict: "abstain", score: 0.4, record: work_record(key: "OL5W", title: "War and Peace"))]))
           expect_no_ai

@@ -223,6 +223,34 @@ def _resolve_terminals(
     return {requested: terminal for requested, terminal in rows}
 
 
+def fetch_redirect_sources(
+    cur: duckdb.DuckDBPyConnection, paths: ArtifactPaths, keys: list[str]
+) -> dict[str, list[str]]:
+    """terminal work key -> every old key that redirects to it, sorted; one
+    query for the whole batch. The reverse of `_resolve_terminals`, with the
+    same non-cycle, non-dangling filter. `redirects` is already transitive, so
+    a chain A -> B -> C lists A under C. Every requested key is present, an
+    empty list when nothing redirects to it."""
+    wanted = list(dict.fromkeys(k for k in keys if k))
+    if not wanted:
+        return {}
+    load_rows(cur, "redirect_targets", [("terminal", "VARCHAR")], [(k,) for k in wanted])
+    rows = cur.execute(
+        f"""
+        SELECT t.terminal, r.source_key
+        FROM redirect_targets t
+        JOIN '{paths.table("redirects")}' r
+          ON r.terminal_key = t.terminal AND r.entity = 'work'
+         AND NOT r.is_cycle AND NOT r.is_dangling
+        ORDER BY t.terminal, r.source_key
+        """
+    ).fetchall()
+    sources: dict[str, list[str]] = {key: [] for key in wanted}
+    for terminal, source in rows:
+        sources[terminal].append(source)
+    return sources
+
+
 # --------------------------------------------------------------------------- works
 
 

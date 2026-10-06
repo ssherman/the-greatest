@@ -52,7 +52,11 @@ and points the decision at a record it creates.
    `external`; else the AI. Rule 2
    also picks among several local candidates holding the accepted key with the same
    ranked/most-lists/oldest preference and flags the rest as
-   `external_key_collision` pairs. Rules 0–2 never fire under `verify`.
+   `external_key_collision` pairs; that pick is medium, not certain, so it needs review.
+   Rules 0–2 never fire under `verify`. Any two local candidates sharing an external key,
+   or one holding a key the source calls a duplicate of the other's
+   (`evidence[:external_duplicate_of]`), are flagged as `external_key_collision` whatever
+   the rules decide.
 3. **AI** (`Services::Ai::Tasks::Matching::SelectCandidateTask`, one call on the `fast` role): the
    incoming item and at most six candidate lines, select one or 0, with confidence,
    reasoning and `same_entity_groups`. `AiSelection` turns that into a decision: a ranked
@@ -107,7 +111,9 @@ sources with `Sources::Identifiers` (Open Library key, ISBN-13, ISBN-10, ASIN, G
 query has authors), `Sources::OpenSearch` over `Search::Books::Search::BookByTitleAndAuthors`
 (title or alternate title required; authors and a year within one as boosts; a higher minimum
 score without authors), and `DataImporters::Books::Book::OpenLibrarySource` (`POST /resolve`,
-limit 5; one candidate per local holder of the work key or a key it redirects from; the whole
+limit 5; one candidate per local holder of the work key or an old key that redirects to it
+(`redirect_sources`); on an accept, one more per local holder of a `decision.duplicates` key
+or an old key of one, under the key it holds and never counted as accepted; the whole
 `Resolution` on `match.external_resolution`, which the provider reuses for a new book). Music
 and games still run their legacy lookups until increments 5 and 6. The audit UI (increment 3) is
 described below.

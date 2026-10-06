@@ -401,6 +401,33 @@ module Books
         assert_equal resolution.candidates.first, resolution.accepted
       end
 
+      test "#resolve exposes duplicates and every redirect source as bare key strings" do
+        body = resolve_response_body
+        body["data"]["decision"]["duplicates"] = [{"source" => "openlibrary", "key" => "OL5W"}]
+        body["data"]["decision"]["duplicate_redirect_sources"] = [{"source" => "openlibrary", "key" => "OL6W"}]
+        body["data"]["candidates"].first["redirect_sources"] = [{"source" => "openlibrary", "key" => "OL7W"}]
+        stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: body.to_json)
+
+        resolution = @client.resolve(title: "The Great Gatsby")
+
+        assert_equal ["OL5W"], resolution.decision.duplicates
+        assert_equal ["OL6W"], resolution.decision.duplicate_redirect_sources
+        assert_equal ["OL7W"], resolution.candidates.first.redirect_sources
+        assert_equal [], resolution.candidates.last.redirect_sources
+      end
+
+      # The Rails app and the service deploy separately: an older service
+      # sends none of these fields.
+      test "#resolve reads a response without duplicates or redirect sources as empty lists" do
+        stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: resolve_response_body.to_json)
+
+        resolution = @client.resolve(title: "The Great Gatsby")
+
+        assert_equal [], resolution.decision.duplicates
+        assert_equal [], resolution.decision.duplicate_redirect_sources
+        assert_equal [], resolution.candidates.first.redirect_sources
+      end
+
       test "#resolve exposes a nil Candidate#record when the service sends record: null" do
         stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: resolve_response_body.to_json)
 

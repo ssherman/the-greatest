@@ -526,6 +526,11 @@ books list wizard (spec 2). Rails must read `decision.duplicates`, not the candi
 (with `limit: 5`, cluster members past rank 5 never reach Rails), and must resolve its stored
 keys through redirects.
 
+**Since fixed** by the local-holders fix, which came after this report. `/resolve` returns
+`redirect_sources` on each candidate and `duplicate_redirect_sources` on the decision. Rails
+treats a holder of a duplicate key as a candidate for review, never as an accept. See
+"Duplicate clusters" in `docs/features/open-library-data-service.md`.
+
 ## Label provenance
 
 The labels are what both readings are graded against, so their quality bounds this whole
