@@ -717,6 +717,26 @@ candidate needs no follow-up call (`year_evidence` rides along for the
 unknown field is a 422 naming it, never a 200 that quietly ignored an
 identifier.
 
+**Load limits on `/resolve`** (`api/limits.py`). The service enforces "one
+`/resolve` at a time" itself; it no longer relies on callers to serialize.
+On 2026-10-06 four Goodreads imports resolving at once pinned the home
+server's ol VM. The Rails client gave up at 60 s, but Uvicorn never cancels a
+sync route when its client disconnects, so every abandoned query kept running
+beside the next. `/resolve` timed out for 25 minutes, until the API was
+restarted. Three settings, forwarded by `docker-compose.yml`:
+
+- `OL_API_RESOLVE_CONCURRENCY` (default 1): how many resolves run at once.
+  The next one is answered **503** at once, with `Retry-After`, and never
+  queued.
+- `OL_API_RESOLVE_DEADLINE_S` (default 55, just under the client's 60 s): a
+  resolve still running then is interrupted and answered **504**. The
+  interrupt repeats every 250 ms until the request ends, because DuckDB's
+  interrupt stops only the statement running at that moment, and a resolve
+  runs a chain of them.
+- `OL_API_THREADS` (default: DuckDB's, one per visible core). Like
+  `OL_API_MEMORY_LIMIT`, it is a setting of the whole database: every
+  endpoint's queries share both.
+
 **Author redirects, measured.** 53,835 `work_authors` rows on the 2026-07-31
 artifact name an author key absent from `authors`; 53,792 of them are
 resolvable author redirects (53,748 works, 46 terminal authors). Before R87
@@ -829,6 +849,11 @@ window, and a 4xx is a completed exchange with a live, healthy service; the occa
 mixed run is still visible to the caller as a failure result even though it never accumulates
 toward opening the circuit.
 
+The service's busy 503 and deadline 504 ("Load limits on `/resolve`" above) count like any other
+5xx. Two callers resolving at once is enough to open the breaker: the one turned away fails five
+times within a second, and then every Open Library call, including the one holding the slot's next
+call, fails with `CircuitOpenError` for 60 s.
+
 ### The `/resolve` body is an allow-list
 
 `Client#resolve` takes exactly the fields the service's `ResolveRequest` accepts
@@ -913,7 +938,9 @@ measured" above), so a background job importing many books should serialize its 
 through the `serial` Sidekiq queue the way the CoverArt and Amazon-enrichment jobs already do
 (`sidekiq_options queue: :serial` in `app/sidekiq/{games,music}/cover_art_download_job.rb` and
 `app/sidekiq/{books,games,music}/amazon_product_enrichment_job.rb`) -- not run several in parallel,
-which makes every one of them slower rather than any one faster. `Books::FindDuplicatesJob` is the
+which makes every one of them slower rather than any one faster. The service now enforces this
+itself: beyond `OL_API_RESOLVE_CONCURRENCY` a call fails at once with a 503 ("Load limits on
+`/resolve`" above). `Books::FindDuplicatesJob` is the
 first bulk caller: one job per ranked book on that same `serial` queue, and `verify: true` means
 every source runs, so every job makes one `/resolve` call.
 

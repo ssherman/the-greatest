@@ -6,6 +6,9 @@ services:
   api:
     environment:
       OL_API_MEMORY_LIMIT: 6GB
+      # One /resolve runs at a time (the default concurrency of 1); its
+      # queries share these threads with every other endpoint's.
+      OL_API_THREADS: "8"
   build:
     # The live API keeps 2 of the 12 vCPUs while a build runs.
     cpus: 10

@@ -24,12 +24,13 @@ from collections.abc import Callable
 from typing import Literal
 
 import duckdb
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from common.normalize import fingerprint, name_fingerprint
 from common.schemas import DiffEntry, DiffKind, Envelope, SourceKey, classify_diff
 from openlibrary.api.deps import ArtifactState, cursor, get_state
+from openlibrary.api.limits import Busy, Deadline
 from openlibrary.api.retrieval import WorkRecord, fetch_redirect_sources, fetch_works
 from openlibrary.matcher.blocking import BlockingQuery, generate_candidates
 from openlibrary.matcher.cluster import build_clusters, cluster_inputs
@@ -377,10 +378,35 @@ def resolve(
 # ----------------------------------------------------------------------------- route
 
 
+# How long a caller turned away as busy should wait: about one resolve.
+BUSY_RETRY_AFTER_S = 10
+
+
 @router.post("/resolve", response_model=Envelope[ResolveResponse])
 def post_resolve(request: ResolveRequest, state: ArtifactState = Depends(get_state)):
     """Sync on purpose: DuckDB blocks, and FastAPI runs a sync `def` route in
-    its threadpool."""
-    with cursor(state) as cur:
-        response = resolve(cur, state, request)
+    its threadpool.
+
+    At most `state.resolve_slots.limit` run at once; the next is a 503 at
+    once, never a queue. One still running at `state.resolve_deadline_s` is
+    interrupted and answered 504 (`openlibrary.api.limits`)."""
+    try:
+        with (
+            state.resolve_slots.hold(),
+            cursor(state) as cur,
+            Deadline(cur, state.resolve_deadline_s) as deadline,
+        ):
+            try:
+                response = resolve(cur, state, request)
+            except duckdb.InterruptException:
+                if not deadline.expired:
+                    raise
+                raise HTTPException(
+                    status_code=504,
+                    detail=f"deadline: resolve stopped after {state.resolve_deadline_s:g} s",
+                ) from None
+    except Busy as exc:
+        raise HTTPException(
+            status_code=503, detail=str(exc), headers={"Retry-After": str(BUSY_RETRY_AFTER_S)}
+        ) from None
     return Envelope(source_version=state.source_version, data=response)

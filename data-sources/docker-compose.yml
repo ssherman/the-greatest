@@ -21,6 +21,10 @@ services:
       # silently keep the 8GB default.
       OL_API_MEMORY_LIMIT: "${OL_API_MEMORY_LIMIT:-8GB}"
       OL_API_TEMP_DIR: "${OL_API_TEMP_DIR:-/tmp}"
+      # Empty means DuckDB's default, one thread per core it can see.
+      OL_API_THREADS: "${OL_API_THREADS:-}"
+      OL_API_RESOLVE_CONCURRENCY: "${OL_API_RESOLVE_CONCURRENCY:-1}"
+      OL_API_RESOLVE_DEADLINE_S: "${OL_API_RESOLVE_DEADLINE_S:-55}"
 
   build:
     build: .
