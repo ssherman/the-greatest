@@ -28,6 +28,8 @@ class Books::Goodreads::VerifyUnverifiedJob
         ::Books::Goodreads::FetchPageJob.perform_async(goodreads_book_id)
       end
     end
+    # Safety net for a resume a crash lost.
+    ::Services::Books::GoodreadsImports::RunImport.resume_waiting
   end
 
   private

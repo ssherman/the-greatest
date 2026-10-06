@@ -1,0 +1,19 @@
+<p>A Goodreads import <%= @import.failed? ? "failed" : "finished" %> on <%= @site_name %>.</p>
+
+<ul>
+  <li>Member: <%= @import.user.email %></li>
+  <li>Started: <%= (@import.started_at || @import.created_at).strftime("%B %-d, %Y at %H:%M") %></li>
+  <li>Rows: <%= @import.rows_count %> (<%= @import.editions_count %> editions)</li>
+  <li>Matched: <%= @import.matched_count %></li>
+  <li>Created: <%= @import.created_count %></li>
+  <li>Flagged: <%= @import.flagged_count %></li>
+  <li>Parked: <%= @import.parked_count %></li>
+  <li>Skipped: <%= @import.skipped_count %></li>
+  <li>AI calls: <%= @import.ai_calls_count %></li>
+</ul>
+
+<% if @import.error.present? %>
+  <p><strong>Error:</strong> <%= @import.error %></p>
+<% end %>
+
+<p><%= link_to "Review it", admin_books_goodreads_import_url(@import) %></p>

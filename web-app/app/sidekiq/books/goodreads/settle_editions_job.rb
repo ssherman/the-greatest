@@ -27,5 +27,8 @@ class Books::Goodreads::SettleEditionsJob
       Rails.logger.error("#{self.class.name}: Goodreads edition #{edition.id} failed: #{e.class}: #{e.message}")
       edition.import_rows.pending.update_all(error: "verification failed: #{e.class}: #{e.message}", updated_at: Time.current)
     end
+    # An import that waited on these editions in verifying writes its
+    # library once nothing it names is still waiting.
+    ::Services::Books::GoodreadsImports::RunImport.resume_waiting(goodreads_book_id: goodreads_book_id)
   end
 end

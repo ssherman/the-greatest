@@ -52,4 +52,10 @@ class Books::Goodreads::VerifyUnverifiedJobTest < ActiveSupport::TestCase
 
     Books::Goodreads::VerifyUnverifiedJob.new.perform(1)
   end
+
+  test "resumes every verifying import with nothing left waiting" do
+    ::Services::Books::GoodreadsImports::RunImport.expects(:resume_waiting).with
+
+    Books::Goodreads::VerifyUnverifiedJob.new.perform
+  end
 end

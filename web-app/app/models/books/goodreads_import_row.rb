@@ -46,7 +46,32 @@ module Books
     enum :replay_finding, {agrees: 0, duplicate: 1, disagrees: 2, unmatched: 3, no_legacy_choice: 4, awaiting_full_pass: 5},
       prefix: :replay
 
+    # What the member's summary page says about a row (Goodreads import spec §11).
+    MEMBER_STATUS_LABELS = {
+      working: "Working on it",
+      matched: "Matched",
+      new_pending_review: "Added, waiting for review",
+      flagged: "Matched, but we're not sure",
+      not_found: "Not found on Goodreads",
+      skipped: "Already on your lists",
+      failed: "Couldn't import"
+    }.freeze
+
     validates :row_number, presence: true, uniqueness: {scope: :import_id}
     validates :rating, inclusion: {in: 0..5}, allow_nil: true
+
+    def member_status
+      return :working if pending?
+      return :not_found if parked?
+      return :skipped if skipped?
+      return :failed if failed?
+
+      book = goodreads_edition&.book
+      return :skipped if book.nil?
+      return :new_pending_review if book.provisional?
+      return :flagged if goodreads_edition.match_decision&.needs_review?
+
+      :matched
+    end
   end
 end

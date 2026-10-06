@@ -104,9 +104,14 @@ module Services
             decided_by: decision&.decided_by&.to_sym, reason: decision&.reason, candidates: considered, decision: decision)
         end
 
+        # A rejected import owns nothing new: a book made for it would be
+        # provisional with nobody left to review it.
         def owning_import
-          @edition.pending_import ||
-            ::Books::GoodreadsImport.where(id: @edition.import_rows.select(:import_id)).order(:id).last
+          pending = @edition.pending_import
+          return pending if pending && !pending.review_rejected?
+
+          ::Books::GoodreadsImport.where(id: @edition.import_rows.select(:import_id))
+            .where.not(review_status: :rejected).order(:id).last
         end
 
         # Nothing waits for the edition, so its decision has nothing left to

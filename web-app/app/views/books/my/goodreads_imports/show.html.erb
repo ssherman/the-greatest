@@ -1,0 +1,89 @@
+<% content_for :page_title, "Goodreads import | The Greatest Books" %>
+
+<div class="space-y-8">
+  <header class="space-y-2">
+    <p><%= link_to "Back to your imports", books_my_goodreads_imports_path, class: "link" %></p>
+    <h1 class="text-3xl sm:text-4xl font-bold">Goodreads import</h1>
+    <p class="text-base-content/70">
+      Uploaded <%= @import.created_at.strftime("%B %-d, %Y at %H:%M") %>.
+      Status: <span data-testid="import-status"><%= @import.status.humanize %></span>
+    </p>
+  </header>
+
+  <% if @import.in_progress? %>
+    <div role="status" class="alert alert-info alert-soft">
+      <span class="loading loading-spinner loading-md" aria-hidden="true"></span>
+      <span>
+        We're working through your books. This page checks again every
+        <%= Books::My::GoodreadsImportsController::REFRESH_SECONDS %> seconds. Books we have to look up on
+        Goodreads can take a while, so you can leave and come back.
+      </span>
+    </div>
+  <% elsif @import.failed? %>
+    <div role="alert" class="alert alert-error">
+      <span>This import stopped before it finished. We've been told and will look into it.</span>
+    </div>
+  <% end %>
+
+  <% if @import.review_rejected? %>
+    <div role="alert" class="alert alert-warning">
+      <span>An admin removed the books and reviews this import added to your lists.</span>
+    </div>
+  <% end %>
+
+  <div class="stats stats-vertical sm:stats-horizontal bg-base-100 border border-base-300">
+    <% [["Matched", @import.matched_count], ["New, waiting for review", @import.created_count],
+        ["Not sure", @import.flagged_count], ["Not found on Goodreads", @import.parked_count],
+        ["Already on your lists", @import.skipped_count]].each do |label, count| %>
+      <div class="stat">
+        <div class="stat-title"><%= label %></div>
+        <div class="stat-value text-2xl"><%= count %></div>
+      </div>
+    <% end %>
+  </div>
+
+  <section class="space-y-4" aria-labelledby="import-rows">
+    <h2 id="import-rows" class="text-2xl font-bold">Your books</h2>
+    <% if @rows.any? %>
+      <div class="overflow-x-auto">
+        <table class="table bg-base-100">
+          <thead>
+            <tr><th>#</th><th>Book</th><th>Result</th><th></th></tr>
+          </thead>
+          <tbody>
+            <% @rows.each do |row| %>
+              <% edition = row.goodreads_edition %>
+              <% book = edition&.book %>
+              <tr data-testid="import-row">
+                <td><%= row.row_number %></td>
+                <td class="[overflow-wrap:anywhere]">
+                  <div class="font-medium"><%= row.raw["Title"].presence || edition&.title %></div>
+                  <div class="text-sm text-base-content/70"><%= row.raw["Author"].presence || edition&.primary_author %></div>
+                </td>
+                <td>
+                  <div><%= Books::GoodreadsImportRow::MEMBER_STATUS_LABELS.fetch(row.member_status) %></div>
+                  <% detail = row.outcome_detail.presence || (row.error if row.failed?) %>
+                  <% if detail && detail != Books::GoodreadsImportRow::MEMBER_STATUS_LABELS[row.member_status] %>
+                    <div class="text-sm text-base-content/70 [overflow-wrap:anywhere]"><%= detail %></div>
+                  <% end %>
+                </td>
+                <td class="whitespace-nowrap">
+                  <% if book && (row.applied? || row.skipped?) %>
+                    <%= link_to "View", book_path(slug: book.slug), class: "link" %>
+                    <span aria-hidden="true">·</span>
+                    <%= link_to "Wrong book?", books_book_correction_path(slug: book.slug), class: "link" %>
+                  <% end %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+      <% if @pagy.pages > 1 %>
+        <div class="flex justify-center"><%== @pagy.series_nav %></div>
+      <% end %>
+    <% else %>
+      <p class="text-base-content/70">No rows yet.</p>
+    <% end %>
+  </section>
+</div>

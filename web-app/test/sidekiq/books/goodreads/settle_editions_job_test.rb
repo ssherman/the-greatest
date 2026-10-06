@@ -9,6 +9,9 @@ class Books::Goodreads::SettleEditionsJobTest < ActiveSupport::TestCase
 
   setup do
     stub_resolution_services
+    # The resumed import would run inline and resolve again; these tests are
+    # about the settle step. The resume has its own test below.
+    Services::Books::GoodreadsImports::RunImport.stubs(:resume_waiting)
     @import = Books::GoodreadsImport.create!(user: users(:editor_user), status: :verifying)
   end
 
@@ -75,5 +78,11 @@ class Books::Goodreads::SettleEditionsJobTest < ActiveSupport::TestCase
     SETTLE.stubs(:call).raises(ActiveRecord::StatementInvalid, "connection lost")
 
     assert_raises(ActiveRecord::StatementInvalid) { Books::Goodreads::SettleEditionsJob.new.perform(90_000_001) }
+  end
+
+  test "resumes imports waiting on this Goodreads id" do
+    ::Services::Books::GoodreadsImports::RunImport.expects(:resume_waiting).with(goodreads_book_id: 123)
+
+    Books::Goodreads::SettleEditionsJob.new.perform(123)
   end
 end
