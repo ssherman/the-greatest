@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_05_140829) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_06_044628) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -333,6 +333,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_140829) do
     t.integer "ai_calls_count", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "finishes_legacy_import_id"
+    t.index ["finishes_legacy_import_id"], name: "index_books_goodreads_imports_on_finishes_legacy_import_id", unique: true, where: "(finishes_legacy_import_id IS NOT NULL)"
     t.index ["legacy_import_id"], name: "index_books_goodreads_imports_on_legacy_import_id", unique: true, where: "(legacy_import_id IS NOT NULL)"
     t.index ["reviewed_by_id"], name: "index_books_goodreads_imports_on_reviewed_by_id"
     t.index ["user_id"], name: "index_books_goodreads_imports_on_user_id"

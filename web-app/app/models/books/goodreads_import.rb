@@ -2,34 +2,36 @@
 #
 # Table name: books_goodreads_imports
 #
-#  id               :bigint           not null, primary key
-#  ai_calls_count   :integer          default(0), not null
-#  created_count    :integer          default(0), not null
-#  editions_count   :integer          default(0), not null
-#  error            :text
-#  finished_at      :datetime
-#  flagged_count    :integer          default(0), not null
-#  matched_count    :integer          default(0), not null
-#  parked_count     :integer          default(0), not null
-#  review_status    :integer          default("pending"), not null
-#  reviewed_at      :datetime
-#  rows_count       :integer          default(0), not null
-#  skipped_count    :integer          default(0), not null
-#  source           :integer          default("member"), not null
-#  started_at       :datetime
-#  status           :integer          default("queued"), not null
-#  created_at       :datetime         not null
-#  updated_at       :datetime         not null
-#  legacy_import_id :integer
-#  reviewed_by_id   :bigint
-#  user_id          :bigint           not null
+#  id                        :bigint           not null, primary key
+#  ai_calls_count            :integer          default(0), not null
+#  created_count             :integer          default(0), not null
+#  editions_count            :integer          default(0), not null
+#  error                     :text
+#  finished_at               :datetime
+#  flagged_count             :integer          default(0), not null
+#  matched_count             :integer          default(0), not null
+#  parked_count              :integer          default(0), not null
+#  review_status             :integer          default("pending"), not null
+#  reviewed_at               :datetime
+#  rows_count                :integer          default(0), not null
+#  skipped_count             :integer          default(0), not null
+#  source                    :integer          default("member"), not null
+#  started_at                :datetime
+#  status                    :integer          default("queued"), not null
+#  created_at                :datetime         not null
+#  updated_at                :datetime         not null
+#  finishes_legacy_import_id :integer
+#  legacy_import_id          :integer
+#  reviewed_by_id            :bigint
+#  user_id                   :bigint           not null
 #
 # Indexes
 #
-#  index_books_goodreads_imports_on_legacy_import_id       (legacy_import_id) UNIQUE WHERE (legacy_import_id IS NOT NULL)
-#  index_books_goodreads_imports_on_reviewed_by_id         (reviewed_by_id)
-#  index_books_goodreads_imports_on_user_id                (user_id)
-#  index_books_goodreads_imports_one_in_progress_per_user  (user_id) UNIQUE WHERE (status = ANY (ARRAY[0, 1, 2, 3, 4]))
+#  index_books_goodreads_imports_on_finishes_legacy_import_id  (finishes_legacy_import_id) UNIQUE WHERE (finishes_legacy_import_id IS NOT NULL)
+#  index_books_goodreads_imports_on_legacy_import_id           (legacy_import_id) UNIQUE WHERE (legacy_import_id IS NOT NULL)
+#  index_books_goodreads_imports_on_reviewed_by_id             (reviewed_by_id)
+#  index_books_goodreads_imports_on_user_id                    (user_id)
+#  index_books_goodreads_imports_one_in_progress_per_user      (user_id) UNIQUE WHERE (status = ANY (ARRAY[0, 1, 2, 3, 4]))
 #
 # Foreign Keys
 #
@@ -61,6 +63,7 @@ module Books
     scope :in_progress, -> { where(status: IN_PROGRESS) }
 
     validates :legacy_import_id, uniqueness: true, allow_nil: true
+    validates :finishes_legacy_import_id, uniqueness: true, allow_nil: true
 
     def in_progress?
       IN_PROGRESS.include?(status)
