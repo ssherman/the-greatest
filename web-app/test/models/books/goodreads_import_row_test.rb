@@ -59,5 +59,27 @@ module Books
         GoodreadsImportRow.replay_findings.keys
       assert_respond_to GoodreadsImportRow.new, :replay_agrees?
     end
+
+    test "member_status reads the row's outcome, its book and its decision" do
+      import = books_goodreads_imports(:regular_user_import)
+      edition = books_goodreads_editions(:war_and_peace_edition)
+      row = import.rows.create!(row_number: 50, goodreads_edition: edition, outcome: :applied)
+
+      edition.update!(book: books_books(:war_and_peace), match_decision: nil)
+      assert_equal :matched, row.reload.member_status
+
+      edition.book.update_column(:provisional, true)
+      assert_equal :new_pending_review, row.reload.member_status
+      edition.book.update_column(:provisional, false)
+
+      decision = ::MatchDecision.create!(finder: "DataImporters::Books::Book::Finder", subject: edition, outcome: :matched,
+        confidence: :medium, decided_by: :ai, needs_review: true)
+      edition.update!(match_decision: decision)
+      assert_equal :flagged, row.reload.member_status
+
+      assert_equal [:not_found, :skipped, :failed, :working],
+        %i[parked skipped failed pending].map { |outcome| row.tap { |r| r.outcome = outcome }.member_status }
+      assert(GoodreadsImportRow::MEMBER_STATUS_LABELS.keys.to_set >= %i[working matched new_pending_review flagged not_found skipped failed].to_set)
+    end
   end
 end

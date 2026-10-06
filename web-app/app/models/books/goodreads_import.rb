@@ -55,6 +55,26 @@ module Books
     enum :status, {queued: 0, parsing: 1, resolving: 2, verifying: 3, writing: 4, complete: 5, failed: 6}
     enum :review_status, {pending: 0, approved: 1, rejected: 2}, prefix: :review
 
+    # The statuses the one-in-progress-per-user index covers.
+    IN_PROGRESS = %w[queued parsing resolving verifying writing].freeze
+
+    scope :in_progress, -> { where(status: IN_PROGRESS) }
+
     validates :legacy_import_id, uniqueness: true, allow_nil: true
+
+    def in_progress?
+      IN_PROGRESS.include?(status)
+    end
+
+    def stuck?(now = Time.current)
+      in_progress? && (started_at || created_at) < now - Rails.application.config.x.goodreads_imports.stuck_after
+    end
+
+    # Ids one key of every row's `applied` names: "list_item_ids" (arrays)
+    # or "review_id".
+    def applied_ids(key)
+      rows.where("applied ? :key", key: key).pluck(Arel.sql("applied -> #{self.class.connection.quote(key)}"))
+        .flat_map { |value| Array(value) }.map(&:to_i)
+    end
   end
 end

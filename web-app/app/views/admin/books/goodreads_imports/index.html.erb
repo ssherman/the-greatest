@@ -1,0 +1,78 @@
+<%# web-app/app/views/admin/books/goodreads_imports/index.html.erb %>
+<% content_for :title, "Goodreads Imports" %>
+
+<div class="space-y-4">
+  <h1 class="text-2xl font-bold">Goodreads Imports</h1>
+  <p class="text-sm text-base-content/70">
+    Member uploads and the legacy replay. Approving promotes the provisional books an import created and queues
+    their enrichment; rejecting removes what it wrote. Imports running for more than
+    <%= Rails.application.config.x.goodreads_imports.stuck_after / 3600 %> hours are marked stuck.
+  </p>
+
+  <%= form_with url: admin_books_goodreads_imports_path, method: :get, class: "flex flex-wrap items-end gap-3", data: {testid: "import-filters"} do |form| %>
+    <div>
+      <%= form.label :source, "Source", class: "label text-xs" %>
+      <%= form.select :source, options_for_select(Admin::Books::GoodreadsImportsController::SOURCES.map { |value| [value.humanize, value] }, @source), {}, class: "select select-sm" %>
+    </div>
+    <% [["status", "Status", Admin::Books::GoodreadsImportsController::STATUSES],
+        ["review_status", "Review", Admin::Books::GoodreadsImportsController::REVIEW_STATUSES]].each do |key, label, values| %>
+      <div>
+        <%= form.label key, label, class: "label text-xs" %>
+        <%= form.select key, options_for_select([["All", ""]] + values.map { |value| [value.humanize, value] }, params[key]), {}, class: "select select-sm" %>
+      </div>
+    <% end %>
+    <%= form.submit "Filter", class: "btn btn-sm" %>
+    <%= link_to "Reset", admin_books_goodreads_imports_path, class: "btn btn-sm btn-ghost" %>
+  <% end %>
+
+  <% if @imports.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-sm bg-base-100">
+        <thead>
+          <tr>
+            <th></th><th>Member</th><th>Uploaded</th><th>Status</th><th>Review</th>
+            <th>Rows</th><th>Matched</th><th>Created</th><th>Flagged</th><th>Parked</th><th>Skipped</th><th>AI calls</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @imports.each do |import| %>
+            <tr data-testid="import-row" data-import-id="<%= import.id %>">
+              <td>
+                <% if import.member? && import.complete? && import.review_pending? && current_user_can_write? %>
+                  <%= check_box_tag "ids[]", import.id, false, id: "import_#{import.id}", class: "checkbox checkbox-sm",
+                        form: "bulk-approve-form", aria: {label: "Select import #{import.id}"} %>
+                <% end %>
+              </td>
+              <td class="[overflow-wrap:anywhere]"><%= link_to import.user.email, admin_books_goodreads_import_path(import), class: "link" %></td>
+              <td class="whitespace-nowrap"><%= import.created_at.strftime("%Y-%m-%d %H:%M") %></td>
+              <td>
+                <span class="badge badge-ghost badge-sm"><%= import.status.humanize %></span>
+                <% if import.stuck? %><span class="badge badge-warning badge-sm">stuck</span><% end %>
+              </td>
+              <td><%= import.review_status.humanize %></td>
+              <td><%= import.rows_count %></td>
+              <td><%= import.matched_count %></td>
+              <td><%= import.created_count %></td>
+              <td><%= import.flagged_count %></td>
+              <td><%= import.parked_count %></td>
+              <td><%= import.skipped_count %></td>
+              <td><%= import.ai_calls_count %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if current_user_can_write? %>
+      <%= form_with url: bulk_approve_admin_books_goodreads_imports_path(filter_params), method: :post, id: "bulk-approve-form" do |form| %>
+        <%= form.submit "Approve selected", class: "btn btn-sm btn-primary" %>
+      <% end %>
+    <% end %>
+  <% else %>
+    <p class="text-center text-base-content/70 py-8">No imports match.</p>
+  <% end %>
+
+  <% if @pagy.pages > 1 %>
+    <div class="mt-4 flex justify-center"><%== @pagy.series_nav %></div>
+  <% end %>
+</div>

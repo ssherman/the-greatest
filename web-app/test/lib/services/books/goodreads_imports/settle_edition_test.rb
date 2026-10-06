@@ -112,6 +112,15 @@ module Services
           assert_includes later.records.map(&:record), edition.reload.book
         end
 
+        test "a rejected import never owns what a settle creates; with no live import the edition is released" do
+          edition = waiting_edition(goodreads_book_id: 90_000_005)
+          @import.update!(status: :failed, review_status: :rejected)
+
+          assert_no_difference -> { ::Books::Book.count } do
+            assert_equal :released, SettleEdition.call(edition: edition, page: nil).data[:outcome]
+          end
+        end
+
         test "with no import left the edition is released, and nothing is created" do
           edition = goodreads_edition(verification: :pending)
 

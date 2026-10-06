@@ -38,6 +38,16 @@ module Services
           assert_equal 2, ::MatchDecision.where(subject_type: "Books::GoodreadsEdition", subject_id: @import.editions.select(:id)).count
         end
 
+        test "an import rejected mid-run resolves no further editions" do
+          parse(WAR_AND_PEACE, QUIET_YEAR)
+          import_id = @import.id
+          ResolveEdition.expects(:call).once.with do |**|
+            ::Books::GoodreadsImport.where(id: import_id).update_all(review_status: ::Books::GoodreadsImport.review_statuses[:rejected])
+          end.returns(ResolveEdition::Result.new(success?: true, data: {outcome: :matched}, errors: []))
+
+          ResolveImport.call(import: @import)
+        end
+
         test "a flagged decision is counted" do
           ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([search_hit(books_books(:war_and_peace))])
           stub_matching_ai(selected_index: 1, confidence: "medium")

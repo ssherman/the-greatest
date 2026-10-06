@@ -30,6 +30,10 @@ module Services
         def call
           outcomes = Hash.new(0)
           ::Books::GoodreadsEdition.where(id: edition_ids).order(:id).each do |edition|
+            # An admin rejected the import while it ran: nothing more is
+            # created on its behalf.
+            break if rejected?
+
             outcomes[resolve(edition)] += 1
           end
           recount
@@ -37,6 +41,10 @@ module Services
         end
 
         private
+
+        def rejected?
+          ::Books::GoodreadsImport.where(id: @import.id).review_rejected.exists?
+        end
 
         def edition_ids
           @edition_ids ||= @import.rows.where.not(goodreads_edition_id: nil).distinct.pluck(:goodreads_edition_id)

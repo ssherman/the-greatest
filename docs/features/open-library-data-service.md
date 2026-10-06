@@ -717,6 +717,30 @@ candidate needs no follow-up call (`year_evidence` rides along for the
 unknown field is a 422 naming it, never a 200 that quietly ignored an
 identifier.
 
+**Load limits on `/resolve`** (`api/limits.py`). The service enforces "one
+`/resolve` at a time" itself; it no longer relies on callers to serialize.
+On 2026-10-06 four Goodreads imports resolving at once pinned the home
+server's ol VM. The Rails client gave up at 60 s, but Uvicorn never cancels a
+sync route when its client disconnects, so every abandoned query kept running
+beside the next. `/resolve` timed out for 25 minutes, until the API was
+restarted. Three settings, forwarded by `docker-compose.yml`:
+
+- `OL_API_RESOLVE_CONCURRENCY` (default 1): how many resolves run at once.
+  The next one is answered **503** at once, with `Retry-After`, and never
+  queued.
+- `OL_API_RESOLVE_DEADLINE_S` (default 55, just under the client's 60 s): a
+  resolve still running then is interrupted and answered **504**. The
+  interrupt repeats every 250 ms until the request ends, because DuckDB's
+  interrupt stops only the statement running at that moment, and a resolve
+  runs a chain of them.
+- `OL_API_THREADS` (default: DuckDB's, one per visible core). Like
+  `OL_API_MEMORY_LIMIT`, it is a setting of the whole database: every
+  endpoint's queries share both.
+
+On the home server with these limits, one resolve takes 12-13 s, peaks under
+4 GiB of the 6 GB pool and spills nothing. Extra calls in a burst get their
+503 in under 10 ms (`docs/features/home-server.md`, "`/resolve` under load").
+
 **Author redirects, measured.** 53,835 `work_authors` rows on the 2026-07-31
 artifact name an author key absent from `authors`; 53,792 of them are
 resolvable author redirects (53,748 works, 46 terminal authors). Before R87
@@ -829,6 +853,24 @@ window, and a 4xx is a completed exchange with a live, healthy service; the occa
 mixed run is still visible to the caller as a failure result even though it never accumulates
 toward opening the circuit.
 
+The service's busy 503 ("Load limits on `/resolve`" above) is the exception. `BaseClient` raises it
+as `BusyError`, recognized by a JSON `detail` that starts `busy:`, and `CircuitBreaker#call(ignore:)`
+lets it pass without counting it or resetting the count: a busy reply proves the service is up, and
+it says nothing about whether the last real failure was a fluke. Any other 503 (Cloudflare's HTML
+page when the tunnel is down) is an ordinary `ServerError`, and the deadline 504 counts like any
+5xx.
+
+`Client#resolve` waits out busy replies instead of failing. Nothing retries a failed source: the
+finder records it (`finder_base.rb`), drops a high-confidence match to medium, and the row ends up
+flagged or with a provisional book. So a second caller, such as another import or the duplicate
+sweep, would otherwise degrade every row it touched. The wait sleeps for the service's `Retry-After`
+(2 s) stretched by up to half again, so waiting callers do not retry in step. It stays inside
+`resolve_timeout`, with each attempt given what is left of it, and it stops once less than
+`RESOLVE_MIN_ATTEMPT` (20 s; one resolve takes 12-13 s) would remain. Then the `BusyError` surfaces
+as a failed source, as before. A waiting caller holds its Sidekiq thread for up to 60 s, the same
+as a timeout. Callers poll, they do not queue, so the order in which waiters get the slot is not
+fair.
+
 ### The `/resolve` body is an allow-list
 
 `Client#resolve` takes exactly the fields the service's `ResolveRequest` accepts
@@ -913,7 +955,9 @@ measured" above), so a background job importing many books should serialize its 
 through the `serial` Sidekiq queue the way the CoverArt and Amazon-enrichment jobs already do
 (`sidekiq_options queue: :serial` in `app/sidekiq/{games,music}/cover_art_download_job.rb` and
 `app/sidekiq/{books,games,music}/amazon_product_enrichment_job.rb`) -- not run several in parallel,
-which makes every one of them slower rather than any one faster. `Books::FindDuplicatesJob` is the
+which makes every one of them slower rather than any one faster. The service now enforces this
+itself: beyond `OL_API_RESOLVE_CONCURRENCY` a call fails at once with a 503 ("Load limits on
+`/resolve`" above). `Books::FindDuplicatesJob` is the
 first bulk caller: one job per ranked book on that same `serial` queue, and `verify: true` means
 every source runs, so every job makes one `/resolve` call.
 

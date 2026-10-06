@@ -164,6 +164,67 @@ module Books
         assert_requested :get, failing_url, times: 5
       end
 
+      def busy_reply(retry_after: "2")
+        headers = {"Content-Type" => "application/json"}
+        headers["Retry-After"] = retry_after if retry_after
+        {status: 503, body: {detail: "busy: 1 resolve(s) already running"}.to_json, headers: headers}
+      end
+
+      test "a busy 503 raises BusyError carrying the service's Retry-After" do
+        stub_request(:post, "#{BASE_URL}/resolve").to_return(busy_reply(retry_after: "3"))
+
+        error = assert_raises(Books::OpenLibrary::Exceptions::BusyError) { @client.post("/resolve", {title: "x"}) }
+
+        assert_equal 503, error.status_code
+        assert_equal 3.0, error.retry_after
+      end
+
+      test "a busy 503 without a usable Retry-After has a nil retry_after" do
+        stub_request(:post, "#{BASE_URL}/resolve").to_return(busy_reply(retry_after: "soon"))
+
+        error = assert_raises(Books::OpenLibrary::Exceptions::BusyError) { @client.post("/resolve", {title: "x"}) }
+
+        assert_nil error.retry_after
+      end
+
+      test "busy 503s never open the breaker" do
+        stub_request(:post, "#{BASE_URL}/resolve").to_return(busy_reply)
+
+        8.times do
+          assert_raises(Books::OpenLibrary::Exceptions::BusyError) { @client.post("/resolve", {title: "x"}) }
+        end
+
+        assert_not @breaker.open?
+      end
+
+      test "a busy 503 neither counts nor clears the real failures around it" do
+        stub_request(:get, "#{BASE_URL}/works/OL1W").to_return(status: 500, body: "boom")
+        stub_request(:post, "#{BASE_URL}/resolve").to_return(busy_reply)
+
+        4.times { assert_raises(Books::OpenLibrary::Exceptions::ServerError) { @client.get("/works/OL1W") } }
+        assert_raises(Books::OpenLibrary::Exceptions::BusyError) { @client.post("/resolve", {title: "x"}) }
+        assert_raises(Books::OpenLibrary::Exceptions::ServerError) { @client.get("/works/OL1W") }
+
+        assert @breaker.open?
+      end
+
+      test "a 503 that is not the service's busy reply is an ordinary ServerError and counts" do
+        # Cloudflare's own 503 page, and a 503 from the service that does not say busy.
+        stub_request(:post, "#{BASE_URL}/resolve")
+          .to_return({status: 503, body: "<html>Service Unavailable</html>"},
+            {status: 503, body: {detail: "something else"}.to_json},
+            {status: 504, body: {detail: "deadline: resolve stopped after 55 s"}.to_json})
+
+        3.times do
+          error = assert_raises(Books::OpenLibrary::Exceptions::ServerError) { @client.post("/resolve", {title: "x"}) }
+          assert_not_kind_of Books::OpenLibrary::Exceptions::BusyError, error
+        end
+        stub_request(:get, "#{BASE_URL}/works/OL1W").to_return(status: 500, body: "boom")
+        2.times { assert_raises(Books::OpenLibrary::Exceptions::ServerError) { @client.get("/works/OL1W") } }
+
+        assert @breaker.open?
+      end
+
       test "the connection defaults to config.timeout and open_timeout" do
         assert_equal @config.timeout, @client.connection.options.timeout
         assert_equal @config.open_timeout, @client.connection.options.open_timeout

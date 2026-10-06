@@ -1,0 +1,219 @@
+<%# web-app/app/views/admin/books/goodreads_imports/show.html.erb %>
+<% content_for :title, "Goodreads Import #{@import.id}" %>
+<% approvable = @import.member? && @import.complete? && @import.review_pending? %>
+<% rejectable = @import.member? && !@import.review_rejected? && (!@import.in_progress? || @import.stuck?) %>
+<% rerunnable = @import.member? && !@import.review_rejected? && (@import.failed? || @import.stuck?) %>
+
+<div class="space-y-4">
+  <p><%= link_to "Goodreads Imports", admin_books_goodreads_imports_path, class: "link text-sm" %></p>
+  <h1 class="text-2xl font-bold">Goodreads Import <%= @import.id %></h1>
+
+  <div class="flex flex-wrap gap-2 items-center">
+    <span class="badge badge-ghost"><%= @import.source.humanize %></span>
+    <span class="badge badge-ghost"><%= @import.status.humanize %></span>
+    <% if @import.stuck? %><span class="badge badge-warning">stuck</span><% end %>
+    <span class="badge badge-outline" data-testid="review-status"><%= @import.review_status.humanize %></span>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="table table-sm bg-base-100 w-auto">
+      <tbody>
+        <tr><th>Member</th><td class="[overflow-wrap:anywhere]"><%= @import.user.email %> (user <%= @import.user_id %>)</td></tr>
+        <tr><th>Uploaded</th><td><%= @import.created_at.strftime("%Y-%m-%d %H:%M") %></td></tr>
+        <tr><th>Started / finished</th><td><%= @import.started_at&.strftime("%Y-%m-%d %H:%M") || "–" %> / <%= @import.finished_at&.strftime("%Y-%m-%d %H:%M") || "–" %></td></tr>
+        <% if @import.reviewed_at %>
+          <tr><th>Reviewed</th><td><%= @import.reviewed_by&.email %> at <%= @import.reviewed_at.strftime("%Y-%m-%d %H:%M") %></td></tr>
+        <% end %>
+        <tr>
+          <th>Counts</th>
+          <td>
+            <%= @import.rows_count %> rows, <%= @import.editions_count %> editions ·
+            matched <%= @import.matched_count %> · created <%= @import.created_count %> ·
+            flagged <%= @import.flagged_count %> · parked <%= @import.parked_count %> ·
+            skipped <%= @import.skipped_count %> · AI calls <%= @import.ai_calls_count %>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <% if @import.error.present? %>
+    <div class="alert alert-error"><span class="[overflow-wrap:anywhere]"><%= @import.error %></span></div>
+  <% end %>
+
+  <div class="flex flex-wrap gap-2">
+    <% if approvable && current_user_can_write? %>
+      <%= button_to "Approve", approve_admin_books_goodreads_import_path(@import), method: :post,
+            class: "btn btn-sm btn-primary", form: {id: "approve-form"} %>
+    <% end %>
+    <% if rejectable && current_user_can_delete? %>
+      <%= button_to "Reject", reject_admin_books_goodreads_import_path(@import), method: :post, class: "btn btn-sm btn-error btn-outline",
+            form: {data: {turbo_confirm: "Reject this import? The member's imported list items and reviews are deleted, and so are the new books nothing else uses."}} %>
+    <% end %>
+    <% if rerunnable && current_user_can_write? %>
+      <%= button_to "Rerun", rerun_admin_books_goodreads_import_path(@import), method: :post, class: "btn btn-sm" %>
+    <% end %>
+  </div>
+  <% if approvable %>
+    <p class="text-sm text-base-content/70">
+      Approving promotes every created record still ticked under Created, plus the provisional books this import's rows
+      point at. Unticked records are deleted if nothing else uses them.
+    </p>
+  <% end %>
+
+  <div role="tablist" class="tabs tabs-border">
+    <% Admin::Books::GoodreadsImportsController::TABS.each do |tab| %>
+      <%= link_to tab.humanize, admin_books_goodreads_import_path(@import, tab: tab), role: "tab",
+            class: "tab #{"tab-active" if @tab == tab}" %>
+    <% end %>
+  </div>
+
+  <% case @tab %>
+  <% when "created" %>
+    <h2 class="text-lg font-semibold">Books</h2>
+    <% if @books.any? %>
+      <div class="overflow-x-auto">
+        <table class="table table-sm bg-base-100">
+          <thead><tr><th>Keep</th><th>Book</th><th>Authors</th><th>Verification</th><th>Decision</th><th></th></tr></thead>
+          <tbody>
+            <% @books.each do |book| %>
+              <tr data-testid="created-book">
+                <td>
+                  <% if approvable && book.provisional? %>
+                    <%= hidden_field_tag "listed_book_ids[]", book.id, id: nil, form: "approve-form" %>
+                    <%= check_box_tag "keep_book_ids[]", book.id, true, id: "keep_book_#{book.id}", class: "checkbox checkbox-sm",
+                          form: "approve-form", aria: {label: "Keep #{book.title}"} %>
+                  <% end %>
+                </td>
+                <td class="[overflow-wrap:anywhere]">
+                  <%= link_to book.title, admin_books_book_path(book), class: "link" %>
+                  <% if book.provisional? %><span class="badge badge-warning badge-sm">provisional</span><% end %>
+                </td>
+                <td class="[overflow-wrap:anywhere]"><%= book.authors.map(&:name).join(", ") %></td>
+                <td><%= book.goodreads_editions.map { |edition| edition.verification.humanize }.uniq.join(", ") %></td>
+                <td>
+                  <% book.goodreads_editions.filter_map(&:match_decision_id).uniq.each do |decision_id| %>
+                    <%= link_to "##{decision_id}", admin_books_match_decision_path(decision_id), class: "link" %>
+                  <% end %>
+                </td>
+                <td class="whitespace-nowrap">
+                  <% if book.provisional? %>
+                    <div class="flex gap-1">
+                      <% if current_user_can_write? %>
+                        <%= button_to "Promote", promote_record_admin_books_goodreads_import_path(@import),
+                              params: {record_type: "Books::Book", record_id: book.id}, class: "btn btn-xs" %>
+                      <% end %>
+                      <% if current_user_can_delete? %>
+                        <%= button_to "Delete", delete_record_admin_books_goodreads_import_path(@import),
+                              params: {record_type: "Books::Book", record_id: book.id}, class: "btn btn-xs btn-error btn-outline",
+                              form: {data: {turbo_confirm: "Delete #{book.title}?"}} %>
+                      <% end %>
+                    </div>
+                  <% end %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <p class="text-base-content/70">This import created no books.</p>
+    <% end %>
+
+    <h2 class="text-lg font-semibold">Authors</h2>
+    <% if @authors.any? %>
+      <div class="overflow-x-auto">
+        <table class="table table-sm bg-base-100">
+          <thead><tr><th>Keep</th><th>Author</th><th></th></tr></thead>
+          <tbody>
+            <% @authors.each do |author| %>
+              <tr data-testid="created-author">
+                <td>
+                  <% if approvable && author.provisional? %>
+                    <%= hidden_field_tag "listed_author_ids[]", author.id, id: nil, form: "approve-form" %>
+                    <%= check_box_tag "keep_author_ids[]", author.id, true, id: "keep_author_#{author.id}", class: "checkbox checkbox-sm",
+                          form: "approve-form", aria: {label: "Keep #{author.name}"} %>
+                  <% end %>
+                </td>
+                <td class="[overflow-wrap:anywhere]">
+                  <%= link_to author.name, admin_books_author_path(author), class: "link" %>
+                  <% if author.provisional? %><span class="badge badge-warning badge-sm">provisional</span><% end %>
+                </td>
+                <td class="whitespace-nowrap">
+                  <% if author.provisional? %>
+                    <div class="flex gap-1">
+                      <% if current_user_can_write? %>
+                        <%= button_to "Promote", promote_record_admin_books_goodreads_import_path(@import),
+                              params: {record_type: "Books::Author", record_id: author.id}, class: "btn btn-xs" %>
+                      <% end %>
+                      <% if current_user_can_delete? %>
+                        <%= button_to "Delete", delete_record_admin_books_goodreads_import_path(@import),
+                              params: {record_type: "Books::Author", record_id: author.id}, class: "btn btn-xs btn-error btn-outline",
+                              form: {data: {turbo_confirm: "Delete #{author.name}?"}} %>
+                      <% end %>
+                    </div>
+                  <% end %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <p class="text-base-content/70">This import created no authors.</p>
+    <% end %>
+
+  <% when "flagged" %>
+    <% if @flagged.any? %>
+      <div class="overflow-x-auto">
+        <table class="table table-sm bg-base-100">
+          <thead><tr><th>Edition</th><th>Matched book</th><th>Confidence</th><th>Reason</th><th></th></tr></thead>
+          <tbody>
+            <% @flagged.each do |edition| %>
+              <tr>
+                <td class="[overflow-wrap:anywhere]"><%= edition.title %> by <%= edition.primary_author %> (gr <%= edition.goodreads_book_id %>)</td>
+                <td class="[overflow-wrap:anywhere]"><%= edition.book ? link_to(edition.book.title, admin_books_book_path(edition.book), class: "link") : "–" %></td>
+                <td><%= edition.match_decision.confidence&.humanize %></td>
+                <td class="[overflow-wrap:anywhere]"><%= edition.match_decision.reason %></td>
+                <td><%= link_to "Review", admin_books_match_decision_path(edition.match_decision), class: "link" %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <p class="text-base-content/70">No flagged decisions.</p>
+    <% end %>
+
+  <% else %>
+    <% if @rows.any? %>
+      <div class="overflow-x-auto">
+        <table class="table table-sm bg-base-100">
+          <thead><tr><th>#</th><th>Title</th><th>Author</th><th>Outcome</th><th>Detail</th><th>Raw</th></tr></thead>
+          <tbody>
+            <% @rows.each do |row| %>
+              <tr data-testid="admin-import-row">
+                <td><%= row.row_number %></td>
+                <td class="[overflow-wrap:anywhere]"><%= row.raw["Title"] %></td>
+                <td class="[overflow-wrap:anywhere]"><%= row.raw["Author"] %></td>
+                <td><%= row.outcome.humanize %></td>
+                <td class="[overflow-wrap:anywhere]"><%= [row.outcome_detail, row.error].compact_blank.join(" · ") %></td>
+                <td>
+                  <details>
+                    <summary class="cursor-pointer text-sm">raw</summary>
+                    <pre class="text-xs whitespace-pre-wrap [overflow-wrap:anywhere]"><%= JSON.pretty_generate(row.raw) %></pre>
+                  </details>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+      <% if @pagy.pages > 1 %>
+        <div class="mt-4 flex justify-center"><%== @pagy.series_nav %></div>
+      <% end %>
+    <% else %>
+      <p class="text-base-content/70">No rows.</p>
+    <% end %>
+  <% end %>
+</div>

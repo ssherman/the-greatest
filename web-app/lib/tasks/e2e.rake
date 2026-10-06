@@ -13,6 +13,14 @@ REJECT_LINK_URL = "https://en.wikipedia.org/wiki/Wikipedia:Sandbox"
 PROVISIONAL_BOOK_TITLE = "E2E Provisional Seed"
 PROVISIONAL_AUTHOR_NAME = "E2E Provisional Seed Author"
 
+# The seed edition, book and author e2e:goodreads_import_seed owns. The id is
+# far above any real Goodreads id in the dev data.
+GOODREADS_SEED_ID = 999_000_001
+GOODREADS_SEED_TITLE = "E2E Goodreads Import Seed"
+GOODREADS_SEED_AUTHOR = "E2E Goodreads Import Author"
+# The filename of e2e/fixtures/goodreads_export.csv, as the upload stores it.
+E2E_GOODREADS_FIXTURE = "goodreads_export.csv"
+
 namespace :e2e do
   # One value from e2e/.env. Read from the file rather than ENV because these
   # tasks run from a shell that has not loaded that file, and dotenv only loads
@@ -328,5 +336,51 @@ namespace :e2e do
       removed += 1
     end
     puts "removed #{removed} list(s)"
+  end
+
+  desc "Seed a finished Goodreads import with one provisional book for the Playwright admin " \
+    "(E2E_GOODREADS_EMAIL overrides the account). Idempotent."
+  task goodreads_import_seed: :environment do
+    user = User.find_by!(email: ENV.fetch("E2E_GOODREADS_EMAIL") { playwright_email })
+    author = Books::Author.find_or_create_by!(name: GOODREADS_SEED_AUTHOR) { |a| a.provisional = true }
+    book = Books::Book.find_by(title: GOODREADS_SEED_TITLE) || Books::Book.create!(title: GOODREADS_SEED_TITLE, provisional: true)
+    Books::BookAuthor.find_or_create_by!(book: book, author: author) { |book_author| book_author.position = 1 }
+    signature = Books::Goodreads::ExportRow.signature(GOODREADS_SEED_TITLE, GOODREADS_SEED_AUTHOR)
+    edition = Books::GoodreadsEdition.find_or_create_by!(goodreads_book_id: GOODREADS_SEED_ID, signature: signature) do |e|
+      e.assign_attributes(title: GOODREADS_SEED_TITLE, primary_author: GOODREADS_SEED_AUTHOR)
+    end
+    edition.update!(book: book, resolution: :created, verification: :verified, resolved_at: edition.resolved_at || Time.current)
+    import = Books::GoodreadsImport.joins(:rows).where(user: user, status: :complete, review_status: :pending)
+      .find_by(books_goodreads_import_rows: {goodreads_edition_id: edition.id})
+    import ||= user.goodreads_imports.create!(status: :complete, rows_count: 1, editions_count: 1, created_count: 1,
+      started_at: Time.current, finished_at: Time.current).tap do |created|
+      created.rows.create!(row_number: 1, goodreads_edition: edition, outcome: :applied, exclusive_shelf: "to-read",
+        raw: {"Book Id" => GOODREADS_SEED_ID.to_s, "Title" => GOODREADS_SEED_TITLE, "Author" => GOODREADS_SEED_AUTHOR})
+      [book, author].each { |record| created.records.create!(record: record, action: :created) }
+    end
+    puts({import_id: import.id, book_id: book.id}.to_json)
+  end
+
+  desc "Remove what e2e:goodreads_import_seed and the Goodreads import E2E upload created"
+  task goodreads_import_cleanup: :environment do
+    edition_ids = Books::GoodreadsEdition.where(goodreads_book_id: GOODREADS_SEED_ID).pluck(:id)
+    named = Books::GoodreadsImport.where(id: Books::GoodreadsImportRow.where(goodreads_edition_id: edition_ids).select(:import_id))
+    # An upload no worker parsed has no rows yet; it is found by the
+    # fixture's filename on the Playwright account.
+    user = User.find_by(email: ENV.fetch("E2E_GOODREADS_EMAIL") { playwright_email })
+    unparsed = user ? user.goodreads_imports.joins(file_attachment: :blob)
+      .where(active_storage_blobs: {filename: E2E_GOODREADS_FIXTURE}) : Books::GoodreadsImport.none
+    Books::GoodreadsImport.where(id: named.select(:id)).or(Books::GoodreadsImport.where(id: unparsed.select(:id))).find_each do |import|
+      # A worker may have run the upload: take back what it wrote first.
+      if import.member? && !import.review_rejected? && !import.in_progress?
+        Services::Books::GoodreadsImports::Revert.call(import: import, reviewer: import.user)
+      end
+      import.file.purge if import.file.attached?
+      import.destroy!
+    end
+    Books::GoodreadsEdition.where(id: edition_ids).find_each(&:destroy!)
+    Books::Book.where(title: GOODREADS_SEED_TITLE).find_each(&:destroy!)
+    Books::Author.where(name: GOODREADS_SEED_AUTHOR).find_each(&:destroy!)
+    puts "cleaned up the Goodreads import E2E records"
   end
 end
