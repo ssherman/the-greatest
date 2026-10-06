@@ -5,8 +5,8 @@ runs on deploy. When a merge leaves a step that someone has to run by hand at la
 a pointer to the doc that explains it.
 
 Production's books data is a rehearsal copy. It is truncated and re-migrated before launch, possibly
-more than once, so everything in sections 1 and 2 runs again after every pass, not only the last
-one. Section 3 is the hostname switch. Section 4 is for after launch.
+more than once, so sections 1 and 2 run again after every pass, not only the last one, except where
+an item says otherwise. Section 3 is the hostname switch. Section 4 is for after launch.
 
 ## 1. Before the truncate
 
@@ -19,6 +19,15 @@ one. Section 3 is the hostname switch. Section 4 is for after launch.
     rejected ones (`docs/features/goodreads-import.md`, "Legacy replay").
   - `external_records` and `match_decisions`: the author chain gets its identifiers back from them
     (`docs/features/books-author-enrichment.md`).
+  - `books_goodreads_imports` (with their ActiveStorage attachments) and `books_goodreads_pages`: the
+    replay's `load` reuses the uploads instead of downloading them again, admin rejections of
+    finishing imports stick, and the Goodreads page cache is not fetched again.
+- **Put `books_goodreads_editions` and `books_goodreads_import_rows` in the truncate list.** The
+  replay rebuilds them, and the step in section 2, item 8 restarts an import only once its rows are
+  gone. A `DELETE`-based clear keeps the rows, and every finishing import would then be skipped as
+  already run.
+- **Before the final truncate, every import that finishes a legacy one must be finished or
+  rejected.** One still running when the truncate happens never restarts cleanly.
 
 ## 2. The migration and what follows it
 
@@ -46,12 +55,21 @@ Run these in this order after each migration pass.
    replay": load, fix_slugs, apply, resolve, duplicates, junk, apply, then report. Nothing changes
    the catalog until `config.x.goodreads_replay.auto_apply` is on. Turn it on only after the
    50-per-kind hand check (spec §12.9).
-8. **Finish the failed and stuck legacy Goodreads imports, on the final pass only.** A rehearsal run is
-   wiped by the next truncate. After the replay's `load`, `DRY_RUN=1 bin/rails books:goodreads_replay:finish_legacy`
-   lists what it would do. Then run `bin/rails "books:goodreads_replay:finish_legacy[5]"` until nothing starts. Each
-   import fetches Goodreads pages on the line member uploads use, so batches keep it from crowding them out. Approve
-   or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`, "Finishing legacy
-   imports".
+8. **Finish the failed and stuck legacy Goodreads imports, on the final pass only.** Never run it on a
+   rehearsal pass in production. It writes list items and reviews for real users, and a truncate does
+   not remove them: those tables have no foreign key to books. The truncate deletes the provisional
+   books they point at, the re-migration resets the books id sequence, and new books then take those
+   ids, so the users' lists and reviews end up on unrelated books.
+   - If it was run on a rehearsal anyway: before the truncate, reject each finishing import under
+     Books → Goodreads Imports (that removes what it wrote), then delete those finishing imports, or
+     the rejection keeps them from running on the final pass.
+   - On the final pass, after the replay's `load`: `DRY_RUN=1 bin/rails books:goodreads_replay:finish_legacy`
+     lists what it would do. Then run `bin/rails "books:goodreads_replay:finish_legacy[5]"`, and wait until
+     none of that batch is still in progress before running the next one. Running imports are skipped,
+     not counted, so starting batches back to back queues them all at once. Each import fetches
+     Goodreads pages on the line member uploads use.
+   - Approve or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`,
+     "Finishing legacy imports".
 
 ### Decide at launch
 

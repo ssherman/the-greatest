@@ -17,11 +17,14 @@ module Services
       # - the replay has no readable file for it;
       # - an admin rejected the import that finished it.
       #
-      # Repeatable after every books migration pass. A finishing import with
-      # rows has run this pass and is left alone. One whose rows a
-      # re-migration truncated runs again from its kept file, pending review,
-      # its old provenance gone. Writes skip on conflict, so items the legacy
-      # import already wrote are not written twice.
+      # Safe to call again, but in production only on the final books
+      # migration pass: the list items and reviews it writes survive a
+      # truncate, and would end up on whatever books later take the deleted
+      # provisional books' ids. A finishing import with rows has run and is
+      # left alone. One whose rows a truncate emptied runs again from its kept
+      # file, pending review, its old provenance gone. Writes skip on
+      # conflict, so items the legacy import already wrote are not written
+      # twice.
       class FinishLegacyImports
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         LegacyImport = Data.define(:id, :user_id, :status, :created_at)
@@ -63,22 +66,30 @@ module Services
           unfinished(imports).each do |legacy|
             break if @limit && outcomes.values.count { |outcome| STARTS.include?(outcome) } >= @limit
 
-            outcome = finish(legacy)
+            # An import not picked by id is never started, but it is still
+            # looked at, so a newer import of the same user still claims them.
+            picked = @ids.nil? || @ids.include?(legacy.id)
+            outcome = finish(legacy, dry_run: @dry_run || !picked)
             @claimed_users << legacy.user_id if CLAIMS.include?(outcome)
-            outcomes[legacy.id] = outcome
+            outcomes[legacy.id] = outcome if picked
           end
           Result.new(success?: true, data: {outcomes: outcomes, tally: outcomes.values.tally}, errors: [])
         end
 
         private
 
+        # Newest first. With ids, the picked imports and every other
+        # unfinished import of their users.
         def unfinished(imports)
           imports = imports.reject { |import| import.status == "complete" }
-          imports = imports.select { |import| @ids.include?(import.id) } if @ids
+          if @ids
+            users = imports.select { |import| @ids.include?(import.id) }.map(&:user_id).to_set
+            imports = imports.select { |import| users.include?(import.user_id) }
+          end
           imports.sort_by { |import| [import.created_at, import.id] }.reverse
         end
 
-        def finish(legacy)
+        def finish(legacy, dry_run:)
           last = @last_completed[legacy.user_id]
           return :later_import_completed if last && last > legacy.created_at
           return :newer_import_finishing if @claimed_users.include?(legacy.user_id)
@@ -101,7 +112,7 @@ module Services
           parsed = ::Books::Goodreads::ExportFile.parse(bytes)
           return :unreadable unless parsed.success? && parsed.data[:rows].any?
           return :user_busy if user.goodreads_imports.in_progress.exists?
-          return :would_start if @dry_run
+          return :would_start if dry_run
 
           start(user, legacy, existing, replay, bytes)
         end

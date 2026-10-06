@@ -93,6 +93,16 @@ module Services
           assert_nil finishing(601)
         end
 
+        test "picking an older import by id still defers to the user's newer one" do
+          replay(legacy_id: 601)
+          replay(legacy_id: 602)
+          newer = legacy(id: 602, created_at: Time.zone.local(2026, 6, 1))
+
+          assert_equal({601 => :newer_import_finishing}, finish(legacy, newer, ids: [601]))
+          assert_nil finishing(601)
+          assert_nil finishing(602)
+        end
+
         test "a newer import with no usable file leaves the older one to finish" do
           replay(legacy_id: 601)
           replay(legacy_id: 602, bytes: nil)

@@ -296,10 +296,16 @@ imports.
   readable file is finished.
 - Rows the stalled legacy import already wrote came over with the data migration, and are skipped as already on the
   user's lists.
-- A re-migration truncates the import's rows but keeps the import and its file. The next run restarts it, pending
-  review again. One with rows has already run this pass and is left alone. One an admin rejected stays rejected.
+- **In production, run it on the final books migration pass only.** The list items and reviews it writes have no
+  foreign key to books, so a truncate leaves them pointing at deleted provisional books. The re-migration resets
+  the books id sequence, and later books take those ids. `docs/launch-todo.md` (section 2, item 8) says how to undo a
+  rehearsal run before the truncate.
+- A truncate that lists `books_goodreads_editions` and `books_goodreads_import_rows` empties an import's rows but keeps
+  the import and its file. The next run restarts it, pending review again. One with rows has already run and is left
+  alone. One an admin rejected stays rejected.
+- `IDS=` only narrows what is started: a picked import still defers to a newer unfinished import of the same user.
 - Each import fetches Goodreads pages for the books it would create, on the fetch line member uploads use. Run it in
-  batches (`[5]`).
+  batches (`[5]`), and let each batch finish before the next: running imports are skipped, not counted.
 - Measured on the 2026-10-05 development load (a dry run): 46 unfinished legacy imports. 10 have a later completed
   import, 12 have no file (missing from the legacy bucket, or not a CSV), and 1 has no Goodreads header. That leaves
   23, all stuck in `pending`, with 40,345 rows between them.
