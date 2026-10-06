@@ -107,6 +107,20 @@ class AdminMailer < ApplicationMailer
     )
   end
 
+  # One per member import, when it completes or fails (Goodreads import spec
+  # §10). To the site's contact inbox, not ADMIN_NOTIFICATION_EMAIL, which is
+  # for sales.
+  def goodreads_import_finished(import)
+    @import = import
+    @site_name = MailBranding.for(:books).site_name
+
+    branded_mail(
+      domain: :books,
+      to: Rails.application.config.x.goodreads_imports.notify_to,
+      subject: "Goodreads import #{import.id} #{import.failed? ? "failed" : "finished"}"
+    )
+  end
+
   private
 
   def valid_submitter_email(list)

@@ -265,4 +265,15 @@ class AdminMailerTest < ActionMailer::TestCase
 
     assert_equal 1, header_section.scan(/^Subject:/i).count
   end
+
+  test "goodreads_import_finished goes to the configured address with a link to the admin page" do
+    import = books_goodreads_imports(:regular_user_import)
+
+    mail = AdminMailer.goodreads_import_finished(import)
+
+    assert_equal [Rails.application.config.x.goodreads_imports.notify_to], mail.to
+    assert_match(/Goodreads import/, mail.subject)
+    assert_no_match(/#{Regexp.escape(import.user.email)}/, mail.subject)
+    assert_match(%r{/admin/goodreads_imports/#{import.id}}, mail.body.encoded)
+  end
 end
