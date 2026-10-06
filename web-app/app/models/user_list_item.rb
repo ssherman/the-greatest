@@ -41,6 +41,23 @@ class UserListItem < ApplicationRecord
   # Scopes
   scope :ordered, -> { order(:position) }
 
+  # Renumbers a list's items to 1..N in position order, in one statement (see
+  # shift_positions_up). Public for bulk deletes that skip the callback.
+  def self.renumber(user_list_id)
+    sql = sanitize_sql_array([<<~SQL.squish, user_list_id])
+      UPDATE user_list_items
+      SET position = ranked.new_position
+      FROM (
+        SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) AS new_position
+        FROM user_list_items
+        WHERE user_list_id = ?
+      ) ranked
+      WHERE user_list_items.id = ranked.id
+        AND user_list_items.position <> ranked.new_position
+    SQL
+    connection.execute(sql)
+  end
+
   private
 
   def listable_type_compatible_with_user_list
@@ -63,17 +80,6 @@ class UserListItem < ApplicationRecord
   # case `dependent: :destroy` is cascading and there are no siblings to renumber.
   def shift_positions_up
     return if user_list.nil? || user_list.destroyed?
-    sql = self.class.sanitize_sql_array([<<~SQL.squish, user_list_id])
-      UPDATE user_list_items
-      SET position = ranked.new_position
-      FROM (
-        SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) AS new_position
-        FROM user_list_items
-        WHERE user_list_id = ?
-      ) ranked
-      WHERE user_list_items.id = ranked.id
-        AND user_list_items.position <> ranked.new_position
-    SQL
-    self.class.connection.execute(sql)
+    self.class.renumber(user_list_id)
   end
 end

@@ -31,6 +31,17 @@ class UserListItemTest < ActiveSupport::TestCase
     @album = music_albums(:wish_you_were_here)
   end
 
+  test "renumber closes the gaps a bulk delete leaves" do
+    user = User.create!(email: "renumber@example.com", role: :user, email_verified: false)
+    list = Books::UserList.find_by!(user: user, list_type: :read)
+    first, second, third = [books_books(:war_and_peace), books_books(:got), books_books(:crime_and_punishment)].map { |book| list.user_list_items.create!(listable: book) }
+    UserListItem.where(id: second.id).delete_all
+
+    UserListItem.renumber(list.id)
+
+    assert_equal [1, 2], [first.reload.position, third.reload.position]
+  end
+
   test "valid fixture" do
     assert user_list_items(:regular_user_fav_album_1).valid?
   end
