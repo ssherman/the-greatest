@@ -48,10 +48,13 @@ module Services
               end
 
               def enriched_items
-                @enriched_items ||= @provided_items || parent.list_items.unverified.ordered.select do |item|
-                  item.listable_id.present? ||
-                    item.metadata["song_id"].present? ||
-                    item.metadata["mb_recording_id"].present?
+                @enriched_items ||= begin
+                  items = @provided_items || parent.list_items.unverified.ordered.select do |item|
+                    item.listable_id.present? ||
+                      item.metadata["song_id"].present? ||
+                      item.metadata["mb_recording_id"].present?
+                  end
+                  items.reject(&:manually_linked?)
                 end
               end
 

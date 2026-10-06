@@ -29,6 +29,7 @@ require_relative "support/viaf_builders"
 require_relative "support/fake_viaf_client"
 require_relative "support/books/open_library/fake_redis"
 require_relative "support/goodreads_import_helper"
+require_relative "support/validator_response_stub"
 
 # Configure Sidekiq to run jobs inline during tests
 # Sidekiq 9 removes `require "sidekiq/testing"`. Sidekiq.testing! loads sidekiq/test_api

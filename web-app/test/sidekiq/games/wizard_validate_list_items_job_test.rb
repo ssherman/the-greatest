@@ -100,4 +100,16 @@ class Games::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     @list.reload
     assert_equal "completed", @list.wizard_manager.step_status("validate")
   end
+
+  test "re-validation leaves a row linked to an IGDB game by hand verified" do
+    manual = ListItem.create!(list: @list, listable_type: "Games::Game", verified: true, position: 2,
+      metadata: {"title" => "Hades", "igdb_id" => 113112, "igdb_name" => "Hades", "manual_igdb_link" => true})
+    result = Services::Ai::Result.new(success: true,
+      data: {valid_count: 1, invalid_count: 0, verified_count: 1, total_count: 1, reasoning: "ok"})
+    Services::Ai::Tasks::Lists::Games::ListItemsValidatorTask.any_instance.stubs(:call).returns(result)
+
+    Games::WizardValidateListItemsJob.new.perform(@list.id)
+
+    assert manual.reload.verified?
+  end
 end
