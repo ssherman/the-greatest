@@ -205,11 +205,57 @@ def test_from_env_reads_every_variable(monkeypatch, tmp_path):
     monkeypatch.setenv("OL_DATA_VERSION", "2026-07-31")
     monkeypatch.setenv("OL_API_MEMORY_LIMIT", "2GB")
     monkeypatch.setenv("OL_API_TEMP_DIR", str(tmp_path / "spill"))
+    monkeypatch.setenv("OL_API_THREADS", "3")
+    monkeypatch.setenv("OL_API_RESOLVE_CONCURRENCY", "2")
+    monkeypatch.setenv("OL_API_RESOLVE_DEADLINE_S", "12.5")
     settings = Settings.from_env()
     assert settings.data_root == tmp_path
     assert settings.data_version == "2026-07-31"
     assert settings.memory_limit == "2GB"
     assert settings.temp_dir == tmp_path / "spill"
+    assert settings.threads == 3
+    assert settings.resolve_concurrency == 2
+    assert settings.resolve_deadline_s == 12.5
+
+
+def test_from_env_defaults_to_one_resolve_at_a_time_inside_the_clients_timeout(monkeypatch):
+    monkeypatch.setenv("OL_DATA_VERSION", "2026-07-31")
+    for name in ("OL_API_THREADS", "OL_API_RESOLVE_CONCURRENCY", "OL_API_RESOLVE_DEADLINE_S"):
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings.from_env()
+    # None keeps DuckDB's own default: every core it can see.
+    assert settings.threads is None
+    assert settings.resolve_concurrency == 1
+    # Just under the Rails client's 60 s resolve_timeout.
+    assert settings.resolve_deadline_s == 55.0
+
+
+def test_an_empty_thread_count_is_the_default(monkeypatch):
+    # Compose forwards OL_API_THREADS as "" when the host does not set it.
+    monkeypatch.setenv("OL_DATA_VERSION", "2026-07-31")
+    monkeypatch.setenv("OL_API_THREADS", "")
+    assert Settings.from_env().threads is None
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("OL_API_THREADS", "0"),
+        ("OL_API_THREADS", "many"),
+        ("OL_API_RESOLVE_CONCURRENCY", "0"),
+        ("OL_API_RESOLVE_DEADLINE_S", "0"),
+        ("OL_API_RESOLVE_DEADLINE_S", "soon"),
+        # float() accepts both. NaN would expire every deadline at once;
+        # infinity overflows the timer thread and leaves no deadline at all.
+        ("OL_API_RESOLVE_DEADLINE_S", "nan"),
+        ("OL_API_RESOLVE_DEADLINE_S", "inf"),
+    ],
+)
+def test_from_env_names_a_bad_limit(monkeypatch, name, value):
+    monkeypatch.setenv("OL_DATA_VERSION", "2026-07-31")
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ConfigurationError, match=name):
+        Settings.from_env()
 
 
 def test_a_missing_table_refuses_to_boot(tmp_path, fixture_artifact):

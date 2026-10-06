@@ -376,6 +376,94 @@ module Books
         @client.resolve(title: "The Great Gatsby")
       end
 
+      # ------------------------------------------------- #resolve when busy
+
+      def busy_reply
+        {status: 503, body: {detail: "busy: 1 resolve(s) already running"}.to_json,
+         headers: {"Content-Type" => "application/json", "Retry-After" => "2"}}
+      end
+
+      # A clock that only moves when the client sleeps (or a test moves it).
+      def waiting_client
+        @now = 0.0
+        @slept = []
+        Books::OpenLibrary::Client.new(
+          config: @config, breaker: @breaker,
+          clock: -> { @now },
+          sleeper: ->(seconds) {
+            @slept << seconds
+            @now += seconds
+          }
+        )
+      end
+
+      test "#resolve waits out busy replies and returns the resolution" do
+        client = waiting_client
+        stub_request(:post, "#{BASE_URL}/resolve")
+          .to_return(busy_reply, busy_reply, {status: 200, body: resolve_response_body.to_json})
+
+        resolution = client.resolve(title: "The Great Gatsby")
+
+        assert_instance_of Books::OpenLibrary::Resolution, resolution
+        assert_requested :post, "#{BASE_URL}/resolve", times: 3
+        assert_equal 2, @slept.size
+        # Retry-After (2 s) plus up to half again of jitter.
+        assert(@slept.all? { |seconds| seconds.between?(2.0, 3.0) }, "slept #{@slept.inspect}")
+      end
+
+      test "#resolve gives each retry only the budget that is left" do
+        client = waiting_client
+        timeouts = []
+        busy = Books::OpenLibrary::Exceptions::BusyError.new("busy", 503, nil, retry_after: 2.0)
+        client.base_client.define_singleton_method(:post) do |_path, _body, timeout:|
+          timeouts << timeout
+          raise busy if timeouts.size == 1
+          {success: true, data: {}, errors: [], metadata: {}}
+        end
+        Books::OpenLibrary::Resolution.stubs(:from_response).returns(:resolution)
+
+        client.resolve(title: "The Great Gatsby")
+
+        assert_equal [@config.resolve_timeout, @config.resolve_timeout - @slept.first], timeouts
+      end
+
+      test "#resolve gives up once a retry would leave too little of the budget" do
+        client = waiting_client
+        # The first attempt took 45 s before it was turned away: 15 s is left,
+        # less than one resolve needs, so the client does not try again.
+        stub_request(:post, "#{BASE_URL}/resolve").to_return do
+          @now += 45
+          busy_reply
+        end
+
+        assert_raises(Books::OpenLibrary::Exceptions::BusyError) { client.resolve(title: "The Great Gatsby") }
+
+        assert_requested :post, "#{BASE_URL}/resolve", times: 1
+        assert_empty @slept
+      end
+
+      test "#resolve that stays busy stops inside the client's budget and never opens the breaker" do
+        client = waiting_client
+        stub_request(:post, "#{BASE_URL}/resolve").to_return(busy_reply)
+
+        assert_raises(Books::OpenLibrary::Exceptions::BusyError) { client.resolve(title: "The Great Gatsby") }
+
+        assert_operator @slept.sum, :<=, @config.resolve_timeout - Books::OpenLibrary::Client::RESOLVE_MIN_ATTEMPT
+        assert_requested :post, "#{BASE_URL}/resolve", times: @slept.size + 1
+        assert_operator @slept.size, :>, 5
+        assert_not @breaker.open?
+      end
+
+      test "#resolve does not retry a real failure" do
+        client = waiting_client
+        stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 504, body: {detail: "deadline"}.to_json)
+
+        assert_raises(Books::OpenLibrary::Exceptions::ServerError) { client.resolve(title: "The Great Gatsby") }
+
+        assert_requested :post, "#{BASE_URL}/resolve", times: 1
+        assert_empty @slept
+      end
+
       test "#resolve returns a Resolution whose candidates are in the served order, never re-sorted" do
         # Serve the higher-scored candidate SECOND -- the fixture's own order
         # happens to be descending by score, which made the old version of

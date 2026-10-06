@@ -264,6 +264,30 @@ downloaded and ended 01:36 UTC.
 - **For comparison, the retired 7700K box** (8 vCPU, 16 GB VM): `year_evidence` took 248 s and peaked
   at 15.3 GB RAM plus 8.2 GB of swap.
 
+### `/resolve` under load, 2026-10-06
+
+A dev run of the Goodreads import pinned the VM: the API container at ~1,100% CPU, load average 15,
+DuckDB spilling up to 14 GB into the container's `/tmp`, and about one `/resolve` a minute, many past
+the Rails client's 60 s timeout. The cause was the pile-up, not the VM's size. Every abandoned query
+kept running, and they all shared the one 6 GB DuckDB pool and every core. The service now runs one
+`/resolve` at a time, answers 503 to the rest, and interrupts a resolve at 55 s
+(`docs/features/open-library-data-service.md`, "Load limits on `/resolve`"). It runs with
+`OL_API_THREADS=8`.
+
+Measured afterwards, on the VM with the same 12 vCPUs, 24 GB and `OL_API_MEMORY_LIMIT=6GB`:
+
+| Call | Time | Peak API memory | Peak CPU | `/tmp` spill |
+|---|---:|---:|---:|---:|
+| `/resolve` Gatsby (title, author, ISBN) | 12.9 s | 3.7 GiB | 799% | none |
+| `/resolve` Hamlet (title, author) | 12.1 s | 3.8 GiB | 803% | none |
+| `/resolve` Pride and Prejudice (title, author) | 13.1 s | 3.6 GiB | 793% | none |
+
+- **Five Hamlet resolves at once:** one answered 200 in 18.1 s; the other four got 503 in 6-8 ms.
+- **The deadline:** inside the container, a real Hamlet resolve given a 3 s deadline stopped at
+  3.20 s, and the connection answered the next query.
+- **No resize:** one resolve needs well under 6 GB, so the VM stays at 12 vCPUs and 24 GB. Eight
+  threads instead of twelve cost about 3 s a resolve (9.8-10 s on 2026-10-04).
+
 ## Lessons
 
 - **The first build was OOM-killed in `year_evidence` on a 16 GB VM:** DuckDB list aggregates hold

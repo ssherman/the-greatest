@@ -7,6 +7,10 @@ module Books
     class CircuitBreakerTest < ActiveSupport::TestCase
       include ActiveSupport::Testing::TimeHelpers
 
+      # Its own class: an unknown `ignore:` keyword would raise ArgumentError,
+      # and a test asserting ArgumentError would then pass for the wrong reason.
+      class Busy < StandardError; end
+
       # FakeRedis lives in test/support/books/open_library/fake_redis.rb
       # (required from test_helper.rb) -- shared with base_client_test.rb.
 
@@ -88,6 +92,33 @@ module Books
         end
 
         assert_not @breaker.open?
+      end
+
+      test "an ignored error passes through without counting toward the threshold" do
+        5.times do
+          assert_raises(Busy) { @breaker.call(ignore: [Busy]) { raise Busy } }
+        end
+
+        assert_not @breaker.open?
+      end
+
+      test "an ignored error does not reset the failures already counted" do
+        2.times { assert_raises(RuntimeError) { @breaker.call { raise "boom" } } }
+        assert_raises(Busy) { @breaker.call(ignore: [Busy]) { raise Busy } }
+        assert_raises(RuntimeError) { @breaker.call { raise "boom" } }
+
+        assert @breaker.open?
+      end
+
+      test "an ignored error on a half-open probe leaves the next call a probe" do
+        3.times { assert_raises(RuntimeError) { @breaker.call { raise "boom" } } }
+
+        travel_to(61.seconds.from_now) do
+          assert_raises(Busy) { @breaker.call(ignore: [Busy]) { raise Busy } }
+          assert_not @breaker.open?
+          assert_raises(RuntimeError) { @breaker.call { raise "boom again" } }
+          assert @breaker.open?
+        end
       end
 
       test "a failed half-open call re-opens the breaker instead of clearing it" do

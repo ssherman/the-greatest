@@ -1,11 +1,15 @@
 # The `ol` VM's production settings (docs/features/home-server.md), merged over
 # data-sources/docker-compose.yml by guest/compose.sh. Sized for a 12-vCPU,
 # 24 GB VM: 6 GB for the API's DuckDB, 8 GB for a running build, the rest is
-# page cache over the artifact.
+# page cache over the artifact. One /resolve peaks under 4 GiB and does not
+# spill (measured 2026-10-06).
 services:
   api:
     environment:
       OL_API_MEMORY_LIMIT: 6GB
+      # One /resolve runs at a time (the default concurrency of 1); its
+      # queries share these threads with every other endpoint's.
+      OL_API_THREADS: "8"
   build:
     # The live API keeps 2 of the 12 vCPUs while a build runs.
     cpus: 10
