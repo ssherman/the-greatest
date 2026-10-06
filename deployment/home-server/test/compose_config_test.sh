@@ -18,6 +18,9 @@ t_build() {
 }
 t_api() {
   cfg ol | jq -e '.services.api.environment.OL_API_MEMORY_LIMIT == "6GB" and
+    .services.api.environment.OL_API_THREADS == "8" and
+    .services.api.environment.OL_API_RESOLVE_CONCURRENCY == "1" and
+    .services.api.environment.OL_API_RESOLVE_DEADLINE_S == "55" and
     (.services.api.volumes[0].source == "/srv/ol-data") and (.services.api.volumes[0].read_only == true)' >/dev/null
 }
 t_pinned() {
@@ -36,7 +39,7 @@ t_fetcher_alias() {
 
 if ! command -v docker >/dev/null; then echo "SKIP  docker not installed"; exit 0; fi
 check "build is capped at 10 CPUs and 8GB" t_build
-check "api gets 6GB and a read-only /srv/ol-data" t_api
+check "api gets 6GB, 8 threads, one resolve at a time and a read-only /srv/ol-data" t_api
 check "cloudflared is a pinned version" t_pinned
 check "cloudflared is off until the tunnel profile is on" t_off_by_default
 check "the fetcher service is unchanged" t_fetcher_untouched

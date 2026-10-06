@@ -18,12 +18,15 @@ module Books
       # Runs the block while the circuit is closed or half-open (cooldown
       # elapsed). Raises Exceptions::CircuitOpenError without invoking the
       # block while the circuit is open. Which errors count is up to the
-      # caller: whatever the block raises increments the failure count.
+      # caller: whatever the block raises increments the failure count,
+      # except the classes in `ignore`, which pass through without counting
+      # or resetting -- a reply that says nothing about the service's health
+      # either way.
       #
       # `opened_at` is read exactly once, before the attempt, so the
       # half-open/closed classification is fixed for the whole call even if
       # the key's state changes (or expires) while the block runs.
-      def call
+      def call(ignore: [])
         opened_at = read_opened_at
         raise Exceptions::CircuitOpenError, "circuit open for '#{@key}'" if opened_at && !cooldown_elapsed?(opened_at)
 
@@ -31,6 +34,8 @@ module Books
 
         begin
           result = yield
+        rescue *ignore
+          raise
         rescue
           half_open ? reopen_after_failed_probe! : record_failure
           raise

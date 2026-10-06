@@ -22,6 +22,11 @@ normalizer); a weights/matcher version mismatch. Only then does it connect.
 `build_report.json` and the code's `eval/thresholds.json` are read ONCE
 here into `ArtifactState` so a malformed file is a boot failure naming the
 file, never a 500 per request.
+
+`threads`, like `memory_limit`, is a setting of the whole DuckDB database:
+every cursor's queries share it. The `/resolve` cap and deadline
+(`openlibrary.api.limits`) are built here too, so a test's `Settings` reach
+the app the same way production's do.
 """
 
 from __future__ import annotations
@@ -38,6 +43,7 @@ from fastapi import Request
 
 from common.normalize import NORMALIZER_VERSION
 from common.schemas import SourceVersion
+from openlibrary.api.limits import ResolveSlots
 from openlibrary.matcher.scorer import MATCHER_VERSION, Weights, load_weights
 from openlibrary.pipeline.duck import connect as duck_connect
 from openlibrary.pipeline.paths import TABLES, ArtifactPaths
@@ -89,6 +95,12 @@ class Settings:
     data_version: str
     memory_limit: str = "8GB"
     temp_dir: Path = field(default_factory=lambda: Path(tempfile.gettempdir()))
+    # None leaves DuckDB's default: one thread per core it can see.
+    threads: int | None = None
+    resolve_concurrency: int = 1
+    # Just under the Rails client's 60 s resolve_timeout, so the server stops
+    # a query no later than the client stops waiting for it.
+    resolve_deadline_s: float = 55.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -103,7 +115,25 @@ class Settings:
             data_version=data_version,
             memory_limit=os.environ.get("OL_API_MEMORY_LIMIT", "8GB"),
             temp_dir=Path(os.environ.get("OL_API_TEMP_DIR", tempfile.gettempdir())),
+            threads=_positive_env("OL_API_THREADS", int, None),
+            resolve_concurrency=_positive_env("OL_API_RESOLVE_CONCURRENCY", int, 1),
+            resolve_deadline_s=_positive_env("OL_API_RESOLVE_DEADLINE_S", float, 55.0),
         )
+
+
+def _positive_env(name, parse, default):
+    """A positive number from the environment. Unset or empty is `default`:
+    Compose forwards a variable the host does not set as an empty string."""
+    raw = os.environ.get(name, "")
+    if raw == "":
+        return default
+    try:
+        value = parse(raw)
+    except ValueError:
+        value = None
+    if value is None or value <= 0:
+        raise ConfigurationError(f"{name} must be a positive number, not {raw!r}")
+    return value
 
 
 @dataclass
@@ -118,6 +148,8 @@ class ArtifactState:
     # eval/thresholds.json: the CODE's calibration record (pinned + measured
     # for the running matcher version), not this artifact's gate run.
     eval_thresholds: dict
+    resolve_slots: ResolveSlots = field(default_factory=lambda: ResolveSlots(1))
+    resolve_deadline_s: float = 55.0
 
 
 def _read_json(path: Path) -> dict:
@@ -183,7 +215,10 @@ def open_artifact(settings: Settings) -> ArtifactState:
     eval_thresholds = _read_json(THRESHOLDS_PATH)
 
     connection = duck_connect(
-        paths, memory_limit=settings.memory_limit, temp_directory=settings.temp_dir
+        paths,
+        memory_limit=settings.memory_limit,
+        threads=settings.threads,
+        temp_directory=settings.temp_dir,
     )
 
     return ArtifactState(
@@ -200,6 +235,8 @@ def open_artifact(settings: Settings) -> ArtifactState:
         weights=weights,
         report=report,
         eval_thresholds=eval_thresholds,
+        resolve_slots=ResolveSlots(settings.resolve_concurrency),
+        resolve_deadline_s=settings.resolve_deadline_s,
     )
 
 

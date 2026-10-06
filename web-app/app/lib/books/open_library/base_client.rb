@@ -77,12 +77,14 @@ module Books
       # that's what counts as a failure. A 404 or other 4xx is a well-formed
       # answer from a healthy service: classify_response returns it as data
       # instead of raising, so breaker.call finishes normally (and resets),
-      # and only then do we raise it here, outside the counted block.
+      # and only then do we raise it here, outside the counted block. A busy
+      # 503 is neither: the breaker ignores it, so it neither counts nor
+      # resets (Client#resolve waits it out).
       def perform(path)
         start_time = Time.current
         outcome = nil
 
-        breaker.call { outcome = classify_response(yield, path, start_time) }
+        breaker.call(ignore: [Exceptions::BusyError]) { outcome = classify_response(yield, path, start_time) }
 
         raise outcome[:error] if outcome[:error]
         outcome[:result]
@@ -102,6 +104,9 @@ module Books
           {error: Exceptions::NotFoundError.new("Not found", response.status, response.body)}
         when 400..499
           {error: Exceptions::ClientError.new("Client error: #{response.status}", response.status, response.body)}
+        when 503
+          raise busy_error(response) if busy?(response)
+          raise Exceptions::ServerError.new("Server error: #{response.status}", response.status, response.body)
         when 500..599
           raise Exceptions::ServerError.new("Server error: #{response.status}", response.status, response.body)
         else
@@ -120,6 +125,21 @@ module Books
             status_code: response.status
           }
         }
+      end
+
+      # Only the service's own busy reply: a JSON `detail` starting "busy:".
+      # Any other 503 -- Cloudflare's HTML page when the tunnel is down, say --
+      # is an ordinary ServerError and counts toward the breaker.
+      def busy?(response)
+        detail = JSON.parse(response.body.to_s)["detail"]
+        detail.is_a?(String) && detail.start_with?("busy:")
+      rescue JSON::ParserError, TypeError
+        false
+      end
+
+      def busy_error(response)
+        retry_after = Float(response.headers["Retry-After"], exception: false)
+        Exceptions::BusyError.new("Busy: #{response.status}", response.status, response.body, retry_after: retry_after)
       end
 
       def parse_json(body)
