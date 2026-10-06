@@ -66,6 +66,14 @@ module Services
           assert_includes result.data[:kept].map(&:first), author.id
         end
 
+        test "an import another admin rejected after this request loaded it is not approved" do
+          ::Books::GoodreadsImport.where(id: @import.id).update_all(review_status: ::Books::GoodreadsImport.review_statuses[:rejected])
+
+          assert_not Approve.call(import: @import, reviewer: @reviewer).success?
+          assert @created.reload.provisional?
+          assert @import.reload.review_rejected?
+        end
+
         test "only a finished member import still pending review can be approved" do
           @import.update!(status: :writing)
           assert_not Approve.call(import: @import, reviewer: @reviewer).success?

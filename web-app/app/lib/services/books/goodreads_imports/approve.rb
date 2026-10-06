@@ -32,14 +32,17 @@ module Services
         end
 
         def call
-          refusal = refusal_reason
-          return Result.new(success?: false, data: {}, errors: [refusal]) if refusal
-
+          refusal = nil
           kept = []
           deleted = []
           promoted = nil
           ActiveRecord::Base.transaction do
+            # Checked under the lock, on the reloaded row: a reject that
+            # committed first wins over this approval.
             @import.lock!
+            refusal = refusal_reason
+            next if refusal
+
             excluded_records.each do |record|
               result = DeleteProvisional.call(import: @import, record: record)
               result.data[:deleted] ? deleted << [record.id, record.class.name] : kept << [record.id, result.errors.first]
@@ -50,6 +53,8 @@ module Services
             promoted = PromoteRecords.call(books: books, authors: authors.reject { |author| @exclude_author_ids.include?(author.id) && !credited_on?(author, books) })
             @import.update!(review_status: :approved, reviewed_by: @reviewer, reviewed_at: Time.current)
           end
+          return Result.new(success?: false, data: {}, errors: [refusal]) if refusal
+
           data = {
             promoted_book_ids: promoted.data[:book_ids],
             promoted_author_ids: promoted.data[:author_ids],

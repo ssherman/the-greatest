@@ -52,6 +52,13 @@ module Services
           assert_not ::UserListItem.exists?(@items.last.id)
         end
 
+        test "an import another admin rejected after this request loaded it is not reverted twice" do
+          ::Books::GoodreadsImport.where(id: @import.id).update_all(review_status: ::Books::GoodreadsImport.review_statuses[:rejected])
+
+          assert_not Revert.call(import: @import, reviewer: @reviewer).success?
+          assert ::UserListItem.exists?(@items.first.id)
+        end
+
         test "editions waiting on Goodreads for the import are released from it" do
           waiting = goodreads_edition(title: "Revert Waiting Book", verification: :pending, pending_import: @import)
 

@@ -27,14 +27,17 @@ module Services
         end
 
         def call
-          refusal = refusal_reason
-          return Result.new(success?: false, data: {}, errors: [refusal]) if refusal
-
+          refusal = nil
           data = nil
           purge_urls = []
           book_ids = []
           ActiveRecord::Base.transaction do
+            # Checked under the lock, on the reloaded row, so two admins'
+            # clicks never both act.
             @import.lock!
+            refusal = refusal_reason
+            next if refusal
+
             purge_urls = ::Services::Books::ReadingGoals::DestructionInvalidator.for_user(user: @import.user)
             item_ids = @import.applied_ids("list_item_ids")
             review_ids = @import.applied_ids("review_id")
@@ -55,6 +58,8 @@ module Services
             data = {deleted_items: deleted_items, deleted_reviews: deleted_reviews, deleted_book_ids: deleted_books,
                     deleted_author_ids: deleted_authors}
           end
+          return Result.new(success?: false, data: {}, errors: [refusal]) if refusal
+
           if purge_urls.any?
             ActiveRecord.after_all_transactions_commit { ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", purge_urls) }
           end
