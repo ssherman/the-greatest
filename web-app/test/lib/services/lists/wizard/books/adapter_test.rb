@@ -95,10 +95,10 @@ module Services
 
           test "recheck_keys saves the chosen work, the accepted key, its duplicates and both redirect-source lists" do
             row = wizard_row(@list, position: 1, title: "Dune")
-            match = wizard_match(subject: row, outcome: :unmatched, external: ol_candidate("OL1W"),
+            match = wizard_match(subject: row, outcome: :unmatched, external: ol_candidate("OL0W"),
               external_resolution: resolution(accept_key: "OL1W", duplicates: ["OL2W"], duplicate_redirects: ["OL3W"], redirect_sources: ["OL4W"]))
 
-            assert_equal %w[OL1W OL2W OL3W OL4W], @adapter.recheck_keys(match).sort
+            assert_equal %w[OL0W OL1W OL2W OL3W OL4W], @adapter.recheck_keys(match).sort
           end
 
           test "recheck_keys without a resolution keeps only an Open Library external key" do
