@@ -11,8 +11,10 @@ module Services
         module_function
 
         def book_used_elsewhere?(book, import:)
+          # A rejected import's rows no longer stand behind anything.
           ::Books::GoodreadsImportRow.joins(:goodreads_edition).where(books_goodreads_editions: {book_id: book.id})
-            .where.not(import_id: import.id).exists? ||
+            .where.not(import_id: import.id)
+            .where(import_id: ::Books::GoodreadsImport.where.not(review_status: :rejected).select(:id)).exists? ||
             book.user_list_items.where.not(id: import.applied_ids("list_item_ids")).exists? ||
             ::Review.where(reviewable: book).where.not(id: import.applied_ids("review_id")).exists? ||
             ::ListItem.where(listable: book).exists?

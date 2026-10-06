@@ -16,6 +16,17 @@ module Services
           assert_not ProvisionalReferences.book_used_elsewhere?(@book, import: @import)
         end
 
+        test "another live import's rows are a use; a rejected import's are not" do
+          edition = goodreads_edition(title: "References Book", book: @book, resolution: :created, resolved_at: Time.current)
+          other = ::Books::GoodreadsImport.create!(user: users(:regular_user), status: :complete, review_status: :rejected)
+          other.rows.create!(row_number: 1, goodreads_edition: edition)
+
+          assert_not ProvisionalReferences.book_used_elsewhere?(@book, import: @import)
+
+          other.update!(review_status: :pending)
+          assert ProvisionalReferences.book_used_elsewhere?(@book, import: @import)
+        end
+
         test "a curated list item is a use" do
           ::ListItem.create!(list: lists(:books_list), listable: @book, position: 1)
 

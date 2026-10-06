@@ -48,6 +48,9 @@ module Services
             deleted_books = delete_books
             deleted_authors = delete_authors
             ::Identifier.where(id: @import.records.stamped.where(record_type: "Identifier").select(:record_id)).destroy_all
+            # Editions still waiting on their page settle for another import,
+            # or are released, never created for this one.
+            @import.pending_editions.update_all(pending_import_id: nil, updated_at: Time.current)
             close!
             data = {deleted_items: deleted_items, deleted_reviews: deleted_reviews, deleted_book_ids: deleted_books,
                     deleted_author_ids: deleted_authors}

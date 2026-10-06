@@ -52,6 +52,24 @@ module Services
           assert_not ::UserListItem.exists?(@items.last.id)
         end
 
+        test "editions waiting on Goodreads for the import are released from it" do
+          waiting = goodreads_edition(title: "Revert Waiting Book", verification: :pending, pending_import: @import)
+
+          Revert.call(import: @import, reviewer: @reviewer)
+
+          assert_nil waiting.reload.pending_import_id
+        end
+
+        test "a book two rejected imports share is deleted by the second rejection" do
+          other = ::Books::GoodreadsImport.create!(user: users(:regular_user), status: :complete)
+          other.rows.create!(row_number: 1, goodreads_edition: @created_edition)
+          Revert.call(import: other, reviewer: @reviewer)
+
+          Revert.call(import: @import, reviewer: @reviewer)
+
+          assert_not ::Books::Book.exists?(@created.id)
+        end
+
         test "identifiers the import stamped on an existing book are removed" do
           stamped = ::Identifier.create!(identifiable: @matched, identifier_type: :books_work_goodreads_id, value: "999123")
           @import.records.create!(record: stamped, action: :stamped)
