@@ -120,6 +120,14 @@ module Services
             assert_equal books_books(:war_and_peace).id, row.reload.listable_id
           end
 
+          test "the claim alone leaves the step stamped, so a running Import is not read as stalled" do
+            ::Services::Lists::Wizard::Books::StateManager.any_instance.stubs(:write_step!)
+
+            ImportRows.call(list: @list, adapter: @adapter, run_id: "run-1")
+
+            assert @list.reload.wizard_state.dig("steps", "import", "updated_at").present?
+          end
+
           test "a second start is refused while another run owns the step" do
             row = create_row(1, "War and Peace", work: "OL5W")
             @list.wizard_manager.write_step!(step: "import", status: "running", metadata: {"run_id" => "other-run"})

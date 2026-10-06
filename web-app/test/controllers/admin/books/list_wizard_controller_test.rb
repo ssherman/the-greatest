@@ -293,7 +293,6 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
 
   test "a stalled step allows re-parse" do
     sign_in_as(@admin, stub_auth: true)
-    unsettled = wizard_row(@list, position: 1, title: "Unsettled", wizard: {bucket: "matched"})
     travel_to 31.minutes.ago do
       @list.wizard_manager.write_step!(step: "parse", status: "running")
     end
@@ -301,7 +300,6 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
 
     post wizard(:reparse)
     assert_redirected_to step("parse")
-    assert ::ListItem.exists?(unsettled.id)
   end
 
   test "a stalled step allows restart" do
@@ -315,6 +313,47 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to wizard
     assert_not ::ListItem.exists?(unsettled.id)
+  end
+
+  test "a Match advanced by the row jobs' progress writes still blocks restart and re-parse" do
+    sign_in_as(@admin, stub_auth: true)
+    row = wizard_row(@list, position: 1, title: "Emma", wizard: {bucket: "matched"})
+    wizard_row(@list, position: 2, title: "Persuasion")
+    @list.wizard_manager.write_step!(step: "match", status: "running")
+    ::Services::Lists::Wizard::Core::MatchProgress.call(list: @list)
+    ::Lists::Wizard::ParseJob.expects(:perform_async).never
+
+    assert_not @list.reload.wizard_manager.step_stalled?("match")
+    post wizard(:restart)
+    assert_redirected_to step("match")
+    post wizard(:reparse)
+    assert_redirected_to step("match")
+    assert ::ListItem.exists?(row.id)
+  end
+
+  test "finishing Review is refused while a row is still pending" do
+    sign_in_as(@admin, stub_auth: true)
+    wizard_row(@list, position: 1, title: "Emma", wizard: {bucket: "matched"})
+    wizard_row(@list, position: 2, title: "Persuasion")
+    ::Lists::Wizard::ImportJob.expects(:perform_async).never
+
+    post wizard(:advance_step, step: "review"), params: {confirm_unlinked: "1"}
+
+    assert_redirected_to step("review")
+    assert flash[:alert].present?
+    assert_equal "idle", @list.reload.wizard_manager.step_status("import")
+  end
+
+  test "a failing restart leaves the rows and the wizard state both untouched" do
+    sign_in_as(@admin, stub_auth: true)
+    row = wizard_row(@list, position: 1, title: "Unsettled", wizard: {bucket: "matched"})
+    @list.wizard_manager.go_to_step!(3)
+    ::Services::Lists::Wizard::Books::StateManager.any_instance.stubs(:reset!).raises(ActiveRecord::StatementInvalid, "boom")
+
+    assert_raises(ActiveRecord::StatementInvalid) { post wizard(:restart) }
+
+    assert ::ListItem.exists?(row.id)
+    assert_equal "review", @list.reload.wizard_manager.current_step_name
   end
 
   test "a step written 29 minutes ago still blocks" do

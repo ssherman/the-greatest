@@ -24,6 +24,11 @@ module Services
             wizard_rows.count { |_item, state| state.flagged? }
           end
 
+          # Rows the Match step has not decided yet.
+          def pending_count
+            wizard_rows.count { |_item, state| state.pending? }
+          end
+
           # Rows with no book, removed rows excluded (spec §5). The one place this
           # rule lives: the Done screen and the list admin page both call it.
           def unlinked_count

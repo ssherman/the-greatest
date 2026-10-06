@@ -14,6 +14,16 @@ module Services
             @list.wizard_manager.write_step!(step: "match", status: "running")
           end
 
+          test "a running Match stays fresh after progress writes, so it is not read as stalled" do
+            wizard_row(@list, position: 1, title: "A", wizard: {bucket: "matched"})
+            wizard_row(@list, position: 2, title: "B")
+
+            MatchProgress.call(list: @list)
+
+            assert_equal "running", @list.reload.wizard_manager.step_status("match")
+            assert_not @list.wizard_manager.step_stalled?("match")
+          end
+
           test "while rows are pending it writes progress as decided rows out of all rows" do
             wizard_row(@list, position: 1, title: "A", wizard: {bucket: "matched"})
             wizard_row(@list, position: 2, title: "B", wizard: {bucket: "flagged"})

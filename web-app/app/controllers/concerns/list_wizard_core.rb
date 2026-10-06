@@ -61,8 +61,10 @@ module ListWizardCore
   def restart
     return refuse_while_running if any_job_running?
 
-    ::ListItem.where(id: ::Services::Lists::Wizard::Core::RowState.unsettled(wizard_entity).map(&:id)).destroy_all
-    wizard_entity.wizard_manager.reset!
+    ::ListItem.transaction do
+      ::ListItem.where(id: ::Services::Lists::Wizard::Core::RowState.unsettled(wizard_entity).map(&:id)).destroy_all
+      wizard_entity.wizard_manager.reset!
+    end
     redirect_to({action: :show}, status: :see_other)
   end
 
@@ -128,7 +130,7 @@ module ListWizardCore
   def refuse_auto_generated_list
     return unless wizard_entity.auto_generated?
 
-    redirect_to wizard_adapter.list_path(wizard_entity), alert: "This list is generated automatically and has no wizard."
+    redirect_to wizard_adapter.list_path(wizard_entity), status: :see_other, alert: "This list is generated automatically and has no wizard."
   end
 
   def refuse_row_action_while_running
@@ -182,7 +184,7 @@ module ListWizardCore
 
   def refuse_while_running(step = running_step)
     redirect_to({action: :show_step, step: step || wizard_entity.wizard_manager.current_step_name},
-      alert: "A step is still running. Please wait.")
+      alert: "A step is still running. Please wait.", status: :see_other)
   end
 
   def move_to(step, completed: false)
@@ -194,7 +196,7 @@ module ListWizardCore
   def refuse_blank_paste(content)
     return false if content.present?
 
-    redirect_to({action: :show_step, step: "paste"}, alert: "Paste the list first.")
+    redirect_to({action: :show_step, step: "paste"}, alert: "Paste the list first.", status: :see_other)
     true
   end
 
@@ -244,9 +246,14 @@ module ListWizardCore
   def advance_from_review
     return refuse_while_running if any_job_running?
 
+    if ::Services::Lists::Wizard::Core::Summary.new(wizard_entity).pending_count.positive?
+      redirect_to({action: :show_step, step: "review"}, alert: "Some rows are still waiting to be matched. Finish matching first.", status: :see_other)
+      return
+    end
+
     prompt = unlinked_prompt(:refusal)
     if prompt && params[:confirm_unlinked] != "1"
-      redirect_to({action: :show_step, step: "review"}, alert: prompt)
+      redirect_to({action: :show_step, step: "review"}, alert: prompt, status: :see_other)
       return
     end
 

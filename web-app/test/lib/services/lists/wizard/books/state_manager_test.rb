@@ -13,6 +13,17 @@ module Services
             assert_equal %w[paste parse match review import done], manager.steps
             assert_equal "paste", manager.current_step_name
           end
+
+          test "every update_step_status! stamps the entry for books; the base manager's does not" do
+            list = ::Books::List.create!(name: "Stamp", status: :unapproved)
+
+            list.wizard_manager.update_step_status!(step: "match", status: "running")
+            assert list.reload.wizard_state.dig("steps", "match", "updated_at").present?
+            assert_not list.wizard_manager.step_stalled?("match")
+
+            Services::Lists::Wizard::StateManager.new(list).update_step_status!(step: "match", status: "running")
+            assert_nil list.reload.wizard_state.dig("steps", "match", "updated_at")
+          end
         end
       end
     end
