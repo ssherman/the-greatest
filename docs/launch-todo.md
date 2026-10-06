@@ -72,14 +72,18 @@ Run these in this order after each migration pass.
    - Approve or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`,
      "Finishing legacy imports".
 
-9. **Before launch: limit concurrent `/resolve` calls in the Open Library service.** Not a manual step
-   but a code change in `data-sources/`, listed here because launch depends on it. On 2026-10-06 four
-   Goodreads imports resolving at once filled the ol VM's 24 GiB and pinned its 12 cores. A lone
-   `/resolve` then timed out at 60 s for 25 minutes, until the API container was restarted. The
-   database connection has an 8 GB cap (`OL_API_MEMORY_LIMIT`), but nothing caps how many requests
-   run at once. Member uploads after launch can arrive in parallel too. The fix: one or two `/resolve`
-   requests at a time, answering busy at once beyond that (the Rails client treats that as a failure
-   and flags the row), plus an explicit DuckDB thread count.
+9. **Before launch: Open Library `/resolve` under parallel load.** Code changes, not manual steps,
+   listed here because launch depends on them. On 2026-10-06 four Goodreads imports resolving at once
+   left `/resolve` timing out at 60 s for 25 minutes, until the API container was restarted. The
+   cause: queries the Rails client had abandoned kept running and piled up in one 6 GB DuckDB pool,
+   spilling to disk. A single `/resolve` takes about 13 s and 3.7 GiB, with no spill.
+   - Server half, on branch `worktree-ol-resolve-limit`: one `/resolve` at a time, an instant 503
+     for the rest, and a server-side deadline so abandoned queries stop. Run
+     `deployment/home-server/provision --ref main` before merging it.
+   - Client half, still to do: the Rails client counts a 503 busy as a source failure. The finder then
+     decides without Open Library and does not retry. Repeated 503s open the breaker, and later lookups
+     skip Open Library too. Busy must mean wait and retry within the 60 s budget, without touching
+     the breaker. Otherwise two members uploading at once degrade each other's matches.
 
 ### Decide at launch
 
