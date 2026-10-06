@@ -737,6 +737,10 @@ restarted. Three settings, forwarded by `docker-compose.yml`:
   `OL_API_MEMORY_LIMIT`, it is a setting of the whole database: every
   endpoint's queries share both.
 
+On the home server with these limits, one resolve takes 12-13 s, peaks under
+4 GiB of the 6 GB pool and spills nothing. Extra calls in a burst get their
+503 in under 10 ms (`docs/features/home-server.md`, "`/resolve` under load").
+
 **Author redirects, measured.** 53,835 `work_authors` rows on the 2026-07-31
 artifact name an author key absent from `authors`; 53,792 of them are
 resolvable author redirects (53,748 works, 46 terminal authors). Before R87
