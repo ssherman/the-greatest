@@ -38,6 +38,11 @@ module Services
             refusal = refusal_reason
             next if refusal
 
+            # The member's row lock, which WriteLibrary holds for its whole
+            # write: a worker still writing commits first, so its `applied`
+            # ids are read below; one that starts after sees the rejection
+            # and writes nothing.
+            ::User.lock.find(@import.user_id)
             purge_urls = ::Services::Books::ReadingGoals::DestructionInvalidator.for_user(user: @import.user)
             item_ids = @import.applied_ids("list_item_ids")
             review_ids = @import.applied_ids("review_id")
