@@ -46,7 +46,12 @@ Run these in this order after each migration pass.
    replay": load, fix_slugs, apply, resolve, duplicates, junk, apply, then report. Nothing changes
    the catalog until `config.x.goodreads_replay.auto_apply` is on. Turn it on only after the
    50-per-kind hand check (spec §12.9).
-8. **Finish the failed and stuck legacy Goodreads imports.** Goodreads increment 7 adds this step.
+8. **Finish the failed and stuck legacy Goodreads imports, on the final pass only.** A rehearsal run is
+   wiped by the next truncate. After the replay's `load`, `DRY_RUN=1 bin/rails books:goodreads_replay:finish_legacy`
+   lists what it would do. Then run `bin/rails "books:goodreads_replay:finish_legacy[5]"` until nothing starts. Each
+   import fetches Goodreads pages on the line member uploads use, so batches keep it from crowding them out. Approve
+   or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`, "Finishing legacy
+   imports".
 
 ### Decide at launch
 
