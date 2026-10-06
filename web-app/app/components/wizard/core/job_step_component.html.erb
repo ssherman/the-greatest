@@ -1,0 +1,62 @@
+<%= render(Wizard::StepComponent.new(title: title, description: description)) do |s| %>
+  <% s.with_step_content do %>
+    <% if status == "running" %>
+      <div data-controller="wizard-step"
+           data-wizard-step-status-url-value="<%= status_path %>"
+           data-wizard-step-step-url-value="<%= step_path %>">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-sm font-medium" data-wizard-step-target="statusText">Working…</span>
+          <span class="text-sm text-base-content/70"><%= progress %>%</span>
+        </div>
+        <progress class="progress progress-primary w-full" value="<%= progress %>" max="100" data-wizard-step-target="progressBar"></progress>
+      </div>
+    <% elsif status == "completed" %>
+      <% case step %>
+      <% when "parse" %>
+        <div class="overflow-x-auto max-h-96 overflow-y-auto" data-testid="parsed-rows">
+          <table class="table table-sm table-pin-rows bg-base-100">
+            <thead><tr><th>#</th><th>Title</th><th>Authors</th><th>Year</th></tr></thead>
+            <tbody>
+              <% parsed_rows.each do |item, display| %>
+                <tr>
+                  <td><%= item.position %></td>
+                  <td class="[overflow-wrap:anywhere]"><%= display[:title] %><% if display[:subtitle].present? %>: <%= display[:subtitle] %><% end %></td>
+                  <td class="[overflow-wrap:anywhere]"><%= Array(display[:authors]).join(", ") %></td>
+                  <td><%= display[:year] || "—" %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% when "match" %>
+        <div class="stats stats-vertical lg:stats-horizontal shadow bg-base-100" data-testid="match-counts">
+          <% {"matched" => "Matched", "create" => "To create", "flagged" => "Flagged"}.each do |key, label| %>
+            <div class="stat" data-stat="<%= key %>">
+              <div class="stat-title"><%= label %></div>
+              <div class="stat-value"><%= counts[key] %></div>
+            </div>
+          <% end %>
+        </div>
+      <% when "import" %>
+        <div class="stats stats-vertical lg:stats-horizontal shadow bg-base-100" data-testid="import-summary">
+          <div class="stat" data-stat="processed">
+            <div class="stat-title">Rows processed</div>
+            <div class="stat-value"><%= metadata["processed_items"].to_i %></div>
+          </div>
+          <div class="stat" data-stat="failed">
+            <div class="stat-title">Failed</div>
+            <div class="stat-value"><%= metadata["failed_count"].to_i %></div>
+          </div>
+        </div>
+      <% end %>
+      <% if rerun_path %>
+        <%= button_to rerun_label, rerun_path, method: :post, class: "btn btn-outline btn-sm mt-4" %>
+      <% end %>
+    <% else %>
+      <% if error.present? %>
+        <div class="alert alert-error mb-4" role="alert"><span class="[overflow-wrap:anywhere]"><%= error %></span></div>
+      <% end %>
+      <%= button_to start_label, start_path, method: :post, class: "btn btn-primary" %>
+    <% end %>
+  <% end %>
+<% end %>

@@ -13,15 +13,16 @@
         { action: :restart },
         method: :post,
         class: "btn btn-outline",
-        data: { turbo_confirm: "Are you sure you want to restart the wizard? Items you have not verified are deleted; verified items are kept." } %>
+        data: restart_button_data %>
 
     <% if show_next_button? %>
       <%= button_to next_label,
           { action: :advance_step, step: step_name },
           method: :post,
+          params: next_params,
           class: "btn btn-primary",
           disabled: next_button_disabled?,
-          data: { wizard_step_target: "nextButton" } %>
+          data: next_button_data %>
     <% end %>
   </div>
 </div>

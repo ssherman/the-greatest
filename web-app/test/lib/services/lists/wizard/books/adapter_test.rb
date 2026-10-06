@@ -193,6 +193,14 @@ module Services
             assert_raises(Adapter::CreateFailed) { @adapter.create(row, importer: authorless) }
             assert_not ::Books::Book.exists?(title: "Nobody's Book")
           end
+
+          test "paths point at the books admin wizard, the book search and the list pages" do
+            assert_equal "/admin/lists/#{@list.id}/wizard", @adapter.wizard_path(nil, @list)
+            assert_equal "/admin/lists/#{@list.id}/wizard/step/review?filter=ai", @adapter.wizard_path(:step, @list, step: "review", filter: "ai")
+            assert_equal "/admin/lists/#{@list.id}/wizard/rows/7/link", @adapter.wizard_path(:link_row, @list, row_id: 7)
+            assert_equal "/admin/books/search", @adapter.search_path
+            assert_equal ["/admin/lists", "/admin/lists/#{@list.id}"], [@adapter.lists_path, @adapter.list_path(@list)]
+          end
         end
       end
     end

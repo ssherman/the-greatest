@@ -1,0 +1,80 @@
+<div class="card bg-base-100 border border-base-300" data-testid="review-row">
+  <div class="card-body gap-3">
+    <div class="flex flex-wrap items-start justify-between gap-2">
+      <div class="min-w-0">
+        <p class="text-sm text-base-content/70">#<%= item.position %></p>
+        <h3 class="font-semibold [overflow-wrap:anywhere]"><%= row_text[:title] %><% if row_text[:subtitle].present? %>: <%= row_text[:subtitle] %><% end %></h3>
+        <p class="text-sm [overflow-wrap:anywhere]"><%= Array(row_text[:authors]).join(", ") %><% if row_text[:year].present? %> (<%= row_text[:year] %>)<% end %></p>
+      </div>
+      <span class="badge <%= bucket_badge %>"><%= bucket_label %></span>
+    </div>
+
+    <% if reasons.any? %>
+      <ul class="text-sm list-disc list-inside" data-testid="row-reasons">
+        <% reasons.each do |label| %><li><%= label %></li><% end %>
+      </ul>
+    <% end %>
+    <% if problem %>
+      <p class="text-sm text-error [overflow-wrap:anywhere]"><%= problem %></p>
+    <% end %>
+    <% if linked %>
+      <p class="text-sm [overflow-wrap:anywhere]">Linked to <strong><%= linked[:title] %></strong><% if linked[:authors].any? %> by <%= linked[:authors].join(", ") %><% end %></p>
+    <% end %>
+
+    <% if candidates.any? %>
+      <div>
+        <h4 class="text-sm font-semibold mb-1">Candidates</h4>
+        <ul class="space-y-2">
+          <% candidates.each do |candidate| %>
+            <li class="flex flex-wrap items-center justify-between gap-2 border border-base-300 rounded-box p-2" data-testid="row-candidate">
+              <div class="min-w-0 text-sm [overflow-wrap:anywhere]">
+                <span class="font-medium"><%= candidate.title %></span>
+                <% if candidate.creators.any? %> by <%= candidate.creators.join(", ") %><% end %>
+                <% if candidate.year.present? %> (<%= candidate.year %>)<% end %>
+                <% if candidate.local? %>
+                  <span class="badge badge-ghost badge-sm">our book, on <%= candidate.list_count.to_i %> <%= "list".pluralize(candidate.list_count.to_i) %></span>
+                <% elsif candidate.external_key.present? %>
+                  <span class="badge badge-ghost badge-sm">Open Library <%= candidate.external_key %></span>
+                <% end %>
+              </div>
+              <% if candidate.local? %>
+                <%= button_to "Link", path(:link_row), method: :post, params: {record_id: candidate.record_id, filter: filter}, class: "btn btn-sm btn-primary" %>
+              <% elsif candidate.external_key.present? %>
+                <%= button_to "Create from this work", path(:create_row), method: :post, params: {external_key: candidate.external_key, filter: filter}, class: "btn btn-sm" %>
+              <% end %>
+            </li>
+          <% end %>
+        </ul>
+      </div>
+    <% end %>
+
+    <details class="collapse collapse-arrow bg-base-200">
+      <summary class="collapse-title text-sm font-medium">More actions</summary>
+      <div class="collapse-content space-y-4">
+        <%= form_with url: path(:link_row), method: :post do |form| %>
+          <%= hidden_field_tag :filter, filter, id: nil %>
+          <%= render(AutocompleteComponent.new(name: "record_id", id: search_id, url: search_path, placeholder: "Search our books…", required: true)) %>
+          <%= form.submit "Link the chosen book", class: "btn btn-sm mt-2" %>
+        <% end %>
+
+        <%= button_to "Create from the row's text", path(:create_row_from_text), method: :post, params: {filter: filter}, class: "btn btn-sm" %>
+
+        <%= form_with url: path(:edit_row), method: :post do |form| %>
+          <%= hidden_field_tag :filter, filter, id: nil %>
+          <label class="label" for="<%= field_id(:title) %>">Title</label>
+          <%= text_field_tag :title, row_text[:title], id: field_id(:title), class: "input w-full", required: true %>
+          <label class="label" for="<%= field_id(:subtitle) %>">Subtitle</label>
+          <%= text_field_tag :subtitle, row_text[:subtitle], id: field_id(:subtitle), class: "input w-full" %>
+          <label class="label" for="<%= field_id(:authors) %>">Authors, one per line</label>
+          <%= text_area_tag :authors, Array(row_text[:authors]).join("\n"), id: field_id(:authors), rows: 3, class: "textarea w-full" %>
+          <label class="label" for="<%= field_id(:year) %>">Year</label>
+          <%= text_field_tag :year, row_text[:year], id: field_id(:year), class: "input w-full", inputmode: "numeric" %>
+          <%= form.submit "Save and match again", class: "btn btn-sm mt-2" %>
+        <% end %>
+
+        <%= button_to "Remove", path(:remove_row), method: :post, params: {filter: filter},
+            class: "btn btn-sm btn-error btn-outline", data: {turbo_confirm: "Remove this row from the list?"} %>
+      </div>
+    </details>
+  </div>
+</div>

@@ -19,6 +19,17 @@ module Services
 
           def listable_includes = [:authors]
 
+          def wizard_path(name, list, **params)
+            helper = [name, "admin_books_list_wizard_path"].compact.join("_")
+            url_helpers.public_send(helper, list_id: list.id, **params)
+          end
+
+          def search_path = url_helpers.search_admin_books_books_path
+
+          def lists_path = url_helpers.admin_books_lists_path
+
+          def list_path(list) = url_helpers.admin_books_list_path(list)
+
           def parse(list, content: nil)
             result = ::Services::Ai::Tasks::Lists::Books::RawParserTask.new(parent: list, content: content).call
             return Result.new(success?: false, data: [], errors: [result.error.presence || "Parsing failed"]) unless result.success?
@@ -133,6 +144,8 @@ module Services
           end
 
           private
+
+          def url_helpers = ::Rails.application.routes.url_helpers
 
           def book_holding(keys)
             return nil if keys.empty?

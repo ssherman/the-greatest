@@ -1,0 +1,13 @@
+<%= render(Wizard::StepComponent.new(title: "Done", description: "What the wizard did with this list.")) do |step| %>
+  <% step.with_step_content do %>
+    <div class="stats stats-vertical lg:stats-horizontal shadow bg-base-100 flex-wrap" data-testid="done-summary">
+      <% LABELS.each do |key, label| %>
+        <div class="stat" data-stat="<%= key %>">
+          <div class="stat-title"><%= label %></div>
+          <div class="stat-value"><%= counts[key] %></div>
+        </div>
+      <% end %>
+    </div>
+    <p class="mt-4"><%= link_to "Back to the list", list_path, class: "btn btn-outline" %></p>
+  <% end %>
+<% end %>

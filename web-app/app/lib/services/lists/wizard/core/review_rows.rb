@@ -15,25 +15,43 @@ module Services
             def local? = !record_id.nil?
           end
 
-          attr_reader :filter
+          PER_PAGE = 100
 
-          def initialize(list:, filter: "flagged", listable_includes: [])
+          attr_reader :filter, :per_page
+
+          def initialize(list:, filter: "flagged", listable_includes: [], page: 1, per_page: PER_PAGE)
             @list = list
             @filter = FILTERS.include?(filter) ? filter : FILTERS.first
             @listable_includes = listable_includes
+            @requested_page = page
+            @per_page = per_page
           end
 
+          # Rows that match the filter, across every page.
+          def total = pairs.size
+
+          def pages = [(total.to_f / per_page).ceil, 1].max
+
+          # The requested page, clamped into 1..pages so a stale link shows the
+          # last page instead of failing.
+          def page = @page ||= @requested_page.to_i.clamp(1, pages)
+
+          # One page of rows; decisions are fetched for this page only.
           def rows
-            items = @list.list_items.includes(listable: @listable_includes).order(:position, :id).to_a
-            pairs = items.map { |item| [item, RowState.new(item)] }.select { |_item, state| keep?(state) }
-            decisions = ::MatchDecision.where(id: pairs.filter_map { |_item, state| state.match_decision_id }).index_by(&:id)
-            pairs.map do |item, state|
+            slice = pairs.slice((page - 1) * per_page, per_page) || []
+            decisions = ::MatchDecision.where(id: slice.filter_map { |_item, state| state.match_decision_id }).index_by(&:id)
+            slice.map do |item, state|
               decision = decisions[state.match_decision_id]
               Row.new(item: item, state: state, decision: decision, candidates: candidates_for(decision))
             end
           end
 
           private
+
+          def pairs
+            @pairs ||= @list.list_items.includes(listable: @listable_includes).order(:position, :id).to_a
+              .map { |item| [item, RowState.new(item)] }.select { |_item, state| keep?(state) }
+          end
 
           def keep?(state)
             return false if state.removed?

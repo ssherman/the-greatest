@@ -51,6 +51,31 @@ module Services
           test "a row without a decision has no candidates" do
             assert_equal [], ReviewRows.new(list: @list).rows.first.candidates
           end
+
+          test "rows come a page at a time, in list order, for every filter" do
+            list = wizard_list
+            (1..5).each { |n| wizard_row(list, position: n, title: "Row #{n}", wizard: {bucket: "flagged", decided_by: "ai"}) }
+
+            %w[flagged all ai].each do |filter|
+              first = ReviewRows.new(list: list, filter: filter, per_page: 2)
+              assert_equal [5, 3, 1], [first.total, first.pages, first.page]
+              assert_equal ["Row 1", "Row 2"], first.rows.map { |row| row.item.metadata["title"] }
+
+              last = ReviewRows.new(list: list, filter: filter, per_page: 2, page: 3)
+              assert_equal ["Row 5"], last.rows.map { |row| row.item.metadata["title"] }
+            end
+          end
+
+          test "the page is clamped into range and defaults to 100 rows" do
+            list = wizard_list
+            (1..3).each { |n| wizard_row(list, position: n, title: "Row #{n}", wizard: {bucket: "flagged"}) }
+
+            assert_equal 100, ReviewRows.new(list: list).per_page
+            assert_equal 2, ReviewRows.new(list: list, per_page: 2, page: 99).page
+            assert_equal 1, ReviewRows.new(list: list, per_page: 2, page: "junk").page
+            assert_equal 1, ReviewRows.new(list: list, per_page: 2, page: 0).page
+            assert_equal [1, 0], [ReviewRows.new(list: wizard_list).pages, ReviewRows.new(list: wizard_list).total]
+          end
         end
       end
     end

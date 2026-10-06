@@ -732,7 +732,24 @@ Rails.application.routes.draw do
         end
       end
 
-      resources :lists
+      resources :lists do
+        # The list wizard core (books list wizard spec §1).
+        resource :wizard, only: [:show], controller: "list_wizard" do
+          get "step/:step", action: :show_step, as: :step
+          get "step/:step/status", action: :step_status, as: :step_status
+          post "step/:step/advance", action: :advance_step, as: :advance_step
+          post "step/:step/back", action: :back_step, as: :back_step
+          post "save_content", action: :save_content, as: :save_content
+          post "reparse", action: :reparse, as: :reparse
+          post "rematch", action: :rematch, as: :rematch
+          post "restart", action: :restart
+          post "rows/:row_id/link", action: :link_row, as: :link_row
+          post "rows/:row_id/create", action: :create_row, as: :create_row
+          post "rows/:row_id/create_from_text", action: :create_row_from_text, as: :create_row_from_text
+          post "rows/:row_id/edit", action: :edit_row, as: :edit_row
+          post "rows/:row_id/remove", action: :remove_row, as: :remove_row
+        end
+      end
 
       resources :reviews, only: [:index, :show, :destroy]
 
