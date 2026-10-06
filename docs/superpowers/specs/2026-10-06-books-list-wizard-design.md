@@ -28,8 +28,9 @@ FOREVER". Here, the admin sees only the rows that might be wrong.
 8. **AI-decided matches at high confidence pass through.** The review screen gets a filter for
    spot-checking them.
 9. **Undecided flagged rows may stay unlinked** when the admin finishes, after one confirmation.
-10. **No locks.** Lists are added one at a time. Import creates books one after another in a single
-    job, which is what stops duplicate authors (section 7).
+10. **No creation locks.** Lists are added one at a time. Import creates books one after another
+    in a single job, which is what stops duplicate authors (section 6). The only lock is the brief
+    row lock that saving wizard progress takes (section 7).
 11. **No name-uniqueness rule** on books or authors. Same titles and same names are legitimate.
 
 ## Non-goals
@@ -89,6 +90,10 @@ under `app/sidekiq/`, generators for new classes.
 
 - The admin pastes HTML or text into `lists.raw_content`. `simplified_content` is filled on save,
   as today.
+- **Large lists.** Paste has the same "large plain-text list (1000+ lines)" checkbox as the old
+  wizards. With it on, the content is parsed 100 non-blank lines at a time and positions are
+  strictly sequential, ignoring the AI's ranks. One AI call cannot return a 1,000-book list. A
+  failed batch fails the whole parse and deletes nothing.
 - The parse job runs the books `RawParserTask`. Each parsed book becomes a `ListItem` whose
   metadata holds `rank`, `title`, `subtitle`, `authors` and `year`, at the position given by its
   rank.
@@ -136,7 +141,8 @@ many pairs were raised.
 
 ## 4. Review
 
-- **The default view** is flagged, unsettled rows in list order. Counts at the top: matched, to
+- **The default view** is every flagged row in list order. A row can be settled and still flagged,
+  for example when its import failed. Counts at the top: matched, to
   create, flagged, settled.
 - **Filters:**
   - all rows;
@@ -207,8 +213,9 @@ many pairs were raised.
 
 - **Row state** lives in `list_items.metadata` under a `wizard` key: bucket, reasons, settled,
   settled by, settled at, and the saved Open Library keys. The finder's decision is reachable
-  through the row's existing `match_decisions`. `verified` is true on matched and settled rows.
-  No migration.
+  through the row's existing `match_decisions`. `verified` is true exactly when the row is linked
+  to a book that a rule, the admin or Import settled on. Unlinked rows (to create, removed or
+  flagged) stay unverified. No migration.
 - **Wizard state writes:** a job writes only its own step's entry and re-reads the list first.
   Today a job writes the whole state from a stale copy, which can overwrite a Back or Next click
   made while it ran.
@@ -216,10 +223,14 @@ many pairs were raised.
 ## 8. Protecting admin decisions
 
 - **A settled row** is any row the admin acted on, plus any row Import created or linked.
-- **Re-match, re-parse and restart never change or delete a settled row.**
+- **Re-match, re-parse and restart never change or delete a settled row.** The one exception is the
+  admin's own "edit the row's text and re-match" on that row.
+- **Rows from before the wizard** (migrated, or added on the list page) have no wizard state and
+  count as settled.
 - **Restart** returns to Paste and deletes only unsettled rows.
-- **Re-parse** replaces unsettled rows. A parsed row whose normalized title and authors equal a
-  kept row's is not added again.
+- **Re-parse** replaces unsettled rows and needs only write access. A parsed row whose normalized
+  title and authors equal a kept row's is not added again. Removed rows are deleted when Import
+  finishes, so a re-parse after Import can bring one back.
 - **Back** works on every step.
 
 ## 9. Fixes to the old wizards (music and games)
