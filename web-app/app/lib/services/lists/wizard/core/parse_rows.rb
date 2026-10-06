@@ -5,7 +5,7 @@ module Services
     module Wizard
       module Core
         # Books list wizard spec §2 and §8: pasted content becomes pending rows.
-        # A re-parse replaces unsettled rows and never re-adds a row whose
+        # A re-parse replaces rows that are neither settled nor linked to a book and never re-adds a row whose
         # normalized title and creators equal a kept row's. Nothing is deleted
         # until the parser has succeeded.
         class ParseRows
@@ -79,7 +79,7 @@ module Services
 
           def replace_rows(rows)
             ::ActiveRecord::Base.transaction do
-              ::ListItem.where(id: RowState.unsettled(@list).map(&:id)).destroy_all
+              ::ListItem.where(id: RowState.replaceable(@list).map(&:id)).destroy_all
               kept = @list.list_items.includes(listable: @adapter.listable_includes).map { |item| @adapter.row_signature(item) }.to_set
 
               now = Time.current

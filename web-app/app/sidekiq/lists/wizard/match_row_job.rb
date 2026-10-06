@@ -3,6 +3,9 @@
 class Lists::Wizard::MatchRowJob
   include Sidekiq::Job
 
+  # Five retries (hours, not the default weeks) before the row is flagged.
+  sidekiq_options retry: 5
+
   # Out of retries: flag the row so the step can finish instead of staying
   # "running" for good (which would block every wizard action).
   sidekiq_retries_exhausted do |msg, exception|

@@ -223,12 +223,15 @@ many pairs were raised.
 ## 8. Protecting admin decisions
 
 - **A settled row** is any row the admin acted on, plus any row Import created or linked.
-- **Re-match, re-parse and restart never change or delete a settled row.** The one exception is the
+- **A kept row** is a settled row or any row linked to a book, including rows Match linked on its
+  own. Restart, re-parse and re-match only touch rows that are neither. A wrong automatic match
+  is corrected with a Review action, not by starting over.
+- **Re-match, re-parse and restart never change or delete a kept row.** The one exception is the
   admin's own "edit the row's text and re-match" on that row.
 - **Rows from before the wizard** (migrated, or added on the list page) have no wizard state and
   count as settled.
-- **Restart** returns to Paste and deletes only unsettled rows.
-- **Re-parse** replaces unsettled rows and needs only write access. A parsed row whose normalized
+- **Restart** returns to Paste and deletes only rows that are not kept.
+- **Re-parse** replaces rows that are not kept and needs only write access. A parsed row whose normalized
   title and authors equal a kept row's is not added again. Removed rows are deleted when Import
   finishes, so a re-parse after Import can bring one back.
 - **Back** works on every step.

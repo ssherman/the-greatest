@@ -71,4 +71,13 @@ class Admin::Lists::ShowComponentTest < ViewComponent::TestCase
 
     assert_no_selector "[data-stat=unlinked]"
   end
+
+  test "the unlinked stat links to the Review step with every row shown, not just the flagged ones" do
+    list = wizard_list
+    wizard_row(list, position: 1, title: "Unlinked", wizard: {bucket: "flagged"})
+    render_show(list)
+
+    href = page.find("[data-stat=unlinked] a")[:href]
+    assert_equal ["/lists/#{list.id}/wizard/step/review", "all"], [URI(href).path, Rack::Utils.parse_query(URI(href).query)["filter"]]
+  end
 end

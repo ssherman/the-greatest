@@ -165,6 +165,38 @@ module Services
             item = @list.list_items.reload.first
             assert_equal ["Emma", ["Jane Austen"]], [item.metadata["title"], item.metadata["authors"]]
           end
+
+          test "a row Match linked to a book is kept by a re-parse of different content" do
+            linked = wizard_row(@list, position: 1, title: "Emma", authors: ["Jane Austen"], listable: books_books(:war_and_peace), verified: true,
+              wizard: {bucket: "matched", target_record_id: books_books(:war_and_peace).id})
+            parsed(row("Mansfield Park", ["Jane Austen"]))
+
+            assert_equal 1, ParseRows.call(list: @list, adapter: @adapter)
+
+            assert_equal books_books(:war_and_peace).id, linked.reload.listable_id
+            assert_equal 2, @list.list_items.reload.count
+          end
+
+          test "re-parsing the same paste does not duplicate a linked row" do
+            book = books_books(:war_and_peace)
+            linked = wizard_row(@list, position: 1, title: "War and Peace", authors: ["Leo Tolstoy"], listable: book, verified: true,
+              wizard: {bucket: "matched", target_record_id: book.id})
+            parsed(row("War and Peace", ["Leo Tolstoy"]), row("Emma", ["Jane Austen"]))
+
+            assert_equal 1, ParseRows.call(list: @list, adapter: @adapter)
+
+            assert ::ListItem.exists?(linked.id)
+            assert_equal 2, @list.list_items.reload.count
+          end
+
+          test "an unlinked flagged row is still replaced by a re-parse" do
+            flagged = wizard_row(@list, position: 1, title: "Old", wizard: {bucket: "flagged", reasons: ["on_list_twice"]})
+            parsed(row("Emma", ["Jane Austen"]))
+
+            ParseRows.call(list: @list, adapter: @adapter)
+
+            assert_not ::ListItem.exists?(flagged.id)
+          end
         end
       end
     end

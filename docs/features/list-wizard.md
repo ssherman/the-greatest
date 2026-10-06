@@ -69,9 +69,12 @@ Sidekiq's own retries run out on an exception, the row is flagged `match_failed`
 Every Review action settles the row and records verdict, reviewer and time on its `MatchDecision`.
 Row actions refuse a pending row ("still being matched"). A `listable_id` clash (another row took the
 book) is reported as already on this list; any other validation error is raised.
-Re-parse, re-match and restart never change or delete a settled row; restart deletes only unsettled
-rows, atomically with the step reset. Re-parse skips a parsed row whose normalized title and authors
-equal a kept row's. Removed rows are kept (hidden) until Import finishes and then deleted, so a re-parse
+Re-parse, re-match and restart never change or delete a kept row. A kept row is settled or linked to a
+book (it has a `listable_id`); restart deletes only the rows that are neither, atomically with the step
+reset. Re-parse skips a parsed row whose normalized title and authors equal a kept row's. Re-running Match
+also re-queues any row stuck pending, settled or not (an edited row whose job was lost), on its current
+text. Re-matching one row of an `on_list_twice` pair leaves the partner flagged; it is not un-flagged
+automatically. Removed rows are kept (hidden) until Import finishes and then deleted, so a re-parse
 after Import may add a removed row back.
 
 ### Large lists
@@ -255,7 +258,7 @@ Provides generic wizard behavior: step navigation, validation, status polling, a
 | `step_status` | GET | JSON status for AJAX polling |
 | `advance_step` | POST | Move to next step |
 | `back_step` | POST | Move to previous step |
-| `restart` | POST | Reset wizard to beginning (deletes unverified items only) |
+| `restart` | POST | Reset wizard to beginning (music/games wizards: deletes unverified items only) |
 
 **Abstract methods** (subclasses must implement):
 
@@ -402,8 +405,6 @@ Games includes `BaseListWizardController` directly (no intermediate base class).
 | review | Manual verification | No |
 | import | Create game records via IGDB importer | `Games::WizardImportGamesJob` |
 | complete | Summary display | No |
-
-Rows linked by hand (`manual_link`, `manual_musicbrainz_link`, `manual_igdb_link`) are never re-validated.
 
 **Review step item actions** (Games):
 

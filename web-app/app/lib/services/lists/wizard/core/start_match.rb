@@ -4,7 +4,7 @@ module Services
   module Lists
     module Wizard
       module Core
-        # Books list wizard spec §3: one job per unsettled row. Every row is
+        # Books list wizard spec §3: one job per row that is replaceable or stuck pending. Every row is
         # marked pending before any job is queued, so the last job to finish
         # (inline in tests, or under Sidekiq) is the one that completes the step.
         class StartMatch
@@ -19,7 +19,7 @@ module Services
           end
 
           def call
-            rows = RowState.unsettled(@list).sort_by { |item| [item.position || 0, item.id] }
+            rows = RowState.matchable(@list).sort_by { |item| [item.position || 0, item.id] }
             rows.each do |item|
               RowState.new(item).merge(RowState::PENDING)
               RowState.unlink(item)

@@ -343,7 +343,7 @@
               <div class="stat" data-stat="unlinked">
                 <div class="stat-title">Unlinked rows</div>
                 <div class="stat-value text-warning"><%= unlinked_rows_count %></div>
-                <div class="stat-desc">Finish them in the wizard's Review step</div>
+                <div class="stat-desc"><%= link_to "Finish them in the wizard's Review step", unlinked_review_path(domain_config[:wizard_path_proc].call(list)), class: "link" %></div>
               </div>
             <% end %>
 

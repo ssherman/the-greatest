@@ -315,6 +315,17 @@ class Admin::Books::ListWizardControllerTest < ActionDispatch::IntegrationTest
     assert_not ::ListItem.exists?(unsettled.id)
   end
 
+  test "restart keeps a row linked to a book and deletes an unlinked one" do
+    sign_in_as(@admin, stub_auth: true)
+    linked = wizard_row(@list, position: 1, title: "War and Peace", listable: books_books(:war_and_peace), verified: true, wizard: {bucket: "matched"})
+    unlinked = wizard_row(@list, position: 2, title: "Emma", wizard: {bucket: "flagged"})
+
+    post wizard(:restart)
+
+    assert_redirected_to wizard
+    assert_equal [true, false], [::ListItem.exists?(linked.id), ::ListItem.exists?(unlinked.id)]
+  end
+
   test "a Match advanced by the row jobs' progress writes still blocks restart and re-parse" do
     sign_in_as(@admin, stub_auth: true)
     row = wizard_row(@list, position: 1, title: "Emma", wizard: {bucket: "matched"})

@@ -67,4 +67,8 @@ class Lists::Wizard::MatchRowJobTest < ActiveSupport::TestCase
       Lists::Wizard::MatchRowJob.sidekiq_retries_exhausted_block.call({"args" => [0]}, StandardError.new("x"))
     end
   end
+
+  test "retries five times so a failing row is flagged within hours" do
+    assert_equal 5, Lists::Wizard::MatchRowJob.get_sidekiq_options["retry"]
+  end
 end

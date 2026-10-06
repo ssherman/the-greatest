@@ -30,6 +30,21 @@ module Services
             list.list_items.reload.reject { |item| new(item).settled? }
           end
 
+          # A "kept" row is settled or linked to a book (spec §8). Re-parse, restart
+          # and re-match act on the rest, so none of them can unlink a book.
+          def self.replaceable(list)
+            unsettled(list).reject { |item| item.listable_id.present? }
+          end
+
+          # Rows Match works on: the replaceable ones, plus any row mid-match
+          # (pending), settled or not, so a lost job never strands one.
+          def self.matchable(list)
+            list.list_items.reload.select do |item|
+              state = new(item)
+              (state.present? && state.pending?) ? true : (!state.settled? && item.listable_id.blank?)
+            end
+          end
+
           def self.holder_of(list, record, except: nil)
             scope = list.list_items.where(listable: record)
             scope = scope.where.not(id: except.id) if except

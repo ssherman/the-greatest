@@ -19,6 +19,12 @@ class Admin::Lists::ShowComponent < ViewComponent::Base
     list.is_a?(::Books::List) && unlinked_rows_count.positive?
   end
 
+  # Pre-wizard unlinked rows are settled, so the default Flagged filter hides
+  # them; the link asks for every row.
+  def unlinked_review_path(wizard_link)
+    "#{wizard_link.to_s.chomp("/")}/step/review?filter=all"
+  end
+
   private
 
   attr_reader :list, :domain_config

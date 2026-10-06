@@ -56,13 +56,13 @@ module ListWizardCore
     redirect_to({action: :show_step, step: wizard_steps[index]}, status: :see_other)
   end
 
-  # Spec §8: back to Paste, deleting only the rows nobody settled. Not while
+  # Spec §8: back to Paste, deleting only the rows nobody settled or linked. Not while
   # a job runs: it would be writing rows this deletes.
   def restart
     return refuse_while_running if any_job_running?
 
     ::ListItem.transaction do
-      ::ListItem.where(id: ::Services::Lists::Wizard::Core::RowState.unsettled(wizard_entity).map(&:id)).destroy_all
+      ::ListItem.where(id: ::Services::Lists::Wizard::Core::RowState.replaceable(wizard_entity).map(&:id)).destroy_all
       wizard_entity.wizard_manager.reset!
     end
     redirect_to({action: :show}, status: :see_other)
