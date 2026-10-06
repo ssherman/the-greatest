@@ -138,6 +138,94 @@ module Services
             assert_equal "completed", @list.reload.wizard_manager.step_status("match")
           end
 
+          def failed_source_answer(**attributes)
+            answer(outcome: :matched, record: @book, confidence: :medium, decided_by: :rule, candidates: [local_candidate(@book)],
+              sources_failed: ["open_library"], **attributes)
+          end
+
+          test "a match with a failed source on the first attempt leaves the row pending and schedules attempt 2" do
+            failed_source_answer
+            decision_count = ::MatchDecision.count
+
+            Sidekiq::Testing.fake! do
+              ::Lists::Wizard::MatchRowJob.jobs.clear
+              MatchRow.call(list_item: @row, adapter: @adapter, single_row: true)
+
+              job = ::Lists::Wizard::MatchRowJob.jobs.last
+              assert_equal [@row.id, true, 2], job["args"]
+              assert_in_delta MatchRow::RETRY_DELAYS.first, job["at"] - Time.now.to_f, 5
+            end
+
+            state = RowState.new(@row.reload)
+            assert_equal "pending", state.bucket
+            assert_nil @row.listable_id
+            assert_nil state.match_decision_id
+            assert_nil state.decided_by
+            assert_equal decision_count + 1, ::MatchDecision.count # the finder wrote one for the attempt
+          end
+
+          test "attempt 2 failing again schedules attempt 3 after the longer delay" do
+            failed_source_answer
+
+            Sidekiq::Testing.fake! do
+              ::Lists::Wizard::MatchRowJob.jobs.clear
+              MatchRow.call(list_item: @row, adapter: @adapter, attempt: 2)
+
+              job = ::Lists::Wizard::MatchRowJob.jobs.last
+              assert_equal [@row.id, false, 3], job["args"]
+              assert_in_delta MatchRow::RETRY_DELAYS.last, job["at"] - Time.now.to_f, 5
+            end
+          end
+
+          test "the final attempt applies the capped result, flagged unsure, and names the failed source" do
+            failed_source_answer
+
+            Sidekiq::Testing.fake! do
+              ::Lists::Wizard::MatchRowJob.jobs.clear
+              MatchRow.call(list_item: @row, adapter: @adapter, attempt: MatchRow::MAX_ATTEMPTS)
+              assert_empty ::Lists::Wizard::MatchRowJob.jobs
+            end
+
+            state = RowState.new(@row.reload)
+            assert_nil @row.listable_id
+            assert_equal ["flagged", ["unsure"]], [state.bucket, state.reasons]
+            assert_includes state.error, "open_library"
+            assert state.match_decision_id.present?
+          end
+
+          test "a successful retry applies normally" do
+            answer(outcome: :matched, record: @book, confidence: :high, decided_by: :rule, candidates: [local_candidate(@book)])
+
+            MatchRow.call(list_item: @row, adapter: @adapter, attempt: 2)
+
+            state = RowState.new(@row.reload)
+            assert_equal [@book.id, "matched", nil], [@row.listable_id, state.bucket, state.error]
+          end
+
+          test "a retry for a row the admin settled meanwhile does nothing" do
+            RowState.new(@row).merge("bucket" => "removed", "reasons" => []).settle(by: users(:admin_user))
+            @row.save!
+            failed_source_answer
+
+            Sidekiq::Testing.fake! do
+              ::Lists::Wizard::MatchRowJob.jobs.clear
+              MatchRow.call(list_item: @row, adapter: @adapter)
+              assert_empty ::Lists::Wizard::MatchRowJob.jobs
+            end
+
+            assert_equal ["removed", true], [RowState.new(@row.reload).bucket, RowState.new(@row).settled?]
+          end
+
+          test "the step does not complete while a row awaits a source retry" do
+            failed_source_answer
+
+            Sidekiq::Testing.fake! do
+              MatchRow.call(list_item: @row, adapter: @adapter)
+            end
+
+            assert_equal "running", @list.reload.wizard_manager.step_status("match")
+          end
+
           test "a finder error flags the row match_failed and the step can still finish" do
             finder = Object.new
             def finder.call(**) = raise(StandardError, "open library timed out")
