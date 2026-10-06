@@ -774,7 +774,18 @@ Rails.application.routes.draw do
         end
       end
       # The Goodreads replay's findings (Goodreads import spec §12.7).
-      resources :goodreads_imports, only: [:show]
+      resources :goodreads_imports, only: [:index, :show] do
+        member do
+          post :approve
+          post :reject
+          post :rerun
+          post :promote_record
+          post :delete_record
+        end
+        collection do
+          post :bulk_approve
+        end
+      end
       resources :repair_verdicts, only: [:index, :show] do
         member do
           post :approve
