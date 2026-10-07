@@ -23,11 +23,13 @@ an item says otherwise. Section 3 is the hostname switch. Section 4 is for after
     replay's `load` reuses the uploads instead of downloading them again, admin rejections of
     finishing imports stick, and the Goodreads page cache is not fetched again.
 - **Put `books_goodreads_editions` and `books_goodreads_import_rows` in the truncate list.** The
-  replay rebuilds them, and the step in section 2, item 8 restarts an import only once its rows are
-  gone. A `DELETE`-based clear keeps the rows, and every finishing import would then be skipped as
-  already run.
-- **Before the final truncate, every import that finishes a legacy one must be finished or
-  rejected.** One still running when the truncate happens never restarts cleanly.
+  replay rebuilds them.
+- **Before any truncate, reject and then delete every import that finishes a legacy one** (section 2,
+  item 8). Finished or approved is not enough. Its rows hold the only ids of the list items and
+  reviews it wrote, and those outlive the truncate while the rows do not. Rejecting first removes
+  them while the ids are still there. Deleting it afterwards lets the final pass create it fresh.
+  One left in place is reported `stale` from then on and never runs again. Its items and reviews
+  can no longer be found by the import.
 
 ## 2. The migration and what follows it
 
@@ -60,9 +62,9 @@ Run these in this order after each migration pass.
    not remove them: those tables have no foreign key to books. The truncate deletes the provisional
    books they point at, the re-migration resets the books id sequence, and new books then take those
    ids, so the users' lists and reviews end up on unrelated books.
-   - If it was run on a rehearsal anyway: before the truncate, reject each finishing import under
-     Books → Goodreads Imports (that removes what it wrote), then delete those finishing imports, or
-     the rejection keeps them from running on the final pass.
+   - If it was run on a rehearsal anyway: before the truncate, let any that is still running finish,
+     reject each finishing import under Books → Goodreads Imports (that removes what it wrote), then
+     delete those finishing imports, or the rejection keeps them from running on the final pass.
    - On the final pass, after the replay's `load`: `DRY_RUN=1 bin/rails books:goodreads_replay:finish_legacy`
      lists what it would do. Then run `bin/rails "books:goodreads_replay:finish_legacy[1]"`, one import at
      a time, and wait until it is no longer in progress before running the next. Running imports are

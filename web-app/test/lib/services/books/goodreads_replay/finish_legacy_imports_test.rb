@@ -150,21 +150,34 @@ module Services
           assert_equal({601 => :already_run}, finish(legacy))
         end
 
-        test "after a re-migration truncated its rows, it runs again from the kept file, pending review" do
+        test "an import whose written rows a truncate emptied is stale, and left exactly as it is" do
           replay
           finish(legacy)
           import = finishing
           import.update!(status: :complete, finished_at: Time.current, review_status: :approved,
-            reviewed_by: users(:admin_user), reviewed_at: Time.current, ai_calls_count: 4)
+            reviewed_by: users(:admin_user), reviewed_at: Time.current, rows_count: 2, ai_calls_count: 4)
           import.records.create!(record: books_books(:war_and_peace), action: :created)
+          ::Books::Goodreads::RunImportJob.expects(:perform_async).never
+
+          assert_equal({601 => :stale}, finish(legacy))
+
+          import.reload
+          assert_equal %w[complete approved], [import.status, import.review_status]
+          assert_equal 1, import.records.count
+        end
+
+        test "an import that failed before parsing anything starts again from the kept file, pending review" do
+          replay
+          finish(legacy)
+          import = finishing
+          import.update!(status: :failed, error: "boom", finished_at: Time.current, ai_calls_count: 1)
 
           assert_equal({601 => :started}, finish(legacy))
 
           import.reload
           assert_equal %w[queued pending], [import.status, import.review_status]
-          assert_nil import.reviewed_at
+          assert_nil import.error
           assert_equal 0, import.ai_calls_count
-          assert_empty import.records
         end
 
         test "an import an admin rejected is never finished again" do

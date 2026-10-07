@@ -20,17 +20,18 @@ module Services
       # Safe to call again, but in production only on the final books
       # migration pass: the list items and reviews it writes survive a
       # truncate, and would end up on whatever books later take the deleted
-      # provisional books' ids. A finishing import with rows has run and is
-      # left alone. One whose rows a truncate emptied runs again from its kept
-      # file, pending review, its old provenance gone. Writes skip on
-      # conflict, so items the legacy import already wrote are not written
-      # twice.
+      # provisional books' ids. Before any truncate, every finishing import
+      # is rejected and deleted. A finishing import with rows has run and is
+      # left alone; one whose written rows a truncate emptied anyway is stale
+      # and left alone too. One that failed before writing any rows starts
+      # again from its kept file. Writes skip on conflict, so items the
+      # legacy import already wrote are not written twice.
       class FinishLegacyImports
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         LegacyImport = Data.define(:id, :user_id, :status, :created_at)
         STARTS = %i[started would_start].freeze
         # Outcomes that mean this import, not an older one, is the user's.
-        CLAIMS = %i[started would_start running already_run rejected user_busy].freeze
+        CLAIMS = %i[started would_start running already_run stale rejected user_busy].freeze
 
         # Every legacy import, with its status as the legacy app holds it now.
         class LegacyImports
@@ -105,6 +106,10 @@ module Services
           return :rejected if existing&.review_rejected?
           return :running if existing&.in_progress?
           return :already_run if existing&.rows&.exists?
+          # Its rows were written and a truncate emptied them. They held the
+          # only ids of the items and reviews it wrote, which outlive the
+          # truncate, so neither a restart nor a reject can find them now.
+          return :stale if existing&.rows_count&.positive?
 
           bytes = upload(replay)
           return :no_file unless bytes
@@ -143,8 +148,8 @@ module Services
           end
         end
 
-        # A re-migration truncated this import's rows and the books its
-        # provenance names, so it starts over and waits for a new approval.
+        # A finishing import that failed before writing any rows: it starts
+        # over and waits for a new approval.
         def restart(import)
           import.records.delete_all
           import.update!(status: :queued, error: nil, started_at: nil, finished_at: nil, review_status: :pending,

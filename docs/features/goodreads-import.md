@@ -300,9 +300,10 @@ imports.
   foreign key to books, so a truncate leaves them pointing at deleted provisional books. The re-migration resets
   the books id sequence, and later books take those ids. `docs/launch-todo.md` (section 2, item 8) says how to undo a
   rehearsal run before the truncate.
-- A truncate that lists `books_goodreads_editions` and `books_goodreads_import_rows` empties an import's rows but keeps
-  the import and its file. The next run restarts it, pending review again. One with rows has already run and is left
-  alone. One an admin rejected stays rejected.
+- A finishing import with rows has already run and is left alone. One an admin rejected stays rejected. One that
+  failed before writing any rows starts again, pending review. One whose written rows a truncate emptied is reported
+  `stale` and never runs again. Those rows held the only ids of the list items and reviews it wrote, so the import
+  can neither redo nor undo them. That is why every finishing import is rejected and then deleted before a truncate.
 - `IDS=` only narrows what is started: a picked import still defers to a newer unfinished import of the same user.
 - Run it one import at a time (`[1]`), and let each finish before the next: running imports are skipped, not
   counted. Four at once overloaded the Open Library service on 2026-10-06 (`docs/launch-todo.md`, section 2, item 9).
