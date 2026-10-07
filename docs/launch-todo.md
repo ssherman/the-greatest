@@ -53,10 +53,26 @@ Run these in this order after each migration pass.
 6. **Duplicate sweep.** Run `bin/rails "books:find_duplicates[100]"` first, then `[all]`. `[all]`
    covers about 21k ranked books on the `serial` queue and takes days. Pairs land in the Duplicates
    queue.
-7. **The Goodreads replay.** Run the pass listed in `docs/features/goodreads-import.md`, "Legacy
-   replay": load, fix_slugs, apply, resolve, duplicates, junk, apply, then report. Nothing changes
-   the catalog until `config.x.goodreads_replay.auto_apply` is on. Turn it on only after the
-   50-per-kind hand check (spec §12.9).
+7. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
+
+   ```bash
+   bin/rails books:goodreads:seed_legacy_pages   # legacy scraped Goodreads pages into the page cache (~39k)
+   bin/rails books:goodreads_replay:load         # the legacy imports: uploads (legacy R2) and rows
+   bin/rails books:goodreads_replay:fix_slugs
+   bin/rails books:goodreads_replay:apply
+   bin/rails books:goodreads_replay:resolve      # queues jobs; re-run until both counts are 0
+   bin/rails books:goodreads_replay:duplicates
+   bin/rails books:goodreads_replay:junk
+   bin/rails books:goodreads_replay:apply
+   bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.md]"
+   ```
+
+   - `seed_legacy_pages` only needs to run once, because the page cache is kept across truncates
+     (section 1). It never overwrites a cached page, so running it again is harmless.
+   - Nothing changes the catalog until `config.x.goodreads_replay.auto_apply` is on. Until then the
+     replay only records proposed fixes, under Books → Repair Verdicts. Turn it on only after the
+     50-per-kind hand check (spec §12.9).
+   - Details: `docs/features/goodreads-import.md`, "Legacy seed" and "Legacy replay".
 8. **Finish the failed and stuck legacy Goodreads imports, on the final pass only.** Never run it on a
    rehearsal pass in production. It writes list items and reviews for real users, and a truncate does
    not remove them: those tables have no foreign key to books. The truncate deletes the provisional
