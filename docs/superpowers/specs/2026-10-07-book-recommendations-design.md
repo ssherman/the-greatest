@@ -272,8 +272,10 @@ as signed weights.
 | Want to read | `+0.2` |
 | Rating `r` (any numeric granularity) | `rating_slope × (r − 3)` with `rating_slope = 0.75` → 5: +1.5, 4.5: +1.125, 4: +0.75, 3: 0, 2: −0.75, 1: −1.5 |
 
-A book on several lists takes its highest list weight; its rating weight is added. A book only
-reviewed in text contributes the read weight. Custom lists contribute nothing but exclusion.
+A book on several lists takes its highest list weight; its rating weight is added. Any review,
+rated or text-only, on a book that is on no list implies the read weight (0.4) as its base, plus
+the rating weight if it has one (amended during execution; a listed book keeps its highest list
+weight plus the rating weight). Custom lists contribute nothing but exclusion.
 
 ### 6.2 Category lift
 
