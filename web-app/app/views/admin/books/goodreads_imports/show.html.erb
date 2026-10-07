@@ -10,6 +10,7 @@
 
   <div class="flex flex-wrap gap-2 items-center">
     <span class="badge badge-ghost"><%= @import.source.humanize %></span>
+    <% if @import.finishes_legacy_import_id %><span class="badge badge-ghost">finishes legacy import <%= @import.finishes_legacy_import_id %></span><% end %>
     <span class="badge badge-ghost"><%= @import.status.humanize %></span>
     <% if @import.stuck? %><span class="badge badge-warning">stuck</span><% end %>
     <span class="badge badge-outline" data-testid="review-status"><%= @import.review_status.humanize %></span>
