@@ -74,18 +74,15 @@ Run these in this order after each migration pass.
    - Approve or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`,
      "Finishing legacy imports".
 
-9. **Before launch: Open Library `/resolve` under parallel load.** Code changes, not manual steps,
-   listed here because launch depends on them. On 2026-10-06 four Goodreads imports resolving at once
-   left `/resolve` timing out at 60 s for 25 minutes, until the API container was restarted. The
-   cause: queries the Rails client had abandoned kept running and piled up in one 6 GB DuckDB pool,
-   spilling to disk. A single `/resolve` takes about 13 s and 3.7 GiB, with no spill.
-   - Server half, on branch `worktree-ol-resolve-limit`: one `/resolve` at a time, an instant 503
-     for the rest, and a server-side deadline so abandoned queries stop. Run
-     `deployment/home-server/provision --ref main` before merging it.
-   - Client half, still to do: the Rails client counts a 503 busy as a source failure. The finder then
-     decides without Open Library and does not retry. Repeated 503s open the breaker, and later lookups
-     skip Open Library too. Busy must mean wait and retry within the 60 s budget, without touching
-     the breaker. Otherwise two members uploading at once degrade each other's matches.
+9. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
+   resolving at once left `/resolve` timing out at 60 s for 25 minutes, until the API container was
+   restarted. Queries the Rails client had abandoned kept running and piled up in one 6 GB DuckDB pool.
+   #358 runs one `/resolve` at a time, answers the rest with an instant 503 busy, and stops a query at
+   a server-side deadline. The Rails client waits out a busy reply within its 60 s budget, and busy
+   never counts toward the breaker.
+   - What remains is capacity. A `/resolve` takes about 13 s, and every caller shares the one slot.
+     A client that cannot get the slot within its budget gives up, and the finder decides that row
+     without Open Library. Watch the flag rate when many members upload at once after launch.
 
 ### Decide at launch
 
