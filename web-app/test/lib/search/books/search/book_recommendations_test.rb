@@ -69,9 +69,9 @@ module Search
         end
 
         test "boosts scale with profile weight and type multiplier" do
-          index_book(1, genre_category_ids: [G1])            # 2.0 * 1.0
-          index_book(2, subject_category_ids: [S1])          # 3.0 * 0.8 = 2.4
-          assert_equal [2, 1], ids(profile: profile(genres: [[9101, 2.0]], subjects: [[9201, 3.0]]))
+          index_book(1, genre_category_ids: [G1])            # 2.0 * 1.0 = 2.0
+          index_book(2, subject_category_ids: [S1])          # 2.4 * 0.8 = 1.92 (2.4 if the multiplier were ignored)
+          assert_equal [1, 2], ids(profile: profile(genres: [[9101, 2.0]], subjects: [[9201, 2.4]]))
         end
 
         test "excluded ids and provisional books never return" do
