@@ -35,13 +35,7 @@ module Search
           {_id: {order: "asc"}}
         ].freeze
 
-        # OpenSearch's match-nothing: an empty terms array matches no document,
-        # regardless of which field it names. Used any time a criterion is
-        # present but cannot be resolved -- see `unparseable_clauses` below and
-        # the book_type-specific case in `filter_clauses` (spec §6: a criterion
-        # that is present but unresolvable must match nothing, never
-        # everything).
-        MATCH_NOTHING_CLAUSE = {terms: {category_ids: []}}.freeze
+        MATCH_NOTHING_CLAUSE = CriteriaClauses::MATCH_NOTHING_CLAUSE
 
         DEFAULT_PER_PAGE = 50
 
@@ -86,104 +80,14 @@ module Search
 
           {
             query: ::Search::Shared::Utils.build_bool_query(
-              filter: filter_clauses(criteria),
-              must_not: must_not_clauses(criteria, excluded_book_ids)
+              filter: CriteriaClauses.filter_clauses(criteria),
+              must_not: CriteriaClauses.must_not_clauses(criteria, excluded_book_ids)
             ),
             sort: SORT,
             from: beyond_window ? 0 : from,
             size: beyond_window ? 0 : [per_page, MAX_RESULT_WINDOW - from].min
           }
         end
-
-        def self.filter_clauses(criteria)
-          clauses = []
-          clauses.concat(category_clauses(criteria))
-          clauses.concat(unparseable_clauses(criteria))
-
-          unless criteria.book_type.nil?
-            category_id = ::Books::BookType.category_id(criteria.book_type)
-            # A book_type we cannot resolve must match NOTHING, not everything: dropping
-            # the clause would turn an unresolvable criterion into a match-all. An empty
-            # terms array is OpenSearch's match-nothing.
-            clauses << (category_id ? {term: {category_ids: category_id}} : MATCH_NOTHING_CLAUSE)
-          end
-
-          languages = criteria.included_language_ids
-          clauses << {terms: {original_language_id: languages}} if languages.any?
-
-          countries = criteria.included_country_ids
-          clauses << {terms: {country_ids: countries}} if countries.any?
-
-          lengths = criteria.book_length
-          clauses << {terms: {book_length: lengths}} if lengths.any?
-
-          year = year_range(criteria)
-          clauses << {range: {first_published_year: year}} if year.any?
-
-          clauses << {exists: {field: "ranked_position"}} if criteria.ranked == :ranked
-
-          max_position = criteria.max_ranked_position
-          clauses << {range: {ranked_position: {lte: max_position}}} if max_position
-
-          clauses
-        end
-
-        # `all` means a book must carry every category, which one terms clause
-        # cannot express -- terms is an OR. One term filter per id is the AND.
-        def self.category_clauses(criteria)
-          ids = criteria.included_category_ids
-          return [] if ids.empty?
-          return [{terms: {category_ids: ids}}] if criteria.genre_match_mode == :any
-
-          ids.map { |id| {term: {category_ids: id}} }
-        end
-
-        # One MATCH_NOTHING_CLAUSE per criterion that is present but did not
-        # parse (spec §6). Placed in `filter`, which ANDs with everything
-        # else, so this forces the whole query to zero hits regardless of
-        # whether the source criterion was itself an include or an exclude --
-        # an unparseable excluded_category_ids must not silently exclude
-        # nothing (a broadening no-op), which is what it would do if this
-        # clause were built as a must_not instead. The criteria that are
-        # merely absent (blank raw value) contribute nothing here, same as
-        # every other clause in this class.
-        def self.unparseable_clauses(criteria)
-          ::Books::SavedSearchCriteria::UNPARSEABLE_KEYS
-            .select { |key| criteria.unparseable?(key) }
-            .map { MATCH_NOTHING_CLAUSE }
-        end
-
-        def self.year_range(criteria)
-          range = {}
-          gt = criteria.first_year_published_gt
-          lt = criteria.first_year_published_lt
-          range[:gte] = gt if gt
-          range[:lte] = lt if lt
-          range
-        end
-
-        def self.must_not_clauses(criteria, excluded_book_ids)
-          clauses = []
-
-          categories = criteria.excluded_category_ids
-          clauses << {terms: {category_ids: categories}} if categories.any?
-
-          languages = criteria.excluded_language_ids
-          clauses << {terms: {original_language_id: languages}} if languages.any?
-
-          countries = criteria.excluded_country_ids
-          clauses << {terms: {country_ids: countries}} if countries.any?
-
-          clauses << {exists: {field: "ranked_position"}} if criteria.ranked == :unranked
-
-          clauses << {ids: {values: excluded_book_ids}} if excluded_book_ids.any?
-
-          clauses << ::Search::Books::BookIndex::EXCLUDE_PROVISIONAL
-
-          clauses
-        end
-
-        private_class_method :filter_clauses, :category_clauses, :unparseable_clauses, :year_range, :must_not_clauses
       end
     end
   end
