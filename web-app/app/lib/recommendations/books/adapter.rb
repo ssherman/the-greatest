@@ -98,6 +98,19 @@ module Recommendations
           .index_by(&:id)
       end
 
+      def search_candidates(profile:, criteria:, excluded_ids:, size:)
+        ::Search::Books::Search::BookRecommendations.call(
+          profile: profile, criteria: criteria, excluded_ids: excluded_ids, type_category_ids: type_category_ids,
+          options: config.merge(candidate_size: size)
+        ).map { |hit| Candidate.new(item_id: hit[:id], score: hit[:score], rank_position: hit[:rank_position], evidence: {taste: true}) }
+      end
+
+      def rank_ordered_candidates(criteria:, excluded_ids:, size:)
+        ::Search::Books::Search::BookRecommendations.ranked_only(
+          criteria: criteria, excluded_ids: excluded_ids, options: config.merge(candidate_size: size)
+        ).map { |hit| Candidate.new(item_id: hit[:id], score: hit[:score], rank_position: hit[:rank_position], evidence: {}) }
+      end
+
       private
 
       def list_weights_for(user)

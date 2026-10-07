@@ -228,18 +228,7 @@ module Search
         def self.wrap_in_normalization(bool, opts)
           return {bool: bool} unless opts[:normalize_by_category_count]
 
-          {
-            function_score: {
-              query: {bool: bool},
-              script_score: {
-                script: {
-                  source: "def count = doc['similarity_category_count'].size() == 0 ? 1 : doc['similarity_category_count'].value; if (count < params.floor) { count = params.floor; } return _score / Math.sqrt(count < 1 ? 1 : count);",
-                  params: {floor: opts[:normalization_floor].to_i}
-                }
-              },
-              boost_mode: "replace"
-            }
-          }
+          CategoryCountNormalization.wrap({bool: bool}, floor: opts[:normalization_floor])
         end
 
         # Excludes the OPPOSITE type rather than requiring the SAME one, and the

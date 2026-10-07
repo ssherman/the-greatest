@@ -121,6 +121,21 @@ module Recommendations
       test "catalog_size counts non-provisional books" do
         assert_equal ::Books::Book.catalog.count, @adapter.catalog_size
       end
+
+      test "search_candidates maps hits to candidates with taste evidence" do
+        ::Search::Books::Search::BookRecommendations.stubs(:call).returns([{id: 5, score: 2.5, rank_position: 12}])
+        profile = Recommendations::Profile.new(genres: [[1, 1.0]], subjects: [], locations: [], demoted: [],
+          fiction_share: nil, genre_distribution: {}, counts: {})
+        candidates = @adapter.search_candidates(profile: profile, criteria: @adapter.criteria_for(@user), excluded_ids: [], size: 10)
+        assert_equal [Recommendations::Candidate.new(item_id: 5, score: 2.5, rank_position: 12, evidence: {taste: true})], candidates
+      end
+
+      test "rank_ordered_candidates maps hits to candidates with empty evidence" do
+        ::Search::Books::Search::BookRecommendations.stubs(:ranked_only).returns([{id: 5, score: 0.0, rank_position: 1}])
+        candidates = @adapter.rank_ordered_candidates(criteria: @adapter.criteria_for(@user), excluded_ids: [], size: 10)
+        assert_equal({}, candidates.first.evidence)
+        assert_equal 1, candidates.first.rank_position
+      end
     end
   end
 end
