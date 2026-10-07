@@ -119,18 +119,20 @@ module Recommendations
       ids = page.map(&:item_id)
       items = adapter.load_items(ids)
       categories = adapter.categories_for(ids)
-      page.filter_map.with_index do |candidate, index|
+      loaded = page.filter_map do |candidate|
         item = items[candidate.item_id]
         next if item.nil?
 
         {
           item: item,
           item_id: candidate.item_id,
-          rank: index + 1,
           score: candidate.score,
           reason: Explainer.call(candidate: candidate, profile: profile, categories: categories.fetch(candidate.item_id, []), config: @config)
         }
       end
+      # Number after dropping ids the adapter could not load, so rank is the
+      # 1-based position on the page with no gaps.
+      loaded.each.with_index(1) { |entry, rank| entry[:rank] = rank }
     end
 
     # Class and a short backtrace, as SimilarBooks logs, so a genuine bug in a

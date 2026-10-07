@@ -11,7 +11,7 @@ module Recommendations
     class FakeAdapter
       attr_reader :calls
 
-      def initialize(config:, interactions: [], categories: {}, candidates: [], ranked: [], facts: {}, raise_search: false, raise_ranked: false)
+      def initialize(config:, interactions: [], categories: {}, candidates: [], ranked: [], facts: {}, raise_search: false, raise_ranked: false, missing_ids: [])
         @config = config
         @interactions = interactions
         @categories = categories
@@ -20,6 +20,7 @@ module Recommendations
         @facts = facts
         @raise_search = raise_search
         @raise_ranked = raise_ranked
+        @missing_ids = missing_ids
         @calls = []
       end
 
@@ -53,7 +54,7 @@ module Recommendations
         ids.index_with { |id| @facts[id] || ItemFact.new(author_ids: [], genre_ids: [], series_predecessor_id: nil, rank_position: nil) }
       end
 
-      def load_items(ids) = ids.index_with { |id| Item.new(id) }
+      def load_items(ids) = (ids - @missing_ids).index_with { |id| Item.new(id) }
     end
 
     # Available and returns a candidate, but its weight is zero: it must never reach fusion.
@@ -160,6 +161,12 @@ module Recommendations
         signal_classes: [Signals::TasteProfile, ZeroWeightSignal])
       assert_equal [101, 102, 103], result.data[:items].map { |i| i[:item_id] }
       assert_equal [:taste_profile], result.data[:signals_used]
+    end
+
+    test "ranks stay contiguous when the adapter cannot load an id" do
+      result, = engine(missing_ids: [102])
+      assert_equal [101, 103], result.data[:items].map { |i| i[:item_id] }
+      assert_equal [1, 2], result.data[:items].map { |i| i[:rank] }
     end
 
     test "an unregistered domain is a failure" do
