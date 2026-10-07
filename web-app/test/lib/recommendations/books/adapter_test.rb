@@ -39,9 +39,10 @@ module Recommendations
         assert_equal :read, interaction(:clash).kind
         assert_in_delta 0.2, interaction(:of_mice_and_men).weight, 0.001
         assert_equal :want_to_read, interaction(:of_mice_and_men).kind
-        assert_in_delta(-1.5, interaction(:cannery_row).weight, 0.001)
+        assert_in_delta(-1.1, interaction(:cannery_row).weight, 0.001, "unlisted review: read weight 0.4 plus rating weight -1.5")
         assert_equal :review, interaction(:cannery_row).kind
-        assert_in_delta 0.0, interaction(:crime_and_punishment).weight, 0.001
+        assert_in_delta 0.4, interaction(:crime_and_punishment).weight, 0.001
+        assert_equal :review, interaction(:crime_and_punishment).kind
       end
 
       test "a text-only review counts as read" do
@@ -94,6 +95,22 @@ module Recommendations
         assert_nil got.series_predecessor_id, "position 1 has no predecessor"
         assert_equal books_books(:got).id, clash.series_predecessor_id, "the unnumbered novella at 1.5 is skipped"
         assert_nil got.rank_position
+      end
+
+      test "item_facts reports the rank in the default primary ranking" do
+        RankedItem.create!(item: books_books(:got), ranking_configuration: ranking_configurations(:books_global), rank: 7)
+        assert_equal 7, @adapter.item_facts([books_books(:got).id])[books_books(:got).id].rank_position
+      end
+
+      test "load_items indexes books by id with authors preloaded" do
+        ids = [books_books(:got).id, books_books(:clash).id]
+        books = @adapter.load_items(ids)
+        assert_equal ids.sort, books.keys.sort
+        assert books.values.all?(::Books::Book)
+        book = books[books_books(:got).id]
+        assert book.association(:book_authors).loaded?
+        assert_not_empty book.book_authors
+        assert book.book_authors.first.association(:author).loaded?
       end
 
       test "criteria_for returns the stored criteria or an empty one" do

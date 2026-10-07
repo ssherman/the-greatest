@@ -24,7 +24,8 @@ module Recommendations
         (list_weights.keys | reviews.keys).map do |item_id|
           rating = reviews[item_id]
           base = list_weights[item_id]
-          base = config[:read_weight] if base.nil? && reviews.key?(item_id) && rating.nil?
+          # A review on a book that is on no list implies it was read.
+          base = config[:read_weight] if base.nil? && reviews.key?(item_id)
           weight = (base || 0.0) + (rating ? config[:rating_slope] * (rating - 3) : 0.0)
           Interaction.new(item_id: item_id, weight: weight.to_f, kind: kinds[item_id] || :review, rating: rating)
         end
