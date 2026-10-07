@@ -24,7 +24,7 @@ module Recommendations
 
         while selected.size < limit && remaining.any?
           pick = remaining.max_by.with_index do |candidate, index|
-            relevance = candidate.score / best
+            relevance = candidate.score.to_f / best
             kl = kl_after_adding(page_mass, selected.size, genres_of(candidate, facts), history, alpha)
             [(1 - lambda_) * relevance - lambda_ * kl, -index]
           end
@@ -50,10 +50,11 @@ module Recommendations
         trial = page_mass.dup
         genres.each { |g| trial[g] += 1.0 / genres.size } if genres.any?
         total = trial.values.sum
-        return 0.0 if total <= 0
 
         history.sum do |genre, p|
-          q = trial.fetch(genre, 0.0) / total
+          next 0.0 unless p.positive?
+
+          q = total.positive? ? trial.fetch(genre, 0.0) / total : 0.0
           q_smoothed = (1 - alpha) * q + alpha * p
           p * Math.log(p / q_smoothed)
         end

@@ -43,10 +43,28 @@ module Recommendations
       page = Reranker::GenreCalibration.call(a_books + b_books, facts: facts, history: history, limit: 10, config: Config.resolve)
       assert_equal 10, page.size
       assert_equal 1, page.first.item_id, "the strongest book still leads"
-      assert_operator page.count { |c| c.item_id > 10 }, :>=, 1
+      assert_equal [1, 2, 3, 4, 5, 11, 6, 7, 8, 9], page.map(&:item_id)
 
       off = Reranker::GenreCalibration.call(a_books + b_books, facts: facts, history: history, limit: 10, config: Config.resolve(calibrate_genres: false))
       assert_equal (1..10).to_a, off.map(&:item_id)
+    end
+
+    test "genre calibration does not let a genre-less book jump the queue on an empty page" do
+      a_books = (1..10).map { |i| cand(i, score: 11 - i) }
+      b_books = (11..15).map { |i| cand(i, score: (16 - i) / 10.0) }
+      facts = (1..10).to_h { |i| [i, fact(genres: [100])] }.merge((11..15).to_h { |i| [i, fact(genres: [200])] })
+
+      page = Reranker::GenreCalibration.call([cand(90, score: 6.0)] + a_books + b_books, facts: facts, history: {100 => 0.7, 200 => 0.3}, limit: 10, config: Config.resolve)
+      assert_equal 1, page.first.item_id
+      assert_includes page.map(&:item_id), 90
+    end
+
+    test "genre calibration ignores history entries with no weight" do
+      a_books = (1..4).map { |i| cand(i, score: 5 - i) }
+      facts = (1..4).to_h { |i| [i, fact(genres: [100])] }
+
+      page = Reranker::GenreCalibration.call(a_books, facts: facts, history: {100 => 0.7, 200 => 0.3, 300 => 0.0}, limit: 3, config: Config.resolve)
+      assert_equal [1, 2, 3], page.map(&:item_id)
     end
 
     test "genre calibration is a no-op for an empty history and returns at most limit" do
