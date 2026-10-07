@@ -103,19 +103,20 @@ module Services
           assert_equal "pending", Core::RowState.new(item.reload).bucket
         end
 
-        test "StartMatch hands its run id to every row job and a stale one starts nothing" do
+        test "StartMatch matches its rows under its run id and a stale one matches nothing" do
           item = wizard_row(@list, position: 1, title: "Emma")
           start("match", "run-1")
+          finder = ListWizardHelper::FakeFinder.new(->(subject) {
+            wizard_match(subject: subject, outcome: :unmatched, confidence: :high, decided_by: :rule)
+          })
+          @adapter.stubs(:finder).returns(finder)
 
-          Sidekiq::Testing.fake! do
-            ::Lists::Wizard::MatchRowJob.jobs.clear
-            Core::StartMatch.call(list: @list, run_id: "run-1")
-            assert_equal [[item.id, false, 1, "run-1"]], ::Lists::Wizard::MatchRowJob.jobs.map { |job| job["args"] }
+          assert_nil Core::StartMatch.call(list: @list, run_id: "stale")
+          assert_empty finder.calls
 
-            ::Lists::Wizard::MatchRowJob.jobs.clear
-            assert_nil Core::StartMatch.call(list: @list, run_id: "stale")
-            assert_empty ::Lists::Wizard::MatchRowJob.jobs
-          end
+          Core::StartMatch.call(list: @list, run_id: "run-1")
+          assert_equal [item.id], finder.calls.map { |call| call[:subject].id }
+          assert_equal "completed", @list.reload.wizard_manager.step_status("match")
         end
 
         test "a source retry carries the run id" do

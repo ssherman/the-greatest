@@ -54,7 +54,7 @@ only, user. It owns:
   which gets a books subclass naming these steps.
 - **Three jobs:**
   - Parse turns pasted content into rows.
-  - Match fans out one job per row.
+  - Match checks rows one at a time in a single job (amended 2026-10-06, see section 3).
   - Import creates rows one at a time in a single job.
 - **The row outcome model** (section 3) and the rules that protect admin decisions (section 8).
 - **The screens:** the step screens and the review table, built once as ViewComponents. They
@@ -104,9 +104,20 @@ under `app/sidekiq/`, generators for new classes.
 
 ## 3. Match: one finder run per row
 
-- One Sidekiq job per row, on the `default` queue. Sidekiq's concurrency of 5 caps how many
-  `/resolve` calls hit the home server at once.
-- Each job:
+- **One Sidekiq job per list, on the `default` queue, checking rows one at a time in list order.**
+  Amended 2026-10-06. The first version ran one job per row and relied on Sidekiq's concurrency of
+  5 to cap the load. But the Open Library service runs one `/resolve` at a time (12-13 s each) and
+  turns the rest away busy, and the client waits only about 40 s for a turn, so on a long list the
+  row jobs crowded each other out and ran out of attempts.
+- **A row whose source failed is retried in place** before the next row starts, after waits of
+  15, 30, 60, 120, 240 and 300 s (about 13 minutes in all).
+- **If Open Library still has not answered, Match pauses.** The step fails with an error naming
+  the source and the row. That row and the rest stay pending, and nothing is flagged for the
+  outage. "Try again" starts a new run, which keeps linked and settled rows.
+- **A run Sidekiq pushes back to the queue at a deploy** (same run id) matches only the rows still
+  pending.
+- **A single-row re-match from Review** runs as its own job, with three attempts.
+- For each row, Match:
   - runs the finder with the row as `subject:`, so the `MatchDecision` is linked to the row;
   - saves the Open Library keys a later re-check needs into the row's metadata. Those are the
     accepted key, `decision.duplicates`, and both redirect-source lists.
