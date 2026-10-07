@@ -23,7 +23,7 @@ Multi-step admin wizards that turn a pasted list into list items. Two generation
 | Parse, Match, Import | `Core::ParseRows`, `Core::StartMatch` + `Core::MatchRow` + `Core::MatchProgress`, `Core::ImportRows` |
 | Review actions | `Core::RowActions` |
 | Review data, counts | `Core::ReviewRows` (paginated, 100 rows per page), `Core::Summary` |
-| Jobs (default queue) | `Lists::Wizard::ParseJob`, `MatchJob`, `MatchRowJob` (one per row), `ImportJob` (one per list) |
+| Jobs (default queue) | `Lists::Wizard::ParseJob`, `MatchJob` (matches every row, one at a time), `MatchRowJob` (single-row re-matches), `ImportJob` (one per list) |
 | Controller | `ListWizardCore` concern (`app/controllers/concerns/`); `Admin::Books::ListWizardController` |
 | Screens | `Wizard::Core::{PasteStep,JobStep,ReviewStep,ReviewRow,DoneStep}Component` + `app/views/admin/list_wizard_core/show_step.html.erb` |
 | Steps | `Services::Lists::Wizard::Books::StateManager` (`paste parse match review import done`) |
@@ -45,7 +45,7 @@ Every wizard row carries `metadata["wizard"]`:
 
 The finder's full answer stays on the row's `MatchDecision` (`subject` = the list item). A row without a
 `wizard` key predates the wizard and is treated as settled. Match attempt counts are not stored on the
-row; they travel in the job arguments.
+row; they live in the job (Match) or its arguments (a single-row re-match).
 
 ### Buckets
 
@@ -56,13 +56,29 @@ verified at once (AI-decided high matches included; the Review "AI-decided" filt
 `match_failed`, `import_failed`, plus `changed_since_match` (informational, set when Import links an
 existing book that appeared after Match). A flagged row with no specific reason is `unsure`.
 
-### Match retries
+### Match runs one row at a time
 
-A row whose finder answer had a failed source (for example Open Library returning 503) is not applied.
-It stays `pending` and `MatchRowJob` re-enqueues itself (3 attempts in total, delays of 20 s and 60 s
-plus up to the same again in random jitter). Each such run still calls `MatchProgress`, so the step's
-timestamp keeps moving. After the third attempt the capped answer is applied (usually `unsure`). If
-Sidekiq's own retries run out on an exception, the row is flagged `match_failed` and progress runs.
+The Open Library service runs one `/resolve` at a time (about 12-13 s each on the home server) and
+answers the rest busy; the client waits out a busy reply for up to about 40 s. Rows matched side by
+side by several jobs therefore crowded each other out, and on a long list many ran out of attempts. So
+`MatchJob` (`StartMatch`) marks the rows pending and then matches them itself, in list order, one
+after another. A 100-row list takes at least about 21 minutes, which is Open Library's pace either way.
+
+A row whose finder answer had a failed source (Open Library busy with another caller, or down) is not
+applied. It stays `pending`, and the job waits and matches it again before moving on
+(`StartMatch::SOURCE_RETRY_DELAYS`: 15, 30, 60, 120, 240 and 300 s, about 13 minutes in all). Each
+attempt still calls `MatchProgress`, so the step's timestamp keeps moving. If the source still fails
+after the last wait, the Match **pauses**: the step fails with an error naming the source and the row,
+this row and every later one stay `pending`, and nothing is flagged for the outage. "Try again" starts
+a new run, which keeps every linked or settled row and matches the rest.
+
+A Sidekiq shutdown (a deploy) pushes the running `MatchJob` back to the queue with the same run id.
+The step records `marked_run_id` when it marks its rows, so the same run starting again matches only
+the rows still pending instead of re-marking the ones it already decided.
+
+A single-row re-match from Review still runs as its own `MatchRowJob`: 3 attempts in total, delays of
+20 s and 60 s plus up to the same again in random jitter, then the capped answer is applied (usually
+`unsure`). If Sidekiq's own retries run out on an exception, the row is flagged `match_failed`.
 
 ### Protecting decisions
 
@@ -102,12 +118,14 @@ so a double start cannot run twice, and is refused while any row is still pendin
 re-reads its row before applying the answer and leaves a row the admin settled meanwhile alone.
 
 Every start of Parse, Match or Import writes a fresh `run_id` into that step's metadata and hands it to
-the job (Match passes it on to each row job and its source retries). A job, and the service it calls,
-acts only while the step's current `run_id` is its own: it checks at the start and again under the list
-lock before each mutation (Parse's row replacement, a Match row's result and progress, each Import row),
+the job. A job, and the service it calls,
+acts only while the step's current `run_id` is its own: it checks at the start, before each row, and
+again under the list lock before each mutation (Parse's row replacement, a Match row's result and
+progress, each Import row),
 and a superseded or restarted run logs one line and writes nothing. `ParseJob`, `MatchJob` and
 `ImportJob` set `retry: false`, so a failure is a failed step and the admin's retry starts a new run;
-`MatchRowJob` keeps `retry: 5`, and its retries-exhausted handler respects the same fence. Single-row
+`MatchRowJob` keeps `retry: 5`, and its retries-exhausted handler respects the same fence (it still
+accepts a run id, for row jobs queued before Match ran in one job). Single-row
 re-matches carry no run id; their "row still pending" re-read is the fence. A superseded Import can
 still create or link the one row it was working on when it was superseded (reachable only after a stall
 or a failed old run lets a second Import start); the per-row re-check covers every other case.
@@ -155,8 +173,8 @@ Wizard" button links there and, for books lists only, the page shows how many ro
 `e2e/tests/books/admin/list-wizard.spec.ts` holds the wizard flow on a three-row list. It needs this checkout's own server and
 Sidekiq; if another worktree's Sidekiq shares the default Redis DB, start both with a separate
 `REDIS_URL` (for example `redis://localhost:6379/5`). `bin/rails e2e:list_wizard_cleanup` removes
-leftover "E2E Wizard List" lists. The Open Library service has returned 503 under about five
-concurrent `/resolve` calls; the wizard tolerates it through the Match retries.
+leftover "E2E Wizard List" lists. Match runs one row at a time, so the three rows take about 40 s
+against the real Open Library service.
 
 ## Music and games (old wizard code)
 

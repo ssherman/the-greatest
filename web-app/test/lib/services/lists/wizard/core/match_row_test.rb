@@ -211,6 +211,28 @@ module Services
             assert state.match_decision_id.present?
           end
 
+          test "serial: a failed source on any attempt leaves the row pending, queues nothing and answers :retry" do
+            failed_source_answer
+
+            Sidekiq::Testing.fake! do
+              ::Lists::Wizard::MatchRowJob.jobs.clear
+              row = MatchRow.new(@row, @adapter, false, MatchRow::MAX_ATTEMPTS + 3, nil, serial: true)
+              assert_equal :retry, row.call
+              assert_equal ["open_library"], row.failed_sources
+              assert_empty ::Lists::Wizard::MatchRowJob.jobs
+            end
+
+            assert_equal ["pending", nil], [RowState.new(@row.reload).bucket, @row.listable_id]
+          end
+
+          test "serial: an answered row is applied and answers :done" do
+            answer(outcome: :matched, record: @book, confidence: :high, decided_by: :rule, candidates: [local_candidate(@book)])
+
+            assert_equal :done, MatchRow.call(list_item: @row, adapter: @adapter, serial: true)
+
+            assert_equal [@book.id, "matched"], [@row.reload.listable_id, RowState.new(@row).bucket]
+          end
+
           test "a successful retry applies normally" do
             answer(outcome: :matched, record: @book, confidence: :high, decided_by: :rule, candidates: [local_candidate(@book)])
 

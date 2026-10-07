@@ -21,8 +21,10 @@ module Services
 
           # run_id is the match generation a full-match job belongs to; a
           # single-row re-match has none (the row still being pending is its fence).
-          def self.call(list_item:, adapter:, single_row: false, attempt: 1, run_id: nil)
-            new(list_item, adapter, single_row, attempt, run_id).call
+          # serial: the caller (StartMatch) retries the row itself. A failed
+          # source then leaves the row pending, queues nothing and answers :retry.
+          def self.call(list_item:, adapter:, single_row: false, attempt: 1, run_id: nil, serial: false)
+            new(list_item, adapter, single_row, attempt, run_id, serial: serial).call
           end
 
           # Also used when a row job runs out of retries. Clears everything an
@@ -34,8 +36,10 @@ module Services
              "import_error" => nil}
           end
 
-          def initialize(item, adapter, single_row, attempt = 1, run_id = nil)
+          def initialize(item, adapter, single_row, attempt = 1, run_id = nil, serial: false)
             @run_id = single_row ? nil : run_id
+            @serial = serial
+            @retry = false
             @item = item
             @adapter = adapter
             @single_row = single_row
@@ -64,7 +68,11 @@ module Services
             return if applied.nil?
 
             MatchProgress.call(list: list, single_row: @single_row, run_id: @run_id)
+            @retry ? :retry : :done
           end
+
+          # The source that failed, for the caller's error once it gives up.
+          def failed_sources = @sources_failed
 
           private
 
@@ -77,6 +85,9 @@ module Services
               if retry_source?
                 # Stay pending. Progress still runs: it cannot complete the step
                 # while this row is pending, and it keeps the heartbeat alive.
+                @retry = true
+                return true if @serial
+
                 delay = RETRY_DELAYS.fetch(@attempt - 1)
                 args = [@item.id, @single_row, @attempt + 1]
                 args << @run_id if @run_id
@@ -104,7 +115,7 @@ module Services
           end
 
           def retry_source?
-            @sources_failed.any? && @attempt < MAX_ATTEMPTS
+            @sources_failed.any? && (@serial || @attempt < MAX_ATTEMPTS)
           end
 
           def failed_source_error
