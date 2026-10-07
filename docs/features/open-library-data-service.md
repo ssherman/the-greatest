@@ -532,7 +532,9 @@ is always the terminal one.
 
 Rails (`OpenLibrarySource`) treats each kind of holder differently:
 - A book holding the candidate's key or one of its `redirect_sources` is a holder of that work.
-  When the work is accepted and that book is its only holder, rule 2 matches it at certain.
+  When the work is accepted and that book is its only holder, rule 2 matches it at certain,
+  provided the book's title (or an alternate title) agrees with the query. The stored keys came
+  from old matching code, so an author-only agreement is left to rule 4 and the AI.
 - A book holding an accepted decision's `duplicates` key, or one of their old keys, is never
   an accept: `duplicates` is evidence, not proof. Such a book is a candidate under the key it
   holds, keeping that candidate's own verdict when the duplicate was also returned and carrying

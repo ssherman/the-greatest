@@ -273,6 +273,34 @@ module DataImporters
           assert_match(/open_library accepted #{key}/, match.reason)
         end
 
+        test "an Open Library accept on a key a local book holds, with only the author agreeing, is left to the AI" do
+          ::Identifier.create!(identifiable: @war_and_peace, identifier_type: :books_work_openlibrary_id, value: "OL4000W")
+          stub_resolve(resolve_response(verdict: "accept", key: "OL4000W", candidates: [ol_candidate(key: "OL4000W", verdict: "accept", score: 0.95, record: work_record(key: "OL4000W", title: "Anna Karenina", authors: ["Leo Tolstoy"]))]))
+          stub_ai({selected_index: 0, confidence: "high", reasoning: "Anna Karenina is a different Tolstoy novel.", same_entity_groups: []})
+
+          match = @finder.call(query: ImportQuery.new(title: "Anna Karenina", author_names: ["Leo Tolstoy"]))
+
+          assert_equal [:unmatched, :ai], [match.outcome, match.decided_by]
+        end
+
+        test "an Open Library accept on a key a local book holds, agreeing on an alternate title, is a certain match" do
+          ::Identifier.create!(identifiable: @war_and_peace, identifier_type: :books_work_openlibrary_id, value: "OL4000W")
+          stub_resolve(resolve_response(verdict: "accept", key: "OL4000W", candidates: [ol_candidate(key: "OL4000W", verdict: "accept", score: 0.95, record: work_record(key: "OL4000W", title: "Voyna i mir", authors: ["Leo Tolstoy"]))]))
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(title: "Voyna i mir", author_names: ["Leo Tolstoy"]))
+
+          assert_equal [@war_and_peace, :certain, :identifier], [match.record, match.confidence, match.decided_by]
+        end
+
+        test "external_accept_corroborated? needs the title to agree, unless the query carries nothing to compare" do
+          candidate = DataImporters::Candidate.new(record: @war_and_peace)
+
+          assert @finder.external_accept_corroborated?(ImportQuery.new(title: "War and Peace", author_names: ["Nobody"]), candidate)
+          assert_not @finder.external_accept_corroborated?(ImportQuery.new(title: "Anna Karenina", author_names: ["Leo Tolstoy"]), candidate)
+          assert @finder.external_accept_corroborated?(ImportQuery.new(title: nil, isbn13: ["9780140447934"]), candidate)
+        end
+
         test "an Open Library accept on a key nobody holds, with no local candidates, is a high-confidence unmatched with the external set" do
           stub_resolve(resolve_response(verdict: "accept", key: "OL999W", candidates: [ol_candidate(key: "OL999W", verdict: "accept", score: 0.95, record: work_record(key: "OL999W", title: "The Brothers Karamazov", authors: ["Fyodor Dostoevsky"], declared_year: 1880))]))
           expect_no_ai

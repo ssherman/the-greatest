@@ -2,10 +2,11 @@ require "test_helper"
 
 module DataImporters
   class DeciderTest < ActiveSupport::TestCase
-    # A stand-in for the finder: the four judgements the rules ask it for.
+    # A stand-in for the finder: the five judgements the rules ask it for.
     class FakeFinder
-      def initialize(corroborated: true, exact: false, ranked_ids: [], list_counts: {})
+      def initialize(corroborated: true, external_accept: nil, exact: false, ranked_ids: [], list_counts: {})
         @corroborated = corroborated
+        @external_accept = external_accept
         @exact = exact
         @ranked_ids = ranked_ids
         @list_counts = list_counts
@@ -13,6 +14,13 @@ module DataImporters
 
       def corroborated?(_query, candidate)
         @corroborated.respond_to?(:call) ? @corroborated.call(candidate) : @corroborated
+      end
+
+      # nil: the FinderBase default, which is corroborated?.
+      def external_accept_corroborated?(query, candidate)
+        return corroborated?(query, candidate) if @external_accept.nil?
+
+        @external_accept.respond_to?(:call) ? @external_accept.call(candidate) : @external_accept
       end
 
       def exact_match?(_query, candidate)
@@ -112,6 +120,26 @@ module DataImporters
       assert_equal @other, decision.record
       assert_equal :medium, decision.confidence
       assert_equal second, decision.external
+      assert_equal [[@other, @book, :external_key_collision]], decision.duplicate_pairs
+    end
+
+    test "rule 2: a corroborated holder that fails the finder's external-accept test is left to the later rules" do
+      candidate = Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:open_library], evidence: {external_verdict: "accept"})
+
+      assert_nil decide([candidate], finder: FakeFinder.new(external_accept: false))
+
+      exact = decide([candidate], finder: FakeFinder.new(external_accept: false, exact: true))
+      assert_equal [:matched, @book, :high, :rule], [exact.outcome, exact.record, exact.confidence, exact.decided_by]
+    end
+
+    test "rule 2: a corroborated holder that fails the external-accept test still makes the one that passes need review" do
+      wrong = Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:open_library], evidence: {external_verdict: "accept"})
+      right = Candidate.new(record: @other, external_key: "OL1W", external_source: :open_library, sources: [:open_library], evidence: {external_verdict: "accept"})
+      finder = FakeFinder.new(external_accept: ->(candidate) { candidate.equal?(right) }, ranked_ids: [@book.id])
+
+      decision = decide([wrong, right], finder: finder)
+
+      assert_equal [@other, :medium, right], [decision.record, decision.confidence, decision.external]
       assert_equal [[@other, @book, :external_key_collision]], decision.duplicate_pairs
     end
 

@@ -54,11 +54,15 @@ module DataImporters
     # Several local records holding it: prefer ranked, then most lists, then
     # oldest; the rest are external-key collisions, and the match needs
     # review, because the key cannot say which of our duplicates is right.
+    # Only a holder passing the finder's stricter external-accept test can be
+    # chosen; a holder failing it still counts among the rest.
     def external_accept_decision
-      hits = @candidates.select { |c| c.local? && c.external_accepted? && @finder.corroborated?(@query, c) }
+      holders = @candidates.select { |c| c.local? && c.external_accepted? && @finder.corroborated?(@query, c) }
+      hits = holders.select { |c| @finder.external_accept_corroborated?(@query, c) }
       return nil if hits.empty?
 
-      chosen, *rest = preferred(hits)
+      chosen = preferred(hits).first
+      rest = preferred(holders.reject { |c| c.equal?(chosen) })
       pairs = rest.map { |c| [chosen.record, c.record, :external_key_collision] }
       matched(
         chosen.record, rest.empty? ? :certain : :medium, :identifier,

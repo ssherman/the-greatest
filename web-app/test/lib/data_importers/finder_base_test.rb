@@ -95,6 +95,13 @@ module DataImporters
       assert_not @finder.corroborated?({title: "Nothing like it", creators: ["Nobody"]}, candidate)
     end
 
+    test "external_accept_corroborated? defaults to corroborated?" do
+      candidate = Candidate.new(record: @book)
+
+      assert @finder.external_accept_corroborated?({title: "Nothing like it", creators: ["Leo Tolstoy"]}, candidate)
+      assert_not @finder.external_accept_corroborated?({title: "Nothing like it", creators: ["Nobody"]}, candidate)
+    end
+
     test "exact_match? needs title, creators (when required) and no year conflict" do
       candidate = Candidate.new(record: @book)
 

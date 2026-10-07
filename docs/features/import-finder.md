@@ -53,7 +53,12 @@ and points the decision at a record it creates.
    also picks among several local candidates holding the accepted key with the same
    ranked/most-lists/oldest preference and flags the rest as
    `external_key_collision` pairs; that pick is medium, not certain, so it needs review
-   (authors included: the `Decider` is shared).
+   (authors included: the `Decider` is shared). The pick must also pass the finder's
+   `external_accept_corroborated?`, which defaults to `corroborated?`. Books override it to
+   require the title to agree (title or an alternate title): our stored Open Library work keys
+   came from old matching code, and some point at another book by the same author, which an
+   author-only agreement would settle as certain. A holder that fails it is left to rule 4
+   and the AI, but still counts among the "rest", so a title-agreeing pick beside it is medium.
    Rules 0–2 never fire under `verify`. Any two local candidates sharing an external key,
    or one holding a key the source calls a duplicate of the other's
    (`evidence[:external_duplicate_of]`), are flagged as `external_key_collision` whatever
