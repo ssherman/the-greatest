@@ -242,6 +242,7 @@ preserved ids): **never truncate that table**, the launch sequence relies on it.
 A pass, after every books migration pass and in the launch sequence:
 
 ```bash
+bin/rails books:goodreads:seed_legacy_pages  # once: legacy scraped pages into the page cache ("Legacy seed")
 bin/rails books:goodreads_replay:load        # legacy imports, uploads (legacy R2, LEGACY_R2_*), rows
 bin/rails books:goodreads_replay:fix_slugs   # 543 slug-form Goodreads ids -> strip_identifier (rule, approved)
 bin/rails books:goodreads_replay:apply       # re-applies every approved verdict from earlier passes (gated)
