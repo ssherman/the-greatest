@@ -50,6 +50,7 @@ class User < ApplicationRecord
   has_many :user_lists, dependent: :destroy
   has_many :user_list_items, through: :user_lists
   has_many :saved_searches, dependent: :destroy
+  has_many :recommendation_configs, dependent: :destroy
   has_many :reviews, dependent: :destroy
   has_many :memberships, dependent: :nullify
   has_many :books_reading_goals, class_name: "Books::ReadingGoal", dependent: :destroy
