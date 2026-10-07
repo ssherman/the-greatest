@@ -154,11 +154,12 @@ recommendation_configs
   :destroy` ([[user-fk-needs-has-many]]). Nothing references a book, so the record merger is
   untouched.
 - `Books::RecommendationCriteria` wraps the JSON: `excluded_category_ids`,
-  `included_category_ids`, `included_category_mode` (`any` / `all`), `book_lengths`
+  `included_category_ids`, `genre_match_mode` (`any` / `all`), `book_length`
   (enum ints), `first_year_published_gt`, `first_year_published_lt`, `max_ranked_position`.
-  It reuses the parsing, id caps, and label code of `Books::SavedSearchCriteria` /
-  `SavedSearchCriteriaParams` / `SavedSearchFilterLabels` (extract shared pieces rather than
-  copy). The settings form reuses the saved-search category picker.
+  Key names match `Books::SavedSearchCriteria` verbatim so the advanced query's clause
+  builders apply unchanged; it composes a `SavedSearchCriteria` over those keys with `ranked`
+  pinned to true, and reuses `SavedSearchCriteriaParams` / `SavedSearchFilterLabels` for
+  writing and labels. The settings form reuses the saved-search category picker.
 - The legacy `exclude_locations` flag has no equivalent and is dropped: the engine down-weights
   locations by design (§6.4) instead of switching them off.
 - Nothing is precomputed. Signals are read live from `user_list_items` (joined to
@@ -177,7 +178,7 @@ users and categories. Modeled on the saved-searches migrator.
   (`model: "Category"`); unmapped ids dropped and counted in the report.
 - `book_lengths` copied after the task asserts the legacy and new enum values agree (fail loudly
   if not). `published_year_start/end` → `first_year_published_gt/lt`. `ranked_limit` →
-  `max_ranked_position`. `included_category_all` → `included_category_mode`.
+  `max_ranked_position`. `included_category_all` → `genre_match_mode: "all"`.
 - Idempotent: upsert on `(user_id, type)`. It is a **repeating** launch step
   ([[books-launch-todo-doc]]): add it to `docs/launch-todo.md`.
 - 33 legacy rows (9 belong to paid users). Sub-second.
