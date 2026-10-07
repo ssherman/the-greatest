@@ -38,7 +38,7 @@ In the combos table the variant names are cut at 36 characters by the printer. T
 | Books (catalog, non-provisional) | 160,292 (160,587 including provisional) |
 | Ranked pool (`RankedItem`, default primary books config) | 21,392 |
 | Eligible users (at least 5 hold-out candidates: favorites plus 4-star-or-better ratings) | 2,367 |
-| Eligible by segment of positive list items | 5-19: 754, 20-99: 860, 100+: 736 |
+| Eligible by segment of positive list items | 5-19: 754, 20-99: 860, 100+: 736 (sum 2,350; the other 17 eligible users have fewer than 5 positive list items and fall in no segment) |
 | Sampled | 100 per segment (300 total) |
 | Evaluated | 5-19: 96, 20-99: 100, 100+: 100 (four 5-19 users had no usable hold-out) |
 | `recommendation_configs` rows | 0, so every user ran on default criteria (no filters) |
@@ -148,7 +148,7 @@ variants: rank baseline | shipped defaults | rank_prior_weight=1.0  max_subjects
    shipped defaults                       0.250     0.054    0.050      5612    3.130   0.882     0.093    226
    rank_prior_weight=1.0  max_subjects=   0.340     0.075    0.057      3912    3.520   0.982     0.078    204
    rank_prior_weight=2.0  max_subjects=   0.390     0.075    0.059      3490    3.650   1.152     0.073    191
-   lift=false                             0.350     0.136    0.080       436    1.430   0.298     0.034    276
+   lift=false                             0.350     0.136    0.080       436    1.430   0.298     0.034    281
 ```
 
 (Rows that appear in more than one run differ slightly in `ms` only; the metrics are identical
@@ -166,8 +166,12 @@ Required: the engine beats BOTH baselines on hit@10 and recall@50, with `kl` at 
 | best single knob (`rank_prior_weight=2.0`) | 0.190 | 0.121 | 0.738 |
 | best combination (`rank_prior_weight=2.0,max_subjects=10,subject_multiplier=0.5`) | 0.170 | 0.097 | 0.826 |
 
-**Not met.** The shipped defaults trail `rank` and `lift=false` on hit@10, recall@50 and ndcg@50 in
-every segment, and their `kl` (0.766) is about twice `lift=false`'s (0.369). The best variant,
+**Not met.** In the 20-99 and 100+ segments the shipped defaults trail `rank` and `lift=false` on hit@10,
+recall@50 and ndcg@50. The 5-19 segment is the exception: on short histories the defaults already
+beat the `lift=false` approximation of the legacy engine at the top of the page (hit@10 0.125
+against 0.094, ndcg@50 0.052 against 0.050), while still trailing it on recall@50 (0.099 against
+0.130) and trailing `rank` throughout. On 20-99 their `kl` (0.766) is about twice
+`lift=false`'s (0.369). The best variant,
 `rank_prior_weight=2.0`, beats `lift=false` on hit@10 (0.190 against 0.170) but not on recall@50
 (0.121 against 0.177), does not come near `rank` on either, and misses the `kl` condition. On
 20-99 no variant clears even one baseline on both metrics. (On 5-19 the combination
@@ -186,7 +190,9 @@ Plain language, and what was and was not tested.
   600) or `rank` (40).
 - **Subjects are not the cause on their own.** `max_subjects=10` made hit@10 slightly worse in all
   three segments; `subject_multiplier=0.5` was mixed (a little better on 20-99, worse on 5-19 and
-  on recall@50 in 100+). Combining either with a heavier prior added nothing over the prior alone.
+  on recall@50 in 100+). Combining either with a heavier prior added nothing over the prior alone on 20-99 and 100+; on
+  5-19 the second combination (`rank_prior_weight=2.0,max_subjects=10,subject_multiplier=0.5`) did
+  beat the prior alone (hit@10 0.198 against 0.167, recall@50 0.174 against 0.153).
 - **Query-shape knobs are noise at this sample size.** `candidate_size=100`, `min_score=2.0`,
   `pseudo_books=20` and `min_support=3` each moved a metric by 0.01 to 0.02, inside what 100 users
   can resolve (one user is 0.01 on hit@10). `min_score=2.0` cuts the 100+ segment's coverage and
@@ -195,8 +201,8 @@ Plain language, and what was and was not tested.
   (0.766 to 0.804) and 5-19 (0.854 to 0.898), and costs nothing in hits within noise. It does not
   explain the `kl` gap to `lift=false`: that gap is the engine's pages carrying different genres
   than the user's history, not the re-ranker failing to pull them back.
-- **Why the pages are deep.** Mean rank 5,800 in a ranked pool of 21,392 is roughly "half way down
-  the pool". The taste query sums boosts over up to 38 category clauses (8 genres, 25 subjects, 5
+- **Why the pages are deep.** Mean rank 5,800 in a ranked pool of 21,392 is about 27% of the way
+  down the pool, roughly a quarter. The taste query sums boosts over up to 38 category clauses (8 genres, 25 subjects, 5
   locations), and lift weights favour rare categories by construction (`ln(s/p)` grows as `p`
   shrinks), so books matching a handful of rare subjects outscore books matching common genres.
   The normalization by `sqrt(category count)` then favours thinly tagged books. A look at one
