@@ -37,6 +37,9 @@ Run these in this order after each migration pass.
 
 1. **`bin/rails data_migration:all`.** It already includes `penalties:reconcile`,
    `author_countries` and the favorites-list rebuild.
+   It now also includes `recommendation_configs` (the 33 legacy recommendation settings, 9 of
+   them paid users'). It re-runs safely on every rehearsal pass; `exclude_locations` is dropped
+   on purpose.
 2. **Search and rankings.** The migrators load with search indexing off, so new records are not in
    OpenSearch until you run `bin/rails search:books:recreate_and_reindex_all`. Then recalculate the
    books list weights and rankings. Author rankings follow from the book rankings:

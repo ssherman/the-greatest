@@ -89,6 +89,11 @@ namespace :data_migration do
     pp Services::BooksMigration::SavedSearchMigrator.call
   end
 
+  desc "Migrate legacy recommendation_configs into Books::RecommendationConfig (keyed on user; remaps categories; drops exclude_locations)"
+  task recommendation_configs: :environment do
+    pp Services::BooksMigration::RecommendationConfigMigrator.call
+  end
+
   desc "Migrate legacy links into external_links (Books::Book parent; source inferred from host)"
   task external_links: :environment do
     pp Services::BooksMigration::ExternalLinkMigrator.call
@@ -326,6 +331,6 @@ namespace :data_migration do
     :categories, :category_items, :book_attributes, :book_type_categories, :countries, :author_countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
     :ranked_lists, :penalties, :list_penalties, "penalties:reconcile", :user_lists, :user_list_items,
-    :reading_goals, :saved_searches, :reviews, :corrections, :news_posts,
+    :reading_goals, :saved_searches, :recommendation_configs, :reviews, :corrections, :news_posts,
     "user_favorites_lists:rebuild"]
 end
