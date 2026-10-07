@@ -35,11 +35,24 @@ module Admin
         assert_response :success
       end
 
-      test "show renders without a wizard button" do
+      test "show renders, and the list's wizard opens on Paste" do
         sign_in_as(@admin_user, stub_auth: true)
         get admin_books_list_path(@list)
         assert_response :success
-        assert_no_match "Launch Wizard", response.body
+        assert_select "a[href=?]", admin_books_list_wizard_path(list_id: @list.id)
+
+        get admin_books_list_wizard_path(list_id: @list.id)
+        assert_redirected_to step_admin_books_list_wizard_path(list_id: @list.id, step: "paste")
+      end
+
+      test "show offers no wizard on an auto-generated list" do
+        generated = ::Books::List.create!(name: "Generated", status: :approved, auto_generated_kind: :user_favorites)
+        sign_in_as(@admin_user, stub_auth: true)
+
+        get admin_books_list_path(generated)
+
+        assert_response :success
+        assert_select "a[href=?]", admin_books_list_wizard_path(list_id: generated.id), count: 0
       end
 
       test "list show renders for a books domain viewer without error" do

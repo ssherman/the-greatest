@@ -281,4 +281,13 @@ class Admin::Games::ListItemsActionsControllerTest < ActionDispatch::Integration
     assert_response :success
     assert_match "Invalid modal type", response.body
   end
+
+  test "re_enrich also drops the manual_link marker so the row is validated again" do
+    @item.update!(metadata: @item.metadata.merge("manual_link" => true, "manual_igdb_link" => true))
+
+    post re_enrich_admin_games_list_item_path(list_id: @list.id, id: @item.id)
+
+    assert_response :redirect
+    assert_equal [nil, nil], @item.reload.metadata.values_at("manual_link", "manual_igdb_link")
+  end
 end

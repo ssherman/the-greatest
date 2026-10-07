@@ -12,7 +12,8 @@ class AutocompleteComponent < ViewComponent::Base
     min_length: 1,
     debounce: 300,
     required: false,
-    disabled: false
+    disabled: false,
+    id: nil
   )
     @name = name
     @url = url
@@ -25,10 +26,11 @@ class AutocompleteComponent < ViewComponent::Base
     @debounce = debounce
     @required = required
     @disabled = disabled
+    @id = id
   end
 
   def input_id
-    @name.to_s.gsub(/[\[\]]/, "_").squeeze("_").sub(/_$/, "")
+    @id.presence || @name.to_s.gsub(/[\[\]]/, "_").squeeze("_").sub(/_$/, "")
   end
 
   def autocomplete_id

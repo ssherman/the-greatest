@@ -8,6 +8,23 @@ class Admin::Lists::ShowComponent < ViewComponent::Base
     @domain_config = domain_config
   end
 
+  # Spec §5: rows the list wizard left unlinked, to be finished later from the
+  # wizard's Review step. The rule itself lives in Summary.
+  def unlinked_rows_count
+    @unlinked_rows_count ||= ::Services::Lists::Wizard::Core::Summary.new(list).unlinked_count
+  end
+
+  # Books lists only: spec §9 allows no other change to the music and games pages.
+  def show_unlinked_rows?
+    list.is_a?(::Books::List) && unlinked_rows_count.positive?
+  end
+
+  # Pre-wizard unlinked rows are settled, so the default Flagged filter hides
+  # them; the link asks for every row.
+  def unlinked_review_path(wizard_link)
+    "#{wizard_link.to_s.chomp("/")}/step/review?filter=all"
+  end
+
   private
 
   attr_reader :list, :domain_config

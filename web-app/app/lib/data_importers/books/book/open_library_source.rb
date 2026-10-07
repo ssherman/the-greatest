@@ -48,6 +48,7 @@ module DataImporters
         def resolve_args
           {
             title: @query.title.to_s,
+            subtitle: @query.subtitle,
             author_names: @query.author_names,
             year: @query.year,
             isbn13: @query.isbn13,

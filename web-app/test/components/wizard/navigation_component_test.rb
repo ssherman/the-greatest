@@ -108,4 +108,17 @@ class Wizard::NavigationComponentTest < ViewComponent::TestCase
 
     assert_not component.next_button_disabled?
   end
+
+  test "the next button carries a confirmation and extra params only when given" do
+    plain = Wizard::NavigationComponent.new(list: @list, step_name: "review", step_index: 3, total_steps: 6)
+    confirming = Wizard::NavigationComponent.new(list: @list, step_name: "review", step_index: 3, total_steps: 6,
+      next_confirm: "Finish with 2 rows unlinked?", next_params: {confirm_unlinked: "1"}, restart_confirm: "Restart?")
+
+    assert_equal({wizard_step_target: "nextButton"}, plain.next_button_data)
+    assert_equal({}, plain.next_params)
+    assert_equal "Finish with 2 rows unlinked?", confirming.next_button_data[:turbo_confirm]
+    assert_equal({confirm_unlinked: "1"}, confirming.next_params)
+    assert_equal({turbo_confirm: "Restart?"}, confirming.restart_button_data)
+    assert_equal Wizard::NavigationComponent::DEFAULT_RESTART_CONFIRM, plain.restart_button_data[:turbo_confirm]
+  end
 end

@@ -198,8 +198,12 @@ class StimulusManifestTest < ActiveSupport::TestCase
       .sort
   end
 
+  # app/components/wizard/ is the list wizard's UI kit. Only admin pages render
+  # it, even though the directory sits outside app/components/admin/ (it is
+  # shared by the music, games and books admin wizards), so its controllers
+  # (wizard-step) belong in the admin bundle and not in the public ones.
   def admin_path?(relative_path)
-    relative_path.start_with?("app/views/admin/", "app/components/admin/")
+    relative_path.start_with?("app/views/admin/", "app/components/admin/", "app/components/wizard/")
   end
 
   # The first path segment under app/views or app/components that names a domain.

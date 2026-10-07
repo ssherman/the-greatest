@@ -70,4 +70,11 @@ class AutocompleteComponentTest < ViewComponent::TestCase
     assert_selector "[data-autocomplete-display-key-value='name']"
     assert_selector "[data-autocomplete-value-key-value='id']"
   end
+
+  test "an explicit id keeps two widgets with the same field name apart" do
+    render_inline(AutocompleteComponent.new(name: "record_id", url: "/search", id: "row_5_record"))
+
+    assert_selector "input#row_5_record_autocomplete[type=search]"
+    assert_selector "input#row_5_record[type=hidden][name=record_id]", visible: :all
+  end
 end

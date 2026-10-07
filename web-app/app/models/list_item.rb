@@ -24,6 +24,14 @@
 #  fk_rails_...  (list_id => lists.id)
 #
 class ListItem < ApplicationRecord
+  # Metadata flags the old wizards set when a person linked a row by hand.
+  # AI re-validation must leave those rows alone (books list wizard spec §9.2).
+  MANUAL_LINK_KEYS = %w[manual_link manual_musicbrainz_link manual_igdb_link].freeze
+
+  def manually_linked?
+    metadata.is_a?(Hash) && MANUAL_LINK_KEYS.any? { |key| metadata[key].present? }
+  end
+
   # Raised to block a hand edit against an auto-generated list's items.
   #
   # Deliberately NOT a subclass of ActiveRecord::RecordNotDestroyed.

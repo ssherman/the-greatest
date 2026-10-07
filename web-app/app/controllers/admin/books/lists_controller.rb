@@ -25,5 +25,6 @@ class Admin::Books::ListsController < Admin::ListsBaseController
 
   def listable_includes = [:authors]
 
-  def wizard_path(_list) = nil
+  # A generated list has no wizard: its generator writes its items.
+  def wizard_path(list) = list.auto_generated? ? nil : admin_books_list_wizard_path(list_id: list.id)
 end
