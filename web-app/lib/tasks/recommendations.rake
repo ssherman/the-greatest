@@ -102,7 +102,7 @@ namespace :recommendations do
     limit = ENV.fetch("LIMIT", "50").to_i
     fraction = ENV.fetch("FRACTION", "0.2").to_f
     variants = RecommendationsHarness.parse_variants(ENV["VARIANTS"])
-    variants << {lift: false} unless variants.any? { |v| v[:lift] == false }
+    variants << {lift: false} unless variants.include?({lift: false})
 
     random = Random.new(seed)
     segments = Recommendations::Evaluation.sample_user_ids(domain: :books, per_segment: users_total / 3, random: random)
@@ -130,13 +130,27 @@ namespace :recommendations do
         excluded = adapter.shelved_item_ids(user) - held_ids
         criteria = adapter.criteria_for(user)
 
-        # Baseline: the filtered pool in global rank order.
-        rank_ids = adapter.rank_ordered_candidates(criteria: criteria, excluded_ids: excluded, size: limit).map(&:item_id)
-        m = Recommendations::Evaluation.metrics(page_ids: rank_ids, held_out_ids: held_ids)
-        rows["rank"][:hit] << m[:hit]
-        rows["rank"][:recall] << m[:recall]
-        rows["rank"][:ndcg] << m[:ndcg]
+        # Every row gets the same arithmetic. The rank baseline has no profile of
+        # its own, so its kl borrows the shipped-defaults profile's genre mix
+        # (recorded last, printed first).
+        defaults_history = nil
+        record = lambda do |row, page_ids, history|
+          facts = adapter.item_facts(page_ids)
+          m = Recommendations::Evaluation.metrics(page_ids: page_ids, held_out_ids: held_ids)
+          row[:hit] << m[:hit]
+          row[:recall] << m[:recall]
+          row[:ndcg] << m[:ndcg]
+          row[:ids].merge(page_ids)
+          ranks = page_ids.filter_map { |id| facts[id]&.rank_position }
+          row[:mean_rank] << RecommendationsHarness.mean(ranks) if ranks.any?
+          author_counts = page_ids.flat_map { |id| facts[id]&.author_ids || [] }.tally.values
+          row[:author_repeats] << author_counts.sum { |c| c - 1 }
+          kl = Recommendations::Evaluation.genre_kl(history: history || {},
+            page_genres: page_ids.map { |id| facts[id]&.genre_ids || [] }, alpha: config[:calibration_alpha])
+          row[:kl] << kl if kl
+        end
 
+        rows["rank"] # first key, so the baseline prints first
         variants.each do |overrides|
           started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
           result = Recommendations::Engine.call(user: user, domain: :books, limit: limit, overrides: overrides,
@@ -144,23 +158,16 @@ namespace :recommendations do
           ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round
           next unless result.success?
 
-          items = result.data[:items]
-          page_ids = items.map { |i| i[:item_id] }
-          facts = adapter.item_facts(page_ids)
-          m = Recommendations::Evaluation.metrics(page_ids: page_ids, held_out_ids: held_ids)
+          history = result.data[:profile].genre_distribution
+          defaults_history = history if overrides.empty?
           row = rows[RecommendationsHarness.label(overrides)]
-          row[:hit] << m[:hit]
-          row[:recall] << m[:recall]
-          row[:ndcg] << m[:ndcg]
           row[:ms] << ms
-          row[:ids].merge(page_ids)
-          ranks = page_ids.filter_map { |id| facts[id]&.rank_position }
-          row[:mean_rank] << RecommendationsHarness.mean(ranks) if ranks.any?
-          author_counts = page_ids.flat_map { |id| facts[id]&.author_ids || [] }.tally.values
-          row[:author_repeats] << author_counts.sum { |c| c - 1 }
-          row[:kl] << Recommendations::Evaluation.genre_kl(history: result.data[:profile].genre_distribution,
-            page_genres: page_ids.map { |id| facts[id]&.genre_ids || [] }, alpha: config[:calibration_alpha])
+          record.call(row, result.data[:items].map { |i| i[:item_id] }, history)
         end
+
+        # Baseline: the filtered pool in global rank order.
+        rank_ids = adapter.rank_ordered_candidates(criteria: criteria, excluded_ids: excluded, size: limit).map(&:item_id)
+        record.call(rows["rank"], rank_ids, defaults_history)
       end
 
       puts "-- segment #{segment}: #{evaluated} of #{user_ids.size} sampled users evaluated"

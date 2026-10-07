@@ -39,12 +39,14 @@ module Recommendations
     end
 
     # KL(history ‖ smoothed page) over genre ids; page_genres is one array of
-    # genre ids per recommended item. Same smoothing as GenreCalibration.
+    # genre ids per recommended item. Same smoothing as GenreCalibration. Nil when
+    # the page carries no genres or the history is empty: there is no mix to
+    # compare, and a 0.0 would read as a perfect match and flatter the average.
     def genre_kl(history:, page_genres:, alpha:)
       mass = Hash.new(0.0)
       page_genres.each { |genres| genres.each { |g| mass[g] += 1.0 / genres.size } if genres.any? }
       total = mass.values.sum
-      return 0.0 if total <= 0 || history.empty?
+      return nil if total <= 0 || history.empty?
 
       history.sum do |genre, p|
         q = mass.fetch(genre, 0.0) / total

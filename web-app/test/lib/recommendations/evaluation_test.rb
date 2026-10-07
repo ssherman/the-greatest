@@ -44,6 +44,12 @@ module Recommendations
       assert_operator Evaluation.genre_kl(history: history, page_genres: [[1], [1], [1]], alpha: 0.01), :>, 0.5
     end
 
+    test "genre_kl is nil when the page carries no genres or the history is empty" do
+      assert_nil Evaluation.genre_kl(history: {1 => 1.0}, page_genres: [[], []], alpha: 0.01)
+      assert_nil Evaluation.genre_kl(history: {1 => 1.0}, page_genres: [], alpha: 0.01)
+      assert_nil Evaluation.genre_kl(history: {}, page_genres: [[1]], alpha: 0.01)
+    end
+
     test "sample_user_ids samples only eligible users, bucketed by positive list items" do
       # regular_user has 3 books items in the fixtures (2 favorites, 1 read) -> below every segment.
       heavy = User.create!(email: "heavy@example.com")
@@ -58,6 +64,30 @@ module Recommendations
       assert_equal [], sample["20-99"]
       assert_equal [], sample["100+"]
       assert_not_includes sample.values.flatten, reader.id
+    end
+
+    test "sample_user_ids needs five hold-out candidates: four favorites plus read books is not enough" do
+      user = User.create!(email: "four-favorites@example.com")
+      favorites = user.default_user_list_for(::Books::UserList, :favorites)
+      read = user.default_user_list_for(::Books::UserList, :read)
+      4.times { |i| favorites.user_list_items.create!(listable: ::Books::Book.create!(title: "Fav#{i}")) }
+      6.times { |i| read.user_list_items.create!(listable: ::Books::Book.create!(title: "Read#{i}")) }
+
+      sample = Evaluation.sample_user_ids(domain: :books, per_segment: 10, random: Random.new(1))
+      assert_not_includes sample.values.flatten, user.id
+    end
+
+    test "sample_user_ids counts 4-star reviews toward the eligibility floor" do
+      user = User.create!(email: "reviewer@example.com")
+      read = user.default_user_list_for(::Books::UserList, :read)
+      5.times do |i|
+        book = ::Books::Book.create!(title: "Reviewed#{i}")
+        read.user_list_items.create!(listable: book)
+        Review.create!(user: user, reviewable: book, rating: 4)
+      end
+
+      sample = Evaluation.sample_user_ids(domain: :books, per_segment: 10, random: Random.new(1))
+      assert_equal [user.id], sample["5-19"]
     end
   end
 end
