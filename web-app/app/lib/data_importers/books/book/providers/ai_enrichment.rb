@@ -31,7 +31,11 @@ module DataImporters
               return success_result(data_populated: [:ai_enrichment_deferred_to_authors])
             end
 
-            ::Books::EnrichBookJob.perform_async(book.id, false, author_names)
+            # After the outermost commit: a worker that runs before it would
+            # not find the book, and a rolled-back book must queue nothing.
+            ::ActiveRecord.after_all_transactions_commit do
+              ::Books::EnrichBookJob.perform_async(book.id, false, author_names)
+            end
 
             success_result(data_populated: [:ai_enrichment_queued])
           rescue => e

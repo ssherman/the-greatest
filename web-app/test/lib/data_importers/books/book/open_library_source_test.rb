@@ -269,6 +269,16 @@ module DataImporters
 
           assert_raises(::Books::OpenLibrary::Exceptions::ServerError) { source(query).call }
         end
+
+        test "sends the query's subtitle to /resolve" do
+          stub_resolve(resolve_response(verdict: "abstain")) do |request|
+            JSON.parse(request.body)["subtitle"] == "A Novel"
+          end
+
+          source(query(subtitle: "A Novel")).call
+
+          assert_requested(:post, "#{BASE_URL}/resolve", times: 1)
+        end
       end
     end
   end

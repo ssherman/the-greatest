@@ -101,7 +101,7 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
       listable: nil,
       metadata: @item.metadata.except(
         "igdb_id", "igdb_name", "igdb_developer_names", "igdb_match",
-        "manual_igdb_link", "opensearch_match", "opensearch_score",
+        "manual_igdb_link", "manual_link", "opensearch_match", "opensearch_score",
         "game_id", "game_name", "ai_match_invalid"
       )
     )

@@ -7,6 +7,8 @@ module Services
         module Music
           module Albums
             class ListItemsValidatorTaskTest < ActiveSupport::TestCase
+              include ValidatorResponseStub
+
               def setup
                 @list = lists(:music_albums_list)
                 @list.list_items.destroy_all
@@ -273,6 +275,19 @@ module Services
                 user_prompt = task.send(:user_prompt)
 
                 assert_equal "", user_prompt
+              end
+
+              test "a hand-linked row handed to the validator is left out of the prompt and untouched" do
+                manual = @list.list_items.create!(position: 4, verified: true,
+                  metadata: {"title" => "Revolver", "artists" => ["The Beatles"], "album_id" => 456, "manual_link" => true})
+                stub_validator_response(invalid: [1])
+
+                result = ListItemsValidatorTask.new(parent: @list, items: [manual, @item1]).call
+
+                assert result.success?
+                assert manual.reload.verified?
+                refute manual.metadata.key?("ai_match_invalid")
+                assert_equal true, @item1.reload.metadata["ai_match_invalid"]
               end
             end
           end

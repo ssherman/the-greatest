@@ -705,4 +705,13 @@ class Admin::Music::Albums::ListItemsActionsControllerTest < ActionDispatch::Int
   rescue ActionController::RoutingError
     session.delete(:user_id) if defined?(session)
   end
+
+  test "re_enrich also drops the manual_link marker so the row is validated again" do
+    @item.update!(metadata: @item.metadata.merge("manual_link" => true, "manual_musicbrainz_link" => true))
+
+    post re_enrich_admin_albums_list_item_path(list_id: @list.id, id: @item.id)
+
+    assert_response :redirect
+    assert_equal [nil, nil], @item.reload.metadata.values_at("manual_link", "manual_musicbrainz_link")
+  end
 end

@@ -1,0 +1,16 @@
+<%= render(Wizard::StepComponent.new(title: "Paste the list", description: "Paste the list's HTML or its plain text. The parser reads every book on it.")) do |step| %>
+  <% step.with_step_content do %>
+    <%= form_with url: form_path, method: :post do |form| %>
+      <label class="label mb-2" for="raw_content">List content</label>
+      <%= form.text_area :raw_content, id: "raw_content", value: list.raw_content, rows: 15, required: true,
+          class: "textarea w-full font-mono text-sm" %>
+      <label class="label mt-3 cursor-pointer">
+        <%= check_box_tag :batch_mode, "1", batch_mode?, class: "checkbox checkbox-sm" %>
+        Large plain-text list (1000+ lines): parse 100 lines at a time
+      </label>
+      <div class="mt-4">
+        <%= form.submit "Save and parse", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  <% end %>
+<% end %>

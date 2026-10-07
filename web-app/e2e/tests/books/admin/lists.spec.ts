@@ -6,13 +6,13 @@ test.describe("Books admin — lists", () => {
     await expect(page.getByRole("heading", { name: "Book Lists", level: 1 })).toBeVisible();
   });
 
-  test("creates a list and shows it without a wizard button", async ({ page }) => {
+  test("creates a list and shows its Launch Wizard link", async ({ page }) => {
     const name = `E2E List ${Date.now()}`;
     await page.goto("/admin/lists/new");
     await page.locator('input[name="books_list[name]"]').fill(name);
     await page.getByRole("button", { name: "Create Book List" }).click();
     await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Launch Wizard" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Launch Wizard/ })).toHaveAttribute("href", /\/admin\/lists\/\d+\/wizard$/);
   });
 
   test("edits a list name", async ({ page }) => {

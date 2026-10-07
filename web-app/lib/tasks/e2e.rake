@@ -328,6 +328,16 @@ namespace :e2e do
     puts "removed #{[book, author].compact.size} row(s)"
   end
 
+  desc "Remove the lists e2e/tests/books/admin/list-wizard.spec.ts created (name prefix only)"
+  task list_wizard_cleanup: :environment do
+    removed = 0
+    Books::List.where("name LIKE ?", "E2E Wizard List %").find_each do |list|
+      list.destroy!
+      removed += 1
+    end
+    puts "removed #{removed} list(s)"
+  end
+
   desc "Seed a finished Goodreads import with one provisional book for the Playwright admin " \
     "(E2E_GOODREADS_EMAIL overrides the account). Idempotent."
   task goodreads_import_seed: :environment do

@@ -210,4 +210,17 @@ class Music::Albums::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     assert_equal "failed", manager.step_status("validate")
     assert_equal "Network error", manager.step_error("validate")
   end
+
+  test "re-validation leaves a row linked by MusicBrainz release by hand verified" do
+    manual = ListItem.create!(list: @list, listable_type: "Music::Album", verified: true, position: 9,
+      metadata: {"title" => "Abbey Road", "mb_release_group_id" => "9162580e-5df4-32de-80cc-f45a8d8a9b1d", "manual_musicbrainz_link" => true})
+    @list_items << manual
+    result = Services::Ai::Result.new(success: true,
+      data: {valid_count: 1, invalid_count: 0, verified_count: 1, total_count: 1, reasoning: "ok"})
+    Services::Ai::Tasks::Lists::Music::Albums::ListItemsValidatorTask.any_instance.stubs(:call).returns(result)
+
+    Music::Albums::WizardValidateListItemsJob.new.perform(@list.id)
+
+    assert manual.reload.verified?
+  end
 end

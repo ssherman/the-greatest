@@ -40,6 +40,25 @@ module DataImporters
             refute result.success?
             assert_includes result.errors.first, "Author enrichment provider error"
           end
+
+          test "the Wikidata step is queued only after the surrounding transaction commits, never on rollback" do
+            provider = AuthorEnrichment.new(new_author_ids: [@tolstoy.id])
+            ::Sidekiq::Testing.fake! do
+              ::Books::Authors::WikidataJob.clear
+              ::ActiveRecord::Base.transaction(requires_new: true) do
+                provider.populate(@book, query: nil)
+                assert_empty ::Books::Authors::WikidataJob.jobs
+              end
+              assert_equal 1, ::Books::Authors::WikidataJob.jobs.size
+
+              ::Books::Authors::WikidataJob.clear
+              ::ActiveRecord::Base.transaction(requires_new: true) do
+                provider.populate(@book, query: nil)
+                raise ::ActiveRecord::Rollback
+              end
+              assert_empty ::Books::Authors::WikidataJob.jobs
+            end
+          end
         end
       end
     end

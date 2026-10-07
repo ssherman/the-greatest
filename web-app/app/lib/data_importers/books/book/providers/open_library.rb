@@ -26,10 +26,11 @@ module DataImporters
             goodreads_id: :books_work_goodreads_id
           }.freeze
 
-          def initialize(client: nil, new_author_ids: [], provisional: false)
+          def initialize(client: nil, new_author_ids: [], provisional: false, trust_work_key: false)
             @client = client
             @new_author_ids = new_author_ids
             @provisional = provisional
+            @trust_work_key = trust_work_key
           end
 
           # Lazy: building the default client constructs a CircuitBreaker
@@ -43,9 +44,20 @@ module DataImporters
           # or nil (item-based / force_providers import, where the book alone
           # must carry everything the request needs).
           def populate(book, query: nil, match: nil)
-            resolution = reusable_resolution(book, match) || client.resolve(**resolve_args(book, query))
+            trusted_key = trusted_work_key(query)
+            resolution = begin
+              reusable_resolution(book, match) || client.resolve(**resolve_args(book, query))
+            rescue => e
+              # A person chose this work; an unreachable service must not lose
+              # it. Without a trusted key the error is reported as before.
+              raise e unless trusted_key
 
-            if resolution.accept?
+              nil
+            end
+
+            if trusted_key
+              apply_trusted(book, resolution, query, trusted_key)
+            elsif resolution.accept?
               apply_accept(book, resolution, query)
             elsif resolution.abstain?
               failure_result(errors: ["Open Library abstained: #{resolution.decision.reason}"])
@@ -72,12 +84,34 @@ module DataImporters
             match.external_resolution
           end
 
+          # A person confirmed this work (the list wizard's Review, books list
+          # wizard spec §6), so it wins over the service's own choice. Applied
+          # like an accept when /resolve returned it; otherwise only its key is
+          # stamped and the Authors provider links authors by name.
+          def trusted_work_key(query)
+            @trust_work_key ? query&.open_library_work_key : nil
+          end
+
+          def apply_trusted(book, resolution, query, key)
+            candidate = resolution&.candidates&.find { |entry| entry.work_key == key }
+            return apply_candidate(book, candidate, query) if candidate
+            return failure_result(errors: ["Open Library work #{key} was chosen but the book has no title"]) if book.title.blank?
+
+            book.identifiers.find_or_initialize_by(identifier_type: :books_work_openlibrary_id, value: key)
+            persist_query_identifiers(book, query)
+            success_result(data_populated: ["open_library_work_key"])
+          end
+
           # The service guarantees an accept decision names a candidate with
           # that key, but this is defensive rather than trusted blindly.
           def apply_accept(book, resolution, query)
             candidate = resolution.accepted
             return failure_result(errors: ["Open Library accepted with no matching candidate"]) unless candidate
 
+            apply_candidate(book, candidate, query)
+          end
+
+          def apply_candidate(book, candidate, query)
             filled = apply_fills(book, candidate)
 
             # R113: ImporterBase#run_providers_with_saving skips save! when

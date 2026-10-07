@@ -133,9 +133,11 @@ module WizardController
   end
 
   # Resets the wizard to its initial state and redirects to the first step.
-  # Deletes all list items and calls +reset!+ on the wizard manager to clear all wizard state.
+  # Deletes only unverified list items: a verified row is a human's decision
+  # (a manual link, an approved match) and restarting must not throw it away
+  # (books list wizard spec 9.1).
   def restart
-    wizard_entity.list_items.destroy_all
+    wizard_entity.list_items.unverified.destroy_all
     wizard_entity.wizard_manager.reset!
     redirect_to action: :show
   end

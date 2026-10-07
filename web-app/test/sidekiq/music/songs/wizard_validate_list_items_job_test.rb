@@ -138,9 +138,8 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     refute @list_items.first.metadata.key?("ai_match_invalid")
   end
 
-  test "job is idempotent - resets verified to false before validation" do
+  test "re-validation still resets a verified row that nobody linked by hand" do
     @list_items.first.update!(verified: true, metadata: @list_items.first.metadata.merge("ai_match_invalid" => true))
-
     result = Services::Ai::Result.new(
       success: true,
       data: {valid_count: 2, invalid_count: 0, verified_count: 2, total_count: 2, reasoning: "All valid"}
@@ -149,10 +148,44 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
 
     Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
 
-    # The clear_previous_validation_flags method should have reset verified and removed ai_match_invalid
     @list_items.first.reload
-    # Note: The job clears ai_match_invalid flag for items that had it
+    assert_not @list_items.first.verified?
     refute @list_items.first.metadata.key?("ai_match_invalid")
+  end
+
+  test "re-validation leaves a hand-linked row verified and linked" do
+    song = music_songs(:wish_you_were_here)
+    manual = ListItem.create!(list: @list, listable: song, verified: true, position: 3,
+      metadata: {"title" => "Wish You Were Here", "song_id" => song.id, "manual_link" => true})
+    @list_items << manual
+    result = Services::Ai::Result.new(
+      success: true,
+      data: {valid_count: 2, invalid_count: 0, verified_count: 2, total_count: 2, reasoning: "All valid"}
+    )
+    Services::Ai::Tasks::Lists::Music::Songs::ListItemsValidatorTask.any_instance.stubs(:call).returns(result)
+
+    Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
+
+    manual.reload
+    assert manual.verified?
+    assert_equal song.id, manual.listable_id
+  end
+
+  test "batch mode never hands a hand-linked row to the validator" do
+    @list.update!(wizard_state: {"current_step" => 3, "batch_mode" => true, "steps" => {"validate" => {"status" => "idle"}}})
+    # Unverified on purpose: this pins the enriched_items filter itself, not
+    # the flag-clearing skip (a verified row is left out of the unverified
+    # scope either way once the clearing stops resetting it).
+    manual = ListItem.create!(list: @list, listable_type: "Music::Song", verified: false, position: 3,
+      metadata: {"title" => "Something", "song_id" => 77, "manual_musicbrainz_link" => true})
+    @list_items << manual
+    task = stub(call: Services::Ai::Result.new(success: true,
+      data: {valid_count: 2, invalid_count: 0, verified_count: 2, reasoning: "ok"}))
+    # The Mocha `with` is the real check: the manual row must not be in items.
+    Services::Ai::Tasks::Lists::Music::Songs::ListItemsValidatorTask.expects(:new)
+      .with(has_entries(items: Not(includes(manual)))).returns(task)
+
+    Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
   end
 
   test "job raises error when list not found" do

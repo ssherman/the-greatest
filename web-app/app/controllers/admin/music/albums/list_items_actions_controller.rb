@@ -110,7 +110,7 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
       listable: nil,
       metadata: @item.metadata.except(
         "mb_release_group_id", "mb_release_group_name", "mb_artist_ids", "mb_artist_names",
-        "mb_release_year", "musicbrainz_match", "manual_musicbrainz_link",
+        "mb_release_year", "musicbrainz_match", "manual_musicbrainz_link", "manual_link",
         "opensearch_match", "opensearch_score", "album_id", "album_name",
         "ai_match_invalid"
       )

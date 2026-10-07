@@ -179,6 +179,14 @@ module DataImporters
           assert_equal 1965, query.year
           assert query.valid?
         end
+
+        test "subtitle is kept, a blank one reads as nil, and it survives a snapshot round trip" do
+          query = ImportQuery.new(title: "Sapiens", subtitle: "A Brief History of Humankind")
+          snapshot = query.instance_variables.to_h { |ivar| [ivar.to_s.delete("@"), query.instance_variable_get(ivar)] }
+
+          assert_equal "A Brief History of Humankind", ImportQuery.from_snapshot(snapshot).subtitle
+          assert_nil ImportQuery.new(title: "Sapiens", subtitle: "  ").subtitle
+        end
       end
     end
   end

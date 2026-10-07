@@ -26,7 +26,11 @@ module DataImporters
             ids = @new_author_ids.uniq
             return success_result(data_populated: []) if ids.empty?
 
-            ids.each { |author_id| ::Books::Authors::WikidataJob.perform_async(author_id) }
+            # After the outermost commit, as in AiEnrichment: the job looks the
+            # author up and drops itself when it is not there yet.
+            ::ActiveRecord.after_all_transactions_commit do
+              ids.each { |author_id| ::Books::Authors::WikidataJob.perform_async(author_id) }
+            end
             success_result(data_populated: [:author_enrichment_queued])
           rescue => e
             failure_result(errors: ["Author enrichment provider error: #{e.message}"])

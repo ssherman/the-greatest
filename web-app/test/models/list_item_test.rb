@@ -26,6 +26,15 @@
 require "test_helper"
 
 class ListItemTest < ActiveSupport::TestCase
+  test "manually_linked? is true for each hand-link flag and false without one" do
+    ListItem::MANUAL_LINK_KEYS.each do |key|
+      assert ListItem.new(metadata: {key => true}).manually_linked?, key
+    end
+    assert_not ListItem.new(metadata: {"manual_link" => false}).manually_linked?
+    assert_not ListItem.new(metadata: {"title" => "Abbey Road"}).manually_linked?
+    assert_not ListItem.new(metadata: nil).manually_linked?
+  end
+
   test "should be valid with valid attributes" do
     assert list_items(:basic_item).valid?
   end

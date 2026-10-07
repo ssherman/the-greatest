@@ -26,9 +26,13 @@ module Services
           assert_instance_of Services::Lists::Wizard::Music::Albums::StateManager, manager
         end
 
-        test ".for returns base StateManager for Books::List" do
-          books_list = lists(:books_list)
-          manager = StateManager.for(books_list)
+        test ".for returns the books StateManager for Books::List" do
+          manager = StateManager.for(lists(:books_list))
+          assert_instance_of Services::Lists::Wizard::Books::StateManager, manager
+        end
+
+        test ".for returns the base StateManager for Games::List" do
+          manager = StateManager.for(lists(:games_list))
           assert_instance_of Services::Lists::Wizard::StateManager, manager
         end
 
@@ -315,8 +319,7 @@ module Services
         # ============================================
 
         test "#steps returns default wizard steps for base class" do
-          books_list = lists(:books_list)
-          manager = StateManager.for(books_list)
+          manager = StateManager.new(lists(:books_list))
           assert_equal %w[source parse enrich validate review import complete], manager.steps
         end
 
@@ -363,6 +366,65 @@ module Services
           # Both steps should retain their status
           assert_equal "completed", manager.step_status("parse")
           assert_equal "completed", manager.step_status("enrich")
+        end
+
+        test "#write_step! re-reads the list, so a Back click made meanwhile survives" do
+          @list.update!(wizard_state: {"current_step" => 1, "steps" => {}})
+          stale = List.find(@list.id)
+          List.find(@list.id).wizard_manager.go_to_step!(3)
+
+          stale.wizard_manager.write_step!(step: "parse", status: "completed", progress: 100, metadata: {"total_items" => 4})
+
+          @list.reload
+          assert_equal 3, @list.wizard_manager.current_step
+          assert_equal ["completed", 100, {"total_items" => 4}],
+            [@list.wizard_manager.step_status("parse"), @list.wizard_manager.step_progress("parse"), @list.wizard_manager.step_metadata("parse")]
+        end
+
+        test "#write_step! stamps the entry, and #step_stalled? is true only for a running step untouched for 30 minutes" do
+          @list.update!(wizard_state: {"current_step" => 1, "steps" => {}})
+          manager = @list.wizard_manager
+
+          manager.write_step!(step: "parse", status: "running")
+          assert_not manager.step_stalled?("parse")
+
+          travel_to 29.minutes.from_now do
+            assert_not List.find(@list.id).wizard_manager.step_stalled?("parse")
+          end
+          travel_to 31.minutes.from_now do
+            assert List.find(@list.id).wizard_manager.step_stalled?("parse")
+          end
+
+          manager.write_step!(step: "parse", status: "completed")
+          travel_to 31.minutes.from_now do
+            assert_not List.find(@list.id).wizard_manager.step_stalled?("parse")
+          end
+        end
+
+        test "#step_stalled? treats a running step with no stamp as stalled" do
+          @list.update!(wizard_state: {"steps" => {"parse" => {"status" => "running"}}})
+
+          assert @list.wizard_manager.step_stalled?("parse")
+        end
+
+        test "#go_to_step! re-reads the list, so a job's step write made meanwhile survives" do
+          @list.update!(wizard_state: {"current_step" => 1, "steps" => {}})
+          stale = List.find(@list.id)
+          List.find(@list.id).wizard_manager.write_step!(step: "parse", status: "running", progress: 40)
+
+          stale.wizard_manager.go_to_step!(2, completed: true)
+
+          @list.reload
+          assert_equal [2, "running", 40], [@list.wizard_manager.current_step, @list.wizard_manager.step_status("parse"), @list.wizard_manager.step_progress("parse")]
+          assert @list.wizard_state["completed_at"].present?
+        end
+
+        test "#go_to_step! leaves completed_at alone unless asked" do
+          @list.update!(wizard_state: {"current_step" => 1})
+
+          @list.wizard_manager.go_to_step!(2)
+
+          assert_nil @list.reload.wizard_state["completed_at"]
         end
       end
     end

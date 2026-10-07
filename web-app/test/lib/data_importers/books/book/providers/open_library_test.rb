@@ -447,6 +447,65 @@ module DataImporters
             refute result.success?
             assert_requested(:post, "#{BASE_URL}/resolve")
           end
+
+          test "a trusted work key wins over the service's accept: that candidate's facts and key are applied" do
+            provider = Providers::OpenLibrary.new(client: @client, trust_work_key: true)
+            body = resolve_response(verdict: "accept", key: "OL1W")
+            body["data"]["candidates"] << candidate_hash(key: "OL2W", verdict: "reject",
+              diff: [diff_entry(field: "first_published_year", ours: nil, theirs: 1951, kind: "fill")])
+            stub_resolve(body)
+            book = ::Books::Book.new(title: "The Chosen")
+            query = DataImporters::Books::Book::ImportQuery.new(title: "The Chosen", open_library_work_key: "OL2W")
+
+            result = provider.populate(book, query: query)
+
+            assert result.success?
+            assert_equal ["OL2W"], book.identifiers.select { |i| i.identifier_type == "books_work_openlibrary_id" }.map(&:value)
+            assert_equal 1951, book.first_published_year
+          end
+
+          test "a trusted work key the service did not return is still stamped" do
+            provider = Providers::OpenLibrary.new(client: @client, trust_work_key: true)
+            stub_resolve(resolve_response(verdict: "abstain"))
+            book = ::Books::Book.new(title: "The Chosen")
+
+            result = provider.populate(book, query: DataImporters::Books::Book::ImportQuery.new(title: "The Chosen", open_library_work_key: "OL7W"))
+
+            assert result.success?
+            assert_equal ["OL7W"], book.identifiers.select { |i| i.identifier_type == "books_work_openlibrary_id" }.map(&:value)
+          end
+
+          test "a trusted work key is stamped even when /resolve fails" do
+            provider = Providers::OpenLibrary.new(client: @client, trust_work_key: true)
+            stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 500, body: "{}")
+            book = ::Books::Book.new(title: "The Chosen")
+
+            result = provider.populate(book, query: DataImporters::Books::Book::ImportQuery.new(title: "The Chosen", open_library_work_key: "OL7W"))
+
+            assert result.success?
+            assert_equal ["OL7W"], book.identifiers.select { |i| i.identifier_type == "books_work_openlibrary_id" }.map(&:value)
+          end
+
+          test "without trust, a /resolve failure is still a failure" do
+            stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 500, body: "{}")
+            book = ::Books::Book.new(title: "The Chosen")
+
+            result = @provider.populate(book, query: DataImporters::Books::Book::ImportQuery.new(title: "The Chosen", open_library_work_key: "OL7W"))
+
+            assert_not result.success?
+            assert_empty book.identifiers.select { |i| i.identifier_type == "books_work_openlibrary_id" }
+          end
+
+          test "without trust, the query's work key does not override the service's accept" do
+            body = resolve_response(verdict: "accept", key: "OL1W")
+            body["data"]["candidates"] << candidate_hash(key: "OL2W", verdict: "reject", diff: [])
+            stub_resolve(body)
+            book = ::Books::Book.new(title: "The Chosen")
+
+            @provider.populate(book, query: DataImporters::Books::Book::ImportQuery.new(title: "The Chosen", open_library_work_key: "OL2W"))
+
+            assert_equal ["OL1W"], book.identifiers.select { |i| i.identifier_type == "books_work_openlibrary_id" }.map(&:value)
+          end
         end
       end
     end

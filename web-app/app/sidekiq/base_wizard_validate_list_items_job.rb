@@ -73,14 +73,14 @@ class BaseWizardValidateListItemsJob
 
   def enriched_items
     @list.list_items.unverified.ordered.select do |item|
-      item.listable_id.present? ||
-        item.metadata[entity_id_key].present? ||
-        item.metadata[enrichment_id_key].present?
+      has_enrichment?(item) && !item.manually_linked?
     end
   end
 
   def clear_previous_validation_flags
     @list.list_items.reorder(nil).find_each do |item|
+      next if item.manually_linked?
+
       needs_update = false
 
       if item.metadata["ai_match_invalid"].present?

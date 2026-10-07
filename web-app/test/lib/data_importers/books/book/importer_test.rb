@@ -480,6 +480,30 @@ module DataImporters
 
           assert_includes result.summary[:data_populated], :ai_enrichment_queued
         end
+
+        test "a new book is seeded with the query's subtitle, and the finder sends it to /resolve" do
+          stub_open_library_client
+          stub_request(:post, "#{BASE_URL}/resolve")
+            .with { |request| JSON.parse(request.body)["subtitle"] == "A Brief History of Humankind" }
+            .to_return(status: 200, body: accept_response(diff: []).to_json)
+
+          result = Importer.call(title: "Sapiens", subtitle: "A Brief History of Humankind", author_names: ["Yuval Noah Harari"])
+
+          assert result.item.persisted?
+          assert_equal "A Brief History of Humankind", result.item.subtitle
+        end
+
+        test "trust_work_key reaches the provider: the chosen key lands on the new book, not the service's" do
+          stub_open_library_client
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: accept_response(diff: []).to_json)
+          match = DataImporters::Match.new(outcome: :unmatched, record: nil, confidence: :high, decided_by: :rule, candidates: [])
+
+          result = Importer.call(title: "The Chosen", author_names: ["Chaim Potok"], open_library_work_key: "OL5W",
+            match: match, trust_work_key: true)
+
+          assert result.item.identifiers.exists?(identifier_type: :books_work_openlibrary_id, value: "OL5W")
+          assert_not result.item.identifiers.exists?(identifier_type: :books_work_openlibrary_id, value: "OL468431W")
+        end
       end
     end
   end
