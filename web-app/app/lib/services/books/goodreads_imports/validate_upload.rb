@@ -26,7 +26,7 @@ module Services
             return refuse("That file is over #{config.max_file_bytes / 1.megabyte} MB. A Goodreads export is much smaller, so check you picked the right file.")
           end
           return refuse("You already have an import running. You can upload another when it finishes.") if @user.goodreads_imports.in_progress.exists?
-          if @user.goodreads_imports.member.where(created_at: 24.hours.ago..).count >= config.daily_limit
+          if @user.goodreads_imports.member.where(finishes_legacy_import_id: nil, created_at: 24.hours.ago..).count >= config.daily_limit
             return refuse("You can start #{config.daily_limit} imports a day. Try again tomorrow.")
           end
 

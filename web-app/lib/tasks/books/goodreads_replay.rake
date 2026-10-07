@@ -1,6 +1,7 @@
 # The legacy Goodreads replay (Goodreads import spec §12). A full pass, after
 # every books migration pass and in the launch sequence:
 #   load -> fix_slugs -> apply -> resolve (wait for the jobs) -> duplicates -> junk -> apply -> report
+#   then finish_legacy, on the final launch pass only
 # apply does nothing while config.x.goodreads_replay.auto_apply is false.
 namespace :books do
   namespace :goodreads_replay do
@@ -36,6 +37,17 @@ namespace :books do
     task junk: :environment do
       counts = Services::Books::GoodreadsReplay::FindJunk.call.data
       puts "mark_provisional verdicts: #{counts[:authorless]} authorless, #{counts[:orphaned]} with no support after relinks"
+    end
+
+    desc "Finish the legacy imports that failed or never finished (spec §12.8) as member imports, for admin " \
+      "approval. Run after load. Optional limit; IDS=\"73 285\" picks legacy imports; DRY_RUN=1 starts nothing."
+    task :finish_legacy, [:limit] => :environment do |_task, args|
+      ids = ENV["IDS"].to_s.split(/[\s,]+/).reject(&:blank?).map(&:to_i).presence
+      result = Services::Books::GoodreadsReplay::FinishLegacyImports.call(
+        limit: args[:limit].presence&.to_i, ids: ids, dry_run: ENV["DRY_RUN"].present?
+      )
+      result.data[:outcomes].each { |id, outcome| puts "legacy import #{id}: #{outcome}" }
+      puts "legacy imports to finish: #{tally.call(result.data[:tally])}"
     end
 
     desc "Apply every approved replay verdict (author merges, book merges, relinks, identifier strips, provisional). " \

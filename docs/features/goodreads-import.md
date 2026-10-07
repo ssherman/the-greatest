@@ -14,8 +14,8 @@ catalog's bad data; this one is built so that it cannot. Spec:
 | 3 | Resolver core: parsing, tables, edition resolution, dry run | shipped |
 | 4 | Goodreads page fetcher and verification | shipped |
 | 5 | Legacy replay | shipped |
-| 6 | Member upload, library write, admin approval | this doc |
-| 7 | Finishing failed legacy imports | not started |
+| 6 | Member upload, library write, admin approval | shipped |
+| 7 | Finishing failed legacy imports | this doc |
 
 Members import at `/my/goodreads-import` ("Member import" below). The dry-run rake and the legacy replay's rakes are
 the other entry points.
@@ -211,8 +211,9 @@ queues `Books::Goodreads::RunImportJob`.
   - It does not restore a reading item a read row replaced, or clear a date it filled.
   - A stuck import is failed as it is rejected, freeing the member to upload again.
 - Per record: promote, or delete while provisional (`DeleteProvisional`). It acts only on records the import created.
-- Replay imports are listed but never approved, rejected or rerun here; increment 7 runs the failed ones through
-  this pipeline.
+- Replay imports are listed but never approved, rejected or rerun here. A legacy import that failed or never
+  finished is finished as a member import (below, "Finishing legacy imports"), and that one is approved here like an
+  upload. Its page says which legacy import it finishes.
 
 Provisional books show normally to their importer and are hidden from everyone else's view of the user's lists (spec
 §9, `Books::UserList.catalog_items`).
@@ -281,6 +282,39 @@ bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.m
   recalculation, the favorites rebuild and the author rankings once, not once per merge.
 - **Before auto-apply:** hand-check 50 auto verdicts per kind with `books:goodreads_replay:sample[kind]`, then set
   `auto_apply: true` in `config/initializers/goodreads_replay.rb`.
+
+### Finishing legacy imports
+
+Spec §12.8. `bin/rails "books:goodreads_replay:finish_legacy[limit]"` (`FinishLegacyImports`) runs each legacy import
+that failed or never finished through the member pipeline. It makes a member import of the same user, linked by
+`finishes_legacy_import_id`, from the upload `load` kept. Admins approve or reject it under Goodreads Imports, and the
+user sees it in their import history. Run it after `load`. `DRY_RUN=1` lists what it would do; `IDS="73 285"` picks
+imports.
+
+- Legacy statuses are read live. An import is skipped when the user later completed a legacy import, or completed any
+  upload here, since its file could bring back books they removed. Only the user's newest unfinished import with a
+  readable file is finished.
+- Rows the stalled legacy import already wrote came over with the data migration, and are skipped as already on the
+  user's lists.
+- **In production, run it on the final books migration pass only.** The list items and reviews it writes have no
+  foreign key to books, so a truncate leaves them pointing at deleted provisional books. The re-migration resets
+  the books id sequence, and later books take those ids. `docs/launch-todo.md` (section 2, item 8) says how to undo a
+  rehearsal run before the truncate.
+- A finishing import with rows has already run and is left alone. One an admin rejected stays rejected. One that
+  failed before writing any rows starts again, pending review. One whose written rows a truncate emptied is reported
+  `stale` and never runs again. Those rows held the only ids of the list items and reviews it wrote, so the import
+  can neither redo nor undo them. That is why every finishing import is rejected and then deleted before a truncate.
+- `IDS=` only narrows what is started: a picked import still defers to a newer unfinished import of the same user.
+- Run it one import at a time (`[1]`), and let each finish before the next: running imports are skipped, not
+  counted. Four at once overloaded the Open Library service on 2026-10-06 (`docs/launch-todo.md`, section 2, item 9).
+  Each import also fetches Goodreads pages for the books it would create, on the fetch line member uploads use.
+- Measured on the 2026-10-05 development load (a dry run): 46 unfinished legacy imports. 10 have a later completed
+  import, 12 have no file (missing from the legacy bucket, or not a CSV), and 1 has no Goodreads header. That leaves
+  23, all stuck in `pending`, with 40,345 rows between them.
+- Measured on development on 2026-10-06, one import alone, with the `/resolve` limit and the client's busy retry in
+  place (legacy import 732, 167 rows): 153 matched, 14 created, 14 flagged (8%), none parked, and 79 skipped as
+  already on the user's lists. It made 15 AI calls and took about 12 minutes with Goodreads verification. Seven
+  earlier test imports ran while Open Library was failing, and flagged 17–44% of their rows. They were rejected.
 
 ## Dry run
 

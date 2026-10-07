@@ -71,6 +71,14 @@ module Services
           end
         end
 
+        test "the daily limit does not count an import finishing a legacy one" do
+          with_goodreads_import_config(daily_limit: 1) do
+            @user.goodreads_imports.create!(status: :complete, finishes_legacy_import_id: 991)
+
+            assert ValidateUpload.call(user: @user, upload: upload(export)).success?
+          end
+        end
+
         def with_goodreads_import_config(**overrides)
           config = Rails.application.config.x.goodreads_imports
           saved = overrides.keys.index_with { |key| config[key] }
