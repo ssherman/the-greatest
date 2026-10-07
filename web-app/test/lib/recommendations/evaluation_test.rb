@@ -44,14 +44,20 @@ module Recommendations
       assert_operator Evaluation.genre_kl(history: history, page_genres: [[1], [1], [1]], alpha: 0.01), :>, 0.5
     end
 
-    test "sample_user_ids buckets books users by positive list items" do
+    test "sample_user_ids samples only eligible users, bucketed by positive list items" do
       # regular_user has 3 books items in the fixtures (2 favorites, 1 read) -> below every segment.
-      user = User.create!(email: "heavy@example.com")
-      list = user.default_user_list_for(::Books::UserList, :read)
-      5.times { |i| list.user_list_items.create!(listable: ::Books::Book.create!(title: "B#{i}")) }
+      heavy = User.create!(email: "heavy@example.com")
+      favorites = heavy.default_user_list_for(::Books::UserList, :favorites)
+      5.times { |i| favorites.user_list_items.create!(listable: ::Books::Book.create!(title: "F#{i}")) }
+      reader = User.create!(email: "reader@example.com")
+      read = reader.default_user_list_for(::Books::UserList, :read)
+      5.times { |i| read.user_list_items.create!(listable: ::Books::Book.create!(title: "R#{i}")) }
+
       sample = Evaluation.sample_user_ids(domain: :books, per_segment: 10, random: Random.new(1))
-      assert_equal [user.id], sample["5-19"]
+      assert_equal [heavy.id], sample["5-19"]
       assert_equal [], sample["20-99"]
+      assert_equal [], sample["100+"]
+      assert_not_includes sample.values.flatten, reader.id
     end
   end
 end

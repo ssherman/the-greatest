@@ -110,7 +110,8 @@ namespace :recommendations do
     adapter = Recommendations::Books::Adapter.new(config: config)
     pool_size = ::RankedItem.where(item_type: "Books::Book", ranking_configuration_id: ::Books::RankingConfiguration.default_primary&.id).count
 
-    puts "Recommendations evaluation  users=#{segments.values.sum(&:size)}  seed=#{seed}  hold-out=#{fraction}  limit=#{limit}"
+    eligible_users = Recommendations::Evaluation.eligible_positive_counts(domain: :books).size
+    puts "Recommendations evaluation  eligible users=#{eligible_users}  sampled=#{segments.values.sum(&:size)}  seed=#{seed}  hold-out=#{fraction}  limit=#{limit}"
     puts "variants: rank baseline | " + variants.map { |v| RecommendationsHarness.label(v) }.join(" | ")
     puts
 

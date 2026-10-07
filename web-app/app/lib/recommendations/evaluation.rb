@@ -8,6 +8,7 @@ module Recommendations
   module Evaluation
     SEGMENTS = {"5-19" => (5..19), "20-99" => (20..99), "100+" => (100..)}.freeze
     HOLD_OUT_RATING = 4
+    MIN_ELIGIBLE = 5
 
     module_function
 
@@ -51,15 +52,29 @@ module Recommendations
       end
     end
 
-    # Users bucketed by how many favorites/read/reading list items they have in
-    # the domain -- a cheap proxy for positive-interaction count that needs one
-    # GROUP BY instead of building every user's interactions.
-    def sample_user_ids(domain:, per_segment:, random:)
+    # Eligible users -- at least MIN_ELIGIBLE hold-out candidates (favorites plus
+    # reviews rated HOLD_OUT_RATING or higher) -- mapped to their positive list-item
+    # count (favorites + read + reading), the figure the segments bucket on. Two
+    # GROUP BYs for eligibility and one for the count, instead of building every
+    # user's interactions. A favorite that is also rated 4-plus counts twice toward
+    # eligibility; the per-user check in the rake task is the exact one.
+    def eligible_positive_counts(domain:)
       klass = ::UserList.subclasses_for(domain).first or raise ArgumentError, "no user lists for domain #{domain}"
-      positive_types = klass.list_types.slice("favorites", "read", "reading").values
-      counts = ::UserListItem.joins(:user_list)
-        .where(user_lists: {type: klass.name, list_type: positive_types})
+      listable = klass.listable_class.name
+      items = ::UserListItem.joins(:user_list)
+
+      favorites = items.where(user_lists: {type: klass.name, list_type: klass.list_types["favorites"]}, listable_type: listable)
         .group("user_lists.user_id").count
+      rated = ::Review.where(reviewable_type: listable).where("rating >= ?", HOLD_OUT_RATING).group(:user_id).count
+      eligible = favorites.merge(rated) { |_, a, b| a + b }.select { |_, n| n >= MIN_ELIGIBLE }.keys
+
+      positive_types = klass.list_types.slice("favorites", "read", "reading").values
+      items.where(user_lists: {type: klass.name, list_type: positive_types, user_id: eligible})
+        .group("user_lists.user_id").count
+    end
+
+    def sample_user_ids(domain:, per_segment:, random:)
+      counts = eligible_positive_counts(domain: domain)
 
       SEGMENTS.to_h do |label, range|
         ids = counts.select { |_, n| range.cover?(n) }.keys.sort
