@@ -55,6 +55,13 @@ module DataImporters
       titles_agree?(query, candidate.record) || creators_agree?(query, candidate.record)
     end
 
+    # Rule 2's test for a local record holding the key the external source
+    # accepted. A domain whose stored keys cannot be trusted on their own
+    # asks for more.
+    def external_accept_corroborated?(query, candidate)
+      corroborated?(query, candidate)
+    end
+
     # Rule 4's test: equal normalized title, agreeing creators where the
     # domain has creators, and no year conflict (both present, > 2 apart).
     def exact_match?(query, candidate)

@@ -49,6 +49,17 @@ module DataImporters
           line
         end
 
+        # The stored Open Library work keys were assigned by old matching code,
+        # and some point at another book by the same author (a novel holding
+        # its sequel's key). An agreeing author alone would settle that wrong
+        # book as certain, so the title has to agree; otherwise the holder is
+        # left to the exact rule and the AI.
+        def external_accept_corroborated?(query, candidate)
+          return true if query_title(query).blank? && query_creators(query).empty?
+
+          titles_agree?(query, candidate.record)
+        end
+
         protected
 
         def model_class = ::Books::Book
