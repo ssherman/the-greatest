@@ -42,7 +42,7 @@ Rails.application.config.x.recommendations = ActiveSupport::OrderedOptions.new.m
   min_score: 1.0,
   # Quality prior inside the score: taste × (floor + (1 − floor) · scale / (scale + ranked_position)).
   # scale 0 = off. Every candidate carries a rank (the pool filter requires one).
-  quality_scale: 0,
+  quality_scale: 1000,
   quality_floor: 0.3,
 
   # Fusion (spec §5.4)
