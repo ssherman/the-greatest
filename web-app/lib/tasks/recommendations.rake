@@ -9,10 +9,14 @@
 #   bin/rails recommendations:eval [USERS=500] [SEED=42] [LIMIT=50] [FRACTION=0.2] [VARIANTS="lift=false"]
 #
 # eval always reports two baselines beside the variants: `rank` (the filtered
-# pool in global-rank order) and `lift=false` (raw frequency share, which is
-# the legacy engine's behaviour).
+# pool in global-rank order) and the frequency baseline (raw frequency share
+# with the quality prior off, which is the legacy engine's behaviour). The
+# baseline pins every knob the legacy engine did not have, so changing a
+# default never changes what the baseline measures.
 module RecommendationsHarness
   module_function
+
+  FREQUENCY_BASELINE = {lift: false, quality_scale: 0}.freeze
 
   def parse_variants(raw)
     specs = [{}]
@@ -103,7 +107,8 @@ namespace :recommendations do
     limit = ENV.fetch("LIMIT", "50").to_i
     fraction = ENV.fetch("FRACTION", "0.2").to_f
     variants = RecommendationsHarness.parse_variants(ENV["VARIANTS"])
-    variants << {lift: false} unless variants.include?({lift: false})
+    baseline = RecommendationsHarness::FREQUENCY_BASELINE
+    variants << baseline unless variants.include?(baseline)
 
     random = Random.new(seed)
     candidate_ids = Recommendations::Evaluation.candidate_ids(domain: :books)

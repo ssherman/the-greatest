@@ -44,6 +44,10 @@ bin/rails recommendations:eval USERS=300 SEED=42 VARIANTS="quality_scale=1000,qu
 bin/rails recommendations:eval USERS=500 SEED=7 VARIANTS="quality_scale=1000; quality_scale=1000,quality_floor=0.1; quality_scale=1000,quality_floor=0.1,rank_prior_weight=1.0"
 ```
 
+The `lift=false` rows below were run while `quality_scale` still defaulted to 0, so they are the
+frequency profile without the prior. After this pass the harness pins its baseline as
+`lift=false  quality_scale=0`, so a regenerated table compares against the same thing.
+
 The seed-42 sample is the same 300 users as the re-run at the end of the previous record (same
 eligibility rule, same seed), so its `rank`, `shipped defaults` and `lift=false` rows differ from
 that record only by the rebuilt index (and timing). The variant column was widened to 48

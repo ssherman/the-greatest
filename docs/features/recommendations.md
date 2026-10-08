@@ -216,9 +216,11 @@ i.e. favorites plus 4-star-or-better ratings, counted only on books in the ranke
 Columns: hit@10, recall@50, ndcg@50, `mean_rank` (mean global rank of the recommended books, the
 popularity check), `au_rep` (author repeats per page), `kl` (mean genre KL from history, averaged
 over pages that carry genres), `coverage` (share of the ranked pool ever recommended), `ms`. Two
-baselines print on every run: `rank` (the filtered pool in global-rank order) and `lift=false`
-(raw frequency share, the legacy engine's behaviour). A plain `lift=false` row is always present
-even when a variant combines it with other knobs.
+baselines print on every run: `rank` (the filtered pool in global-rank order) and
+`lift=false  quality_scale=0` (raw frequency share with the quality prior off, the legacy engine's
+behaviour; the records before 2026-10-08 print it as `lift=false`, when the prior did not exist).
+The baseline pins every knob the legacy engine lacked, so a default change never changes what it
+measures. That row is always present even when a variant combines `lift=false` with other knobs.
 
 Hold-outs are drawn only from the ranked pool, since that is all the engine can return: an unranked
 favorite can never come back, so holding it out would only deflate recall and NDCG.
