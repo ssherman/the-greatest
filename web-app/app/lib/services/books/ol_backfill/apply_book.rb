@@ -54,9 +54,11 @@ module Services
           return unchanged(:unsure, stored, nil) if work.nil?
 
           key = work.key
-          if (other = book_holding(key))
+          other = book_holding(key)
+          if other
             flag_books(other, key)
-            return unchanged(:duplicate_pair, stored, key).merge(pair_book_id: other)
+            # A book that does not hold the answer takes nothing from it.
+            return unchanged(:duplicate_pair, stored, key).merge(pair_book_id: other) unless stored.include?(key)
           end
 
           outcome = if stored.include?(key) then :confirmed
@@ -66,7 +68,7 @@ module Services
             :replaced
           end
           set_work_key(stored, key)
-          {outcome: outcome, old_keys: stored, new_key: key, pair_book_id: nil,
+          {outcome: outcome, old_keys: stored, new_key: key, pair_book_id: other,
            duplicate_keys: save_duplicates(answer.duplicates, key),
            author_changes: AuthorKeys.call(book: @book, work: work)}
         end

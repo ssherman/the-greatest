@@ -91,6 +91,18 @@ module Services
           assert_empty books_authors(:tolstoy).identifiers
         end
 
+        test "confirmed: a book that already holds the answer stays confirmed when another book holds it too, and the pair is flagged" do
+          work = ol_work("OL262758W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
+          add_key("OL262758W")
+
+          row = ApplyBook.call(book: @book, client: fast_client(work), run_id: "run-1").data
+
+          assert_equal [["OL262758W"], "confirmed", @other.id], [work_keys, row.outcome, row.pair_book_id]
+          assert_equal [[books_authors(:tolstoy).id, "OL26783A"]], row.author_changes["added"]
+          pair = ::DuplicateCandidate.find_by(item_type: "Books::Book", item_a_id: [@book.id, @other.id].min, item_b_id: [@book.id, @other.id].max)
+          assert_equal "ol_backfill", pair.source
+        end
+
         test "unsure: no trusted answer leaves the stored key alone" do
           add_key("OL5W")
 
