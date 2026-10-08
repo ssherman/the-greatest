@@ -4,7 +4,7 @@ module Services
   module Books
     module OlBackfill
       # Spec section 1, passes 1 and 2: which Open Library work, if any, this
-      # book is. Raises the client's errors (a 404 on an identifier is no
+      # book is. Raises the client's errors (a 4xx on an identifier is no
       # hit); Run retries them.
       class Lookup
         Answer = Data.define(:work, :lookup, :duplicates, :redirect_sources, :source_version)
@@ -57,7 +57,8 @@ module Services
 
         def hits_for(type, value)
           @client.identifier(type, value)
-        rescue ::Books::OpenLibrary::Exceptions::NotFoundError
+        rescue ::Books::OpenLibrary::Exceptions::ClientError
+          # 404 (unknown) and 422 (a value the service cannot normalise): no hit.
           []
         end
 

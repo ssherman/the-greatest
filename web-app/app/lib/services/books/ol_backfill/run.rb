@@ -24,13 +24,14 @@ module Services
           @client = client || ::Books::OpenLibrary::Client.new
           @sleeper = sleeper || ->(seconds) { sleep(seconds) }
           @scope = scope || ::Books::Book.all
+          @attempted = Set.new
         end
 
         def call
-          version = @retry_unsure ? @client.version : nil
           # A job Sidekiq requeued at a deploy carries its run id: what it
-          # already logged counts toward its limit.
-          done = ::Books::OpenLibraryBackfill.where(run_id: @run_id).count
+          # already logged (failures aside) counts toward its limit.
+          done = ::Books::OpenLibraryBackfill.where(run_id: @run_id).where.not(outcome: :failed).count
+          version = @retry_unsure ? @client.version : nil
           loop do
             break if full?(done)
 
@@ -39,6 +40,8 @@ module Services
 
             ids.each do |id|
               break if full?(done)
+
+              @attempted << id
 
               book = ::Books::Book.find_by(id: id)
               next unless book
@@ -63,11 +66,16 @@ module Services
           Result.new(success?: !stopped, data: {processed: done, stopped: stopped, error: @error}, errors: [@error].compact)
         end
 
-        # :done, :skipped (another run wrote the row) or :failed.
+        # :done, :skipped (another run wrote the row, or this book alone failed:
+        # the run goes on) or :failed (an outage: the run stops).
         def process(book)
           attempt = 0
           begin
             ApplyBook.call(book: book, client: @client, run_id: @run_id).success? ? :done : :skipped
+          rescue ::Books::OpenLibrary::Exceptions::ClientError, ::Books::OpenLibrary::Exceptions::ParseError => e
+            # This book fails the same way every time: log it, move on.
+            ApplyBook.record_failure(book: book, run_id: @run_id, error: "#{e.class}: #{e.message}")
+            :skipped
           rescue ::Books::OpenLibrary::Exceptions::Error => e
             delay = RETRY_DELAYS[attempt]
             if delay
@@ -83,19 +91,25 @@ module Services
 
         def next_ids(version, done)
           size = @limit.nil? ? BATCH : [BATCH, @limit - done].min
+          failed = ::Books::OpenLibraryBackfill.outcomes["failed"]
           settled = ::Books::OpenLibraryBackfill.where.not(outcome: :failed)
           settled = settled.where.not(id: retryable_unsure(version)) if version
           config_id = ::Books::RankingConfiguration.default_primary&.id
 
-          @scope
-            .where.not(id: settled.select(:book_id))
+          scope = @scope.where.not(id: settled.select(:book_id))
+          scope = scope.where.not(id: @attempted.to_a) if @attempted.any?
+          scope
+            .joins("LEFT JOIN books_open_library_backfills prior ON prior.book_id = books_books.id")
             .joins(::Books::Book.sanitize_sql_array([
               "LEFT JOIN ranked_items ranked ON ranked.item_type = 'Books::Book' AND ranked.item_id = books_books.id " \
               "AND ranked.ranking_configuration_id = ? AND ranked.rank IS NOT NULL", config_id
             ]))
             .joins("LEFT JOIN (SELECT listable_id, COUNT(*) AS list_count FROM list_items " \
                    "WHERE listable_type = 'Books::Book' GROUP BY listable_id) list_counts ON list_counts.listable_id = books_books.id")
-            .order(Arel.sql("ranked.rank ASC NULLS LAST, list_counts.list_count DESC NULLS LAST, books_books.id ASC"))
+            .order(Arel.sql(::Books::Book.sanitize_sql_array([
+              "(prior.outcome = ?) ASC NULLS FIRST, ranked.rank ASC NULLS LAST, " \
+              "list_counts.list_count DESC NULLS LAST, books_books.id ASC", failed
+            ])))
             .limit(size)
             .pluck("books_books.id")
         end

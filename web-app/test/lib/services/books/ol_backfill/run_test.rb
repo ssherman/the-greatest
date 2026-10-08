@@ -86,15 +86,63 @@ module Services
           assert_equal 2, result.data[:processed]
         end
 
-        test "an Open Library failure waits and tries the book again" do
+        test "an Open Library failure waits and tries the same book again" do
           error = ::Books::OpenLibrary::Exceptions::ServerError.new("busy", 500)
-          ApplyBook.stubs(:call).raises(error).then.returns(ok)
+          tried = []
+          ApplyBook.stubs(:call).with do |book:, **|
+            tried << book.id
+            true
+          end.raises(error).then.returns(ok)
           waits = []
 
           result = run_backfill(limit: 1, sleeper: ->(seconds) { waits << seconds })
 
           assert_equal [Run::RETRY_DELAYS.first], waits
+          assert_equal 2, tried.size
+          assert_equal 1, tried.uniq.size
           assert_equal 1, result.data[:processed]
+        end
+
+        test "a book-specific error (ClientError) logs that book failed with no wait and the run moves on" do
+          bad = ::Books::OpenLibrary::Exceptions::ClientError.new("bad isbn", 422)
+          order = []
+          ApplyBook.stubs(:call).with do |book:, run_id:, **|
+            order << book.id
+            raise bad if book.id == @war.id
+
+            ::Books::OpenLibraryBackfill.create!(book: book, outcome: :keyed, run_id: run_id)
+            true
+          end.returns(ok)
+
+          result = run_backfill
+
+          assert_equal [@war.id, @crime.id, @got.id, @clash.id].sort, order.sort
+          assert_equal "failed", ::Books::OpenLibraryBackfill.find_by!(book: @war).outcome
+          assert_equal false, result.data[:stopped]
+          assert_equal 3, result.data[:processed]
+        end
+
+        test "a book that failed before is taken after books never tried" do
+          rank(@war, 1)
+          ::Books::OpenLibraryBackfill.create!(book: @war, outcome: :failed, run_id: "old")
+          order = record_applies
+
+          run_backfill(limit: 1)
+
+          assert_not_equal @war.id, order.first
+          assert_equal 1, order.size
+        end
+
+        test "one call never takes the same book twice" do
+          calls = []
+          ApplyBook.stubs(:call).with do |book:, **|
+            calls << book.id
+            true
+          end.returns(ok)
+
+          run_backfill
+
+          assert_equal [@war, @crime, @got, @clash].map(&:id).sort, calls.sort
         end
 
         test "a book that keeps failing is logged failed after the last wait, and the run stops" do
