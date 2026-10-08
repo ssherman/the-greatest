@@ -8,9 +8,9 @@ class Services::BooksMigration::AuthorMigratorTest < ActiveSupport::TestCase
     ]
   end
 
-  def run_migrator
+  def run_migrator(rows = legacy_rows)
     migrator = Services::BooksMigration::AuthorMigrator.new
-    migrator.stubs(:legacy_each).multiple_yields(*legacy_rows.zip)
+    migrator.stubs(:legacy_each).multiple_yields(*rows.zip)
     migrator.call
   end
 
@@ -39,11 +39,21 @@ class Services::BooksMigration::AuthorMigratorTest < ActiveSupport::TestCase
     end
   end
 
-  test "resets the books_authors sequence above the max id" do
-    ::Books::Author.connection.expects(:reset_pk_sequence!).with("books_authors")
+  test "moves the books_authors sequence to the reserved floor after the load" do
+    Services::BooksMigration.expects(:bump_sequence_to_floor!).with("books_authors")
 
     result = run_migrator
 
     assert result[:success], result[:error]
+  end
+
+  test "fails the run when a legacy author id reaches the reserved ceiling" do
+    ceiling = Services::BooksMigration::RESERVED_CEILINGS.fetch("books_authors")
+
+    result = run_migrator([{"id" => ceiling, "name" => "Too High", "family_name" => "High", "alternative_names" => nil}])
+
+    refute result[:success]
+    assert_includes result[:error], "reserved ceiling"
+    refute ::Books::Author.exists?(ceiling)
   end
 end

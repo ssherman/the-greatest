@@ -9,11 +9,24 @@ class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCas
     m.call
   end
 
+  # Sequence changes survive the test transaction, so start low: otherwise an
+  # earlier test that already pushed the sequence past the ceiling would make the
+  # finalize assertion pass with finalize deleted.
+  def start_sequence_low(table)
+    connection = ActiveRecord::Base.connection
+    sequence = connection.select_value("SELECT pg_get_serial_sequence(#{connection.quote(table)}, 'id')")
+    connection.execute("SELECT setval(#{connection.quote(sequence)}, 1, false)")
+  end
+
+  def next_sequence_value(table)
+    ActiveRecord::Base.connection.select_value("SELECT nextval(pg_get_serial_sequence('#{table}', 'id'))").to_i
+  end
+
   # The legacy column is jsonb holding a JSON *string*, so the migrator receives
   # a String here -- reproducing that exactly is the point of this helper.
   def legacy_row(criteria_hash = {"genre_match_mode" => "any"}, overrides = {})
     {
-      "id" => 900_001,
+      "id" => 15_001,
       "user_id" => users(:regular_user).id,
       "name" => "Migrated Search",
       "description" => "From legacy",
@@ -37,7 +50,7 @@ class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCas
     assert result[:success], result[:error]
     assert_equal 1, result[:data][:count]
 
-    search = SavedSearch.find(900_001)
+    search = SavedSearch.find(15_001)
     assert_instance_of ::Books::SavedSearch, search
     assert_equal "Migrated Search", search.name
     assert_equal 77, search.result_count
@@ -47,7 +60,7 @@ class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCas
   test "unwraps the double-encoded criteria into a real hash" do
     run_migrator([legacy_row({"genre_match_mode" => "any", "ranked" => "true"})])
 
-    criteria = SavedSearch.find(900_001).criteria
+    criteria = SavedSearch.find(15_001).criteria
     assert_kind_of Hash, criteria
     assert_equal "true", criteria["ranked"]
   end
@@ -63,13 +76,13 @@ class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCas
   test "remaps category ids through LegacyIdMap" do
     run_migrator([legacy_row({"included_category_ids" => ["55555"]})])
 
-    assert_equal [@category.id], SavedSearch.find(900_001).criteria["included_category_ids"]
+    assert_equal [@category.id], SavedSearch.find(15_001).criteria["included_category_ids"]
   end
 
   test "remaps excluded category ids too" do
     run_migrator([legacy_row({"excluded_category_ids" => ["55555"]})])
 
-    assert_equal [@category.id], SavedSearch.find(900_001).criteria["excluded_category_ids"]
+    assert_equal [@category.id], SavedSearch.find(15_001).criteria["excluded_category_ids"]
   end
 
   test "leaves language and country ids untouched, only normalizing to integers" do
@@ -78,7 +91,7 @@ class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCas
       "excluded_country_ids" => ["7"]
     })])
 
-    criteria = SavedSearch.find(900_001).criteria
+    criteria = SavedSearch.find(15_001).criteria
     assert_equal [12], criteria["included_language_ids"]
     assert_equal [7], criteria["excluded_country_ids"]
   end
@@ -86,7 +99,7 @@ class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCas
   test "drops blank entries before normalizing passthrough ids to integers" do
     run_migrator([legacy_row({"included_language_ids" => ["12", ""]})])
 
-    assert_equal [12], SavedSearch.find(900_001).criteria["included_language_ids"]
+    assert_equal [12], SavedSearch.find(15_001).criteria["included_language_ids"]
   end
 
   test "copies scalar criteria verbatim" do
@@ -98,7 +111,7 @@ class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCas
       "genre_match_mode" => "all"
     })])
 
-    criteria = SavedSearch.find(900_001).criteria
+    criteria = SavedSearch.find(15_001).criteria
     assert_equal 0, criteria["book_type"]
     assert_equal 100, criteria["max_ranked_position"]
     assert_equal "false", criteria["ranked"]
@@ -109,7 +122,7 @@ class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCas
   test "preserves the legacy timestamps" do
     run_migrator([legacy_row])
 
-    search = SavedSearch.find(900_001)
+    search = SavedSearch.find(15_001)
     assert_equal Time.zone.parse("2025-01-01 00:00:00"), search.created_at
   end
 
@@ -133,13 +146,28 @@ class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCas
     result = run_migrator(rows)
 
     assert result[:success], result[:error]
-    assert_equal 1, SavedSearch.where(id: 900_001).count
+    assert_equal 1, SavedSearch.where(id: 15_001).count
   end
 
-  test "resets the primary key sequence past the migrated maximum" do
+  test "moves the saved_searches sequence to the reserved ceiling after the load" do
+    # Fixture ids are hashed far above 20,000; empty the table so max + 1 cannot
+    # reach the ceiling by itself. Nothing references saved_searches by foreign key.
+    ::SavedSearch.delete_all
+    start_sequence_low("saved_searches")
+
     run_migrator([legacy_row])
 
     fresh = ::Books::SavedSearch.create!(user: users(:regular_user), criteria: {"genre_match_mode" => "any"})
-    assert fresh.id > 900_001, "expected a fresh id above the migrated max, got #{fresh.id}"
+    assert_operator fresh.id, :>=, Services::BooksMigration::RESERVED_CEILINGS.fetch("saved_searches")
+  end
+
+  test "fails the run when a legacy saved search id reaches the reserved ceiling" do
+    ceiling = Services::BooksMigration::RESERVED_CEILINGS.fetch("saved_searches")
+
+    result = run_migrator([legacy_row({"genre_match_mode" => "any"}, {"id" => ceiling})])
+
+    refute result[:success]
+    assert_includes result[:error], "reserved ceiling"
+    refute ::SavedSearch.exists?(ceiling)
   end
 end
