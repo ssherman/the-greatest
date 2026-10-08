@@ -26,6 +26,15 @@ module DataImporters
       assert_equal [:open_library, :musicbrainz], set.to_a.first.sources
     end
 
+    test "a candidate linked only by duplication does not fold into the external-only candidate for its key" do
+      set = CandidateSet.new
+      set.add(Candidate.new(external_key: "OL1W", external_source: :open_library, sources: [:open_library], evidence: {external_verdict: "accept"}))
+      set.add(Candidate.new(record: @book, external_key: "OL1W", external_source: :open_library, sources: [:open_library], evidence: {external_duplicate_of: "OL1W"}))
+
+      assert_equal 2, set.size
+      assert_nil set.to_a.find { |candidate| candidate.record == @book }.external_verdict
+    end
+
     test "an external candidate that later turns out to be a known local record folds into the local one" do
       set = CandidateSet.new
       set.add(Candidate.new(record: @book, sources: [:opensearch]))

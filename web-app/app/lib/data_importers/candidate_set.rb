@@ -17,9 +17,9 @@ module DataImporters
       # something to fold into that other record.
       by_key = nil if by_key&.local? && candidate.local? && !same_record?(by_key.record, candidate.record)
 
-      # A holder of the accepted key as a duplicate-type key carries that key
-      # without being its holder: folding it into the key's candidate would
-      # hand it that candidate's verdict.
+      # A candidate the external source only links by duplication
+      # (`external_duplicate_of`) never folds into the external-only candidate
+      # for its key: it would inherit that candidate's verdict.
       by_key = nil if candidate.evidence[:external_duplicate_of] && !by_key&.local?
 
       if by_record && by_key && !by_record.equal?(by_key) && !by_key.local?

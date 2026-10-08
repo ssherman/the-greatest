@@ -147,15 +147,18 @@ module Services
 
           def url_helpers = ::Rails.application.routes.url_helpers
 
-          # A book holding any of these keys as its work key, or as a
-          # duplicate-type key (the Open Library key backfill).
+          # A book holding any of these keys as its work key; failing that, as
+          # a duplicate-type key (the Open Library key backfill).
           def book_holding(keys)
             return nil if keys.empty?
 
-            types = ::Identifier.identifier_types.values_at("books_work_openlibrary_id", "books_work_openlibrary_duplicate_id")
-            ::Books::Book.joins(:identifiers)
-              .where(identifiers: {identifier_type: types, value: keys})
-              .order(:id).first
+            %w[books_work_openlibrary_id books_work_openlibrary_duplicate_id].each do |type|
+              book = ::Books::Book.joins(:identifiers)
+                .where(identifiers: {identifier_type: ::Identifier.identifier_types[type], value: keys})
+                .order(:id).first
+              return book if book
+            end
+            nil
           end
 
           def book_created_from_text_since_match(item, state)
