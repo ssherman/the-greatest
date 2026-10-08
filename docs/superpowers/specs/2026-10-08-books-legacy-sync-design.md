@@ -81,9 +81,11 @@ Extend `RESERVED_CEILINGS` (`app/lib/services/books_migration.rb`):
 
 No rows need relocating: all four tables hold only legacy-origin rows today. So this does **not**
 use `IdRangeReservationService`'s relocation, which shifts every row below the ceiling and would
-move the legacy rows themselves. A new step sets each sequence to its ceiling and **refuses if the
-table's max id is already at or above the ceiling** (something unexpected is there; stop and look).
-It is idempotent: a sequence already at or past the ceiling is left alone.
+move the legacy rows themselves. A new step, run by a data migration on deploy, sets each sequence to
+`max(ceiling, max id + 1)`, never moving it backward. It is idempotent. It does **not** refuse when
+rows already sit above the ceiling (amended while planning increment 1): a raising migration
+crash-loops the web container for all four sites, and the migrators' per-row ceiling guard is what
+actually keeps legacy ids out of the reserved range.
 
 Each migrator that preserves ids into these tables (`BookMigrator`, `AuthorMigrator`,
 `ReviewMigrator`, `SavedSearchMigrator`) raises if a legacy id reaches its ceiling, like
