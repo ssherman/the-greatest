@@ -199,7 +199,7 @@ bin/rails recommendations:eval [USERS=500] [SEED=42] [LIMIT=50] [FRACTION=0.2] [
 `VARIANTS` is a `;`-separated list of variants, each a `,`-separated list of `knob=value`. `show`
 prints the profile, the page and the reasons for one user. `eval` samples `USERS / 3` users per
 segment (5-19, 20-99, 100+ positive list items; only users with at least five hold-out candidates,
-i.e. favorites plus 4-star-or-better ratings), hides `FRACTION` of each user's favorites and
+i.e. favorites plus 4-star-or-better ratings, counted only on books in the ranked pool), hides `FRACTION` of each user's favorites and
 4-plus-rated books, recommends `LIMIT` from the rest, and checks whether the hidden books return.
 Columns: hit@10, recall@50, ndcg@50, `mean_rank` (mean global rank of the recommended books, the
 popularity check), `au_rep` (author repeats per page), `kl` (mean genre KL from history, averaged
@@ -207,6 +207,9 @@ over pages that carry genres), `coverage` (share of the ranked pool ever recomme
 baselines print on every run: `rank` (the filtered pool in global-rank order) and `lift=false`
 (raw frequency share, the legacy engine's behaviour). A plain `lift=false` row is always present
 even when a variant combines it with other knobs.
+
+Hold-outs are drawn only from the ranked pool, since that is all the engine can return: an unranked
+favorite can never come back, so holding it out would only deflate recall and NDCG.
 
 The hold-out metric rewards famous books: hidden favorites are mostly canon, so the `rank` baseline
 is hard to beat on hit@10 and a deeper-cutting engine is penalised by construction. Read it next
@@ -257,3 +260,7 @@ describe the dev database on that day.
   calibration.
 - Not attempted: rating centering per user, time decay, a ranked-only `p_c`, and a "deep cuts"
   setting (spec §9.4).
+- `categories.item_count` is a polymorphic counter cache shared with `Books::Author`; the profile
+  divides it by the book catalog size, which is exact only while no category is attached to an
+  author (0 author rows today against 2,269,792 book rows). If authors ever gain categories, switch
+  the profile to a book-only count (a cached one; a per-request GROUP BY over 2.3M rows is too slow).

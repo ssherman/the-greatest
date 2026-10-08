@@ -16,8 +16,11 @@ module Recommendations
       interaction.kind == :favorite || (interaction.rating && interaction.rating >= HOLD_OUT_RATING)
     end
 
-    def split(interactions, fraction:, random:)
-      eligible = interactions.select { |i| eligible?(i) }
+    # candidate_ids is the set of items the engine can return (the ranked pool).
+    # Hold-outs are drawn only from it: an unranked book can never come back, so
+    # holding it out would deflate recall and NDCG for every variant alike.
+    def split(interactions, fraction:, random:, candidate_ids: nil)
+      eligible = interactions.select { |i| eligible?(i) && (candidate_ids.nil? || candidate_ids.include?(i.item_id)) }
       count = (eligible.size * fraction).ceil
       held = eligible.sort_by(&:item_id).sample(count, random: random)
       held_ids = held.map(&:item_id).to_set
@@ -62,20 +65,32 @@ module Recommendations
       end
     end
 
+    # Ids of the items in the domain's ranked pool, the only books the engine's
+    # queries can return.
+    def candidate_ids(domain:)
+      klass = ::UserList.subclasses_for(domain).first or raise ArgumentError, "no user lists for domain #{domain}"
+      ::RankedItem.where(item_type: klass.listable_class.name,
+        ranking_configuration_id: klass.ranking_configuration_class.default_primary&.id)
+        .where.not(rank: nil).pluck(:item_id).to_set
+    end
+
     # Eligible users -- at least MIN_ELIGIBLE hold-out candidates (favorites plus
     # reviews rated HOLD_OUT_RATING or higher) -- mapped to their positive list-item
     # count (favorites + read + reading), the figure the segments bucket on. Two
     # GROUP BYs for eligibility and one for the count, instead of building every
-    # user's interactions. A favorite that is also rated 4-plus counts twice toward
+    # user's interactions. Only items in candidate_ids count toward eligibility.
+    # A favorite that is also rated 4-plus counts twice toward
     # eligibility; the per-user check in the rake task is the exact one.
-    def eligible_positive_counts(domain:)
+    def eligible_positive_counts(domain:, candidate_ids: Evaluation.candidate_ids(domain: domain))
       klass = ::UserList.subclasses_for(domain).first or raise ArgumentError, "no user lists for domain #{domain}"
       listable = klass.listable_class.name
       items = ::UserListItem.joins(:user_list)
+      pool = candidate_ids.to_a
 
-      favorites = items.where(user_lists: {type: klass.name, list_type: klass.list_types["favorites"]}, listable_type: listable)
-        .group("user_lists.user_id").count
-      rated = ::Review.where(reviewable_type: listable).where("rating >= ?", HOLD_OUT_RATING).group(:user_id).count
+      favorites = items.where(user_lists: {type: klass.name, list_type: klass.list_types["favorites"]},
+        listable_type: listable, listable_id: pool).group("user_lists.user_id").count
+      rated = ::Review.where(reviewable_type: listable, reviewable_id: pool)
+        .where("rating >= ?", HOLD_OUT_RATING).group(:user_id).count
       eligible = favorites.merge(rated) { |_, a, b| a + b }.select { |_, n| n >= MIN_ELIGIBLE }.keys
 
       positive_types = klass.list_types.slice("favorites", "read", "reading").values
@@ -83,8 +98,8 @@ module Recommendations
         .group("user_lists.user_id").count
     end
 
-    def sample_user_ids(domain:, per_segment:, random:)
-      counts = eligible_positive_counts(domain: domain)
+    def sample_user_ids(domain:, per_segment:, random:, candidate_ids: Evaluation.candidate_ids(domain: domain))
+      counts = eligible_positive_counts(domain: domain, candidate_ids: candidate_ids)
 
       SEGMENTS.to_h do |label, range|
         ids = counts.select { |_, n| range.cover?(n) }.keys.sort

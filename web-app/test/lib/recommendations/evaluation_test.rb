@@ -17,6 +17,28 @@ module Recommendations
       assert_empty train.map(&:item_id) & held.map(&:item_id)
     end
 
+    test "split with candidate_ids holds out only ranked items and keeps unranked ones in train" do
+      ints = (1..10).map { |i| interaction(i) }
+      candidates = (2..10).to_set
+      train, held = Evaluation.split(ints, fraction: 0.5, random: Random.new(3), candidate_ids: candidates)
+      assert_equal 5, held.size
+      assert held.all? { |i| candidates.include?(i.item_id) }
+      assert_includes train.map(&:item_id), 1
+      assert_equal 5, train.size
+    end
+
+    test "candidate_ids returns the ranked pool of the primary books ranking" do
+      config = ranking_configurations(:books_global)
+      ranked = ::Books::Book.create!(title: "Ranked")
+      unranked = ::Books::Book.create!(title: "Nil rank")
+      ::RankedItem.create!(item: ranked, ranking_configuration: config, rank: 1, score: 1)
+      ::RankedItem.create!(item: unranked, ranking_configuration: config, rank: nil, score: 1)
+
+      ids = Evaluation.candidate_ids(domain: :books)
+      assert_includes ids, ranked.id
+      assert_not_includes ids, unranked.id
+    end
+
     test "train_for returns the adapter's interactions minus the held-out ids" do
       adapter = mock("adapter")
       user = mock("user")
@@ -59,11 +81,20 @@ module Recommendations
       assert_nil Evaluation.genre_kl(history: {}, page_genres: [[1]], alpha: 0.01)
     end
 
+    def ranked_book(title)
+      book = ::Books::Book.create!(title: title)
+      ::RankedItem.create!(item: book, ranking_configuration: ranking_configurations(:books_global), rank: 1, score: 1)
+      book
+    end
+
     test "sample_user_ids samples only eligible users, bucketed by positive list items" do
       # regular_user has 3 books items in the fixtures (2 favorites, 1 read) -> below every segment.
       heavy = User.create!(email: "heavy@example.com")
       favorites = heavy.default_user_list_for(::Books::UserList, :favorites)
-      5.times { |i| favorites.user_list_items.create!(listable: ::Books::Book.create!(title: "F#{i}")) }
+      5.times { |i| favorites.user_list_items.create!(listable: ranked_book("F#{i}")) }
+      unranked_fan = User.create!(email: "unranked-fan@example.com")
+      unranked_favorites = unranked_fan.default_user_list_for(::Books::UserList, :favorites)
+      5.times { |i| unranked_favorites.user_list_items.create!(listable: ::Books::Book.create!(title: "U#{i}")) }
       reader = User.create!(email: "reader@example.com")
       read = reader.default_user_list_for(::Books::UserList, :read)
       5.times { |i| read.user_list_items.create!(listable: ::Books::Book.create!(title: "R#{i}")) }
@@ -73,13 +104,14 @@ module Recommendations
       assert_equal [], sample["20-99"]
       assert_equal [], sample["100+"]
       assert_not_includes sample.values.flatten, reader.id
+      assert_not_includes sample.values.flatten, unranked_fan.id
     end
 
     test "sample_user_ids needs five hold-out candidates: four favorites plus read books is not enough" do
       user = User.create!(email: "four-favorites@example.com")
       favorites = user.default_user_list_for(::Books::UserList, :favorites)
       read = user.default_user_list_for(::Books::UserList, :read)
-      4.times { |i| favorites.user_list_items.create!(listable: ::Books::Book.create!(title: "Fav#{i}")) }
+      4.times { |i| favorites.user_list_items.create!(listable: ranked_book("Fav#{i}")) }
       6.times { |i| read.user_list_items.create!(listable: ::Books::Book.create!(title: "Read#{i}")) }
 
       sample = Evaluation.sample_user_ids(domain: :books, per_segment: 10, random: Random.new(1))
@@ -90,7 +122,7 @@ module Recommendations
       user = User.create!(email: "reviewer@example.com")
       read = user.default_user_list_for(::Books::UserList, :read)
       5.times do |i|
-        book = ::Books::Book.create!(title: "Reviewed#{i}")
+        book = ranked_book("Reviewed#{i}")
         read.user_list_items.create!(listable: book)
         Review.create!(user: user, reviewable: book, rating: 4)
       end

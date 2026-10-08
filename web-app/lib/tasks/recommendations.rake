@@ -106,13 +106,14 @@ namespace :recommendations do
     variants << {lift: false} unless variants.include?({lift: false})
 
     random = Random.new(seed)
-    segments = Recommendations::Evaluation.sample_user_ids(domain: :books, per_segment: users_total / 3, random: random)
+    candidate_ids = Recommendations::Evaluation.candidate_ids(domain: :books)
+    segments = Recommendations::Evaluation.sample_user_ids(domain: :books, per_segment: users_total / 3, random: random, candidate_ids: candidate_ids)
     config = Recommendations::Config.resolve
     adapter = Recommendations::Books::Adapter.new(config: config)
     pool_size = ::RankedItem.where(item_type: "Books::Book", ranking_configuration_id: ::Books::RankingConfiguration.default_primary&.id).count
 
-    eligible_users = Recommendations::Evaluation.eligible_positive_counts(domain: :books).size
-    puts "Recommendations evaluation  eligible users=#{eligible_users}  sampled=#{segments.values.sum(&:size)}  seed=#{seed}  hold-out=#{fraction}  limit=#{limit}"
+    eligible_users = Recommendations::Evaluation.eligible_positive_counts(domain: :books, candidate_ids: candidate_ids).size
+    puts "Recommendations evaluation  eligible users=#{eligible_users}  ranked pool=#{candidate_ids.size}  sampled=#{segments.values.sum(&:size)}  seed=#{seed}  hold-out=#{fraction}  limit=#{limit}"
     puts "variants: rank baseline | " + variants.map { |v| RecommendationsHarness.label(v) }.join(" | ")
     puts
 
@@ -123,8 +124,8 @@ namespace :recommendations do
       user_ids.each do |user_id|
         user = User.find(user_id)
         interactions = adapter.interactions(user)
-        _, held = Recommendations::Evaluation.split(interactions, fraction: fraction, random: Random.new(seed + user_id))
-        next if held.size < 1 || interactions.count { |i| Recommendations::Evaluation.eligible?(i) } < Recommendations::Evaluation::MIN_ELIGIBLE
+        _, held = Recommendations::Evaluation.split(interactions, fraction: fraction, random: Random.new(seed + user_id), candidate_ids: candidate_ids)
+        next if held.size < 1 || interactions.count { |i| Recommendations::Evaluation.eligible?(i) && candidate_ids.include?(i.item_id) } < Recommendations::Evaluation::MIN_ELIGIBLE
 
         evaluated += 1
         held_ids = held.map(&:item_id)
