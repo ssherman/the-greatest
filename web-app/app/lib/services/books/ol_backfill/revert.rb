@@ -26,7 +26,7 @@ module Services
           end
 
           ::ActiveRecord::Base.transaction do
-            restore_work_keys(row.old_keys)
+            restore_work_keys(row)
             @book.identifiers.where(identifier_type: ApplyBook::DUPLICATE_KEY, value: row.duplicate_keys).destroy_all
             Array(row.author_changes["added"]).each do |author_id, key|
               ::Identifier.where(identifiable_type: "Books::Author", identifiable_id: author_id,
@@ -39,10 +39,12 @@ module Services
 
         private
 
-        def restore_work_keys(old_keys)
+        # Removes only the key the backfill gave; a work key that arrived later
+        # (a merge, an admin) is not the backfill's to take away.
+        def restore_work_keys(row)
           held = @book.identifiers.where(identifier_type: ApplyBook::WORK_KEY)
-          held.where.not(value: old_keys).destroy_all
-          (old_keys - held.reload.pluck(:value)).each do |key|
+          held.where(value: row.new_key).destroy_all if row.new_key.present? && !row.old_keys.include?(row.new_key)
+          (row.old_keys - held.reload.pluck(:value)).each do |key|
             @book.identifiers.create!(identifier_type: ApplyBook::WORK_KEY, value: key)
           end
         end

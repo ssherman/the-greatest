@@ -49,5 +49,10 @@ class BooksOlBackfillRakeTest < ActiveSupport::TestCase
 
     Rake::Task["books:ol_backfill_revert"].reenable
     assert_output(nil, /no book/) { assert_raises(SystemExit) { Rake::Task["books:ol_backfill_revert"].invoke("0") } }
+
+    Rake::Task["books:ol_backfill_revert"].reenable
+    Services::Books::OlBackfill::Revert.expects(:call).with(book: book)
+      .returns(Services::Books::OlBackfill::Revert::Result.new(success?: false, data: nil, errors: ["book is duplicate_pair"]))
+    assert_output(nil, /book is duplicate_pair/) { assert_raises(SystemExit) { Rake::Task["books:ol_backfill_revert"].invoke(book.id.to_s) } }
   end
 end

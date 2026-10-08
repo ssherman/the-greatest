@@ -69,6 +69,14 @@ key is left alone and counted as a conflict.
 (`identifiers` or `resolve`), old and new keys, duplicate keys saved, pair book, author changes, the
 Open Library dump date and matcher version, run id, attempts and error.
 
+## Reverting
+
+`books:ol_backfill_revert` removes only the work key the backfill gave the book, restores its old
+keys, and removes the duplicate keys the run saved. A work key that arrived afterwards (a merge, an
+admin) stays. It also removes the author keys the backfill added for that book; another book
+processed later may have relied on the same author key, so check those books. Pairs the run flagged
+stay in the Duplicates queue.
+
 ## Reading the report
 
 Check the `replaced` and `duplicate_pair` lines: every replacement is a key the old code assigned and
