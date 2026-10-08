@@ -104,7 +104,8 @@ pos_c = min(lift_cap, max(0, ln(s_c / p_c)))      (no min when lift_cap is 0)
 ```
 
 The `m` term shrinks short histories toward the catalog so one favorite with many subjects cannot
-become the whole profile. `lift_cap` bounds how far a rare category can run: without it a subject on
+become the whole profile. `lift_cap` bounds how far a rare category can run (positives only; the
+negative profile is never capped, so demotion keeps working at any cap): without it a subject on
 0.01% of the catalog scores `ln(s/p)` several times a common genre's, so a handful of rare subjects
 can outvote every genre. `lift_population` picks the population `p_c` is measured over: `"catalog"`
 (every non-provisional book, the default) or `"ranked"` (the ranked pool the query draws from, so a
@@ -261,11 +262,13 @@ the numbers describe the dev database on those days.
 
 ## Known gaps
 
-- **The revised bar (spec §9.2, amended 2026-10-08) is met on hit@10 and page depth, and on
-  recall@50 only within noise on the fresh sample.** With the quality prior the engine beats the
-  frequency profile on hit@10 by about two times on every sample and returns pages at mean rank
-  750-800 instead of 5,500; recall@50 still trails it on long histories, which is breadth the
-  collaborative signal is meant to add. `lift_cap` and `lift_population` exist, measured, and off.
+- **The revised bar (spec §9.2, amended 2026-10-08) is met on hit@10 and page depth, and NOT met
+  on recall@50 or KL.** With the quality prior the engine beats the frequency profile on hit@10 by
+  about 1.6x on the 20-99 segment on both samples and returns pages at mean rank 750-800 instead
+  of 5,500; on recall@50 it trails that profile by 0.02-0.06 (a tie on the fresh sample, a loss on
+  the other), and its KL sits 0.02-0.07 above the previous defaults. Shipping it as the default is
+  a judgement, argued in the data-quality record. `lift_cap` and `lift_population` exist, measured,
+  and off.
 - **No "deep cuts" setting yet.** `quality_floor` 0.1 / 0.3 / 0.5 is the measured safer-bets /
   default / deeper trade-off; nothing exposes it to the user.
 
@@ -276,8 +279,8 @@ the numbers describe the dev database on those days.
   pool (reciprocal-rank terms at `k = 60` are close together).
 - Fiction and Nonfiction are never scored; they only steer through `fiction_share` and the genre
   calibration.
-- Not attempted: rating centering per user, time decay, a ranked-only `p_c`, and a "deep cuts"
-  setting (spec §9.4).
+- Not attempted: rating centering per user, time decay, and a "deep cuts" setting (spec §9.4).
+  Ranked-only `p_c` was built and measured (`lift_population`), and left off.
 - `categories.item_count` is a polymorphic counter cache shared with `Books::Author`; the profile
   divides it by the book catalog size, which is exact only while no category is attached to an
   author (0 author rows today against 2,269,792 book rows). If authors ever gain categories, switch

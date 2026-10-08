@@ -128,6 +128,7 @@ module Recommendations
         ::RankedItem.create!(item: got, ranking_configuration: primary, rank: 1)
         ::RankedItem.create!(item: books_books(:clash), ranking_configuration: primary, rank: 2)
         ::RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: primary, rank: nil)
+        ::RankedItem.create!(item: books_books(:cannery_row), ranking_configuration: ranking_configurations(:books_user), rank: 1)
         epic = ::Books::Category.create!(name: "Epic fantasy", category_type: :genre)
         [got, books_books(:war_and_peace), books_books(:cannery_row)].each do |book|
           ::CategoryItem.create!(category: epic, item: book)

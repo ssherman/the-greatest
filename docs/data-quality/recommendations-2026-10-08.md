@@ -294,21 +294,25 @@ profile can have, since it is built from the user's most frequent genres, so "KL
 | seed 7, `quality_scale=1000` | 0.271 | 0.181 | 0.107 | 754 | 0.775 |
 | seed 7, `quality_scale=1000, quality_floor=0.1, rank_prior_weight=1.0` | 0.259 | 0.199 | 0.111 | 287 | 0.826 |
 
-**`quality_scale=1000` meets (1) on hit@10 on both samples (0.210 vs 0.130; 0.271 vs 0.175), ties
-or trails on recall@50 (0.170 vs 0.231 on seed 42 is outside the noise band; 0.181 vs 0.202 on seed
-7 is inside it), meets (2) on both (813 vs 514; 754 vs 791), and meets (3) on seed 7 (0.775 vs 0.759)
-while sitting 0.07 above it on seed 42.** So the bar is met in full on the fresh sample, and on
-hit@10 and depth but not recall@50 on the tuning sample. It is shipped anyway, for two reasons:
-every variant with the prior beats the shipped defaults by two to three times on every hit metric
-in every segment, which is the problem the previous record found; and the remaining recall gap is
-the frequency profile's narrowness (author repeats 1.6 against 4.4, KL 0.28 against 0.8), i.e. it
-recommends more of the same genre, which the hold-out rewards and which is the behaviour the lift
-profile exists to move away from.
+**`quality_scale=1000` meets (1) on hit@10 on both samples (0.210 vs 0.130, 1.6x; 0.271 vs 0.175,
+1.55x) and (2) on both (813 vs 514; 754 vs 791). It does NOT meet (1) on recall@50: it trails
+`lift=false` by 0.06 on seed 42 (0.170 vs 0.231, outside the noise band) and by 0.02 on seed 7
+(0.181 vs 0.202, inside it, so a tie, not a win). It does NOT meet (3): KL is 0.07 above the
+shipped defaults on seed 42 (0.827 vs 0.756) and 0.016 above on seed 7 (0.775 vs 0.759, inside
+noise).** So the amended bar is met on hit@10 and depth and not on recall@50 or KL. The default
+ships anyway, and that is a judgement, for two reasons: the prior beats the shipped defaults on
+every hit metric in every segment on both samples (hit@10 by 1.4x to 2.6x, recall@50 by 1.8x to
+3.2x, ndcg@50 by 1.7x to 2.4x), which is the problem the previous record found; and the remaining
+recall gap is the frequency profile's narrowness (author repeats 1.6 against 4.4, KL 0.28 against
+0.8), i.e. it recommends more of the same genre, which the hold-out rewards and which is the
+behaviour the lift profile exists to move away from. Whoever decides whether increment 3 builds
+pages on this engine should read it as "much better than before, roughly level with the legacy
+shape on recall, clearly ahead at the top of the page", not as a gate passed.
 
 ## Reading
 
 - **The prior is the lever, and it is a large one.** Any `quality_scale` from 300 to 3,000 takes
-  the 20-99 page from mean rank 5,566 to between 866 and 1,271 and lifts hit@10 from 0.110 to
+  the 20-99 page from mean rank 5,566 to between 813 and 1,271 and lifts hit@10 from 0.110 to
   0.21-0.24, recall@50 from 0.069 to 0.13-0.17 (table 1). The previous record's best knob,
   `rank_prior_weight=2.0` in fusion, reached 0.230 / 0.124 at mean rank 1,538: the prior inside
   the query gets there and past it because it changes which 300 books form the pool, where fusion
@@ -329,7 +333,8 @@ profile exists to move away from.
   hit@10 on 20-99 from 0.110 to 0.190 and on 100+ from 0.180 to 0.240, but deepens the page (5,566
   to 6,993) and raises author repeats (table 2). Combined with the prior it is worse than the
   prior alone on recall and ndcg and roughly doubles KL in the 100+ segment (1.6-1.7 against 1.0,
-  table 3), and it costs an extra query per request (ms 319 vs 196). Left off.
+  table 3), and it costs extra queries per request (the grouped count runs once for the profile
+  and again when the page's item facts are loaded; ms 319 vs 196). Left off.
 - **Nothing around the leader helps.** `calibration_lambda=0.5` lowers KL by 0.02 and changes
   nothing else; `max_subjects=10` and `subject_multiplier=0.5` raise hit@10 by 0.03 but cut
   recall@50 by 0.04-0.05 and raise KL; `pseudo_books=30` is worse on both; `rank_prior_weight=2.0`
@@ -368,6 +373,9 @@ profile exists to move away from.
   exist, the page does not.
 - The 100+ recall gap, which is breadth, not depth; spec 2's collaborative signal is the planned
   fix and should be measured against these tables.
+- `min_score` (1.0) now applies after the prior, so a deep book with floor 0.3 needs a taste score
+  of about 3.3 to stay in the pool. A thin profile could therefore get a pool smaller than the
+  page. The harness's "N of M evaluated" counts did not change, but page lengths were not checked.
 - The hold-out itself still rewards the canon. A metric that scores the hidden favorites by their
   rank percentile (so recovering a rank-3,000 favorite counts for more than a rank-30 one) would
   tell personalization from popularity; not built.

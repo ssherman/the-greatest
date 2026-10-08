@@ -64,6 +64,14 @@ module Recommendations
       assert_operator weight(uncapped, RARE), :>, 2.5
     end
 
+    test "lift_cap never caps the negative profile, so demotion survives a low cap" do
+      hated = Interaction.new(item_id: 99, weight: -1.5, kind: :review, rating: 1)
+      cats = positive_categories.merge(99 => [fact(FICTION, "genre", 550), fact(HATED, "subject", 20)])
+      profile = build(interactions: positives + [hated], categories: cats, lift_cap: 0.5)
+      assert_includes profile.demoted, HATED
+      assert_in_delta 0.5, weight(profile, RARE), 0.0001
+    end
+
     test "lift_cap does nothing with lift off" do
       profile = build(interactions: positives, categories: positive_categories, lift: false, lift_cap: 0.01)
       assert_operator weight(profile, COMMON), :>, 0.01
