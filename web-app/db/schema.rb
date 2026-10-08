@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_07_221918) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_08_165948) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -358,6 +358,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_221918) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["goodreads_book_id"], name: "index_books_goodreads_pages_on_goodreads_book_id", unique: true
+  end
+
+  create_table "books_open_library_backfills", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.integer "outcome", null: false
+    t.integer "lookup"
+    t.string "old_keys", default: [], null: false, array: true
+    t.string "new_key"
+    t.string "duplicate_keys", default: [], null: false, array: true
+    t.bigint "pair_book_id"
+    t.jsonb "author_changes", default: {}, null: false
+    t.string "dump_date"
+    t.integer "matcher_version"
+    t.string "run_id", null: false
+    t.integer "attempts", default: 1, null: false
+    t.text "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["book_id"], name: "index_books_open_library_backfills_on_book_id", unique: true
+    t.index ["outcome"], name: "index_books_open_library_backfills_on_outcome"
+    t.index ["run_id"], name: "index_books_open_library_backfills_on_run_id"
   end
 
   create_table "books_reading_goals", force: :cascade do |t|
@@ -1235,6 +1256,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_221918) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["user_id", "type"], name: "index_recommendation_configs_on_user_id_and_type", unique: true
+    t.index ["user_id"], name: "index_recommendation_configs_on_user_id"
   end
 
   create_table "review_summaries", force: :cascade do |t|
@@ -1410,6 +1432,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_221918) do
   add_foreign_key "books_goodreads_import_rows", "books_goodreads_imports", column: "import_id", on_delete: :cascade
   add_foreign_key "books_goodreads_imports", "users"
   add_foreign_key "books_goodreads_imports", "users", column: "reviewed_by_id"
+  add_foreign_key "books_open_library_backfills", "books_books", column: "book_id", on_delete: :cascade
+  add_foreign_key "books_open_library_backfills", "books_books", column: "pair_book_id", on_delete: :nullify
   add_foreign_key "books_reading_goals", "users"
   add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
   add_foreign_key "books_series_books", "books_books", column: "book_id"

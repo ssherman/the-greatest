@@ -36,7 +36,7 @@ class DuplicateCandidate < ApplicationRecord
   belongs_to :resolved_by, class_name: "User", optional: true
 
   # Enums. `pending` is the spec's "open".
-  enum :source, {identifier_collision: 0, external_key_collision: 1, ai: 2, human: 3, bulk_verify: 4}, prefix: :raised_by
+  enum :source, {identifier_collision: 0, external_key_collision: 1, ai: 2, human: 3, bulk_verify: 4, ol_backfill: 5}, prefix: :raised_by
   enum :status, {pending: 0, merged: 1, not_duplicate: 2}
 
   # Validations
