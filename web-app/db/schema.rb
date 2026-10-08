@@ -1256,7 +1256,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_08_165948) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["user_id", "type"], name: "index_recommendation_configs_on_user_id_and_type", unique: true
-    t.index ["user_id"], name: "index_recommendation_configs_on_user_id"
   end
 
   create_table "review_summaries", force: :cascade do |t|
