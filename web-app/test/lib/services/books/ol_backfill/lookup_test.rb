@@ -72,6 +72,15 @@ module Services
           assert_equal :resolve, Lookup.call(book: @book, client: client).lookup
         end
 
+        test "an identifier lookup answered 403 is raised, not treated as no hit" do
+          client = FakeOlClient.new(
+            hits: {["isbn13", "9780140447934"] => ::Books::OpenLibrary::Exceptions::ClientError.new("forbidden", 403)},
+            resolution: ol_resolution(verdict: "accept", work: @work)
+          )
+
+          assert_raises(::Books::OpenLibrary::Exceptions::ClientError) { Lookup.call(book: @book, client: client) }
+        end
+
         test "a book with no identifiers goes straight to /resolve with its stored key as a hint" do
           book = books_books(:crime_and_punishment) # holds OL262758W, no ISBN, no author
           client = FakeOlClient.new(resolution: ol_resolution(verdict: "accept", work: ol_work("OL262758W", title: "Crime and Punishment")))

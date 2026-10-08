@@ -16,6 +16,7 @@ module Services
         }.freeze
         # Enough lookups to show whether a book's identifiers agree.
         MAX_FAST_LOOKUPS = 10
+        NO_HIT_STATUSES = [400, 422].freeze
 
         def self.call(book:, client:)
           new(book, client).call
@@ -57,8 +58,11 @@ module Services
 
         def hits_for(type, value)
           @client.identifier(type, value)
-        rescue ::Books::OpenLibrary::Exceptions::ClientError
-          # 404 (unknown) and 422 (a value the service cannot normalise): no hit.
+        rescue ::Books::OpenLibrary::Exceptions::ClientError => e
+          # 404 (unknown), 400/422 (a value the service cannot normalise): no hit.
+          # Anything else (401, 403, 429...) is about us, not the book.
+          raise unless e.is_a?(::Books::OpenLibrary::Exceptions::NotFoundError) || NO_HIT_STATUSES.include?(e.status_code)
+
           []
         end
 

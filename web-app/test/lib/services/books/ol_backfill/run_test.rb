@@ -122,6 +122,17 @@ module Services
           assert_equal 3, result.data[:processed]
         end
 
+        test "a 403 is an outage: the run waits, retries and stops" do
+          ApplyBook.stubs(:call).raises(::Books::OpenLibrary::Exceptions::ClientError.new("forbidden", 403))
+          waits = []
+
+          result = run_backfill(sleeper: ->(seconds) { waits << seconds })
+
+          assert_equal Run::RETRY_DELAYS, waits
+          assert_equal true, result.data[:stopped]
+          assert_equal 1, ::Books::OpenLibraryBackfill.failed.count
+        end
+
         test "a book that failed before is taken after books never tried" do
           rank(@war, 1)
           ::Books::OpenLibraryBackfill.create!(book: @war, outcome: :failed, run_id: "old")
@@ -138,7 +149,7 @@ module Services
           ApplyBook.stubs(:call).with do |book:, **|
             calls << book.id
             true
-          end.returns(ok)
+          end.returns(ApplyBook::Result.new(success?: false, data: nil, errors: []))
 
           run_backfill
 

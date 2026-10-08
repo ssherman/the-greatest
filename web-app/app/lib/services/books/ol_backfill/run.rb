@@ -12,6 +12,8 @@ module Services
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         RETRY_DELAYS = [15, 30, 60, 120, 240, 300].freeze
         BATCH = 100
+        # A 4xx that is about this book's data, not about us or the service.
+        BOOK_SPECIFIC_STATUSES = [400, 422].freeze
 
         def self.call(limit:, run_id:, retry_unsure: false, client: nil, sleeper: nil, scope: nil)
           new(limit: limit, run_id: run_id, retry_unsure: retry_unsure, client: client, sleeper: sleeper, scope: scope).call
@@ -41,12 +43,13 @@ module Services
             ids.each do |id|
               break if full?(done)
 
-              @attempted << id
-
               book = ::Books::Book.find_by(id: id)
               next unless book
 
-              case process(book)
+              outcome = process(book)
+              # A :done always wrote a settled row, which next_ids already excludes.
+              @attempted << id unless outcome == :done
+              case outcome
               when :done then done += 1
               when :failed then return finish(done, stopped: true)
               end
@@ -72,11 +75,13 @@ module Services
           attempt = 0
           begin
             ApplyBook.call(book: book, client: @client, run_id: @run_id).success? ? :done : :skipped
-          rescue ::Books::OpenLibrary::Exceptions::ClientError, ::Books::OpenLibrary::Exceptions::ParseError => e
-            # This book fails the same way every time: log it, move on.
-            ApplyBook.record_failure(book: book, run_id: @run_id, error: "#{e.class}: #{e.message}")
-            :skipped
           rescue ::Books::OpenLibrary::Exceptions::Error => e
+            if book_specific?(e)
+              # This book fails the same way every time: log it, move on.
+              ApplyBook.record_failure(book: book, run_id: @run_id, error: "#{e.class}: #{e.message}")
+              return :skipped
+            end
+
             delay = RETRY_DELAYS[attempt]
             if delay
               attempt += 1
@@ -87,6 +92,11 @@ module Services
             ApplyBook.record_failure(book: book, run_id: @run_id, error: @error)
             :failed
           end
+        end
+
+        def book_specific?(error)
+          error.is_a?(::Books::OpenLibrary::Exceptions::ParseError) ||
+            (error.is_a?(::Books::OpenLibrary::Exceptions::ClientError) && BOOK_SPECIFIC_STATUSES.include?(error.status_code))
         end
 
         def next_ids(version, done)
@@ -107,7 +117,7 @@ module Services
             .joins("LEFT JOIN (SELECT listable_id, COUNT(*) AS list_count FROM list_items " \
                    "WHERE listable_type = 'Books::Book' GROUP BY listable_id) list_counts ON list_counts.listable_id = books_books.id")
             .order(Arel.sql(::Books::Book.sanitize_sql_array([
-              "(prior.outcome = ?) ASC NULLS FIRST, ranked.rank ASC NULLS LAST, " \
+              "COALESCE(prior.outcome = ?, false) ASC, ranked.rank ASC NULLS LAST, " \
               "list_counts.list_count DESC NULLS LAST, books_books.id ASC", failed
             ])))
             .limit(size)
