@@ -1,0 +1,111 @@
+# frozen_string_literal: true
+
+module Services
+  module Books
+    module OlBackfill
+      # Spec section 4, "The job": books one at a time, ranked first, then by
+      # how many lists they are on, then id, stopping after `limit` (nil: all).
+      # A book whose Open Library lookup raised waits and is tried again;
+      # after the last wait it is logged failed and the run stops, so an
+      # outage does not use up the batch.
+      class Run
+        Result = Struct.new(:success?, :data, :errors, keyword_init: true)
+        RETRY_DELAYS = [15, 30, 60, 120, 240, 300].freeze
+        BATCH = 100
+
+        def self.call(limit:, run_id:, retry_unsure: false, client: nil, sleeper: nil, scope: nil)
+          new(limit: limit, run_id: run_id, retry_unsure: retry_unsure, client: client, sleeper: sleeper, scope: scope).call
+        end
+
+        def initialize(limit:, run_id:, retry_unsure:, client:, sleeper:, scope:)
+          @limit = limit
+          @run_id = run_id
+          @retry_unsure = retry_unsure
+          @client = client || ::Books::OpenLibrary::Client.new
+          @sleeper = sleeper || ->(seconds) { sleep(seconds) }
+          @scope = scope || ::Books::Book.all
+        end
+
+        def call
+          version = @retry_unsure ? @client.version : nil
+          # A job Sidekiq requeued at a deploy carries its run id: what it
+          # already logged counts toward its limit.
+          done = ::Books::OpenLibraryBackfill.where(run_id: @run_id).count
+          loop do
+            break if full?(done)
+
+            ids = next_ids(version, done)
+            break if ids.empty?
+
+            ids.each do |id|
+              break if full?(done)
+
+              book = ::Books::Book.find_by(id: id)
+              next unless book
+
+              case process(book)
+              when :done then done += 1
+              when :failed then return finish(done, stopped: true)
+              end
+            end
+          end
+          finish(done, stopped: false)
+        rescue ::Books::OpenLibrary::Exceptions::Error => e
+          @error = "#{e.class}: #{e.message}"
+          finish(done || 0, stopped: true)
+        end
+
+        private
+
+        def full?(done) = !@limit.nil? && done >= @limit
+
+        def finish(done, stopped:)
+          Result.new(success?: !stopped, data: {processed: done, stopped: stopped, error: @error}, errors: [@error].compact)
+        end
+
+        # :done, :skipped (another run wrote the row) or :failed.
+        def process(book)
+          attempt = 0
+          begin
+            ApplyBook.call(book: book, client: @client, run_id: @run_id).success? ? :done : :skipped
+          rescue ::Books::OpenLibrary::Exceptions::Error => e
+            delay = RETRY_DELAYS[attempt]
+            if delay
+              attempt += 1
+              @sleeper.call(delay)
+              retry
+            end
+            @error = "#{e.class}: #{e.message}"
+            ApplyBook.record_failure(book: book, run_id: @run_id, error: @error)
+            :failed
+          end
+        end
+
+        def next_ids(version, done)
+          size = @limit.nil? ? BATCH : [BATCH, @limit - done].min
+          settled = ::Books::OpenLibraryBackfill.where.not(outcome: :failed)
+          settled = settled.where.not(id: retryable_unsure(version)) if version
+          config_id = ::Books::RankingConfiguration.default_primary&.id
+
+          @scope
+            .where.not(id: settled.select(:book_id))
+            .joins(::Books::Book.sanitize_sql_array([
+              "LEFT JOIN ranked_items ranked ON ranked.item_type = 'Books::Book' AND ranked.item_id = books_books.id " \
+              "AND ranked.ranking_configuration_id = ? AND ranked.rank IS NOT NULL", config_id
+            ]))
+            .joins("LEFT JOIN (SELECT listable_id, COUNT(*) AS list_count FROM list_items " \
+                   "WHERE listable_type = 'Books::Book' GROUP BY listable_id) list_counts ON list_counts.listable_id = books_books.id")
+            .order(Arel.sql("ranked.rank ASC NULLS LAST, list_counts.list_count DESC NULLS LAST, books_books.id ASC"))
+            .limit(size)
+            .pluck("books_books.id")
+        end
+
+        def retryable_unsure(version)
+          ::Books::OpenLibraryBackfill.unsure
+            .where("dump_date < :dump OR matcher_version < :matcher", dump: version[:dump_date].to_s, matcher: version[:matcher_version].to_i)
+            .select(:id)
+        end
+      end
+    end
+  end
+end
