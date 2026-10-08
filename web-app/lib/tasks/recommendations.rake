@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 # Read-only development harness for the recommendation engine (spec §9). Never
-# writes to the database or the index. Every knob is a per-call override, so one
-# process sweeps a range:
+# writes to the database or the index. Every knob is a per-call override, and eval
+# rebuilds each variant's training interactions under that variant's config, so
+# one process sweeps a range:
 #
-#   bin/rails recommendations:show USER=123 [LIMIT=50] [VARIANTS="lift=false; calibrate_genres=false"]
+#   bin/rails recommendations:show USER_ID=123 [LIMIT=50] [VARIANTS="lift=false; calibrate_genres=false"]
 #   bin/rails recommendations:eval [USERS=500] [SEED=42] [LIMIT=50] [FRACTION=0.2] [VARIANTS="lift=false"]
 #
 # eval always reports two baselines beside the variants: `rank` (the filtered
@@ -63,9 +64,9 @@ module RecommendationsHarness
 end
 
 namespace :recommendations do
-  desc "Print one user's profile and recommendations with reasons (USER=id, LIMIT, VARIANTS)"
+  desc "Print one user's profile and recommendations with reasons (USER_ID=id, LIMIT, VARIANTS)"
   task show: :environment do
-    user = User.find(ENV.fetch("USER"))
+    user = User.find(ENV.fetch("USER_ID"))
     limit = ENV.fetch("LIMIT", "50").to_i
     variants = RecommendationsHarness.parse_variants(ENV["VARIANTS"])
 
@@ -122,8 +123,8 @@ namespace :recommendations do
       user_ids.each do |user_id|
         user = User.find(user_id)
         interactions = adapter.interactions(user)
-        train, held = Recommendations::Evaluation.split(interactions, fraction: fraction, random: Random.new(seed + user_id))
-        next if held.size < 1 || interactions.count { |i| Recommendations::Evaluation.eligible?(i) } < 5
+        _, held = Recommendations::Evaluation.split(interactions, fraction: fraction, random: Random.new(seed + user_id))
+        next if held.size < 1 || interactions.count { |i| Recommendations::Evaluation.eligible?(i) } < Recommendations::Evaluation::MIN_ELIGIBLE
 
         evaluated += 1
         held_ids = held.map(&:item_id)
@@ -153,8 +154,11 @@ namespace :recommendations do
         rows["rank"] # first key, so the baseline prints first
         variants.each do |overrides|
           started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          # Rebuilt per variant: the weight knobs act when interactions are built.
+          variant_adapter = Recommendations::Books::Adapter.new(config: Recommendations::Config.resolve(overrides))
+          variant_train = Recommendations::Evaluation.train_for(adapter: variant_adapter, user: user, held_out_ids: held_ids)
           result = Recommendations::Engine.call(user: user, domain: :books, limit: limit, overrides: overrides,
-            interactions: train, excluded_ids: excluded)
+            interactions: variant_train, excluded_ids: excluded)
           ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round
           next unless result.success?
 

@@ -108,8 +108,10 @@ module Recommendations
       return [] if fused.empty?
 
       facts = adapter.item_facts(fused.map(&:item_id))
-      page = Reranker::AuthorCap.call(fused, facts: facts, config: @config)
-      page = Reranker::SeriesRule.call(page, facts: facts, interactions: interactions)
+      # Series rule first: the cap must not spend an author's slots on sequels
+      # the series rule then drops, which would lose the series opener too.
+      page = Reranker::SeriesRule.call(fused, facts: facts, interactions: interactions)
+      page = Reranker::AuthorCap.call(page, facts: facts, config: @config)
       Reranker::GenreCalibration.call(page, facts: facts, history: profile.genre_distribution, limit: @limit, config: @config)
     end
 

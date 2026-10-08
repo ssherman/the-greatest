@@ -145,6 +145,15 @@ module Recommendations
       assert_equal [101], result.data[:items].map { |i| i[:item_id] }
     end
 
+    test "the series rule runs before the author cap, so a series opener survives" do
+      # Fused order is book 3, book 2, book 1 by one author, and nothing is read.
+      facts = {101 => ItemFact.new(author_ids: [9], genre_ids: [], series_predecessor_id: 102, rank_position: 101),
+               102 => ItemFact.new(author_ids: [9], genre_ids: [], series_predecessor_id: 103, rank_position: 102),
+               103 => ItemFact.new(author_ids: [9], genre_ids: [], series_predecessor_id: nil, rank_position: 103)}
+      result, = engine(overrides: {max_per_author: 2}, facts: facts)
+      assert_equal [103], result.data[:items].map { |i| i[:item_id] }
+    end
+
     test "injected interactions and exclusions replace the adapter's (harness hold-out)" do
       held_out = Interaction.new(item_id: 101, weight: 2.0, kind: :favorite, rating: nil)
       adapter = FakeAdapter.new(config: Config.resolve, interactions: @interactions + [held_out],

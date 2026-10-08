@@ -192,7 +192,7 @@ Recommendations::Engine.call(user:, domain:, limit:, overrides: {})
        TasteProfile   profile → one OpenSearch query                          §6, §7
        Collaborative  reads spec 2's tables; returns [] until then            §5.3
   3. Fusion         weighted reciprocal-rank fusion; rank prior re-orders      §5.4
-  4. Reranker       author cap → series rule → genre calibration               §8.1
+  4. Reranker       series rule → author cap → genre calibration               §8.1
   5. Explainer      one reason per item                                        §8.3
   → Result(success?, data: {items: [{item, rank, reason}], profile:, signals_used:}, errors:)
 ```
@@ -357,10 +357,11 @@ change**: every field used already exists (`genre/subject/location_category_ids`
 
 ### 8.1 Re-ranker passes, in order
 
-1. **Author cap:** at most `max_per_author` (2) per page. Skipped, not demoted.
-2. **Series rule:** a book with a series predecessor is kept only if the predecessor is on the
+1. **Series rule:** a book with a series predecessor is kept only if the predecessor is on the
    user's read or favorites list; otherwise it is dropped and the series' first book is kept if
-   it is itself a candidate. Uses `Books::SeriesBook`.
+   it is itself a candidate. Uses `Books::SeriesBook`. It runs first so the author cap cannot
+   spend an author's slots on sequels this rule then drops, which would lose the series opener.
+2. **Author cap:** at most `max_per_author` (2) per page. Skipped, not demoted.
 3. **Genre calibration:** greedy selection maximising
    `(1 − λ) · fused_score_norm − λ · KL(history_genre_dist ‖ page_genre_dist)`,
    `λ = 0.3`, where the history distribution spreads each positive book's weight evenly over its
@@ -370,8 +371,8 @@ change**: every field used already exists (`genre/subject/location_category_ids`
 
 ### 8.2 Order
 
-Hard constraints are already in the query. Fusion → author cap → series rule → calibration →
-take `limit`.
+Hard constraints are already in the query. Fusion → series rule → author cap → calibration →
+take `limit`. (The series rule precedes the cap so the cap never spends an author's slots on sequels the rule then drops.)
 
 ### 8.3 Explanations
 

@@ -17,6 +17,15 @@ module Recommendations
       assert_empty train.map(&:item_id) & held.map(&:item_id)
     end
 
+    test "train_for returns the adapter's interactions minus the held-out ids" do
+      adapter = mock("adapter")
+      user = mock("user")
+      adapter.expects(:interactions).with(user).returns((1..5).map { |i| interaction(i, weight: i.to_f) })
+      train = Evaluation.train_for(adapter: adapter, user: user, held_out_ids: [2, 4])
+      assert_equal [1, 3, 5], train.map(&:item_id)
+      assert_equal [1.0, 3.0, 5.0], train.map(&:weight)
+    end
+
     test "split is deterministic for a seed" do
       ints = (1..10).map { |i| interaction(i) }
       a = Evaluation.split(ints, fraction: 0.2, random: Random.new(7)).last.map(&:item_id)

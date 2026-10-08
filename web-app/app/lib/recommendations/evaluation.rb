@@ -24,6 +24,14 @@ module Recommendations
       [interactions.reject { |i| held_ids.include?(i.item_id) }, held]
     end
 
+    # The adapter's interactions for this user (under the adapter's own config,
+    # so weight knobs take effect) minus the held-out items. Which items are held
+    # out depends only on kind and rating, so one hold-out serves every variant.
+    def train_for(adapter:, user:, held_out_ids:)
+      held = held_out_ids.to_set
+      adapter.interactions(user).reject { |i| held.include?(i.item_id) }
+    end
+
     def metrics(page_ids:, held_out_ids:, k_hit: 10, k_recall: 50)
       held = held_out_ids.to_set
       top = page_ids.first(k_recall)

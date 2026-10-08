@@ -33,7 +33,7 @@ Recommendations::Engine.call(user:, domain:, limit:, overrides: {})
   3. signals          Signals::TasteProfile           -> ranked Candidates (one OpenSearch query)
                       Signals::Collaborative          -> [] (unavailable until spec 2)
   4. fusion           Fusion                          weighted reciprocal-rank fusion + rank prior
-  5. re-ranking       Reranker::AuthorCap -> SeriesRule -> GenreCalibration
+  5. re-ranking       Reranker::SeriesRule -> AuthorCap -> GenreCalibration
   6. explanations     Explainer                       -> Reason(type, ids) per item
   -> Result(success?, data: {items: [{item, item_id, rank, score, reason}], profile:, signals_used:, fallback:}, errors:)
 ```
@@ -150,10 +150,11 @@ introduces a book.
 
 **Re-ranker passes, in order:**
 
-1. `AuthorCap`: at most `max_per_author` (2) per page; extras are skipped, not demoted.
-2. `SeriesRule`: a book with a numbered series predecessor is kept only if the predecessor is a
+1. `SeriesRule`: a book with a numbered series predecessor is kept only if the predecessor is a
    favorite, read, reading or rated book (want-to-read does not unlock it). The series' first book
-   stays if it is itself a candidate.
+   stays if it is itself a candidate. It runs before the cap so the cap never spends an author's
+   slots on sequels this rule then drops (which could lose the series opener too).
+2. `AuthorCap`: at most `max_per_author` (2) per page; extras are skipped, not demoted.
 3. `GenreCalibration`: greedy selection maximising `(1 − λ)·relevance − λ·KL(history ‖ page)`, with
    `λ = 0.3`, relevance the fused score over the best fused score, and the page distribution
    smoothed with `α = 0.01` of the history. A candidate with no genres scores `KL = −ln α` on an
@@ -187,10 +188,11 @@ The development database holds no rows, so the harness runs everyone on default 
 ## Harness
 
 Read-only against the development database; needs the local OpenSearch. Every knob is a per-call
-override, so one process sweeps a range.
+override, and `eval` rebuilds each variant's training interactions under that variant's config (the
+weight knobs act when interactions are built), so one process sweeps a range.
 
 ```bash
-bin/rails recommendations:show USER=123 [LIMIT=50] [VARIANTS="lift=false; calibrate_genres=false"]
+bin/rails recommendations:show USER_ID=123 [LIMIT=50] [VARIANTS="lift=false; calibrate_genres=false"]
 bin/rails recommendations:eval [USERS=500] [SEED=42] [LIMIT=50] [FRACTION=0.2] [VARIANTS="..."]
 ```
 
@@ -250,8 +252,7 @@ describe the dev database on that day.
 - No pages yet: results, gating, nav entry and pitch page are increment 3; wizard and settings
   are increment 4.
 - The rank prior at 0.3 can re-order roughly 20 places among the taste candidates at a 300-item
-  pool (reciprocal-rank terms at `k = 60` are close together), so it is a tie-breaker only for
-  items that are already adjacent.
+  pool (reciprocal-rank terms at `k = 60` are close together).
 - Fiction and Nonfiction are never scored; they only steer through `fiction_share` and the genre
   calibration.
 - Not attempted: rating centering per user, time decay, a ranked-only `p_c`, and a "deep cuts"

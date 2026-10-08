@@ -42,6 +42,7 @@ In the combos table the variant names are cut at 36 characters by the printer. T
 | Sampled | 100 per segment (300 total) |
 | Evaluated | 5-19: 96, 20-99: 100, 100+: 100 (four 5-19 users had no usable hold-out) |
 | `recommendation_configs` rows | 0, so every user ran on default criteria (no filters) |
+| Dev OpenSearch index | 126,611 book documents (24,272 with `ranked_position`), against 160,587 books (21,392 ranked) in Postgres at the time of the run. The engine drew candidates from the index while `coverage`, `mean_rank` and the pool size are measured against Postgres. The gate margins are far larger than this could move; the index should be rebuilt before the next pass. |
 
 ## Shipped defaults and baselines (`eval-defaults.txt`)
 
