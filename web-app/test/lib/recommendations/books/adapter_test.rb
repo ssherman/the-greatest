@@ -122,6 +122,26 @@ module Recommendations
         assert_equal ::Books::Book.catalog.count, @adapter.catalog_size
       end
 
+      test "lift_population ranked sizes and counts categories over the ranked pool" do
+        primary = ::Books::RankingConfiguration.default_primary
+        got = books_books(:got)
+        ::RankedItem.create!(item: got, ranking_configuration: primary, rank: 1)
+        ::RankedItem.create!(item: books_books(:clash), ranking_configuration: primary, rank: 2)
+        ::RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: primary, rank: nil)
+        epic = ::Books::Category.create!(name: "Epic fantasy", category_type: :genre)
+        [got, books_books(:war_and_peace), books_books(:cannery_row)].each do |book|
+          ::CategoryItem.create!(category: epic, item: book)
+        end
+
+        ranked = Adapter.new(config: Config.resolve(lift_population: "ranked"))
+        assert_equal 2, ranked.catalog_size
+        fact = ranked.categories_for([got.id]).fetch(got.id).find { |f| f.id == epic.id }
+        assert_equal 1, fact.item_count, "only the ranked book carrying the category counts"
+
+        catalog_fact = @adapter.categories_for([got.id]).fetch(got.id).find { |f| f.id == epic.id }
+        assert_equal 3, catalog_fact.item_count
+      end
+
       test "search_candidates maps hits to candidates with taste evidence" do
         ::Search::Books::Search::BookRecommendations.stubs(:call).returns([{id: 5, score: 2.5, rank_position: 12}])
         profile = Recommendations::Profile.new(genres: [[1, 1.0]], subjects: [], locations: [], demoted: [],

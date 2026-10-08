@@ -125,6 +125,21 @@ module Search
           assert_in_delta scores[1] / 2, scores[2], 0.001
         end
 
+        test "the quality prior multiplies the score by a rank decay with a floor" do
+          index_book(1, genre_category_ids: [G1], ranked_position: 1)
+          index_book(2, genre_category_ids: [G1], ranked_position: 1000)
+          base = BookRecommendations.call(profile: profile, criteria: criteria, excluded_ids: [],
+            type_category_ids: TYPE_IDS, options: {min_score: 0}).to_h { |h| [h[:id], h[:score]] }
+          assert_in_delta base[1], base[2], 0.0001, "scale 0 leaves scores untouched by rank"
+
+          result = BookRecommendations.call(profile: profile, criteria: criteria, excluded_ids: [],
+            type_category_ids: TYPE_IDS, options: {min_score: 0, quality_scale: 1000, quality_floor: 0.2})
+          assert_equal [1, 2], result.map { |h| h[:id] }
+          scores = result.to_h { |h| [h[:id], h[:score]] }
+          assert_in_delta base[1] * (0.2 + 0.8 * 1000.0 / 1001), scores[1], 0.001
+          assert_in_delta base[2] * (0.2 + 0.8 * 0.5), scores[2], 0.001
+        end
+
         test "returns the rank position from doc values" do
           index_book(1, genre_category_ids: [G1], ranked_position: 37)
           hit = BookRecommendations.call(profile: profile, criteria: criteria, excluded_ids: [],

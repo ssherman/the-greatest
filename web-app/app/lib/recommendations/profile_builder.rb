@@ -45,9 +45,10 @@ module Recommendations
 
     private
 
-    # {category_id => weight}. With lift on: max(0, ln(s_c / p_c)); off: the raw
-    # share n_c / W, which reproduces the legacy frequency behaviour for the
-    # harness baseline.
+    # {category_id => weight}. With lift on: max(0, ln(s_c / p_c)), clipped to
+    # lift_cap when that is positive so a few rare categories cannot outvote the
+    # genres; off: the raw share n_c / W, which reproduces the legacy frequency
+    # behaviour for the harness baseline.
     def lift_weights(interactions)
       total = interactions.sum { |i| i.weight.abs }
       return {} if total <= 0
@@ -63,6 +64,7 @@ module Recommendations
 
       min_support = (interactions.size >= @config[:min_support_history]) ? @config[:min_support] : 1
       m = @config[:pseudo_books].to_f
+      cap = @config[:lift_cap].to_f
 
       mass.each_with_object({}) do |(id, n), out|
         next if support[id] < min_support
@@ -70,7 +72,8 @@ module Recommendations
         p = [fact_by_id[id].item_count.to_f / @catalog_size, 1.0 / @catalog_size].max
         weight = if @config[:lift]
           s = (n + m * p) / (total + m)
-          [0.0, Math.log(s / p)].max
+          lifted = [0.0, Math.log(s / p)].max
+          cap.positive? ? [lifted, cap].min : lifted
         else
           n / total
         end

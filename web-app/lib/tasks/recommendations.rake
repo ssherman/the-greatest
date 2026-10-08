@@ -176,9 +176,9 @@ namespace :recommendations do
       end
 
       puts "-- segment #{segment}: #{evaluated} of #{user_ids.size} sampled users evaluated"
-      puts "   #{"variant".ljust(36)}  hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms"
+      puts "   #{"variant".ljust(48)}  hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms"
       rows.each do |name, r|
-        puts format("   %-36s %7s %9s %8s %9s %8s %7s %9s %6s", name[0, 36],
+        puts format("   %-48s %7s %9s %8s %9s %8s %7s %9s %6s", name[0, 48],
           RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:hit])),
           RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:recall])),
           RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:ndcg])),
