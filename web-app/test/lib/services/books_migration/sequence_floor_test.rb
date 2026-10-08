@@ -1,6 +1,10 @@
 require "test_helper"
 
 class Services::BooksMigration::SequenceFloorTest < ActiveSupport::TestCase
+  include SequenceIsolation
+
+  isolate_sequences "books_books", "books_authors", "reviews", "saved_searches", "corrections", "users", "user_lists", "lists"
+
   CEILINGS = Services::BooksMigration::RESERVED_CEILINGS
 
   # Sequence changes are NOT rolled back with the test transaction, so every test
@@ -81,12 +85,12 @@ class Services::BooksMigration::SequenceFloorTest < ActiveSupport::TestCase
     ).id
   end
 
-  test "reserve_sequence_floors! moves all four catalog tables to at least their ceilings" do
+  test "reserve_sequence_floors! moves every sequence-floor table to at least its ceiling" do
     Services::BooksMigration::SEQUENCE_FLOOR_TABLES.each { |table| set_next_value(table, 1) }
 
     result = Services::BooksMigration.reserve_sequence_floors!
 
-    assert_equal %w[books_books books_authors reviews saved_searches], result.keys
+    assert_equal %w[books_books books_authors reviews saved_searches corrections], result.keys
     result.each do |table, next_id|
       assert_operator next_id, :>=, CEILINGS.fetch(table), table
       assert_operator next_id, :>, max_id(table), table
@@ -118,8 +122,9 @@ class Services::BooksMigration::SequenceFloorTest < ActiveSupport::TestCase
 
   test "the catalog ceilings are the values the spec reserved" do
     assert_equal(
-      {"books_books" => 250_000, "books_authors" => 120_000, "reviews" => 250_000, "saved_searches" => 20_000},
-      CEILINGS.slice("books_books", "books_authors", "reviews", "saved_searches")
+      {"books_books" => 250_000, "books_authors" => 120_000, "reviews" => 250_000, "saved_searches" => 20_000,
+       "corrections" => 10_000},
+      CEILINGS.slice("books_books", "books_authors", "reviews", "saved_searches", "corrections")
     )
   end
 end

@@ -2,7 +2,7 @@ module Services
   module BooksMigration
     # Legacy `changesets` -> `corrections` + `correction_fields`.
     #
-    # Legacy ids are PRESERVED (1-647 into a brand-new table, so it is free). That
+    # Legacy ids are PRESERVED, below the reserved ceiling (RESERVED_CEILINGS). That
     # buys idempotency -- a re-run collides on the pkey and ON CONFLICT DO NOTHING
     # absorbs it -- and traceability back to the legacy row. Book ids and user ids
     # are already preserved by BookMigrator and UserMigrator, so both map 1:1.
@@ -56,12 +56,15 @@ module Services
       end
 
       # insert_all with explicit ids never advances the sequence, so without this the
-      # first correction a real visitor submits gets id 1 and collides.
+      # first correction a real visitor submits collides -- and it must sit at the
+      # reserved ceiling, not max + 1, or new corrections take ids legacy will use.
       def finalize
-        ::Correction.connection.reset_pk_sequence!("corrections")
+        Services::BooksMigration.bump_sequence_to_floor!("corrections")
       end
 
       def upsert_row(attrs)
+        Services::BooksMigration.raise_if_at_ceiling!("corrections", attrs["id"])
+
         book_id = attrs["changeable_id"]
         # Skipped, not raised -- a departure from ReviewMigrator's fail-loud rule.
         # Two legacy changesets point at books that no longer exist, and a

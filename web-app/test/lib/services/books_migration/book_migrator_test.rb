@@ -1,6 +1,10 @@
 require "test_helper"
 
 class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
+  include SequenceIsolation
+
+  isolate_sequences "books_books"
+
   def run_migrator(rows)
     migrator = Services::BooksMigration::BookMigrator.new
     migrator.stubs(:legacy_each).multiple_yields(*rows.zip)

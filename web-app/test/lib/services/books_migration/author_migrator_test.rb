@@ -1,6 +1,10 @@
 require "test_helper"
 
 class Services::BooksMigration::AuthorMigratorTest < ActiveSupport::TestCase
+  include SequenceIsolation
+
+  isolate_sequences "books_authors"
+
   def legacy_rows
     [
       {"id" => 90001, "name" => "Legacy Author One", "family_name" => "One", "alternative_names" => nil},

@@ -15,10 +15,10 @@ module Services
     # bigint PK).
     #
     # users/user_lists/lists (as of 2026-06/07) were reserved by relocating
-    # new-app rows up (IdRangeReservationService). The four catalog tables
-    # (legacy max on 2026-10-08: books 175,879; authors 80,329; reviews 153,446;
-    # saved searches 6,070) hold only legacy rows, so they are reserved by moving
-    # the sequence alone -- see SEQUENCE_FLOOR_TABLES.
+    # new-app rows up (IdRangeReservationService). The other tables (legacy max on
+    # 2026-10-08: books 175,879; authors 80,329; reviews 153,446; saved searches
+    # 6,070; changesets 771) held only legacy rows below legacy's max, so they are
+    # reserved by moving the sequence alone -- see SEQUENCE_FLOOR_TABLES.
     RESERVED_CEILINGS = {
       "users" => 150_000,
       "user_lists" => 1_000_000,
@@ -26,13 +26,14 @@ module Services
       "books_books" => 250_000,
       "books_authors" => 120_000,
       "reviews" => 250_000,
-      "saved_searches" => 20_000
+      "saved_searches" => 20_000,
+      "corrections" => 10_000
     }.freeze
 
     # Reserved by sequence only. Never pass these to IdRangeReservationService:
     # its relocation shifts every row below the ceiling, which here means the
     # preserved legacy ids themselves.
-    SEQUENCE_FLOOR_TABLES = %w[books_books books_authors reviews saved_searches].freeze
+    SEQUENCE_FLOOR_TABLES = %w[books_books books_authors reviews saved_searches corrections].freeze
 
     # Reserved table => the FK columns that must be remapped when one of its rows
     # is relocated out of the reserved range. Verified against db/schema.rb

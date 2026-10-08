@@ -3,6 +3,10 @@
 require "test_helper"
 
 class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCase
+  include SequenceIsolation
+
+  isolate_sequences "saved_searches"
+
   def run_migrator(rows)
     m = Services::BooksMigration::SavedSearchMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)

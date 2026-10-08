@@ -78,6 +78,11 @@ Extend `RESERVED_CEILINGS` (`app/lib/services/books_migration.rb`):
 | `books_authors` | 80,329 | ~500 / 12.2k | 120,000 |
 | `reviews` | 153,446 | ~5k / 12.5k | 250,000 |
 | `saved_searches` | 6,070 | small | 20,000 |
+| `corrections` (legacy `changesets`) | 771 | ~10–70 | 10,000 |
+
+`corrections` was added during increment 1's final review: `CorrectionMigrator` also preserves
+legacy ids and reset its sequence to max + 1, and dev already held 6 new-app corrections (ids
+772–777) where legacy's next changesets will land.
 
 No rows need relocating: all four tables hold only legacy-origin rows today. So this does **not**
 use `IdRangeReservationService`'s relocation, which shifts every row below the ceiling and would
@@ -88,7 +93,7 @@ crash-loops the web container for all four sites, and the migrators' per-row cei
 actually keeps legacy ids out of the reserved range.
 
 Each migrator that preserves ids into these tables (`BookMigrator`, `AuthorMigrator`,
-`ReviewMigrator`, `SavedSearchMigrator`) raises if a legacy id reaches its ceiling, like
+`ReviewMigrator`, `SavedSearchMigrator`, `CorrectionMigrator`) raises if a legacy id reaches its ceiling, like
 `ReadingGoalMigrator`'s 10,000 guard. Their `reset_pk_sequence!` finalize calls must not pull a
 sequence back below the ceiling: replace them with "set to max(ceiling, max id + 1)".
 

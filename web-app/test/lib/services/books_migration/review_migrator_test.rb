@@ -1,6 +1,10 @@
 require "test_helper"
 
 class Services::BooksMigration::ReviewMigratorTest < ActiveSupport::TestCase
+  include SequenceIsolation
+
+  isolate_sequences "reviews"
+
   # Rows are yielded NEWEST FIRST, matching find_each(order: :desc) in the real
   # legacy_each. Order is load-bearing for the dedup rule.
   def run_migrator(rows)
