@@ -235,3 +235,178 @@ in the order I would try them if allowed:
    candidate pool is the 21k ranked ones, so a category rare in the catalog may be common in the pool.
 4. Re-examining whether the gate is the right bar: it compares a profile engine against a
    canon-only list on a metric that rewards the canon.
+
+
+## Re-run after restricting hold-outs to the ranked pool (PR #363 review)
+
+**Why.** The review (Codex, verified against the dev database) found that `Evaluation.eligible?`
+marked every favorite and every 4-plus rating as a hold-out candidate, but both engine queries
+return only books with a `ranked_position`, the 21,392-book ranked pool. Measured on the dev
+database, 12.2% of favorites and 47.0% of 4-plus ratings are unranked books. A held-out unranked
+book can never come back, so it inflated the recall and NDCG denominators and let users clear the
+five-candidate floor on items nobody could recover. The comparison between rows was unaffected (every
+row shares one hold-out per user), but the absolute numbers above understate every row.
+
+**Fix.** `Evaluation.split` takes `candidate_ids` (the ranked pool) and draws hold-outs only from it;
+`eligible_positive_counts` and `sample_user_ids` count only ranked favorites and ranked 4-plus ratings;
+the rake task applies the same filter in its per-user floor check. Same three commands, same seed
+and sizes as above; outputs are `eval2-defaults.txt`, `eval2-sweep.txt` and `eval2-combos.txt`.
+
+**Header counts.** Eligible users **2,204** (was 2,367; 163 users no longer have five ranked
+candidates), ranked pool **21,392**, sampled 100 per segment. Evaluated: 5-19: 94, 20-99: 100,
+100+: 100 (six 5-19 users had no usable hold-out, was four).
+
+**The sampled users are not the same users as above.** Eligibility changed, so the seeded draw lands
+on a different set of people. A row-for-row comparison with the first pass therefore mixes the
+metric fix with a new sample, and at 100 users per segment differences under about 0.03-0.05 are
+noise. Compare rows within one table, not across the two passes.
+
+### Shipped defaults and baselines (`eval2-defaults.txt`)
+
+```
+Recommendations evaluation  eligible users=2204  ranked pool=21392  sampled=300  seed=42  hold-out=0.2  limit=50
+variants: rank baseline | shipped defaults | lift=false
+
+-- segment 5-19: 94 of 100 sampled users evaluated
+   variant                               hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms
+   rank                                   0.234     0.394    0.144        27    6.702   1.275     0.003      -
+   shipped defaults                       0.085     0.074    0.053      5974    4.404   0.785     0.138    268
+   lift=false                             0.149     0.158    0.074      2597    2.138   0.643     0.032    203
+
+-- segment 20-99: 100 of 100 sampled users evaluated
+   variant                               hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms
+   rank                                   0.290     0.306    0.156        43    6.250   1.136     0.011      -
+   shipped defaults                       0.110     0.066    0.033      5549    4.460   0.754     0.118    328
+   lift=false                             0.120     0.223    0.087       510    1.680   0.279     0.025    359
+
+-- segment 100+: 100 of 100 sampled users evaluated
+   variant                               hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms
+   rank                                   0.620     0.290    0.212        66    5.880   1.179     0.013      -
+   shipped defaults                       0.180     0.054    0.043      5809    3.560   0.872     0.091    333
+   lift=false                             0.340     0.173    0.098       408    1.370   0.297     0.026    417
+```
+
+### One knob at a time (`eval2-sweep.txt`)
+
+```
+Recommendations evaluation  eligible users=2204  ranked pool=21392  sampled=300  seed=42  hold-out=0.2  limit=50
+variants: rank baseline | shipped defaults | rank_prior_weight=1.0 | rank_prior_weight=2.0 | max_subjects=10 | subject_multiplier=0.5 | calibrate_genres=false | candidate_size=100 | min_score=2.0 | pseudo_books=20 | min_support=3 | lift=false
+
+-- segment 5-19: 94 of 100 sampled users evaluated
+   variant                               hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms
+   rank                                   0.234     0.394    0.144        27    6.702   1.275     0.003      -
+   shipped defaults                       0.085     0.074    0.053      5974    4.404   0.785     0.138    225
+   rank_prior_weight=1.0                  0.096     0.138    0.062      3098    4.883   0.759     0.112    220
+   rank_prior_weight=2.0                  0.149     0.138    0.065      1547    4.915   0.768     0.089    218
+   max_subjects=10                        0.085     0.082    0.050      5943    4.606   0.802     0.141    223
+   subject_multiplier=0.5                 0.085     0.112    0.059      5901    4.404   0.835     0.133    217
+   calibrate_genres=false                 0.085     0.071    0.047      5981    4.415   0.815     0.137    125
+   candidate_size=100                     0.074     0.071    0.052      6120    4.351   0.787     0.139    135
+   min_score=2.0                          0.085     0.071    0.046      5954    3.723   0.883     0.117    173
+   pseudo_books=20                        0.085     0.074    0.053      6043    4.426   0.793     0.136    216
+   min_support=3                          0.043     0.073    0.045      5501    3.755   0.881     0.125    210
+   lift=false                             0.149     0.158    0.074      2597    2.138   0.643     0.032    191
+
+-- segment 20-99: 100 of 100 sampled users evaluated
+   variant                               hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms
+   rank                                   0.290     0.306    0.156        43    6.250   1.136     0.011      -
+   shipped defaults                       0.110     0.066    0.033      5549    4.460   0.754     0.118    278
+   rank_prior_weight=1.0                  0.180     0.113    0.056      2943    4.810   0.700     0.096    281
+   rank_prior_weight=2.0                  0.230     0.124    0.072      1538    4.650   0.707     0.079    279
+   max_subjects=10                        0.120     0.066    0.035      5719    4.230   0.762     0.116    265
+   subject_multiplier=0.5                 0.100     0.076    0.036      5735    4.730   0.827     0.110    267
+   calibrate_genres=false                 0.090     0.066    0.032      5544    4.490   0.791     0.118    123
+   candidate_size=100                     0.100     0.059    0.034      5701    4.340   0.755     0.119    152
+   min_score=2.0                          0.090     0.050    0.028      5844    3.490   1.019     0.098    164
+   pseudo_books=20                        0.120     0.066    0.034      5538    4.400   0.749     0.118    277
+   min_support=3                          0.100     0.073    0.036      5615    4.500   0.846     0.117    280
+   lift=false                             0.120     0.223    0.087       510    1.680   0.279     0.025    298
+
+-- segment 100+: 100 of 100 sampled users evaluated
+   variant                               hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms
+   rank                                   0.620     0.290    0.212        66    5.880   1.179     0.013      -
+   shipped defaults                       0.180     0.054    0.043      5809    3.560   0.872     0.091    345
+   rank_prior_weight=1.0                  0.260     0.087    0.064      3716    3.840   0.826     0.079    343
+   rank_prior_weight=2.0                  0.350     0.084    0.071      2535    3.880   0.829     0.070    342
+   max_subjects=10                        0.230     0.050    0.042      5932    3.260   1.002     0.083    306
+   subject_multiplier=0.5                 0.220     0.046    0.040      5943    3.500   1.098     0.084    309
+   calibrate_genres=false                 0.190     0.054    0.042      5805    3.580   0.894     0.091    154
+   candidate_size=100                     0.180     0.052    0.037      5903    3.520   0.875     0.091    203
+   min_score=2.0                          0.160     0.048    0.032      5402    1.690   1.312     0.065    194
+   pseudo_books=20                        0.180     0.056    0.044      5668    3.600   0.853     0.092    351
+   min_support=3                          0.240     0.061    0.044      5712    3.440   0.866     0.098    371
+   lift=false                             0.340     0.173    0.098       408    1.370   0.297     0.026    432
+```
+
+### Combinations (`eval2-combos.txt`)
+
+```
+Recommendations evaluation  eligible users=2204  ranked pool=21392  sampled=300  seed=42  hold-out=0.2  limit=50
+variants: rank baseline | shipped defaults | rank_prior_weight=1.0  max_subjects=10 | rank_prior_weight=2.0  max_subjects=10  subject_multiplier=0.5 | lift=false
+
+-- segment 5-19: 94 of 100 sampled users evaluated
+   variant                               hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms
+   rank                                   0.234     0.394    0.144        27    6.702   1.275     0.003      -
+   shipped defaults                       0.085     0.074    0.053      5974    4.404   0.785     0.138    225
+   rank_prior_weight=1.0  max_subjects=   0.117     0.148    0.063      3025    4.926   0.763     0.115    221
+   rank_prior_weight=2.0  max_subjects=   0.191     0.143    0.065      1714    5.053   0.820     0.086    218
+   lift=false                             0.149     0.158    0.074      2597    2.138   0.643     0.032    196
+
+-- segment 20-99: 100 of 100 sampled users evaluated
+   variant                               hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms
+   rank                                   0.290     0.306    0.156        43    6.250   1.136     0.011      -
+   shipped defaults                       0.110     0.066    0.033      5549    4.460   0.754     0.118    312
+   rank_prior_weight=1.0  max_subjects=   0.160     0.120    0.066      3206    4.810   0.715     0.098    294
+   rank_prior_weight=2.0  max_subjects=   0.270     0.122    0.070      2226    4.800   0.828     0.079    280
+   lift=false                             0.120     0.223    0.087       510    1.680   0.279     0.025    330
+
+-- segment 100+: 100 of 100 sampled users evaluated
+   variant                               hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms
+   rank                                   0.620     0.290    0.212        66    5.880   1.179     0.013      -
+   shipped defaults                       0.180     0.054    0.043      5809    3.560   0.872     0.091    332
+   rank_prior_weight=1.0  max_subjects=   0.280     0.085    0.064      4115    3.880   0.967     0.076    305
+   rank_prior_weight=2.0  max_subjects=   0.300     0.078    0.062      3434    3.940   1.112     0.072    282
+   lift=false                             0.340     0.173    0.098       408    1.370   0.297     0.026    422
+```
+
+In the combos table the printer cuts names at 36 characters. The two rows are
+`rank_prior_weight=1.0  max_subjects=10` and
+`rank_prior_weight=2.0  max_subjects=10  subject_multiplier=0.5`.
+
+### The gate, on the 20-99 segment (re-run)
+
+Required: beat BOTH baselines on hit@10 and recall@50, with `kl` at or below `lift=false`.
+
+| | hit@10 | recall@50 | kl |
+|---|---|---|---|
+| `rank` baseline | 0.290 | 0.306 | 1.136 |
+| `lift=false` baseline | 0.120 | 0.223 | 0.279 |
+| shipped defaults | 0.110 | 0.066 | 0.754 |
+| best single knob (`rank_prior_weight=2.0`) | 0.230 | 0.124 | 0.707 |
+| best combination (`rank_prior_weight=2.0,max_subjects=10,subject_multiplier=0.5`) | 0.270 | 0.122 | 0.828 |
+
+### Reading
+
+- **The gate verdict on 20-99 does not change: not met.** The shipped defaults still trail both
+  baselines on hit@10 (0.110 against 0.290 and 0.120), recall@50 (0.066 against 0.306 and 0.223) and
+  ndcg@50, and their `kl` (0.754) is still about 2.7 times `lift=false`'s (0.279). No variant beats
+  either baseline on both metrics: the best recall@50 among variants is 0.124, barely over half of
+  `lift=false`'s 0.223.
+- **Absolute numbers moved, but not in one direction, because the sample moved.** On 20-99 the
+  `rank` baseline went from hit@10 0.380 to 0.290 and recall@50 from 0.266 to 0.306; `lift=false`
+  from 0.170 to 0.120 hit@10 and 0.177 to 0.223 recall@50; the shipped defaults barely changed
+  (0.110 to 0.110 hit@10, 0.064 to 0.066 recall@50). Recall rises for the baselines, as the finding
+  predicts, since the denominators no longer hold unrecoverable books; hit@10 falls for them,
+  which is sample noise at n=100, not the fix. I did not run the old sample under the new rule, so
+  the size of the denominator effect on its own is not isolated here.
+- **One small change in the ordering.** On 20-99, `lift=false` now has the lowest hit@10 of the
+  strong rows (0.120), so `rank_prior_weight=1.0` (0.180), `rank_prior_weight=2.0` (0.230) and the
+  two combinations (0.160, 0.270) all beat it on hit@10 where before only `rank_prior_weight=2.0`
+  did. That is still one metric of two, still below `rank` (0.290), and recall@50 is where the
+  engine loses.
+- **The pattern in the first pass holds.** Every variant lands at mean rank 1,500 to 6,000 against
+  `lift=false`'s 510; `rank_prior_weight` remains the one lever that moves metrics; the query-shape
+  knobs (`candidate_size`, `calibrate_genres`, `pseudo_books`, `max_subjects`) stay inside noise;
+  `min_score=2.0` is still the worst on `kl`.
+- **Decision rule unchanged.** The initializer was not edited; the choice of what to change in
+  spec §6 is Shane's.
