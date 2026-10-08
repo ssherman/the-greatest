@@ -147,11 +147,14 @@ module Services
 
           def url_helpers = ::Rails.application.routes.url_helpers
 
+          # A book holding any of these keys as its work key, or as a
+          # duplicate-type key (the Open Library key backfill).
           def book_holding(keys)
             return nil if keys.empty?
 
+            types = ::Identifier.identifier_types.values_at("books_work_openlibrary_id", "books_work_openlibrary_duplicate_id")
             ::Books::Book.joins(:identifiers)
-              .where(identifiers: {identifier_type: ::Identifier.identifier_types[:books_work_openlibrary_id], value: keys})
+              .where(identifiers: {identifier_type: types, value: keys})
               .order(:id).first
           end
 
