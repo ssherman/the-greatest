@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_06_044628) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_07_221918) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1228,6 +1228,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_06_044628) do
     t.index ["user_id"], name: "index_ranking_configurations_on_user_id"
   end
 
+  create_table "recommendation_configs", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "type", null: false
+    t.jsonb "criteria", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "type"], name: "index_recommendation_configs_on_user_id_and_type", unique: true
+  end
+
   create_table "review_summaries", force: :cascade do |t|
     t.string "reviewable_type", null: false
     t.bigint "reviewable_id", null: false
@@ -1460,6 +1469,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_06_044628) do
   add_foreign_key "ranking_configurations", "lists", column: "secondary_mapped_list_id"
   add_foreign_key "ranking_configurations", "ranking_configurations", column: "inherited_from_id"
   add_foreign_key "ranking_configurations", "users"
+  add_foreign_key "recommendation_configs", "users"
   add_foreign_key "reviews", "users"
   add_foreign_key "saved_searches", "users"
   add_foreign_key "user_list_items", "user_lists"
