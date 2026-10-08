@@ -244,8 +244,12 @@ marked every favorite and every 4-plus rating as a hold-out candidate, but both 
 return only books with a `ranked_position`, the 21,392-book ranked pool. Measured on the dev
 database, 12.2% of favorites and 47.0% of 4-plus ratings are unranked books. A held-out unranked
 book can never come back, so it inflated the recall and NDCG denominators and let users clear the
-five-candidate floor on items nobody could recover. The comparison between rows was unaffected (every
-row shares one hold-out per user), but the absolute numbers above understate every row.
+five-candidate floor on items nobody could recover. Every row shares one hold-out per user, so
+the rows were compared on the same held-out books, but that does not make the comparison immune:
+each user's denominator shrinks by a different factor and the held-out sets change, so averaged
+rows could reorder. The recall and NDCG figures above are understated (a denominator that includes
+unrecoverable books can only deflate them); whether hit@10 moved, and in which direction, is not
+established.
 
 **Fix.** `Evaluation.split` takes `candidate_ids` (the ranked pool) and draws hold-outs only from it;
 `eligible_positive_counts` and `sample_user_ids` count only ranked favorites and ranked 4-plus ratings;
@@ -254,7 +258,11 @@ and sizes as above; outputs are `eval2-defaults.txt`, `eval2-sweep.txt` and `eva
 
 **Header counts.** Eligible users **2,204** (was 2,367; 163 users no longer have five ranked
 candidates), ranked pool **21,392**, sampled 100 per segment. Evaluated: 5-19: 94, 20-99: 100,
-100+: 100 (six 5-19 users had no usable hold-out, was four).
+100+: 100 (six 5-19 users were skipped, was four). They were skipped by the rake's exact floor check
+(fewer than five ranked eligible items), not for lack of a hold-out: once a user has one ranked
+candidate, `held.size < 1` cannot happen. The likely cause is that the sampler's eligibility count
+adds a favorite that is also rated 4-plus twice, so it admits users the exact check then rejects.
+I did not verify this per user.
 
 **The sampled users are not the same users as above.** Eligibility changed, so the seeded draw lands
 on a different set of people. A row-for-row comparison with the first pass therefore mixes the
@@ -397,16 +405,20 @@ Required: beat BOTH baselines on hit@10 and recall@50, with `kl` at or below `li
   from 0.170 to 0.120 hit@10 and 0.177 to 0.223 recall@50; the shipped defaults barely changed
   (0.110 to 0.110 hit@10, 0.064 to 0.066 recall@50). Recall rises for the baselines, as the finding
   predicts, since the denominators no longer hold unrecoverable books; hit@10 falls for them,
-  which is sample noise at n=100, not the fix. I did not run the old sample under the new rule, so
-  the size of the denominator effect on its own is not isolated here.
-- **One small change in the ordering.** On 20-99, `lift=false` now has the lowest hit@10 of the
-  strong rows (0.120), so `rank_prior_weight=1.0` (0.180), `rank_prior_weight=2.0` (0.230) and the
-  two combinations (0.160, 0.270) all beat it on hit@10 where before only `rank_prior_weight=2.0`
-  did. That is still one metric of two, still below `rank` (0.290), and recall@50 is where the
-  engine loses.
+  and I cannot say why. The `rank` drop of 0.09 is larger than the 0.03-0.05 noise band this
+  document uses, so it is not safely written off as sampling noise either. I did not run the old
+  sample under the new rule, so neither the denominator effect nor the sample effect is isolated.
+- **Within this table, on hit@10.** On 20-99, `lift=false` scores 0.120, and
+  `rank_prior_weight=1.0` (0.180), `rank_prior_weight=2.0` (0.230) and the two combinations (0.160,
+  0.270) score above it. The smaller gaps (0.160 and 0.180 against 0.120) sit at or near the noise
+  band, so only the 0.230 and 0.270 rows are clearly ahead. Every one of them is still below `rank`
+  (0.290) on hit@10, and on recall@50 every variant is far below `lift=false`.
 - **The pattern in the first pass holds.** Every variant lands at mean rank 1,500 to 6,000 against
   `lift=false`'s 510; `rank_prior_weight` remains the one lever that moves metrics; the query-shape
   knobs (`candidate_size`, `calibrate_genres`, `pseudo_books`, `max_subjects`) stay inside noise;
   `min_score=2.0` is still the worst on `kl`.
 - **Decision rule unchanged.** The initializer was not edited; the choice of what to change in
   spec §6 is Shane's.
+- **Coverage denominator.** The rake's `pool_size` (the denominator of the `coverage` column) still
+  counts `RankedItem` rows with a nil rank, so it can differ from the `ranked pool=` figure printed
+  in the header. This predates the change and was not touched here.
