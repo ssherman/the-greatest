@@ -59,7 +59,7 @@ module Search
 
         def ids(profile: self.profile, criteria: self.criteria, excluded_ids: [], **options)
           BookRecommendations.call(profile: profile, criteria: criteria, excluded_ids: excluded_ids,
-            type_category_ids: TYPE_IDS, options: {min_score: 0}.merge(options)).map { |h| h[:id] }
+            type_category_ids: TYPE_IDS, options: {min_score: 0, quality_scale: 0}.merge(options)).map { |h| h[:id] }
         end
 
         test "shared categories add up: two matches outrank one" do
@@ -100,7 +100,7 @@ module Search
           index_book(1, genre_category_ids: [G1])
           index_book(2, genre_category_ids: [G1], subject_category_ids: [S1])
           result = BookRecommendations.call(profile: profile(demoted: [9201]), criteria: criteria, excluded_ids: [],
-            type_category_ids: TYPE_IDS, options: {min_score: 0})
+            type_category_ids: TYPE_IDS, options: {min_score: 0, quality_scale: 0})
           assert_equal [1, 2], result.map { |h| h[:id] }
           assert_in_delta result[0][:score] * 0.3, result[1][:score], 0.01
         end
@@ -119,16 +119,31 @@ module Search
           index_book(2, genre_category_ids: [G1], similarity_category_count: 40)
           index_book(3, genre_category_ids: [G1], similarity_category_count: 3)
           result = BookRecommendations.call(profile: profile, criteria: criteria, excluded_ids: [],
-            type_category_ids: TYPE_IDS, options: {min_score: 0})
+            type_category_ids: TYPE_IDS, options: {min_score: 0, quality_scale: 0})
           scores = result.to_h { |h| [h[:id], h[:score]] }
           assert_in_delta scores[1], scores[3], 0.001, "the floor clamps the thin book to the same denominator"
           assert_in_delta scores[1] / 2, scores[2], 0.001
         end
 
+        test "the quality prior multiplies the score by a rank decay with a floor" do
+          index_book(1, genre_category_ids: [G1], ranked_position: 1)
+          index_book(2, genre_category_ids: [G1], ranked_position: 1000)
+          base = BookRecommendations.call(profile: profile, criteria: criteria, excluded_ids: [],
+            type_category_ids: TYPE_IDS, options: {min_score: 0, quality_scale: 0}).to_h { |h| [h[:id], h[:score]] }
+          assert_in_delta base[1], base[2], 0.0001, "scale 0 leaves scores untouched by rank"
+
+          result = BookRecommendations.call(profile: profile, criteria: criteria, excluded_ids: [],
+            type_category_ids: TYPE_IDS, options: {min_score: 0, quality_scale: 1000, quality_floor: 0.2})
+          assert_equal [1, 2], result.map { |h| h[:id] }
+          scores = result.to_h { |h| [h[:id], h[:score]] }
+          assert_in_delta base[1] * (0.2 + 0.8 * 1000.0 / 1001), scores[1], 0.001
+          assert_in_delta base[2] * (0.2 + 0.8 * 0.5), scores[2], 0.001
+        end
+
         test "returns the rank position from doc values" do
           index_book(1, genre_category_ids: [G1], ranked_position: 37)
           hit = BookRecommendations.call(profile: profile, criteria: criteria, excluded_ids: [],
-            type_category_ids: TYPE_IDS, options: {min_score: 0}).first
+            type_category_ids: TYPE_IDS, options: {min_score: 0, quality_scale: 0}).first
           assert_equal 37, hit[:rank_position]
         end
 

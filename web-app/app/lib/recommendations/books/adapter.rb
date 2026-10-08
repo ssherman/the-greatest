@@ -46,16 +46,21 @@ module Recommendations
           .where(item_type: "Books::Book", item_id: item_ids)
           .where(categories: {deleted: false, category_type: SCORING_TYPES})
           .pluck(:item_id, "categories.id", "categories.category_type", "categories.item_count")
+        ranked_counts = ranked_population? ? ranked_counts_for(rows.map { |r| r[1] }.uniq) : nil
 
         rows.group_by(&:first).transform_values do |group|
           group.map do |_, id, type, count|
-            CategoryFact.new(id: id, category_type: type_name(type), item_count: count.to_i)
+            CategoryFact.new(id: id, category_type: type_name(type),
+              item_count: ranked_counts ? ranked_counts.fetch(id, 0) : count.to_i)
           end
         end
       end
 
+      # The population the lift's p_c is measured over: every non-provisional
+      # book, or (lift_population "ranked") the ranked pool the query draws from.
+      # categories_for counts each category over the same population.
       def catalog_size
-        @catalog_size ||= ::Books::Book.catalog.count
+        @catalog_size ||= ranked_population? ? ranked_pool.count : ::Books::Book.catalog.count
       end
 
       def type_category_ids
@@ -112,6 +117,25 @@ module Recommendations
       end
 
       private
+
+      def ranked_population?
+        config[:lift_population].to_s == "ranked"
+      end
+
+      # The same pool Evaluation.candidate_ids measures: the default primary
+      # configuration's ranked items with a rank.
+      def ranked_pool
+        ::RankedItem.where(item_type: "Books::Book", ranking_configuration_id: ::Books::RankingConfiguration.default_primary&.id)
+          .where.not(rank: nil)
+      end
+
+      def ranked_counts_for(category_ids)
+        return {} if category_ids.empty?
+
+        ::CategoryItem.where(item_type: "Books::Book", category_id: category_ids)
+          .where(item_id: ranked_pool.select(:item_id))
+          .group(:category_id).count
+      end
 
       def list_weights_for(user)
         rows = ::UserListItem.joins(:user_list)
