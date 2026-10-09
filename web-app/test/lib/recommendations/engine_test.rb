@@ -178,6 +178,22 @@ module Recommendations
       assert_equal [1, 2], result.data[:items].map { |i| i[:rank] }
     end
 
+    test "the result says it is degraded when a personalized signal raised, and not otherwise" do
+      healthy, = engine
+      assert_equal false, healthy.data[:degraded]
+
+      ranked = [Candidate.new(item_id: 7, score: 0.0, rank_position: 1, evidence: {})]
+      broken, = engine(raise_search: true, ranked: ranked)
+      assert broken.success?
+      assert broken.data[:degraded]
+      assert broken.data[:fallback]
+    end
+
+    test "each item carries its global rank position" do
+      result, = engine
+      assert_equal [101, 102, 103], result.data[:items].map { |i| i[:rank_position] }
+    end
+
     test "an unregistered domain is a failure" do
       result = Engine.call(user: @user, domain: :music, limit: 10)
       assert_not result.success?

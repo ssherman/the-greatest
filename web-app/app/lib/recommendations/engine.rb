@@ -25,6 +25,7 @@ module Recommendations
       @interactions_override = interactions
       @excluded_override = excluded_ids
       @signal_classes = signal_classes
+      @degraded = false
     end
 
     def call
@@ -50,7 +51,8 @@ module Recommendations
         items: build_items(adapter, page, profile),
         profile: profile,
         signals_used: signals_used,
-        fallback: fallback
+        fallback: fallback,
+        degraded: @degraded
       })
     end
 
@@ -129,6 +131,7 @@ module Recommendations
           item: item,
           item_id: candidate.item_id,
           score: candidate.score,
+          rank_position: candidate.rank_position,
           reason: Explainer.call(candidate: candidate, profile: profile, categories: categories.fetch(candidate.item_id, []), config: @config)
         }
       end
@@ -142,6 +145,7 @@ module Recommendations
     def guarded(signal_name)
       yield
     rescue => e
+      @degraded = true
       Rails.logger.error "Recommendations signal #{signal_name} failed for user #{@user&.id}: #{e.class}: #{e.message} #{e.backtrace&.first(5)&.join(" | ")}"
       nil
     end

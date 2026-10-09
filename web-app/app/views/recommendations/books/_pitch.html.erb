@@ -1,0 +1,24 @@
+<% content_for :page_title, "Book recommendations" %>
+<div class="container mx-auto max-w-3xl px-4 py-10 space-y-10">
+  <header class="text-center">
+    <h1 class="text-3xl font-bold mb-4">Book recommendations built from what you have actually read</h1>
+    <p class="text-lg text-base-content/80">Tell us your favorites, what you have read and how you rated it. We match that against every ranked book on the site and show you what fits, with a reason for each one.</p>
+  </header>
+
+  <section class="card bg-base-200">
+    <div class="card-body">
+      <h2 class="card-title">How it works</h2>
+      <ul class="list-disc pl-5 space-y-2">
+        <li><strong>Your favorites</strong> carry the most weight. They tell us which genres, subjects and settings you come back to.</li>
+        <li><strong>Your ratings</strong> sharpen it. Four and five stars push a book's traits up; one and two stars push them down.</li>
+        <li><strong>Your reading history</strong> keeps us from recommending books you already know.</li>
+        <li><strong>Your settings</strong> let you exclude genres, cap by rank, pick lengths and eras, and choose safer bets or deeper cuts.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="text-center">
+    <p class="mb-4">A free account gets <%= Rails.application.config.x.recommendations[:free_limit] %> recommendations. Members get <%= Rails.application.config.x.recommendations[:member_limit] %> and every setting.</p>
+    <button class="btn btn-primary btn-lg" onclick="login_modal.showModal()" data-testid="pitch-sign-in">Sign in or create an account</button>
+  </section>
+</div>

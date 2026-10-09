@@ -576,6 +576,16 @@ Rails.application.routes.draw do
   get "searches/:id/page/:page", to: "saved_searches#show", as: :saved_search_page,
     constraints: {id: /\d+/, page: /\d+/}
 
+  # Recommendations (spec 2026-10-07 §2): one controller for every host; the
+  # domain comes from Current.domain and a host with no registry entry 404s.
+  # `search` and `settings` are declared before `wizard/:step` on purpose.
+  get "recommendations", to: "recommendations#show", as: :recommendations
+  get "recommendations/search", to: "recommendations#search", as: :recommendations_search
+  get "recommendations/settings", to: "recommendations#settings", as: :recommendations_settings
+  post "recommendations/settings", to: "recommendations#update_settings"
+  post "recommendations/reset", to: "recommendations#reset", as: :recommendations_reset
+  get "recommendations/wizard/:step", to: "recommendations#wizard", as: :recommendations_wizard, constraints: {step: /[1-4]/}
+
   # Legacy `scope "(/v/:view_type)" { resources :searches }`. These 301 rather
   # than rendering: increment 5 dropped the view switcher, so grid, table and
   # the bare path all resolve to the same card grid and a redirect costs the
