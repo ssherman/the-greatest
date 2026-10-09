@@ -3,6 +3,8 @@
 require "test_helper"
 
 class Services::BooksMigration::BookTypeCategoryMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     m = Services::BooksMigration::BookTypeCategoryMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -88,5 +90,16 @@ class Services::BooksMigration::BookTypeCategoryMigratorTest < ActiveSupport::Te
     run_migrator([{"id" => @book.id, "book_type" => 0}])
 
     assert_equal 0, SearchIndexRequest.count
+  end
+
+  test "sync mode links the run's books only" do
+    outside = ::Books::Book.create!(title: "Outside")
+    m = Services::BooksMigration::BookTypeCategoryMigrator.new(sync: sync_scope(book_ids: [@book.id]))
+    m.stubs(:legacy_each).multiple_yields([{"id" => @book.id, "book_type" => 0}], [{"id" => outside.id, "book_type" => 0}])
+
+    m.call
+
+    assert CategoryItem.exists?(category_id: @fiction.id, item_type: "Books::Book", item_id: @book.id)
+    refute CategoryItem.exists?(category_id: @fiction.id, item_type: "Books::Book", item_id: outside.id)
   end
 end

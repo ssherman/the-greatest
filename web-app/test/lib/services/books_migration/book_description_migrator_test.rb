@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::BookDescriptionMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     m = Services::BooksMigration::BookDescriptionMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -200,5 +202,18 @@ class Services::BooksMigration::BookDescriptionMigratorTest < ActiveSupport::Tes
 
     refute result[:success]
     assert_match(/#{missing}/, result[:error])
+  end
+
+  test "sync mode describes the run's books only" do
+    m = Services::BooksMigration::BookDescriptionMigrator.new(sync: sync_scope(book_ids: [@book.id]))
+    m.stubs(:legacy_each).multiple_yields(
+      [legacy_book(@book.id, "ai_generated_description" => "In the run.")],
+      [legacy_book(@other_book.id, "ai_generated_description" => "Outside the run.")]
+    )
+
+    m.call
+
+    assert_equal ["In the run."], descriptions_for(@book).pluck(:content)
+    refute Description.exists?(describable: @other_book, content: "Outside the run.")
   end
 end

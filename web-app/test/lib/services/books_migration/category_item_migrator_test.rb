@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::CategoryItemMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     m = Services::BooksMigration::CategoryItemMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -75,5 +77,32 @@ class Services::BooksMigration::CategoryItemMigratorTest < ActiveSupport::TestCa
     assert_no_difference -> { SearchIndexRequest.count } do
       run_migrator([{"id" => 7, "category_id" => 8006, "book_id" => book.id}])
     end
+  end
+
+  test "sync mode writes items of the run's books only" do
+    category = make_category(8101)
+    in_run = ::Books::Book.create!(title: "In The Run")
+    outside = ::Books::Book.create!(title: "Outside")
+    m = Services::BooksMigration::CategoryItemMigrator.new(sync: sync_scope(book_ids: [in_run.id]))
+    m.stubs(:legacy_each).multiple_yields(
+      [{"id" => 1, "category_id" => 8101, "book_id" => in_run.id}],
+      [{"id" => 2, "category_id" => 8101, "book_id" => outside.id}]
+    )
+
+    m.call
+
+    assert CategoryItem.exists?(category_id: category.id, item_id: in_run.id)
+    refute CategoryItem.exists?(category_id: category.id, item_id: outside.id)
+  end
+
+  test "drops a book_category whose mapped category no longer exists here" do
+    category = make_category(8102)
+    ::Books::Category.where(id: category.id).delete_all
+    book = ::Books::Book.create!(title: "Gone Category Book")
+
+    result = run_migrator([{"id" => 9, "category_id" => 8102, "book_id" => book.id}])
+
+    assert result[:success], result[:error]
+    assert_empty CategoryItem.where(item_id: book.id, item_type: "Books::Book")
   end
 end

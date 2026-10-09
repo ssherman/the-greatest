@@ -3,6 +3,8 @@ require "test_helper"
 module Services
   module BooksMigration
     class ExternalLinkMigratorTest < ActiveSupport::TestCase
+      include BooksLegacySyncHelper
+
       setup do
         @book = ::Books::Book.create!(title: "Link Parent")
         @user = users(:regular_user)
@@ -138,6 +140,17 @@ module Services
 
         refute result[:success]
         assert_match(/4343/, result[:error])
+      end
+
+      test "sync mode adds links of the run's books only" do
+        outside = ::Books::Book.create!(title: "Outside")
+        migrator = ExternalLinkMigrator.new(sync: sync_scope(book_ids: [@book.id]))
+        migrator.stubs(:legacy_each).multiple_yields([legacy_row], [legacy_row("id" => 2, "book_id" => outside.id)])
+
+        migrator.call
+
+        assert ExternalLink.exists?(parent_type: "Books::Book", parent_id: @book.id)
+        refute ExternalLink.exists?(parent_type: "Books::Book", parent_id: outside.id)
       end
     end
   end

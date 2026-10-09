@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::AuthorDescriptionMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     m = Services::BooksMigration::AuthorDescriptionMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -121,5 +123,18 @@ class Services::BooksMigration::AuthorDescriptionMigratorTest < ActiveSupport::T
 
     refute result[:success]
     assert_match(/#{missing}/, result[:error])
+  end
+
+  test "sync mode describes the run's authors only" do
+    m = Services::BooksMigration::AuthorDescriptionMigrator.new(sync: sync_scope(author_ids: [@author.id]))
+    m.stubs(:legacy_each).multiple_yields(
+      [legacy_author(@author.id, "ai_description" => "In the run.")],
+      [legacy_author(@other_author.id, "ai_description" => "Outside the run.")]
+    )
+
+    m.call
+
+    assert Description.exists?(describable: @author, content: "In the run.")
+    refute Description.exists?(describable: @other_author, content: "Outside the run.")
   end
 end

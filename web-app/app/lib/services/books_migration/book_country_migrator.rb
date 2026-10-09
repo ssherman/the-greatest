@@ -49,6 +49,10 @@ module Services
         @seen = Set.new
       end
 
+      def sync_filter
+        [:book_ids, "book_id"]
+      end
+
       def build_rows(attrs)
         country_id = attrs["country_id"]
         unless @country_ids.include?(country_id)
