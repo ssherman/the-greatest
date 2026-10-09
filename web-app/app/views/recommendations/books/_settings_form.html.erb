@@ -3,7 +3,7 @@
 
 <% if locked %>
   <div role="note" class="alert alert-info mb-6" data-testid="settings-locked">
-    <span>🔒 Settings are a member feature. Free accounts get <%= knobs[:free_limit] %> recommendations on the defaults; members get <%= knobs[:member_limit] %> and every setting below.</span>
+    <span>🔒 Settings are a member feature. Free accounts get <%= knobs[:free_limit] %> recommendations; members get <%= knobs[:member_limit] %> and can change the settings below.</span>
     <%= link_to "Become a member", membership_path, class: "btn btn-primary btn-sm" %>
   </div>
 <% end %>

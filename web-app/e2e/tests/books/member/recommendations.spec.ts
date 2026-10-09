@@ -6,8 +6,7 @@ const BOOK_PATH = '/book/headlong-hall';
 
 async function untickEveryList(page: Page) {
   await page.goto(BOOK_PATH);
-  const card = page.locator('[data-listable-type="Books::Book"]').first();
-  await card.getByRole('button', { name: /Add to list|On \d+ list/i }).click();
+  await page.getByRole('button', { name: /Add to list|On \d+ list/i }).first().click();
   const modal = page.locator('#user_list_modal');
   await expect(modal).toBeVisible();
   for (const box of await modal.getByRole('checkbox').all()) {
@@ -17,6 +16,7 @@ async function untickEveryList(page: Page) {
     }
   }
   await page.keyboard.press('Escape');
+  await expect(modal).not.toBeVisible();
 }
 
 async function removeReview(page: Page) {
@@ -33,7 +33,6 @@ async function removeReview(page: Page) {
 }
 
 async function resetSettings(page: Page) {
-  await page.goto('/recommendations/settings');
   // The results side panel and step 4 carry the reset button; settings does not, so go via step 4.
   await page.goto('/recommendations/wizard/4');
   const reset = page.getByTestId('reset-button');
@@ -81,23 +80,23 @@ test.describe('Recommendations, as a member', () => {
     await favorites.check();
     await expect(favorites).toBeChecked();
     await page.keyboard.press('Escape');
+    await expect(modal).not.toBeVisible();
 
     await page.reload();
     await expect(page.getByTestId('favorites-list')).toContainText(BOOK_TITLE);
   });
 
   test('step 3: rate the favorite', async ({ page }) => {
-    await page.goto('/recommendations/wizard/3');
     // Headlong Hall is a favorite, not a read book, so it is not in the unrated list;
     // add it to the read list from the book page first so step 3 has a row to rate.
     await page.goto(BOOK_PATH);
-    const card = page.locator('[data-listable-type="Books::Book"]').first();
-    await card.getByRole('button', { name: /Add to list|On \d+ list/i }).click();
+    await page.getByRole('button', { name: /Add to list|On \d+ list/i }).first().click();
     const modal = page.locator('#user_list_modal');
     const read = modal.getByRole('checkbox', { name: /^read$|books i.ve read|have read/i }).first();
     await read.check();
     await expect(read).toBeChecked();
     await page.keyboard.press('Escape');
+    await expect(modal).not.toBeVisible();
 
     await page.goto('/recommendations/wizard/3');
     const row = page.getByTestId('unrated-list').locator('[data-testid="wizard-book-row"]', { hasText: BOOK_TITLE });
@@ -120,7 +119,7 @@ test.describe('Recommendations, as a member', () => {
     await expect(page.getByTestId('recommendation').first()).toBeVisible();
     await expect(page.getByTestId('recommendation-reason').first()).not.toBeEmpty();
     await expect(page.getByTestId('member-pitch')).toHaveCount(0);
-    await expect(page.locator('aside')).toContainText('Deep cuts');
+    await expect(page.getByTestId('recommendations-side-panel')).toContainText('Deep cuts');
   });
 
   test('the settings page is editable for a member', async ({ page }) => {
