@@ -36,7 +36,7 @@ class DuplicateCandidate < ApplicationRecord
   belongs_to :resolved_by, class_name: "User", optional: true
 
   # Enums. `pending` is the spec's "open".
-  enum :source, {identifier_collision: 0, external_key_collision: 1, ai: 2, human: 3, bulk_verify: 4}, prefix: :raised_by
+  enum :source, {identifier_collision: 0, external_key_collision: 1, ai: 2, human: 3, bulk_verify: 4, ol_backfill: 5}, prefix: :raised_by
   enum :status, {pending: 0, merged: 1, not_duplicate: 2}
 
   # Validations
@@ -52,6 +52,11 @@ class DuplicateCandidate < ApplicationRecord
   def self.not_duplicate?(item_type:, ids:)
     a, b = ids.map(&:to_i).minmax
     where(item_type: item_type, item_a_id: a, item_b_id: b).not_duplicate.exists?
+  end
+
+  # The queue's badge. "OL" is an initialism, so humanize alone gets it wrong.
+  def source_label
+    (source == "ol_backfill") ? "OL backfill" : source.humanize
   end
 
   private

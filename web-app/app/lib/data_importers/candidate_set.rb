@@ -17,6 +17,11 @@ module DataImporters
       # something to fold into that other record.
       by_key = nil if by_key&.local? && candidate.local? && !same_record?(by_key.record, candidate.record)
 
+      # A candidate the external source only links by duplication
+      # (`external_duplicate_of`) never folds into the external-only candidate
+      # for its key: it would inherit that candidate's verdict.
+      by_key = nil if candidate.evidence[:external_duplicate_of] && !by_key&.local?
+
       if by_record && by_key && !by_record.equal?(by_key) && !by_key.local?
         # A local candidate and an external-only candidate turn out to be
         # the same thing: fold the external one into the local one.

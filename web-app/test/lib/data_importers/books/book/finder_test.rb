@@ -260,6 +260,32 @@ module DataImporters
 
         # ---- Open Library (rules 2 and 5) ---------------------------------------
 
+        test "a book holding the accepted work as a duplicate key blocks a create and is a candidate with no verdict" do
+          ::Identifier.create!(identifiable: @crime, identifier_type: :books_work_openlibrary_duplicate_id, value: "OL999W")
+          stub_resolve(resolve_response(verdict: "accept", key: "OL999W", candidates: [ol_candidate(key: "OL999W", verdict: "accept", score: 0.95, record: work_record(key: "OL999W", title: "The Brothers Karamazov", authors: ["Fyodor Dostoevsky"]))]))
+          stub_ai({selected_index: 0, confidence: "high", reasoning: "A different novel.", same_entity_groups: []})
+
+          match = @finder.call(query: ImportQuery.new(title: "The Brothers Karamazov", author_names: ["Fyodor Dostoevsky"]))
+
+          assert_equal [:unmatched, :ai], [match.outcome, match.decided_by]
+          holder = match.candidates.find { |candidate| candidate.record == @crime }
+          assert_equal ["OL999W", "OL999W"], [holder.external_key, holder.evidence[:external_duplicate_of]]
+          assert_nil holder.external_verdict
+        end
+
+        test "a duplicate-key holder beside the accepted key's holder is flagged as a pair" do
+          ::Identifier.create!(identifiable: @war_and_peace, identifier_type: :books_work_openlibrary_id, value: "OL999W")
+          ::Identifier.create!(identifiable: @crime, identifier_type: :books_work_openlibrary_duplicate_id, value: "OL999W")
+          stub_resolve(resolve_response(verdict: "accept", key: "OL999W", candidates: [ol_candidate(key: "OL999W", verdict: "accept", score: 0.95, record: work_record(key: "OL999W", title: "War and Peace", authors: ["Leo Tolstoy"]))]))
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(title: "War and Peace", author_names: ["Leo Tolstoy"]))
+
+          assert_equal [@war_and_peace, :certain], [match.record, match.confidence]
+          ids = [@war_and_peace.id, @crime.id]
+          assert ::DuplicateCandidate.exists?(item_type: "Books::Book", item_a_id: ids.min, item_b_id: ids.max)
+        end
+
         test "an Open Library accept on a key a local book holds, corroborated by the title, is a certain match with the resolution kept" do
           key = identifiers(:crime_and_punishment_openlibrary).value
           stub_resolve(resolve_response(verdict: "accept", key: key, candidates: [ol_candidate(key: key, verdict: "accept", score: 0.95, record: work_record(key: key, title: "Crime and Punishment"))]))

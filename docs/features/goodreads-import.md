@@ -299,7 +299,7 @@ imports.
   user's lists.
 - **In production, run it on the final books migration pass only.** The list items and reviews it writes have no
   foreign key to books, so a truncate leaves them pointing at deleted provisional books. The re-migration resets
-  the books id sequence, and later books take those ids. `docs/launch-todo.md` (section 2, item 8) says how to undo a
+  the books id sequence, and later books take those ids. `docs/launch-todo.md` (section 2, item 9) says how to undo a
   rehearsal run before the truncate.
 - A finishing import with rows has already run and is left alone. One an admin rejected stays rejected. One that
   failed before writing any rows starts again, pending review. One whose written rows a truncate emptied is reported
@@ -307,7 +307,7 @@ imports.
   can neither redo nor undo them. That is why every finishing import is rejected and then deleted before a truncate.
 - `IDS=` only narrows what is started: a picked import still defers to a newer unfinished import of the same user.
 - Run it one import at a time (`[1]`), and let each finish before the next: running imports are skipped, not
-  counted. Four at once overloaded the Open Library service on 2026-10-06 (`docs/launch-todo.md`, section 2, item 9).
+  counted. Four at once overloaded the Open Library service on 2026-10-06 (`docs/launch-todo.md`, section 2, item 10).
   Each import also fetches Goodreads pages for the books it would create, on the fetch line member uploads use.
 - Measured on the 2026-10-05 development load (a dry run): 46 unfinished legacy imports. 10 have a later completed
   import, 12 have no file (missing from the legacy bucket, or not a CSV), and 1 has no Goodreads header. That leaves

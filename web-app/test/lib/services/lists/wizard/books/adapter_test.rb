@@ -134,6 +134,24 @@ module Services
             assert_nil @adapter.recheck(missing)
           end
 
+          test "the Import re-check finds a book holding the chosen work as a duplicate key" do
+            book = books_books(:crime_and_punishment)
+            ::Identifier.create!(identifiable: book, identifier_type: :books_work_openlibrary_duplicate_id, value: "OL777W")
+            item = wizard_row(@list, position: 1, title: "Some Novel", wizard: {bucket: "create", ol_work_key: "OL777W", ol_keys: []})
+
+            assert_equal book, @adapter.recheck(item)
+          end
+
+          test "recheck prefers the book holding the work key over a lower-id duplicate-key holder" do
+            exact, duplicate = books_books(:crime_and_punishment, :war_and_peace).sort_by(&:id).reverse
+            ::Identifier.create!(identifiable: exact, identifier_type: :books_work_openlibrary_id, value: "OL888W")
+            ::Identifier.create!(identifiable: duplicate, identifier_type: :books_work_openlibrary_duplicate_id, value: "OL888W")
+            item = wizard_row(@list, position: 1, title: "Some Novel", wizard: {bucket: "create", ol_work_key: "OL888W", ol_keys: []})
+
+            assert_operator duplicate.id, :<, exact.id
+            assert_equal exact, @adapter.recheck(item)
+          end
+
           test "recheck for a text row finds a book with the same title and an agreeing author created after its match" do
             row = wizard_row(@list, position: 1, title: "A Winter of Crows", authors: ["Wren Halloway"],
               wizard: {bucket: "create", matched_at: 1.hour.ago.iso8601})

@@ -108,14 +108,20 @@ module DataImporters
         # book. Their presence still stops rule 5 from creating a book we
         # may already have, and `external_duplicate_of` groups them with the
         # accepted work's holders as suspected pairs. Books already returned
-        # as a holder of some candidate are left alone.
+        # as a holder of some candidate are left alone. So are books holding
+        # the accepted work, or one of its duplicates, as a duplicate-type key
+        # (saved by the Open Library key backfill).
         def duplicate_holders(returned)
           accepted = @resolution.accepted
           decision = @resolution.decision
           return [] unless accepted
 
           keys = (decision.duplicates + decision.duplicate_redirect_sources).uniq - [accepted.work_key]
-          return [] if keys.empty?
+          # Work keys of the duplicates, plus duplicate-type keys (the OL key
+          # backfill) of the accepted work or its duplicates.
+          holdings = holdings_of(keys, work_key_type)
+            .merge(holdings_of([accepted.work_key, *keys], duplicate_key_type)) { |_id, ours, theirs| (ours + theirs).uniq }
+          return [] if holdings.empty?
 
           seen = returned.filter_map { |candidate| candidate.record&.id }
           work = accepted.record
@@ -123,7 +129,6 @@ module DataImporters
             external_duplicate_of: accepted.work_key, external_score: accepted.score,
             external_title: work&.title, external_creators: Array(work&.author_names), external_year: year_of(work)
           }
-          holdings = holdings_of(keys)
           ::Books::Book.where(id: holdings.keys - seen).order(:id).map do |book|
             Candidate.new(
               record: book,
@@ -146,13 +151,19 @@ module DataImporters
             .to_a
         end
 
-        # book id -> the keys (of `keys`) it holds.
-        def holdings_of(keys)
+        # book id -> the keys (of `keys`) it holds as `type`.
+        def holdings_of(keys, type)
+          return {} if keys.empty?
+
           ::Identifier
-            .where(identifiable_type: "Books::Book", identifier_type: work_key_type, value: keys)
+            .where(identifiable_type: "Books::Book", identifier_type: type, value: keys)
             .pluck(:identifiable_id, :value)
             .group_by(&:first)
             .transform_values { |rows| rows.map(&:last) }
+        end
+
+        def duplicate_key_type
+          ::Identifier.identifier_types[:books_work_openlibrary_duplicate_id]
         end
 
         def work_key_type

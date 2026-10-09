@@ -14,6 +14,10 @@ an item says otherwise. Section 3 is the hostname switch. Section 4 is for after
   and `books_countries`. A truncate that leaves it out fails on the constraint, and one run with
   `CASCADE` drops rows that were never meant to go. See `docs/features/books-author-enrichment.md`,
   "Launch sequence".
+- **Put `books_open_library_backfills` in the truncate list.** It has foreign keys to `books_books`
+  (`book_id` and `pair_book_id`). A truncate that leaves it out fails on the constraint, and `CASCADE`
+  is not the answer. Stale log rows would also make the next backfill skip re-migrated books whose
+  old keys are back. See `docs/features/open-library-backfill.md`.
 - **Keep these tables:**
   - `books_repair_verdicts`: the Goodreads replay re-applies its approved verdicts and skips the
     rejected ones (`docs/features/goodreads-import.md`, "Legacy replay").
@@ -25,7 +29,7 @@ an item says otherwise. Section 3 is the hostname switch. Section 4 is for after
 - **Put `books_goodreads_editions` and `books_goodreads_import_rows` in the truncate list.** The
   replay rebuilds them.
 - **Before any truncate, reject and then delete every import that finishes a legacy one** (section 2,
-  item 8). Finished or approved is not enough. Its rows hold the only ids of the list items and
+  item 9). Finished or approved is not enough. Its rows hold the only ids of the list items and
   reviews it wrote, and those outlive the truncate while the rows do not. Rejecting first removes
   them while the ids are still there. Deleting it afterwards lets the final pass create it fresh.
   One left in place is reported `stale` from then on and never runs again. Its items and reviews
@@ -53,10 +57,23 @@ Run these in this order after each migration pass.
 5. **Stored-name normalization.** `ANALYZE` the tables that have `lower()` expression indexes. Then
    run `bin/rails books:normalize_names:report`, and after reading its output,
    `books:normalize_names:apply`.
-6. **Duplicate sweep.** Run `bin/rails "books:find_duplicates[100]"` first, then `[all]`. `[all]`
+6. **Open Library key backfill.** Run `bin/rails "books:ol_backfill[100]"`, read
+   `bin/rails books:ol_backfill_report`, then `bin/rails "books:ol_backfill[all]"`. It checks or adds an
+   Open Library key on every book, ranked first. Top-ranked books ran at about 4 books a minute before
+   the fast pass was sped up, so the full run is likely 2-4 weeks and the top few thousand ranked books
+   finish in the first days. It shares Open Library's one
+   `/resolve` slot with the wizard and the Goodreads replay, so all of them slow down while it runs.
+   It pauses 4 seconds after each `/resolve` so the others can get the slot, but
+   do not run the Goodreads replay or the legacy-import finishing steps while it runs: when they
+   cannot get the slot they decide rows without Open Library. Every merge deploys, and a deploy stops
+   a running backfill (it is not requeued), so expect to run the task again during the weeks it runs;
+   it carries on, because logged books are skipped. Its log is keyed to book ids, so every
+   migration pass starts it from scratch.
+   Details: `docs/features/open-library-backfill.md`.
+7. **Duplicate sweep.** Run `bin/rails "books:find_duplicates[100]"` first, then `[all]`. `[all]`
    covers about 21k ranked books on the `serial` queue and takes days. Pairs land in the Duplicates
    queue.
-7. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
+8. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
 
    ```bash
    bin/rails books:goodreads:seed_legacy_pages   # legacy scraped Goodreads pages into the page cache (~39k)
@@ -76,7 +93,7 @@ Run these in this order after each migration pass.
      replay only records proposed fixes, under Books → Repair Verdicts. Turn it on only after the
      50-per-kind hand check (spec §12.9).
    - Details: `docs/features/goodreads-import.md`, "Legacy seed" and "Legacy replay".
-8. **Finish the failed and stuck legacy Goodreads imports, on the final pass only.** Never run it on a
+9. **Finish the failed and stuck legacy Goodreads imports, on the final pass only.** Never run it on a
    rehearsal pass in production. It writes list items and reviews for real users, and a truncate does
    not remove them: those tables have no foreign key to books. The truncate deletes the provisional
    books they point at, the re-migration resets the books id sequence, and new books then take those
@@ -93,7 +110,7 @@ Run these in this order after each migration pass.
    - Approve or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`,
      "Finishing legacy imports".
 
-9. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
+10. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
    resolving at once left `/resolve` timing out at 60 s for 25 minutes, until the API container was
    restarted. Queries the Rails client had abandoned kept running and piled up in one 6 GB DuckDB pool.
    #358 runs one `/resolve` at a time, answers the rest with an instant 503 busy, and stops a query at

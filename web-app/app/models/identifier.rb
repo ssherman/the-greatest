@@ -32,6 +32,10 @@ class Identifier < ApplicationRecord
     books_work_isbn10: 6,
     books_work_asin: 7,
     books_work_ean13: 8,
+    # A work Open Library lists as a duplicate of this book's work (the OL
+    # key backfill). Evidence, never identity: the finder treats a holder as
+    # a candidate with no verdict.
+    books_work_openlibrary_duplicate_id: 9,
 
     # Books - Edition level (Books::Edition)
     books_edition_isbn13: 10,
