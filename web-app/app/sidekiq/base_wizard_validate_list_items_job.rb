@@ -18,9 +18,7 @@ class BaseWizardValidateListItemsJob
 
   def perform(list_id)
     @list = list_class.find(list_id)
-    @items = enriched_items
-
-    if @items.empty?
+    if enriched_items.empty?
       complete_with_no_items
       return
     end
@@ -28,6 +26,10 @@ class BaseWizardValidateListItemsJob
     @list.wizard_manager.update_step_status!(step: "validate", status: "running", progress: 0, metadata: {})
 
     clear_previous_validation_flags
+    # Selected after the clearing, which resets rows an earlier run verified: a re-run (an admin's,
+    # or Sidekiq requeueing this job at a deploy) must validate those too, as the task does when it
+    # picks its own items outside batch mode.
+    @items = enriched_items
 
     data = if batch_mode?
       process_in_batches

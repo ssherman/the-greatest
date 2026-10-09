@@ -188,6 +188,22 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
   end
 
+  # A re-run after a partial run (an admin's, or Sidekiq requeueing the job at a deploy): rows the
+  # first run already verified are reset to unverified, so they must also be validated again.
+  test "batch mode re-run validates rows an earlier run verified" do
+    @list.update!(wizard_state: {"current_step" => 3, "batch_mode" => true, "steps" => {"validate" => {"status" => "idle"}}})
+    already_verified = @list_items.first
+    already_verified.update!(verified: true)
+    task = stub(call: Services::Ai::Result.new(success: true,
+      data: {valid_count: 2, invalid_count: 0, verified_count: 2, reasoning: "ok"}))
+    Services::Ai::Tasks::Lists::Music::Songs::ListItemsValidatorTask.expects(:new)
+      .with(has_entries(items: includes(already_verified))).returns(task)
+
+    Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
+
+    assert_equal 2, @list.reload.wizard_manager.step_metadata("validate")["validated_items"]
+  end
+
   test "job raises error when list not found" do
     assert_raises(ActiveRecord::RecordNotFound) do
       Music::Songs::WizardValidateListItemsJob.new.perform(999999)
