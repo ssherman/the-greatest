@@ -204,6 +204,20 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     assert_equal 2, @list.reload.wizard_manager.step_metadata("validate")["validated_items"]
   end
 
+  # An all-valid list re-run, or a requeue after the last batch saved but before the step completed.
+  test "batch mode re-run validates every row when an earlier run verified them all" do
+    @list.update!(wizard_state: {"current_step" => 3, "batch_mode" => true, "steps" => {"validate" => {"status" => "idle"}}})
+    @list_items.each { |item| item.update!(verified: true) }
+    task = stub(call: Services::Ai::Result.new(success: true,
+      data: {valid_count: 2, invalid_count: 0, verified_count: 2, reasoning: "ok"}))
+    Services::Ai::Tasks::Lists::Music::Songs::ListItemsValidatorTask.expects(:new)
+      .with(has_entries(items: @list_items.sort_by(&:position))).returns(task)
+
+    Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
+
+    assert_equal 2, @list.reload.wizard_manager.step_metadata("validate")["validated_items"]
+  end
+
   test "job raises error when list not found" do
     assert_raises(ActiveRecord::RecordNotFound) do
       Music::Songs::WizardValidateListItemsJob.new.perform(999999)
