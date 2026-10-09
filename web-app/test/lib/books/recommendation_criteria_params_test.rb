@@ -27,5 +27,12 @@ module Books
       assert_equal({}, ::Books::RecommendationCriteriaParams.call(nil))
       assert_equal({}, ::Books::RecommendationCriteriaParams.call({"max_ranked_position" => ""}))
     end
+
+    test "keeps a non-default depth and drops balanced and unknown values" do
+      assert_equal "deep", RecommendationCriteriaParams.call("depth" => "deep")["depth"]
+      assert_equal "safe", RecommendationCriteriaParams.call("depth" => "safe")["depth"]
+      assert_nil RecommendationCriteriaParams.call("depth" => "balanced")["depth"]
+      assert_nil RecommendationCriteriaParams.call("depth" => "whatever")["depth"]
+    end
   end
 end

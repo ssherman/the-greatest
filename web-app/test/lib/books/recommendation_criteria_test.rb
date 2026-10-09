@@ -41,5 +41,23 @@ module Books
       assert c.unparseable?("excluded_category_ids")
       assert_not ::Books::RecommendationCriteria.new({}).unparseable?("max_ranked_position")
     end
+
+    test "depth defaults to balanced and only accepts the three known values" do
+      assert_equal "balanced", RecommendationCriteria.new({}).depth
+      assert_equal "deep", RecommendationCriteria.new("depth" => "deep").depth
+      assert_equal "balanced", RecommendationCriteria.new("depth" => "sideways").depth
+    end
+
+    test "engine_overrides maps depth to the quality floor and balanced to nothing" do
+      assert_equal({}, RecommendationCriteria.new({}).engine_overrides)
+      assert_equal({quality_floor: 0.1}, RecommendationCriteria.new("depth" => "safe").engine_overrides)
+      assert_equal({quality_floor: 0.5}, RecommendationCriteria.new("depth" => "deep").engine_overrides)
+    end
+
+    test "depth never reaches the search criteria" do
+      criteria = RecommendationCriteria.new("depth" => "deep", "max_ranked_position" => 100)
+      assert_equal 100, criteria.to_search_criteria.max_ranked_position
+      assert_equal :ranked, criteria.to_search_criteria.ranked
+    end
   end
 end

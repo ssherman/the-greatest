@@ -35,5 +35,9 @@ module Books
       assert_equal({}, config.criteria)
       assert_equal [], config.criteria_object.excluded_category_ids
     end
+
+    test "names its criteria params class" do
+      assert_equal ::Books::RecommendationCriteriaParams, ::Books::RecommendationConfig.criteria_params_class
+    end
   end
 end
