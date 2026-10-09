@@ -14,6 +14,10 @@ an item says otherwise. Section 3 is the hostname switch. Section 4 is for after
   and `books_countries`. A truncate that leaves it out fails on the constraint, and one run with
   `CASCADE` drops rows that were never meant to go. See `docs/features/books-author-enrichment.md`,
   "Launch sequence".
+- **Put `books_open_library_backfills` in the truncate list.** It has foreign keys to `books_books`
+  (`book_id` and `pair_book_id`). A truncate that leaves it out fails on the constraint, and `CASCADE`
+  is not the answer. Stale log rows would also make the next backfill skip re-migrated books whose
+  old keys are back. See `docs/features/open-library-backfill.md`.
 - **Keep these tables:**
   - `books_repair_verdicts`: the Goodreads replay re-applies its approved verdicts and skips the
     rejected ones (`docs/features/goodreads-import.md`, "Legacy replay").
@@ -57,7 +61,12 @@ Run these in this order after each migration pass.
    `bin/rails books:ol_backfill_report`, then `bin/rails "books:ol_backfill[all]"`. It checks or adds an
    Open Library key on every book, ranked first, and takes about a week. It shares Open Library's one
    `/resolve` slot with the wizard and the Goodreads replay, so all of them slow down while it runs;
-   none of them fail. Its log is keyed to book ids, so every migration pass starts it from scratch.
+   none of them fail. It pauses 4 seconds after each `/resolve` so the others can get the slot, but
+   do not run the Goodreads replay or the legacy-import finishing steps while it runs: when they
+   cannot get the slot they decide rows without Open Library. Every merge deploys, and a deploy stops
+   a running backfill (it is not requeued), so expect to run the task again during the week it runs;
+   it carries on, because logged books are skipped. Its log is keyed to book ids, so every
+   migration pass starts it from scratch.
    Details: `docs/features/open-library-backfill.md`.
 7. **Duplicate sweep.** Run `bin/rails "books:find_duplicates[100]"` first, then `[all]`. `[all]`
    covers about 21k ranked books on the `serial` queue and takes days. Pairs land in the Duplicates

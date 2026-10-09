@@ -18,7 +18,12 @@ threads for as long as it runs, which is days for `[all]`. It works through book
 ranked books by rank, then by how many lists a book is on, then by id. A book with a log row is never
 taken again, except a `failed` one (and an `unsure` one under `retry_unsure`). Books with a `failed`
 row are retried after books never tried, and one run never takes the same book twice. A deploy
-requeues the job with its run id and it carries on.
+stops the run (the worker is killed before Sidekiq would requeue the job). Run the rake task again
+afterwards and it carries on; logged books are skipped.
+
+After each book that went through `/resolve`, the run waits 4 seconds (`Run::RESOLVE_PAUSE`). The
+service runs one `/resolve` at a time, and the pause lets other callers (the wizard, the Goodreads
+replay, legacy imports) take the slot. A book settled by the fast pass is not followed by a pause.
 
 Errors are handled by what they are about:
 
