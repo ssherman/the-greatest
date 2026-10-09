@@ -4,11 +4,22 @@
 
 **Code is the source of truth.** We document features and architecture at a high level, not individual classes.
 
-### Why Not Class-Level Documentation?
+### Why Not Per-Class Documentation Files?
+
+The project once kept one Markdown file per class under `docs/models/` and `docs/lib/`. That tree
+was deleted on purpose and must not come back:
 
 - **Maintenance burden**: Class-specific docs quickly become stale and misleading
 - **AI agents read code well**: Modern LLMs understand Ruby classes, associations, validations, and method signatures directly from source code
 - **Duplication**: Class docs duplicate what's already clear from well-written code with good naming
+
+**This rule is about files under `docs/`, not about comments in the code.** A class-header or
+method comment that explains *why* the code is shaped the way it is (the constraint it works
+around, the measurement that set a number, the alternative that was rejected) belongs in the
+source and is welcome; `FooterComponent` and `Books::GlobalCanonQuery` carry such headers. What
+a method does is usually clear from its name and body and needs no comment. A reviewer who sees
+a header comment and reaches for "the project prohibits class-level documentation" has misread
+this rule: the prohibition is on a `docs/<something>/<class>.md` file, never on a comment.
 
 ### What We Document
 
