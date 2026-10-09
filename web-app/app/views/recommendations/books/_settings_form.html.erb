@@ -62,7 +62,7 @@
           <legend class="fieldset-legend"><%= legend %></legend>
           <%= hidden_field_tag "recommendation_config[criteria][#{kind}_category_ids][]", "", id: nil %>
           <div class="relative">
-            <input type="search" class="input w-full" placeholder="Search genres, subjects, settings" autocomplete="off"
+            <input type="search" class="input w-full" aria-label="<%= legend %>" placeholder="Search genres, subjects, settings" autocomplete="off"
                    data-saved-search-picker-target="query"
                    data-action="input->saved-search-picker#search keydown->saved-search-picker#suppressEnter">
             <div class="hidden absolute dropdown-content p-2 shadow-lg bg-base-100 rounded-box w-full mt-1 max-h-80 overflow-y-auto z-[9999] left-0 top-full flex flex-col gap-1"

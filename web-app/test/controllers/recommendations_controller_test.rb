@@ -247,9 +247,27 @@ class RecommendationsControllerTest < ActionDispatch::IntegrationTest
     assert_nil ::Books::RecommendationConfig.for_user(@member).criteria["depth"]
   end
 
-  test "criteria posted as a string is a 422, not a 500" do
+  test "criteria posted as a string is a 422, not a 500, and changes nothing" do
     sign_in_as @member, stub_auth: true
-    post recommendations_settings_path, params: {recommendation_config: {criteria: "garbage"}}
+    assert_no_changes -> { ::Books::RecommendationConfig.for_user(@member).criteria } do
+      post recommendations_settings_path, params: {recommendation_config: {criteria: "garbage"}}
+    end
+    assert_response :unprocessable_entity
+  end
+
+  test "recommendation_config posted as a string is a 422 and changes nothing" do
+    sign_in_as @member, stub_auth: true
+    assert_no_changes -> { ::Books::RecommendationConfig.for_user(@member).criteria } do
+      post recommendations_settings_path, params: {recommendation_config: "garbage"}
+    end
+    assert_response :unprocessable_entity
+  end
+
+  test "a post with no recommendation_config at all is a 422 and changes nothing" do
+    sign_in_as @member, stub_auth: true
+    assert_no_changes -> { ::Books::RecommendationConfig.for_user(@member).criteria } do
+      post recommendations_settings_path, params: {}
+    end
     assert_response :unprocessable_entity
   end
 

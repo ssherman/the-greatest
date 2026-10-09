@@ -120,7 +120,10 @@ class RecommendationsController < ApplicationController
   # nil when the criteria is not a hash (a hand-rolled `criteria=x` would
   # otherwise raise on permit and 500), so the caller can answer 422.
   def criteria_params
-    raw = params.fetch(:recommendation_config, {})[:criteria]
+    outer = params[:recommendation_config]
+    return nil unless outer.respond_to?(:permit) # absent, string or array
+
+    raw = outer[:criteria]
     return {} if raw.nil?
     return nil unless raw.respond_to?(:permit)
 
