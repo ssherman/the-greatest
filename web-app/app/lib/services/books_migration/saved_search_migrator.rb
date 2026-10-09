@@ -1,9 +1,8 @@
 module Services
   module BooksMigration
     # Legacy saved_searches -> Books::SavedSearch (STI on the shared saved_searches
-    # table), ids preserved. Preservation is safe without a reserved ceiling because
-    # the table is created empty by this increment and nothing else writes to it --
-    # the books_countries case, not user_lists. It is load-bearing: /searches/:id is
+    # table), ids preserved below the reserved ceiling
+    # (Services::BooksMigration::RESERVED_CEILINGS). It is load-bearing: /searches/:id is
     # a bookmarked URL that must keep resolving.
     #
     # Two transformations. criteria is DOUBLE-ENCODED -- the legacy jsonb column
@@ -31,6 +30,7 @@ module Services
       end
 
       def upsert_row(attrs)
+        Services::BooksMigration.raise_if_at_ceiling!("saved_searches", attrs["id"])
         search = ::Books::SavedSearch.find_or_initialize_by(id: attrs["id"])
         search.assign_attributes(
           user_id: attrs["user_id"],
@@ -72,7 +72,7 @@ module Services
       end
 
       def finalize
-        ::SavedSearch.connection.reset_pk_sequence!("saved_searches")
+        Services::BooksMigration.bump_sequence_to_floor!("saved_searches")
       end
     end
   end

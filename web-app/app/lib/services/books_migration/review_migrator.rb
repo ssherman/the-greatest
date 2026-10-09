@@ -56,10 +56,11 @@ module Services
       end
 
       # insert_all with explicit ids never advances the sequence, so without this the
-      # first review a real user writes gets id 1 and collides with a migrated row.
+      # first review a real user writes collides with a migrated row -- and it must sit
+      # at the reserved ceiling, not max + 1, or new reviews take ids legacy will use.
       # finalize runs outside without_search_indexing, so keep it callback-free.
       def finalize
-        target_model.connection.reset_pk_sequence!("reviews")
+        Services::BooksMigration.bump_sequence_to_floor!("reviews")
       end
 
       # Newest-first so the dedup below keeps the newer of a duplicated pair.
@@ -70,6 +71,8 @@ module Services
       end
 
       def build_rows(attrs)
+        Services::BooksMigration.raise_if_at_ceiling!("reviews", attrs["id"])
+
         book_id = attrs["book_id"]
         unless @book_ids.include?(book_id)
           raise "no migrated ::Books::Book for legacy reviews.book_id=#{book_id.inspect}"

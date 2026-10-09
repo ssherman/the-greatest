@@ -4,7 +4,8 @@ module Services
     # are kept verbatim (book URLs). Writes through Books::Book (FriendlyId slug,
     # title normalization, book_kind default). Remaps original_language_id through
     # LegacyIdMap (languages migrate first) — the first real consumer of the map.
-    # Resets the PK sequence after load.
+    # Moves the PK sequence to the reserved ceiling after load
+    # (Services::BooksMigration::RESERVED_CEILINGS).
     class BookMigrator < Migrator
       private
 
@@ -17,6 +18,7 @@ module Services
       end
 
       def upsert_row(attrs)
+        Services::BooksMigration.raise_if_at_ceiling!("books_books", attrs["id"])
         book = ::Books::Book.find_or_initialize_by(id: attrs["id"])
         book.assign_attributes(BookTransformer.call(attrs))
         book.original_language_id = remap_language(attrs["original_language_id"])
@@ -35,7 +37,7 @@ module Services
       end
 
       def finalize
-        ::Books::Book.connection.reset_pk_sequence!("books_books")
+        Services::BooksMigration.bump_sequence_to_floor!("books_books")
       end
     end
   end

@@ -1,6 +1,10 @@
 require "test_helper"
 
 class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
+  include SequenceIsolation
+
+  isolate_sequences "books_books"
+
   def run_migrator(rows)
     migrator = Services::BooksMigration::BookMigrator.new
     migrator.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -48,12 +52,22 @@ class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
     end
   end
 
-  test "resets the books_books sequence above the max migrated id" do
-    ::Books::Book.connection.expects(:reset_pk_sequence!).with("books_books")
+  test "moves the books_books sequence to the reserved floor after the load" do
+    Services::BooksMigration.expects(:bump_sequence_to_floor!).with("books_books")
 
     result = run_migrator([{"id" => 90005, "title" => "Seq Probe Book", "original_language_id" => nil}])
 
     assert result[:success], result[:error]
+  end
+
+  test "fails the run when a legacy book id reaches the reserved ceiling" do
+    ceiling = Services::BooksMigration::RESERVED_CEILINGS.fetch("books_books")
+
+    result = run_migrator([{"id" => ceiling, "title" => "Too High", "original_language_id" => nil}])
+
+    refute result[:success]
+    assert_includes result[:error], "reserved ceiling"
+    refute ::Books::Book.exists?(ceiling)
   end
 
   test "fails the row (naming the legacy book id) when a non-nil legacy language has no id map" do
