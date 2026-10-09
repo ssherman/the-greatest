@@ -15,7 +15,7 @@ class Services::BooksMigration::SyncReportTest < ActiveSupport::TestCase
     out = render(book_rows: [[101, 3.days.ago], [102, 1.hour.ago]], book_identifier_rows: [[501, 3.days.ago]], books_updated_count: 87)
 
     assert_match(/books \(above watermark\)\s+2\s+0\s+1\s+1/, out)
-    assert_includes out, "book_identifiers (new)"
+    assert_includes out, "book_identifiers (new legacy rows; deduped on insert)"
     assert_includes out, "redirects recorded: books merged 1, deleted 0; authors merged 0, deleted 0"
     assert_includes out, "legacy edits to existing books, not synced: 87"
   end

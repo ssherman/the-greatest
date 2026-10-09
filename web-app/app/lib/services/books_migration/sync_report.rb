@@ -19,7 +19,7 @@ module Services
           format(COLUMNS, "Catalog", "legacy", "here", "would insert", "waiting (<24h)"),
           record_line("books (above watermark)", @report[:books]),
           record_line("authors", @report[:authors]),
-          format("  %-30s %10s %10s %14s %16s", "book_identifiers (new)", "", "", number(@report[:book_identifiers][:would_insert]), number(@report[:book_identifiers][:waiting])),
+          format("  %-30s %10s %10s %14s %16s", "book_identifiers (new legacy rows; deduped on insert)", "", "", number(@report[:book_identifiers][:would_insert]), number(@report[:book_identifiers][:waiting])),
           "  categories (unmapped): #{number(@report[:categories_unmapped])}",
           "  skipped (redirected): books #{@report[:books][:skipped_redirected]}, authors #{@report[:authors][:skipped_redirected]}",
           "  legacy deleted, still here: books #{ids(@report[:books][:legacy_deleted_still_here])}; " \

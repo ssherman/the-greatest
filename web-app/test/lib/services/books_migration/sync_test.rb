@@ -82,6 +82,18 @@ class Services::BooksMigration::SyncTest < ActiveSupport::TestCase
     assert_equal({"books" => 1_001, "authors" => 501, "book_identifiers" => 5_001}, watermarks)
   end
 
+  # updated_at marks the last successful sync (CategoryMigrator's retry repair reads
+  # it), so it must move even when no watermark value does.
+  test "a successful run stamps the watermarks even when nothing is new" do
+    LegacySyncWatermark.update_all(updated_at: 1.day.ago)
+    quiet = FakeLegacySource.new(book_ids: [900], author_ids: [])
+    stub_legacy({})
+
+    Services::BooksMigration::Sync.call(legacy: quiet)
+
+    assert_operator LegacySyncWatermark.minimum(:updated_at), :>, 1.minute.ago
+  end
+
   test "FINAL takes the book still inside the delay" do
     Services::BooksMigration::Sync.call(final: true, legacy: legacy)
 

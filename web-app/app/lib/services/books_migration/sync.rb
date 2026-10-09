@@ -99,9 +99,12 @@ module Services
         inserted.transform_values(&:size)
       end
 
+      # updated_at always moves, even when a value does not: it marks the last
+      # successful sync, which CategoryMigrator's retry repair reads.
       def advance_watermarks(values)
+        now = Time.current
         LegacySyncWatermark.transaction do
-          values.each { |key, value| LegacySyncWatermark.find_by!(key: key).update!(value: value) }
+          values.each { |key, value| LegacySyncWatermark.find_by!(key: key).update!(value: value, updated_at: now) }
         end
       end
 
