@@ -1,7 +1,7 @@
 <div class="grid gap-8 lg:grid-cols-3">
   <section class="lg:col-span-2 space-y-6">
     <h2 class="text-2xl font-semibold">Step 1: your favorite books</h2>
-    <p>Your favorites tell us more than anything else. They carry the most weight, so start here.</p>
+    <p>Your favorites tell us more than anything else, so start here.</p>
 
     <% if @favorites.total.zero? %>
       <div class="alert" data-testid="favorites-empty"><span>No favorites yet. Search below and add a few.</span></div>
@@ -23,7 +23,7 @@
   <aside class="space-y-4">
     <div class="card bg-base-200"><div class="card-body">
       <h3 class="card-title text-lg">Why favorites matter</h3>
-      <p>They show which genres, subjects and places you return to, and the writing you prefer. The more you add, the sharper the match.</p>
+      <p>They show which genres, subjects and places you return to. The more you add, the better the match.</p>
     </div></div>
     <%= link_to "Continue to step 2", recommendations_wizard_path(step: 2), class: "btn btn-primary w-full", data: {testid: "wizard-next"} %>
   </aside>
