@@ -1,0 +1,37 @@
+<div class="grid gap-8 lg:grid-cols-3">
+  <section class="lg:col-span-2 space-y-6">
+    <h2 class="text-2xl font-semibold">Step 2: what you have read</h2>
+    <p>Books you have read show us patterns, and they are never recommended back to you.</p>
+
+    <div class="alert alert-info" data-testid="goodreads-callout">
+      <span>Have a Goodreads account? <%= link_to "Import your shelves", books_my_goodreads_imports_path, class: "link" %> and this step fills itself.</span>
+    </div>
+
+    <% if @read.total.zero? %>
+      <div class="alert"><span>Nothing on your read list yet. Search below and add what you remember.</span></div>
+    <% else %>
+      <p class="font-medium"><%= pluralize(@read.total, "book") %> read<% if @read.total > @read.books.size %>, showing the latest <%= @read.books.size %><% end %>.</p>
+      <ul class="max-h-[32rem] overflow-y-auto" data-testid="read-list">
+        <% @read.books.each do |book| %>
+          <%= render "recommendations/books/book_row", book: book %>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <%= render "recommendations/books/search_form", label: "Find a book" %>
+  </section>
+
+  <aside class="space-y-4">
+    <div class="card bg-base-200"><div class="card-body">
+      <h3 class="card-title text-lg">Why history matters</h3>
+      <p>It keeps books you know off the page and shows us which authors and series you follow.</p>
+    </div></div>
+    <% if @unlocked %>
+      <%= link_to "Continue to step 3", recommendations_wizard_path(step: 3), class: "btn btn-primary w-full", data: {testid: "wizard-next"} %>
+    <% else %>
+      <button class="btn btn-primary w-full" disabled data-testid="wizard-next">Continue to step 3</button>
+      <p class="text-sm text-warning">Add a favorite or a read book first.</p>
+    <% end %>
+    <%= link_to "Back to step 1", recommendations_wizard_path(step: 1), class: "btn btn-ghost w-full" %>
+  </aside>
+</div>

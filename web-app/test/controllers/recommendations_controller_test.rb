@@ -114,4 +114,86 @@ class RecommendationsControllerTest < ActionDispatch::IntegrationTest
     get recommendations_path
     assert_response :not_found
   end
+
+  test "wizard steps 1 and 2 render for any signed-in user" do
+    sign_in_as @free, stub_auth: true
+    get recommendations_wizard_path(step: 1)
+    assert_response :success
+    assert_equal 1, @controller.view_assigns["step"]
+    get recommendations_wizard_path(step: 2)
+    assert_response :success
+  end
+
+  test "steps 3 and 4 need a favorite or read book and bounce to step 2 with an alert" do
+    sign_in_as @free, stub_auth: true
+    get recommendations_wizard_path(step: 3)
+    assert_redirected_to recommendations_wizard_path(step: 2)
+    assert flash[:alert].present?
+    get recommendations_wizard_path(step: 4)
+    assert_redirected_to recommendations_wizard_path(step: 2)
+
+    give_history(@free)
+    get recommendations_wizard_path(step: 3)
+    assert_response :success
+    assert_equal [], @controller.view_assigns["unrated"]
+  end
+
+  test "step 3 lists unrated read books" do
+    list = ::Books::UserList.find_or_create_by!(user: @free, list_type: :read) { |l| l.name = "Read" }
+    ::UserListItem.create!(user_list: list, listable: books_books(:got))
+    sign_in_as @free, stub_auth: true
+    get recommendations_wizard_path(step: 3)
+    assert_response :success
+    assert_equal [books_books(:got)], @controller.view_assigns["unrated"]
+  end
+
+  test "a step outside 1-4 is not routable" do
+    sign_in_as @free, stub_auth: true
+    get "/recommendations/wizard/5"
+    assert_response :not_found
+  end
+
+  test "the wizard is signed-in only" do
+    get recommendations_wizard_path(step: 1)
+    assert_response :redirect
+  end
+
+  test "search renders the frame of cards and skips the search for a blank query" do
+    sign_in_as @free, stub_auth: true
+    ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: books_books(:got).id.to_s, score: 1.0, source: {"title" => books_books(:got).title}}])
+    get recommendations_search_path(q: "thrones")
+    assert_response :success
+    assert_select "turbo-frame#wizard_search_results[target='_top']"
+    assert_equal [books_books(:got)], @controller.view_assigns["books"]
+
+    ::Search::Books::Search::BookGeneral.expects(:call).never
+    get recommendations_search_path(q: "   ")
+    assert_response :success
+    assert_equal [], @controller.view_assigns["books"]
+  end
+
+  test "an oversized query is accepted" do
+    sign_in_as @free, stub_auth: true
+    ::Search::Books::Search::BookGeneral.stubs(:call).returns([])
+    get recommendations_search_path(q: "x" * 2000)
+    assert_response :success
+  end
+
+  test "no link inside the wizard search frame is trapped" do
+    sign_in_as @free, stub_auth: true
+    ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: books_books(:got).id.to_s, score: 1.0, source: {"title" => books_books(:got).title}}])
+    assert_no_frame_trapped_links recommendations_search_path(q: "thrones")
+  end
+
+  test "step 3 lists rated books with their reviews" do
+    list = user_lists(:regular_user_books_read)
+    ::UserListItem.create!(user_list: list, listable: books_books(:war_and_peace))
+    sign_in_as @member, stub_auth: true
+    get recommendations_wizard_path(step: 3)
+    assert_response :success
+    rated = @controller.view_assigns["rated"]
+    pair = rated.find { |book, _| book == books_books(:war_and_peace) }
+    assert_equal 5, pair.last.rating
+    assert_equal reviews(:regular_user_war_and_peace), pair.last
+  end
 end

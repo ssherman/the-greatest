@@ -1,0 +1,7 @@
+<li class="flex items-center justify-between gap-4 py-2 border-b border-base-300 last:border-b-0" data-testid="wizard-book-row">
+  <div class="min-w-0">
+    <%= link_to book.title, book_path(book.slug), class: "link link-hover font-medium [overflow-wrap:anywhere]" %>
+    <div class="text-sm text-base-content/70"><%= book.book_authors.map { |ba| ba.author.name }.join(", ") %></div>
+  </div>
+  <% if local_assigns[:trailing] %><div class="shrink-0"><%= trailing %></div><% end %>
+</li>

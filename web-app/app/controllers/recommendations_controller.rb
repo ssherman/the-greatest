@@ -11,6 +11,9 @@ class RecommendationsController < ApplicationController
   include DomainLayout
   include MembershipGated
 
+  GATED_STEPS = (3..4)
+  NEEDS_HISTORY_ALERT = "Add a favorite book or a book you have read before rating books or setting preferences."
+
   layout :resolve_layout
 
   before_action :require_domain_support!
@@ -41,15 +44,35 @@ class RecommendationsController < ApplicationController
     @groups = pages.criteria_groups(recommendation_config.criteria_object)
   end
 
-  # Tasks 6 and 7 replace these.
   def search
-    head :not_found
+    @query = params[:q].to_s.strip.first(200)
+    @books = @query.blank? ? [] : pages.search(@query)
+    render layout: false
   end
 
   def wizard
-    head :not_found
+    @step = params[:step].to_i
+    @unlocked = pages.history?
+    if GATED_STEPS.cover?(@step) && !@unlocked
+      return redirect_to recommendations_wizard_path(step: 2), alert: NEEDS_HISTORY_ALERT
+    end
+
+    case @step
+    when 1
+      @favorites = pages.favorites
+      @favorites_list = pages.list(:favorites)
+    when 2 then @read = pages.read_books
+    when 3
+      @unrated = pages.unrated_read
+      @rated = pages.rated
+    when 4
+      @config = recommendation_config
+      @locked = !current_user.member?
+      @picked_categories = picked_categories(@config.criteria_object)
+    end
   end
 
+  # Task 7 replaces these.
   def settings
     head :not_found
   end
@@ -84,6 +107,13 @@ class RecommendationsController < ApplicationController
   # Never written on GET: for_user is find_or_initialize_by.
   def recommendation_config
     @recommendation_config ||= ::RecommendationConfig.subclass_for(domain).for_user(current_user)
+  end
+
+  # The category records behind the stored include/exclude ids, for the
+  # picker's prerendered chips. One query; a missing id simply has no chip.
+  def picked_categories(criteria)
+    ids = criteria.included_category_ids + criteria.excluded_category_ids
+    ids.empty? ? {} : ::Books::Category.where(id: ids).index_by(&:id)
   end
 
   def knobs

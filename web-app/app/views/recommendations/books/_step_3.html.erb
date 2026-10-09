@@ -1,0 +1,37 @@
+<div class="grid gap-8 lg:grid-cols-3">
+  <section class="lg:col-span-2 space-y-6">
+    <h2 class="text-2xl font-semibold">Step 3: rate what you have read</h2>
+    <p>Four and five stars push a book's traits up. One and two stars push them down. A three changes nothing.</p>
+
+    <% if @unrated.empty? %>
+      <div class="alert alert-success" data-testid="unrated-empty"><span>Everything on your read list is rated.</span></div>
+    <% else %>
+      <p class="font-medium"><%= pluralize(@unrated.size, "book") %> without a rating.</p>
+      <ul data-testid="unrated-list">
+        <% @unrated.each do |book| %>
+          <%= render "recommendations/books/book_row", book: book,
+                trailing: render(Reviews::WidgetComponent.new(reviewable: book)) %>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <% if @rated.any? %>
+      <h3 class="text-xl font-semibold mt-8">Already rated</h3>
+      <ul data-testid="rated-list">
+        <% @rated.each do |book, review| %>
+          <%= render "recommendations/books/book_row", book: book,
+                trailing: render(Reviews::StarsComponent.new(rating: review.rating, size: "size-4", label: "#{review.rating} stars")) %>
+        <% end %>
+      </ul>
+    <% end %>
+  </section>
+
+  <aside class="space-y-4">
+    <div class="card bg-base-200"><div class="card-body">
+      <h3 class="card-title text-lg">Why ratings matter</h3>
+      <p>They tell us which of your read books to learn from most, and which to learn from in reverse.</p>
+    </div></div>
+    <%= link_to "Continue to step 4", recommendations_wizard_path(step: 4), class: "btn btn-primary w-full", data: {testid: "wizard-next"} %>
+    <%= link_to "Back to step 2", recommendations_wizard_path(step: 2), class: "btn btn-ghost w-full" %>
+  </aside>
+</div>
