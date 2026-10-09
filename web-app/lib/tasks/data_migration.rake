@@ -36,7 +36,7 @@ namespace :data_migration do
   desc "Print what data_migration:sync would do now (read-only; safe in production at any time)"
   task sync_report: :environment do
     plan = Services::BooksMigration::SyncPlan.build(final: ActiveModel::Type::Boolean.new.cast(ENV["FINAL"]) || false)
-    puts Services::BooksMigration::SyncReport.render(plan)
+    puts Services::BooksMigration::SyncReport.render(plan, user_data: Services::BooksMigration::UserDataDiff.call(scope: plan.scope))
   end
 
   desc "Migrate legacy users into the global users table (preserves ids)"

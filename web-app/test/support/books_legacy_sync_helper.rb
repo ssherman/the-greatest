@@ -1,10 +1,14 @@
 # Test doubles for the books legacy sync. No test opens the legacy connection:
 # FakeLegacySource answers the same questions Services::BooksMigration::LegacySource
-# asks legacy. Rows are [id, created_at] pairs in id order.
+# asks legacy. Catalog rows are [id, created_at] pairs in id order. user_list_items
+# are legacy attribute hashes; review_rows are [id, user_id, book_id, updated_at],
+# newest first.
 module BooksLegacySyncHelper
   class FakeLegacySource
     def initialize(book_rows: [], author_rows: [], book_identifier_rows: [], book_ids: nil, author_ids: nil,
-      category_ids: [], books_updated_count: 0, max_book_identifier_id: 0)
+      category_ids: [], books_updated_count: 0, max_book_identifier_id: 0,
+      user_versions: {}, user_list_versions: {}, saved_search_versions: {}, review_rows: [],
+      correction_rows: [], reading_goal_ids: [], recommendation_config_count: 0, user_list_items: [])
       @book_rows = book_rows
       @author_rows = author_rows
       @book_identifier_rows = book_identifier_rows
@@ -13,9 +17,28 @@ module BooksLegacySyncHelper
       @category_ids = category_ids
       @books_updated_count = books_updated_count
       @max_book_identifier_id = max_book_identifier_id
+      @user_versions = user_versions
+      @user_list_versions = user_list_versions
+      @saved_search_versions = saved_search_versions
+      @review_rows = review_rows
+      @correction_rows = correction_rows
+      @reading_goal_ids = reading_goal_ids
+      @recommendation_config_count = recommendation_config_count
+      @user_list_items = user_list_items
     end
 
-    attr_reader :category_ids, :max_book_identifier_id
+    attr_reader :category_ids, :max_book_identifier_id, :user_versions, :user_list_versions,
+      :saved_search_versions, :review_rows, :correction_rows, :reading_goal_ids, :recommendation_config_count
+
+    # Same shape and digest as LegacySource's SQL: md5 of the sorted book ids joined by ",".
+    def user_list_item_digests
+      @user_list_items.group_by { |row| row["user_list_id"] }.transform_values do |rows|
+        ids = rows.map { |row| row["book_id"] }.sort
+        [ids.size, Digest::MD5.hexdigest(ids.join(","))]
+      end
+    end
+
+    def user_list_items_for(list_ids) = @user_list_items.select { |row| list_ids.include?(row["user_list_id"]) }
 
     def book_rows_above(id) = @book_rows.select { |row_id, _| row_id > id }
 

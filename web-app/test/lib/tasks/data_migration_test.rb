@@ -293,11 +293,13 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
     assert_match(/data_migration:sync failed: editions failed: boom/, err)
   end
 
-  test "sync_report prints the plan and runs nothing" do
+  test "sync_report prints the plan with its user data and runs nothing" do
     Services::BooksMigration::Sync.expects(:call).never
     plan = mock("plan")
+    plan.stubs(:scope).returns(:the_scope)
     Services::BooksMigration::SyncPlan.expects(:build).with(final: false).returns(plan)
-    Services::BooksMigration::SyncReport.expects(:render).with(plan).returns("REPORT")
+    Services::BooksMigration::UserDataDiff.expects(:call).with(scope: :the_scope).returns(:the_diff)
+    Services::BooksMigration::SyncReport.expects(:render).with(plan, user_data: :the_diff).returns("REPORT")
 
     out, _err = with_env("FINAL", nil) { capture_io { Rake::Task["data_migration:sync_report"].invoke } }
 
