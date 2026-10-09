@@ -34,7 +34,7 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
     get membership_url
 
     assert_response :success
-    assert_select "a[href='/recommendations']"
+    assert_select ".prose a[href='/recommendations']"
   end
 
   test "thanks sets its own page title" do

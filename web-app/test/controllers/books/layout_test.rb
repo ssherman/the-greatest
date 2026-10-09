@@ -21,7 +21,8 @@ module Books
       get "/"
 
       assert_response :success
-      assert_select "#navbar_my_books a[href='/recommendations']", minimum: 2
+      assert_select ".navbar-center #navbar_my_books a[href='/recommendations']", count: 1
+      assert_select "#books-nav-drawer-panel #navbar_my_books a[href='/recommendations']", count: 1
     end
 
     test "the drawer panel is a sibling of the drawer content, not inside it" do
