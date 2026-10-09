@@ -8,7 +8,8 @@ module BooksLegacySyncHelper
     def initialize(book_rows: [], author_rows: [], book_identifier_rows: [], book_ids: nil, author_ids: nil,
       category_ids: [], books_updated_count: 0, max_book_identifier_id: 0,
       user_versions: {}, user_list_versions: {}, saved_search_versions: {}, review_rows: [],
-      correction_rows: [], reading_goal_ids: [], recommendation_config_count: 0, user_list_items: [])
+      correction_rows: [], reading_goal_ids: [], recommendation_config_count: 0, user_list_items: [],
+      saved_search_criteria: [])
       @book_rows = book_rows
       @author_rows = author_rows
       @book_identifier_rows = book_identifier_rows
@@ -25,10 +26,12 @@ module BooksLegacySyncHelper
       @reading_goal_ids = reading_goal_ids
       @recommendation_config_count = recommendation_config_count
       @user_list_items = user_list_items
+      @saved_search_criteria = saved_search_criteria
     end
 
     attr_reader :category_ids, :max_book_identifier_id, :user_versions, :user_list_versions,
-      :saved_search_versions, :review_rows, :correction_rows, :reading_goal_ids, :recommendation_config_count
+      :saved_search_versions, :review_rows, :correction_rows, :reading_goal_ids, :recommendation_config_count,
+      :saved_search_criteria
 
     # Same shape and digest as LegacySource's SQL: md5 of the sorted book ids joined by ",".
     def user_list_item_digests

@@ -97,6 +97,26 @@ class Services::BooksMigration::ReviewMigratorSyncTest < ActiveSupport::TestCase
     assert_equal @survivor.id, ::Review.find(111).reviewable_id
   end
 
+  test "a mid-run merge that reroutes an older review onto a pair an earlier batch wrote keeps the newer" do
+    # Built before the merge: still thinks 200_001 is here, knows no redirect.
+    stale = Services::BooksMigration::BookRoute.new(sync_scope, book_ids_here: Set[200_001, @survivor.id])
+    Services::BooksMigration::BookRoute.stubs(:new).returns(stale)
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 200_001, to_id: @survivor.id)
+    migrator = Services::BooksMigration::ReviewMigrator.new(sync: sync_scope)
+    migrator.stubs(:upsert_batch).returns(1) # one review per batch
+    migrator.stubs(:legacy_each).multiple_yields(
+      [legacy_review(121, "book_id" => @survivor.id, "rating" => 5)],
+      [legacy_review(120, "book_id" => 200_001, "rating" => 1)]
+    )
+
+    result = migrator.call
+
+    assert result[:success], result[:error]
+    assert_equal 5, ::Review.find(121).rating
+    refute ::Review.exists?(120)
+    assert_equal 1, result[:data][:collisions]
+  end
+
   test "deletes a legacy-origin books review legacy no longer has, and leaves new-app reviews alone" do
     here_review(107)
     new_app = here_review(250_001, book: @survivor)

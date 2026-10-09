@@ -41,8 +41,33 @@ class Services::BooksMigration::UserDataDiffTest < ActiveSupport::TestCase
 
     result = user_data_diff(legacy)
 
-    assert_equal({legacy: 1, here: 1, inserted: 1, updated: 0, deleted: 1}, result[:saved_searches])
+    assert_equal({legacy: 1, here: 1, inserted: 1, updated: 0, deleted: 1, categories_removed: 0}, result[:saved_searches])
     assert_equal({legacy: 1, here: 0, deleted: 0}, result[:reading_goals])
+  end
+
+  test "counts the categories a sync would remove from saved searches" do
+    genre = ::Books::Category.create!(name: "Kept Genre", category_type: :genre)
+    LegacyIdMap.record(model: "Books::Category", legacy_id: 31, new_id: genre.id)
+    LegacyIdMap.record(model: "Books::Category", legacy_id: 32, new_id: 999_999_999) # deleted here
+    criteria = [
+      {"included_category_ids" => ["31", "32"]}.to_json,
+      {"excluded_category_ids" => [32], "genre_match_mode" => "any"}.to_json,
+      {"genre_match_mode" => "any"}.to_json
+    ]
+
+    reported = user_data_diff(FakeLegacySource.new(saved_search_criteria: criteria))[:saved_searches][:categories_removed]
+
+    rows = criteria.each_with_index.map do |raw, index|
+      {"id" => 15_101 + index, "user_id" => @user.id, "name" => "S#{index}", "description" => nil, "criteria" => raw,
+       "public" => false, "last_executed_at" => nil, "result_count" => nil, "created_at" => @t, "updated_at" => @t}
+    end
+    migrator = Services::BooksMigration::SavedSearchMigrator.new
+    migrator.stubs(:legacy_each).multiple_yields(*rows.zip)
+    Services::BooksMigration.stubs(:bump_sequence_to_floor!) # keep the saved_searches sequence where it is
+    migrated = migrator.call
+
+    assert_equal 2, reported
+    assert_equal reported, migrated[:data][:categories_removed]
   end
 
   test "only lists whose items differ are planned item by item" do

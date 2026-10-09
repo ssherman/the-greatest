@@ -29,7 +29,8 @@ module Services
           user_lists: versioned(list_versions, ::Books::UserList, "user_lists"),
           user_list_items: user_list_items(list_versions.keys),
           reviews: reviews,
-          saved_searches: versioned(@legacy.saved_search_versions, ::Books::SavedSearch, "saved_searches"),
+          saved_searches: versioned(@legacy.saved_search_versions, ::Books::SavedSearch, "saved_searches")
+            .merge(categories_removed: saved_search_categories_removed),
           reading_goals: reading_goals,
           recommendation_configs: {legacy: @legacy.recommendation_config_count, here: ::Books::RecommendationConfig.count},
           corrections: corrections
@@ -117,6 +118,26 @@ module Services
           updated: kept.count { |id, updated_at| here.key?(id) && updated_at > here[id] },
           deleted: here.keys.count { |id| !kept.key?(id) }
         )
+      end
+
+      # Mirrors SavedSearchMigrator#remap_category_ids: a mapped category whose row
+      # is gone here is removed from the criteria, once per occurrence. Unmapped
+      # ids and criteria that are not a Hash make the migrator raise, so they are
+      # not removals and are not counted here.
+      def saved_search_categories_removed
+        category_map = LegacyIdMap.where(model: "Books::Category").pluck(:legacy_id, :new_id).to_h
+        category_ids_here = ::Books::Category.pluck(:id).to_set
+        @legacy.saved_search_criteria.sum do |raw|
+          criteria = raw.is_a?(String) ? JSON.parse(raw) : raw
+          next 0 unless criteria.is_a?(Hash)
+
+          SavedSearchMigrator::CATEGORY_ID_KEYS.sum do |key|
+            Array(criteria[key]).count do |legacy_id|
+              new_id = category_map[legacy_id.to_i]
+              new_id && !category_ids_here.include?(new_id)
+            end
+          end
+        end
       end
 
       def reading_goals

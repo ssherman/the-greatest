@@ -28,6 +28,9 @@ module Services
 
       def saved_search_versions = LegacyBooks::SavedSearch.pluck(:id, :updated_at).to_h
 
+      # The raw jsonb values; legacy double-encodes them, so most are JSON strings.
+      def saved_search_criteria = LegacyBooks::SavedSearch.pluck(:criteria)
+
       # Newest first: ReviewMigrator keeps the newer of two reviews that collide.
       def review_rows = LegacyBooks::Review.order(id: :desc).pluck(:id, :user_id, :book_id, :updated_at)
 

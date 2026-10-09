@@ -62,6 +62,7 @@ module Services
         @route = BookRoute.new(sync, book_ids_here: @book_ids)
         @here_ids = legacy_origin_reviews.pluck(:id).to_set
         @kept_ids = Set.new
+        @written_keys = Set.new
         @stats = {inserted: 0, deleted: 0, dropped: 0, waiting: 0, collisions: 0, held_by_new_app: 0}
       end
 
@@ -174,15 +175,15 @@ module Services
           ::Review.upsert_all(writable, unique_by: :id, record_timestamps: false) if writable.any?
         end
         @kept_ids.merge(writable.map { |row| row[:id] })
+        @written_keys.merge(writable.map { |row| [row[:user_id], row[:reviewable_id]] })
         @count += writable.size
       end
 
       # A book merged or deleted after this run started (route.lock reloaded the
       # redirects): route each row again, drop rows on a deleted book, and keep
-      # the first (newest) row per user and book. When an earlier batch already
-      # kept that user and book, flush's holder check replaces it with this older
-      # row. That flip is rare and harmless, and the next sync restores the newer
-      # one.
+      # the first (newest) row per user and book. Rows arrive newest first, so a
+      # pair an earlier batch already wrote holds the newer review: a row rerouted
+      # onto it is a collision, not a replacement.
       def reroute(rows)
         batch_keys = Set.new
         rows.filter_map do |row|
@@ -194,12 +195,13 @@ module Services
           unless book_id.is_a?(Integer)
             raise "legacy reviews.id=#{row[:id]}: book #{row[:reviewable_id]} is neither here nor redirected"
           end
-          unless batch_keys.add?([row[:user_id], book_id])
+          key = [row[:user_id], book_id]
+          if @written_keys.include?(key) || !batch_keys.add?(key)
             @stats[:collisions] += 1
             next
           end
 
-          @seen << [row[:user_id], book_id]
+          @seen << key
           row.merge(reviewable_id: book_id)
         end
       end
