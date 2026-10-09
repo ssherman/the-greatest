@@ -65,6 +65,7 @@ module Recommendations
         store = Store.default
         assert_kind_of Store::R2, store
         assert_equal "b", store.bucket
+        assert_equal "https://acct.r2.cloudflarestorage.com", store.client.config.endpoint.to_s
       end
       with_env("RECOMMENDATIONS_R2_ACCOUNT_ID" => "acct", "RECOMMENDATIONS_R2_ACCESS_KEY" => nil,
         "RECOMMENDATIONS_R2_SECRET_KEY" => "s", "RECOMMENDATIONS_R2_BUCKET" => "b") do

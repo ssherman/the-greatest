@@ -54,7 +54,7 @@ module Recommendations
       ENV_KEYS = %w[RECOMMENDATIONS_R2_ACCOUNT_ID RECOMMENDATIONS_R2_ACCESS_KEY
         RECOMMENDATIONS_R2_SECRET_KEY RECOMMENDATIONS_R2_BUCKET].freeze
 
-      attr_reader :bucket
+      attr_reader :bucket, :client
 
       def self.from_env
         values = ENV_KEYS.map { |k| ENV[k].presence }
@@ -65,7 +65,11 @@ module Recommendations
         client = Aws::S3::Client.new(
           endpoint: "https://#{account}.r2.cloudflarestorage.com",
           access_key_id: access, secret_access_key: secret,
-          region: "auto", force_path_style: true
+          region: "auto", force_path_style: true,
+          # Newer aws-sdk-s3 adds checksum headers to every upload, which R2 mishandles;
+          # same setting as the writers in config/storage.yml.
+          request_checksum_calculation: "when_required",
+          response_checksum_validation: "when_required"
         )
         new(client: client, bucket: bucket)
       end
