@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_08_225748) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_09_025948) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -779,6 +779,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_08_225748) do
     t.index ["model", "legacy_id"], name: "index_legacy_id_maps_on_model_and_legacy_id", unique: true
   end
 
+  create_table "legacy_sync_watermarks", force: :cascade do |t|
+    t.string "key", null: false
+    t.bigint "value", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["key"], name: "index_legacy_sync_watermarks_on_key", unique: true
+  end
+
   create_table "list_items", force: :cascade do |t|
     t.bigint "list_id", null: false
     t.string "listable_type"
@@ -1235,6 +1243,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_08_225748) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["user_id", "type"], name: "index_recommendation_configs_on_user_id_and_type", unique: true
+  end
+
+  create_table "record_redirects", force: :cascade do |t|
+    t.string "item_type", null: false
+    t.bigint "from_id", null: false
+    t.bigint "to_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["item_type", "from_id"], name: "index_record_redirects_on_item_type_and_from_id", unique: true
   end
 
   create_table "review_summaries", force: :cascade do |t|

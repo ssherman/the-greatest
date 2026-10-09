@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::BookCountryMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     m = Services::BooksMigration::BookCountryMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -107,5 +109,21 @@ class Services::BooksMigration::BookCountryMigratorTest < ActiveSupport::TestCas
     run_migrator([{"id" => 9, "book_id" => book.id, "country_id" => other.id}])
 
     assert_equal 0, country.reload.book_count
+  end
+
+  test "sync mode links the run's books only" do
+    country = make_country(9150, name: "Uruguayan")
+    in_run = ::Books::Book.create!(title: "In The Run")
+    outside = ::Books::Book.create!(title: "Outside")
+    m = Services::BooksMigration::BookCountryMigrator.new(sync: sync_scope(book_ids: [in_run.id]))
+    m.stubs(:legacy_each).multiple_yields(
+      [{"id" => 1, "book_id" => in_run.id, "country_id" => country.id}],
+      [{"id" => 2, "book_id" => outside.id, "country_id" => country.id}]
+    )
+
+    m.call
+
+    assert ::Books::BookCountry.exists?(book_id: in_run.id, country_id: country.id)
+    refute ::Books::BookCountry.exists?(book_id: outside.id)
   end
 end

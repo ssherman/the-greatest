@@ -16,11 +16,29 @@ module Services
       end
 
       def upsert_row(attrs)
-        book_author = ::Books::BookAuthor.find_or_initialize_by(
-          book_id: attrs["book_id"], author_id: attrs["author_id"]
-        )
+        author_id = attrs["author_id"]
+        if sync
+          # A new book may name an author that was merged or deleted here (spec §5).
+          author_id = sync.redirects.resolve("Books::Author", author_id)
+          if author_id == :deleted
+            @dropped_deleted = @dropped_deleted.to_i + 1
+            return
+          end
+        end
+
+        book_author = ::Books::BookAuthor.find_or_initialize_by(book_id: attrs["book_id"], author_id: author_id)
+        return if sync && book_author.persisted?
+
         book_author.assign_attributes(BookAuthorTransformer.call(attrs))
         book_author.save!
+      end
+
+      def sync_filter
+        [:book_ids, "book_id"]
+      end
+
+      def extra_result_data
+        sync ? {dropped_deleted: @dropped_deleted.to_i} : {}
       end
     end
   end

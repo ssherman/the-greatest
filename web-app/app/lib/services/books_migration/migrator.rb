@@ -8,14 +8,22 @@ module Services
     class Migrator
       BATCH_SIZE = 1000
 
-      def self.call
-        new.call
+      def self.call(sync: nil)
+        new(sync: sync).call
+      end
+
+      # sync: a SyncScope when data_migration:sync runs this migrator (spec §5), nil
+      # for the full migration.
+      def initialize(sync: nil)
+        @sync = sync
       end
 
       def call
         @count = 0
         Services::BooksMigration.without_search_indexing do
           legacy_each do |attrs|
+            next unless in_sync_scope?(attrs)
+
             upsert_row(attrs)
             @count += 1
           rescue => e
@@ -30,10 +38,34 @@ module Services
 
       private
 
+      attr_reader :sync
+
       # Yields each legacy row's attributes (String keys). Stubbed in tests so the
       # legacy connection is never opened.
       def legacy_each(&block)
-        legacy_model.find_each(batch_size: BATCH_SIZE) { |record| block.call(record.attributes) }
+        sync_narrowed(legacy_model).find_each(batch_size: BATCH_SIZE) { |record| block.call(record.attributes) }
+      end
+
+      # [SyncScope id set, legacy column] naming the rows that belong to a sync run,
+      # e.g. [:book_ids, "book_id"]. nil: every row (the migrator decides per row).
+      def sync_filter
+        nil
+      end
+
+      def in_sync_scope?(attrs)
+        return true unless sync && sync_filter
+
+        ids, column = sync_filter
+        sync.public_send(ids).include?(attrs[column])
+      end
+
+      # Asks legacy for the run's rows only. in_sync_scope? still decides; this just
+      # keeps a weekly run from reading every legacy row.
+      def sync_narrowed(relation)
+        return relation unless sync && sync_filter
+
+        ids, column = sync_filter
+        relation.where(column => sync.public_send(ids).to_a)
       end
 
       def finalize

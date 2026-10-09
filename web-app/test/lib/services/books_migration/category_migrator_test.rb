@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::CategoryMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     m = Services::BooksMigration::CategoryMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -72,5 +74,60 @@ class Services::BooksMigration::CategoryMigratorTest < ActiveSupport::TestCase
     assert_no_difference -> { SearchIndexRequest.count } do
       run_migrator([legacy(9008)])
     end
+  end
+
+  def run_sync(rows)
+    m = Services::BooksMigration::CategoryMigrator.new(sync: sync_scope)
+    m.stubs(:legacy_each).multiple_yields(*rows.zip)
+    m.call
+  end
+
+  test "sync mode leaves a mapped category as it is here, even one deleted here" do
+    run_migrator([legacy(9101), legacy(9102)])
+    edited = ::Books::Category.find(LegacyIdMap.lookup(model: "Books::Category", legacy_id: 9101))
+    edited.update!(name: "Edited Here")
+    ::Books::Category.where(id: LegacyIdMap.lookup(model: "Books::Category", legacy_id: 9102)).delete_all
+
+    result = run_sync([legacy(9101, "name" => "Legacy Name"), legacy(9102)])
+
+    assert result[:success], result[:error]
+    assert_equal "Edited Here", edited.reload.name
+    refute ::Books::Category.exists?(name: "Cat 9102")
+  end
+
+  test "sync mode adds a new category under a parent mapped earlier" do
+    run_migrator([legacy(9103)])
+
+    result = run_sync([legacy(9104, "parent_category_id" => 9103)])
+
+    assert result[:success], result[:error]
+    child = ::Books::Category.find(LegacyIdMap.lookup(model: "Books::Category", legacy_id: 9104))
+    assert_equal LegacyIdMap.lookup(model: "Books::Category", legacy_id: 9103), child.parent_id
+  end
+
+  # An interrupted sync inserted the child (mapped after the last successful sync)
+  # but failed before finalize set its parent; the retry must still set it.
+  test "sync mode retry sets the parent of a category an interrupted run inserted" do
+    init_watermarks(books: 1, authors: 1, book_identifiers: 1)
+    LegacySyncWatermark.update_all(updated_at: 1.hour.ago)
+    run_migrator([legacy(9105), legacy(9106)])
+    child = ::Books::Category.find(LegacyIdMap.lookup(model: "Books::Category", legacy_id: 9106))
+    assert_nil child.parent_id
+
+    result = run_sync([legacy(9105), legacy(9106, "parent_category_id" => 9105)])
+
+    assert result[:success], result[:error]
+    assert_equal LegacyIdMap.lookup(model: "Books::Category", legacy_id: 9105), child.reload.parent_id
+  end
+
+  test "sync mode leaves the parent of a category mapped before the last successful sync" do
+    run_migrator([legacy(9107), legacy(9108)])
+    LegacyIdMap.where(model: "Books::Category").update_all(created_at: 2.hours.ago)
+    init_watermarks(books: 1, authors: 1, book_identifiers: 1)
+    child = ::Books::Category.find(LegacyIdMap.lookup(model: "Books::Category", legacy_id: 9108))
+
+    run_sync([legacy(9107), legacy(9108, "parent_category_id" => 9107)])
+
+    assert_nil child.reload.parent_id
   end
 end

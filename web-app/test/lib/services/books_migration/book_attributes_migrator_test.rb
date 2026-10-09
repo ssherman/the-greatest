@@ -3,6 +3,8 @@
 require "test_helper"
 
 class Services::BooksMigration::BookAttributesMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   # update_batch is shrunk to 2 to force a flush mid-stream plus a final flush,
   # exercising the multi-batch branch that UPDATE_BATCH = 1000 never hits in a test.
   class TestSmallBatchMigrator < Services::BooksMigration::BookAttributesMigrator
@@ -143,5 +145,21 @@ class Services::BooksMigration::BookAttributesMigratorTest < ActiveSupport::Test
     assert_equal "medium", @book.reload.book_length
     assert_equal "very_short", book2.reload.book_length
     assert_equal "very_long", book3.reload.book_length
+  end
+
+  test "sync mode updates the run's books only" do
+    m = Services::BooksMigration::BookAttributesMigrator.new(sync: sync_scope(book_ids: []))
+    m.stubs(:legacy_each).multiple_yields([legacy_row])
+
+    m.call
+
+    assert_nil @book.reload.word_count
+
+    m = Services::BooksMigration::BookAttributesMigrator.new(sync: sync_scope(book_ids: [@book.id]))
+    m.stubs(:legacy_each).multiple_yields([legacy_row])
+
+    m.call
+
+    assert_equal 90_000, @book.reload.word_count
   end
 end

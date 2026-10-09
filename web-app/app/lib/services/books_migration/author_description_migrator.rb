@@ -56,9 +56,13 @@ module Services
       end
 
       def legacy_each(&block)
-        legacy_model.select(*LEGACY_COLUMNS).find_each(batch_size: BATCH_SIZE) do |record|
+        sync_narrowed(legacy_model.select(*LEGACY_COLUMNS)).find_each(batch_size: BATCH_SIZE) do |record|
           block.call(record.attributes)
         end
+      end
+
+      def sync_filter
+        [:author_ids, "id"]
       end
 
       def build_rows(attrs)

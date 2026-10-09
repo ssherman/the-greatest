@@ -18,6 +18,8 @@ module Services
         buffer = []
         Services::BooksMigration.without_search_indexing do
           legacy_each do |attrs|
+            next unless in_sync_scope?(attrs)
+
             buffer << row_for(attrs)
             if buffer.size >= update_batch
               flush(buffer)
@@ -49,8 +51,12 @@ module Services
       end
 
       def legacy_each(&block)
-        legacy_model.select(:id, :book_length, :page_range, :word_count)
+        sync_narrowed(legacy_model.select(:id, :book_length, :page_range, :word_count))
           .find_each(batch_size: BATCH_SIZE) { |record| block.call(record.attributes) }
+      end
+
+      def sync_filter
+        [:book_ids, "id"]
       end
 
       def row_for(attrs)

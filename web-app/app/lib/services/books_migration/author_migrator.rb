@@ -18,9 +18,16 @@ module Services
 
       def upsert_row(attrs)
         Services::BooksMigration.raise_if_at_ceiling!("books_authors", attrs["id"])
+        # Insert-only in sync mode: the catalog here is the master (spec §5).
+        return if sync && ::Books::Author.exists?(attrs["id"])
+
         author = ::Books::Author.find_or_initialize_by(id: attrs["id"])
         author.assign_attributes(AuthorTransformer.call(attrs))
         author.save!
+      end
+
+      def sync_filter
+        [:author_ids, "id"]
       end
 
       def finalize

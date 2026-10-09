@@ -33,8 +33,12 @@ module Services
       end
 
       def legacy_each(&block)
-        legacy_model.where.not(nationality_text: [nil, ""]).select(:id, :nationality_text)
+        sync_narrowed(legacy_model.where.not(nationality_text: [nil, ""]).select(:id, :nationality_text))
           .find_each(batch_size: BATCH_SIZE) { |record| block.call(record.attributes) }
+      end
+
+      def sync_filter
+        [:author_ids, "id"]
       end
 
       def preload_context

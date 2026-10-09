@@ -72,6 +72,7 @@ class Books::Author < ApplicationRecord
 
   before_validation :normalize_name
   before_validation :normalize_alternate_names
+  after_destroy { Services::BooksMigration::RedirectRecorder.deleted(item_type: "Books::Author", from_id: id) }
 
   def as_indexed_json
     {

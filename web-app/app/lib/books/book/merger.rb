@@ -69,6 +69,7 @@ module Books
           reconcile_scalars
           target_book.save! if target_book.changed?
           resolve_duplicate_candidates
+          record_redirect
           destroy_source_book
           @transaction_body_completed = true
         end
@@ -634,6 +635,12 @@ module Books
       # transaction so a rollback undoes it with the rest.
       def resolve_duplicate_candidates
         ::Services::DuplicateCandidates::RecordMerge.call(item_type: "Books::Book", source_id: @source_book_id, target_id: target_book.id)
+      end
+
+      # Before the destroy, so the after_destroy delete row that follows finds this
+      # one and leaves it. Inside the transaction, so a rollback takes it too.
+      def record_redirect
+        ::Services::BooksMigration::RedirectRecorder.merged(item_type: "Books::Book", from_id: @source_book_id, to_id: target_book.id)
       end
 
       def destroy_source_book

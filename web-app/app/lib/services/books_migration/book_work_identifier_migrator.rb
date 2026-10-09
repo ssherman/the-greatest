@@ -27,6 +27,10 @@ module Services
           value: attrs["goodreads_id"]
         )
       end
+
+      def sync_filter
+        [:book_ids, "id"]
+      end
     end
   end
 end

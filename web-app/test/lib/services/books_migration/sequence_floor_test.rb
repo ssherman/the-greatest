@@ -127,4 +127,12 @@ class Services::BooksMigration::SequenceFloorTest < ActiveSupport::TestCase
       CEILINGS.slice("books_books", "books_authors", "reviews", "saved_searches", "corrections")
     )
   end
+
+  test "max_legacy_origin_id is the highest id below the ceiling" do
+    ceiling = Services::BooksMigration::RESERVED_CEILINGS.fetch("books_books")
+    ::Books::Book.create!(id: 1_500, title: "Legacy Origin")
+    ::Books::Book.create!(id: ceiling + 3, title: "New App")
+
+    assert_equal 1_500, Services::BooksMigration.max_legacy_origin_id("books_books")
+  end
 end

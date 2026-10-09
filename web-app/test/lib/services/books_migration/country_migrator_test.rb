@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::CountryMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     m = Services::BooksMigration::CountryMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -81,5 +83,17 @@ class Services::BooksMigration::CountryMigratorTest < ActiveSupport::TestCase
 
     assert_not result[:success]
     assert_match "legacy id=9001", result[:error]
+  end
+
+  test "sync mode inserts a new country and leaves one already here alone" do
+    ::Books::Country.create!(id: 9001, name: "Edited Here")
+    migrator = Services::BooksMigration::CountryMigrator.new(sync: sync_scope)
+    migrator.stubs(:legacy_each).multiple_yields([legacy_row], [legacy_row("id" => 9002, "name" => "Chilean", "slug" => "chilean")])
+
+    result = migrator.call
+
+    assert result[:success], result[:error]
+    assert_equal "Edited Here", ::Books::Country.find(9001).name
+    assert_equal "Chilean", ::Books::Country.find(9002).name
   end
 end

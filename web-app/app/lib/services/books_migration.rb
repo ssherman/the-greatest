@@ -108,6 +108,14 @@ module Services
       raise "legacy #{table} id #{id} reaches the reserved ceiling #{ceiling}; raise RESERVED_CEILINGS[#{table.inspect}]"
     end
 
+    # The highest id below the table's ceiling: the last legacy-origin row here.
+    def self.max_legacy_origin_id(table)
+      connection = ActiveRecord::Base.connection
+      connection.select_value(
+        "SELECT COALESCE(MAX(id), 0) FROM #{connection.quote_table_name(table)} WHERE id < #{RESERVED_CEILINGS.fetch(table).to_i}"
+      ).to_i
+    end
+
     SUPPRESS_KEY = :books_migration_suppress_search
 
     # Runs the block with SearchIndexable enqueuing disabled on this thread, so a
