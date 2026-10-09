@@ -35,4 +35,14 @@ module BooksLegacySyncHelper
       LegacySyncWatermark.create!(key: key, value: value)
     end
   end
+
+  # redirects: rows for Services::BooksMigration::Redirects.new, [[item_type, from_id, to_id], ...]
+  def sync_scope(book_ids: [], author_ids: [], identifier_ids: [], redirects: [])
+    Services::BooksMigration::SyncScope.new(
+      book_ids: book_ids.to_set,
+      author_ids: author_ids.to_set,
+      identifier_ids: identifier_ids.to_set,
+      redirects: Services::BooksMigration::Redirects.new(redirects)
+    )
+  end
 end
