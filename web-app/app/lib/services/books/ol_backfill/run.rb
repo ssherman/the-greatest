@@ -12,6 +12,10 @@ module Services
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         RETRY_DELAYS = [15, 30, 60, 120, 240, 300].freeze
         BATCH = 100
+        # Seconds to wait after a book that used /resolve. The service runs one at a
+        # time and turns the others away busy, so this leaves the slot to the wizard,
+        # the Goodreads replay and the legacy imports.
+        RESOLVE_PAUSE = 4
         # A 4xx that is about this book's data, not about us or the service.
         BOOK_SPECIFIC_STATUSES = [400, 422].freeze
 
@@ -74,7 +78,11 @@ module Services
         def process(book)
           attempt = 0
           begin
-            ApplyBook.call(book: book, client: @client, run_id: @run_id).success? ? :done : :skipped
+            result = ApplyBook.call(book: book, client: @client, run_id: @run_id)
+            return :skipped unless result.success?
+
+            @sleeper.call(RESOLVE_PAUSE) if result.data&.via_resolve?
+            :done
           rescue ::Books::OpenLibrary::Exceptions::Error => e
             if book_specific?(e)
               # This book fails the same way every time: log it, move on.

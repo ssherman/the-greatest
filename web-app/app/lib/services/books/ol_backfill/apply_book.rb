@@ -99,7 +99,7 @@ module Services
           return [:updated, nil] if stored.intersect?(answer.redirect_sources)
 
           records = @client.works_batch(stored)
-          [stored.any? { |old| records[old]&.key == key } ? :updated : :replaced, records]
+          [(stored.any? { |old| records[old]&.key == key }) ? :updated : :replaced, records]
         end
 
         # A replaced key whose own record is the same book (title and an author

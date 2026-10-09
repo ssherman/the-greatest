@@ -51,6 +51,32 @@ module Services
           assert_equal({processed: 2, stopped: false, error: nil}, result.data)
         end
 
+        def list_book(book, *lists)
+          lists.each { |list| ::ListItem.create!(list: list, listable: book, position: 1) }
+        end
+
+        test "unranked books are taken by how many lists they are on, most first" do
+          list_book(@got, lists(:basic_list), lists(:another_list))
+          list_book(@crime, lists(:basic_list))
+          order = record_applies
+
+          run_backfill
+
+          assert_equal [@got.id, @crime.id], order.first(2)
+          assert_equal [@war.id, @clash.id].sort, order.last(2)
+        end
+
+        test "books on the same number of lists are taken in id order, ranked ones first" do
+          list_book(@got, lists(:basic_list))
+          list_book(@crime, lists(:basic_list))
+          rank(@clash, 1)
+          order = record_applies
+
+          run_backfill
+
+          assert_equal [@clash.id, *[@crime.id, @got.id].sort, @war.id], order
+        end
+
         test "with no limit every book in scope is done once" do
           order = record_applies
 
@@ -186,6 +212,49 @@ module Services
           stale.update!(dump_date: "2026-09-30")
           run_backfill(retry_unsure: true)
           assert_empty order
+        end
+
+        test "retry_unsure also takes an unsure book from an older matcher on the same dump" do
+          @client = FakeOlClient.new(version: {dump_date: "2026-09-30", matcher_version: 3})
+          [@crime, @got, @clash].each { |book| ::Books::OpenLibraryBackfill.create!(book: book, outcome: :keyed, run_id: "old") }
+          stale = ::Books::OpenLibraryBackfill.create!(book: @war, outcome: :unsure, run_id: "old", dump_date: "2026-09-30", matcher_version: 2)
+          order = []
+          ApplyBook.stubs(:call).with do |book:, run_id:, **|
+            order << book.id
+            stale.update!(matcher_version: 3, run_id: run_id)
+            true
+          end.returns(ok)
+
+          run_backfill(retry_unsure: true)
+
+          assert_equal [@war.id], order
+        end
+
+        test "a book settled through /resolve is followed by one RESOLVE_PAUSE wait; one settled by identifiers is not" do
+          resolve_row = ::Books::OpenLibraryBackfill.new(lookup: :resolve)
+          identifiers_row = ::Books::OpenLibraryBackfill.new(lookup: :identifiers)
+          rank(@war, 1)
+          rank(@crime, 2)
+          ApplyBook.stubs(:call).with do |book:, run_id:, **|
+            ::Books::OpenLibraryBackfill.create!(book: book, outcome: :keyed, run_id: run_id)
+            true
+          end.returns(ApplyBook::Result.new(success?: true, data: resolve_row, errors: []))
+            .then.returns(ApplyBook::Result.new(success?: true, data: identifiers_row, errors: []))
+            .then.returns(ok)
+          waits = []
+
+          run_backfill(limit: 3, sleeper: ->(seconds) { waits << seconds })
+
+          assert_equal [Run::RESOLVE_PAUSE], waits
+          assert_equal 4, Run::RESOLVE_PAUSE
+        end
+
+        test "a skipped book is not followed by a pause" do
+          ApplyBook.stubs(:call).returns(ApplyBook::Result.new(success?: false, data: nil, errors: []))
+
+          result = run_backfill(sleeper: ->(seconds) { flunk "waited #{seconds}" })
+
+          assert_equal 0, result.data[:processed]
         end
 
         test "without retry_unsure an unsure book is never taken again" do

@@ -42,13 +42,28 @@ Errors are handled by what they are about:
    stored key as a hint. Acted on only for an `accept` that passes the same check.
 
 Titles agree when equal after normalizing, or once a subtitle is dropped from one side (never both).
-No AI is involved.
+Authors agree when any of these holds: a name (or alternate name) of ours equals one on the work
+after normalizing; the two names are equal once reduced to letters only, with diacritics stripped
+("J.R.R. Tolkien" and "J. R. R. Tolkien"; a reduced name under four letters is ignored); one of our
+authors holds an Open Library author key the work lists; or one of our names equals the name or an
+alternate name on the work's Open Library author records. Those records (`/authors/batch`, the first
+five author keys) are fetched only when the title agrees and the plain comparison failed. No AI is
+involved.
+
+`/resolve` is sent at most three ISBN-13s, three ISBN-10s and three Goodreads ids
+(`Lookup::RESOLVE_IDENTIFIERS_PER_TYPE`).
+
+When `/resolve` does not accept (it abstains on margin, which famous books with many near-identical
+Open Library records do) but its top candidate is a work key the book already holds and that
+candidate passes the check, the book is `confirmed` with no change at all: no key added, swapped or
+removed, no duplicates saved, no author keys. The row has `confirmed_on_abstain` set, and the report
+counts these. Any other non-accept stays `unsure`.
 
 | Outcome | Meaning |
 |---|---|
 | `confirmed` | the stored key was right |
 | `updated` | the stored key redirects to the answer; moved to the current key |
-| `replaced` | the stored key was another work, or dead; swapped (old key in the log) |
+| `replaced` | the stored key was another work, or dead; swapped (old key in the log). An old key whose own record agrees with the book on title and author is kept as a duplicate key |
 | `keyed` | the book had no key; added |
 | `duplicate_pair` | another book holds the answer; nothing saved, pair in Books → Duplicates |
 | `unsure` | no confident, agreeing answer; nothing changed |
@@ -58,6 +73,12 @@ No AI is involved.
 A book that already holds Open Library's answer stays `confirmed` even when another book holds the
 same key. The pair is still flagged and `pair_book_id` is set, so `pair_book_id` can appear on a
 `confirmed` row, not only on `duplicate_pair`.
+
+A row that holds a result (anything but `failed` or `unsure`) is never overwritten: a second run, or
+a run that settled the book while another was looking it up, skips it, and so does a failure record.
+
+When the key a book is given is held by another book as a duplicate key, the pair is flagged; the key
+is still saved.
 
 A full match also saves Open Library's duplicate works as `books_work_openlibrary_duplicate_id`. The
 book finder treats a book holding the accepted work under that type as a candidate with no verdict. In

@@ -101,4 +101,9 @@ class DuplicateCandidateTest < ActiveSupport::TestCase
 
     assert_equal [newer, older], DuplicateCandidate.newest_first.where(id: [newer.id, older.id]).to_a
   end
+
+  test "source_label keeps the OL initialism and humanizes the rest" do
+    assert_equal "OL backfill", DuplicateCandidate.new(source: :ol_backfill).source_label
+    assert_equal "Bulk verify", DuplicateCandidate.new(source: :bulk_verify).source_label
+  end
 end

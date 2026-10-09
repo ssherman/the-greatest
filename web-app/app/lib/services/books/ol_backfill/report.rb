@@ -16,8 +16,10 @@ module Services
           counts = rows.group(:outcome).count
           ::Books::OpenLibraryBackfill.outcomes.each_key { |outcome| lines << format("  %-15s %d", outcome, counts.fetch(outcome, 0)) }
           lines << ""
+          lines << abstain_line
           lines << ranked_line
           lines << latest_run_line
+          lines << latest_failure_line
           lines << author_line
           lines << ""
           lines << "Most recent replaced keys and pairs:"
@@ -43,6 +45,17 @@ module Services
           "Latest run #{latest.run_id}: #{rows.where(run_id: latest.run_id).count} books, last at #{latest.updated_at.iso8601}"
         end
 
+        def abstain_line
+          "Confirmed on Open Library's top answer (abstained): #{rows.where(confirmed_on_abstain: true).count}"
+        end
+
+        def latest_failure_line
+          failure = rows.failed.includes(:book).order(updated_at: :desc, id: :desc).first
+          return "Latest failure: none" unless failure
+
+          "Latest failure: book #{failure.book_id} \"#{failure.book.title}\": #{failure.error} at #{failure.updated_at.iso8601}"
+        end
+
         def author_line
           totals = %w[added pairs conflicts].map do |part|
             rows.sum(Arel.sql("jsonb_array_length(COALESCE(author_changes->'#{part}', '[]'::jsonb))")).to_i
@@ -51,7 +64,8 @@ module Services
         end
 
         def recent_lines
-          recent = rows.where(outcome: %i[replaced duplicate_pair]).includes(:book).order(updated_at: :desc, id: :desc).limit(RECENT)
+          pairs = rows.where(outcome: :confirmed).where.not(pair_book_id: nil)
+          recent = rows.where(outcome: %i[replaced duplicate_pair]).or(pairs).includes(:book).order(updated_at: :desc, id: :desc).limit(RECENT)
           return ["  none"] if recent.empty?
 
           recent.map do |row|

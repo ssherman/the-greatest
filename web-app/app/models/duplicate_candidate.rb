@@ -54,6 +54,11 @@ class DuplicateCandidate < ApplicationRecord
     where(item_type: item_type, item_a_id: a, item_b_id: b).not_duplicate.exists?
   end
 
+  # The queue's badge. "OL" is an initialism, so humanize alone gets it wrong.
+  def source_label
+    (source == "ol_backfill") ? "OL backfill" : source.humanize
+  end
+
   private
 
   def ids_in_order
