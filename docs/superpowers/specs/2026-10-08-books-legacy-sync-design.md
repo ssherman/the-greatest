@@ -100,6 +100,18 @@ sequence back below the ceiling: replace them with "set to max(ceiling, max id +
 Ships first and alone. Until it does, the first book the Goodreads replay or a member import
 creates in production gets overwritten by the next weekly `:all`.
 
+**Precondition: no new-app rows already inside the legacy range.** Moving a sequence protects only
+rows created afterwards. A new-app row that already sits between legacy's max and the ceiling stays
+there, and a later sync overwrites it (books, authors, saved searches) or skips the legacy row and
+misattaches its children (corrections). Production met this on 2026-10-08 for all five tables
+(Shane's read-only queries; the corrections check: legacy changesets max 774, new max 772).
+Relocating such rows is deliberately not done: a migration cannot tell new-app rows from legacy
+rows without the legacy database, and re-keying a book means rewriting about twenty referencing
+tables, many polymorphic with no foreign key. Development does **not** meet it (§9: refresh from
+production first). Increment 2's report lists every row below the ceiling that legacy lacks
+("legacy deleted, still here"), so any row that slips in before deploy is visible before a sync
+runs.
+
 ## 4. The redirect record
 
 New table `record_redirects`:
@@ -338,8 +350,10 @@ Minitest; there are no new pages, so no Playwright spec.
 Fixtures need a negative class for every scoping rule: a non-legacy row next to each legacy one,
 an existing book next to each new one.
 
-**Dev rehearsal before switching production:** refresh the legacy restore (`--legacy-only`) so it
-is ahead of dev, run `sync_init` with the watermarks below legacy's max, merge and edit a few books,
+**Dev rehearsal before switching production:** first refresh dev from production
+(`bin/refresh-dev-db.sh`). Dev holds new-app rows inside the legacy range (296 provisional books,
+6 corrections at 772–777, §3) that a sync would overwrite or misattach. Then refresh the legacy
+restore (`--legacy-only`) so it is ahead of dev, run `sync_init` with the watermarks below legacy's max, merge and edit a few books,
 run `sync_report` then `sync`, and check the report's numbers against the result.
 
 ## 10. Out of scope
