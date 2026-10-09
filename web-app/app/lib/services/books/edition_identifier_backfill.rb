@@ -15,12 +15,15 @@ module Services
     class EditionIdentifierBackfill
       LOOKUP_INDEX = :index_identifiers_on_lookup_unique
 
-      def self.call(batch_size: 1_000)
-        new(batch_size: batch_size).call
+      # book_ids: limit to these books' editions (the legacy sync passes its new
+      # books, so identifiers removed during cleanup are never re-added).
+      def self.call(batch_size: 1_000, book_ids: nil)
+        new(batch_size: batch_size, book_ids: book_ids).call
       end
 
-      def initialize(batch_size: 1_000)
+      def initialize(batch_size: 1_000, book_ids: nil)
         @batch_size = batch_size
+        @book_ids = book_ids
       end
 
       def call
@@ -43,7 +46,8 @@ module Services
       private
 
       def scope
-        ::Books::Edition.where("metadata -> 'amazon' IS NOT NULL")
+        editions = ::Books::Edition.where("metadata -> 'amazon' IS NOT NULL")
+        @book_ids ? editions.where(book_id: @book_ids) : editions
       end
 
       def rows_for(edition)

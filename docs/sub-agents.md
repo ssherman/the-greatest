@@ -69,17 +69,16 @@ This project uses specialized Claude Code sub-agents to handle specific types of
 **Tools**: All tools (inherits full toolset)
 
 **When to use**:
-- After creating new models, services, or controllers
-- When updating existing classes that need doc updates
-- Creating or updating spec files in `docs/specs/`
-- Ensuring documentation stays in sync with code
+- After a feature changes, so `docs/features/<feature>.md` matches the code again
+- When checking that paths, knobs, tasks and numbers in `docs/` still exist in the code
+- Keeping cross-references between feature docs, object models and data-quality records valid
 
 **What it does**:
-- Creates class documentation following project templates
-- Updates task management files
+- Maintains feature docs, object models and data-quality records (see `docs/documentation.md`)
+- Never creates per-class documentation files (that tree was deleted on purpose) and never
+  removes explanatory comments from the code
 - Maintains cross-references and consistency
 - Tracks changes made by AI agents
-- Follows strict documentation standards for The Greatest
 
 ---
 

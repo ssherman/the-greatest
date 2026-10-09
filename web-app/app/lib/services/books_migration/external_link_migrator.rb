@@ -44,6 +44,10 @@ module Services
         link.save!
       end
 
+      def sync_filter
+        [:book_ids, "book_id"]
+      end
+
       def normalize_url(url)
         url.to_s.match?(%r{\Ahttps?://}i) ? url : "https://#{url}"
       end

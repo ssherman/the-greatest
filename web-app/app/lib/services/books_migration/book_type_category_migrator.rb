@@ -50,8 +50,12 @@ module Services
       end
 
       def legacy_each(&block)
-        legacy_model.select(:id, :book_type)
+        sync_narrowed(legacy_model.select(:id, :book_type))
           .find_each(batch_size: BATCH_SIZE) { |record| block.call(record.attributes) }
+      end
+
+      def sync_filter
+        [:book_ids, "id"]
       end
 
       def build_rows(attrs)

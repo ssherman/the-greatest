@@ -60,9 +60,13 @@ module Services
       # Narrowed to the columns actually mapped -- the legacy books table is wide, and the
       # base implementation would load every column of all 126,204 rows.
       def legacy_each(&block)
-        legacy_model.select(*LEGACY_COLUMNS).find_each(batch_size: BATCH_SIZE) do |record|
+        sync_narrowed(legacy_model.select(*LEGACY_COLUMNS)).find_each(batch_size: BATCH_SIZE) do |record|
           block.call(record.attributes)
         end
+      end
+
+      def sync_filter
+        [:book_ids, "id"]
       end
 
       def build_rows(attrs)

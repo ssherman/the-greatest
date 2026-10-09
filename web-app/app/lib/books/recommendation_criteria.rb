@@ -10,17 +10,26 @@ module Books
   class RecommendationCriteria
     KEYS = %w[
       included_category_ids excluded_category_ids genre_match_mode book_length
-      first_year_published_gt first_year_published_lt max_ranked_position
+      first_year_published_gt first_year_published_lt max_ranked_position depth
     ].freeze
+
+    # The keys SavedSearchCriteria understands; `depth` is the engine's, not the query's.
+    SEARCH_KEYS = (KEYS - %w[depth]).freeze
 
     READERS = %i[
       included_category_ids excluded_category_ids genre_match_mode book_length
       first_year_published_gt first_year_published_lt max_ranked_position
     ].freeze
 
+    DEPTHS = %w[safe balanced deep].freeze
+    DEFAULT_DEPTH = "balanced"
+
+    attr_reader :depth
+
     def initialize(raw)
       stored = (raw || {}).to_h.stringify_keys.slice(*KEYS)
-      @search = ::Books::SavedSearchCriteria.new(stored.merge("ranked" => "true"))
+      @depth = DEPTHS.include?(stored["depth"]) ? stored["depth"] : DEFAULT_DEPTH
+      @search = ::Books::SavedSearchCriteria.new(stored.slice(*SEARCH_KEYS).merge("ranked" => "true"))
     end
 
     READERS.each do |reader|
@@ -34,6 +43,13 @@ module Books
     # The object the clause builders (Search::Books::Search::CriteriaClauses) take.
     def to_search_criteria
       @search
+    end
+
+    # Per-call engine knobs this criteria implies (Recommendations::Engine
+    # `overrides:`). Balanced overrides nothing, so it follows the initializer.
+    def engine_overrides
+      floor = Rails.application.config.x.recommendations[:depth_floors][depth]
+      floor ? {quality_floor: floor} : {}
     end
   end
 end

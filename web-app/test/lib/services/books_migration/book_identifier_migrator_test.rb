@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     m = Services::BooksMigration::BookIdentifierMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -71,5 +73,60 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
     book = ::Books::Book.create!(title: "Whitespace Book")
     run_migrator([{"id" => 30, "book_id" => book.id, "identifier_type" => 1, "identifier" => "  0375755349  "}])
     assert_equal "0375755349", Identifier.find_by(identifiable: book).value
+  end
+
+  def run_sync(rows, scope)
+    m = Services::BooksMigration::BookIdentifierMigrator.new(sync: scope)
+    m.stubs(:legacy_each).multiple_yields(*rows.zip)
+    m.call
+  end
+
+  def goodreads_ids(book_id)
+    Identifier.where(identifiable_type: "Books::Book", identifiable_id: book_id, identifier_type: :books_work_goodreads_id).pluck(:value)
+  end
+
+  test "sync mode adds a new identifier row to a book already here" do
+    book = ::Books::Book.create!(id: 90300, title: "Existing Book")
+
+    result = run_sync([
+      {"id" => 601, "book_id" => book.id, "identifier_type" => 5, "identifier" => "111"},
+      {"id" => 602, "book_id" => book.id, "identifier_type" => 5, "identifier" => "222"}
+    ], sync_scope(identifier_ids: [601]))
+
+    assert result[:success], result[:error]
+    assert_equal ["111"], goodreads_ids(book.id)
+  end
+
+  test "sync mode takes every identifier of a new book, even below the identifier watermark" do
+    book = ::Books::Book.create!(id: 90301, title: "New Legacy Book")
+
+    run_sync([{"id" => 10, "book_id" => book.id, "identifier_type" => 5, "identifier" => "333"}], sync_scope(book_ids: [book.id]))
+
+    assert_equal ["333"], goodreads_ids(book.id)
+  end
+
+  test "sync mode puts an identifier of a merged book on the survivor" do
+    survivor = ::Books::Book.create!(id: 90302, title: "Survivor")
+
+    run_sync([{"id" => 603, "book_id" => 1_301, "identifier_type" => 5, "identifier" => "444"}],
+      sync_scope(identifier_ids: [603], redirects: [["Books::Book", 1_301, survivor.id]]))
+
+    assert_equal ["444"], goodreads_ids(survivor.id)
+  end
+
+  test "sync mode drops and counts an identifier of a deleted book" do
+    result = run_sync([{"id" => 604, "book_id" => 1_302, "identifier_type" => 5, "identifier" => "555"}],
+      sync_scope(identifier_ids: [604], redirects: [["Books::Book", 1_302, nil]]))
+
+    assert result[:success], result[:error]
+    assert_equal 1, result[:data][:dropped_deleted]
+    assert_empty goodreads_ids(1_302)
+  end
+
+  test "fails the run naming the legacy row when the book is neither here nor redirected" do
+    result = run_sync([{"id" => 605, "book_id" => 1_303, "identifier_type" => 5, "identifier" => "666"}], sync_scope(identifier_ids: [605]))
+
+    refute result[:success]
+    assert_includes result[:error], "legacy id=605"
   end
 end

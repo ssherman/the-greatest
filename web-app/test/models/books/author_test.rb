@@ -181,5 +181,14 @@ module Books
       author.provisional = true
       assert_equal true, author.as_indexed_json[:provisional]
     end
+
+    test "destroying a legacy-origin author records it as deleted" do
+      author = ::Books::Author.create!(id: 1_001, name: "Legacy Origin Author")
+
+      author.destroy!
+
+      row = RecordRedirect.find_by!(item_type: "Books::Author", from_id: 1_001)
+      assert_nil row.to_id
+    end
   end
 end

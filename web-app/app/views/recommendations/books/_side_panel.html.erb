@@ -1,0 +1,34 @@
+<div class="space-y-6">
+  <section class="card bg-base-200">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Your settings</h2>
+      <% if @groups.empty? %>
+        <p class="text-sm text-base-content/70">Default settings: every ranked book, balanced depth.</p>
+      <% else %>
+        <dl class="space-y-2 text-sm">
+          <% @groups.each do |group| %>
+            <div>
+              <dt class="font-semibold"><%= group.label %></dt>
+              <dd class="[overflow-wrap:anywhere]"><%= group.values.join(", ") %><% if group.note %> <span class="text-base-content/60">(<%= group.note %>)</span><% end %></dd>
+            </div>
+          <% end %>
+        </dl>
+      <% end %>
+      <div class="card-actions mt-4 flex-col items-stretch gap-2">
+        <%= link_to "Change settings", recommendations_settings_path, class: "btn btn-sm btn-outline", data: {testid: "settings-link"} %>
+        <%= link_to "Walk through the wizard", recommendations_wizard_path(step: 1), class: "btn btn-sm btn-ghost" %>
+        <%= button_to "Reset everything", recommendations_reset_path, method: :post, class: "btn btn-sm btn-ghost text-error",
+              form: {data: {turbo_confirm: "Reset your recommendation settings? Your lists and ratings stay."}}, data: {testid: "reset-button"} %>
+      </div>
+    </div>
+  </section>
+
+  <% if @profile && !@profile.empty? %>
+    <section class="card bg-base-200">
+      <div class="card-body">
+        <h2 class="card-title text-lg">Your taste</h2>
+        <%= render Recommendations::TasteComponent.new(profile: @profile, names: @taste_names) %>
+      </div>
+    </section>
+  <% end %>
+</div>

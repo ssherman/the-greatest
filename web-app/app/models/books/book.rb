@@ -138,6 +138,7 @@ class Books::Book < ApplicationRecord
   before_validation :normalize_title
   before_validation :derive_book_length,
     if: -> { book_length.blank? && (page_range_changed? || word_count_changed?) }
+  after_destroy { Services::BooksMigration::RedirectRecorder.deleted(item_type: "Books::Book", from_id: id) }
 
   scope :selectable, -> { where(book_kind: :standalone) }
 

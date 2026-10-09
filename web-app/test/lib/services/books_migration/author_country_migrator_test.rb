@@ -3,6 +3,8 @@
 require "test_helper"
 
 class Services::BooksMigration::AuthorCountryMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     migrator = Services::BooksMigration::AuthorCountryMigrator.new
     migrator.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -113,5 +115,21 @@ class Services::BooksMigration::AuthorCountryMigratorTest < ActiveSupport::TestC
     run_migrator(rows)
 
     assert_no_difference(-> { ::Books::AuthorCountry.count }) { run_migrator(rows) }
+  end
+
+  test "sync mode maps the run's authors only" do
+    country("Russian")
+    in_run = ::Books::Author.create!(name: "In The Run")
+    outside = ::Books::Author.create!(name: "Outside")
+    m = Services::BooksMigration::AuthorCountryMigrator.new(sync: sync_scope(author_ids: [in_run.id]))
+    m.stubs(:legacy_each).multiple_yields(
+      [{"id" => in_run.id, "nationality_text" => "Russian"}],
+      [{"id" => outside.id, "nationality_text" => "Russian"}]
+    )
+
+    m.call
+
+    assert ::Books::AuthorCountry.exists?(author_id: in_run.id)
+    refute ::Books::AuthorCountry.exists?(author_id: outside.id)
   end
 end

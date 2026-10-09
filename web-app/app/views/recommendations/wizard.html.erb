@@ -1,0 +1,10 @@
+<% content_for :page_title, "Recommendation wizard, step #{@step}" %>
+<div class="container mx-auto max-w-5xl px-4 py-8">
+  <header class="text-center mb-6">
+    <h1 class="text-3xl font-bold">Your next great read</h1>
+    <p class="text-base-content/70">Four short steps. Each one makes the recommendations better.</p>
+  </header>
+  <%= render Recommendations::ProgressComponent.new(current_step: @step, unlocked: @unlocked) %>
+  <%= render "recommendations/alert" %>
+  <%= render "recommendations/#{Current.domain}/step_#{@step}" %>
+</div>

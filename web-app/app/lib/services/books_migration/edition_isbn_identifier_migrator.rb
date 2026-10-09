@@ -48,6 +48,10 @@ module Services
           )
         end
       end
+
+      def sync_filter
+        [:book_ids, "book_id"]
+      end
     end
   end
 end

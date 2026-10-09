@@ -20,6 +20,15 @@ module Services
       end
 
       def upsert_row(attrs)
+        # Insert-only in sync mode: a legacy id with a map entry was seen before, so
+        # a category edited or deleted here stays that way (spec §5). One mapped
+        # since the last successful sync was inserted by an interrupted run that
+        # never reached finalize, so its parent link is queued again.
+        if sync && (mapped = LegacyIdMap.find_by(model: model_key, legacy_id: attrs["id"]))
+          stash_parent_link(attrs) if inserted_by_interrupted_run?(mapped)
+          return
+        end
+
         ::Books::Category.transaction do
           new_id = LegacyIdMap.lookup(model: model_key, legacy_id: attrs["id"])
           category = new_id ? ::Books::Category.find(new_id) : ::Books::Category.new
@@ -29,6 +38,12 @@ module Services
           LegacyIdMap.record(model: model_key, legacy_id: attrs["id"], new_id: category.id)
         end
         stash_parent_link(attrs)
+      end
+
+      # Watermarks' updated_at is stamped by every successful sync (Sync#advance_watermarks).
+      def inserted_by_interrupted_run?(mapped)
+        @last_sync_at = LegacySyncWatermark.maximum(:updated_at) unless defined?(@last_sync_at)
+        @last_sync_at.present? && mapped.created_at > @last_sync_at
       end
 
       def stash_parent_link(attrs)

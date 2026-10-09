@@ -5,6 +5,8 @@ require "test_helper"
 module Services
   module Books
     class EditionIdentifierBackfillTest < ActiveSupport::TestCase
+      include BooksLegacySyncHelper
+
       def setup
         @edition = books_editions(:wp_legacy_amazon)
       end
@@ -73,6 +75,16 @@ module Services
         EditionIdentifierBackfill.call
 
         refute_includes uncovered.call.pluck(:id), @edition.id
+      end
+
+      test "limits the backfill to the given books" do
+        EditionIdentifierBackfill.call(book_ids: [@edition.book_id + 1])
+
+        assert_empty @edition.identifiers
+
+        EditionIdentifierBackfill.call(book_ids: [@edition.book_id])
+
+        assert_not_empty @edition.identifiers
       end
     end
   end

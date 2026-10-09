@@ -3,6 +3,8 @@ require "test_helper"
 module Services
   module BooksMigration
     class BookImageMigratorTest < ActiveSupport::TestCase
+      include BooksLegacySyncHelper
+
       # Stub the join/stream so the legacy replica connection is never opened.
       def run_migrator(rows)
         migrator = BookImageMigrator.new
@@ -31,6 +33,14 @@ module Services
 
         assert result[:success], result[:error]
         assert_equal 2, result[:data][:count]
+      end
+
+      test "sync mode enqueues covers of the run's books only" do
+        ::Books::MigrateCoverImageJob.expects(:perform_async).with(1, "blobkey", "cover.jpg", "image/jpeg").once
+        migrator = BookImageMigrator.new(sync: sync_scope(book_ids: [1]))
+        migrator.stubs(:legacy_each).multiple_yields([row("book_id" => 1)], [row("book_id" => 2)])
+
+        migrator.call
       end
     end
   end

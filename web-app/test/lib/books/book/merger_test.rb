@@ -16,6 +16,16 @@ module Books
         assert_equal [], result.errors
       end
 
+      test "records a legacy-origin source as merged into the target, and the destroy keeps it" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        source = ::Books::Book.create!(id: 1_002, title: "Legacy Duplicate")
+
+        result = ::Books::Book::Merger.call(source: source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_equal @target.id, RecordRedirect.find_by!(item_type: "Books::Book", from_id: 1_002).to_id
+      end
+
       test "destroys the source book" do
         source_id = @source.id
 

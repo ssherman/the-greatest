@@ -18,18 +18,23 @@ module Services
         "Books::Book#primary_image"
       end
 
+      # The legacy column is record_id but the yielded key is "book_id", so this
+      # narrows by hand rather than through sync_narrowed.
       def legacy_each
-        LegacyBooks::ActiveStorageAttachment
-          .where(record_type: "Book", name: "primary_image")
-          .includes(:blob)
-          .find_each(batch_size: BATCH_SIZE) do |attachment|
-            yield({
-              "book_id" => attachment.record_id,
-              "key" => attachment.blob.key,
-              "filename" => attachment.blob.filename,
-              "content_type" => attachment.blob.content_type
-            })
-          end
+        attachments = LegacyBooks::ActiveStorageAttachment.where(record_type: "Book", name: "primary_image")
+        attachments = attachments.where(record_id: sync.book_ids.to_a) if sync
+        attachments.includes(:blob).find_each(batch_size: BATCH_SIZE) do |attachment|
+          yield({
+            "book_id" => attachment.record_id,
+            "key" => attachment.blob.key,
+            "filename" => attachment.blob.filename,
+            "content_type" => attachment.blob.content_type
+          })
+        end
+      end
+
+      def sync_filter
+        [:book_ids, "book_id"]
       end
 
       def upsert_row(attrs)

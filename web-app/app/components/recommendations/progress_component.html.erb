@@ -1,0 +1,11 @@
+<ul class="steps w-full mb-8" data-testid="wizard-progress">
+  <% steps.each do |step| %>
+    <li class="step <%= "step-primary" if step[:reached] %>" <%= "aria-current=step".html_safe if step[:number] == @current_step %>>
+      <% if step[:linked] %>
+        <%= link_to step[:label], helpers.recommendations_wizard_path(step: step[:number]), class: "link link-hover" %>
+      <% else %>
+        <span class="text-base-content/60"><%= step[:label] %></span>
+      <% end %>
+    </li>
+  <% end %>
+</ul>

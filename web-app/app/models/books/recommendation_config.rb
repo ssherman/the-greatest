@@ -23,5 +23,9 @@ module Books
     def self.criteria_class
       ::Books::RecommendationCriteria
     end
+
+    def self.criteria_params_class
+      ::Books::RecommendationCriteriaParams
+    end
   end
 end

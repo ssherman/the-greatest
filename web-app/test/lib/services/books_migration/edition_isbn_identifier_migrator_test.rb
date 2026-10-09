@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::EditionIsbnIdentifierMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     m = Services::BooksMigration::EditionIsbnIdentifierMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -74,5 +76,20 @@ class Services::BooksMigration::EditionIsbnIdentifierMigratorTest < ActiveSuppor
     result = run_migrator([{"id" => 110, "book_id" => 999_999, "identifiers" => {"isbn_10" => ["0375755349"]}}])
     refute result[:success]
     assert_match(/legacy id=110/, result[:error])
+  end
+
+  test "sync mode reads only editions of the run's books" do
+    in_run = ::Books::Book.create!(id: 90340, title: "In The Run")
+    outside = ::Books::Book.create!(id: 90341, title: "Outside")
+    m = Services::BooksMigration::EditionIsbnIdentifierMigrator.new(sync: sync_scope(book_ids: [in_run.id]))
+    m.stubs(:legacy_each).multiple_yields(
+      [{"id" => 940, "book_id" => in_run.id, "identifiers" => {"isbn_13" => ["9780000000017"]}}],
+      [{"id" => 941, "book_id" => outside.id, "identifiers" => {"isbn_13" => ["9780000000024"]}}]
+    )
+
+    m.call
+
+    assert Identifier.exists?(identifiable_type: "Books::Book", identifiable_id: in_run.id)
+    refute Identifier.exists?(identifiable_type: "Books::Book", identifiable_id: outside.id)
   end
 end

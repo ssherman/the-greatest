@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   include SequenceIsolation
 
   isolate_sequences "books_books"
@@ -79,5 +81,31 @@ class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
     assert_includes result[:error], "legacy id=90010"
     assert_includes result[:error], "999999"
     assert_nil ::Books::Book.find_by(id: 90010)
+  end
+
+  def run_sync(rows, scope)
+    migrator = Services::BooksMigration::BookMigrator.new(sync: scope)
+    migrator.stubs(:legacy_each).multiple_yields(*rows.zip)
+    migrator.call
+  end
+
+  test "sync mode inserts only the run's new books" do
+    result = run_sync([
+      {"id" => 90020, "title" => "In The Run", "original_language_id" => nil},
+      {"id" => 90021, "title" => "Not In The Run", "original_language_id" => nil}
+    ], sync_scope(book_ids: [90020]))
+
+    assert result[:success], result[:error]
+    assert ::Books::Book.exists?(90020)
+    refute ::Books::Book.exists?(90021)
+  end
+
+  test "sync mode never overwrites a book that is already here" do
+    ::Books::Book.create!(id: 90022, title: "Cleaned Title")
+
+    result = run_sync([{"id" => 90022, "title" => "Legacy Title", "original_language_id" => nil}], sync_scope(book_ids: [90022]))
+
+    assert result[:success], result[:error]
+    assert_equal "Cleaned Title", ::Books::Book.find(90022).title
   end
 end
