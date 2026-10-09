@@ -1,0 +1,101 @@
+<% criteria = config.criteria_object %>
+<% knobs = Rails.application.config.x.recommendations %>
+
+<% if locked %>
+  <div role="note" class="alert alert-info mb-6" data-testid="settings-locked">
+    <span>🔒 Settings are a member feature. Free accounts get <%= knobs[:free_limit] %> recommendations; members get <%= knobs[:member_limit] %> and can change the settings below.</span>
+    <%= link_to "Become a member", membership_path, class: "btn btn-primary btn-sm" %>
+  </div>
+<% end %>
+
+<%= form_with model: config, url: recommendations_settings_path, scope: :recommendation_config, method: :post,
+      id: "recommendation-settings-form", class: "space-y-6", data: {turbo: false} do |f| %>
+  <fieldset class="space-y-6 <%= "opacity-70" if locked %>" <%= "disabled" if locked %> data-testid="settings-fields">
+    <%= f.fields_for :criteria, criteria do |c| %>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Depth</legend>
+        <% Recommendations::Books::Pages::DEPTH_LABELS.each do |value, label| %>
+          <label class="label cursor-pointer justify-start gap-3">
+            <%= c.radio_button :depth, value, checked: criteria.depth == value, class: "radio" %>
+            <span><%= label %></span>
+          </label>
+        <% end %>
+        <p class="text-sm text-base-content/70">Safer bets lean toward the best-known books that fit you. Deep cuts go further down the ranking.</p>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Book length</legend>
+        <div class="flex flex-wrap gap-4">
+          <% ::Books::Book.book_lengths.each do |key, value| %>
+            <label class="label cursor-pointer gap-2">
+              <%= check_box_tag "recommendation_config[criteria][book_length][]", value, criteria.book_length.include?(value), id: nil, class: "checkbox checkbox-sm" %>
+              <span><%= key.to_s.titleize %></span>
+            </label>
+          <% end %>
+        </div>
+        <p class="text-sm text-base-content/70">Leave every box empty for any length.</p>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <%= c.label :max_ranked_position, "Only the top N ranked books", class: "fieldset-legend" %>
+        <%= c.number_field :max_ranked_position, value: criteria.max_ranked_position, min: 1, max: 20_000, class: "input w-full", placeholder: "Any rank" %>
+      </fieldset>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <fieldset class="fieldset">
+          <%= c.label :first_year_published_gt, "Published from", class: "fieldset-legend" %>
+          <%= c.number_field :first_year_published_gt, value: criteria.first_year_published_gt, class: "input w-full", placeholder: "1837" %>
+        </fieldset>
+        <fieldset class="fieldset">
+          <%= c.label :first_year_published_lt, "Published to", class: "fieldset-legend" %>
+          <%= c.number_field :first_year_published_lt, value: criteria.first_year_published_lt, class: "input w-full", placeholder: Date.current.year.to_s %>
+        </fieldset>
+      </div>
+
+      <% [["included", "Only books with these categories", criteria.included_category_ids],
+          ["excluded", "Never these categories", criteria.excluded_category_ids]].each do |kind, legend, ids| %>
+        <fieldset class="fieldset" data-controller="saved-search-picker"
+                  data-saved-search-picker-url-value="<%= saved_search_categories_path %>"
+                  data-saved-search-picker-name-value="recommendation_config[criteria][<%= kind %>_category_ids][]"
+                  data-testid="picker-<%= kind %>">
+          <legend class="fieldset-legend"><%= legend %></legend>
+          <%= hidden_field_tag "recommendation_config[criteria][#{kind}_category_ids][]", "", id: nil %>
+          <div class="relative">
+            <input type="search" class="input w-full" aria-label="<%= legend %>" placeholder="Search genres, subjects, settings" autocomplete="off"
+                   data-saved-search-picker-target="query"
+                   data-action="input->saved-search-picker#search keydown->saved-search-picker#suppressEnter">
+            <div class="hidden absolute dropdown-content p-2 shadow-lg bg-base-100 rounded-box w-full mt-1 max-h-80 overflow-y-auto z-[9999] left-0 top-full flex flex-col gap-1"
+                 data-saved-search-picker-target="results"></div>
+          </div>
+          <div class="flex flex-wrap gap-2 mt-2" data-saved-search-picker-target="chips">
+            <% ids.each do |id| %>
+              <% record = picked_categories[id] %>
+              <% next if record.nil? %>
+              <span class="badge badge-outline gap-1" data-chip="<%= id %>">
+                <%= hidden_field_tag "recommendation_config[criteria][#{kind}_category_ids][]", id, id: nil %>
+                <span><%= record.name_with_type %></span>
+                <button type="button" class="btn btn-ghost btn-xs px-1" data-action="saved-search-picker#remove" aria-label="Remove <%= record.name %>">×</button>
+              </span>
+            <% end %>
+          </div>
+        </fieldset>
+      <% end %>
+
+      <fieldset class="fieldset">
+        <%= c.label :genre_match_mode, "When several categories are included", class: "fieldset-legend" %>
+        <%= c.select :genre_match_mode, [["A book needs any one of them", "any"], ["A book needs all of them", "all"]],
+              {selected: criteria.genre_match_mode.to_s}, {class: "select w-full"} %>
+      </fieldset>
+    <% end %>
+  </fieldset>
+
+  <div class="flex flex-wrap gap-3">
+    <% if locked %>
+      <%= link_to "Become a member to save settings", membership_path, class: "btn btn-primary", data: {testid: "settings-join"} %>
+    <% else %>
+      <%= f.submit "Save settings", class: "btn btn-primary", data: {testid: "settings-save"} %>
+    <% end %>
+    <%= link_to "View my recommendations", recommendations_path, class: "btn btn-outline", data: {testid: "settings-view"} %>
+  </div>
+<% end %>

@@ -1,0 +1,44 @@
+<% if !signed_in? %>
+  <%= render "recommendations/#{Current.domain}/pitch" %>
+<% else %>
+<% content_for :page_title, "Your recommendations" %>
+<div class="container mx-auto px-4 py-8">
+  <%= render "recommendations/alert" %>
+  <div class="flex flex-col lg:flex-row gap-8">
+    <main class="flex-1 min-w-0">
+      <h1 class="text-3xl font-bold mb-6">Your recommendations</h1>
+
+      <% case @state %>
+      <% when :ok %>
+        <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>" data-testid="recommendations-grid">
+          <% @items.each_with_index do |entry, index| %>
+            <div class="flex flex-col gap-2" data-testid="recommendation">
+              <%= render Books::CardComponent.new(book: entry[:item], rank: entry[:rank_position], index: index) %>
+              <%= render Recommendations::ReasonComponent.new(reason: entry[:reason], names: @reason_names) %>
+            </div>
+          <% end %>
+        </div>
+        <% unless @member %>
+          <%= render "recommendations/#{Current.domain}/member_pitch", limit: @limit %>
+        <% end %>
+      <% when :no_matches %>
+        <div role="status" class="alert" data-testid="recommendations-empty">
+          <% if @member %>
+            <span>No books match your settings. <%= link_to "Loosen them", recommendations_settings_path, class: "link" %> or add more books to your lists.</span>
+          <% else %>
+            <span>No books match your settings. Use Reset everything in the side panel, or add more books to your lists.</span>
+          <% end %>
+        </div>
+      <% else %>
+        <div role="alert" class="alert alert-warning" data-testid="recommendations-unavailable">
+          <span>Recommendations are unavailable right now. Try again in a few minutes.</span>
+        </div>
+      <% end %>
+    </main>
+
+    <aside class="w-full lg:w-80 shrink-0" data-testid="recommendations-side-panel">
+      <%= render "recommendations/#{Current.domain}/side_panel" %>
+    </aside>
+  </div>
+</div>
+<% end %>
