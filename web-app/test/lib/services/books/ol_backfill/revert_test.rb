@@ -83,7 +83,7 @@ module Services
           assert_equal [["OL5W", "OL6W"], "reverted"], [keys(ApplyBook::WORK_KEY), ::Books::OpenLibraryBackfill.find_by!(book: @book).outcome]
         end
 
-        test "only confirmed, updated, replaced and keyed rows can be reverted" do
+        test "only confirmed, updated, replaced, keyed and removed rows can be reverted" do
           ::Books::OpenLibraryBackfill.create!(book: @book, outcome: :duplicate_pair, run_id: "run-1")
 
           result = Revert.call(book: @book)

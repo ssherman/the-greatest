@@ -69,8 +69,9 @@ module Services
           return ["  none"] if recent.empty?
 
           recent.map do |row|
+            keys = (row.outcome == "removed") ? row.old_keys - row.book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).pluck(:value) : row.old_keys
             pair = row.pair_book_id ? " (pair with book #{row.pair_book_id})" : ""
-            "  #{row.outcome} book #{row.book_id} \"#{row.book.title}\": #{row.old_keys.join(", ").presence || "no key"} -> #{row.new_key.presence || "no key"}#{pair}"
+            "  #{row.outcome} book #{row.book_id} \"#{row.book.title}\": #{keys.join(", ").presence || "no key"} -> #{row.new_key.presence || "no key"}#{pair}"
           end
         end
       end

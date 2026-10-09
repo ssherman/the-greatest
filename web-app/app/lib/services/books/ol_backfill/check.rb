@@ -29,16 +29,22 @@ module Services
           authors_agree?(book, work, ol_authors: client.authors_batch(keys).values.compact)
         end
 
-        # Neither the title nor any author agrees: another book's record. Fetches
-        # the work's author records (once, at most AUTHOR_FETCH_LIMIT) only when
-        # the title and the names on the work both fail.
+        # The title and the authors both disagree: another book's record.
+        # Missing authors, on our side or the work's, are unknown, not
+        # disagreement. Fetches the work's author records (once, at most
+        # AUTHOR_FETCH_LIMIT) only when the title and the names on the work fail.
         def clearly_different?(book, work, client)
-          return false if titles_agree?(book, work) || authors_agree?(book, work)
+          return false if titles_agree?(book, work) || book.authors.empty?
 
+          names = Array(work.author_names).reject(&:blank?)
           keys = Array(work.author_keys).compact.first(AUTHOR_FETCH_LIMIT)
-          return true if keys.empty?
+          return false if names.empty? && keys.empty?
+          return false if authors_agree?(book, work)
 
-          !authors_agree?(book, work, ol_authors: client.authors_batch(keys).values.compact)
+          records = keys.empty? ? [] : client.authors_batch(keys).values.compact
+          return false if names.empty? && records.empty?
+
+          !authors_agree?(book, work, ol_authors: records)
         end
 
         # Equal after normalizing, or equal once a subtitle (text after the

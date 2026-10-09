@@ -60,13 +60,6 @@ candidate passes the check, the book is `confirmed` with no change at all: no ke
 removed, no duplicates saved, no author keys. The row has `confirmed_on_abstain` set, and the report
 counts these. Any other non-accept stays `unsure`. A confirmed-on-abstain book flags no pair either.
 
-## How long it takes
-
-Measured on 200 top-ranked books: about 4 books a minute before the fast pass was cut to five
-concurrent lookups. Most of the time went to identifier lookups and full matches. The full run is
-likely 2-4 weeks, and the top few thousand ranked books finish in the first days. Unranked books
-probably have fewer identifiers, so they may go faster, but that is not measured.
-
 | Outcome | Meaning |
 |---|---|
 | `confirmed` | the stored key was right |
@@ -82,7 +75,7 @@ probably have fewer identifiers, so they may go faster, but that is not measured
 **removed.** A book with no trusted answer would stay `unsure` and keep its stored key, so a key the
 old code gave to the wrong book (a generic title holding a famous book's key) would stay for good.
 Instead, the book's stored keys are fetched in one `works_batch` call. A key is clearly another book
-when its record exists, its title does not agree with the book's, and no author agrees either (the
+when its record exists, its title does not agree with the book's, and no author agrees either (missing authors, on the book or on the record, count as unknown, not as disagreement; the key Open Library itself accepted or ranked top is never removed) (the
 record's Open Library author records are fetched only when the plain comparison fails). Every such key
 is removed and the outcome is `removed`, with `old_keys` holding all keys from before and no new key.
 A dead key (no record) is kept, as is a key whose record agrees on the title or on an author. A
@@ -113,6 +106,13 @@ holding it as a duplicate key.
 Authors of a book that ends with a trusted key take the work's author keys: an author with no key
 gets one; an author whose key another author holds becomes an author pair; an author with a different
 key is left alone and counted as a conflict.
+
+## How long it takes
+
+Measured on 200 top-ranked books: about 4 books a minute before the fast pass was cut to five
+concurrent lookups. Most of the time went to identifier lookups and full matches. The full run is
+likely 2-4 weeks, and the top few thousand ranked books finish in the first days. Unranked books
+probably have fewer identifiers, so they may go faster, but that is not measured.
 
 ## The log
 

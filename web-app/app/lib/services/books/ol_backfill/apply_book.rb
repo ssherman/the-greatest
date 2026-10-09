@@ -70,7 +70,7 @@ module Services
         def decide(answer)
           stored = stored_keys
           work = answer.work
-          return unsure_or_removed(stored) if work.nil?
+          return unsure_or_removed(stored, answer.ol_pick) if work.nil?
           # Open Library abstained, but its top answer is a key we hold: nothing to change.
           return unchanged(:confirmed, stored, work.key) if answer.confirm_only
 
@@ -114,11 +114,13 @@ module Services
         # No trusted answer. A stored key whose record is clearly another book
         # (title and author both disagree) is removed; a dead key, or a record
         # that agrees on either, stays.
-        def unsure_or_removed(stored)
-          return unchanged(:unsure, stored, nil) if stored.empty?
+        # The key Open Library itself named for this book is never removed.
+        def unsure_or_removed(stored, ol_pick)
+          candidates = stored - [ol_pick]
+          return unchanged(:unsure, stored, nil) if candidates.empty?
 
-          records = @client.works_batch(stored)
-          wrong = stored.select { |old| (record = records[old]) && Check.clearly_different?(@book, record, @client) }
+          records = @client.works_batch(candidates)
+          wrong = candidates.select { |old| (record = records[old]) && Check.clearly_different?(@book, record, @client) }
           return unchanged(:unsure, stored, nil) if wrong.empty?
 
           @book.identifiers.where(identifier_type: WORK_KEY, value: wrong).destroy_all
@@ -140,6 +142,8 @@ module Services
         def book_holding(key, work, type = WORK_KEY)
           ids = ::Identifier.where(identifiable_type: "Books::Book", identifier_type: type, value: key)
             .where.not(identifiable_id: @book.id).pluck(:identifiable_id)
+          return nil if ids.empty?
+
           ::Books::Book.where(id: ids).order(:id).find { |other| Check.titles_agree?(other, work) }&.id
         end
 

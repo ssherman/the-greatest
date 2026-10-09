@@ -54,7 +54,8 @@ module Services
 
         test "a removed row is listed among the recent changes" do
           war = books_books(:war_and_peace)
-          ::Books::OpenLibraryBackfill.create!(book: war, outcome: :removed, run_id: "run-1", old_keys: ["OL5W"])
+          ::Identifier.create!(identifiable: war, identifier_type: :books_work_openlibrary_id, value: "OL6W")
+          ::Books::OpenLibraryBackfill.create!(book: war, outcome: :removed, run_id: "run-1", old_keys: ["OL5W", "OL6W"])
 
           assert_match(/removed book #{war.id} "War and Peace": OL5W -> no key/, Report.call.join("\n"))
         end

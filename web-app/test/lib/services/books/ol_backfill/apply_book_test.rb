@@ -333,6 +333,55 @@ module Services
           assert_equal [["OL5W"], "unsure"], [work_keys, row.outcome]
         end
 
+        test "unsure: a book with no authors keeps a stored key whose record has a different title" do
+          add_key("OL5W")
+          other = ol_work("OL5W", title: "Anna Karenina", authors: [["OL9A", "Someone Else"]])
+          @book.book_authors.destroy_all
+
+          row = ApplyBook.call(book: @book.reload, client: abstain_client(works: {"OL5W" => other}), run_id: "run-1").data
+
+          assert_equal [["OL5W"], "unsure"], [work_keys, row.outcome]
+        end
+
+        test "unsure: a record with no authors and a different title keeps the stored key, and no authors are fetched" do
+          add_key("OL5W")
+          client = abstain_client(works: {"OL5W" => ol_work("OL5W", title: "Anna Karenina")})
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal [["OL5W"], "unsure"], [work_keys, row.outcome]
+          assert_empty client.calls.select { |call| call.first == :authors_batch }
+        end
+
+        test "unsure: author records that come back empty are unknown too" do
+          add_key("OL5W")
+          client = abstain_client(works: {"OL5W" => ol_work("OL5W", title: "Anna Karenina", authors: [["OL9A", ""]])})
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal [["OL5W"], "unsure"], [work_keys, row.outcome]
+        end
+
+        test "unsure: the key Open Library accepted is never removed, even when its record disagrees" do
+          add_key("OL5W")
+          wrong = ol_work("OL5W", title: "Anna Karenina", authors: [["OL9A", "Someone Else"]])
+          client = FakeOlClient.new(resolution: ol_resolution(verdict: "accept", work: wrong), works: {"OL5W" => wrong})
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal [["OL5W"], "unsure"], [work_keys, row.outcome]
+        end
+
+        test "unsure: the top candidate Open Library abstained on is never removed either" do
+          add_key("OL5W")
+          wrong = ol_work("OL5W", title: "Anna Karenina", authors: [["OL9A", "Someone Else"]])
+          client = FakeOlClient.new(resolution: ol_resolution(verdict: "abstain", work: wrong), works: {"OL5W" => wrong})
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal [["OL5W"], "unsure"], [work_keys, row.outcome]
+        end
+
         test "removed: of two stored keys only the clearly different one goes, with one works_batch call" do
           add_key("OL5W")
           add_key("OL6W")
@@ -387,6 +436,7 @@ module Services
         test "with several holders the lowest-id real one is the pair; a non-real lower id is ignored" do
           make_other_a_real_holder
           wrong = books_books(:got)
+          assert_operator wrong.id, :<, @other.id, "premise: the non-real holder has the lower id"
           ::Identifier.create!(identifiable: wrong, identifier_type: ApplyBook::WORK_KEY, value: "OL262758W")
           work = ol_work("OL262758W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
 

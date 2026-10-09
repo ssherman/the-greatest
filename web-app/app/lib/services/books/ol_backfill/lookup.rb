@@ -9,8 +9,10 @@ module Services
       class Lookup
         # confirm_only: Open Library abstained, but its top candidate is a key the
         # book already holds and agrees with it. Nothing is to be changed.
-        Answer = Data.define(:work, :lookup, :duplicates, :redirect_sources, :source_version, :confirm_only) do
-          def initialize(work:, lookup:, duplicates:, redirect_sources:, source_version:, confirm_only: false)
+        # ol_pick: the key Open Library accepted or ranked top, even when it failed
+        # our check (work is then nil). Never removed from the book.
+        Answer = Data.define(:work, :lookup, :duplicates, :redirect_sources, :source_version, :confirm_only, :ol_pick) do
+          def initialize(work:, lookup:, duplicates:, redirect_sources:, source_version:, confirm_only: false, ol_pick: nil)
             super
           end
         end
@@ -110,7 +112,8 @@ module Services
 
           held = confirmable_stored_key(resolution)
           Answer.new(work: held, lookup: :resolve, duplicates: [], redirect_sources: [],
-            source_version: resolution.source_version, confirm_only: !held.nil?)
+            source_version: resolution.source_version, confirm_only: !held.nil?,
+            ol_pick: accepted&.work_key || resolution.candidates.first&.work_key)
         end
 
         # Not an accept, but the top candidate is a key we hold and its record

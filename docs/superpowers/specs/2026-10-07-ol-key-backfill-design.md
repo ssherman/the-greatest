@@ -71,7 +71,7 @@ Used by both passes:
 **Amended 2026-10-08, rulings from the 200-book measurement:**
 
 - **Confirm on abstain (Shane).** When `/resolve` abstains but its top candidate is a key the book holds and passes the check, the book is `confirmed` with no change at all (no key, duplicate, author or pair changes), flagged `confirmed_on_abstain`.
-- **`removed` (Shane).** For a book that would end `unsure`, one `works_batch` fetches its stored keys' records; a key whose record exists and fails both the title and the author check is removed. A dead key, or a record agreeing on either, is kept.
+- **`removed` (Shane).** For a book that would end `unsure`, one `works_batch` fetches its stored keys' records; a key whose record exists and fails both the title and the author check is removed. A dead key, or a record agreeing on either, is kept. Missing authors (on the book, or on the record) are unknown, not disagreement. The key Open Library accepted or ranked top is never removed.
 - **Real holder for pairs.** Another book holding the answer as its work key is a holder only if its title agrees with the matched work. A non-real holder is ignored: no `duplicate_pair`, no flag, and it does not block saving a duplicate key. The lowest-id real holder is the pair.
 - **Replaced keys that agree.** A replaced old key whose own record also passes the check is kept as a duplicate key (or flagged, if another book holds it as a work key).
 - **Errors.** An error about one book (400, 422, unparseable response) logs `failed` and the run continues; any other error retries, then logs `failed` and stops the run.
@@ -85,7 +85,7 @@ Used by both passes:
 
 When pass 2 ran, every key in `decision.duplicates` is saved on the book as a new identifier type, `books_work_openlibrary_duplicate_id` (enum value 9).
 
-- A key another of our books holds as its work key is not saved. That pair is flagged instead.
+- A key another of our books holds as its work key is not saved. That pair is flagged instead. *Amended 2026-10-08:* only when that book really looks like the matched work (its title agrees); otherwise the duplicate key is saved and nothing is flagged.
 - Pass 1 does not return duplicates, so books settled there get none.
 
 ## 2. Authors
@@ -131,7 +131,7 @@ The unique `book_id` is also what stops two runs from handling the same book: an
   - ranked books checked out of ranked books total;
   - the latest run's progress;
   - author keys added, author pairs and author conflicts;
-  - the 20 most recent `replaced` and `duplicate_pair` books, with titles and keys, for spot checks.
+  - the 20 most recent `replaced`, `duplicate_pair` and `removed` books and `confirmed` books with a pair (*amended 2026-10-08*), with titles and keys, for spot checks.
 - `books:ol_backfill_revert[<book_id>]` restores the old keys, removes the new key and any duplicate keys the backfill added, removes author keys it added, and marks the row `reverted`.
 
 ### The job
@@ -148,7 +148,7 @@ The unique `book_id` is also what stops two runs from handling the same book: an
 - Pass 2 takes 12-13 s. *Amended 2026-10-08:* pass 1 measured 4-5 s per famous book (0.2-0.6 s per lookup, ten lookups in series), about 4 books a minute overall; the cap of five concurrent lookups is meant to cut that. The "about a week" below was an estimate; expect 2-4 weeks.
 - About 76% of books carry an identifier that reaches an Open Library work (`docs/data-quality/books-identifier-coverage.md`). If most of those settle in pass 1, `all` takes about a week rather than the roughly 24 days pass 2 alone would.
 - The top few thousand ranked books finish on the first day.
-- **Sharing Open Library with the wizard:** each waits its turn for the single slot, so the wizard gets slower while the backfill runs but nothing fails.
+- **Sharing Open Library with the wizard:** each waits its turn for the single slot, so the wizard gets slower while the backfill runs.
 
 ## 5. Duplicate keys in the finder
 
