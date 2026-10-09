@@ -412,5 +412,23 @@ module Books
       book.provisional = true
       assert_equal true, book.as_indexed_json[:provisional]
     end
+
+    test "destroying a legacy-origin book records it as deleted" do
+      book = ::Books::Book.create!(id: 1_001, title: "Legacy Origin Book")
+
+      book.destroy!
+
+      row = RecordRedirect.find_by!(item_type: "Books::Book", from_id: 1_001)
+      assert_nil row.to_id
+    end
+
+    test "destroying a new-app book records nothing" do
+      book = ::Books::Book.create!(title: "New App Book")
+      assert_operator book.id, :>=, Services::BooksMigration::RESERVED_CEILINGS.fetch("books_books")
+
+      assert_no_difference -> { RecordRedirect.count } do
+        book.destroy!
+      end
+    end
   end
 end
