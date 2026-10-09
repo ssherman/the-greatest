@@ -21,7 +21,7 @@ module Services
           "books_work_goodreads_id" => "goodreads"
         }.freeze
         # Enough lookups to show whether a book's identifiers agree.
-        MAX_FAST_LOOKUPS = 10
+        MAX_FAST_LOOKUPS = 5
         NO_HIT_STATUSES = [400, 422].freeze
         RESOLVE_IDENTIFIERS_PER_TYPE = 3
 
@@ -53,7 +53,7 @@ module Services
         def fast
           return nil if identifiers.empty?
 
-          hits = identifiers.first(MAX_FAST_LOOKUPS).flat_map { |type, value| hits_for(FAST_TYPES.fetch(type), value) }
+          hits = fast_hits
           keys = hits.map(&:work_key).compact.uniq
           return nil unless keys.size == 1
 
@@ -61,6 +61,24 @@ module Services
           return nil unless work && Check.verified?(@book, work, @client)
 
           Answer.new(work: work, lookup: :identifiers, duplicates: [], redirect_sources: [], source_version: work.source_version)
+        end
+
+        # One thread per lookup (the client and its breaker are safe for
+        # concurrent requests; the threads touch no database connection).
+        # Joined in order; the first error, in lookup order, is raised.
+        def fast_hits
+          threads = identifiers.first(MAX_FAST_LOOKUPS).map do |type, value|
+            Thread.new do
+              hits_for(FAST_TYPES.fetch(type), value)
+            rescue => e
+              e
+            end
+          end
+          results = threads.map(&:value)
+          error = results.find { |result| result.is_a?(Exception) }
+          raise error if error
+
+          results.flatten
         end
 
         def hits_for(type, value)

@@ -53,7 +53,8 @@ module OlBackfillHelper
   # errors: one entry per call, in call order, whatever the call; nil means
   #   "no error for this call", an exception is raised by that call.
   class FakeOlClient
-    attr_reader :calls
+    # Called from threads (the fast pass looks identifiers up concurrently).
+    def calls = @lock.synchronize { @calls.dup }
 
     def initialize(hits: {}, works: {}, authors: {}, resolution: nil, version: nil, errors: [])
       @hits = hits
@@ -63,10 +64,11 @@ module OlBackfillHelper
       @version = version
       @errors = errors.dup
       @calls = []
+      @lock = Mutex.new
     end
 
     def identifier(type, value)
-      @calls << [:identifier, type, value]
+      record([:identifier, type, value])
       raise_next!
       found = @hits.fetch([type, value], [])
       raise found if found.is_a?(Exception)
@@ -75,19 +77,19 @@ module OlBackfillHelper
     end
 
     def works_batch(keys)
-      @calls << [:works_batch, keys]
+      record([:works_batch, keys])
       raise_next!
       keys.to_h { |key| [key, @works[key]] }
     end
 
     def authors_batch(keys)
-      @calls << [:authors_batch, keys]
+      record([:authors_batch, keys])
       raise_next!
       keys.to_h { |key| [key, @authors[key]] }
     end
 
     def resolve(**args)
-      @calls << [:resolve, args]
+      record([:resolve, args])
       raise_next!
       raise "no resolution stubbed" if @resolution.nil?
 
@@ -95,15 +97,17 @@ module OlBackfillHelper
     end
 
     def version
-      @calls << [:version]
+      record([:version])
       raise_next!
       @version
     end
 
     private
 
+    def record(call) = @lock.synchronize { @calls << call }
+
     def raise_next!
-      error = @errors.shift
+      error = @lock.synchronize { @errors.shift }
       raise error if error
     end
   end

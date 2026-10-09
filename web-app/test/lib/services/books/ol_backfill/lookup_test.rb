@@ -114,6 +114,30 @@ module Services
           assert_equal Lookup::MAX_FAST_LOOKUPS, client.calls.count { |call| call.first == :identifier }
         end
 
+        test "MAX_FAST_LOOKUPS is 5" do
+          assert_equal 5, Lookup::MAX_FAST_LOOKUPS
+        end
+
+        test "an error raised by one of the concurrent identifier lookups propagates" do
+          ::Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          client = FakeOlClient.new(hits: {["goodreads", "656"] => ::Books::OpenLibrary::Exceptions::ServerError.new("down", 500)})
+
+          assert_raises(::Books::OpenLibrary::Exceptions::ServerError) { Lookup.call(book: @book, client: client) }
+        end
+
+        test "a missing identifier among concurrent lookups is no hit and the others still settle the book" do
+          ::Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          work = ol_work("OL1W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
+          client = FakeOlClient.new(
+            hits: {["isbn13", "9780140447934"] => [ol_hit("OL1W")], ["goodreads", "656"] => ::Books::OpenLibrary::Exceptions::NotFoundError.new("none", 404)},
+            works: {"OL1W" => work}
+          )
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal [:identifiers, "OL1W"], [answer.lookup, answer.work.key]
+        end
+
         test "the fast pass fetches author records when the names differ, and settles on an alternate name" do
           work = ol_work("OL1W", title: "War and Peace", authors: [["OL1A", "Лев Толстой"]])
           client = FakeOlClient.new(hits: {["isbn13", "9780140447934"] => [ol_hit("OL1W")]}, works: {"OL1W" => work},
