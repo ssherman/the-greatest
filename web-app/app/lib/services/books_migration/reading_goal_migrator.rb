@@ -56,6 +56,13 @@ module Services
           .where(id: ...RESERVED_ID_FLOOR)
           .where.not(id: @legacy_goal_ids)
         @orphaned_goal_ids = orphans.order(:id).pluck(:id)
+        # An empty legacy table (a restore in progress) would delete every goal.
+        # The table is a few hundred rows, under guard_deletion!'s floor, so this
+        # checks for the empty table directly.
+        if @legacy_goal_ids.empty? && @orphaned_goal_ids.any?
+          raise "legacy has no reading goals but #{@orphaned_goal_ids.size} are here; " \
+            "refusing to delete them all (check the legacy database)"
+        end
         orphans.delete_all if @orphaned_goal_ids.any?
       end
 

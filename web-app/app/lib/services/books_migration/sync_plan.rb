@@ -30,17 +30,18 @@ module Services
           Window.new(ids: [], waiting: 0)
         end
 
-        @scope = SyncScope.new(
-          book_ids: books.ids.to_set - redirects.redirected_ids("Books::Book"),
-          author_ids: authors.ids.to_set - redirects.redirected_ids("Books::Author"),
-          identifier_ids: identifiers.ids.to_set,
-          redirects: redirects
-        )
         @next_watermarks = {
           "books" => books.ids.max || @watermarks["books"],
           "authors" => authors.ids.max || @watermarks["authors"],
           "book_identifiers" => identifiers.ids.max || @watermarks["book_identifiers"]
         }
+        @scope = SyncScope.new(
+          book_ids: books.ids.to_set - redirects.redirected_ids("Books::Book"),
+          author_ids: authors.ids.to_set - redirects.redirected_ids("Books::Author"),
+          identifier_ids: identifiers.ids.to_set,
+          redirects: redirects,
+          books_watermark: @next_watermarks["books"]
+        )
         @report = build_report(books, authors, identifiers, redirects)
       end
 

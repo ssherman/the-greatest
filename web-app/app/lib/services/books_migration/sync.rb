@@ -1,10 +1,11 @@
 module Services
   module BooksMigration
-    # data_migration:sync (spec §5): brings over only what is new on legacy, in
-    # :all's dependency order, then queues search indexing for what it inserted and
-    # advances the watermarks. Any failed step stops the run with the watermarks
-    # unchanged; every step is insert-only here, so the next run retries safely.
-    # The user-data steps join after news_posts in increment 3 (spec §6).
+    # data_migration:sync (spec §5, §6): brings over only what is new on legacy, in
+    # :all's dependency order, and makes legacy users' data match legacy, then
+    # queues search indexing for what it inserted and advances the watermarks. Any
+    # failed step stops the run with the watermarks unchanged. Catalog steps are
+    # insert-only and user-data steps converge on legacy, so the next run retries
+    # safely. The rake task rebuilds the favorites lists after a successful run.
     class Sync
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -66,7 +67,16 @@ module Services
           ["author_descriptions", -> { AuthorDescriptionMigrator.call(sync: scope) }],
           ["description_safety_net", -> { ::Services::BooksDescriptionSafetyNet.call }],
           ["news_posts", -> { NewsPostMigrator.call }],
-          ["book_images", -> { BookImageMigrator.call(sync: scope) }]
+          ["book_images", -> { BookImageMigrator.call(sync: scope) }],
+          ["user_lists", -> { UserListMigrator.call(sync: scope) }],
+          ["user_list_items", -> { UserListItemMigrator.call(sync: scope) }],
+          ["reading_goals", -> { ReadingGoalMigrator.call }],
+          ["saved_searches", -> { SavedSearchMigrator.call(sync: scope) }],
+          ["recommendation_configs", -> { RecommendationConfigMigrator.call }],
+          ["reviews", -> { ReviewMigrator.call(sync: scope) }],
+          # upsert_all bypassed Review's after_commit, as in the reviews rake task.
+          ["review_summaries", -> { ::Services::Reviews::SummaryRecalculator.backfill_all! }],
+          ["corrections", -> { CorrectionMigrator.call(sync: scope) }]
         ]
       end
 

@@ -11,6 +11,8 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       Rake::Task.define_task(:environment) {} unless Rake::Task.task_defined?(:environment)
       load Rails.root.join("lib/tasks/data_migration.rake").to_s
     end
+    load Rails.root.join("lib/tasks/lists/user_favorites.rake").to_s unless Rake::Task.task_defined?("user_favorites_lists:rebuild")
+    Rake::Task["user_favorites_lists:rebuild"].stubs(:invoke)
     %w[
       data_migration:reading_goals
       data_migration:verify_reading_goals
@@ -25,6 +27,11 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       data_migration:languages
       data_migration:sync
       data_migration:sync_report
+      data_migration:user_lists
+      data_migration:user_list_items
+      data_migration:saved_searches
+      data_migration:reviews
+      data_migration:corrections
     ].each { |name| Rake::Task[name].reenable if Rake::Task.task_defined?(name) }
   end
 
@@ -201,10 +208,30 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
     capture_io { Rake::Task["data_migration:books"].invoke }
   end
 
-  test "the user-data tasks are not guarded" do
-    %w[users user_lists user_list_items reading_goals saved_searches recommendation_configs reviews corrections news_posts description_safety_net].each do |name|
+  test "the user-data tasks the sync does not replace are not guarded" do
+    %w[users reading_goals recommendation_configs news_posts description_safety_net].each do |name|
       refute_includes Rake::Task["data_migration:#{name}"].prerequisites, "refuse_after_sync_init", name
     end
+  end
+
+  test "the user-data tasks the sync replaces refuse after sync_init" do
+    %w[user_lists user_list_items saved_searches reviews corrections].each do |name|
+      assert_includes Rake::Task["data_migration:#{name}"].prerequisites, "refuse_after_sync_init", name
+    end
+  end
+
+  test "sync rebuilds the favorites lists after a successful run" do
+    Services::BooksMigration::Sync.stubs(:call).returns(sync_result)
+    Rake::Task["user_favorites_lists:rebuild"].expects(:invoke).once
+
+    capture_io { Rake::Task["data_migration:sync"].invoke }
+  end
+
+  test "a failed sync does not rebuild the favorites lists" do
+    Services::BooksMigration::Sync.stubs(:call).returns(sync_result(success: false, errors: ["reviews failed: boom"]))
+    Rake::Task["user_favorites_lists:rebuild"].expects(:invoke).never
+
+    capture_io { assert_raises(SystemExit) { Rake::Task["data_migration:sync"].invoke } }
   end
 
   test "sync_init prints the watermarks" do
@@ -266,11 +293,13 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
     assert_match(/data_migration:sync failed: editions failed: boom/, err)
   end
 
-  test "sync_report prints the plan and runs nothing" do
+  test "sync_report prints the plan with its user data and runs nothing" do
     Services::BooksMigration::Sync.expects(:call).never
     plan = mock("plan")
+    plan.stubs(:scope).returns(:the_scope)
     Services::BooksMigration::SyncPlan.expects(:build).with(final: false).returns(plan)
-    Services::BooksMigration::SyncReport.expects(:render).with(plan).returns("REPORT")
+    Services::BooksMigration::UserDataDiff.expects(:call).with(scope: :the_scope).returns(:the_diff)
+    Services::BooksMigration::SyncReport.expects(:render).with(plan, user_data: :the_diff).returns("REPORT")
 
     out, _err = with_env("FINAL", nil) { capture_io { Rake::Task["data_migration:sync_report"].invoke } }
 
