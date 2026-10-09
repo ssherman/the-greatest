@@ -30,6 +30,13 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
     assert_select "title", "Support The Greatest Books"
   end
 
+  test "the books story links to the recommendations pitch" do
+    get membership_url
+
+    assert_response :success
+    assert_select "a[href='/recommendations']"
+  end
+
   test "thanks sets its own page title" do
     get membership_thanks_url
 
