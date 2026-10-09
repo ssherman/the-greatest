@@ -252,5 +252,9 @@ wrong place.
   saved_searches, ...)
 - `docs/data-quality/` — measured findings about the data we already hold, with the script
   that produced them. Regenerate before acting: the numbers describe a moment, not a rule.
-- `docs/documentation.md` — documentation philosophy. **Code is the source of truth: we do NOT write
-  class-level docs.** Features go in `docs/features/`, data models in `docs/object_models/`.
+- `docs/documentation.md` — documentation philosophy. **Code is the source of truth: there is no
+  per-class documentation FILE** (the old `docs/models/`, `docs/lib/` tree is gone and must not come
+  back). Features go in `docs/features/`, data models in `docs/object_models/`. This rule is about
+  files under `docs/`, not about comments: a class-header or method comment that explains *why* the
+  code is shaped the way it is belongs in the source and is welcome. Never flag such a comment as
+  "class-level documentation".

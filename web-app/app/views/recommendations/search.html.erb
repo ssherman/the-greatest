@@ -1,0 +1,14 @@
+<%= turbo_frame_tag "wizard_search_results", target: "_top" do %>
+  <% if @query.blank? %>
+    <p class="text-sm text-base-content/70">Type a title or an author to find a book.</p>
+  <% elsif @books.empty? %>
+    <p class="text-sm text-base-content/70 [overflow-wrap:anywhere]" data-testid="wizard-search-empty">No books match "<%= @query %>".</p>
+  <% else %>
+    <p class="text-sm text-base-content/70">Use "Add to list" on a card to put it on a list.</p>
+    <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>" data-testid="wizard-search-results">
+      <% @books.each_with_index do |book, index| %>
+        <%= render Books::CardComponent.new(book: book, rank: book.ranked_position, index: index) %>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>

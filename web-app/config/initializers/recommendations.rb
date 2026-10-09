@@ -44,6 +44,9 @@ Rails.application.config.x.recommendations = ActiveSupport::OrderedOptions.new.m
   # scale 0 = off. Every candidate carries a rank (the pool filter requires one).
   quality_scale: 1000,
   quality_floor: 0.3,
+  # The user-facing "depth" setting (spec §9.4 "deep cuts"): a stored depth maps
+  # to this quality_floor; "balanced" stores nothing and follows quality_floor.
+  depth_floors: {"safe" => 0.1, "deep" => 0.5}.freeze,
 
   # Fusion (spec §5.4)
   rrf_k: 60,

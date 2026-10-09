@@ -1,0 +1,16 @@
+<div class="space-y-4" data-testid="taste">
+  <% groups.each do |key, heading, rows| %>
+    <div>
+      <h3 class="font-semibold mb-2"><%= heading %></h3>
+      <ul class="space-y-1">
+        <% rows.each do |name, percent| %>
+          <li class="flex items-center gap-2" data-testid="taste-<%= key %>">
+            <span class="flex-1 text-sm [overflow-wrap:anywhere]"><%= name %></span>
+            <progress class="progress progress-primary w-24" value="<%= percent %>" max="100" aria-label="<%= name %> weight"></progress>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+  <p class="text-sm text-base-content/70" data-testid="taste-counts"><%= counts_line %></p>
+</div>

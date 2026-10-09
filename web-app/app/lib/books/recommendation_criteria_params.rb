@@ -6,7 +6,11 @@ module Books
   # keys, so `ranked`/`hide_read`/language/country never enter the column.
   class RecommendationCriteriaParams
     def self.call(raw)
-      ::Books::SavedSearchCriteriaParams.call(raw).slice(*::Books::RecommendationCriteria::KEYS)
+      out = ::Books::SavedSearchCriteriaParams.call(raw).slice(*::Books::RecommendationCriteria::KEYS)
+      depth = (raw || {}).to_h.stringify_keys["depth"].to_s
+      stored_depths = ::Books::RecommendationCriteria::DEPTHS - [::Books::RecommendationCriteria::DEFAULT_DEPTH]
+      out["depth"] = depth if stored_depths.include?(depth)
+      out
     end
   end
 end

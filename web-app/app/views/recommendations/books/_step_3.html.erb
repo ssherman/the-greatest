@@ -1,0 +1,44 @@
+<div class="grid gap-8 lg:grid-cols-3">
+  <section class="lg:col-span-2 space-y-6">
+    <h2 class="text-2xl font-semibold">Step 3: rate what you have read</h2>
+    <p>Four and five stars push a book's traits up. One and two stars push them down. A three changes nothing.</p>
+
+    <% if @unrated.books.empty? %>
+      <% if @read_total.zero? %>
+        <div class="alert" data-testid="unrated-empty"><span>Your read list is empty. Ratings come from books you have read; add some on <%= link_to "step 2", recommendations_wizard_path(step: 2), class: "link" %> or rate a book from its page.</span></div>
+      <% else %>
+        <div class="alert alert-success" data-testid="unrated-empty"><span>Everything on your read list is rated.</span></div>
+      <% end %>
+    <% else %>
+      <p class="font-medium"><%= pluralize(@unrated.total, "book") %> without a rating.</p>
+      <% if @unrated.total > @unrated.books.size %>
+        <p class="text-sm text-base-content/70" data-testid="unrated-capped">Showing <%= @unrated.books.size %> of <%= @unrated.total %>. Rate the rest from each book's page, or after rating these.</p>
+      <% end %>
+      <ul data-testid="unrated-list">
+        <% @unrated.books.each do |book| %>
+          <%= render "recommendations/books/book_row", book: book,
+                trailing: render(Reviews::WidgetComponent.new(reviewable: book)) %>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <% if @rated.any? %>
+      <h3 class="text-xl font-semibold mt-8">Already rated</h3>
+      <ul data-testid="rated-list">
+        <% @rated.each do |book, review| %>
+          <%= render "recommendations/books/book_row", book: book,
+                trailing: render(Reviews::StarsComponent.new(rating: review.rating, size: "size-4", label: "#{review.rating} stars")) %>
+        <% end %>
+      </ul>
+    <% end %>
+  </section>
+
+  <aside class="space-y-4">
+    <div class="card bg-base-200"><div class="card-body">
+      <h3 class="card-title text-lg">Why ratings matter</h3>
+      <p>They tell us which books to learn from, and which to steer away from.</p>
+    </div></div>
+    <%= link_to "Continue to step 4", recommendations_wizard_path(step: 4), class: "btn btn-primary w-full", data: {testid: "wizard-next"} %>
+    <%= link_to "Back to step 2", recommendations_wizard_path(step: 2), class: "btn btn-ghost w-full" %>
+  </aside>
+</div>

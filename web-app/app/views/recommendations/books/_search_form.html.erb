@@ -1,0 +1,7 @@
+<div class="space-y-4" data-testid="wizard-search">
+  <%= form_with url: recommendations_search_path, method: :get, data: {turbo_frame: "wizard_search_results"}, class: "join w-full" do |f| %>
+    <%= f.search_field :q, placeholder: "Search by title or author", class: "input join-item flex-1", autocomplete: "off", "aria-label": label %>
+    <button type="submit" class="btn btn-primary join-item"><%= label %></button>
+  <% end %>
+  <%= turbo_frame_tag "wizard_search_results", target: "_top" %>
+</div>
