@@ -17,6 +17,14 @@ module Services
           @client = FakeOlClient.new
         end
 
+        # Session locks outlive a test's rolled-back transaction, so start each test clean.
+        setup { release_session_locks }
+        teardown { release_session_locks }
+
+        def release_session_locks
+          ActiveRecord::Base.connection.select_value("SELECT 1 FROM (SELECT pg_advisory_unlock_all()) AS unlocked")
+        end
+
         def no_sleep = ->(_seconds) { flunk "no wait expected" }
 
         def ok = ApplyBook::Result.new(success?: true, data: nil, errors: [])
@@ -47,13 +55,13 @@ module Services
           PG.connect(dbname: config[:database], host: config[:host], port: config[:port], user: config[:username], password: config[:password])
         end
 
-        def lock_sql(function) = "SELECT 1 FROM (SELECT #{function}(#{Run::LOCK_KEY})) AS lock_taken"
-
         def with_lock_held_elsewhere
           session = other_session
-          session.exec(lock_sql("pg_advisory_lock"))
+          assert_equal "t", session.exec("SELECT pg_try_advisory_lock(#{Run::LOCK_KEY})").getvalue(0, 0)
           yield
         ensure
+          # Unlock explicitly: the server frees a closed session's locks a moment later.
+          session&.exec("SELECT pg_advisory_unlock(#{Run::LOCK_KEY})")
           session&.close
         end
 
@@ -61,6 +69,7 @@ module Services
           session = other_session
           assert_equal "t", session.exec("SELECT pg_try_advisory_lock(#{Run::LOCK_KEY})").getvalue(0, 0)
         ensure
+          session&.exec("SELECT pg_advisory_unlock(#{Run::LOCK_KEY})")
           session&.close
         end
 
@@ -78,6 +87,16 @@ module Services
           run_backfill(limit: 1)
 
           assert_lock_free
+        end
+
+        test "a lost lock is logged with the run id" do
+          record_applies
+          Run.any_instance.stubs(:unlock).returns(false)
+          Rails.logger.expects(:warn).with(regexp_matches(/run-1/)).once
+
+          run_backfill(limit: 1)
+        ensure
+          ActiveRecord::Base.connection.select_value("SELECT pg_advisory_unlock(#{Run::LOCK_KEY})")
         end
 
         test "the lock is released when the run raises" do

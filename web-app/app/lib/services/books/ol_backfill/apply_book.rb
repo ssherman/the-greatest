@@ -44,6 +44,7 @@ module Services
         def call
           return skipped("book #{@book.id} already has a settled row") if self.class.settled?(::Books::OpenLibraryBackfill.find_by(book: @book))
 
+          @inserting = false
           answer = Lookup.call(book: @book, client: @client)
           ::ActiveRecord::Base.transaction do
             row = ::Books::OpenLibraryBackfill.find_or_initialize_by(book: @book)
@@ -52,6 +53,7 @@ module Services
             next skipped("another run settled book #{@book.id} first") if self.class.settled?(row)
 
             attempts = row.new_record? ? 1 : row.attempts + 1
+            @inserting = row.new_record?
             row.assign_attributes(decide(answer).merge(
               lookup: answer.lookup, run_id: @run_id, attempts: attempts, error: nil, confirmed_on_abstain: answer.confirm_only,
               dump_date: answer.source_version&.dig(:dump_date), matcher_version: answer.source_version&.dig(:matcher_version)
@@ -60,9 +62,9 @@ module Services
             Result.new(success?: true, data: row, errors: [])
           end
         rescue ::ActiveRecord::RecordNotUnique
-          # Only the backfill row's unique book_id means another run won; any other
+          # Only a failed insert of a new backfill row (unique book_id) means another run won; any other
           # uniqueness failure is a real error and must not hide the book.
-          raise unless ::Books::OpenLibraryBackfill.exists?(book_id: @book.id)
+          raise unless @inserting && ::Books::OpenLibraryBackfill.exists?(book_id: @book.id)
 
           skipped("another run wrote book #{@book.id} first")
         end

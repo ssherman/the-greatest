@@ -480,6 +480,15 @@ module Services
           assert_raises(ActiveRecord::RecordNotUnique) { ApplyBook.call(book: @book, client: fast_client, run_id: "run-1") }
           assert_nil ::Books::OpenLibraryBackfill.find_by(book: @book)
         end
+
+        test "a uniqueness failure while retrying a failed row propagates and leaves the row" do
+          failed = ::Books::OpenLibraryBackfill.create!(book: @book, outcome: :failed, run_id: "old-run", error: "boom", attempts: 1)
+          AuthorKeys.stubs(:call).raises(ActiveRecord::RecordNotUnique, "duplicate author key")
+
+          assert_raises(ActiveRecord::RecordNotUnique) { ApplyBook.call(book: @book, client: fast_client, run_id: "run-1") }
+          failed.reload
+          assert_equal ["failed", "old-run", 1], [failed.outcome, failed.run_id, failed.attempts]
+        end
       end
     end
   end

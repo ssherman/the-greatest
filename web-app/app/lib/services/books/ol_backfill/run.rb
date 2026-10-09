@@ -47,7 +47,7 @@ module Services
             begin
               run_locked
             ensure
-              connection.select_value("SELECT pg_advisory_unlock(#{LOCK_KEY})")
+              release_lock(connection)
             end
           end
         end
@@ -85,6 +85,17 @@ module Services
           @error = "#{e.class}: #{e.message}"
           finish(done || 0, stopped: true)
         end
+
+        # Never raises: it runs in an ensure and must not mask the run's own error.
+        def release_lock(connection)
+          return if unlock(connection)
+
+          ::Rails.logger.warn("Open Library backfill run #{@run_id}: advisory lock was already lost at the end of the run")
+        rescue => e
+          ::Rails.logger.warn("Open Library backfill run #{@run_id}: releasing the advisory lock failed: #{e.class}: #{e.message}")
+        end
+
+        def unlock(connection) = connection.select_value("SELECT pg_advisory_unlock(#{LOCK_KEY})")
 
         def full?(done) = !@limit.nil? && done >= @limit
 
