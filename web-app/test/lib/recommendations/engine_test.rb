@@ -190,8 +190,13 @@ module Recommendations
     end
 
     test "each item carries its global rank position" do
+      # Positions deliberately differ from the ids, so returning the id fails.
+      @candidates = [[101, 37], [102, 5], [103, 900]].map do |id, position|
+        Candidate.new(item_id: id, score: 3.0 - id % 100 / 10.0, rank_position: position, evidence: {taste: true})
+      end
       result, = engine
-      assert_equal [101, 102, 103], result.data[:items].map { |i| i[:rank_position] }
+      assert_equal [101, 102, 103], result.data[:items].map { |i| i[:item_id] }
+      assert_equal [37, 5, 900], result.data[:items].map { |i| i[:rank_position] }
     end
 
     test "an unregistered domain is a failure" do
