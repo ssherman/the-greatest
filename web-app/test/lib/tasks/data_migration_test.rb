@@ -171,9 +171,12 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
   end
 
   test "all refuses once the sync watermarks exist" do
-    # Rake looks up every prerequisite before running the first one, and this
-    # file loads only data_migration.rake.
-    Rake::Task.define_task("user_favorites_lists:rebuild") unless Rake::Task.task_defined?("user_favorites_lists:rebuild")
+    # Rake looks up every prerequisite before running the first one, and this file
+    # loads only data_migration.rake. Load the real task, never a stub: the
+    # favorites rake test skips loading its file when the task is already defined.
+    unless Rake::Task.task_defined?("user_favorites_lists:rebuild")
+      load Rails.root.join("lib/tasks/lists/user_favorites.rake").to_s
+    end
     init_watermarks(books: 1, authors: 1, book_identifiers: 1)
     Services::BooksMigration::LanguageMigrator.expects(:call).never
 
@@ -212,6 +215,14 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
     out, _err = capture_io { Rake::Task["data_migration:sync_init"].invoke }
 
     assert_match(/"books" => 5/, out)
+  end
+
+  test "sync_init passes BOOK_IDENTIFIERS_FROM through as the identifier watermark" do
+    Services::BooksMigration::SyncInit.expects(:call).with(book_identifiers: 80_000).returns(
+      Services::BooksMigration::SyncInit::Result.new(success?: true, data: {}, errors: [])
+    )
+
+    with_env("BOOK_IDENTIFIERS_FROM", "80000") { capture_io { Rake::Task["data_migration:sync_init"].invoke } }
   end
 
   test "sync_init aborts when it refuses" do

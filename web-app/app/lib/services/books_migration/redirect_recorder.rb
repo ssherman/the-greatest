@@ -11,6 +11,10 @@ module Services
       # A merge overwrites any row already there: it is the more specific fate.
       def self.merged(item_type:, from_id:, to_id:)
         repoint(item_type, from_id, to_id)
+        # The survivor is alive by definition. A row naming it as its own target
+        # (it had been merged away, then came back with a weekly :all) would read
+        # as a cycle on every sync.
+        RecordRedirect.where(item_type: item_type, from_id: to_id).delete_all
         return unless legacy_origin?(item_type, from_id)
 
         RecordRedirect.upsert({item_type: item_type, from_id: from_id, to_id: to_id}, unique_by: [:item_type, :from_id])

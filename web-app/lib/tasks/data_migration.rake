@@ -11,9 +11,13 @@ namespace :data_migration do
     end
   end
 
-  desc "Record the legacy sync watermarks (once, right after the final data_migration:all)"
+  # BOOK_IDENTIFIERS_FROM: legacy's max book_identifiers id, read BEFORE the final
+  # data_migration:all started. Without it, identifiers legacy adds to existing
+  # books while that :all runs are never copied.
+  desc "Record the legacy sync watermarks (once, right after the final data_migration:all; see BOOK_IDENTIFIERS_FROM)"
   task sync_init: :environment do
-    result = Services::BooksMigration::SyncInit.call
+    from = ENV["BOOK_IDENTIFIERS_FROM"].presence&.to_i
+    result = from ? Services::BooksMigration::SyncInit.call(book_identifiers: from) : Services::BooksMigration::SyncInit.call
     pp result.data
     abort "sync_init failed: #{result.errors.join("; ")}" unless result.success?
   end

@@ -14,6 +14,16 @@ over only what is new there. Design: `docs/superpowers/specs/2026-10-08-books-le
 
 After `sync_init`, `data_migration:all` and every catalog task abort with "use data_migration:sync".
 
+### Switching over
+
+1. Before starting the final `data_migration:all`, read legacy's highest `book_identifiers` id
+   (`bin/rails runner 'puts LegacyBooks::BookIdentifier.maximum(:id)'`).
+2. Run the final `data_migration:all`.
+3. `BOOK_IDENTIFIERS_FROM=<that id> bin/rails data_migration:sync_init`. Without it, identifiers
+   legacy adds to existing books while the hours-long `:all` runs are never copied.
+   `sync_init` also removes redirect rows for books and authors that exist again (the weekly
+   `:all` ignores redirects, so it restores what was deleted or merged before the switch).
+
 ## How it decides what is new
 
 - `legacy_sync_watermarks` holds the last legacy id processed for `books`, `authors`, `book_identifiers`.

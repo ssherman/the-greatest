@@ -73,6 +73,17 @@ class Services::BooksMigration::RedirectRecorderTest < ActiveSupport::TestCase
     assert_nil fate("Books::Book", 1_001).to_id
   end
 
+  # A was merged into B, the weekly :all brought A back, then B was merged into A:
+  # the repoint would leave A -> A, and resolving A would raise a cycle forever.
+  test "a merge into a record that had been merged away drops the self-loop" do
+    Recorder.merged(item_type: "Books::Book", from_id: 1_001, to_id: 2_002)
+
+    Recorder.merged(item_type: "Books::Book", from_id: 2_002, to_id: 1_001)
+
+    assert_nil fate("Books::Book", 1_001)
+    assert_equal 1_001, fate("Books::Book", 2_002).to_id
+  end
+
   test "repoints within the item type only" do
     Recorder.merged(item_type: "Books::Author", from_id: 1_001, to_id: 2_002)
 
