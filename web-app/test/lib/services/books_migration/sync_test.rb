@@ -29,6 +29,7 @@ class Services::BooksMigration::SyncTest < ActiveSupport::TestCase
     Services::BooksMigration::ReadingGoalMigrator.stubs(:call).returns(success: true, data: {model: "Books::ReadingGoal", count: 0})
     Services::BooksMigration::RecommendationConfigMigrator.stubs(:call).returns(success: true, data: {model: "Books::RecommendationConfig", count: 0})
     Services::BooksMigration::UserListItemMigrator.any_instance.stubs(:legacy_items_for).returns([])
+    Services::BooksMigration::UserListItemMigrator.any_instance.stubs(:legacy_item_count).returns(0)
     stub_legacy(
       "AuthorMigrator" => [{"id" => 501, "name" => "New Legacy Author", "family_name" => "Author", "alternative_names" => nil}],
       "BookMigrator" => [

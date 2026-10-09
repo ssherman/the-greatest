@@ -24,6 +24,7 @@ class Services::BooksMigration::UserListItemMigratorSyncTest < ActiveSupport::Te
     migrator.define_singleton_method(:legacy_items_for) do |list_ids|
       rows.select { |row| list_ids.include?(row["user_list_id"]) }
     end
+    migrator.define_singleton_method(:legacy_item_count) { rows.size }
     migrator.call
   end
 
@@ -91,6 +92,20 @@ class Services::BooksMigration::UserListItemMigratorSyncTest < ActiveSupport::Te
 
     assert result[:success], result[:error]
     assert_equal [@survivor.id], listed
+  end
+
+  test "refuses before deleting anything when legacy has far fewer items than here" do
+    # Lists restored, list items still empty: every item here would look removed.
+    add_here(@list, @book, 1)
+    migrator = Services::BooksMigration::UserListItemMigrator.new(sync: sync_scope)
+    migrator.stubs(:legacy_item_count).returns(0)
+    migrator.define_singleton_method(:legacy_items_for) { |_list_ids| [] }
+    Services::BooksMigration.expects(:guard_deletion!).with("user_list_items", 1, 1).raises(RuntimeError, "would delete 1 of 1")
+
+    result = migrator.call
+
+    refute result[:success]
+    assert_equal [@book.id], listed
   end
 
   test "deletes an item legacy no longer has from a legacy-origin list" do

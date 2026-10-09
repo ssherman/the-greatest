@@ -142,6 +142,7 @@ class Services::BooksMigration::UserDataDiffTest < ActiveSupport::TestCase
     list_result = run.call(Services::BooksMigration::UserListMigrator, lists)
     items_migrator = Services::BooksMigration::UserListItemMigrator.new(sync: scope)
     items_migrator.define_singleton_method(:legacy_items_for) { |ids| items.select { |row| ids.include?(row["user_list_id"]) } }
+    items_migrator.define_singleton_method(:legacy_item_count) { items.size }
     item_result = items_migrator.call
     review_result = run.call(Services::BooksMigration::ReviewMigrator, reviews)
     correction_result = run.call(Services::BooksMigration::CorrectionMigrator, changesets)

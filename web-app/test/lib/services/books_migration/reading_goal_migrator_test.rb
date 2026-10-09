@@ -140,6 +140,16 @@ module Services
         assert_match(/legacy reading goal id 10000 reaches reserved id floor 10000/, result[:error])
       end
 
+      test "refuses to delete every goal when legacy has none, and deletes nothing" do
+        create_goal(id: 437, name: "Here, while legacy's table is empty or still restoring")
+
+        result = run_migrator([], legacy_ids: [])
+
+        refute result[:success]
+        assert_includes result[:error], "legacy has no reading goals"
+        assert ::Books::ReadingGoal.exists?(437)
+      end
+
       test "deletes low target goals whose legacy goal no longer exists" do
         create_goal(id: 437, name: "Deleted in legacy since the last pass")
 

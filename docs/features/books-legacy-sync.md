@@ -68,7 +68,9 @@ books it points at, so a merge waits for it, or the write is re-planned onto the
 
 **Deletion guard.** An empty or half-restored legacy database looks like mass deletion. A step that
 would delete more than `max(500, 5%)` of a table's legacy-origin rows refuses, unless
-`SYNC_ALLOW_DELETES=1`. It covers user lists, reviews and saved searches.
+`SYNC_ALLOW_DELETES=1`. It covers user lists, reviews and saved searches, and list items by
+comparing legacy's total with the total here before any batch runs (a restore can have the lists in
+and the items not yet). Reading goals, a table of a few hundred rows, refuse when legacy has none.
 
 **The Goodreads replay's relinks** move legacy users' list items and reviews. Each sync puts them
 back to match legacy, and `books:goodreads_replay:apply` re-applies the approved ones after every

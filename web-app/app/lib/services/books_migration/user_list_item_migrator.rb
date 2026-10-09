@@ -31,6 +31,7 @@ module Services
         @count = 0
         @stats = {inserted: 0, deleted: 0, dropped: 0, waiting: 0, collisions: 0}
         route = BookRoute.new(sync)
+        guard_item_deletions
         Services::BooksMigration.without_search_indexing do
           legacy_origin_list_ids.each_slice(LIST_BATCH) { |list_ids| sync_lists(list_ids, route) }
         end
@@ -123,6 +124,21 @@ module Services
         @stats[:inserted] += plan.inserted
         @stats[:deleted] += plan.stale_ids.size
         %i[dropped waiting collisions].each { |key| @stats[key] += plan.public_send(key) }
+      end
+
+      # The user_lists guard does not cover a legacy whose lists are restored but
+      # whose items are not yet (pg_restore runs tables in parallel): every item
+      # here would look removed. Compare the totals before deleting anything; a
+      # normal week of users removing books barely moves them.
+      def guard_item_deletions
+        here = ::UserListItem.joins(:user_list)
+          .where(user_lists: {type: "Books::UserList", id: ...RESERVED_CEILINGS.fetch("user_lists")}).count
+        Services::BooksMigration.guard_deletion!("user_list_items", [here - legacy_item_count, 0].max, here)
+      end
+
+      # Stubbed in tests, so the legacy connection is never opened.
+      def legacy_item_count
+        LegacyBooks::UserListBook.count
       end
 
       def legacy_origin_list_ids
