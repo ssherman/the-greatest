@@ -23,6 +23,15 @@ module Books
         assert_equal [], result.errors
       end
 
+      test "records a legacy-origin source as merged into the target, and the destroy keeps it" do
+        source = ::Books::Author.create!(id: 1_003, name: "Legacy Pen Name")
+
+        result = ::Books::Author::Merger.call(source: source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_equal @target.id, RecordRedirect.find_by!(item_type: "Books::Author", from_id: 1_003).to_id
+      end
+
       test "merging a catalog author into a provisional one leaves a catalog author" do
         @target.update!(provisional: true)
 
