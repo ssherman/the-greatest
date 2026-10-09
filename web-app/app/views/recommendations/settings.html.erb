@@ -1,0 +1,6 @@
+<% content_for :page_title, "Recommendation settings" %>
+<div class="container mx-auto max-w-3xl px-4 py-8 space-y-6">
+  <%= render "recommendations/alert" %>
+  <h1 class="text-3xl font-bold">Recommendation settings</h1>
+  <%= render "recommendations/#{Current.domain}/settings_form", config: @config, locked: @locked, picked_categories: @picked_categories %>
+</div>

@@ -66,23 +66,28 @@ class RecommendationsController < ApplicationController
       @unrated = pages.unrated_read
       @rated = pages.rated
     when 4
-      @config = recommendation_config
-      @locked = !current_user.member?
-      @picked_categories = picked_categories(@config.criteria_object)
+      assign_settings_form(locked: !current_user.member?)
     end
   end
 
-  # Task 7 replaces these.
   def settings
-    head :not_found
+    assign_settings_form(locked: !current_user.member?)
   end
 
   def update_settings
-    head :not_found
+    permitted = criteria_params
+    if permitted
+      recommendation_config.criteria = recommendation_config.class.criteria_params_class.call(permitted)
+      return redirect_to recommendations_path, notice: "Settings saved." if recommendation_config.save
+    end
+
+    assign_settings_form(locked: false)
+    render :settings, status: :unprocessable_entity
   end
 
   def reset
-    head :not_found
+    recommendation_config.destroy if recommendation_config.persisted?
+    redirect_to recommendations_wizard_path(step: 1), status: :see_other, notice: "Settings reset. Start again from your favorites."
   end
 
   private
@@ -109,11 +114,24 @@ class RecommendationsController < ApplicationController
     @recommendation_config ||= ::RecommendationConfig.subclass_for(domain).for_user(current_user)
   end
 
-  # The category records behind the stored include/exclude ids, for the
-  # picker's prerendered chips. One query; a missing id simply has no chip.
-  def picked_categories(criteria)
-    ids = criteria.included_category_ids + criteria.excluded_category_ids
-    ids.empty? ? {} : ::Books::Category.where(id: ids).index_by(&:id)
+  CRITERIA_PARAMS = [:genre_match_mode, :first_year_published_gt, :first_year_published_lt, :max_ranked_position, :depth,
+    {book_length: [], included_category_ids: [], excluded_category_ids: []}].freeze
+
+  # nil when the criteria is not a hash (a hand-rolled `criteria=x` would
+  # otherwise raise on permit and 500), so the caller can answer 422.
+  def criteria_params
+    raw = params.fetch(:recommendation_config, {})[:criteria]
+    return {} if raw.nil?
+    return nil unless raw.respond_to?(:permit)
+
+    raw.permit(*CRITERIA_PARAMS)
+  end
+
+  def assign_settings_form(locked:)
+    @step = 4
+    @config = recommendation_config
+    @locked = locked
+    @picked_categories = pages.picked_categories(@config.criteria_object)
   end
 
   def knobs

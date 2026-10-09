@@ -98,6 +98,13 @@ module Recommendations
         balanced = @pages.criteria_groups(::Books::RecommendationCriteria.new({}))
         assert_equal [], balanced.map(&:label)
       end
+
+      test "picked_categories maps ids to category records in one query and skips missing ids" do
+        genre = categories(:books_classics_genre)
+        criteria = ::Books::RecommendationCriteria.new("included_category_ids" => [genre.id], "excluded_category_ids" => [999_999])
+        assert_equal({genre.id => genre}, @pages.picked_categories(criteria))
+        assert_equal({}, @pages.picked_categories(::Books::RecommendationCriteria.new({})))
+      end
     end
   end
 end

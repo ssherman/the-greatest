@@ -68,6 +68,14 @@ module Recommendations
         ::Books::Book.where(id: ids).pluck(:id, :title).to_h
       end
 
+      # The category records behind the stored include/exclude ids, for the
+      # settings picker's prerendered chips. One query; a missing id simply has
+      # no entry.
+      def picked_categories(criteria)
+        ids = criteria.included_category_ids + criteria.excluded_category_ids
+        ids.empty? ? {} : ::Books::Category.where(id: ids).index_by(&:id)
+      end
+
       # The side panel's settings summary. The saved-search labels already
       # name categories and format years; the recommendation criteria pin
       # `ranked` to true, so that group is noise here and is dropped.

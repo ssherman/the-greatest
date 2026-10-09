@@ -196,4 +196,85 @@ class RecommendationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 5, pair.last.rating
     assert_equal reviews(:regular_user_war_and_peace), pair.last
   end
+
+  def settings_params(overrides = {})
+    {recommendation_config: {criteria: {
+      depth: "deep", max_ranked_position: "250", book_length: ["1", "2"],
+      first_year_published_gt: "1900", excluded_category_ids: [categories(:books_politics_subject).id.to_s],
+      genre_match_mode: "all"
+    }.merge(overrides)}}
+  end
+
+  test "the settings page is locked for a free account and editable for a member" do
+    sign_in_as @free, stub_auth: true
+    get recommendations_settings_path
+    assert_response :success
+    assert_equal true, @controller.view_assigns["locked"]
+
+    sign_in_as @member, stub_auth: true
+    get recommendations_settings_path
+    assert_response :success
+    assert_equal false, @controller.view_assigns["locked"]
+  end
+
+  test "a free account cannot save settings even by hand" do
+    sign_in_as @free, stub_auth: true
+    assert_no_difference "RecommendationConfig.count" do
+      post recommendations_settings_path, params: settings_params
+    end
+    assert_redirected_to membership_path
+  end
+
+  test "a member saves settings and lands on the results" do
+    sign_in_as @member, stub_auth: true
+    assert_no_difference "RecommendationConfig.count" do
+      post recommendations_settings_path, params: settings_params
+    end
+    assert_redirected_to recommendations_path
+    criteria = ::Books::RecommendationConfig.for_user(@member).criteria
+    assert_equal "deep", criteria["depth"]
+    assert_equal 250, criteria["max_ranked_position"]
+    assert_equal [1, 2], criteria["book_length"]
+    assert_equal [categories(:books_politics_subject).id], criteria["excluded_category_ids"]
+    assert_equal "all", criteria["genre_match_mode"]
+    assert_nil criteria["ranked"], "ranked never enters the stored criteria"
+  end
+
+  test "saving balanced depth clears a stored depth" do
+    ::Books::RecommendationConfig.for_user(@member).update!(criteria: {"depth" => "deep"})
+    sign_in_as @member, stub_auth: true
+    post recommendations_settings_path, params: settings_params(depth: "balanced")
+    assert_nil ::Books::RecommendationConfig.for_user(@member).criteria["depth"]
+  end
+
+  test "criteria posted as a string is a 422, not a 500" do
+    sign_in_as @member, stub_auth: true
+    post recommendations_settings_path, params: {recommendation_config: {criteria: "garbage"}}
+    assert_response :unprocessable_entity
+  end
+
+  test "reset destroys the config and returns to step 1" do
+    sign_in_as @member, stub_auth: true
+    assert_difference "RecommendationConfig.count", -1 do
+      post recommendations_reset_path
+    end
+    assert_redirected_to recommendations_wizard_path(step: 1)
+    assert_response :see_other
+  end
+
+  test "reset with no stored config is harmless" do
+    sign_in_as @free, stub_auth: true
+    assert_no_difference "RecommendationConfig.count" do
+      post recommendations_reset_path
+    end
+    assert_redirected_to recommendations_wizard_path(step: 1)
+  end
+
+  test "the settings form skips a stored category that no longer exists" do
+    ::Books::RecommendationConfig.for_user(@member).update!(criteria: {"included_category_ids" => [999_999]})
+    sign_in_as @member, stub_auth: true
+    get recommendations_settings_path
+    assert_response :success
+    assert_equal({}, @controller.view_assigns["picked_categories"])
+  end
 end
