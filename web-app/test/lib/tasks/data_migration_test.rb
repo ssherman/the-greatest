@@ -2,6 +2,8 @@ require "test_helper"
 require "rake"
 
 class DataMigrationRakeTaskTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   VerificationResult = Data.define(:success?, :data, :errors)
 
   setup do
@@ -17,6 +19,10 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       data_migration:list_penalties
       data_migration:penalties:reconcile
       data_migration:all
+      data_migration:refuse_after_sync_init
+      data_migration:sync_init
+      data_migration:books
+      data_migration:languages
     ].each { |name| Rake::Task[name].reenable if Rake::Task.task_defined?(name) }
   end
 
@@ -156,5 +162,64 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
     prerequisites = Rake::Task["data_migration:all"].prerequisites
     assert_equal prerequisites.index("list_penalties") + 1, prerequisites.index("penalties:reconcile")
     assert_operator prerequisites.index("penalties"), :<, prerequisites.index("list_penalties")
+  end
+
+  test "all checks for sync watermarks before anything else" do
+    assert_equal "refuse_after_sync_init", Rake::Task["data_migration:all"].prerequisites.first
+  end
+
+  test "all refuses once the sync watermarks exist" do
+    # Rake looks up every prerequisite before running the first one, and this
+    # file loads only data_migration.rake.
+    Rake::Task.define_task("user_favorites_lists:rebuild") unless Rake::Task.task_defined?("user_favorites_lists:rebuild")
+    init_watermarks(books: 1, authors: 1, book_identifiers: 1)
+    Services::BooksMigration::LanguageMigrator.expects(:call).never
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:all"].invoke }
+    end
+    assert_match(/use data_migration:sync/, err)
+  end
+
+  test "a catalog task refuses on its own once the sync watermarks exist" do
+    init_watermarks(books: 1, authors: 1, book_identifiers: 1)
+    Services::BooksMigration::BookMigrator.expects(:call).never
+
+    capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:books"].invoke }
+    end
+  end
+
+  test "a catalog task runs normally before sync_init" do
+    Services::BooksMigration::BookMigrator.expects(:call).once.returns(success: true, data: {model: "Books::Book", count: 0})
+
+    capture_io { Rake::Task["data_migration:books"].invoke }
+  end
+
+  test "the user-data tasks are not guarded" do
+    %w[users user_lists user_list_items reading_goals saved_searches recommendation_configs reviews corrections news_posts description_safety_net].each do |name|
+      refute_includes Rake::Task["data_migration:#{name}"].prerequisites, "refuse_after_sync_init", name
+    end
+  end
+
+  test "sync_init prints the watermarks" do
+    Services::BooksMigration::SyncInit.expects(:call).returns(
+      Services::BooksMigration::SyncInit::Result.new(success?: true, data: {"books" => 5}, errors: [])
+    )
+
+    out, _err = capture_io { Rake::Task["data_migration:sync_init"].invoke }
+
+    assert_match(/"books" => 5/, out)
+  end
+
+  test "sync_init aborts when it refuses" do
+    Services::BooksMigration::SyncInit.stubs(:call).returns(
+      Services::BooksMigration::SyncInit::Result.new(success?: false, data: {}, errors: ["sync watermarks already exist"])
+    )
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:sync_init"].invoke }
+    end
+    assert_match(/sync_init failed: sync watermarks already exist/, err)
   end
 end

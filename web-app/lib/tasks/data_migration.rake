@@ -4,6 +4,20 @@ namespace :data_migration do
     pp Services::BooksMigration::LanguageMigrator.call
   end
 
+  desc "Abort when data_migration:sync_init has run (a full migration would undo cleanup)"
+  task refuse_after_sync_init: :environment do
+    if LegacySyncWatermark.exists?
+      abort "data_migration: the legacy sync watermarks exist, so a full migration would undo cleanup -- use data_migration:sync"
+    end
+  end
+
+  desc "Record the legacy sync watermarks (once, right after the final data_migration:all)"
+  task sync_init: :environment do
+    result = Services::BooksMigration::SyncInit.call
+    pp result.data
+    abort "sync_init failed: #{result.errors.join("; ")}" unless result.success?
+  end
+
   desc "Migrate legacy users into the global users table (preserves ids)"
   task users: :environment do
     pp Services::BooksMigration::UserMigrator.call
@@ -327,10 +341,20 @@ namespace :data_migration do
   # cross-domain feature, not a books migration step, and the same task is what
   # an admin runs by hand.
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :edition_amazon_identifiers,
+  task all: [:refuse_after_sync_init, :languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :edition_amazon_identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries, :author_countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
     :ranked_lists, :penalties, :list_penalties, "penalties:reconcile", :user_lists, :user_list_items,
     :reading_goals, :saved_searches, :recommendation_configs, :reviews, :corrections, :news_posts,
     "user_favorites_lists:rebuild"]
+
+  # Each task the sync replaces or retires refuses on its own as well, so running
+  # one by hand after sync_init cannot undo cleanup either. The user-data tasks,
+  # the description safety net and penalties:reconcile stay runnable.
+  %i[languages authors books book_authors editions identifiers edition_amazon_identifiers categories
+    category_items book_attributes book_type_categories countries author_countries book_countries
+    external_links lists list_items ranking_configurations ranked_lists penalties list_penalties
+    book_descriptions author_descriptions book_images].each do |name|
+    task name => :refuse_after_sync_init
+  end
 end
