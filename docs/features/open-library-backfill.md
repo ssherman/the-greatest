@@ -21,6 +21,10 @@ row are retried after books never tried, and one run never takes the same book t
 stops the run (the worker is killed before Sidekiq would requeue the job). Run the rake task again
 afterwards and it carries on; logged books are skipped.
 
+Only one run runs at a time, enforced by a PostgreSQL session advisory lock (`Run::LOCK_KEY`). A run
+started while another is in progress exits immediately with `stopped` and an error; queue it again
+later. The unique `book_id` on the log row is only a backstop.
+
 After each book that went through `/resolve`, the run waits 4 seconds (`Run::RESOLVE_PAUSE`). The
 service runs one `/resolve` at a time, and the pause lets other callers (the wizard, the Goodreads
 replay, legacy imports) take the slot. A book settled by the fast pass is not followed by a pause.

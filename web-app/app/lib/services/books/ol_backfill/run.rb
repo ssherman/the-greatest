@@ -18,6 +18,11 @@ module Services
         RESOLVE_PAUSE = 4
         # A 4xx that is about this book's data, not about us or the service.
         BOOK_SPECIFIC_STATUSES = [400, 422].freeze
+        # Session advisory lock key: one backfill run at a time. A fixed 64-bit
+        # constant, not a hash; the app's other advisory locks use hashtext of a
+        # string, so this cannot collide with them by accident.
+        LOCK_KEY = 7_262_024_100_801
+        LOCK_BUSY = "another Open Library backfill run is in progress"
 
         def self.call(limit:, run_id:, retry_unsure: false, client: nil, sleeper: nil, scope: nil)
           new(limit: limit, run_id: run_id, retry_unsure: retry_unsure, client: client, sleeper: sleeper, scope: scope).call
@@ -34,6 +39,22 @@ module Services
         end
 
         def call
+          ::ActiveRecord::Base.connection_pool.with_connection do |connection|
+            unless connection.select_value("SELECT pg_try_advisory_lock(#{LOCK_KEY})")
+              return Result.new(success?: false, data: {processed: 0, stopped: true, error: LOCK_BUSY}, errors: [LOCK_BUSY])
+            end
+
+            begin
+              run_locked
+            ensure
+              connection.select_value("SELECT pg_advisory_unlock(#{LOCK_KEY})")
+            end
+          end
+        end
+
+        private
+
+        def run_locked
           # A re-queued run (same run id) counts what it already logged
           # (failures aside) toward its limit.
           done = ::Books::OpenLibraryBackfill.where(run_id: @run_id).where.not(outcome: :failed).count
@@ -64,8 +85,6 @@ module Services
           @error = "#{e.class}: #{e.message}"
           finish(done || 0, stopped: true)
         end
-
-        private
 
         def full?(done) = !@limit.nil? && done >= @limit
 

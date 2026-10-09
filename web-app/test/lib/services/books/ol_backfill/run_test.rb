@@ -40,6 +40,53 @@ module Services
           Run.call(limit: nil, run_id: "run-1", client: @client, sleeper: no_sleep, scope: @scope, **options)
         end
 
+        # A real second session: the test connection is shared by every
+        # pool checkout, and an advisory lock is re-entrant in one session.
+        def other_session
+          config = ActiveRecord::Base.connection_db_config.configuration_hash
+          PG.connect(dbname: config[:database], host: config[:host], port: config[:port], user: config[:username], password: config[:password])
+        end
+
+        def lock_sql(function) = "SELECT 1 FROM (SELECT #{function}(#{Run::LOCK_KEY})) AS lock_taken"
+
+        def with_lock_held_elsewhere
+          session = other_session
+          session.exec(lock_sql("pg_advisory_lock"))
+          yield
+        ensure
+          session&.close
+        end
+
+        def assert_lock_free
+          session = other_session
+          assert_equal "t", session.exec("SELECT pg_try_advisory_lock(#{Run::LOCK_KEY})").getvalue(0, 0)
+        ensure
+          session&.close
+        end
+
+        test "a run started while another holds the lock does nothing and says so" do
+          ApplyBook.expects(:call).never
+          result = nil
+          with_lock_held_elsewhere { result = run_backfill }
+
+          assert_not result.success?
+          assert_equal({processed: 0, stopped: true, error: "another Open Library backfill run is in progress"}, result.data)
+        end
+
+        test "the lock is released after a normal run" do
+          record_applies
+          run_backfill(limit: 1)
+
+          assert_lock_free
+        end
+
+        test "the lock is released when the run raises" do
+          ApplyBook.stubs(:call).raises(ActiveRecord::RecordNotUnique, "boom")
+          assert_raises(ActiveRecord::RecordNotUnique) { run_backfill }
+
+          assert_lock_free
+        end
+
         test "ranked books come first, by rank, and the run stops after its limit" do
           rank(@got, 2)
           rank(@clash, 1)

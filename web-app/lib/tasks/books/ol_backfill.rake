@@ -18,6 +18,7 @@ namespace :books do
     run_id = SecureRandom.uuid
     Books::OpenLibraryBackfillJob.perform_async(limit, run_id, retry_unsure)
     puts "queued Open Library backfill run #{run_id}: #{limit || "all"} books#{" (retrying unsure books)" if retry_unsure}. " \
+      "Only one run works at a time: one started while another is in progress exits at once, so queue it again later. " \
       "Progress: bin/rails books:ol_backfill_report"
   end
 

@@ -118,7 +118,7 @@ Only for books that end `confirmed`, `updated`, `replaced` or `keyed`:
 | `attempts`, `error` | how often a `failed` row was tried, and the last error |
 | timestamps | |
 
-The unique `book_id` is also what stops two runs from handling the same book: an insert that loses the race is skipped.
+*Amended 2026-10-08:* only one run runs at a time, enforced by a PostgreSQL advisory lock; a second run exits at once. The unique `book_id` is a backstop: an insert that loses the race is skipped only if the backfill row now exists, any other uniqueness failure propagates.
 
 ## 4. Running it
 

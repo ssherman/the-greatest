@@ -60,6 +60,10 @@ module Services
             Result.new(success?: true, data: row, errors: [])
           end
         rescue ::ActiveRecord::RecordNotUnique
+          # Only the backfill row's unique book_id means another run won; any other
+          # uniqueness failure is a real error and must not hide the book.
+          raise unless ::Books::OpenLibraryBackfill.exists?(book_id: @book.id)
+
           skipped("another run wrote book #{@book.id} first")
         end
 
