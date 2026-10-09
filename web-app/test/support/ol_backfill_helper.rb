@@ -15,6 +15,12 @@ module OlBackfillHelper
     }, source_version: source_version)
   end
 
+  def ol_author(key, name:, alternate_names: [])
+    ::Books::OpenLibrary::Author.from_record({
+      "key" => {"source" => "openlibrary", "key" => key}, "name" => name, "alternate_names" => alternate_names
+    }, source_version: SOURCE_VERSION)
+  end
+
   def ol_hit(work_key, id_type: "isbn13", value: "9780140447934")
     ::Books::OpenLibrary::IdentifierHit.new(work_key: work_key, source: "openlibrary", redirected_from: [],
       edition_keys: [], id_type: id_type, value: value)
@@ -42,15 +48,17 @@ module OlBackfillHelper
 
   # hits: {[type, value] => [IdentifierHit] or an exception to raise}
   # works: {key => Work or nil}
+  # authors: {key => Author or nil}
   # resolution: a Resolution, or a lambda given the resolve arguments
   # errors: one entry per call, in call order, whatever the call; nil means
   #   "no error for this call", an exception is raised by that call.
   class FakeOlClient
     attr_reader :calls
 
-    def initialize(hits: {}, works: {}, resolution: nil, version: nil, errors: [])
+    def initialize(hits: {}, works: {}, authors: {}, resolution: nil, version: nil, errors: [])
       @hits = hits
       @works = works
+      @authors = authors
       @resolution = resolution
       @version = version
       @errors = errors.dup
@@ -70,6 +78,12 @@ module OlBackfillHelper
       @calls << [:works_batch, keys]
       raise_next!
       keys.to_h { |key| [key, @works[key]] }
+    end
+
+    def authors_batch(keys)
+      @calls << [:authors_batch, keys]
+      raise_next!
+      keys.to_h { |key| [key, @authors[key]] }
     end
 
     def resolve(**args)

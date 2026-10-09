@@ -169,6 +169,123 @@ module Services
           assert_equal ["keyed", 3, nil], [row.outcome, row.attempts, row.error]
         end
 
+        test "a settled row is skipped without calling Open Library" do
+          %i[confirmed updated replaced keyed duplicate_pair reverted].each do |outcome|
+            ::Books::OpenLibraryBackfill.where(book: @book).delete_all
+            row = ::Books::OpenLibraryBackfill.create!(book: @book, outcome: outcome, run_id: "old", old_keys: ["OL5W"], new_key: "OL1W")
+            client = fast_client
+
+            result = ApplyBook.call(book: @book, client: client, run_id: "run-2")
+
+            assert_not result.success?, outcome
+            assert_empty client.calls, outcome
+            assert_equal [outcome.to_s, "old", ["OL5W"]], [row.reload.outcome, row.run_id, row.old_keys]
+          end
+        end
+
+        test "an unsure or failed row is processed again" do
+          %i[unsure failed].each do |outcome|
+            ::Books::OpenLibraryBackfill.where(book: @book).delete_all
+            ::Books::OpenLibraryBackfill.create!(book: @book, outcome: outcome, run_id: "old")
+            ::Identifier.where(identifiable: @book, identifier_type: ApplyBook::WORK_KEY).destroy_all
+
+            assert ApplyBook.call(book: @book, client: fast_client, run_id: "run-2").success?, outcome
+          end
+        end
+
+        test "a row another run settled during the lookup is not overwritten" do
+          client = fast_client
+          book_id = @book.id
+          client.define_singleton_method(:works_batch) do |keys|
+            ::Books::OpenLibraryBackfill.create!(book_id: book_id, outcome: :replaced, run_id: "other", old_keys: ["OL5W"], new_key: "OL1W")
+            super(keys)
+          end
+
+          result = ApplyBook.call(book: @book, client: client, run_id: "run-1")
+
+          assert_not result.success?
+          assert_empty work_keys
+          row = ::Books::OpenLibraryBackfill.find_by!(book: @book)
+          assert_equal ["replaced", "other", ["OL5W"]], [row.outcome, row.run_id, row.old_keys]
+        end
+
+        test "record_failure leaves a settled row alone" do
+          settled = ::Books::OpenLibraryBackfill.create!(book: @book, outcome: :replaced, run_id: "old", old_keys: ["OL5W"], new_key: "OL1W")
+
+          row = ApplyBook.record_failure(book: @book, run_id: "run-2", error: "down")
+
+          assert_equal settled.id, row.id
+          assert_equal ["replaced", "old", 1, nil], [settled.reload.outcome, settled.run_id, settled.attempts, settled.error]
+        end
+
+        test "confirm_only: confirmed, no key or author change, flag set" do
+          add_key("OL1W")
+          add_key("OL9W")
+          resolution = ol_resolution(verdict: "abstain", work: @work, duplicates: ["OL2W"])
+
+          row = ApplyBook.call(book: @book, client: resolve_client(resolution), run_id: "run-1").data
+
+          assert_equal [["OL1W", "OL9W"], [], "confirmed", ["OL1W", "OL9W"], "OL1W", true, {}],
+            [work_keys, duplicate_keys, row.outcome, row.old_keys, row.new_key, row.confirmed_on_abstain, row.author_changes]
+          assert_empty books_authors(:tolstoy).identifiers
+        end
+
+        test "an ordinary confirmed row does not carry the abstain flag" do
+          add_key("OL1W")
+
+          assert_equal false, ApplyBook.call(book: @book, client: fast_client, run_id: "run-1").data.confirmed_on_abstain
+        end
+
+        test "a work key given while another book holds it as a duplicate key flags the pair, and the key stays" do
+          add_key("OL1W", book: @other, type: ApplyBook::DUPLICATE_KEY)
+
+          row = ApplyBook.call(book: @book, client: fast_client, run_id: "run-1").data
+
+          assert_equal [["OL1W"], "keyed", nil], [work_keys, row.outcome, row.pair_book_id]
+          pair = ::DuplicateCandidate.find_by(item_type: "Books::Book", item_a_id: [@book.id, @other.id].min, item_b_id: [@book.id, @other.id].max)
+          assert_equal "ol_backfill", pair.source
+        end
+
+        test "replaced: an old key whose record agrees is kept as a duplicate key" do
+          add_key("OL5W")
+          old = ol_work("OL5W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
+
+          row = ApplyBook.call(book: @book, client: fast_client(works: {"OL5W" => old}), run_id: "run-1").data
+
+          assert_equal [["OL1W"], ["OL5W"], "replaced", ["OL5W"], ["OL5W"]], [work_keys, duplicate_keys, row.outcome, row.old_keys, row.duplicate_keys]
+        end
+
+        test "replaced: an old key whose record disagrees is dropped, as is one that is dead" do
+          add_key("OL5W")
+          add_key("OL6W")
+          anna = ol_work("OL5W", title: "Anna Karenina", authors: [["OL26783A", "Leo Tolstoy"]])
+
+          row = ApplyBook.call(book: @book, client: fast_client(works: {"OL5W" => anna}), run_id: "run-1").data
+
+          assert_equal [["OL1W"], [], "replaced", []], [work_keys, duplicate_keys, row.outcome, row.duplicate_keys]
+        end
+
+        test "replaced: an agreeing old key that another book holds as its work key is flagged, not saved" do
+          add_key("OL262758W")
+          old = ol_work("OL262758W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
+
+          row = ApplyBook.call(book: @book, client: fast_client(works: {"OL262758W" => old}), run_id: "run-1").data
+
+          assert_equal [["OL1W"], [], "replaced"], [work_keys, duplicate_keys, row.outcome]
+          assert ::DuplicateCandidate.exists?(item_type: "Books::Book", item_a_id: [@book.id, @other.id].min, item_b_id: [@book.id, @other.id].max)
+        end
+
+        test "replaced: the old record's authors are fetched only when the names differ" do
+          add_key("OL5W")
+          old = ol_work("OL5W", title: "War and Peace", authors: [["OL5A", "Лев Толстой"]])
+          client = fast_client(works: {"OL5W" => old})
+          client.instance_variable_get(:@authors)["OL5A"] = ol_author("OL5A", name: "Лев Толстой", alternate_names: ["Leo Tolstoy"])
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal [["OL5W"], 1], [row.duplicate_keys, client.calls.count { |call| call.first == :authors_batch }]
+        end
+
         test "losing the insert race to another run is an unsuccessful result, not an error" do
           ::Books::OpenLibraryBackfill.create!(book: @book, outcome: :unsure, run_id: "other-run")
           ::Books::OpenLibraryBackfill.stubs(:find_or_initialize_by).returns(::Books::OpenLibraryBackfill.new(book: @book))

@@ -7,7 +7,13 @@ module Services
       # book is. Raises the client's errors (a 4xx on an identifier is no
       # hit); Run retries them.
       class Lookup
-        Answer = Data.define(:work, :lookup, :duplicates, :redirect_sources, :source_version)
+        # confirm_only: Open Library abstained, but its top candidate is a key the
+        # book already holds and agrees with it. Nothing is to be changed.
+        Answer = Data.define(:work, :lookup, :duplicates, :redirect_sources, :source_version, :confirm_only) do
+          def initialize(work:, lookup:, duplicates:, redirect_sources:, source_version:, confirm_only: false)
+            super
+          end
+        end
 
         FAST_TYPES = {
           "books_work_isbn13" => "isbn13",
@@ -17,6 +23,7 @@ module Services
         # Enough lookups to show whether a book's identifiers agree.
         MAX_FAST_LOOKUPS = 10
         NO_HIT_STATUSES = [400, 422].freeze
+        RESOLVE_IDENTIFIERS_PER_TYPE = 3
 
         def self.call(book:, client:)
           new(book, client).call
@@ -51,7 +58,7 @@ module Services
           return nil unless keys.size == 1
 
           work = @client.works_batch(keys)[keys.first]
-          return nil unless work && Check.agree?(@book, work)
+          return nil unless work && Check.verified?(@book, work, @client)
 
           Answer.new(work: work, lookup: :identifiers, duplicates: [], redirect_sources: [], source_version: work.source_version)
         end
@@ -71,19 +78,33 @@ module Services
             title: @book.title.to_s,
             author_names: @book.authors.map(&:name),
             year: @book.first_published_year,
-            isbn13: values("books_work_isbn13"),
-            isbn10: values("books_work_isbn10"),
-            goodreads_id: values("books_work_goodreads_id"),
+            isbn13: values("books_work_isbn13").first(RESOLVE_IDENTIFIERS_PER_TYPE),
+            isbn10: values("books_work_isbn10").first(RESOLVE_IDENTIFIERS_PER_TYPE),
+            goodreads_id: values("books_work_goodreads_id").first(RESOLVE_IDENTIFIERS_PER_TYPE),
             existing_ol_key: stored_keys.first
           )
           accepted = resolution.accepted
           work = accepted&.record
-          unless work && Check.agree?(@book, work)
-            return Answer.new(work: nil, lookup: :resolve, duplicates: [], redirect_sources: [], source_version: resolution.source_version)
+          if work && Check.verified?(@book, work, @client)
+            return Answer.new(work: work, lookup: :resolve, duplicates: resolution.decision.duplicates.uniq - [work.key],
+              redirect_sources: Array(accepted.redirect_sources), source_version: resolution.source_version)
           end
 
-          Answer.new(work: work, lookup: :resolve, duplicates: resolution.decision.duplicates.uniq - [work.key],
-            redirect_sources: Array(accepted.redirect_sources), source_version: resolution.source_version)
+          held = confirmable_stored_key(resolution)
+          Answer.new(work: held, lookup: :resolve, duplicates: [], redirect_sources: [],
+            source_version: resolution.source_version, confirm_only: !held.nil?)
+        end
+
+        # Not an accept, but the top candidate is a key we hold and its record
+        # agrees with the book: famous books with many near-identical Open
+        # Library records abstain on margin even then.
+        def confirmable_stored_key(resolution)
+          return nil if resolution.accept?
+
+          top = resolution.candidates.first
+          return nil unless top&.record && stored_keys.include?(top.work_key)
+
+          top.record if Check.verified?(@book, top.record, @client)
         end
       end
     end

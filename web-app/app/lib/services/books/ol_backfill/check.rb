@@ -9,8 +9,24 @@ module Services
       module Check
         module_function
 
-        def agree?(book, work)
-          titles_agree?(book, work) && authors_agree?(book, work)
+        COMPACT_MIN = 4
+        AUTHOR_FETCH_LIMIT = 5
+
+        def agree?(book, work, ol_authors: [])
+          titles_agree?(book, work) && authors_agree?(book, work, ol_authors: ol_authors)
+        end
+
+        # agree?, fetching the work's author records from Open Library (once,
+        # at most AUTHOR_FETCH_LIMIT) only when the title agrees and the names
+        # on the work do not.
+        def verified?(book, work, client)
+          return false unless titles_agree?(book, work)
+          return true if authors_agree?(book, work)
+
+          keys = Array(work.author_keys).compact.first(AUTHOR_FETCH_LIMIT)
+          return false if keys.empty?
+
+          authors_agree?(book, work, ol_authors: client.authors_batch(keys).values.compact)
         end
 
         # Equal after normalizing, or equal once a subtitle (text after the
@@ -26,10 +42,39 @@ module Services
           ours.include?(theirs_full) || (!theirs_short.nil? && ours.include?(theirs_short)) || ours_short.include?(theirs_full)
         end
 
-        def authors_agree?(book, work)
-          ours = book.authors.flat_map { |author| [author.name, *Array(author.alternate_names)] }.filter_map { |name| normalize(name) }
-          theirs = Array(work.author_names).filter_map { |name| normalize(name) }
-          ours.intersect?(theirs)
+        # Any of: a shared normalized name; a shared "compact" name (letters
+        # only, so "J.R.R. Tolkien" is "J. R. R. Tolkien"); one of our authors
+        # holding a key the work lists; one of our names matching the name or
+        # an alternate name of the work's Open Library author records.
+        def authors_agree?(book, work, ol_authors: [])
+          authors = book.authors.to_a
+          names = authors.flat_map { |author| [author.name, *Array(author.alternate_names)] }
+          ours = names.filter_map { |name| normalize(name) }
+          ours_compact = names.filter_map { |name| compact(name) }
+          theirs_names = Array(work.author_names)
+          return true if ours.intersect?(theirs_names.filter_map { |name| normalize(name) })
+          return true if ours_compact.intersect?(theirs_names.filter_map { |name| compact(name) })
+          return true if holds_author_key?(authors, work)
+
+          record_names = ol_authors.flat_map { |author| [author.name, *Array(author.alternate_names)] }
+          ours.intersect?(record_names.filter_map { |name| normalize(name) }) ||
+            ours_compact.intersect?(record_names.filter_map { |name| compact(name) })
+        end
+
+        def holds_author_key?(authors, work)
+          keys = Array(work.author_keys).compact
+          return false if keys.empty? || authors.empty?
+
+          ::Identifier.where(identifiable_type: "Books::Author", identifiable_id: authors.map(&:id),
+            identifier_type: :books_author_openlibrary_id, value: keys).exists?
+        end
+
+        # Lowercase letters only, diacritics stripped; nil when too short to mean anything.
+        def compact(text)
+          return nil if text.blank?
+
+          letters = text.to_s.unicode_normalize(:nfkd).gsub(/\p{Mn}/, "").downcase.gsub(/[^\p{L}]/, "")
+          letters if letters.length >= COMPACT_MIN
         end
 
         def normalize(text)

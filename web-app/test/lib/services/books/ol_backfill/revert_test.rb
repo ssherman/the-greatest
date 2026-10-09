@@ -27,6 +27,16 @@ module Services
           assert_empty @tolstoy.identifiers.where(identifier_type: :books_author_openlibrary_id)
         end
 
+        test "a replaced book that kept its old key as a duplicate key gets it back as the work key, with no duplicate left" do
+          ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::WORK_KEY, value: "OL1W")
+          ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::DUPLICATE_KEY, value: "OL5W")
+          ::Books::OpenLibraryBackfill.create!(book: @book, outcome: :replaced, run_id: "run-1", old_keys: ["OL5W"], new_key: "OL1W", duplicate_keys: ["OL5W"])
+
+          Revert.call(book: @book)
+
+          assert_equal [["OL5W"], []], [keys(ApplyBook::WORK_KEY), keys(ApplyBook::DUPLICATE_KEY)]
+        end
+
         test "a work key added after the backfill survives; the new key goes and old keys return" do
           ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::WORK_KEY, value: "OL1W")
           ::Books::OpenLibraryBackfill.create!(book: @book, outcome: :replaced, run_id: "run-1", old_keys: ["OL5W"], new_key: "OL1W")

@@ -16,13 +16,24 @@ module Services
           new(book, client, run_id).call
         end
 
+        # A row that holds a result (anything but failed or unsure) is never
+        # overwritten: it may hold the old keys a revert needs.
+        REPROCESSABLE = %w[failed unsure].freeze
+
         def self.record_failure(book:, run_id:, error:)
-          row = ::Books::OpenLibraryBackfill.find_or_initialize_by(book: book)
-          row.assign_attributes(outcome: :failed, run_id: run_id, error: error.to_s.truncate(1000),
-            attempts: row.new_record? ? 1 : row.attempts + 1)
-          row.save!
-          row
+          ::ActiveRecord::Base.transaction do
+            row = ::Books::OpenLibraryBackfill.find_or_initialize_by(book: book)
+            row.lock! unless row.new_record?
+            next row if settled?(row)
+
+            row.assign_attributes(outcome: :failed, run_id: run_id, error: error.to_s.truncate(1000),
+              attempts: row.new_record? ? 1 : row.attempts + 1)
+            row.save!
+            row
+          end
         end
+
+        def self.settled?(row) = row&.persisted? && REPROCESSABLE.exclude?(row.outcome)
 
         def initialize(book, client, run_id)
           @book = book
@@ -31,27 +42,37 @@ module Services
         end
 
         def call
+          return skipped("book #{@book.id} already has a settled row") if self.class.settled?(::Books::OpenLibraryBackfill.find_by(book: @book))
+
           answer = Lookup.call(book: @book, client: @client)
           ::ActiveRecord::Base.transaction do
             row = ::Books::OpenLibraryBackfill.find_or_initialize_by(book: @book)
+            row.lock! unless row.new_record?
+            # Another run may have settled it during the lookup.
+            next skipped("another run settled book #{@book.id} first") if self.class.settled?(row)
+
             attempts = row.new_record? ? 1 : row.attempts + 1
             row.assign_attributes(decide(answer).merge(
-              lookup: answer.lookup, run_id: @run_id, attempts: attempts, error: nil,
+              lookup: answer.lookup, run_id: @run_id, attempts: attempts, error: nil, confirmed_on_abstain: answer.confirm_only,
               dump_date: answer.source_version&.dig(:dump_date), matcher_version: answer.source_version&.dig(:matcher_version)
             ))
             row.save!
             Result.new(success?: true, data: row, errors: [])
           end
         rescue ::ActiveRecord::RecordNotUnique
-          Result.new(success?: false, data: nil, errors: ["another run wrote book #{@book.id} first"])
+          skipped("another run wrote book #{@book.id} first")
         end
 
         private
+
+        def skipped(message) = Result.new(success?: false, data: nil, errors: [message])
 
         def decide(answer)
           stored = stored_keys
           work = answer.work
           return unchanged(:unsure, stored, nil) if work.nil?
+          # Open Library abstained, but its top answer is a key we hold: nothing to change.
+          return unchanged(:confirmed, stored, work.key) if answer.confirm_only
 
           key = work.key
           other = book_holding(key)
@@ -61,16 +82,33 @@ module Services
             return unchanged(:duplicate_pair, stored, key).merge(pair_book_id: other) unless stored.include?(key)
           end
 
-          outcome = if stored.include?(key) then :confirmed
-          elsif stored.empty? then :keyed
-          elsif redirected?(stored, key, answer) then :updated
-          else
-            :replaced
-          end
+          outcome, records = classify(stored, key, answer)
+          kept = (outcome == :replaced) ? agreeing_old_keys(stored, records) : []
           set_work_key(stored, key)
+          flag_duplicate_holder(key) unless outcome == :confirmed
           {outcome: outcome, old_keys: stored, new_key: key, pair_book_id: other,
-           duplicate_keys: save_duplicates(answer.duplicates, key),
+           duplicate_keys: save_duplicates(answer.duplicates + kept, key),
            author_changes: AuthorKeys.call(book: @book, work: work)}
+        end
+
+        # [outcome, Open Library's records for the stored keys (nil when not fetched)].
+        # updated rather than replaced: an old key Open Library redirects to the answer.
+        def classify(stored, key, answer)
+          return [:confirmed, nil] if stored.include?(key)
+          return [:keyed, nil] if stored.empty?
+          return [:updated, nil] if stored.intersect?(answer.redirect_sources)
+
+          records = @client.works_batch(stored)
+          [stored.any? { |old| records[old]&.key == key } ? :updated : :replaced, records]
+        end
+
+        # A replaced key whose own record is the same book (title and an author
+        # agree) is another Open Library record of it: kept as a duplicate key.
+        def agreeing_old_keys(stored, records)
+          stored.select do |old|
+            record = records[old]
+            record && record.key == old && Check.verified?(@book, record, @client)
+          end
         end
 
         def unchanged(outcome, stored, key)
@@ -81,18 +119,10 @@ module Services
           @book.identifiers.where(identifier_type: WORK_KEY).order(:id).pluck(:value)
         end
 
-        # Another book holding this key as its work key.
-        def book_holding(key)
-          ::Identifier.where(identifiable_type: "Books::Book", identifier_type: WORK_KEY, value: key)
+        # Another book holding this key as its work key (or as `type`).
+        def book_holding(key, type = WORK_KEY)
+          ::Identifier.where(identifiable_type: "Books::Book", identifier_type: type, value: key)
             .where.not(identifiable_id: @book.id).order(:identifiable_id).pick(:identifiable_id)
-        end
-
-        # updated rather than replaced: an old key Open Library redirects to the answer.
-        def redirected?(stored, key, answer)
-          return true if stored.intersect?(answer.redirect_sources)
-
-          records = @client.works_batch(stored)
-          stored.any? { |old| records[old]&.key == key }
         end
 
         def set_work_key(stored, key)
@@ -115,6 +145,12 @@ module Services
               saved << duplicate
             end
           end
+        end
+
+        # Another book holds the key we just gave this one as a duplicate key.
+        def flag_duplicate_holder(key)
+          other = book_holding(key, DUPLICATE_KEY)
+          flag_books(other, key) if other
         end
 
         def flag_books(other, key)

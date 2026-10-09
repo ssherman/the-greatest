@@ -44,6 +44,35 @@ module Services
           assert Check.authors_agree?(@book.reload, ol_work("OL1W", title: "x", authors: [["OL1A", "Lev Tolstoy"]]))
         end
 
+        test "authors agree on a compact form: initials spacing, diacritics, punctuation" do
+          books_authors(:tolstoy).update!(name: "J. R. R. Tolkien")
+          assert Check.authors_agree?(@book.reload, ol_work("OL1W", title: "x", authors: [["OL1A", "J.R.R. Tolkien"]]))
+          books_authors(:tolstoy).update!(name: "Fiodor Dostoievski")
+          assert Check.authors_agree?(@book.reload, ol_work("OL1W", title: "x", authors: [["OL1A", "Fiódor Dostoievski"]]))
+        end
+
+        test "a compact key shorter than four letters never matches" do
+          books_authors(:tolstoy).update!(name: "Ng O")
+          assert_not Check.authors_agree?(@book.reload, ol_work("OL1W", title: "x", authors: [["OL1A", "NgO"]]))
+        end
+
+        test "authors agree when ours holds a key the work lists" do
+          work = ol_work("OL1W", title: "x", authors: [["OL26783A", "Лев Толстой"]])
+          assert_not Check.authors_agree?(@book, work)
+
+          ::Identifier.create!(identifiable: books_authors(:tolstoy), identifier_type: :books_author_openlibrary_id, value: "OL26783A")
+          assert Check.authors_agree?(@book.reload, work)
+        end
+
+        test "authors agree when our name is an alternate name on the work's author record" do
+          work = ol_work("OL1W", title: "x", authors: [["OL26783A", "Лев Толстой"]])
+          record = ol_author("OL26783A", name: "Лев Толстой", alternate_names: ["Count Leo Tolstoy", "Leo Tolstoy"])
+
+          assert_not Check.authors_agree?(@book, work)
+          assert Check.authors_agree?(@book, work, ol_authors: [record])
+          assert_not Check.authors_agree?(@book, work, ol_authors: [ol_author("OL1A", name: "Somebody", alternate_names: ["Else"])])
+        end
+
         test "a book with no authors never agrees" do
           book = books_books(:crime_and_punishment)
           assert_empty book.authors
