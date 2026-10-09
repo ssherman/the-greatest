@@ -17,14 +17,6 @@ module Services
           @client = FakeOlClient.new
         end
 
-        # Session locks outlive a test's rolled-back transaction, so start each test clean.
-        setup { release_session_locks }
-        teardown { release_session_locks }
-
-        def release_session_locks
-          ActiveRecord::Base.connection.select_value("SELECT 1 FROM (SELECT pg_advisory_unlock_all()) AS unlocked")
-        end
-
         def no_sleep = ->(_seconds) { flunk "no wait expected" }
 
         def ok = ApplyBook::Result.new(success?: true, data: nil, errors: [])
@@ -97,6 +89,16 @@ module Services
           run_backfill(limit: 1)
         ensure
           ActiveRecord::Base.connection.select_value("SELECT pg_advisory_unlock(#{Run::LOCK_KEY})")
+        end
+
+        test "two runs in one query cache scope both reach the server, and the lock ends free" do
+          record_applies
+          ActiveRecord::Base.connection.cache do
+            run_backfill(limit: 1)
+            run_backfill(limit: 1)
+          end
+
+          assert_lock_free
         end
 
         test "the lock is released when the run raises" do

@@ -40,7 +40,7 @@ module Services
 
         def call
           ::ActiveRecord::Base.connection_pool.with_connection do |connection|
-            unless connection.select_value("SELECT pg_try_advisory_lock(#{LOCK_KEY})")
+            unless lock_query(connection, "pg_try_advisory_lock")
               return Result.new(success?: false, data: {processed: 0, stopped: true, error: LOCK_BUSY}, errors: [LOCK_BUSY])
             end
 
@@ -95,7 +95,14 @@ module Services
           ::Rails.logger.warn("Open Library backfill run #{@run_id}: releasing the advisory lock failed: #{e.class}: #{e.message}")
         end
 
-        def unlock(connection) = connection.select_value("SELECT pg_advisory_unlock(#{LOCK_KEY})")
+        def unlock(connection) = lock_query(connection, "pg_advisory_unlock")
+
+        # Uncached: inside the Rails executor (every job, every test) select_value is
+        # answered from the query cache, so a second identical lock or unlock never
+        # reaches the server and the lock leaks silently.
+        def lock_query(connection, function)
+          connection.uncached { connection.select_value("SELECT #{function}(#{LOCK_KEY})") }
+        end
 
         def full?(done) = !@limit.nil? && done >= @limit
 
