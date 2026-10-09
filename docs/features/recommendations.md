@@ -197,6 +197,32 @@ everything.
 write is an upsert on `(user_id, type)`. It is a **repeating** launch step (`docs/launch-todo.md`).
 The development database holds no rows, so the harness runs everyone on default criteria.
 
+## Pages
+
+Routes are global (`/recommendations`, `/recommendations/wizard/1..4`, `/recommendations/search`,
+`/recommendations/settings`, `/recommendations/reset`); `RecommendationsController` resolves the
+domain from `Current.domain`, 404s on a host with no `Registry` entry, and never caches. Books data
+for the pages comes from `Recommendations::Books::Pages` (shelves for the wizard, the search box,
+names behind ids, the settings summary); books markup lives in `app/views/recommendations/books/`.
+
+| Visitor | `/recommendations` | Settings form |
+|---|---|---|
+| Signed out | pitch | — |
+| Free account | `free_limit` results, side panel, member pitch | rendered, every field disabled, "Become a member" replaces Save; the POST is refused server-side (`require_membership!(:book_recommendations)`) |
+| Member | `member_limit` results | editable |
+
+A signed-in user with no favorite and no read book is sent to wizard step 1; steps 3 and 4 bounce
+to step 2 until one exists. Steps 1 and 2 search through `GET /recommendations/search`, a Turbo
+frame (`target: "_top"`) of `Books::CardComponent` cards whose list widget adds the book. Step 3
+rates through `Reviews::WidgetComponent`. The results page shows `rank_position` on each card and
+one `Recommendations::ReasonComponent` line beneath; `@state` is `:ok`, `:no_matches` (engine
+succeeded, nothing matched) or `:unavailable` (a signal raised: `data[:degraded]`).
+
+**Depth** is the one setting the spec did not list: stored as `criteria["depth"]` (`safe` or
+`deep`; balanced stores nothing) and mapped by `RecommendationCriteria#engine_overrides` to
+`quality_floor` through the `depth_floors` knob. Measured in
+`docs/data-quality/recommendations-2026-10-08.md`.
+
 ## Harness
 
 Read-only against the development database; needs the local OpenSearch. Every knob is a per-call
@@ -271,17 +297,16 @@ the numbers describe the dev database on those days.
   the other), and its KL sits 0.02-0.07 above the previous defaults. Shipping it as the default is
   a judgement, argued in the data-quality record. `lift_cap` and `lift_population` exist, measured,
   and off.
-- **No "deep cuts" setting yet.** `quality_floor` 0.1 / 0.3 / 0.5 is the measured safer-bets /
-  default / deeper trade-off; nothing exposes it to the user.
-
 - The collaborative signal is a stub until spec 2 (the CF service on the home server).
-- No pages yet: results, gating, nav entry and pitch page are increment 3; wizard and settings
-  are increment 4.
+- The wizard's "add" is the list widget's modal (pick a list), not a one-click add; the spec's
+  "one click" is two.
+- Results run the engine on every request (~15 queries + the OpenSearch call + ~110 ms
+  calibration); no caching, by design, since the page is per-user.
 - The rank prior at 0.3 can re-order roughly 20 places among the taste candidates at a 300-item
   pool (reciprocal-rank terms at `k = 60` are close together).
 - Fiction and Nonfiction are never scored; they only steer through `fiction_share` and the genre
   calibration.
-- Not attempted: rating centering per user, time decay, and a "deep cuts" setting (spec §9.4).
+- Not attempted: rating centering per user, and time decay (spec §9.4).
   Ranked-only `p_c` was built and measured (`lift_population`), and left off.
 - `categories.item_count` is a polymorphic counter cache shared with `Books::Author`; the profile
   divides it by the book catalog size, which is exact only while no category is attached to an
