@@ -28,6 +28,9 @@ module Services
 
         def duplicate_keys(book = @book) = book.identifiers.where(identifier_type: ApplyBook::DUPLICATE_KEY).order(:id).pluck(:value)
 
+        # @other becomes a book that really looks like @work: same title.
+        def make_other_a_real_holder = @other.update_columns(title: "War and Peace")
+
         def add_key(value, book: @book, type: ApplyBook::WORK_KEY) = ::Identifier.create!(identifiable: book, identifier_type: type, value: value)
 
         test "keyed: a book with no key gets one, its author gets one, and the row says how" do
@@ -80,6 +83,7 @@ module Services
         end
 
         test "duplicate_pair: another book holds the answer; nothing on this book changes and the pair is flagged" do
+          make_other_a_real_holder
           work = ol_work("OL262758W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
 
           row = ApplyBook.call(book: @book, client: fast_client(work), run_id: "run-1").data
@@ -92,6 +96,7 @@ module Services
         end
 
         test "confirmed: a book that already holds the answer stays confirmed when another book holds it too, and the pair is flagged" do
+          make_other_a_real_holder
           work = ol_work("OL262758W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
           add_key("OL262758W")
 
@@ -120,6 +125,7 @@ module Services
         end
 
         test "duplicates from /resolve are saved as the duplicate type; one another book holds is a pair instead" do
+          make_other_a_real_holder
           add_key("OL3W", book: @other)
           client = resolve_client(ol_resolution(verdict: "accept", work: @work, duplicates: ["OL2W", "OL3W"]))
 
@@ -141,7 +147,8 @@ module Services
         test "the same work answered for a second book in the run is a duplicate_pair" do
           ApplyBook.call(book: @book, client: fast_client, run_id: "run-1")
           got = books_books(:got)
-          same = ol_work("OL1W", title: got.title, authors: [["OL2A", "Stephen King"]])
+          got.update_columns(alternate_titles: ["War and Peace"])
+          same = ol_work("OL1W", title: "War and Peace", authors: [["OL2A", "Stephen King"]])
 
           row = ApplyBook.call(book: got, client: resolve_client(ol_resolution(verdict: "accept", work: same)), run_id: "run-1").data
 
@@ -237,6 +244,7 @@ module Services
         end
 
         test "a work key given while another book holds it as a duplicate key flags the pair, and the key stays" do
+          make_other_a_real_holder
           add_key("OL1W", book: @other, type: ApplyBook::DUPLICATE_KEY)
 
           row = ApplyBook.call(book: @book, client: fast_client, run_id: "run-1").data
@@ -266,6 +274,7 @@ module Services
         end
 
         test "replaced: an agreeing old key that another book holds as its work key is flagged, not saved" do
+          make_other_a_real_holder
           add_key("OL262758W")
           old = ol_work("OL262758W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
 
@@ -284,6 +293,125 @@ module Services
           row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
 
           assert_equal [["OL5W"], 1], [row.duplicate_keys, client.calls.count { |call| call.first == :authors_batch }]
+        end
+
+        # --- removed: a stored key whose record is clearly a different book ---
+
+        def abstain_client(works: {}, authors: {}) = FakeOlClient.new(resolution: ol_resolution(verdict: "abstain"), works: works, authors: authors)
+
+        test "removed: an unsure book whose stored key's record disagrees on title and author loses the key" do
+          add_key("OL5W")
+          other = ol_work("OL5W", title: "Anna Karenina", authors: [["OL9A", "Someone Else"]])
+
+          row = ApplyBook.call(book: @book, client: abstain_client(works: {"OL5W" => other}), run_id: "run-1").data
+
+          assert_equal [[], "removed", ["OL5W"], nil, [], nil],
+            [work_keys, row.outcome, row.old_keys, row.new_key, row.duplicate_keys, row.pair_book_id]
+        end
+
+        test "unsure: a stored key whose record agrees on the title only, or the author only, is kept" do
+          add_key("OL5W")
+          title_only = ol_work("OL5W", title: "War and Peace", authors: [["OL9A", "Someone Else"]])
+          row = ApplyBook.call(book: @book, client: abstain_client(works: {"OL5W" => title_only}), run_id: "run-1").data
+          assert_equal [["OL5W"], "unsure"], [work_keys, row.outcome]
+
+          ::Books::OpenLibraryBackfill.where(book: @book).delete_all
+          author_only = ol_work("OL5W", title: "Anna Karenina", authors: [["OL26783A", "Leo Tolstoy"]])
+          row = ApplyBook.call(book: @book, client: abstain_client(works: {"OL5W" => author_only}), run_id: "run-2").data
+          assert_equal [["OL5W"], "unsure"], [work_keys, row.outcome]
+        end
+
+        test "unsure: a dead stored key is not clearly a different book, and a record whose author is found by alternate name is kept" do
+          add_key("OL5W")
+          row = ApplyBook.call(book: @book, client: abstain_client, run_id: "run-1").data
+          assert_equal [["OL5W"], "unsure"], [work_keys, row.outcome]
+
+          ::Books::OpenLibraryBackfill.where(book: @book).delete_all
+          russian = ol_work("OL5W", title: "Anna Karenina", authors: [["OL5A", "Лев Толстой"]])
+          client = abstain_client(works: {"OL5W" => russian}, authors: {"OL5A" => ol_author("OL5A", name: "Лев Толстой", alternate_names: ["Leo Tolstoy"])})
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-2").data
+          assert_equal [["OL5W"], "unsure"], [work_keys, row.outcome]
+        end
+
+        test "removed: of two stored keys only the clearly different one goes, with one works_batch call" do
+          add_key("OL5W")
+          add_key("OL6W")
+          wrong = ol_work("OL5W", title: "Anna Karenina", authors: [["OL9A", "Someone Else"]])
+          right = ol_work("OL6W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
+          client = abstain_client(works: {"OL5W" => wrong, "OL6W" => right})
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal [["OL6W"], "removed", ["OL5W", "OL6W"]], [work_keys, row.outcome, row.old_keys]
+          assert_equal [[:works_batch, ["OL5W", "OL6W"]]], client.calls.select { |call| call.first == :works_batch }
+        end
+
+        test "an unsure book with no stored key makes no works_batch call" do
+          client = abstain_client
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal "unsure", row.outcome
+          assert_empty client.calls.select { |call| call.first == :works_batch }
+        end
+
+        test "a removed row is settled: it is skipped and never overwritten" do
+          ::Books::OpenLibraryBackfill.create!(book: @book, outcome: :removed, run_id: "old", old_keys: ["OL5W"])
+          client = fast_client
+
+          assert_not ApplyBook.call(book: @book, client: client, run_id: "run-2").success?
+          assert_empty client.calls
+        end
+
+        # --- pairs only for a holder that really looks like the same work ---
+
+        test "a holder whose title disagrees with the answer is no pair: the book is keyed and nothing is flagged" do
+          work = ol_work("OL262758W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
+
+          row = ApplyBook.call(book: @book, client: fast_client(work), run_id: "run-1").data
+
+          assert_equal [["OL262758W"], "keyed", nil], [work_keys, row.outcome, row.pair_book_id]
+          assert_not ::DuplicateCandidate.exists?(item_type: "Books::Book", source: "ol_backfill")
+        end
+
+        test "confirmed with a holder whose title disagrees: no pair book and no flag" do
+          work = ol_work("OL262758W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
+          add_key("OL262758W")
+
+          row = ApplyBook.call(book: @book, client: fast_client(work), run_id: "run-1").data
+
+          assert_equal ["confirmed", nil], [row.outcome, row.pair_book_id]
+          assert_not ::DuplicateCandidate.exists?(item_type: "Books::Book", source: "ol_backfill")
+        end
+
+        test "with several holders the lowest-id real one is the pair; a non-real lower id is ignored" do
+          make_other_a_real_holder
+          wrong = books_books(:got)
+          ::Identifier.create!(identifiable: wrong, identifier_type: ApplyBook::WORK_KEY, value: "OL262758W")
+          work = ol_work("OL262758W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
+
+          row = ApplyBook.call(book: @book, client: fast_client(work), run_id: "run-1").data
+
+          assert_equal ["duplicate_pair", @other.id], [row.outcome, row.pair_book_id]
+          assert_equal 1, ::DuplicateCandidate.where(item_type: "Books::Book", source: "ol_backfill").count
+        end
+
+        test "a duplicate key another book holds with a disagreeing title is saved and flags nothing" do
+          add_key("OL3W", book: @other)
+          client = resolve_client(ol_resolution(verdict: "accept", work: @work, duplicates: ["OL3W"]))
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal [["OL3W"], ["OL3W"]], [duplicate_keys, row.duplicate_keys]
+          assert_not ::DuplicateCandidate.exists?(item_type: "Books::Book", source: "ol_backfill")
+        end
+
+        test "a duplicate-key holder with a disagreeing title is not flagged when the work key is given" do
+          add_key("OL1W", book: @other, type: ApplyBook::DUPLICATE_KEY)
+
+          ApplyBook.call(book: @book, client: fast_client, run_id: "run-1")
+
+          assert_not ::DuplicateCandidate.exists?(item_type: "Books::Book", source: "ol_backfill")
         end
 
         test "losing the insert race to another run is an unsuccessful result, not an error" do

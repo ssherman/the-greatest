@@ -6,7 +6,7 @@ module Books
     belongs_to :book, class_name: "Books::Book"
     belongs_to :pair_book, class_name: "Books::Book", optional: true
 
-    enum :outcome, {confirmed: 0, updated: 1, replaced: 2, keyed: 3, duplicate_pair: 4, unsure: 5, failed: 6, reverted: 7}
+    enum :outcome, {confirmed: 0, updated: 1, replaced: 2, keyed: 3, duplicate_pair: 4, unsure: 5, failed: 6, reverted: 7, removed: 8}
     enum :lookup, {identifiers: 0, resolve: 1}, prefix: :via
 
     # Outcomes that leave the book with a key the backfill trusts.

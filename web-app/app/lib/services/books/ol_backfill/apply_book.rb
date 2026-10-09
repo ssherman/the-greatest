@@ -70,12 +70,12 @@ module Services
         def decide(answer)
           stored = stored_keys
           work = answer.work
-          return unchanged(:unsure, stored, nil) if work.nil?
+          return unsure_or_removed(stored) if work.nil?
           # Open Library abstained, but its top answer is a key we hold: nothing to change.
           return unchanged(:confirmed, stored, work.key) if answer.confirm_only
 
           key = work.key
-          other = book_holding(key)
+          other = book_holding(key, work)
           if other
             flag_books(other, key)
             # A book that does not hold the answer takes nothing from it.
@@ -85,9 +85,9 @@ module Services
           outcome, records = classify(stored, key, answer)
           kept = (outcome == :replaced) ? agreeing_old_keys(stored, records) : []
           set_work_key(stored, key)
-          flag_duplicate_holder(key) unless outcome == :confirmed
+          flag_duplicate_holder(key, work) unless outcome == :confirmed
           {outcome: outcome, old_keys: stored, new_key: key, pair_book_id: other,
-           duplicate_keys: save_duplicates(answer.duplicates + kept, key),
+           duplicate_keys: save_duplicates(answer.duplicates + kept, key, work),
            author_changes: AuthorKeys.call(book: @book, work: work)}
         end
 
@@ -111,6 +111,20 @@ module Services
           end
         end
 
+        # No trusted answer. A stored key whose record is clearly another book
+        # (title and author both disagree) is removed; a dead key, or a record
+        # that agrees on either, stays.
+        def unsure_or_removed(stored)
+          return unchanged(:unsure, stored, nil) if stored.empty?
+
+          records = @client.works_batch(stored)
+          wrong = stored.select { |old| (record = records[old]) && Check.clearly_different?(@book, record, @client) }
+          return unchanged(:unsure, stored, nil) if wrong.empty?
+
+          @book.identifiers.where(identifier_type: WORK_KEY, value: wrong).destroy_all
+          unchanged(:removed, stored, nil)
+        end
+
         def unchanged(outcome, stored, key)
           {outcome: outcome, old_keys: stored, new_key: key, duplicate_keys: [], pair_book_id: nil, author_changes: {}}
         end
@@ -119,10 +133,14 @@ module Services
           @book.identifiers.where(identifier_type: WORK_KEY).order(:id).pluck(:value)
         end
 
-        # Another book holding this key as its work key (or as `type`).
-        def book_holding(key, type = WORK_KEY)
-          ::Identifier.where(identifiable_type: "Books::Book", identifier_type: type, value: key)
-            .where.not(identifiable_id: @book.id).order(:identifiable_id).pick(:identifiable_id)
+        # The lowest-id other book holding this key as its work key (or as
+        # `type`) that really looks like the matched work: its title agrees.
+        # A book holding the key wrongly is no holder. Title only: the other
+        # book's authors can be missing in legacy data.
+        def book_holding(key, work, type = WORK_KEY)
+          ids = ::Identifier.where(identifiable_type: "Books::Book", identifier_type: type, value: key)
+            .where.not(identifiable_id: @book.id).pluck(:identifiable_id)
+          ::Books::Book.where(id: ids).order(:id).find { |other| Check.titles_agree?(other, work) }&.id
         end
 
         def set_work_key(stored, key)
@@ -133,12 +151,12 @@ module Services
 
         # Spec section 1, "Open Library's duplicate works": only /resolve
         # returns them. One another book holds as its work key is a pair.
-        def save_duplicates(duplicates, key)
+        def save_duplicates(duplicates, key, work)
           held = @book.identifiers.where(identifier_type: DUPLICATE_KEY).pluck(:value)
           duplicates.uniq.each_with_object([]) do |duplicate, saved|
             next if duplicate == key || held.include?(duplicate)
 
-            if (other = book_holding(duplicate))
+            if (other = book_holding(duplicate, work))
               flag_books(other, duplicate)
             else
               @book.identifiers.create!(identifier_type: DUPLICATE_KEY, value: duplicate)
@@ -148,8 +166,8 @@ module Services
         end
 
         # Another book holds the key we just gave this one as a duplicate key.
-        def flag_duplicate_holder(key)
-          other = book_holding(key, DUPLICATE_KEY)
+        def flag_duplicate_holder(key, work)
+          other = book_holding(key, work, DUPLICATE_KEY)
           flag_books(other, key) if other
         end
 

@@ -52,6 +52,13 @@ module Services
           assert_no_match(/book #{got.id} "/, text)
         end
 
+        test "a removed row is listed among the recent changes" do
+          war = books_books(:war_and_peace)
+          ::Books::OpenLibraryBackfill.create!(book: war, outcome: :removed, run_id: "run-1", old_keys: ["OL5W"])
+
+          assert_match(/removed book #{war.id} "War and Peace": OL5W -> no key/, Report.call.join("\n"))
+        end
+
         test "counts the books confirmed on Open Library's top answer after an abstain" do
           ::Books::OpenLibraryBackfill.create!(book: books_books(:got), outcome: :confirmed, run_id: "run-1", confirmed_on_abstain: true)
           ::Books::OpenLibraryBackfill.create!(book: books_books(:clash), outcome: :confirmed, run_id: "run-1")

@@ -41,9 +41,11 @@ Used by both passes:
 - **Title agrees:** the two titles are equal after the finder's normalization, or equal once a subtitle (text after the first ":") is dropped from either side, or Open Library's title equals one of our `alternate_titles`.
 - **Author agrees:** at least one of our book's authors (name or alternate name, normalized) equals one of the work's author names.
 
+**Amended 2026-10-08.** The author check is wider than "a name equals a name": names also match once reduced to letters only (diacritics stripped; under four letters ignored), an author of ours holding an Open Library author key the work lists agrees, and so does a name of ours equal to a name or alternate name on the work's Open Library author records (`/authors/batch`, first five keys, fetched only when the title agrees and the plain comparison fails).
+
 ### Pass 1: the fast lookup
 
-- Look up each of the book's ISBN-13s, ISBN-10s and Goodreads ids with `Client#identifier` (about 0.16 s each). Then fetch every work they point to in one `Client#works_batch` call.
+- Look up each of the book's ISBN-13s, ISBN-10s and Goodreads ids with `Client#identifier`. *Amended 2026-10-08:* at most five lookups, run concurrently, 0.2-0.6 s each over the tunnel. Then fetch every work they point to in one `Client#works_batch` call.
 - **Settled here** only when every hit points at the same single work and that work passes the title-and-author check.
 - **Anything else goes to pass 2:** no hits, hits on more than one work, or a failed check.
 
@@ -64,6 +66,16 @@ Used by both passes:
 | `unsure` | `abstain`, no candidates, or the check disagreed | none; the stored key stays |
 | `failed` | Open Library down or erroring after the retries | none; retried on the next run |
 | `reverted` | an admin ran the revert task | the backfill's changes undone; never redone |
+| `removed` | *Amended 2026-10-08.* no trusted answer, and a stored key's record is clearly another book (title and author both disagree) | that key removed; old keys logged; revertible |
+
+**Amended 2026-10-08, rulings from the 200-book measurement:**
+
+- **Confirm on abstain (Shane).** When `/resolve` abstains but its top candidate is a key the book holds and passes the check, the book is `confirmed` with no change at all (no key, duplicate, author or pair changes), flagged `confirmed_on_abstain`.
+- **`removed` (Shane).** For a book that would end `unsure`, one `works_batch` fetches its stored keys' records; a key whose record exists and fails both the title and the author check is removed. A dead key, or a record agreeing on either, is kept.
+- **Real holder for pairs.** Another book holding the answer as its work key is a holder only if its title agrees with the matched work. A non-real holder is ignored: no `duplicate_pair`, no flag, and it does not block saving a duplicate key. The lowest-id real holder is the pair.
+- **Replaced keys that agree.** A replaced old key whose own record also passes the check is kept as a duplicate key (or flagged, if another book holds it as a work key).
+- **Errors.** An error about one book (400, 422, unparseable response) logs `failed` and the run continues; any other error retries, then logs `failed` and stops the run.
+- **Pause.** After a book that went through `/resolve`, the run waits 4 s so other callers can take the single slot.
 
 - A book with several stored work keys (rare) is `confirmed` only if one of them is the answer. The others are removed and logged.
 - **Redirect check.** To tell `updated` from `replaced`, the stored key is looked up with `works_batch`. A record whose key is the answer, or whose `redirected_from` lists the stored key, means `updated`.
@@ -127,13 +139,13 @@ The unique `book_id` is also what stops two runs from handling the same book: an
 - `Books::OpenLibraryBackfillJob`, queue `low`, `retry: false`. Arguments: limit (nil for all), run id, retry_unsure.
 - **Order:** ranked books (the default primary `Books::RankingConfiguration`) by rank, then the rest by how many lists they are on (descending), then id.
 - **Skips** books with a log row, except `failed` rows, which are taken again (and `unsure` rows under `retry_unsure`).
-- **Works one book at a time** and stops after `limit` books. Log rows with its run id count toward the limit, so a job Sidekiq pushes back to the queue at a deploy carries on rather than starting a fresh count.
+- **Works one book at a time** and stops after `limit` books. Log rows with its run id count toward the limit, so a re-queued run (same run id) carries on rather than starting a fresh count.
 - **Open Library failing:** the book is retried in place after waits of 15, 30, 60, 120, 240 and 300 s, as the wizard's Match does. If it still fails, the book is logged `failed` and the run stops, so an outage does not use up the batch. The circuit breaker's open state counts as failing.
 - If the job dies outright, running the rake task again picks up where it stopped.
 
 ### Speed
 
-- Pass 1 takes well under a second. Pass 2 takes 12-13 s.
+- Pass 2 takes 12-13 s. *Amended 2026-10-08:* pass 1 measured 4-5 s per famous book (0.2-0.6 s per lookup, ten lookups in series), about 4 books a minute overall; the cap of five concurrent lookups is meant to cut that. The "about a week" below was an estimate; expect 2-4 weeks.
 - About 76% of books carry an identifier that reaches an Open Library work (`docs/data-quality/books-identifier-coverage.md`). If most of those settle in pass 1, `all` takes about a week rather than the roughly 24 days pass 2 alone would.
 - The top few thousand ranked books finish on the first day.
 - **Sharing Open Library with the wizard:** each waits its turn for the single slot, so the wizard gets slower while the backfill runs but nothing fails.

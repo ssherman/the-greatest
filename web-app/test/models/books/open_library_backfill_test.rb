@@ -10,7 +10,7 @@ module Books
 
     test "outcome and lookup values are pinned" do
       assert_equal({"confirmed" => 0, "updated" => 1, "replaced" => 2, "keyed" => 3, "duplicate_pair" => 4,
-                    "unsure" => 5, "failed" => 6, "reverted" => 7}, OpenLibraryBackfill.outcomes)
+                    "unsure" => 5, "failed" => 6, "reverted" => 7, "removed" => 8}, OpenLibraryBackfill.outcomes)
       assert_equal({"identifiers" => 0, "resolve" => 1}, OpenLibraryBackfill.lookups)
     end
 

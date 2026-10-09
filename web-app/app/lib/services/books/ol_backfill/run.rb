@@ -34,8 +34,8 @@ module Services
         end
 
         def call
-          # A job Sidekiq requeued at a deploy carries its run id: what it
-          # already logged (failures aside) counts toward its limit.
+          # A re-queued run (same run id) counts what it already logged
+          # (failures aside) toward its limit.
           done = ::Books::OpenLibraryBackfill.where(run_id: @run_id).where.not(outcome: :failed).count
           version = @retry_unsure ? @client.version : nil
           loop do

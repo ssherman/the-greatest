@@ -7,7 +7,7 @@ along the way. Spec: `docs/superpowers/specs/2026-10-07-ol-key-backfill-design.m
 
 ```bash
 bin/rails "books:ol_backfill[100]"                 # one run of 100 books, ranked first
-bin/rails "books:ol_backfill[all]"                 # everything not yet done (about a week)
+bin/rails "books:ol_backfill[all]"                 # everything not yet done (weeks; see "How long it takes")
 bin/rails "books:ol_backfill[100,retry_unsure]"    # also retry unsure books from an older OL version
 bin/rails books:ol_backfill_report                 # outcome counts, ranked coverage, latest run, recent swaps
 bin/rails "books:ol_backfill_revert[123]"          # put book 123's keys back
@@ -35,8 +35,9 @@ Errors are handled by what they are about:
 
 ## One book
 
-1. **Fast pass:** look up the book's ISBNs and Goodreads ids (`GET /identifiers`, about 0.16 s each).
-   If they all point at one work, and its title and an author agree with ours, that is the answer.
+1. **Fast pass:** look up the book's ISBNs and Goodreads ids (`GET /identifiers`, 0.2-0.6 s each over
+   the tunnel), at most five (`Lookup::MAX_FAST_LOOKUPS`), all at once in one thread each. An error
+   from any of them is raised as before. If they all point at one work, and its title and an author agree with ours, that is the answer.
    An identifier the service rejects (400/422) or does not know (404) counts as no hit.
 2. **Full match:** otherwise one `POST /resolve` (12-13 s) with title, authors, year, ISBNs and the
    stored key as a hint. Acted on only for an `accept` that passes the same check.
@@ -57,7 +58,14 @@ When `/resolve` does not accept (it abstains on margin, which famous books with 
 Open Library records do) but its top candidate is a work key the book already holds and that
 candidate passes the check, the book is `confirmed` with no change at all: no key added, swapped or
 removed, no duplicates saved, no author keys. The row has `confirmed_on_abstain` set, and the report
-counts these. Any other non-accept stays `unsure`.
+counts these. Any other non-accept stays `unsure`. A confirmed-on-abstain book flags no pair either.
+
+## How long it takes
+
+Measured on 200 top-ranked books: about 4 books a minute before the fast pass was cut to five
+concurrent lookups. Most of the time went to identifier lookups and full matches. The full run is
+likely 2-4 weeks, and the top few thousand ranked books finish in the first days. Unranked books
+probably have fewer identifiers, so they may go faster, but that is not measured.
 
 | Outcome | Meaning |
 |---|---|
@@ -67,8 +75,25 @@ counts these. Any other non-accept stays `unsure`.
 | `keyed` | the book had no key; added |
 | `duplicate_pair` | another book holds the answer; nothing saved, pair in Books → Duplicates |
 | `unsure` | no confident, agreeing answer; nothing changed |
+| `removed` | no confident answer, and a stored key's record is clearly another book; that key was removed (see below) |
 | `failed` | Open Library failing, or an error about this book; retried by a later run |
 | `reverted` | undone by `books:ol_backfill_revert`; never redone |
+
+**removed.** A book with no trusted answer would stay `unsure` and keep its stored key, so a key the
+old code gave to the wrong book (a generic title holding a famous book's key) would stay for good.
+Instead, the book's stored keys are fetched in one `works_batch` call. A key is clearly another book
+when its record exists, its title does not agree with the book's, and no author agrees either (the
+record's Open Library author records are fetched only when the plain comparison fails). Every such key
+is removed and the outcome is `removed`, with `old_keys` holding all keys from before and no new key.
+A dead key (no record) is kept, as is a key whose record agrees on the title or on an author. A
+`removed` row is settled and can be reverted. No author keys, duplicates or pairs come from it.
+
+**Pairs need a real holder.** Another book holding the answer as its work key counts as a holder only
+if its title agrees with the matched work (title only: its authors can be missing in legacy data).
+A book holding the key wrongly ("The Collection" holding *Little Women*'s key) is no holder: it does
+not make the book a `duplicate_pair`, is not flagged, and does not stop a duplicate key from being
+saved. With several holders, the lowest-id real one is the pair. The same test applies to a work key
+given while another book holds it as a duplicate key.
 
 A book that already holds Open Library's answer stays `confirmed` even when another book holds the
 same key. The pair is still flagged and `pair_book_id` is set, so `pair_book_id` can appear on a
@@ -105,6 +130,6 @@ stay in the Duplicates queue.
 
 ## Reading the report
 
-Check the `replaced` and `duplicate_pair` lines: every replacement is a key the old code assigned and
-Open Library contradicted. A wrong one is undone with the revert task. Pairs are reviewed in the
+Check the `replaced`, `duplicate_pair` and `removed` lines: every replacement or removal is a key the
+old code assigned and Open Library contradicted. A wrong one is undone with the revert task. Pairs are reviewed in the
 Duplicates queue like any other.

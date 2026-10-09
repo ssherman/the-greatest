@@ -29,6 +29,18 @@ module Services
           authors_agree?(book, work, ol_authors: client.authors_batch(keys).values.compact)
         end
 
+        # Neither the title nor any author agrees: another book's record. Fetches
+        # the work's author records (once, at most AUTHOR_FETCH_LIMIT) only when
+        # the title and the names on the work both fail.
+        def clearly_different?(book, work, client)
+          return false if titles_agree?(book, work) || authors_agree?(book, work)
+
+          keys = Array(work.author_keys).compact.first(AUTHOR_FETCH_LIMIT)
+          return true if keys.empty?
+
+          !authors_agree?(book, work, ol_authors: client.authors_batch(keys).values.compact)
+        end
+
         # Equal after normalizing, or equal once a subtitle (text after the
         # first ":") is dropped from ONE side, never both: "Dune: Messiah"
         # and "Dune: Part One" do not agree. The work's own subtitle field,

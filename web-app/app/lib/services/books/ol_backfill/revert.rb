@@ -8,7 +8,7 @@ module Services
       # no later run takes again.
       class Revert
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
-        REVERTIBLE = ::Books::OpenLibraryBackfill::KEYED_OUTCOMES
+        REVERTIBLE = (::Books::OpenLibraryBackfill::KEYED_OUTCOMES + %w[removed]).freeze
 
         def self.call(book:)
           new(book).call

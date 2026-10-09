@@ -59,12 +59,14 @@ Run these in this order after each migration pass.
    `books:normalize_names:apply`.
 6. **Open Library key backfill.** Run `bin/rails "books:ol_backfill[100]"`, read
    `bin/rails books:ol_backfill_report`, then `bin/rails "books:ol_backfill[all]"`. It checks or adds an
-   Open Library key on every book, ranked first, and takes about a week. It shares Open Library's one
-   `/resolve` slot with the wizard and the Goodreads replay, so all of them slow down while it runs;
-   none of them fail. It pauses 4 seconds after each `/resolve` so the others can get the slot, but
+   Open Library key on every book, ranked first. Top-ranked books ran at about 4 books a minute before
+   the fast pass was sped up, so the full run is likely 2-4 weeks and the top few thousand ranked books
+   finish in the first days. It shares Open Library's one
+   `/resolve` slot with the wizard and the Goodreads replay, so all of them slow down while it runs.
+   It pauses 4 seconds after each `/resolve` so the others can get the slot, but
    do not run the Goodreads replay or the legacy-import finishing steps while it runs: when they
    cannot get the slot they decide rows without Open Library. Every merge deploys, and a deploy stops
-   a running backfill (it is not requeued), so expect to run the task again during the week it runs;
+   a running backfill (it is not requeued), so expect to run the task again during the weeks it runs;
    it carries on, because logged books are skipped. Its log is keyed to book ids, so every
    migration pass starts it from scratch.
    Details: `docs/features/open-library-backfill.md`.

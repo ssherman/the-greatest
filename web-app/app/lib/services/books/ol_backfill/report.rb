@@ -65,12 +65,12 @@ module Services
 
         def recent_lines
           pairs = rows.where(outcome: :confirmed).where.not(pair_book_id: nil)
-          recent = rows.where(outcome: %i[replaced duplicate_pair]).or(pairs).includes(:book).order(updated_at: :desc, id: :desc).limit(RECENT)
+          recent = rows.where(outcome: %i[replaced duplicate_pair removed]).or(pairs).includes(:book).order(updated_at: :desc, id: :desc).limit(RECENT)
           return ["  none"] if recent.empty?
 
           recent.map do |row|
             pair = row.pair_book_id ? " (pair with book #{row.pair_book_id})" : ""
-            "  #{row.outcome} book #{row.book_id} \"#{row.book.title}\": #{row.old_keys.join(", ").presence || "no key"} -> #{row.new_key}#{pair}"
+            "  #{row.outcome} book #{row.book_id} \"#{row.book.title}\": #{row.old_keys.join(", ").presence || "no key"} -> #{row.new_key.presence || "no key"}#{pair}"
           end
         end
       end
