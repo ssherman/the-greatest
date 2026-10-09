@@ -21,6 +21,10 @@ module Services
       end
 
       def upsert_row(attrs)
+        # Insert-only in sync mode. Countries keep legacy ids and have no map, so a
+        # country deleted here comes back; editing one here sticks.
+        return if sync && ::Books::Country.exists?(attrs["id"])
+
         country = ::Books::Country.find_or_initialize_by(id: attrs["id"])
         country.assign_attributes(
           name: attrs["name"],

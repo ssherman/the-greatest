@@ -19,10 +19,17 @@ module Services
 
       def upsert_row(attrs)
         Services::BooksMigration.raise_if_at_ceiling!("books_books", attrs["id"])
+        # Insert-only in sync mode: the catalog here is the master (spec §5).
+        return if sync && ::Books::Book.exists?(attrs["id"])
+
         book = ::Books::Book.find_or_initialize_by(id: attrs["id"])
         book.assign_attributes(BookTransformer.call(attrs))
         book.original_language_id = remap_language(attrs["original_language_id"])
         book.save!
+      end
+
+      def sync_filter
+        [:book_ids, "id"]
       end
 
       # A genuinely nil legacy language maps to nil. But a NON-nil legacy id with

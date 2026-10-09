@@ -20,6 +20,10 @@ module Services
       end
 
       def upsert_row(attrs)
+        # Insert-only in sync mode: a legacy id with a map entry was seen before, so
+        # a category edited or deleted here stays that way (spec §5).
+        return if sync && LegacyIdMap.lookup(model: model_key, legacy_id: attrs["id"])
+
         ::Books::Category.transaction do
           new_id = LegacyIdMap.lookup(model: model_key, legacy_id: attrs["id"])
           category = new_id ? ::Books::Category.find(new_id) : ::Books::Category.new

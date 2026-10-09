@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::AuthorMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   include SequenceIsolation
 
   isolate_sequences "books_authors"
@@ -59,5 +61,26 @@ class Services::BooksMigration::AuthorMigratorTest < ActiveSupport::TestCase
     refute result[:success]
     assert_includes result[:error], "reserved ceiling"
     refute ::Books::Author.exists?(ceiling)
+  end
+
+  def run_sync(rows, scope)
+    migrator = Services::BooksMigration::AuthorMigrator.new(sync: scope)
+    migrator.stubs(:legacy_each).multiple_yields(*rows.zip)
+    migrator.call
+  end
+
+  test "sync mode inserts only the run's new authors and never overwrites one here" do
+    ::Books::Author.create!(id: 90031, name: "Cleaned Name")
+
+    result = run_sync([
+      {"id" => 90030, "name" => "New Legacy Author", "family_name" => "Author", "alternative_names" => nil},
+      {"id" => 90031, "name" => "Legacy Name", "family_name" => "Name", "alternative_names" => nil},
+      {"id" => 90032, "name" => "Outside The Run", "family_name" => "Run", "alternative_names" => nil}
+    ], sync_scope(author_ids: [90030, 90031]))
+
+    assert result[:success], result[:error]
+    assert ::Books::Author.exists?(90030)
+    assert_equal "Cleaned Name", ::Books::Author.find(90031).name
+    refute ::Books::Author.exists?(90032)
   end
 end

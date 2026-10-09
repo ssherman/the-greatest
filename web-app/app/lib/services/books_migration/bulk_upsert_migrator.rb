@@ -19,6 +19,8 @@ module Services
         preload_context
         Services::BooksMigration.without_search_indexing do
           legacy_each do |attrs|
+            next unless in_sync_scope?(attrs)
+
             build_rows(attrs).each { |row| buffer << row }
             if buffer.size >= upsert_batch
               flush(buffer)

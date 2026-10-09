@@ -15,6 +15,9 @@ module Services
       end
 
       def upsert_row(attrs)
+        # Insert-only in sync mode: a language with a map entry was seen before.
+        return if sync && LegacyIdMap.lookup(model: model_key, legacy_id: attrs["id"])
+
         target = LanguageTransformer.call(attrs)
         language = Language.find_or_create_by!(name: target[:name])
         LegacyIdMap.record(model: model_key, legacy_id: attrs["id"], new_id: language.id)
