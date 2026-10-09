@@ -251,6 +251,13 @@ to fan out to. Author **rankings** still recalculate, though — not because the
 schedules them, but because `CalculateRankingsJob` already cascades into
 `Books::CalculateAuthorRankingsJob` for any affected `Books::RankingConfiguration`.
 
+### Redirects (books)
+
+`Books::Book::Merger` and `Books::Author::Merger` record `source → survivor` in
+`record_redirects` inside the merge transaction, before the destroy, so the books
+legacy sync never brings a merged-away legacy book or author back. See
+`docs/features/books-legacy-sync.md`.
+
 ## Scalar reconciliation
 
 The target's own non-blank values always win — there is no field-level "pick a winner" UI.

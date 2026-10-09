@@ -23,6 +23,8 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       data_migration:sync_init
       data_migration:books
       data_migration:languages
+      data_migration:sync
+      data_migration:sync_report
     ].each { |name| Rake::Task[name].reenable if Rake::Task.task_defined?(name) }
   end
 
@@ -221,5 +223,46 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       assert_raises(SystemExit) { Rake::Task["data_migration:sync_init"].invoke }
     end
     assert_match(/sync_init failed: sync watermarks already exist/, err)
+  end
+
+  def sync_result(success: true, errors: [])
+    Services::BooksMigration::Sync::Result.new(success?: success, data: {plan: nil, steps: [], indexed: {}}, errors: errors)
+  end
+
+  def with_env(name, value)
+    previous = ENV[name]
+    ENV[name] = value
+    yield
+  ensure
+    ENV[name] = previous
+  end
+
+  test "sync passes FINAL through as a boolean" do
+    {"1" => true, "true" => true, "yes" => true, "0" => false, nil => false}.each do |value, final|
+      Rake::Task["data_migration:sync"].reenable
+      Services::BooksMigration::Sync.expects(:call).with(final: final).returns(sync_result)
+
+      with_env("FINAL", value) { capture_io { Rake::Task["data_migration:sync"].invoke } }
+    end
+  end
+
+  test "sync aborts when the run fails" do
+    Services::BooksMigration::Sync.stubs(:call).returns(sync_result(success: false, errors: ["editions failed: boom"]))
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:sync"].invoke }
+    end
+    assert_match(/data_migration:sync failed: editions failed: boom/, err)
+  end
+
+  test "sync_report prints the plan and runs nothing" do
+    Services::BooksMigration::Sync.expects(:call).never
+    plan = mock("plan")
+    Services::BooksMigration::SyncPlan.expects(:build).with(final: false).returns(plan)
+    Services::BooksMigration::SyncReport.expects(:render).with(plan).returns("REPORT")
+
+    out, _err = with_env("FINAL", nil) { capture_io { Rake::Task["data_migration:sync_report"].invoke } }
+
+    assert_includes out, "REPORT"
   end
 end

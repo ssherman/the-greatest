@@ -18,6 +18,21 @@ namespace :data_migration do
     abort "sync_init failed: #{result.errors.join("; ")}" unless result.success?
   end
 
+  desc "Bring over what is new on legacy since the last run: catalog + users (FINAL=1 drops the 24h delay)"
+  task sync: :environment do
+    result = Services::BooksMigration::Sync.call(final: ActiveModel::Type::Boolean.new.cast(ENV["FINAL"]) || false)
+    puts Services::BooksMigration::SyncReport.render(result.data[:plan]) if result.data[:plan]
+    result.data[:steps].each { |label, outcome| pp(label => outcome) }
+    abort "data_migration:sync failed: #{result.errors.join("; ")}" unless result.success?
+    pp(indexed: result.data[:indexed])
+  end
+
+  desc "Print what data_migration:sync would do now (read-only; safe in production at any time)"
+  task sync_report: :environment do
+    plan = Services::BooksMigration::SyncPlan.build(final: ActiveModel::Type::Boolean.new.cast(ENV["FINAL"]) || false)
+    puts Services::BooksMigration::SyncReport.render(plan)
+  end
+
   desc "Migrate legacy users into the global users table (preserves ids)"
   task users: :environment do
     pp Services::BooksMigration::UserMigrator.call
