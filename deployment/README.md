@@ -85,6 +85,11 @@ curl https://thegreatestmovies.org
 - **Image**: ghcr.io/ssherman/the-greatest:latest
 - **Command**: `bundle exec sidekiq`
 - **Health Check**: Process check for sidekiq
+- **Stop grace period**: 30 s, longer than Sidekiq's 25 s shutdown timeout. On a deploy Sidekiq
+  finishes what it can, then pushes jobs still running back onto the queue, and the new worker runs
+  them again **from the start**. A job running at a deploy may therefore run twice, so long jobs
+  must be safe to re-run. A crash or out-of-memory kill still loses running jobs: open-source
+  Sidekiq has no recovery for that.
 
 ### Nginx Service
 - **Build**: Custom image on nginx 1.30 (stable), rebuilt with --pull --no-cache on every deploy

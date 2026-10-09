@@ -18,8 +18,10 @@ threads for as long as it runs, which is days for `[all]`. It works through book
 ranked books by rank, then by how many lists a book is on, then by id. A book with a log row is never
 taken again, except a `failed` one (and an `unsure` one under `retry_unsure`). Books with a `failed`
 row are retried after books never tried, and one run never takes the same book twice. A deploy
-stops the run (the worker is killed before Sidekiq would requeue the job). Run the rake task again
-afterwards and it carries on; logged books are skipped.
+puts the run back on the queue (the worker's 30 s stop grace period outlasts Sidekiq's 25 s shutdown
+timeout). It starts again with the same run id, so its earlier books still count toward the limit
+and logged books are skipped. The book in progress has no row yet and is done again. A worker crash
+loses the run instead: run the rake task again and it carries on the same way, under a new run id.
 
 Only one run runs at a time, enforced by a PostgreSQL session advisory lock (`Run::LOCK_KEY`). A run
 started while another is in progress exits immediately with `stopped` and an error; queue it again

@@ -73,9 +73,9 @@ the sync never undoes them.
    Goodreads replay, so all of them slow down while it runs. It pauses 4 seconds after each
    `/resolve` so the others can get the slot, but do not run the Goodreads replay or the
    legacy-import finishing steps while it runs: when they cannot get the slot they decide rows
-   without Open Library. Every merge deploys, and a deploy stops a running backfill (it is not
-   requeued), so expect to run the task again during the weeks it runs; it carries on, because
-   logged books are skipped. Details: `docs/features/open-library-backfill.md`.
+   without Open Library. A deploy puts a running backfill back on the queue and it carries on
+   under the same run id; logged books are skipped. If the worker crashes instead, the run is lost:
+   run the task again. Details: `docs/features/open-library-backfill.md`.
 3. **Duplicates.** Review the pairs the sweep found in the Duplicates queue and merge them. Every
    merge is recorded as a redirect, so the sync never brings the merged book back.
 4. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
