@@ -211,7 +211,11 @@ names behind ids, the settings summary); books markup lives in `app/views/recomm
 | Free account | `free_limit` results, side panel, member pitch | rendered, every field disabled, "Become a member" replaces Save; the POST is refused server-side (`require_membership!(:book_recommendations)`) |
 | Member | `member_limit` results | editable |
 
-A signed-in user with no favorite and no read book is sent to wizard step 1; steps 3 and 4 bounce
+Stored settings, depth included, apply to free accounts as well as members; a free account can
+reset them but not edit them. The step-3 unrated list and the already-rated list are each capped
+at 50 (`Recommendations::Books::Pages::UNRATED_LIMIT`, `RATED_LIMIT`).
+
+A signed-in user with no favorite, read or reading item and no rating is sent to wizard step 1; steps 3 and 4 bounce
 to step 2 until one exists. Steps 1 and 2 search through `GET /recommendations/search`, a Turbo
 frame (`target: "_top"`) of `Books::CardComponent` cards whose list widget adds the book. Step 3
 rates through `Reviews::WidgetComponent`. The results page shows `rank_position` on each card and

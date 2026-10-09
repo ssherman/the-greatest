@@ -18,7 +18,7 @@ module MembershipGate
     members_area: "The members' area at /members",
     api: "The public API at /api/v1 (tokens managed at /developers/tokens)",
     csv_export_full: "Full CSV downloads of rankings and saved searches (non-members get the top 500 rows)",
-    book_recommendations: "Personalized book recommendations: 50 results and editable preferences (free accounts get 10 results on the default settings)"
+    book_recommendations: "Personalized book recommendations: the full results page and editable preferences (free accounts get fewer results and read-only settings)"
   }.freeze
 
   def self.members_only?(feature) = FEATURES.key?(feature.to_sym)

@@ -23,9 +23,9 @@ module Recommendations
       end
 
       def history?
-        [list(:favorites), list(:read)].compact.any? do |l|
-          ::UserListItem.where(user_list: l, listable_type: "Books::Book").exists?
-        end
+        shelved = ::UserListItem.where(listable_type: "Books::Book", user_list_id:
+          ::Books::UserList.where(user: @user, list_type: [:favorites, :read, :reading]).select(:id))
+        shelved.exists? || rated_reviews.exists?
       end
 
       def favorites

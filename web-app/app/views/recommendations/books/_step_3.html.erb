@@ -4,7 +4,11 @@
     <p>Four and five stars push a book's traits up. One and two stars push them down. A three changes nothing.</p>
 
     <% if @unrated.books.empty? %>
-      <div class="alert alert-success" data-testid="unrated-empty"><span>Everything on your read list is rated.</span></div>
+      <% if @read_total.zero? %>
+        <div class="alert" data-testid="unrated-empty"><span>Your read list is empty. Ratings come from books you have read; add some on <%= link_to "step 2", recommendations_wizard_path(step: 2), class: "link" %> or rate a book from its page.</span></div>
+      <% else %>
+        <div class="alert alert-success" data-testid="unrated-empty"><span>Everything on your read list is rated.</span></div>
+      <% end %>
     <% else %>
       <p class="font-medium"><%= pluralize(@unrated.total, "book") %> without a rating.</p>
       <% if @unrated.total > @unrated.books.size %>

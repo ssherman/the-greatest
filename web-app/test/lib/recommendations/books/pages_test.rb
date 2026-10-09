@@ -21,10 +21,26 @@ module Recommendations
         ::UserListItem.create!(user_list: list, listable: book, position: position)
       end
 
-      test "history? is false with empty lists and true once a favorite or read book exists" do
-        assert_not @pages.history?
+      test "history? is false with empty lists and no ratings, true once a favorite or read book exists" do
+        @user.reviews.delete_all
+        assert_not Pages.new(user: @user).history?
         add(@read, books_books(:got))
         assert Pages.new(user: @user).history?
+      end
+
+      test "history? is true for a user whose only signal is a rating" do
+        user = users(:books_viewer_user)
+        assert_not Pages.new(user: user).history?
+        Review.create!(user: user, reviewable: books_books(:got), rating: 4)
+        assert Pages.new(user: user).history?
+      end
+
+      test "history? is true for a user with only a reading-list item" do
+        user = users(:books_viewer_user)
+        reading = ::Books::UserList.create!(user: user, list_type: :reading, name: "Reading")
+        assert_not Pages.new(user: user).history?
+        ::UserListItem.create!(user_list: reading, listable: books_books(:got))
+        assert Pages.new(user: user).history?
       end
 
       test "favorites come back in list order with their total" do

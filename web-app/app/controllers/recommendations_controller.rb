@@ -12,7 +12,7 @@ class RecommendationsController < ApplicationController
   include MembershipGated
 
   GATED_STEPS = (3..4)
-  NEEDS_HISTORY_ALERT = "Add a favorite book or a book you have read before rating books or setting preferences."
+  NEEDS_HISTORY_ALERT = "Add a favorite book, a book you have read, or a rating before this step."
 
   layout :resolve_layout
 
@@ -64,6 +64,7 @@ class RecommendationsController < ApplicationController
     when 2 then @read = pages.read_books
     when 3
       @unrated = pages.unrated_read
+      @read_total = pages.read_books(limit: 1).total
       @rated = pages.rated
     when 4
       assign_settings_form(locked: !current_user.member?)
