@@ -81,15 +81,18 @@ What a refresh does **not** bring back is anything created since the last nightl
 replaces the database wholesale rather than merging. So this is still not a database to treat as
 disposable; the cost of losing it is just far lower than this section used to claim.
 
-Do not swing the other way on the production side either: **the books data in production is a
-pre-launch rehearsal copy, not live user data.** Books has not launched, nobody signs in as those
-rows *today*, and Shane will truncate and re-run the data migration before launch. Music and games
-ARE live on the same database, so a destructive command there is still an outage — the point is
-only that prod books rows are neither absent nor precious. Any books-migration step you plan for
-production is a **repeating** step, not a one-off: the data migration is rehearsed against
-production more than once, and anything downstream of it (uid write-backs, Firebase imports) has
-to be re-run after each pass and again in the final launch sequence. Design those steps to be
-idempotent and then actually exercise that, rather than scheduling them once.
+Do not swing the other way on the production side either. **Production's books data is not live
+user data yet, but it stops being disposable at the legacy-sync switch-over.** Books has not
+launched and nobody signs in as those rows today. There is no pre-launch truncate any more
+(`docs/features/books-legacy-sync.md`). Until `data_migration:sync_init` runs, the weekly
+`data_migration:all` still overwrites books from legacy. After it (`LegacySyncWatermark.exists?`),
+merges, deletes and edits made in production are kept: the catalog there is the master, and the
+weekly `data_migration:sync` only adds what is new on legacy and re-matches legacy users' data.
+Music and games ARE live on the same database, so a destructive command there is an outage. Any
+books step you plan for production that runs downstream of the sync (uid write-backs, the Goodreads
+replay's `apply`) is a **repeating** step: it re-runs after each sync and again in the final launch
+sequence. Design those steps to be idempotent and then actually exercise that, rather than
+scheduling them once.
 One caveat on "nobody signs in": every domain's auth widget points at the **same**
 Firebase project (`projectId` is hardcoded in `firebase_auth_service.js`; only `authDomain` varies),
 so any account pushed into Firebase becomes signable-in on live music and games immediately,

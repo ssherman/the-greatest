@@ -725,7 +725,11 @@ The Wikidata and VIAF clients cache labels, country codes and AutoSuggest answer
 `config.x.external_api_cache`, a Redis store (namespace `external-api`). It survives deploys, which
 a multi-day run spans; `Rails.cache` in production is a per-container file store.
 
-**Launch sequence.** Production's books data is a rehearsal copy: it gets truncated and
+**Launch sequence.** Superseded on 2026-10-09: there is no pre-launch truncate any more. The legacy
+sync keeps this database's catalog from the switch-over on (`docs/features/books-legacy-sync.md`),
+so the truncate-list warnings below only matter for a development rebuild.
+
+The original note: Production's books data is a rehearsal copy: it gets truncated and
 re-migrated more than once before launch (spec §14). The pre-launch truncate has to include
 `books_author_countries` -- it carries foreign keys to both `books_authors` and
 `books_countries`, so a truncate that forgets it either fails outright on the constraint or, if

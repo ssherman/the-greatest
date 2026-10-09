@@ -297,14 +297,11 @@ imports.
   readable file is finished.
 - Rows the stalled legacy import already wrote came over with the data migration, and are skipped as already on the
   user's lists.
-- **In production, run it on the final books migration pass only.** The list items and reviews it writes have no
-  foreign key to books, so a truncate leaves them pointing at deleted provisional books. The re-migration resets
-  the books id sequence, and later books take those ids. `docs/launch-todo.md` (section 2, item 9) says how to undo a
-  rehearsal run before the truncate.
+- **In production, run it at the cutover only, after the final sync** (`docs/launch-todo.md`, section 5). It writes
+  into legacy users' lists and reviews, and every `data_migration:sync` rewrites those to match legacy, so an earlier
+  run is undone by the next sync.
 - A finishing import with rows has already run and is left alone. One an admin rejected stays rejected. One that
-  failed before writing any rows starts again, pending review. One whose written rows a truncate emptied is reported
-  `stale` and never runs again. Those rows held the only ids of the list items and reviews it wrote, so the import
-  can neither redo nor undo them. That is why every finishing import is rejected and then deleted before a truncate.
+  failed before writing any rows starts again, pending review.
 - `IDS=` only narrows what is started: a picked import still defers to a newer unfinished import of the same user.
 - Run it one import at a time (`[1]`), and let each finish before the next: running imports are skipped, not
   counted. Four at once overloaded the Open Library service on 2026-10-06 (`docs/launch-todo.md`, section 2, item 10).
