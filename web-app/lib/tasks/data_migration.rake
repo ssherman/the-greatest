@@ -22,13 +22,15 @@ namespace :data_migration do
     abort "sync_init failed: #{result.errors.join("; ")}" unless result.success?
   end
 
-  desc "Bring over what is new on legacy since the last run: catalog + users (FINAL=1 drops the 24h delay)"
+  desc "Bring over what is new on legacy and match legacy users' data to it (FINAL=1 drops the 24h delay)"
   task sync: :environment do
     result = Services::BooksMigration::Sync.call(final: ActiveModel::Type::Boolean.new.cast(ENV["FINAL"]) || false)
     puts Services::BooksMigration::SyncReport.render(result.data[:plan]) if result.data[:plan]
     result.data[:steps].each { |label, outcome| pp(label => outcome) }
     abort "data_migration:sync failed: #{result.errors.join("; ")}" unless result.success?
     pp(indexed: result.data[:indexed])
+    # It reads the lists the sync just rewrote, as at the end of :all.
+    Rake::Task["user_favorites_lists:rebuild"].invoke
   end
 
   desc "Print what data_migration:sync would do now (read-only; safe in production at any time)"
@@ -368,12 +370,15 @@ namespace :data_migration do
     "user_favorites_lists:rebuild"]
 
   # Each task the sync replaces or retires refuses on its own as well, so running
-  # one by hand after sync_init cannot undo cleanup either. The user-data tasks,
-  # the description safety net and penalties:reconcile stay runnable.
+  # one by hand after sync_init cannot undo cleanup either. The user-data tasks the
+  # sync replaces refuse too: their full-migration mode ignores redirects and never
+  # deletes. users, reading_goals, recommendation_configs, news_posts, the
+  # description safety net and penalties:reconcile stay runnable.
   %i[languages authors books book_authors editions identifiers edition_amazon_identifiers categories
     category_items book_attributes book_type_categories countries author_countries book_countries
     external_links lists list_items ranking_configurations ranked_lists penalties list_penalties
-    book_descriptions author_descriptions book_images].each do |name|
+    book_descriptions author_descriptions book_images
+    user_lists user_list_items saved_searches reviews corrections].each do |name|
     task name => :refuse_after_sync_init
   end
 end

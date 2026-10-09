@@ -2,13 +2,18 @@ require "test_helper"
 
 class Services::BooksMigration::SyncTest < ActiveSupport::TestCase
   include BooksLegacySyncHelper
+  include SequenceIsolation
+
+  # The user-data steps run in every test here, and three of them move sequences.
+  isolate_sequences "reviews", "saved_searches", "corrections"
 
   SYNC_MIGRATORS = %w[
     LanguageMigrator AuthorMigrator BookMigrator BookAuthorMigrator EditionMigrator BookIdentifierMigrator
     BookWorkIdentifierMigrator AuthorIdentifierMigrator EditionIdentifierMigrator EditionIsbnIdentifierMigrator
     CategoryMigrator CategoryItemMigrator BookAttributesMigrator BookTypeCategoryMigrator CountryMigrator
     AuthorCountryMigrator BookCountryMigrator ExternalLinkMigrator BookDescriptionMigrator
-    AuthorDescriptionMigrator BookImageMigrator
+    AuthorDescriptionMigrator BookImageMigrator UserListMigrator SavedSearchMigrator ReviewMigrator
+    CorrectionMigrator
   ].freeze
 
   setup do
@@ -21,6 +26,9 @@ class Services::BooksMigration::SyncTest < ActiveSupport::TestCase
     Services::BooksMigration::NewsPostMigrator.stubs(:call).returns(
       Services::BooksMigration::NewsPostMigrator::Result.new(success?: true, data: {}, errors: [])
     )
+    Services::BooksMigration::ReadingGoalMigrator.stubs(:call).returns(success: true, data: {model: "Books::ReadingGoal", count: 0})
+    Services::BooksMigration::RecommendationConfigMigrator.stubs(:call).returns(success: true, data: {model: "Books::RecommendationConfig", count: 0})
+    Services::BooksMigration::UserListItemMigrator.any_instance.stubs(:legacy_items_for).returns([])
     stub_legacy(
       "AuthorMigrator" => [{"id" => 501, "name" => "New Legacy Author", "family_name" => "Author", "alternative_names" => nil}],
       "BookMigrator" => [
@@ -176,5 +184,45 @@ class Services::BooksMigration::SyncTest < ActiveSupport::TestCase
       Services::BooksMigration::Sync.call(legacy: legacy)
     end
     assert_equal 1, plan.report[:books][:would_insert]
+  end
+
+  test "runs the user-data steps after the catalog, in :all's order" do
+    result = Services::BooksMigration::Sync.call(legacy: legacy)
+
+    assert result.success?, result.errors.inspect
+    assert_equal %w[book_images user_lists user_list_items reading_goals saved_searches recommendation_configs reviews review_summaries corrections],
+      result.data[:steps].map(&:first).last(9)
+  end
+
+  test "carries a list item on a book the run brought over and waits on one still inside the delay" do
+    user = users(:regular_user)
+    ::Books::UserList.create!(id: 700, user: user, name: "Legacy", list_type: :custom)
+    Services::BooksMigration::UserListMigrator.any_instance.stubs(:legacy_each).multiple_yields([{
+      "id" => 700, "user_id" => user.id, "name" => "Legacy", "description" => nil, "list_type" => 4,
+      "view_mode" => nil, "public" => true, "position" => 1, "created_at" => @old, "updated_at" => @old
+    }])
+    item = ->(id, book_id, position) {
+      {"id" => id, "user_list_id" => 700, "book_id" => book_id, "position" => position, "read_date" => nil,
+       "created_at" => @old, "updated_at" => @old}
+    }
+    Services::BooksMigration::UserListItemMigrator.any_instance.stubs(:legacy_items_for)
+      .returns([item.call(1, 1_001, 1), item.call(2, 1_002, 2)])
+
+    result = Services::BooksMigration::Sync.call(legacy: legacy)
+
+    assert result.success?, result.errors.inspect
+    assert_equal [1_001], UserListItem.where(user_list_id: 700).pluck(:listable_id)
+    items_outcome = result.data[:steps].to_h["user_list_items"]
+    assert_equal 1, items_outcome[:data][:waiting]
+  end
+
+  test "a failed user-data step leaves the watermarks" do
+    Services::BooksMigration::ReviewMigrator.stubs(:call).returns(success: false, error: "boom", data: {})
+
+    result = Services::BooksMigration::Sync.call(legacy: legacy)
+
+    refute result.success?
+    assert_includes result.errors.first, "reviews failed: boom"
+    assert_equal({"books" => 1_000, "authors" => 500, "book_identifiers" => 5_000}, watermarks)
   end
 end
