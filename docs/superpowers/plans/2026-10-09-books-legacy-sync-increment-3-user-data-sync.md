@@ -29,7 +29,7 @@
 
 1. **Deletes happen in sync mode only.** `data_migration:all` keeps today's behavior, apart from decision 9. It is about to be retired, and Shane runs it weekly in production until the switch-over.
 2. **List items sync list by list in sync mode.** For each batch of 1,000 legacy-origin `Books::UserList` ids here, the migrator reads legacy's items for those lists, plans them (`UserListItemPlan`), deletes the stale rows and upserts the rest in one transaction. Streaming every legacy item (the `:all` path) cannot delete items legacy removed or collapse merge collisions without holding all 3.2M pairs in memory.
-3. **A book that is neither here, redirected nor waiting fails the run for list items and reviews**, naming the legacy rows, like increment 2's catalog steps. Corrections keep today's *skip*: two legacy changesets name books legacy itself deleted, and the full migration has always skipped them.
+3. **A book that is neither here, redirected nor waiting fails the run for list items and reviews**, naming the legacy rows, like increment 2's catalog steps. Corrections keep today's *skip*: two legacy changesets name books legacy itself deleted, and the full migration has always skipped them. Only a book removed without callbacks (`delete_all`, raw SQL) gets here: a merge during the run is handled by decision 13.
 4. **Review collisions keep the newer review, meaning the higher legacy id.** That is the order `ReviewMigrator` already dedupes in. A key held here by a *new-app* review (id at or above the ceiling) keeps the new-app review: the legacy row is skipped and counted (`held_by_new_app`).
 5. **A mass-deletion guard.** An empty or half-restored legacy database looks exactly like mass deletion. `Services::BooksMigration.guard_deletion!` refuses when a step would delete more than `max(500, 5%)` of a table's legacy-origin rows, unless `SYNC_ALLOW_DELETES=1`. It covers user lists, reviews and saved searches. List items are not guarded: users remove books from lists all the time, and the user-lists step runs first and catches an empty legacy.
 6. **Saved searches lose only categories deleted here** (no `Books::Category` row). A soft-deleted category stays in the criteria, as today. The search already filters it out. An unmapped legacy category still raises, because categories run first. This applies in both modes.
@@ -39,11 +39,12 @@
 10. **Report vs sync.** The report's `update` column (legacy `updated_at` newer than here) is report-only. The sync overwrites every legacy-origin row anyway. Insert, delete, drop, wait, collision and held-by-new-app counts are computed the same way on both sides and pinned by an equality test (spec §9). Saved searches' "categories removed" appears in the sync's output only. The report would need every legacy criteria blob to count it.
 11. **`review_summaries` is rebuilt as a sync step** (`SummaryRecalculator.backfill_all!`). `insert_all` and `upsert_all` bypass the after-commit that maintains it, as the `reviews` rake task already says.
 12. **The user-data steps go after `book_images`**, in `:all`'s order: user lists, list items, reading goals, saved searches, recommendation configs, reviews, review summaries, corrections. They are all after `news_posts`, as increment 2 required.
+13. **Merging while a sync runs is safe** (Shane will merge heavily in the new app). Each write of list items, reviews or a correction share-locks the books it points at (`BookRoute#lock`, `FOR SHARE`). The merger and a destroy take the row `FOR UPDATE`, so a merge that starts mid-write waits for the write to commit, then moves what was written. If a merge committed before the write, the lock comes back short: the route reloads the redirects, and the batch is re-planned onto the survivor. Without this, a mid-run merge would silently leave a list item or review on a book that no longer exists, because polymorphic rows have no foreign key.
 
 ## Review Focus
 
 1. **An empty or half-restored legacy database** (a restore in progress, the wrong `DATABASE_URL`). The sync must refuse rather than delete legacy-origin lists, reviews or saved searches. Pinned in Tasks 2, 4 and 5: `refuses past the deletion guard and deletes nothing`.
-2. **A merge that commits while a sync runs**, so the run's redirects snapshot is stale. A list item or review on the just-merged book must fail the run and name the legacy row, never write an orphan. Pinned in Tasks 3 and 4: `fails naming the legacy row when the book is neither here nor redirected`.
+2. **A merge that commits while a sync runs**, so the run's redirects snapshot is stale. The row must land on the survivor, never on the book that is gone. Pinned in Tasks 1, 3, 4 and 6: `a book merged after the run started is noticed, ...`. A book removed without callbacks must still fail the run and name the legacy row: `fails naming the legacy row when the book is neither here nor redirected`.
 3. **A legacy list whose items include books still inside the delay.** Those items wait, the rest land, positions come out 1..N with no gap, and the run succeeds. Pinned in Task 3: `skips an item on a book the run has not copied yet, and counts it`, and Task 7: `carries a list item on a book the run brought over and waits on one still inside the delay`.
 4. **A user-data step that fails after the catalog steps succeeded.** The watermarks must not move, so the next run retries the same scope. Pinned in Task 7: `a failed user-data step leaves the watermarks`.
 5. **Two reviews by one user that a merge puts on the same book, when the older one is already here.** The newer one must win without tripping `index_reviews_on_user_and_reviewable`. Pinned in Task 4: `a merge that gives one user two reviews of a book keeps the newer`.
@@ -89,7 +90,7 @@ Not unit-testable, so checked in the dev rehearsal (spec §9): `LegacySource`'s 
 - Test: `web-app/test/lib/services/books_migration/book_route_test.rb`, `web-app/test/lib/services/books_migration/deletion_guard_test.rb`, `web-app/test/lib/services/books_migration/sync_plan_test.rb`
 
 **Interfaces:**
-- Produces: `SyncScope#books_watermark` (Integer: the books watermark this run advances to). `Services::BooksMigration::BookRoute.new(scope, book_ids_here: Set)` with `#call(book_id)` → `Integer | :deleted | :waiting | :missing`. `Services::BooksMigration.guard_deletion!(label, doomed_count, total_count)` raises or returns nil. Test helper `sync_scope(..., books_watermark: Float::INFINITY)`.
+- Produces: `SyncScope#books_watermark` (Integer: the books watermark this run advances to). `Services::BooksMigration::BookRoute.new(scope, book_ids_here: Set)` with `#call(book_id)` → `Integer | :deleted | :waiting | :missing`, and `#lock(book_ids)` → `true`, or `false` after reloading (call it inside the write transaction). `Services::BooksMigration.guard_deletion!(label, doomed_count, total_count)` raises or returns nil. Test helper `sync_scope(..., books_watermark: Float::INFINITY)`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -136,7 +137,21 @@ class Services::BooksMigration::BookRouteTest < ActiveSupport::TestCase
   test "an author redirect does not route a book" do
     assert_equal :missing, route(redirects: [["Books::Author", 5, 20]]).call(5)
   end
-end
+
+  test "lock is true when every book is still here" do
+    book = ::Books::Book.create!(title: "Still Here")
+
+    assert route(here: [book.id]).lock([book.id, book.id])
+  end
+
+  test "lock notices a book merged since the route was built, and reloads the redirects" do
+    survivor = ::Books::Book.create!(title: "Survivor")
+    stale = route(here: [200_001, survivor.id]) # built before the merge
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 200_001, to_id: survivor.id)
+
+    refute stale.lock([200_001, survivor.id])
+    assert_equal survivor.id, stale.call(200_001)
+  end
 ```
 
 `web-app/test/lib/services/books_migration/deletion_guard_test.rb`:
@@ -244,7 +259,7 @@ module Services
     # :waiting, a legacy book above the books watermark that this run has not
     # copied yet because of the 24h delay (skipped and counted; a later run picks
     # the row up). :missing is a book that is none of these: removed here without
-    # callbacks, or merged while this run was going. The caller decides whether
+    # callbacks (delete_all, raw SQL). The caller decides whether
     # that fails the run.
     class BookRoute
       def initialize(scope, book_ids_here: ::Books::Book.pluck(:id).to_set)
@@ -260,6 +275,23 @@ module Services
         return :waiting if resolved == book_id && book_id > @watermark
 
         :missing
+      end
+
+      # Call inside the transaction that writes rows pointing at +book_ids+.
+      # Share-locks those books, so a merge or delete (both take the row FOR
+      # UPDATE) waits until the write commits, and then moves or removes what was
+      # written. Returns true when every book is still here. When one has gone since
+      # this route was built (a merge or delete that committed mid-run), it reloads
+      # the redirects and the books here and returns false: the caller re-plans its
+      # batch, and the gone book now routes to its survivor or :deleted. Without
+      # this, a row would land on a book that no longer exists.
+      def lock(book_ids)
+        ids = book_ids.uniq.sort
+        return true if ::Books::Book.where(id: ids).order(:id).lock("FOR SHARE").pluck(:id).size == ids.size
+
+        @redirects = Redirects.load
+        @here = ::Books::Book.pluck(:id).to_set
+        false
       end
     end
   end
@@ -627,6 +659,19 @@ class Services::BooksMigration::UserListItemMigratorSyncTest < ActiveSupport::Te
     assert_includes result[:error], "77"
   end
 
+  test "a book merged after the run started is noticed, and its item lands on the survivor" do
+    # The route was built before the merge: it still thinks 200_001 is here, and
+    # knows no redirect. The merge has since committed.
+    stale = Services::BooksMigration::BookRoute.new(sync_scope, book_ids_here: Set[200_001, @survivor.id])
+    Services::BooksMigration::BookRoute.stubs(:new).returns(stale)
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 200_001, to_id: @survivor.id)
+
+    result = run_sync([legacy_item(1, 200_001, 1)])
+
+    assert result[:success], result[:error]
+    assert_equal [@survivor.id], listed
+  end
+
   test "deletes an item legacy no longer has from a legacy-origin list" do
     add_here(@list, @book, 1)
 
@@ -778,21 +823,34 @@ Modify `user_list_item_migrator.rb`:
         }
       end
 
+      # A merge that commits while this batch is planned shows up in route.lock,
+      # which reloads the redirects; the batch is then planned again. Three tries
+      # covers a merge chain landing mid-batch; more means something is wrong.
       def sync_lists(list_ids, route)
-        here = ::UserListItem.where(user_list_id: list_ids).pluck(:id, :user_list_id, :listable_type, :listable_id)
-        plan = UserListItemPlan.call(legacy_items_for(list_ids), here, route)
-        if plan.missing.any?
-          raise "legacy user_list_books #{plan.missing.first(10).join(", ")} name a book that is neither here " \
-            "nor redirected (removed without callbacks, or merged while this run was going)"
-        end
+        legacy_rows = legacy_items_for(list_ids)
+        plan = nil
+        rows = nil
+        written = 3.times.any? do
+          here = ::UserListItem.where(user_list_id: list_ids).pluck(:id, :user_list_id, :listable_type, :listable_id)
+          plan = UserListItemPlan.call(legacy_rows, here, route)
+          if plan.missing.any?
+            raise "legacy user_list_books #{plan.missing.first(10).join(", ")} name a book that is neither here " \
+              "nor redirected (removed without callbacks)"
+          end
 
-        rows = plan.keep.map { |(list_id, book_id), attrs| item_row(attrs, list_id, book_id) }
-        ::UserListItem.transaction do
-          ::UserListItem.where(id: plan.stale_ids).delete_all if plan.stale_ids.any?
-          rows.each_slice(UPSERT_BATCH) do |slice|
-            target_model.upsert_all(slice, unique_by: unique_by, record_timestamps: false)
+          rows = plan.keep.map { |(list_id, book_id), attrs| item_row(attrs, list_id, book_id) }
+          ::UserListItem.transaction do
+            next false unless route.lock(plan.keep.keys.map(&:last))
+
+            ::UserListItem.where(id: plan.stale_ids).delete_all if plan.stale_ids.any?
+            rows.each_slice(UPSERT_BATCH) do |slice|
+              target_model.upsert_all(slice, unique_by: unique_by, record_timestamps: false)
+            end
+            true
           end
         end
+        raise "user lists #{list_ids.first}..#{list_ids.last}: books kept vanishing mid-run; re-run the sync" unless written
+
         @count += rows.size
         @stats[:inserted] += plan.inserted
         @stats[:deleted] += plan.stale_ids.size
@@ -932,6 +990,18 @@ class Services::BooksMigration::ReviewMigratorSyncTest < ActiveSupport::TestCase
     assert_includes result[:error], "106"
   end
 
+  test "a book merged after the run started is noticed, and its review lands on the survivor" do
+    # Built before the merge: still thinks 200_001 is here, knows no redirect.
+    stale = Services::BooksMigration::BookRoute.new(sync_scope, book_ids_here: Set[200_001, @survivor.id])
+    Services::BooksMigration::BookRoute.stubs(:new).returns(stale)
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 200_001, to_id: @survivor.id)
+
+    result = run_sync([legacy_review(111, "book_id" => 200_001)])
+
+    assert result[:success], result[:error]
+    assert_equal @survivor.id, ::Review.find(111).reviewable_id
+  end
+
   test "deletes a legacy-origin books review legacy no longer has, and leaves new-app reviews alone" do
     here_review(107)
     new_app = here_review(250_001, book: @survivor)
@@ -1013,7 +1083,8 @@ In `review_migrator.rb`, replace `preload_context`, `finalize` and `build_rows`'
         book_id = sync ? routed_book_id(attrs) : attrs["book_id"]
         return [] if book_id.nil?
 
-        unless @book_ids.include?(book_id)
+        # In sync mode the route has already placed the book, and flush locks it.
+        unless sync || @book_ids.include?(book_id)
           raise "no migrated ::Books::Book for legacy reviews.book_id=#{book_id.inspect}"
         end
 
@@ -1050,7 +1121,7 @@ In `review_migrator.rb`, replace `preload_context`, `finalize` and `build_rows`'
           nil
         when :missing
           raise "legacy reviews.book_id=#{attrs["book_id"]} is neither here nor redirected " \
-            "(removed without callbacks, or merged while this run was going)"
+            "(removed without callbacks)"
         else
           book_id
         end
@@ -1064,31 +1135,66 @@ In `review_migrator.rb`, replace `preload_context`, `finalize` and `build_rows`'
       def flush(rows)
         return super unless sync
 
-        holders = ::Review
-          .where(reviewable_type: "Books::Book", user_id: rows.map { |row| row[:user_id] },
-            reviewable_id: rows.map { |row| row[:reviewable_id] })
-          .pluck(:user_id, :reviewable_id, :id)
-          .to_h { |user_id, book_id, id| [[user_id, book_id], id] }
-        ceiling = RESERVED_CEILINGS.fetch("reviews")
-        stale = []
-        writable = rows.select do |row|
-          holder = holders[[row[:user_id], row[:reviewable_id]]]
-          next true if holder.nil? || holder == row[:id]
-
-          if holder >= ceiling
-            @stats[:held_by_new_app] += 1
-            next false
-          end
-          stale << holder
-          true
-        end
-
+        writable = []
         ::Review.transaction do
+          attempts = 0
+          until rows.empty? || @route.lock(rows.map { |row| row[:reviewable_id] })
+            raise "reviews: books kept vanishing mid-run; re-run the sync" if (attempts += 1) > 3
+
+            rows = reroute(rows)
+          end
+
+          holders = ::Review
+            .where(reviewable_type: "Books::Book", user_id: rows.map { |row| row[:user_id] },
+              reviewable_id: rows.map { |row| row[:reviewable_id] })
+            .pluck(:user_id, :reviewable_id, :id)
+            .to_h { |user_id, book_id, id| [[user_id, book_id], id] }
+          ceiling = RESERVED_CEILINGS.fetch("reviews")
+          stale = []
+          writable = rows.select do |row|
+            holder = holders[[row[:user_id], row[:reviewable_id]]]
+            next true if holder.nil? || holder == row[:id]
+
+            if holder >= ceiling
+              @stats[:held_by_new_app] += 1
+              next false
+            end
+            stale << holder
+            true
+          end
+
           ::Review.where(id: stale).delete_all if stale.any?
           ::Review.upsert_all(writable, unique_by: :id, record_timestamps: false) if writable.any?
         end
         @kept_ids.merge(writable.map { |row| row[:id] })
         @count += writable.size
+      end
+
+      # A book merged or deleted after this run started (route.lock reloaded the
+      # redirects): route each row again, drop rows on a deleted book, and keep
+      # the first (newest) row per user and book. When an earlier batch already
+      # kept that user and book, flush's holder check replaces it with this older
+      # row. That flip is rare and harmless, and the next sync restores the newer
+      # one.
+      def reroute(rows)
+        batch_keys = Set.new
+        rows.filter_map do |row|
+          book_id = @route.call(row[:reviewable_id])
+          if book_id == :deleted
+            @stats[:dropped] += 1
+            next
+          end
+          unless book_id.is_a?(Integer)
+            raise "legacy reviews.id=#{row[:id]}: book #{row[:reviewable_id]} is neither here nor redirected"
+          end
+          unless batch_keys.add?([row[:user_id], book_id])
+            @stats[:collisions] += 1
+            next
+          end
+
+          @seen << [row[:user_id], book_id]
+          row.merge(reviewable_id: book_id)
+        end
       end
 
       # Every legacy-origin books review the run did not keep: legacy deleted it,
@@ -1387,6 +1493,18 @@ class Services::BooksMigration::CorrectionMigratorSyncTest < ActiveSupport::Test
     assert_equal 1, result[:data][:missing]
   end
 
+  test "a book merged after the run started is noticed, and the correction lands on the survivor" do
+    # Built before the merge: still thinks 200_001 is here, knows no redirect.
+    stale = Services::BooksMigration::BookRoute.new(sync_scope, book_ids_here: Set[200_001, @survivor.id])
+    Services::BooksMigration::BookRoute.stubs(:new).returns(stale)
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 200_001, to_id: @survivor.id)
+
+    result = run_sync([legacy_changeset(9_006, 200_001)])
+
+    assert result[:success], result[:error]
+    assert_equal @survivor.id, ::Correction.find(9_006).correctable_id
+  end
+
   test "counts only what it inserts" do
     run_sync([legacy_changeset(9_005, @survivor.id)])
 
@@ -1430,6 +1548,14 @@ In `correction_migrator.rb`:
 
         # (keep the existing one-transaction comment block here unchanged)
         ::Correction.transaction do
+          if sync && !@route.lock([book_id])
+            # A merge or delete committed since this run started, and route.lock
+            # reloaded the redirects: route the book again.
+            book_id = target_book_id(attrs)
+            next if book_id.nil?
+            raise "Books::Book #{book_id} vanished twice mid-run; re-run the sync" unless @route.lock([book_id])
+          end
+
           inserted = ::Correction.insert_all(
             [correction_row(attrs, book_id, unmappable, applied)],
             unique_by: nil, record_timestamps: false
@@ -2448,7 +2574,8 @@ or other domains' lists.
 A row on a legacy book that is not here yet (above the books watermark, inside the 24h delay) is
 skipped and counted as `waiting`; a later run picks it up. A list item or review on a book that is
 neither here, redirected nor waiting fails the run and names the legacy rows: the book was removed
-without callbacks, or merged while the run was going.
+without callbacks (`delete_all`, raw SQL). Merging while a sync runs is safe: each write locks the books it
+points at, so a merge waits for it, or the write is re-planned onto the survivor.
 
 **Deletion guard.** An empty or half-restored legacy database looks like mass deletion. A step that
 would delete more than `max(500, 5%)` of a table's legacy-origin rows refuses, unless
