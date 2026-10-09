@@ -17,6 +17,9 @@ module Services
       end
 
       def upsert_row(attrs)
+        # Insert-only in sync mode: an edition already mapped stays as it is here.
+        return if sync && LegacyIdMap.lookup(model: model_key, legacy_id: attrs["id"])
+
         ::Books::Edition.transaction do
           new_id = LegacyIdMap.lookup(model: model_key, legacy_id: attrs["id"])
           edition = new_id ? ::Books::Edition.find(new_id) : ::Books::Edition.new
@@ -27,20 +30,30 @@ module Services
         end
       end
 
+      def sync_filter
+        [:book_ids, "book_id"]
+      end
+
       # Set each book's default_edition_id to its most-popular edition (popularity
       # desc, nulls last, id asc), for books that have editions only. Set-based SQL
       # bypasses AR callbacks (no SearchIndexRequest flood — finalize runs OUTSIDE
       # the without_search_indexing block) and is idempotent. Editionless books
       # keep default_edition_id NULL (no synthesis). Authoritative: recomputes on
-      # every run (meant for a pre-launch cutover), so re-running tracks the
-      # current most-popular edition rather than preserving a hand-picked default.
+      # every run of the full migration, so re-running tracks the current
+      # most-popular edition rather than preserving a hand-picked default. In sync
+      # mode it is limited to the run's new books, so a default chosen during
+      # cleanup is never reset (spec §5).
       def finalize
+        return if sync && sync.book_ids.empty?
+
+        only_run = sync ? "WHERE book_id IN (#{sync.book_ids.map(&:to_i).join(", ")})" : ""
         ::Books::Book.connection.execute(<<~SQL)
           UPDATE books_books b
           SET default_edition_id = e.id
           FROM (
             SELECT DISTINCT ON (book_id) id, book_id
             FROM books_editions
+            #{only_run}
             ORDER BY book_id, popularity DESC NULLS LAST, id ASC
           ) e
           WHERE e.book_id = b.id

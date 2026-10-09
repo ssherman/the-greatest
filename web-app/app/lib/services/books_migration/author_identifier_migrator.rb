@@ -20,6 +20,10 @@ module Services
           value: self.class.strip_openlibrary_key(attrs["ol_author_id"])
         )
       end
+
+      def sync_filter
+        [:author_ids, "id"]
+      end
     end
   end
 end

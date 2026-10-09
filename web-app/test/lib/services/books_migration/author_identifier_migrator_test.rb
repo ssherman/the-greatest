@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::AuthorIdentifierMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     m = Services::BooksMigration::AuthorIdentifierMigrator.new
     m.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -29,5 +31,20 @@ class Services::BooksMigration::AuthorIdentifierMigratorTest < ActiveSupport::Te
     assert_no_difference -> { Identifier.count } do
       run_migrator(rows)
     end
+  end
+
+  test "sync mode reads only the run's authors" do
+    in_run = ::Books::Author.create!(id: 90320, name: "In The Run")
+    outside = ::Books::Author.create!(id: 90321, name: "Outside")
+    m = Services::BooksMigration::AuthorIdentifierMigrator.new(sync: sync_scope(author_ids: [in_run.id]))
+    m.stubs(:legacy_each).multiple_yields(
+      [{"id" => in_run.id, "ol_author_id" => "/authors/OL1A"}],
+      [{"id" => outside.id, "ol_author_id" => "/authors/OL2A"}]
+    )
+
+    m.call
+
+    assert Identifier.exists?(identifiable_type: "Books::Author", identifiable_id: in_run.id)
+    refute Identifier.exists?(identifiable_type: "Books::Author", identifiable_id: outside.id)
   end
 end

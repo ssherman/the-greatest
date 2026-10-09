@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::EditionMigratorTest < ActiveSupport::TestCase
+  include BooksLegacySyncHelper
+
   def run_migrator(rows)
     migrator = Services::BooksMigration::EditionMigrator.new
     migrator.stubs(:legacy_each).multiple_yields(*rows.zip)
@@ -87,5 +89,56 @@ class Services::BooksMigration::EditionMigratorTest < ActiveSupport::TestCase
     id_5009 = LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 5009)
     id_5010 = LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 5010)
     assert_equal [id_5009, id_5010].min, book.reload.default_edition_id
+  end
+
+  def run_sync(rows, scope)
+    m = Services::BooksMigration::EditionMigrator.new(sync: scope)
+    m.stubs(:legacy_each).multiple_yields(*rows.zip)
+    m.call
+  end
+
+  def edition_row(id, book_id, popularity:, title: "Ed #{id}")
+    {"id" => id, "book_id" => book_id, "title" => title, "publication_year" => 2000,
+     "popularity" => popularity, "book_binding" => 1, "metadata" => {}}
+  end
+
+  test "sync mode adds editions for the run's books only" do
+    new_book = ::Books::Book.create!(id: 90200, title: "New Legacy Book")
+    old_book = ::Books::Book.create!(id: 90201, title: "Existing Book")
+
+    result = run_sync([
+      edition_row(6002, new_book.id, popularity: 1),
+      edition_row(6003, old_book.id, popularity: 9)
+    ], sync_scope(book_ids: [new_book.id]))
+
+    assert result[:success], result[:error]
+    assert LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 6002)
+    assert_nil LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 6003)
+  end
+
+  # A retry after a failed run meets editions that run already mapped.
+  test "sync mode leaves an edition already mapped as it is here" do
+    new_book = ::Books::Book.create!(id: 90204, title: "New Legacy Book")
+    run_migrator([edition_row(6001, new_book.id, popularity: 5, title: "Original")])
+    mapped = ::Books::Edition.find(LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 6001))
+    mapped.update!(title: "Edited Here")
+
+    result = run_sync([edition_row(6001, new_book.id, popularity: 5, title: "Legacy Title")], sync_scope(book_ids: [new_book.id]))
+
+    assert result[:success], result[:error]
+    assert_equal "Edited Here", mapped.reload.title
+  end
+
+  test "sync mode sets the default edition of the run's books only" do
+    new_book = ::Books::Book.create!(id: 90202, title: "New Legacy Book")
+    old_book = ::Books::Book.create!(id: 90203, title: "Existing Book")
+    run_migrator([edition_row(6010, old_book.id, popularity: 1), edition_row(6011, old_book.id, popularity: 9)])
+    chosen = LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 6010)
+    old_book.update_columns(default_edition_id: chosen)
+
+    run_sync([edition_row(6012, new_book.id, popularity: 4)], sync_scope(book_ids: [new_book.id]))
+
+    assert_equal chosen, old_book.reload.default_edition_id
+    assert_equal LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 6012), new_book.reload.default_edition_id
   end
 end
