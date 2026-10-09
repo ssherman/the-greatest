@@ -36,4 +36,9 @@ class MembershipGateTest < ActiveSupport::TestCase
   test "the full CSV export is registered as a paid feature" do
     assert MembershipGate.members_only?(:csv_export_full)
   end
+
+  test "book recommendations are a registered members-only feature" do
+    assert MembershipGate.members_only?(:book_recommendations)
+    assert_equal :book_recommendations, MembershipGate.validate!(:book_recommendations)
+  end
 end

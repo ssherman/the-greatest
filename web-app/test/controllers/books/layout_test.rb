@@ -17,6 +17,14 @@ module Books
       assert_select "#books-nav-drawer-panel a[href=?]", "/authors", count: 1
     end
 
+    test "the My Books menu links to recommendations in both nav variants" do
+      get "/"
+
+      assert_response :success
+      assert_select ".navbar-center #navbar_my_books a[href='/recommendations']", count: 1
+      assert_select "#books-nav-drawer-panel #navbar_my_books a[href='/recommendations']", count: 1
+    end
+
     test "the drawer panel is a sibling of the drawer content, not inside it" do
       get "/"
 

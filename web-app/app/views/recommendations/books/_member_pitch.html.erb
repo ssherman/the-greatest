@@ -1,0 +1,9 @@
+<section class="card bg-base-200 mt-10" data-testid="member-pitch">
+  <div class="card-body items-center text-center">
+    <h2 class="card-title">Want the full list?</h2>
+    <p class="max-w-prose">Free accounts see <%= limit %> recommendations. Members get <%= Rails.application.config.x.recommendations[:member_limit] %> at a time and can change the settings: length, era, genres and depth.</p>
+    <div class="card-actions">
+      <%= link_to "Become a member", membership_path, class: "btn btn-primary" %>
+    </div>
+  </div>
+</section>
