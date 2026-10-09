@@ -19,6 +19,10 @@ module Services
     # insert_all bypasses Review's before_validation AND its after_commit, so the body is
     # sanitized explicitly here and review_summaries is rebuilt afterwards by
     # SummaryRecalculator.backfill_all! (see the data_migration:reviews rake task).
+    #
+    # In data_migration:sync (spec §6) it overwrites instead, routes each book through
+    # redirects, and deletes legacy-origin books reviews that legacy no longer has.
+    # See flush.
     class ReviewMigrator < InsertOnlyMigrator
       # Same list BodySanitizer#render partitions spoiler-marker search scopes on --
       # see convert_spoiler_tag below for why a legacy <spoiler> wrapping one of these
@@ -53,6 +57,12 @@ module Services
         @book_ids = ::Books::Book.pluck(:id).to_set
         @user_ids = ::User.pluck(:id).to_set
         @seen = Set.new
+        return unless sync
+
+        @route = BookRoute.new(sync, book_ids_here: @book_ids)
+        @here_ids = legacy_origin_reviews.pluck(:id).to_set
+        @kept_ids = Set.new
+        @stats = {inserted: 0, deleted: 0, dropped: 0, waiting: 0, collisions: 0, held_by_new_app: 0}
       end
 
       # insert_all with explicit ids never advances the sequence, so without this the
@@ -60,7 +70,12 @@ module Services
       # at the reserved ceiling, not max + 1, or new reviews take ids legacy will use.
       # finalize runs outside without_search_indexing, so keep it callback-free.
       def finalize
+        delete_reviews_legacy_lacks if sync
         Services::BooksMigration.bump_sequence_to_floor!("reviews")
+      end
+
+      def extra_result_data
+        sync ? @stats : {}
       end
 
       # Newest-first so the dedup below keeps the newer of a duplicated pair.
@@ -73,8 +88,11 @@ module Services
       def build_rows(attrs)
         Services::BooksMigration.raise_if_at_ceiling!("reviews", attrs["id"])
 
-        book_id = attrs["book_id"]
-        unless @book_ids.include?(book_id)
+        book_id = sync ? routed_book_id(attrs) : attrs["book_id"]
+        return [] if book_id.nil?
+
+        # In sync mode the route has already placed the book, and flush locks it.
+        unless sync || @book_ids.include?(book_id)
           raise "no migrated ::Books::Book for legacy reviews.book_id=#{book_id.inspect}"
         end
 
@@ -84,7 +102,10 @@ module Services
         end
 
         # First occurrence wins, and rows arrive newest-first.
-        return [] unless @seen.add?([user_id, book_id])
+        unless @seen.add?([user_id, book_id])
+          @stats[:collisions] += 1 if sync
+          return []
+        end
 
         [{
           id: attrs["id"],
@@ -97,6 +118,105 @@ module Services
           created_at: attrs["created_at"],
           updated_at: attrs["updated_at"]
         }]
+      end
+
+      # nil drops the row; the reason is counted.
+      def routed_book_id(attrs)
+        book_id = @route.call(attrs["book_id"])
+        case book_id
+        when :deleted, :waiting
+          @stats[(book_id == :deleted) ? :dropped : :waiting] += 1
+          nil
+        when :missing
+          raise "legacy reviews.book_id=#{attrs["book_id"]} is neither here nor redirected (removed without callbacks)"
+        else
+          book_id
+        end
+      end
+
+      # Sync mode overwrites (spec §6) instead of insert-only, keyed on the id. A
+      # different legacy-origin review holding the same user and book (the older
+      # side of a merge collision, or one a replay relink moved here) is deleted
+      # first, so the unique index takes the winner. A new-app review holding it
+      # wins instead, and the legacy row is skipped.
+      def flush(rows)
+        return super unless sync
+
+        writable = []
+        ::Review.transaction do
+          attempts = 0
+          until rows.empty? || @route.lock(rows.map { |row| row[:reviewable_id] })
+            raise "reviews: books kept vanishing mid-run; re-run the sync" if (attempts += 1) > 3
+
+            rows = reroute(rows)
+          end
+
+          holders = ::Review
+            .where(reviewable_type: "Books::Book", user_id: rows.map { |row| row[:user_id] },
+              reviewable_id: rows.map { |row| row[:reviewable_id] })
+            .pluck(:user_id, :reviewable_id, :id)
+            .to_h { |user_id, book_id, id| [[user_id, book_id], id] }
+          ceiling = RESERVED_CEILINGS.fetch("reviews")
+          stale = []
+          writable = rows.select do |row|
+            holder = holders[[row[:user_id], row[:reviewable_id]]]
+            next true if holder.nil? || holder == row[:id]
+
+            if holder >= ceiling
+              @stats[:held_by_new_app] += 1
+              next false
+            end
+            stale << holder
+            true
+          end
+
+          ::Review.where(id: stale).delete_all if stale.any?
+          ::Review.upsert_all(writable, unique_by: :id, record_timestamps: false) if writable.any?
+        end
+        @kept_ids.merge(writable.map { |row| row[:id] })
+        @count += writable.size
+      end
+
+      # A book merged or deleted after this run started (route.lock reloaded the
+      # redirects): route each row again, drop rows on a deleted book, and keep
+      # the first (newest) row per user and book. When an earlier batch already
+      # kept that user and book, flush's holder check replaces it with this older
+      # row. That flip is rare and harmless, and the next sync restores the newer
+      # one.
+      def reroute(rows)
+        batch_keys = Set.new
+        rows.filter_map do |row|
+          book_id = @route.call(row[:reviewable_id])
+          if book_id == :deleted
+            @stats[:dropped] += 1
+            next
+          end
+          unless book_id.is_a?(Integer)
+            raise "legacy reviews.id=#{row[:id]}: book #{row[:reviewable_id]} is neither here nor redirected"
+          end
+          unless batch_keys.add?([row[:user_id], book_id])
+            @stats[:collisions] += 1
+            next
+          end
+
+          @seen << [row[:user_id], book_id]
+          row.merge(reviewable_id: book_id)
+        end
+      end
+
+      # Every legacy-origin books review the run did not keep: legacy deleted it,
+      # it lost a collision, or its book was deleted here. Counted against the
+      # ids here at the start, as UserDataDiff counts them.
+      def delete_reviews_legacy_lacks
+        doomed = (@here_ids - @kept_ids).to_a.sort
+        Services::BooksMigration.guard_deletion!("reviews", doomed.size, @here_ids.size)
+        doomed.each_slice(1_000) { |ids| ::Review.where(id: ids).delete_all }
+        @stats[:inserted] = (@kept_ids - @here_ids).size
+        @stats[:deleted] = doomed.size
+      end
+
+      def legacy_origin_reviews
+        ::Review.where(reviewable_type: "Books::Book", id: ...RESERVED_CEILINGS.fetch("reviews"))
       end
 
       # The cap runs AFTER sanitizing: <script> contents survive sanitizing as visible
