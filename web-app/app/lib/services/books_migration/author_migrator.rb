@@ -2,8 +2,9 @@ module Services
   module BooksMigration
     # Preserved-id migrator: books_authors is a books-only table, so legacy author
     # ids are kept verbatim (author URLs). Writes through Books::Author so
-    # FriendlyId slugs, name normalization, and the kind enum all apply. Resets
-    # the PK sequence after load so later auto-inserts don't collide.
+    # FriendlyId slugs, name normalization, and the kind enum all apply. Moves the
+    # PK sequence to the reserved ceiling after load so later auto-inserts never
+    # take an id legacy will hand out.
     class AuthorMigrator < Migrator
       private
 
@@ -16,13 +17,14 @@ module Services
       end
 
       def upsert_row(attrs)
+        Services::BooksMigration.raise_if_at_ceiling!("books_authors", attrs["id"])
         author = ::Books::Author.find_or_initialize_by(id: attrs["id"])
         author.assign_attributes(AuthorTransformer.call(attrs))
         author.save!
       end
 
       def finalize
-        ::Books::Author.connection.reset_pk_sequence!("books_authors")
+        Services::BooksMigration.bump_sequence_to_floor!("books_authors")
       end
     end
   end

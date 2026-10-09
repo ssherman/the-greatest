@@ -3,6 +3,10 @@ require "test_helper"
 module Services
   module BooksMigration
     class CorrectionMigratorTest < ActiveSupport::TestCase
+      include SequenceIsolation
+
+      isolate_sequences "corrections"
+
       def legacy_row(overrides = {})
         {
           "id" => 9001,
@@ -150,6 +154,31 @@ module Services
 
         fresh = ::Correction.create!(correctable: ::Books::Book.first, notes: "new one")
         assert_operator fresh.id, :>, 9001
+      end
+
+      test "moves the corrections sequence to the reserved ceiling after the load" do
+        # Fixture ids are hashed far above the ceiling, so empty the tables (fields
+        # first, for their foreign key) or max + 1 clears it by itself. Sequence
+        # changes survive the test transaction, so start the sequence low too.
+        ::CorrectionField.delete_all
+        ::Correction.delete_all
+        connection = ::Correction.connection
+        connection.execute("SELECT setval(pg_get_serial_sequence('corrections', 'id'), 1, false)")
+
+        migrate([legacy_row])
+
+        fresh = ::Correction.create!(correctable: ::Books::Book.first, notes: "new one")
+        assert_operator fresh.id, :>=, Services::BooksMigration::RESERVED_CEILINGS.fetch("corrections")
+      end
+
+      test "fails the run when a legacy changeset id reaches the reserved ceiling" do
+        ceiling = Services::BooksMigration::RESERVED_CEILINGS.fetch("corrections")
+
+        result = migrate([legacy_row("id" => ceiling)])
+
+        refute result[:success]
+        assert_includes result[:error], "reserved ceiling"
+        refute ::Correction.exists?(ceiling)
       end
     end
   end

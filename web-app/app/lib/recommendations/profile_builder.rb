@@ -26,8 +26,8 @@ module Recommendations
       positives = @interactions.select(&:positive?)
       negatives = @interactions.select(&:negative?)
 
-      pos = lift_weights(positives)
-      neg = lift_weights(negatives)
+      pos = lift_weights(positives, cap: @config[:lift_cap].to_f)
+      neg = lift_weights(negatives, cap: 0.0)
       net = pos.to_h { |id, w| [id, w - @config[:negative_gamma] * neg.fetch(id, 0.0)] }
         .select { |_, w| w.positive? }
       demoted = neg.select { |id, w| !pos.key?(id) && w >= @config[:demote_threshold] }.keys
@@ -45,10 +45,12 @@ module Recommendations
 
     private
 
-    # {category_id => weight}. With lift on: max(0, ln(s_c / p_c)); off: the raw
-    # share n_c / W, which reproduces the legacy frequency behaviour for the
-    # harness baseline.
-    def lift_weights(interactions)
+    # {category_id => weight}. With lift on: max(0, ln(s_c / p_c)), clipped to
+    # `cap` when that is positive so a few rare categories cannot outvote the
+    # genres (the positive profile only: a capped negative profile could never
+    # reach demote_threshold); off: the raw share n_c / W, which reproduces the
+    # legacy frequency behaviour for the harness baseline.
+    def lift_weights(interactions, cap:)
       total = interactions.sum { |i| i.weight.abs }
       return {} if total <= 0
 
@@ -70,7 +72,8 @@ module Recommendations
         p = [fact_by_id[id].item_count.to_f / @catalog_size, 1.0 / @catalog_size].max
         weight = if @config[:lift]
           s = (n + m * p) / (total + m)
-          [0.0, Math.log(s / p)].max
+          lifted = [0.0, Math.log(s / p)].max
+          cap.positive? ? [lifted, cap].min : lifted
         else
           n / total
         end
