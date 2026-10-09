@@ -48,23 +48,32 @@ module Recommendations
       test "unrated_read drops read books the user has rated, and rated lists them with the review" do
         add(@read, books_books(:war_and_peace))
         add(@read, books_books(:got))
-        assert_equal [books_books(:got)], @pages.unrated_read
+        assert_equal [books_books(:got)], @pages.unrated_read.books
         rated = @pages.rated
         assert_includes rated.map(&:first), books_books(:war_and_peace)
         assert_equal 5, rated.find { |book, _| book == books_books(:war_and_peace) }.last.rating
       end
 
+      test "unrated_read caps the books but reports the full total" do
+        add(@read, books_books(:got))
+        add(@read, books_books(:clash))
+        add(@read, books_books(:war_and_peace))
+        result = @pages.unrated_read(limit: 1)
+        assert_equal 1, result.books.size
+        assert_equal 2, result.total
+      end
+
       test "a text-only review does not count as rated" do
         add(@read, books_books(:got))
         ::Review.create!(user: @user, reviewable: books_books(:got), body: "Fine.")
-        assert_includes @pages.unrated_read, books_books(:got)
+        assert_includes @pages.unrated_read.books, books_books(:got)
       end
 
       test "a user with no lists has no history and empty steps" do
         pages = Pages.new(user: users(:books_viewer_user))
         assert_not pages.history?
         assert_equal 0, pages.favorites.total
-        assert_equal [], pages.unrated_read
+        assert_equal [], pages.unrated_read.books
       end
 
       test "search delegates to the site search with the page size" do

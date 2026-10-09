@@ -26,12 +26,7 @@
       <h3 class="card-title text-lg">Why history matters</h3>
       <p>It keeps books you know off the page and shows us which authors and series you follow.</p>
     </div></div>
-    <% if @unlocked %>
-      <%= link_to "Continue to step 3", recommendations_wizard_path(step: 3), class: "btn btn-primary w-full", data: {testid: "wizard-next"} %>
-    <% else %>
-      <button class="btn btn-primary w-full" disabled data-testid="wizard-next">Continue to step 3</button>
-      <p class="text-sm text-warning">Add a favorite or a read book first.</p>
-    <% end %>
+    <%= link_to "Continue to step 3", recommendations_wizard_path(step: 3), class: "btn btn-primary w-full", data: {testid: "wizard-next"} %>
     <%= link_to "Back to step 1", recommendations_wizard_path(step: 1), class: "btn btn-ghost w-full" %>
   </aside>
 </div>

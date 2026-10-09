@@ -3,12 +3,15 @@
     <h2 class="text-2xl font-semibold">Step 3: rate what you have read</h2>
     <p>Four and five stars push a book's traits up. One and two stars push them down. A three changes nothing.</p>
 
-    <% if @unrated.empty? %>
+    <% if @unrated.books.empty? %>
       <div class="alert alert-success" data-testid="unrated-empty"><span>Everything on your read list is rated.</span></div>
     <% else %>
-      <p class="font-medium"><%= pluralize(@unrated.size, "book") %> without a rating.</p>
+      <p class="font-medium"><%= pluralize(@unrated.total, "book") %> without a rating.</p>
+      <% if @unrated.total > @unrated.books.size %>
+        <p class="text-sm text-base-content/70" data-testid="unrated-capped">Showing <%= @unrated.books.size %> of <%= @unrated.total %>. Rate the rest from each book's page, or after rating these.</p>
+      <% end %>
       <ul data-testid="unrated-list">
-        <% @unrated.each do |book| %>
+        <% @unrated.books.each do |book| %>
           <%= render "recommendations/books/book_row", book: book,
                 trailing: render(Reviews::WidgetComponent.new(reviewable: book)) %>
         <% end %>

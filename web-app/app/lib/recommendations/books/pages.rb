@@ -11,6 +11,7 @@ module Recommendations
     class Pages
       READ_LIMIT = 500
       RATED_LIMIT = 50
+      UNRATED_LIMIT = 50
       SEARCH_SIZE = 12
       DEPTH_LABELS = {"safe" => "Safer bets", "balanced" => "Balanced", "deep" => "Deep cuts"}.freeze
       DROPPED_GROUP_LABELS = ["Ranking status"].freeze
@@ -35,9 +36,10 @@ module Recommendations
         list_books(:read, order: {created_at: :desc}, limit: limit)
       end
 
-      def unrated_read
+      def unrated_read(limit: UNRATED_LIMIT)
         rated_ids = rated_reviews.pluck(:reviewable_id).to_set
-        read_books.books.reject { |book| rated_ids.include?(book.id) }
+        unrated = read_books.books.reject { |book| rated_ids.include?(book.id) }
+        StepBooks.new(books: unrated.first(limit), total: unrated.size)
       end
 
       def rated(limit: RATED_LIMIT)

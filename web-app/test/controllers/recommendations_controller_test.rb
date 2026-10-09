@@ -135,7 +135,7 @@ class RecommendationsControllerTest < ActionDispatch::IntegrationTest
     give_history(@free)
     get recommendations_wizard_path(step: 3)
     assert_response :success
-    assert_equal [], @controller.view_assigns["unrated"]
+    assert_equal [], @controller.view_assigns["unrated"].books
   end
 
   test "step 3 lists unrated read books" do
@@ -144,7 +144,7 @@ class RecommendationsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as @free, stub_auth: true
     get recommendations_wizard_path(step: 3)
     assert_response :success
-    assert_equal [books_books(:got)], @controller.view_assigns["unrated"]
+    assert_equal [books_books(:got)], @controller.view_assigns["unrated"].books
   end
 
   test "a step outside 1-4 is not routable" do
