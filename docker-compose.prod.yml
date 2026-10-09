@@ -40,6 +40,9 @@ services:
     image: ghcr.io/ssherman/the-greatest:latest
     container_name: the-greatest-worker
     command: bundle exec sidekiq
+    # Longer than Sidekiq's 25 s shutdown timeout, so a deploy lets Sidekiq push unfinished jobs back
+    # onto the queue. Docker's default 10 s killed it first and those jobs were silently lost.
+    stop_grace_period: 30s
     env_file: .env
     volumes:
       - rails-storage:/rails/storage

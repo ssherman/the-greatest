@@ -65,9 +65,9 @@ Run these in this order after each migration pass.
    `/resolve` slot with the wizard and the Goodreads replay, so all of them slow down while it runs.
    It pauses 4 seconds after each `/resolve` so the others can get the slot, but
    do not run the Goodreads replay or the legacy-import finishing steps while it runs: when they
-   cannot get the slot they decide rows without Open Library. Every merge deploys, and a deploy stops
-   a running backfill (it is not requeued), so expect to run the task again during the weeks it runs;
-   it carries on, because logged books are skipped. Its log is keyed to book ids, so every
+   cannot get the slot they decide rows without Open Library. A deploy puts a running backfill back
+   on the queue and it carries on under the same run id; logged books are skipped. If the worker
+   crashes instead, the run is lost: run the task again. Its log is keyed to book ids, so every
    migration pass starts it from scratch.
    Details: `docs/features/open-library-backfill.md`.
 7. **Duplicate sweep.** Run `bin/rails "books:find_duplicates[100]"` first, then `[all]`. `[all]`
