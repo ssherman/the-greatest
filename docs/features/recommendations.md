@@ -58,7 +58,7 @@ A domain adapter (`Registry::DOMAIN_ADAPTERS`) answers, for the engine:
 | `shelved_item_ids(user)` | every list item (custom lists included) and every reviewed item: a hard exclusion |
 | `criteria_for(user)` | the user's `RecommendationCriteria` (unsaved defaults when they have no config) |
 | `categories_for(item_ids)` | `{item_id => [CategoryFact(id, category_type, item_count)]}` for scoring types only |
-| `catalog_size` | N for the lift computation |
+| `catalog_size` | N for the lift computation: non-provisional books, or the ranked pool when `lift_population` is `"ranked"` (then `categories_for` counts over the same pool) |
 | `type_category_ids` | `{"Fiction" => id, "Nonfiction" => id}`, resolved by name, memoised |
 | `item_facts(item_ids)` | `{item_id => ItemFact(author_ids, genre_ids, series_predecessor_id, rank_position)}` |
 | `load_items(item_ids)` | hydrated records with the card preloads, indexed by id |
@@ -100,11 +100,16 @@ the rating weight if there is one. Custom lists contribute nothing but exclusion
 W⁺    = Σ w_i                     (w_i > 0)
 n_c   = Σ w_i · [c ∈ book_i]      (w_i > 0)
 s_c   = (n_c + m · p_c) / (W⁺ + m)      m = pseudo_books = 10
-pos_c = max(0, ln(s_c / p_c))
+pos_c = min(lift_cap, max(0, ln(s_c / p_c)))      (no min when lift_cap is 0)
 ```
 
 The `m` term shrinks short histories toward the catalog so one favorite with many subjects cannot
-become the whole profile. **Support:** a category needs `min_support` (2) distinct positive books
+become the whole profile. `lift_cap` bounds how far a rare category can run (positives only; the
+negative profile is never capped, so demotion keeps working at any cap): without it a subject on
+0.01% of the catalog scores `ln(s/p)` several times a common genre's, so a handful of rare subjects
+can outvote every genre. `lift_population` picks the population `p_c` is measured over: `"catalog"`
+(every non-provisional book, the default) or `"ranked"` (the ranked pool the query draws from, so a
+category rare in the catalog but common among ranked books is not over-lifted). **Support:** a category needs `min_support` (2) distinct positive books
 once the user has `min_support_history` (5) or more positive books, else 1. With `lift: false` the
 weight is the raw share `n_c / W⁺` instead (the harness baseline that approximates the legacy
 engine).
@@ -139,14 +144,21 @@ One OpenSearch query against `Search::Books::BookIndex`; no mapping change.
    clause from (4), `negative_boost: 0.3`.
 6. **Normalization:** `function_score` dividing by `sqrt(max(similarity_category_count, floor))`,
    floor `normalization_floor` (10), so a heavily tagged book cannot win on volume.
-7. `size: candidate_size` (300), `min_score` (1.0), `_source: false`.
+7. **Quality prior** (when `quality_scale` > 0): a second `function_score` multiplying by
+   `quality_floor + (1 − quality_floor) · quality_scale / (quality_scale + ranked_position)`: 1 at
+   the top of the ranking, half way to the floor at rank `quality_scale`, the floor far down. This
+   puts the global ranking inside the score that builds the pool; the fusion rank prior below can
+   only re-order what the pool already holds. `min_score` applies after it, so deep books with a
+   weak taste match drop out.
+8. `size: candidate_size` (300), `min_score` (1.0), `_source: false`.
 
 ## Fusion, re-ranking, explanations
 
 **Fusion** is weighted reciprocal-rank fusion, `Σ w / (rrf_k + rank)` with `rrf_k = 60`. Taste
 weight 1.0. The **rank prior** is one more list of the fused items ordered by global rank, weight
 `rank_prior_weight` (0.3); it can only re-order items a personalized signal returned and never
-introduces a book.
+introduces a book. The quality prior inside the query (step 7 above) is what decides which books
+reach fusion at all; this prior is the smaller, second lever.
 
 **Re-ranker passes, in order:**
 
@@ -204,9 +216,11 @@ i.e. favorites plus 4-star-or-better ratings, counted only on books in the ranke
 Columns: hit@10, recall@50, ndcg@50, `mean_rank` (mean global rank of the recommended books, the
 popularity check), `au_rep` (author repeats per page), `kl` (mean genre KL from history, averaged
 over pages that carry genres), `coverage` (share of the ranked pool ever recommended), `ms`. Two
-baselines print on every run: `rank` (the filtered pool in global-rank order) and `lift=false`
-(raw frequency share, the legacy engine's behaviour). A plain `lift=false` row is always present
-even when a variant combines it with other knobs.
+baselines print on every run: `rank` (the filtered pool in global-rank order) and
+`lift=false  quality_scale=0` (raw frequency share with the quality prior off, the legacy engine's
+behaviour; the records before 2026-10-08 print it as `lift=false`, when the prior did not exist).
+The baseline pins every knob the legacy engine lacked, so a default change never changes what it
+measures. That row is always present even when a variant combines `lift=false` with other knobs.
 
 Hold-outs are drawn only from the ranked pool, since that is all the engine can return: an unranked
 favorite can never come back, so holding it out would only deflate recall and NDCG.
@@ -227,6 +241,8 @@ All in `config/initializers/recommendations.rb`, each overridable per call.
 | `read_weight`, `want_to_read_weight` | 0.4, 0.2 |
 | `rating_slope` | 0.75 |
 | `lift` | true |
+| `lift_cap` | 0 (uncapped) |
+| `lift_population` | `"catalog"` (or `"ranked"`) |
 | `pseudo_books` (m) | 10 |
 | `min_support`, `min_support_history` | 2, 5 |
 | `negative_gamma` | 0.5 |
@@ -235,21 +251,28 @@ All in `config/initializers/recommendations.rb`, each overridable per call.
 | `genre_multiplier`, `subject_multiplier`, `location_multiplier` | 1.0, 0.8, 0.4 |
 | `fiction_share_high`, `fiction_share_low` | 0.9, 0.1 |
 | `normalization_floor`, `min_score` | 10, 1.0 |
+| `quality_scale`, `quality_floor` | 1000, 0.3 (0 turns the prior off) |
 | `rrf_k`, `taste_weight`, `collaborative_half_point`, `rank_prior_weight` | 60, 1.0, 10, 0.3 |
 | `max_per_author` | 2 |
 | `calibrate_genres`, `calibration_lambda`, `calibration_alpha` | true, 0.3, 0.01 |
 | `explain_threshold` | 1.0 |
 
-Measured values and the acceptance gate (spec §9.2) are in
-`docs/data-quality/recommendations-2026-10-07.md`. Regenerate before acting on them; the numbers
-describe the dev database on that day.
+Measured values are in `docs/data-quality/recommendations-2026-10-07.md` (the first pass, which
+found the pages too deep) and `docs/data-quality/recommendations-2026-10-08.md` (the quality prior,
+the revised bar, and why `quality_scale=1000` is the default). Regenerate before acting on them;
+the numbers describe the dev database on those days.
 
 ## Known gaps
 
-- **The §9.2 acceptance gate is not met** (first pass, 2026-10-07): on the 20-99 segment the shipped
-  defaults trail both baselines on hit@10 and recall@50 and return pages about ten times deeper in
-  the global ranking than `lift=false`. No single knob or listed combination clears it. Increment 3
-  should not build pages on the engine until the profile math is revisited; see the data-quality doc.
+- **The revised bar (spec §9.2, amended 2026-10-08) is met on hit@10 and page depth, and NOT met
+  on recall@50 or KL.** With the quality prior the engine beats the frequency profile on hit@10 by
+  about 1.6x on the 20-99 segment on both samples and returns pages at mean rank 750-800 instead
+  of 5,500; on recall@50 it trails that profile by 0.02-0.06 (a tie on the fresh sample, a loss on
+  the other), and its KL sits 0.02-0.07 above the previous defaults. Shipping it as the default is
+  a judgement, argued in the data-quality record. `lift_cap` and `lift_population` exist, measured,
+  and off.
+- **No "deep cuts" setting yet.** `quality_floor` 0.1 / 0.3 / 0.5 is the measured safer-bets /
+  default / deeper trade-off; nothing exposes it to the user.
 
 - The collaborative signal is a stub until spec 2 (the CF service on the home server).
 - No pages yet: results, gating, nav entry and pitch page are increment 3; wizard and settings
@@ -258,8 +281,8 @@ describe the dev database on that day.
   pool (reciprocal-rank terms at `k = 60` are close together).
 - Fiction and Nonfiction are never scored; they only steer through `fiction_share` and the genre
   calibration.
-- Not attempted: rating centering per user, time decay, a ranked-only `p_c`, and a "deep cuts"
-  setting (spec §9.4).
+- Not attempted: rating centering per user, time decay, and a "deep cuts" setting (spec §9.4).
+  Ranked-only `p_c` was built and measured (`lift_population`), and left off.
 - `categories.item_count` is a polymorphic counter cache shared with `Books::Author`; the profile
   divides it by the book catalog size, which is exact only while no category is attached to an
   author (0 author rows today against 2,269,792 book rows). If authors ever gain categories, switch

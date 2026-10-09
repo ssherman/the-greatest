@@ -411,6 +411,15 @@ On the 20–99 segment the tuned engine must beat both baselines on hit rate@10 
 mean genre KL at or below the lift-off baseline. If it does not, tune or revisit §6 before
 building pages on it.
 
+**Amended 2026-10-08** (`docs/data-quality/recommendations-2026-10-08.md`). The gate above was
+not met and two of its conditions were the wrong question: the rank-only baseline is a canon list
+judged by a canon-rewarding hold-out, and the lift-off profile has the lowest genre KL any profile
+can have. The bar is now, on the 20–99 segment: beat the lift-off baseline on hit rate@10 and
+recall@50 beyond the sample's noise band; a mean global rank within a factor of two of that
+baseline's; and KL no worse than the previous defaults'. Rank-only stays in every table as context.
+The §7 query gained a quality prior inside the score (`quality_scale`, `quality_floor`); §6.2
+gained `lift_cap` and `lift_population`, both off.
+
 ### 9.3 Initial knob values
 
 All in `config/initializers/recommendations.rb`, each a measured-later starting point:

@@ -20,6 +20,8 @@ Rails.application.config.x.recommendations = ActiveSupport::OrderedOptions.new.m
 
   # Profile (spec §6.2-6.4)
   lift: true,
+  lift_cap: 0,                 # max lift weight per category; 0 = uncapped
+  lift_population: "catalog",  # "catalog" (all non-provisional books) or "ranked" (the ranked pool) for p_c
   pseudo_books: 10,
   min_support: 2,
   min_support_history: 5,
@@ -38,6 +40,10 @@ Rails.application.config.x.recommendations = ActiveSupport::OrderedOptions.new.m
   # Query (spec §7)
   normalization_floor: 10,
   min_score: 1.0,
+  # Quality prior inside the score: taste × (floor + (1 − floor) · scale / (scale + ranked_position)).
+  # scale 0 = off. Every candidate carries a rank (the pool filter requires one).
+  quality_scale: 1000,
+  quality_floor: 0.3,
 
   # Fusion (spec §5.4)
   rrf_k: 60,
