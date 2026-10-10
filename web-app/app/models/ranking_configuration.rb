@@ -209,10 +209,6 @@ class RankingConfiguration < ApplicationRecord
     calculator_service.call
   end
 
-  def calculate_rankings_async
-    CalculateRankingsJob.perform_async(id)
-  end
-
   def calculator_service
     @calculator_service ||= case type
     when "Books::RankingConfiguration"

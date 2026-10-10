@@ -246,11 +246,12 @@ module Music
         @affected_ranking_configurations = (source_configs + target_configs).uniq
       end
 
+      # Post-commit: perform_in writes to Redis, which a rollback cannot undo.
+      # RequestRefresh claims each configuration, so a burst of merges sharing a
+      # configuration queues one run for it, not one per merge; the delay lets
+      # the burst collect. The run reweighs before it ranks.
       def schedule_ranking_recalculation
-        @affected_ranking_configurations.each do |config_id|
-          BulkCalculateWeightsJob.perform_async(config_id)
-          CalculateRankingsJob.perform_in(5.minutes, config_id)
-        end
+        ::Services::RankingConfigurations::RequestRefresh.call_for_ids(@affected_ranking_configurations, delay: 5.minutes)
       end
 
       # The generated "Our Users' Favorites" list is derived data: merge_list_items
@@ -259,9 +260,11 @@ module Music
       # generated list falls one item short. Only a full rebuild -- not a repointed
       # row -- produces the correct combined score, voter_count and position for
       # the target song, so the list is regenerated here rather than waiting for
-      # the nightly cron. Queuing it now runs it comfortably inside the 5 minutes
-      # before schedule_ranking_recalculation's CalculateRankingsJob would otherwise
-      # read that short list and bake the wrong result into the rankings.
+      # the nightly cron.
+      # Queuing it now usually lands before the RefreshJob that
+      # schedule_ranking_recalculation requested reads the list, since the first merge
+      # in a burst gets the full 5 minutes. A later merge in the same burst can race a
+      # run that is already scheduled and may miss it; the next trigger picks it up.
       def regenerate_user_favorites_list
         GenerateUserFavoritesListsJob.perform_async("Music::Songs::UserList")
       end

@@ -46,8 +46,8 @@ and the API's ranked endpoints.
 
 **Whoever flags an existing book provisional must queue a books ranking recalculation, then an
 author ranking recalculation.** Until then, the book keeps its old rank. The legacy replay's apply
-step does this: one `CalculateRankingsJob` per configuration that ranked the book, plus the default
-one, whose job cascades to the author rankings.
+step does this: one `RequestRefresh` per configuration that ranked the book, plus the default
+one, whose refresh requests the author rankings when it lands.
 
 ## Surfaces
 

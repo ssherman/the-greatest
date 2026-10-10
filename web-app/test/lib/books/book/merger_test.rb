@@ -769,24 +769,24 @@ module Books
         )
       end
 
-      test "schedules ranking recalculation for every affected configuration" do
+      test "requests a delayed refresh of every affected configuration" do
         config = ranking_configurations(:books_global)
         RankedItem.create!(item: @source, ranking_configuration: config, rank: 5)
-
-        BulkCalculateWeightsJob.expects(:perform_async).with(config.id)
-        CalculateRankingsJob.expects(:perform_in).with(5.minutes, config.id)
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).with([config.id], delay: 5.minutes).once
         GenerateUserFavoritesListsJob.stubs(:perform_async)
 
-        result = ::Books::Book::Merger.call(source: @source, target: @target)
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        result = merger.call
 
         assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_nil merger.stats[:post_commit_error],
+          "a violated Mocha expectation in a post-commit step is swallowed into this key"
       end
 
       test "defer_rankings leaves the ranking and favorites jobs to the caller, and names the configurations" do
         config = ranking_configurations(:books_global)
         RankedItem.create!(item: @source, ranking_configuration: config, rank: 5)
-        BulkCalculateWeightsJob.expects(:perform_async).never
-        CalculateRankingsJob.expects(:perform_in).never
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).never
         GenerateUserFavoritesListsJob.expects(:perform_async).never
 
         merger = ::Books::Book::Merger.new(source: @source, target: @target, defer_rankings: true)
@@ -804,11 +804,57 @@ module Books
         # its ranked_items would already be gone and this job would never fire.
         RankedItem.create!(item: @source, ranking_configuration: config, rank: 5)
 
-        BulkCalculateWeightsJob.expects(:perform_async).with(config.id).once
-        CalculateRankingsJob.stubs(:perform_in)
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).with([config.id], delay: 5.minutes).once
         GenerateUserFavoritesListsJob.stubs(:perform_async)
 
-        ::Books::Book::Merger.call(source: @source, target: @target)
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        merger.call
+
+        assert_nil merger.stats[:post_commit_error]
+      end
+
+      # The bug this whole change exists for: a session of merges in the admin
+      # queued one full recalculation per merge per configuration.
+      test "a burst of merges sharing configurations queues one refresh per configuration" do
+        global = ranking_configurations(:books_global)
+        member = ranking_configurations(:books_user)
+        pairs = 3.times.map do |i|
+          source = ::Books::Book.create!(title: "Burst Source #{i}")
+          target = ::Books::Book.create!(title: "Burst Target #{i}")
+          [global, member].each { |config| RankedItem.create!(item: source, ranking_configuration: config, rank: 900 + i) }
+          [source, target]
+        end
+
+        Sidekiq::Testing.fake! do
+          ::RankingConfigurations::RefreshJob.clear
+
+          pairs.each do |source, target|
+            merger = ::Books::Book::Merger.new(source: source, target: target)
+            assert merger.call.success?
+            assert_nil merger.stats[:post_commit_error]
+          end
+
+          assert_equal({global.id => 1, member.id => 1},
+            ::RankingConfigurations::RefreshJob.jobs.map { |job| job["args"].first }.tally)
+        end
+      end
+
+      test "a merge still commits when Redis is unreachable, and the configuration stays claimable" do
+        config = ranking_configurations(:books_global)
+        RankedItem.create!(item: @source, ranking_configuration: config, rank: 5)
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        Sidekiq::Job::Setter.any_instance.stubs(:perform_in).raises(RedisClient::CannotConnectError, "redis is down")
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_not ::Books::Book.exists?(@source.id)
+        config.reload
+        assert config.refresh_failed?
+        assert config.refresh_claimable?
+        assert_nil merger.stats[:post_commit_error]
+        assert_match(/redis is down/, config.last_refresh_error)
       end
 
       test "rebuilds the generated favorites list after the merge commits" do
