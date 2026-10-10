@@ -98,8 +98,10 @@ costs a redundant alternate name, not a duplicate author.
   It holds the distinct keys of `name` and every alternate name.
 - **Maintained by the model:** a `before_validation` on `Books::Author`, after the existing name
   normalizers, sets `name_keys`. Every write path to author names saves through the model (the data
-  migration's `AuthorMigrator` uses `save!`; no `insert_all`, `upsert_all` or `update_columns`
-  touches `name` or `alternate_names` — checked 2026-10-09), so the key cannot go stale.
+  migration's `AuthorMigrator` uses `save!`, and the weekly legacy sync, `data_migration:sync`,
+  runs the same migrator; `Books::Author::Merger` assigns `alternate_names` and saves the target; no
+  `insert_all`, `upsert_all` or `update_columns` touches `name` or `alternate_names` — checked
+  2026-10-10), so the key cannot go stale.
 - **Filled by the migration.** The migration adds the column and index, then fills existing rows by
   calling `Services::Books::RefreshAuthorNameKeys`, which computes keys in Ruby and writes them in
   batches of 2,000 with one `UPDATE ... FROM (VALUES ...)` per batch (about 36 statements for 72k
@@ -139,7 +141,7 @@ there; it only stops new duplicates of this kind.
 ## 8. Rollout
 
 1. Merge: the migration adds and fills the column during the deploy.
-2. Nothing manual. After each books data-migration pass the authors are created through `save!`,
-   so their keys are set as they are written.
+2. Nothing manual. Authors the weekly legacy sync (`data_migration:sync`) adds are created through
+   `save!`, so their keys are set as they are written.
 3. The duplicate cleanup stays where it is: `books:goodreads_replay:duplicates` in the launch
    sequence.
