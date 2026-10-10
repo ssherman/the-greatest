@@ -173,7 +173,7 @@ and ends up a dead job.
 | Calculation raises | Row `failed` + `last_refresh_error`; the next trigger claims it |
 | Redis unreachable at enqueue | Claim released into `failed`; the caller logs and continues |
 | Worker killed mid-run (OOM, hard kill) | Row stays `running` for up to `REFRESH_STALE_AFTER` (1 h), then the next trigger takes it over. Runs take 5-10 minutes, so 1 hour is well clear |
-| Graceful Sidekiq restart mid-run | Sidekiq pushes the job back; it reruns and sets `running` again |
+| Graceful Sidekiq restart mid-run | Sidekiq pushes the job back and raises `Sidekiq::Shutdown` in the running one; the job hands the row back to `queued` (only if still `running`) and re-raises, so the pushed-back job reruns |
 | Configuration deleted while queued | Job returns early |
 | Change lands during a run | Waits for the next trigger (accepted) |
 

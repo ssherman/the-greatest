@@ -37,7 +37,11 @@ module RankingConfigurations
     def perform(ranking_configuration_id)
       config = ::RankingConfiguration.find_by(id: ranking_configuration_id)
       return if config.nil? # deleted while queued -- not a failure
-      return unless start(config)
+      started = start(config)
+      unless started
+        Rails.logger.info "[RankingConfigurations::RefreshJob] configuration #{ranking_configuration_id}: run skipped, the row was not queued (another job holds it, or nothing requested one)"
+        return
+      end
 
       weights = Rankings::BulkWeightCalculator.new(config).call
       if weights[:errors].any?
@@ -56,6 +60,15 @@ module RankingConfigurations
 
       request_primary_follow_ups(config)
       request_csv_regenerate(config)
+    rescue ::Sidekiq::Shutdown
+      # Sidekiq has already pushed this job back onto the queue, and the pushed-back
+      # copy only runs from `queued`. Hand the row back (only if it is still ours,
+      # i.e. `running`) or it stays wedged until the stale window expires.
+      if started
+        ::RankingConfiguration.where(id: ranking_configuration_id, refresh_status: ::RankingConfiguration.refresh_statuses[:running])
+          .update_all(refresh_status: ::RankingConfiguration.refresh_statuses[:queued])
+      end
+      raise
     rescue => e
       Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{ranking_configuration_id}: #{e.message}"
       ::RankingConfiguration.where(id: ranking_configuration_id).update_all(

@@ -853,6 +853,8 @@ module Books
         config.reload
         assert config.refresh_failed?
         assert config.refresh_claimable?
+        assert_nil merger.stats[:post_commit_error]
+        assert_match(/redis is down/, config.last_refresh_error)
       end
 
       test "rebuilds the generated favorites list after the merge commits" do

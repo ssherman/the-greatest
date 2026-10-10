@@ -183,6 +183,8 @@ Services::RankingConfigurations::RequestRefresh.call_for_ids(ids, delay: 5.minut
 - **One job, in order:** `RefreshJob` starts only from `queued`, reweighs, ranks, and then, for
   the books default primary only, requests the authors primary refresh and enqueues
   `Books::ReindexRankedFieldsJob`. Every run also requests a CSV regenerate.
+- **Graceful restart:** on `Sidekiq::Shutdown` mid-run the job hands the row back to `queued` and
+  re-raises, so the job Sidekiq pushed back reruns instead of finding a `running` row and skipping.
 - **Accepted trade-off:** a change that lands while a run is `running` is not guaranteed its own
   run; it waits for the next trigger. Triggers are frequent and public pages are served from the
   Cloudflare cache.

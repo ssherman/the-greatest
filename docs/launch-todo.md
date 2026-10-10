@@ -22,6 +22,8 @@ Run these in this order after each `data_migration:all`.
    ranks and requests the author rankings when it lands. The 04:00 UTC author cron is the safety
    net. **The release after this one ships deletes the transitional `CalculateRankingsJob` shim**
    (see `docs/superpowers/specs/2026-10-10-coalesced-ranking-recalculation-design.md` §4).
+   Before deleting it, check Sidekiq's scheduled and retry sets for `CalculateRankingsJob`
+   entries. Any still waiting would die with `NameError`.
 3. **Cover images.** Make sure Sidekiq is up, because this queues about 148k jobs. Then run
    `bin/rails data_migration:book_images`. It is idempotent, and the primary-image count should
    come out close to 37,296.

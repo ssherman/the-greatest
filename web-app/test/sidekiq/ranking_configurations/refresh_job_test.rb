@@ -149,6 +149,20 @@ module RankingConfigurations
       assert @config.reload.refresh_running?, "the run that holds the row is left alone"
     end
 
+    test "a Sidekiq shutdown mid-run hands the row back to queued and re-raises, so the pushed-back job reruns" do
+      Rankings::BulkWeightCalculator.any_instance.stubs(:call).returns(@clean_weights)
+      RankingConfiguration.any_instance.stubs(:calculate_rankings).raises(::Sidekiq::Shutdown)
+
+      assert_raises(::Sidekiq::Shutdown) { RefreshJob.new.perform(@config.id) }
+      assert @config.reload.refresh_queued?, "the requeued job only runs from queued"
+
+      RankingConfiguration.any_instance.unstub(:calculate_rankings)
+      RankingConfiguration.any_instance.expects(:calculate_rankings).once.returns(@success)
+      RefreshJob.new.perform(@config.id)
+
+      assert @config.reload.refresh_idle?
+    end
+
     test "an idle row is skipped too" do
       @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:idle])
       Rankings::BulkWeightCalculator.any_instance.expects(:call).never

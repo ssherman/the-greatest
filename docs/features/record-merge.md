@@ -299,9 +299,9 @@ since testing only the transfer branch is how this kind of rule silently degrade
 repoint and starts raising `RecordNotUnique` in production.
 
 `test/lib/books/author/merger_test.rb` follows the same shape with two additions specific to
-authors. `Services::RankingConfigurations::RequestRefresh.call` is stubbed in `setup`: Sidekiq runs
-inline in tests and the author merger fires that job unconditionally, so an unstubbed merge would
-run a real ranking calculation in every test. And the two reindex tests call a
+authors. `Services::RankingConfigurations::RequestRefresh.call` is stubbed in `setup`: the author merger
+requests a delayed refresh through it, and because Sidekiq runs inline in tests, an unstubbed
+merge would run a real ranking calculation in every test. And the two reindex tests call a
 `neutralize_scalar_confound` helper first — scalar reconciliation nearly always dirties the target
 (absorbing the duplicate's name alone does it), and the resulting `target.save!` fires
 `SearchIndexable`'s own `after_commit`, creating exactly the `index_item` row those tests mean to
