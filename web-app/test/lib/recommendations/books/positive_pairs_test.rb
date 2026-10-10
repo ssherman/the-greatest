@@ -15,9 +15,8 @@ module Recommendations
         custom = ::Books::UserList.create!(user: @user, list_type: :custom, name: "Shelf")
         custom.user_list_items.create!(listable: books_books(:combo_steinbeck))
         Review.create!(user: @user, reviewable: books_books(:cannery_row), rating: 2)
-        # Read and rated 2: still a positive (reading is the signal, the rating floor only gates the rest).
-        user_lists(:regular_user_books_read).user_list_items.create!(listable: books_books(:combo_steinbeck))
-        Review.create!(user: @user, reviewable: books_books(:combo_steinbeck), rating: 2)
+        # Ruling 1: a read-list book rated 2 stays a positive (clash is on the read list).
+        Review.create!(user: @user, reviewable: books_books(:clash), rating: 2)
       end
 
       def pairs(min_rating: 3, batch_size: 50_000)
@@ -28,7 +27,7 @@ module Recommendations
 
       test "yields favorites, read and rated-at-floor books once each, never want-to-read, custom or low ratings" do
         mine = pairs.select { |u, _| u == @user.id }.map(&:last)
-        expected = %i[war_and_peace got clash crime_and_punishment combo_steinbeck].map { |b| books_books(b).id }.sort
+        expected = %i[war_and_peace got clash crime_and_punishment].map { |b| books_books(b).id }.sort
         assert_equal expected, mine.sort
         assert_equal mine.uniq, mine, "a favorite that is also rated appears once"
       end

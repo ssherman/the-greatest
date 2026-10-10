@@ -65,8 +65,7 @@ up to date the same day instead of the next.
 
 5. **Before books goes live.**
    - Cap the shelf the signal scores (an 18,534-book shelf takes 1.1 s in the neighbour SQL today),
-     and profile the +140-215 ms (measured +200-255 ms in `Engine.call` when run after the
-     taste-only variant) the signal adds on the 20-99 and 100+ segments.
+     and profile the +140-215 ms the signal adds on the 20-99 and 100+ segments (the harness `ms` column is confounded by variant order; see the data-quality record).
    - Close the depth gap: the collaborative list ignores the depth setting (see "Known gaps" in
      `docs/features/recommendations.md`).
 

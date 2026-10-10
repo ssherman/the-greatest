@@ -38,8 +38,9 @@ module Search
 
         # The same pool and constraints with no taste applied: the cold-start
         # fallback, the harness's rank baseline, and (with `ids`) the filter
-        # the collaborative signal passes its candidates through so every
-        # setting applies to that list exactly as to the taste list (spec 2 §6).
+        # the collaborative signal passes its candidates through, so length,
+        # year range, rank cap and categories apply to that list as to the taste list
+        # (spec 2 §6). The depth setting does not: it lives in the taste query's quality prior.
         def self.ranked_only(criteria:, excluded_ids:, options: {}, ids: nil)
           opts = Rails.application.config.x.recommendations.merge(options)
           search_criteria = criteria.to_search_criteria
