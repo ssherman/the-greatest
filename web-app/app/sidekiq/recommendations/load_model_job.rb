@@ -6,7 +6,8 @@ module Recommendations
   class LoadModelJob
     include Sidekiq::Job
 
-    sidekiq_options queue: :low
+    # The cron entry is the retry; Sidekiq retries would repeat the work on top of it.
+    sidekiq_options queue: :low, retry: false
 
     def perform(domain = "books")
       result = LoadModel.call(domain: domain, store: Store.default)

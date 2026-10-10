@@ -13,8 +13,25 @@ module Recommendations
     Result = Struct.new(:success?, :data, :errors, keyword_init: true)
     BATCH = 10_000
 
+    # One load per domain at a time: a second caller (cron beside a retry, or
+    # the rake task beside the job) would otherwise take the other's `loading`
+    # row for a crashed load and delete rows out from under it.
     def self.call(domain:, store:, version: nil)
       domain = domain.to_s
+      conn = ActiveRecord::Base.connection
+      key = "SELECT %s(hashtext(#{conn.quote("recommendations_load_#{domain}")}))"
+      # uncached: an identical SELECT inside a query-cache scope would replay
+      # the first answer instead of asking Postgres again.
+      locked = conn.uncached { conn.select_value(key % "pg_try_advisory_lock") }
+      return skipped(version, "another load holds the lock") unless locked
+      begin
+        load_locked(domain, store, version)
+      ensure
+        conn.uncached { conn.select_value(key % "pg_advisory_unlock") }
+      end
+    end
+
+    def self.load_locked(domain, store, version)
       version ||= store.read_pointer(Paths.model_latest(domain))
       return skipped(version, "no model published") if version.nil?
 
@@ -26,17 +43,21 @@ module Recommendations
       model.update!(manifest: manifest) if existing
       model.recommendation_item_neighbors.in_batches(of: BATCH).delete_all if existing
 
-      rows = insert_rows(model, store.get(Paths.model(domain, version)))
+      insert_rows(model, store.get(Paths.model(domain, version)))
       expected = manifest.fetch("rows").to_i
-      if rows != expected
-        return Result.new(success?: false, data: {loaded: false, version: version, rows: rows},
-          errors: ["#{domain} #{version}: inserted #{rows} rows but the manifest says #{expected}; left in loading"])
-      end
-
+      rows = nil
       RecommendationModel.transaction do
+        # Count what the signal will read, not what was parsed.
+        rows = model.recommendation_item_neighbors.count
+        next if rows != expected
         RecommendationModel.active.where(domain: domain).where.not(id: model.id).find_each { |m| m.update!(state: :retired) }
         model.update!(state: :active)
       end
+      if rows != expected
+        return Result.new(success?: false, data: {loaded: false, version: version, rows: rows},
+          errors: ["#{domain} #{version}: #{rows} rows in the table but the manifest says #{expected}; left in loading"])
+      end
+
       RecommendationModel.retired.where(domain: domain).find_each do |m|
         m.recommendation_item_neighbors.in_batches(of: BATCH).delete_all
         m.destroy!
@@ -65,6 +86,6 @@ module Recommendations
       Result.new(success?: true, errors: [], data: {loaded: false, version: version, rows: 0, reason: reason})
     end
 
-    private_class_method :insert_rows, :skipped
+    private_class_method :load_locked, :insert_rows, :skipped
   end
 end

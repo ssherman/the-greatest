@@ -6,6 +6,7 @@ module Recommendations
   class ExportInteractionsJobTest < ActiveSupport::TestCase
     test "runs on the low queue" do
       assert_equal "low", ExportInteractionsJob.get_sidekiq_options["queue"].to_s
+      assert_equal false, ExportInteractionsJob.get_sidekiq_options["retry"]
     end
 
     test "exports the domain through the default store" do
@@ -15,7 +16,7 @@ module Recommendations
       assert store.exist?(Paths.interactions_latest(:books))
     end
 
-    test "raises when the export fails so Sidekiq retries" do
+    test "raises when the export fails" do
       Store.stubs(:default).returns(Store::Local.new(Dir.mktmpdir))
       Export.stubs(:call).returns(Export::Result.new(success?: false, data: nil, errors: ["boom"]))
       error = assert_raises(RuntimeError) { ExportInteractionsJob.new.perform("books") }

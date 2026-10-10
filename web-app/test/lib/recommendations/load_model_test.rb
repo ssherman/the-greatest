@@ -87,5 +87,34 @@ module Recommendations
       assert_not result.data[:loaded]
       assert_equal 0, RecommendationModel.count
     end
+
+    test "a load while another holds the domain lock does nothing" do
+      publish(@store, "2026-10-09")
+      # A genuinely separate session: transactional tests share one pooled
+      # connection, and advisory locks are re-entrant within a session.
+      cfg = ActiveRecord::Base.connection_db_config.configuration_hash
+      other = PG.connect(host: cfg[:host], port: cfg[:port], user: cfg[:username], password: cfg[:password], dbname: cfg[:database])
+      begin
+        other.exec("SELECT pg_advisory_lock(hashtext('recommendations_load_books'))")
+        result = LoadModel.call(domain: :books, store: @store)
+        assert result.success?
+        assert_not result.data[:loaded]
+        assert_match(/lock/, result.data[:reason])
+        assert_equal 0, RecommendationModel.count
+        assert_equal 0, RecommendationItemNeighbor.count
+      ensure
+        other.exec("SELECT pg_advisory_unlock(hashtext('recommendations_load_books'))")
+        other.close
+      end
+      later = LoadModel.call(domain: :books, store: @store)
+      assert later.data[:loaded], "#{later.data.inspect} the lock is released and a later load proceeds"
+    end
+
+    test "the reported row count is the table count" do
+      publish(@store, "2026-10-09", manifest_rows: 99)
+      result = LoadModel.call(domain: :books, store: @store)
+      model = RecommendationModel.find_by(version: "2026-10-09")
+      assert_equal RecommendationItemNeighbor.where(recommendation_model_id: model.id).count, result.data[:rows]
+    end
   end
 end
