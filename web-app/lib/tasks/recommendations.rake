@@ -213,4 +213,12 @@ namespace :recommendations do
     abort result.errors.join(", ") unless result.success?
     puts "wrote #{result.data[:rows]} rows to #{result.data[:key]}#{" (pointer not moved)" unless result.data[:pointer_moved]}"
   end
+
+  desc "Load a published model into Postgres (DIR=dir for a local store, else R2; VERSION=name to load a hold-out model)"
+  task load: :environment do
+    store = ENV["DIR"].present? ? Recommendations::Store::Local.new(ENV["DIR"]) : Recommendations::Store.default
+    result = Recommendations::LoadModel.call(domain: :books, store: store, version: ENV["VERSION"].presence)
+    abort result.errors.join(", ") unless result.success?
+    puts result.data[:loaded] ? "loaded #{result.data[:version]}: #{result.data[:rows]} rows" : "nothing loaded (#{result.data[:reason]})"
+  end
 end

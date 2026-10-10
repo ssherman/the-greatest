@@ -29,3 +29,9 @@ recommendations_export_books:
   cron: "30 2 * * *"
   args: ["books"]
   description: "Export the books positive pairs for the collaborative-filtering trainer"
+
+recommendations_load_books:
+  class: Recommendations::LoadModelJob
+  cron: "15 * * * *"
+  args: ["books"]
+  description: "Load the latest collaborative-filtering model the home server published"
