@@ -215,5 +215,22 @@ module RankingConfigurations
       assert primary.refresh_idle?
       assert_nil primary.last_refresh_error
     end
+
+    test "a run stamps its own start, so a request made mid-run after a long wait in the queue is refused" do
+      @config.update_columns(refresh_requested_at: (RankingConfiguration::REFRESH_STALE_AFTER + 5.minutes).ago)
+      id = @config.id
+      mid_run = nil
+      Rankings::BulkWeightCalculator.any_instance.stubs(:call).returns(@clean_weights)
+      RankingConfiguration.any_instance.stubs(:calculate_rankings).with { |*|
+        mid_run = Services::RankingConfigurations::RequestRefresh.call(config: RankingConfiguration.find(id))
+        true
+      }.returns(@success)
+
+      RefreshJob.new.perform(id)
+
+      refute mid_run.success?
+      assert_equal :already_running, mid_run.data[:reason]
+      assert @config.reload.refresh_idle?
+    end
   end
 end

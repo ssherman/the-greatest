@@ -12,7 +12,10 @@
 #
 # A run starts only from `queued`. A stale claim can put a second job in the
 # queue while the first is still waiting or working, and that second job must
-# not calculate alongside it.
+# not calculate alongside it. Starting also stamps refresh_requested_at, so the
+# stale window RequestRefresh measures counts from when the run began, not from
+# when it was queued: a job that waited most of an hour must not look wedged a
+# few minutes into its own run.
 #
 # needs_refresh is cleared when the run STARTS, not when it ends: an edit made
 # while this job is running (Save, AddLists, remove) sets it back to true, and
@@ -64,12 +67,13 @@ module RankingConfigurations
 
     private
 
-    # queued -> running in one conditional UPDATE; false means another job
-    # already holds this run, or nothing asked for one.
+    # queued -> running in one conditional UPDATE (restamping the clock the
+    # stale check reads); false means another job already holds this run, or
+    # nothing asked for one.
     def start(config)
       statuses = ::RankingConfiguration.refresh_statuses
       ::RankingConfiguration.where(id: config.id, refresh_status: statuses[:queued])
-        .update_all(refresh_status: statuses[:running], needs_refresh: false) == 1
+        .update_all(refresh_status: statuses[:running], needs_refresh: false, refresh_requested_at: Time.current) == 1
     end
 
     # Their own rescue, like the CSV request: the ranking already landed, and a
