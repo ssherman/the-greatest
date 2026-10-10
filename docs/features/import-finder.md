@@ -79,18 +79,33 @@ and points the decision at a record it creates.
 agrees with the query on its title (or an alternate title) or on a creator (or an alternate
 name), or when the query carried nothing to compare. **Exact match** (rule 4): equal
 normalized title, agreeing creators where the domain has them, no year conflict (both
-present and more than two apart).
+present and more than two apart). For books authors, names compare by
+`Services::Text::PersonNameKey`: the same normalization, plus single-letter initials folded, so
+`J.D.`, `J. D.` and `J D` are one spelling. Every other word must still match. There is no
+surname-only matching. That shortcut is what gave the legacy books app its wrong authors.
 
 ## Sources (`DataImporters::Sources`)
 
 Each has `#name` and `#call -> [Candidate]`. `Identifiers` (Postgres, never decisive on its
-own), `Exact` (one relation the finder builds; the `lower(title)`/`lower(name)` expression
-indexes serve it), `OpenSearch` (the domain's title-plus-creators query, top five), and
+own), `Exact` (one relation the finder builds; the `lower(title)` expression index and, for
+books authors, the GIN-indexed `books_authors.name_keys` serve it), `OpenSearch` (the domain's title-plus-creators query, top five), and
 `Legacy` (increment 1 only: the pre-redesign lookup as a single decisive source). A source
 that responds to `#resolution` after `#call` has it copied onto the match. `CandidateSet`
 keeps a local candidate apart from another local record's candidate that merely shares its
 external key (a suspected duplicate), and folds an external-only candidate into the local
 record that holds its key.
+
+## Author name keys
+
+`books_authors.name_keys` holds the `PersonNameKey` of an author's name and each alternate name,
+GIN-indexed. `Books::Author` sets it on every save. The migration that added it filled it in
+place, so it was complete the moment the finders began reading it. Both books finders match on
+it (`name_keys && ARRAY[...]`). So do their creator and name agreement, the list wizard's
+created-since-Match re-check, and the Open Library backfill's author-key step.
+`bin/rails books:refresh_author_name_keys` recomputes it. It is needed only if the key rule
+changes. Bare run-together initials (`JD`) and hyphenated ones (`J.-P.`) are not folded.
+Existing authors that differ only in their initials are left to
+`bin/rails books:goodreads_replay:duplicates`.
 
 ## Tables
 
@@ -253,8 +268,8 @@ ActiveRecord::Base.connection.execute("EXPLAIN (ANALYZE, BUFFERS) #{sql}").each 
 
 `Services::Books::NormalizeStoredNames` rewrites every stored book title and author name the
 save-time normalizer (`QuoteNormalizer` then `NameNormalizer`) would still change, so the exact
-source's `lower(title)`/`lower(name)` comparison can see rows written before that normalizer
-existed; it also rewrites `alternate_names`/`alternate_titles` entries the same way and saves a
+source's `lower(title)` comparison can see rows written before that normalizer existed (author
+names no longer depend on it: `name_keys` run the same normalizer when they are computed); it also rewrites `alternate_names`/`alternate_titles` entries the same way and saves a
 row whose only defect is in one of those lists, which the report's counts do not include.
 `bin/rails books:normalize_names:report` is read-only; `bin/rails books:normalize_names:apply`
 saves the changed rows through the model callbacks and flags a `bulk_verify` pair for an author
