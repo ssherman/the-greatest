@@ -108,6 +108,14 @@ This document lists all environment variables required for production deployment
 - **Required**: No; defaults to `STORAGE_ENDPOINT` (the same R2 account)
 - **Used By**: web, worker
 
+### Recommendations store
+
+#### RECOMMENDATIONS_R2_ACCOUNT_ID / RECOMMENDATIONS_R2_ACCESS_KEY / RECOMMENDATIONS_R2_SECRET_KEY / RECOMMENDATIONS_R2_BUCKET
+- **Description**: The private R2 bucket the collaborative-filtering loop uses as a mailbox (`docs/features/recommendations.md`, "Collaborative signal"): Rails writes the nightly positive-pair export there and reads the model the home server publishes. Its own bucket, holding nothing else; the endpoint is `https://<RECOMMENDATIONS_R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. The home server's trainer uses the same bucket through `RECOMMENDER_R2_*` in `secrets/home-server.env`.
+- **Required**: No. With all four unset, `Recommendations::ExportInteractionsJob` and `Recommendations::LoadModelJob` log "recommendations store not configured; skipping" and do nothing; with only some set, they raise. The recommendations page works either way (no model loaded means no collaborative signal). Set all four when the bucket exists (`docs/launch-todo.md`, section 3).
+- **Used By**: worker (Sidekiq cron), rake
+- **Security**: Never commit; lives in `secrets/.env.production`. Use a token scoped to this bucket, with object read and write (Rails writes exports and reads models; one bucket cannot split that by prefix).
+
 ### Legacy bucket (read-only)
 
 #### LEGACY_R2_ACCOUNT_ID / LEGACY_R2_BUCKET / LEGACY_R2_ACCESS_KEY / LEGACY_R2_SECRET_KEY
