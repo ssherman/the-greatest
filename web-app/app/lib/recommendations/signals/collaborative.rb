@@ -11,6 +11,9 @@ module Recommendations
     class Collaborative < Base
       def available?
         config[:collaborative] && !model.nil?
+      rescue => e
+        Rails.logger.error "Recommendations signal #{name} failed: #{e.class}: #{e.message}"
+        false
       end
 
       def weight(positive_count)

@@ -11,8 +11,9 @@
 # eval always reports two baselines beside the variants: `rank` (the filtered
 # pool in global-rank order) and the frequency baseline (raw frequency share
 # with the quality prior off, which is the legacy engine's behaviour). The
-# baseline pins every knob the legacy engine did not have, so changing a
-# default never changes what the baseline measures.
+# baseline pins every knob the legacy engine did not have (the quality prior,
+# lift, and the collaborative signal), so changing a default or loading a model
+# never changes what the baseline measures.
 #
 # The cf column counts the evaluated users whose run used the collaborative
 # signal. VARIANTS="collaborative=false" is the taste-only comparison: the same
@@ -20,7 +21,7 @@
 module RecommendationsHarness
   module_function
 
-  FREQUENCY_BASELINE = {lift: false, quality_scale: 0}.freeze
+  FREQUENCY_BASELINE = {lift: false, quality_scale: 0, collaborative: false}.freeze
 
   def parse_variants(raw)
     specs = [{}]

@@ -60,6 +60,28 @@ module Recommendations
       assert_equal :collaborative, signal.name
     end
 
+    test "a model for another domain leaves the books signal unavailable" do
+      @adapter.stubs(:domain).returns(:books)
+      RecommendationModel.create!(domain: "music", version: "v", state: :active)
+      assert_not Signals::Collaborative.new(adapter: @adapter, config: @config).available?
+    end
+
+    test "collaborative is unavailable, not fatal, when the model lookup raises" do
+      @adapter.stubs(:domain).returns(:books)
+      RecommendationModel.stubs(:active_for).raises(StandardError, "db down")
+      assert_not Signals::Collaborative.new(adapter: @adapter, config: @config).available?
+    end
+
+    test "a read and loved book is named as the contributor" do
+      @adapter.stubs(:domain).returns(:books)
+      model_with([[5, 14, 0.8], [1, 14, 0.1]])
+      @adapter.stubs(:filter_candidate_ids).returns({14 => 2})
+      out = Signals::Collaborative.new(adapter: @adapter, config: @config)
+        .call(profile: @profile, interactions: shelf([5, :read, 4], [1, :favorite, nil]), criteria: @criteria, excluded_ids: [], size: 50)
+      assert_equal [14], out.map(&:item_id)
+      assert_equal 5, out[0].evidence[:because_of]
+    end
+
     test "collaborative scores the trainable shelf, filters through the pool, and names a loved contributor" do
       @adapter.stubs(:domain).returns(:books)
       model_with([[1, 10, 0.5], [1, 11, 0.2], [2, 10, 0.4], [2, 12, 0.9], [3, 13, 0.3]])
