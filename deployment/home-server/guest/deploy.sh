@@ -41,8 +41,8 @@ if [ "$ROLE" = ol ]; then
   # build, and never let one start mid-deploy.
   exec 9>"$BUILD_LOCK"
   if ! flock -n 9; then
-    log "a data build is running; deploying next time"
-    hc_ping "${HC_DEPLOY:-}" "" "deferred: build running"
+    log "a build or training run holds $BUILD_LOCK; deploying next time"
+    hc_ping "${HC_DEPLOY:-}" "" "deferred: lock held"
     exit 0
   fi
 fi
@@ -50,12 +50,15 @@ git checkout --quiet --force --detach "$target" || fail "checkout ${target:0:12}
 "$INSTALL_UNITS" || fail "install-units"
 
 case "$ROLE" in
-  ol) service=api ;;
-  fetcher) service=fetcher ;;
+  # ol also builds the trainer image: recommender-train.timer runs it with
+  # `run --rm`, so it is never brought up here, but a merged trainer change
+  # must reach the VM the same way an API change does.
+  ol) service=api; build=(api recommender) ;;
+  fetcher) service=fetcher; build=(fetcher) ;;
   *) fail "unknown ROLE '$ROLE'" ;;
 esac
 # A failed build leaves the running container exactly as it was.
-"$COMPOSE" build "$service" || fail "image build for $service at ${target:0:12}"
+"$COMPOSE" build "${build[@]}" || fail "image build for ${build[*]} at ${target:0:12}"
 
 if [ "$ROLE" = ol ] && [ ! -f "$OL_DATA/current-version" ]; then
   log "no Open Library version yet; ol-refresh starts api after the first build"
