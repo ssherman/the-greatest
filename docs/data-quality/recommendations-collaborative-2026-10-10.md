@@ -189,6 +189,16 @@ comparison below is on the same users and the same hold-out.
 The smallest margin on a hit metric is +0.085 (5-19 recall@50, seed 42), roughly twice the top of
 the noise band. Every other margin is larger, most of them by five to ten times.
 
+Two notes on what that footing is. First, the setting is weak generalisation: every sampled user
+is in the training data and only their hidden pairs are missing, which is the production case
+(the model knows the reader's other books). Second, a binomial standard error at n ≈ 100 and
+p ≈ 0.5 is about 0.05 per proportion, about 0.07 for an unpaired difference; every margin on the
+20-99 and 100+ conditions (smallest +0.250) clears that 0.07 by more than 3.5×, and the 5-19
+condition only asks for no loss, where the margins are gains of 0.085-0.125. The comparisons are
+paired, on the same users, so the real band is narrower. A review check found at most 2 of the 100 sampled 100+ users with a
+near-duplicate account whose shelf contains their held books; that bounds any leak through a
+second account at 0.02 on hit@10 and recall@50, inside every margin.
+
 The gap the previous record left open is closed as well: on 100+ the defaults now beat the
 frequency baseline on recall@50 (0.381 vs 0.152; 0.405 vs 0.210), and on 20-99 too (0.397 vs
 0.202; 0.432 vs 0.204). On that comparison the 2026-10-08 engine lost on both segments.
@@ -200,7 +210,8 @@ frequency baseline on recall@50 (0.381 vs 0.152; 0.405 vs 0.210), and on 20-99 t
   is the hold-out's canon bias. But the `rank` baseline, which is the canon in order at mean rank
   28-77, scores 0.55-0.59 on 100+ hit@10 and 0.26-0.27 on recall@50; the collaborative page scores
   0.74 and 0.38-0.41 at mean rank 550-600. It recovers more hidden favorites than the canon does,
-  from a page whose mean rank is 8-20 times deeper.
+  from a page whose mean rank is about 8 times deeper on 100+ (595 against 77, 551 against 72).
+  On 5-19 the ratio is about 20 (548 against 28, 577 against 30).
 - **KL fell, it did not rise.** The co-read neighbours of a reader's books sit in that reader's
   genres more than the category query's long tail does, so the calibrated page matches the history
   better (100+: 0.67-0.72 against 1.08-1.23).

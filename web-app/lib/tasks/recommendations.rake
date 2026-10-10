@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
-# Read-only development harness for the recommendation engine (spec §9). Never
-# writes to the database or the index. Every knob is a per-call override, and eval
+# Development harness for the recommendation engine (spec §9). Read-only except
+# `load`, which writes the two collaborative model tables (recommendation_models,
+# recommendation_item_neighbors); nothing writes to the index. `export` writes
+# files only. Every knob is a per-call override, and eval
 # rebuilds each variant's training interactions under that variant's config, so
 # one process sweeps a range:
 #

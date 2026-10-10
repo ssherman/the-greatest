@@ -201,9 +201,11 @@ in two places that tests hold equal: the export's SQL (`Recommendations::Books::
 the serving side's Ruby (`Interaction#trainable?(min_rating:)`).
 
 **Three legs and a store.** Each leg reads and writes files through `Recommendations::Store`
-(`Local`, a directory, for development; `R2`, a private bucket, in production; `Store.default`
-raises unless all four `RECOMMENDATIONS_R2_*` variables are set). The Python side has the same two
-stores (`RECOMMENDER_R2_*`).
+(`Local`, a directory, for development; `R2`, a private bucket, in production). The Python side
+has the same two stores (`RECOMMENDER_R2_*`). The two Rails jobs build the store from the four
+`RECOMMENDATIONS_R2_*` variables: with none set they log "recommendations store not configured;
+skipping" and return, so a deploy before the bucket exists is quiet; with only some set they raise
+`Store::NotConfigured`. The rake tasks without `DIR` use `Store.default`, which raises in both cases.
 
 1. **Export** (Rails, `Recommendations::ExportInteractionsJob`, nightly 02:30): every positive pair,
    streamed through a server-side cursor, written as
@@ -264,8 +266,8 @@ active model (and deletes the previous one), so leave a full model loaded when y
 and the trainer as a `recommender` compose service under a systemd timer (04:00) on the home
 server's `ol` VM, pinging a healthchecks.io check. Nothing on the home server listens, and nothing
 in Rails calls it; if it is off, the model goes stale, never down. That deployment is spec 2 §4.4
-and its increment 2, not yet built; until it is, the jobs have no model to load. The launch steps
-are in `docs/launch-todo.md`.
+and its increment 2, not yet built; until it is and the store is configured, the jobs log a skip
+and the signal stays unavailable. The launch steps are `docs/launch-todo.md`, section 3.
 
 ## Preferences store
 
