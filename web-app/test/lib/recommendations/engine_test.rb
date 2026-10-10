@@ -24,6 +24,10 @@ module Recommendations
         @calls = []
       end
 
+      def domain = :books
+
+      def filter_candidate_ids(_ids, **) = {}
+
       def interactions(_user) = @interactions
 
       def shelved_item_ids(_user) = @interactions.map(&:item_id)
@@ -99,6 +103,21 @@ module Recommendations
       assert_not result.data[:fallback]
       assert_operator result.data[:profile].weight_for(RARE), :>, 0
       assert_kind_of Item, result.data[:items].first[:item]
+    end
+
+    test "the collaborative signal appears in signals_used when a model is active and the shelf has positives" do
+      model = RecommendationModel.create!(domain: "books", version: "v", state: :active)
+      model.recommendation_item_neighbors.create!(item_id: books_books(:war_and_peace).id, neighbor_id: books_books(:got).id, weight: 0.5)
+      Recommendations::Books::Adapter.any_instance.stubs(:filter_candidate_ids).returns({books_books(:got).id => 7})
+      Recommendations::Books::Adapter.any_instance.stubs(:search_candidates).returns([])
+      interactions = [Interaction.new(item_id: books_books(:war_and_peace).id, weight: 2.0, kind: :favorite, rating: nil)]
+
+      result = Engine.call(user: users(:regular_user), domain: :books, limit: 10, interactions: interactions, excluded_ids: [])
+
+      assert result.success?
+      assert_includes result.data[:signals_used], :collaborative
+      assert_equal [books_books(:got).id], result.data[:items].map { |i| i[:item_id] }
+      assert_equal :because_of, result.data[:items].first[:reason].type
     end
 
     test "respects the limit" do

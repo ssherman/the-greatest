@@ -297,14 +297,14 @@ imports.
   readable file is finished.
 - Rows the stalled legacy import already wrote came over with the data migration, and are skipped as already on the
   user's lists.
-- **In production, run it at the cutover only, after the final sync** (`docs/launch-todo.md`, section 5). It writes
+- **In production, run it at the cutover only, after the final sync** (`docs/launch-todo.md`, section 6). It writes
   into legacy users' lists and reviews, and every `data_migration:sync` rewrites those to match legacy, so an earlier
   run is undone by the next sync.
 - A finishing import with rows has already run and is left alone. One an admin rejected stays rejected. One that
   failed before writing any rows starts again, pending review.
 - `IDS=` only narrows what is started: a picked import still defers to a newer unfinished import of the same user.
 - Run it one import at a time (`[1]`), and let each finish before the next: running imports are skipped, not
-  counted. Four at once overloaded the Open Library service on 2026-10-06 (`docs/launch-todo.md`, section 2, item 10).
+  counted. Four at once overloaded the Open Library service on 2026-10-06 (`docs/launch-todo.md`, section 5, item 5).
   Each import also fetches Goodreads pages for the books it would create, on the fetch line member uploads use.
 - Measured on the 2026-10-05 development load (a dry run): 46 unfinished legacy imports. 10 have a later completed
   import, 12 have no file (missing from the legacy bucket, or not a CSV), and 1 has no Goodreads header. That leaves

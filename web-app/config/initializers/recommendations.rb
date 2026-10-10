@@ -48,10 +48,14 @@ Rails.application.config.x.recommendations = ActiveSupport::OrderedOptions.new.m
   # to this quality_floor; "balanced" stores nothing and follows quality_floor.
   depth_floors: {"safe" => 0.1, "deep" => 0.5}.freeze,
 
-  # Fusion (spec §5.4)
+  # Fusion (spec §5.4) and the collaborative signal (spec 2 §6, §7)
   rrf_k: 60,
   taste_weight: 1.0,
+  collaborative: true,            # false = the signal reports itself unavailable (the harness's taste-only variant)
   collaborative_half_point: 10,
+  collaborative_min_rating: 3,    # a rating at or above this is a positive, for training and for the shelf scored at serving time
+  collaborative_overfetch: 2,     # neighbour rows fetched = overfetch × candidate_size, so the ranked-pool filter can drop some and still fill
+  because_of_rating: 4,           # "Because you loved X" only names a favorite or a book rated at least this
   rank_prior_weight: 0.3,
 
   # Re-ranking and explanations (spec §8)

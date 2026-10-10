@@ -9,5 +9,17 @@ module Recommendations
     def positive? = weight.positive?
 
     def negative? = weight.negative?
+
+    # A positive for the collaborative model (spec 2 §3): a shelf presence or
+    # a rating at the floor. Same predicate as Books::PositivePairs's SQL; the
+    # pairs test asserts the two agree. Not the signed weight: want-to-read is
+    # weighted positive but is not a positive here.
+    def trainable?(min_rating:)
+      Interaction::TRAINABLE_KINDS.include?(kind) || (!rating.nil? && rating >= min_rating)
+    end
   end
+
+  # Declared outside the Struct block: a constant defined in a block lands in
+  # the enclosing lexical scope, not on the struct.
+  Interaction::TRAINABLE_KINDS = %i[favorite read reading].freeze
 end

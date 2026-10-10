@@ -167,6 +167,21 @@ module Search
           assert_equal [2, 1], result.map { |h| h[:id] }
           assert_equal 10, result.first[:rank_position]
         end
+
+        test "ranked_only with ids returns only those ids, still filtered and rank-sorted" do
+          index_book(1, ranked_position: 30)
+          index_book(2, ranked_position: 10)
+          index_book(3, ranked_position: 20, provisional: true)
+          index_book(4, ranked_position: 5)
+          criteria = ::Books::RecommendationCriteria.new({})
+
+          hits = BookRecommendations.ranked_only(criteria: criteria, excluded_ids: [], ids: [1, 2, 3, 99])
+          assert_equal [2, 1], hits.map { |h| h[:id] }, "4 is not asked for, 3 is provisional, 99 does not exist"
+          assert_equal [10, 30], hits.map { |h| h[:rank_position] }
+
+          hits = BookRecommendations.ranked_only(criteria: criteria, excluded_ids: [2], ids: [1, 2])
+          assert_equal [1], hits.map { |h| h[:id] }
+        end
       end
     end
   end

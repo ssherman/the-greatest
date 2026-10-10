@@ -39,9 +39,37 @@ survive the weekly run. Do not merge, delete or edit books yet: the next `:all` 
 3. `BOOK_IDENTIFIERS_FROM=<that id> bin/rails data_migration:sync_init`.
 
 From then on `data_migration:all`, the catalog tasks and the user-data tasks the sync replaces refuse
-to run. Cleanup can start (section 4).
+to run. Cleanup can start (section 5).
 
-## 3. Every week after the switch-over
+## 3. The collaborative-filtering model (once, after spec 2 increment 2 merges)
+
+Depends only on spec 2's increment 2 (the home-server timer) being merged, not on the switch-over.
+Until the store is configured, the nightly export and hourly load jobs log "recommendations store
+not configured; skipping" and do nothing; if only some of the `RECOMMENDATIONS_R2_*` variables are
+set, they raise. Details: `docs/features/recommendations.md`, "Collaborative signal".
+
+1. **The bucket.** Create the private R2 bucket and a token scoped to it. Put
+   `RECOMMENDATIONS_R2_ACCESS_KEY/SECRET_KEY/BUCKET` in the production SOPS secrets (the endpoint defaults to `STORAGE_ENDPOINT`), and `RECOMMENDER_R2_*` +
+   `HC_RECOMMENDER` in `secrets/home-server.env`.
+2. **The check.** Create the healthchecks.io check `recommender-train` (period 1 day, grace 2 days).
+3. **The home server.** Run `deployment/home-server/provision` so the `ol` VM gets the units and env.
+4. **The first model.** `Recommendations::ExportInteractionsJob.perform_async("books")` from a
+   console (or wait for the 02:30 UTC run), let the home server's `recommender-train` timer run (04:00 Chicago;
+   or `systemctl start recommender-train` on the `ol` VM), then confirm `Recommendations::LoadModelJob`
+   loaded it (`RecommendationModel.active_for(:books)`) and that
+   `bin/rails recommendations:show USER_ID=…` lists `collaborative`.
+
+After that the nightly export, daily train and hourly load keep it current through every weekly
+`data_migration:sync`; after a sync, step 4's `perform_async` and `systemctl start` bring the model
+up to date the same day instead of the next.
+
+5. **Before books goes live.**
+   - Cap the shelf the signal scores (an 18,534-book shelf takes 1.1 s in the neighbour SQL today),
+     and profile the +140-215 ms the signal adds on the 20-99 and 100+ segments (the harness `ms` column is confounded by variant order; see the data-quality record).
+   - Close the depth gap: the collaborative list ignores the depth setting (see "Known gaps" in
+     `docs/features/recommendations.md`).
+
+## 4. Every week after the switch-over
 
 1. **`bin/rails data_migration:sync_report`.** Read-only, safe any time. A `MISSING` line means the
    sync will fail on rows whose book was removed without callbacks. A large delete count means
@@ -57,7 +85,7 @@ to run. Cleanup can start (section 4).
    them.
 5. **Rankings.** The books list weights and book rankings. Author rankings follow.
 
-## 4. Cleanup, after the switch-over
+## 5. Cleanup, after the switch-over
 
 These change the catalog, so they wait for section 2. Each runs once, not after every sync, because
 the sync never undoes them.
@@ -98,7 +126,7 @@ the sync never undoes them.
      replay only records proposed fixes, under Books → Repair Verdicts. Turn it on only after the
      50-per-kind hand check (spec §12.9).
    - Its merges and provisional marks are catalog changes and stick. Its relinks of legacy users'
-     list items and reviews are undone by each sync and re-applied by `apply` (section 3).
+     list items and reviews are undone by each sync and re-applied by `apply` (section 4).
    - Details: `docs/features/goodreads-import.md`, "Legacy seed" and "Legacy replay".
 5. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
    resolving at once left `/resolve` timing out at 60 s for 25 minutes, until the API container was
@@ -119,12 +147,12 @@ the sync never undoes them.
 - **Amazon enrichment of ranked books:** `bin/rails books:amazon_enrich_ranked`. It has never been
   run.
 
-## 5. Cutover
+## 6. Cutover
 
 1. Take legacy offline.
 2. `FINAL=1 bin/rails data_migration:sync`. `FINAL=1` drops the 24-hour delay, so the last day's
    books come over too. Run `sync_report` with `FINAL=1` first.
-3. Section 3, steps 3-5.
+3. Section 4, steps 3-5.
 4. **Finish the failed and stuck legacy Goodreads imports.** Only now: they write into legacy users'
    lists, which every sync rewrites to match legacy, so a finishing import run earlier is undone by
    the next sync.
@@ -132,14 +160,14 @@ the sync never undoes them.
      `bin/rails "books:goodreads_replay:finish_legacy[1]"`, one import at a time, and wait until it is
      no longer in progress before running the next. Running imports are skipped, not counted, so
      starting them back to back queues them all at once. Four at once overloaded the Open Library VM
-     on 2026-10-06 (section 4, item 5). Each import also fetches Goodreads pages on the line member
+     on 2026-10-06 (section 5, item 5). Each import also fetches Goodreads pages on the line member
      uploads use.
    - Approve or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`,
      "Finishing legacy imports".
 5. **The Firebase bulk import, one last time** (`docs/features/v1-user-migration.md`, "Running it"),
-   then never again (section 7).
+   then never again (section 8).
 
-## 6. Pointing thegreatestbooks.org at this app
+## 7. Pointing thegreatestbooks.org at this app
 
 - **Issue the TLS certificate on the server before merging the hostname change.** Merging deploys.
   If nginx references a certificate that doesn't exist, it crash-loops, and one nginx container
@@ -147,7 +175,7 @@ the sync never undoes them.
 - **Firebase authorized domains** must list every books hostname that sign-in and the reset emails
   use. A missing domain fails silently on password reset.
 - **Stripe, in this order** (`docs/guides/stripe-account-setup.md`, sections 7 and 11):
-  1. Re-check the legacy guard just before launch (section 7).
+  1. Re-check the legacy guard just before launch (section 8).
   2. Delete legacy's webhook endpoint by hand in the Stripe Dashboard. Never run
      `rake stripe:delete_webhooks` once the hostname points here: it would delete this app's
      endpoint.
@@ -159,7 +187,7 @@ the sync never undoes them.
   next 05:00 UTC sweep.
 - After the deploy, check Admin → Webhook Events for `ignored` rows.
 
-## 7. After launch
+## 8. After launch
 
 - **Stop re-running the Firebase bulk import.** An import replaces the whole account, so once real
   people use these accounts it would reset changed passwords and verified emails. The export and
