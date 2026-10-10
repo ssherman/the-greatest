@@ -41,11 +41,13 @@ t_build_defers_reboot() {
 t_units_for_ol() {
   setup; write_env ROLE=ol
   "$GUEST/install-units.sh" && [ -f "$SYSTEMD_DIR/ol-refresh.timer" ] &&
-    called 'systemctl daemon-reload' && called 'systemctl enable --now ol-refresh.timer'
+    [ -f "$SYSTEMD_DIR/recommender-train.timer" ] && [ -f "$SYSTEMD_DIR/recommender-train.service" ] &&
+    called 'systemctl daemon-reload' && called 'systemctl enable --now ol-refresh.timer' &&
+    called 'systemctl enable --now recommender-train.timer'
 }
 t_units_for_fetcher() {
   setup; "$GUEST/install-units.sh" && [ ! -f "$SYSTEMD_DIR/ol-refresh.timer" ] &&
-    [ -f "$SYSTEMD_DIR/the-greatest-deploy.timer" ]
+    [ ! -f "$SYSTEMD_DIR/recommender-train.timer" ] && [ -f "$SYSTEMD_DIR/the-greatest-deploy.timer" ]
 }
 t_units_idempotent() {
   setup; "$GUEST/install-units.sh" && : >"$CALLS" &&
@@ -59,7 +61,7 @@ check "the fetcher heartbeat asks /health" t_fetcher_beats_on_health
 check "no reboot-required flag, no reboot" t_no_flag_no_reboot
 check "the flag reboots" t_flag_reboots
 check "a running build defers the reboot" t_build_defers_reboot
-check "ol gets the refresh timer" t_units_for_ol
-check "fetcher does not" t_units_for_fetcher
+check "ol gets the refresh and train timers" t_units_for_ol
+check "fetcher gets neither" t_units_for_fetcher
 check "a second install changes nothing" t_units_idempotent
 finish

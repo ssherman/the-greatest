@@ -56,16 +56,17 @@ set, they raise. Details: `docs/features/recommendations.md`, "Collaborative sig
    `RECOMMENDATIONS_R2_ACCESS_KEY/SECRET_KEY/BUCKET` in the production SOPS secrets (the endpoint defaults to `STORAGE_ENDPOINT`), and `RECOMMENDER_R2_*` +
    `HC_RECOMMENDER` in `secrets/home-server.env`.
 2. **The check.** Create the healthchecks.io check `recommender-train` (period 1 day, grace 2 days).
-3. **The home server.** Run `deployment/home-server/provision` so the `ol` VM gets the units and env.
+3. **The home server.** Run `deployment/home-server/provision` (`SOPS_AGE_KEY_FILE` set) so the `ol` VM gets the new env. A VM tracking `main` installs `recommender-train.timer` and builds the trainer image within 15 minutes of the merge, before anyone provisions; `provision` then pushes the env file and forces an immediate deploy. `provision --verify` then reports `ol: recommender-train.timer is enabled`. If the VMs were pointed at a branch to test this, `provision --ref main` goes **before** the merge: GitHub deletes the merged branch and a VM tracking it fails its next deploy. Until the first export exists in the bucket, each 04:00 run pings `fail` with `no export published for books`; that is expected, and step 4 the same day ends it.
 4. **The first model.** `Recommendations::ExportInteractionsJob.perform_async("books")` from a
-   console (or wait for the 02:30 UTC run), let the home server's `recommender-train` timer run (04:00 Chicago;
-   or `systemctl start recommender-train` on the `ol` VM), then confirm `Recommendations::LoadModelJob`
+   console (or wait for the 02:30 UTC run), let the home server's `recommender-train` timer run (04:00 UTC;
+   or `sudo systemctl start recommender-train` on the `ol` VM, then `journalctl -u recommender-train` for the trainer's output), then confirm `Recommendations::LoadModelJob`
    loaded it (`RecommendationModel.active_for(:books)`) and that
    `bin/rails recommendations:show USER_ID=…` lists `collaborative`.
 
 After that the nightly export, daily train and hourly load keep it current through every weekly
-`data_migration:sync`; after a sync, step 4's `perform_async` and `systemctl start` bring the model
-up to date the same day instead of the next.
+`data_migration:sync`; after a sync, the next 02:30 export and 04:00 train pick it up by themselves; running step 4's
+`perform_async` and `systemctl start` by hand only helps before that day's 04:00 run, because a
+second export on the same day reuses the day's file name and the trainer reports it already trained.
 
 5. **Before books goes live.**
    - Cap the shelf the signal scores (an 18,534-book shelf takes 1.1 s in the neighbour SQL today),

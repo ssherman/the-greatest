@@ -12,8 +12,9 @@ pages) and `docs/superpowers/specs/2026-10-09-book-recommendations-collaborative
 
 State of delivery: spec 1 is done (preferences store, engine, harness, tuning, the results,
 wizard and settings pages). Spec 2's first increment (export, trainer, load, signal, measured in
-development) is done; its second, the home-server timer that trains in production, is not, so
-production has no model and the signal is unavailable there until it lands.
+development) is done; its second, the home-server timer that trains in production, is built
+(`deployment/home-server/guest/recommender-train.sh`); the one-time setup that gives production its
+first model is `docs/launch-todo.md`, section 3.
 
 Where it lives:
 
@@ -263,15 +264,17 @@ without `VERSION`. In development the train takes about 20 s and 3.2 GiB; the lo
 active model (and deletes the previous one), so leave a full model loaded when you are done.
 
 **Production** runs the same three legs with `Store::R2`: the two Rails jobs on the Sidekiq cron,
-and the trainer as a `recommender` compose service under a systemd timer (04:00 Chicago) on the home
-server's `ol` VM, pinging a healthchecks.io check. Nothing on the home server listens, and nothing
-in Rails calls it; if it is off, the model goes stale, never down. That deployment is spec 2 §4.4
-and its increment 2, not yet built; until it is and the store is configured, the jobs log a skip
+and the trainer as the `recommender` compose service under `recommender-train.timer` (04:00 UTC, and
+20 minutes after boot) on the home server's `ol` VM, pinging the healthchecks.io check
+`recommender-train` (`docs/features/home-server.md`). Nothing on the home server listens, and nothing
+in Rails calls it; if it is off, the model goes stale, never down. Until the bucket's values are in
+both secrets files, the Rails jobs log a skip, the timer logs `RECOMMENDER_R2_* not set` and exits,
 and the signal stays unavailable. The launch steps are `docs/launch-todo.md`, section 3.
 
 **Time zones.** The Sidekiq crons run in the Rails server's zone, which is UTC (the app sets no
-`config.time_zone`), so "02:30" is 02:30 UTC. The home server's 04:00 Chicago train therefore runs
-6.5-7.5 h after the export, depending on daylight saving. The export's file name and the age check
+`config.time_zone`), so "02:30" is 02:30 UTC. The `ol` VM's clock is UTC too, so the 04:00 train runs
+1.5 h after the export, an hour after the 03:00 dump refresh (a refresh that starts a build holds
+the lock, and the train defers to the next day). The export's file name and the age check
 use UTC dates.
 
 ## Preferences store

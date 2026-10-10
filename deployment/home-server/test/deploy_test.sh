@@ -18,8 +18,11 @@ setup() {
   export REPO_DIR="$SANDBOX/repo"
   git -C "$REPO_DIR" rev-parse HEAD >"$STATE_DIR/deployed-sha"
   write_env ROLE=fetcher REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
-  unset BUILD_EXIT TUNNEL_RUNNING
-  stub compose 'if [ "$1" = build ]; then exit "${BUILD_EXIT:-0}"; fi
+  unset BUILD_EXIT RECOMMENDER_BUILD_EXIT TUNNEL_RUNNING
+  stub compose 'if [ "$1" = build ]; then
+  if [ "$2" = recommender ]; then exit "${RECOMMENDER_BUILD_EXIT:-0}"; fi
+  exit "${BUILD_EXIT:-0}"
+fi
 if [ "$*" = "--profile tunnel ps -q cloudflared" ] && [ -n "${TUNNEL_RUNNING:-}" ]; then echo 0123abcd; fi'
   stub install-units ''
   stub docker ''
@@ -65,7 +68,23 @@ t_force_marker() {
 t_ol_without_version() {
   setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
   commit data-sources/app v2
-  deploy && called '^compose build api$' && ! called '^compose up'
+  deploy && called '^compose build recommender$' && called '^compose build api$' && ! called '^compose up'
+}
+t_ol_with_version() {
+  setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  echo 2026-09-30 >"$OL_DATA/current-version"
+  commit data-sources/src/recommender/ease.py v2
+  deploy && [ "$(grep -E '^compose build ' "$CALLS" | tr '\n' ' ')" = "compose build recommender compose build api " ] &&
+    called '^compose up -d --remove-orphans api$' &&
+    ! called 'up .*recommender'
+}
+t_ol_trainer_build_fails() {
+  setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  echo 2026-09-30 >"$OL_DATA/current-version"
+  before="$(cat "$STATE_DIR/deployed-sha")"; commit data-sources/src/recommender/ease.py v2
+  export RECOMMENDER_BUILD_EXIT=1
+  ! deploy && ! called '^compose build api$' && ! called '^compose up' &&
+    [ "$(cat "$STATE_DIR/deployed-sha")" = "$before" ] && called 'image build for recommender.*deploy/fail'
 }
 t_ol_without_version_tunnels() {
   setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=1 HC_DEPLOY=https://hc.test/deploy
@@ -127,6 +146,8 @@ check "the next run retries a failed build" t_retry_after_failure
 check "--force deploys without a change" t_force_flag
 check "the force-deploy marker deploys once and is cleared" t_force_marker
 check "ol with no data version builds but does not start api" t_ol_without_version
+check "ol builds the trainer image, then the api's, and brings up only the api" t_ol_with_version
+check "a trainer image that fails to build stops ol before the api image is touched" t_ol_trainer_build_fails
 check "ol with no data version still starts the tunnel" t_ol_without_version_tunnels
 check "ol with a version and tunnels brings up api and cloudflared only" t_ol_with_version_tunnels
 check "the fetcher role never brings up api" t_fetcher_never_api

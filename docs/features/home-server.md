@@ -32,14 +32,14 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 │   │                                    │     dropped                   │
 │  VM 110 "ol"                        VM 120 "fetcher"                  │
 │   cloudflared ─► openlibrary:8080     cloudflared ─► page-fetcher:8081 │
-│   build (timer)                                                       │
+│   build, train (timers)                                               │
 │   /srv/ol-data (own disk)           VM 101 "musicbrainz" (by hand)    │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 | VM | Role | vCPU | RAM | Disks | Network |
 |---|---|---|---|---|---|
-| 110 `ol` | Open Library API and dump builds | 12 | 24 GB, no ballooning | 32 GB OS disk on `local-zfs`; 300 GB data disk on `rpool2`, ext4, mounted at `/srv/ol-data` | `vmbr0`, LAN |
+| 110 `ol` | Open Library API, dump builds, recommendations trainer | 12 | 24 GB, no ballooning | 32 GB OS disk on `local-zfs`; 300 GB data disk on `rpool2`, ext4, mounted at `/srv/ol-data` | `vmbr0`, LAN |
 | 120 `fetcher` | Camoufox page fetcher | 4 | 4 GB, no ballooning | 40 GB OS disk on `local-zfs` | `vmbr1`, static `10.20.0.10`, gateway `10.20.0.1` |
 | 101 `musicbrainz` | MusicBrainz, built by hand | 8 | 16 GB | 1 TB on `rpool2` | LAN |
 
@@ -91,6 +91,8 @@ The keys in `secrets/home-server.env` (SOPS-encrypted). Each VM receives only it
 | `PVE_LAN_IPV4`, `PVE_LAN_GATEWAY4` | every run | The host's static LAN address and the router |
 | `OL_TUNNEL_TOKEN`, `FETCHER_TUNNEL_TOKEN` | `--enable-tunnels` | The two Cloudflare tunnel tokens |
 | `HC_OL_HEARTBEAT`, `HC_OL_DEPLOY`, `HC_OL_REFRESH`, `HC_FETCHER_HEARTBEAT`, `HC_FETCHER_DEPLOY` | optional | healthchecks.io ping URLs; blank means no ping |
+| `HC_RECOMMENDER` | optional | healthchecks.io ping URL for `recommender-train`, `ol` only |
+| `RECOMMENDER_R2_ENDPOINT`, `RECOMMENDER_R2_ACCESS_KEY`, `RECOMMENDER_R2_SECRET_KEY`, `RECOMMENDER_R2_BUCKET` | the trainer | The recommendations bucket (`docs/features/recommendations.md`, "Collaborative signal"): its S3 endpoint and a token scoped to it. All four or none; `ol` only. With none set, `recommender-train` logs a skip and does not ping. |
 | `VM_STORAGE` | optional | OS disks and cloud-init drive. Default `local-lvm`; `local-zfs` here |
 | `DATA_STORAGE` | optional | The `ol` data disk. Default `VM_STORAGE`; `rpool2` here |
 | `IMAGE_STORAGE` | optional | Imported cloud images. Default `local` |
@@ -123,21 +125,23 @@ The firewall revert does not restore the old rules: it sets `enable: 0` in `clus
 |---|---|
 | Power cut | BIOS "Restore on AC Power Loss" boots the host. VMs with `onboot` start in order (`ol`, then `fetcher`). Docker starts at boot and every container is `restart: unless-stopped`. A build cut short runs again at the next 03:00 or 10 minutes after boot (`ol-refresh.timer`). |
 | A container exits | `restart: unless-stopped` restarts it. |
-| Bad deploy | `the-greatest-deploy.timer` (boot plus 2 minutes, then every 15 minutes) runs `deploy.sh` every 15 minutes. A failed build leaves the running container alone and the deployed SHA where it was, so the next run tries again; each failure pings `fail`. |
+| Bad deploy | `the-greatest-deploy.timer` (boot plus 2 minutes, then every 15 minutes) runs `deploy.sh` every 15 minutes. A failed build leaves the running container alone and the deployed SHA where it was, so the next run tries again; each failure pings `fail`. On `ol` the deploy builds the trainer image first and the API's second, each in its own command: the API and the dump build share one image tag, so a trainer build that fails stops the deploy before the API image changes, and a half-built pair can never reach the next dump promotion's `up -d api`. A trainer image that fails to build therefore holds back an API change until it is fixed; the `fail` ping names the image. |
 | Bad dump | `ol-refresh.sh` promotes a version only when every gate passes. A failed build keeps the previous version serving and pings `fail`. If the new API does not report the new date in time, it writes the previous date back. |
+| Stale model | `recommender-train.timer` (04:00, and 20 min after boot) runs `recommender-train.sh`. The trainer refuses an export older than three days or a model that fails its gate and exits non-zero, which pings `fail` with its last line; `model/latest` in the bucket and the model Rails serves stay as they were. A day under the build lock defers and logs `deferred: lock held` to the check without counting as a run, so about three days without a completed run (period 1 day, grace 2 days) alerts. |
 | Box offline | Nothing recovers it. `ol-heartbeat` and `fetcher-heartbeat` stop pinging and healthchecks.io emails Shane. |
 
 Security updates install on both VMs through `unattended-upgrades`, and `reboot-if-required.timer`
 reboots a VM at 05:30 only if a reboot is pending and no build lock is held. On the host,
 `unattended-upgrades` installs Debian security updates only; Proxmox packages are upgraded only by
 `provision`, and the host never reboots itself. The one-shot `build` service has no restart policy
-(it runs with `run --rm`); a build cut short (crash, OOM, reboot) runs again at the next timer run. A build that fails its gates is not retried until a newer dump appears; delete its version directory to force a rebuild.
+(it runs with `run --rm`); a build cut short (crash, OOM, reboot) runs again at the next timer run. A build that fails its gates is not retried until a newer dump appears; delete its version directory to force a rebuild. `recommender-train` is the same shape as the build: a one-shot `run --rm` under a timer, no restart policy, run again at the next 04:00 or 20 minutes after boot; the trainer itself says `already trained; nothing to do` when there is nothing new.
 
 ## Alerts
 
 healthchecks.io, free tier. A missed or failed ping emails Shane. The periods and graces below are
 settings to create on healthchecks.io; the code only sends the pings. Deploy and refresh also send a
-plain success ping with a message when they defer because a lock or build is held.
+plain success ping with a message when they defer because a lock or build is held; train logs its
+deferral to the check's `/log` endpoint instead, so a run that keeps deferring still alerts.
 
 | Check | Pinged by | Period / grace |
 |---|---|---|
@@ -145,6 +149,7 @@ plain success ping with a message when they defer because a lock or build is hel
 | `fetcher-heartbeat` | timer every 5 min, only if `127.0.0.1:8081/health` answers | 5 min / 15 min |
 | `ol-deploy`, `fetcher-deploy` | `deploy.sh`: `success` on a deploy or a no-op, `fail` on error | 15 min / 1 h |
 | `ol-refresh` | `ol-refresh.sh`: `start`, then `success`, no-op or `fail` | 1 day / 6 h |
+| `recommender-train` | `recommender-train.sh`: `start`, then `success` with the trainer's last line or `fail` with it; a deferral goes to `/log` and does not reset the period | 1 day / 2 days |
 
 `ol-heartbeat` is down until the first build finishes, because the API does not start without a
 built version.
@@ -209,7 +214,7 @@ Things that look fine but are not:
   3. Exempt both hostnames from Bot Fight Mode and any bot or WAF rule that would challenge a
      non-browser client from the production server's IP. A challenge reaches the client as a 403.
   4. Access goes on before a hostname is routed. Run `provision --enable-tunnels` only after that.
-- healthchecks.io: the account and the five checks above, with their ping URLs in
+- healthchecks.io: the account and the six checks above, with their ping URLs in
   `secrets/home-server.env`.
 
 ## If the LAN changes
