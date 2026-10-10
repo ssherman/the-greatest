@@ -68,7 +68,7 @@ class Local:
 
 class R2:
     ENV_KEYS = (
-        "RECOMMENDER_R2_ACCOUNT_ID",
+        "RECOMMENDER_R2_ENDPOINT",
         "RECOMMENDER_R2_ACCESS_KEY",
         "RECOMMENDER_R2_SECRET_KEY",
         "RECOMMENDER_R2_BUCKET",
@@ -85,10 +85,12 @@ class R2:
             return None
         if any(v is None for v in values):
             raise RuntimeError(f"{', '.join(cls.ENV_KEYS)} must all be set or all be unset")
-        account, access, secret, bucket = values
+        endpoint, access, secret, bucket = values
         client = boto3.client(
             "s3",
-            endpoint_url=f"https://{account}.r2.cloudflarestorage.com",
+            # https://<account id>.r2.cloudflarestorage.com; the Rails side falls back to
+            # its STORAGE_ENDPOINT for the same account, the home server has no such default.
+            endpoint_url=endpoint,
             aws_access_key_id=access,
             aws_secret_access_key=secret,
             region_name="auto",

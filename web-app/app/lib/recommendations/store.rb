@@ -14,7 +14,7 @@ module Recommendations
     # R2 when configured, never a silent local fallback: a production job
     # writing into the container's filesystem is the failure this prevents.
     def self.default
-      R2.from_env or raise NotConfigured, "set #{R2::ENV_KEYS.join(", ")} to use the recommendations store"
+      R2.from_env or raise NotConfigured, "set #{R2::REQUIRED_KEYS.join(", ")} to use the recommendations store"
     end
 
     class Local
@@ -51,19 +51,25 @@ module Recommendations
     end
 
     class R2
-      ENV_KEYS = %w[RECOMMENDATIONS_R2_ACCOUNT_ID RECOMMENDATIONS_R2_ACCESS_KEY
-        RECOMMENDATIONS_R2_SECRET_KEY RECOMMENDATIONS_R2_BUCKET].freeze
+      REQUIRED_KEYS = %w[RECOMMENDATIONS_R2_ACCESS_KEY RECOMMENDATIONS_R2_SECRET_KEY RECOMMENDATIONS_R2_BUCKET].freeze
+      # The S3 endpoint names the R2 account. Production already has STORAGE_ENDPOINT
+      # for the same account (config/storage.yml's private_imports falls back to it
+      # the same way); RECOMMENDATIONS_R2_ENDPOINT overrides it for a different account.
+      ENDPOINT_KEYS = %w[RECOMMENDATIONS_R2_ENDPOINT STORAGE_ENDPOINT].freeze
 
       attr_reader :bucket, :client
 
       def self.from_env
-        values = ENV_KEYS.map { |k| ENV[k].presence }
+        values = REQUIRED_KEYS.map { |k| ENV[k].presence }
         return nil if values.all?(&:nil?)
-        raise NotConfigured, "#{ENV_KEYS.join(", ")} must all be set or all be unset" if values.any?(&:nil?)
+        raise NotConfigured, "#{REQUIRED_KEYS.join(", ")} must all be set or all be unset" if values.any?(&:nil?)
 
-        account, access, secret, bucket = values
+        endpoint = ENDPOINT_KEYS.filter_map { |k| ENV[k].presence }.first
+        raise NotConfigured, "set #{ENDPOINT_KEYS.join(" or ")} for the recommendations store" if endpoint.nil?
+
+        access, secret, bucket = values
         client = Aws::S3::Client.new(
-          endpoint: "https://#{account}.r2.cloudflarestorage.com",
+          endpoint: endpoint,
           access_key_id: access, secret_access_key: secret,
           region: "auto", force_path_style: true,
           # Newer aws-sdk-s3 adds checksum headers to every upload, which R2 mishandles;

@@ -110,11 +110,16 @@ This document lists all environment variables required for production deployment
 
 ### Recommendations store
 
-#### RECOMMENDATIONS_R2_ACCOUNT_ID / RECOMMENDATIONS_R2_ACCESS_KEY / RECOMMENDATIONS_R2_SECRET_KEY / RECOMMENDATIONS_R2_BUCKET
-- **Description**: The private R2 bucket the collaborative-filtering loop uses as a mailbox (`docs/features/recommendations.md`, "Collaborative signal"): Rails writes the nightly positive-pair export there and reads the model the home server publishes. Its own bucket, holding nothing else; the endpoint is `https://<RECOMMENDATIONS_R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. The home server's trainer uses the same bucket through `RECOMMENDER_R2_*` in `secrets/home-server.env`.
-- **Required**: No. With all four unset, `Recommendations::ExportInteractionsJob` and `Recommendations::LoadModelJob` log "recommendations store not configured; skipping" and do nothing; with only some set, they raise. The recommendations page works either way (no model loaded means no collaborative signal). Set all four when the bucket exists (`docs/launch-todo.md`, section 3).
+#### RECOMMENDATIONS_R2_ACCESS_KEY / RECOMMENDATIONS_R2_SECRET_KEY / RECOMMENDATIONS_R2_BUCKET
+- **Description**: The private R2 bucket the collaborative-filtering loop uses as a mailbox (`docs/features/recommendations.md`, "Collaborative signal"): Rails writes the nightly positive-pair export there and reads the model the home server publishes. Its own bucket, holding nothing else, in the same R2 account as the other buckets (see `RECOMMENDATIONS_R2_ENDPOINT`). The home server's trainer uses the same bucket through `RECOMMENDER_R2_*` in `secrets/home-server.env`.
+- **Required**: No. With all three unset, `Recommendations::ExportInteractionsJob` and `Recommendations::LoadModelJob` log "recommendations store not configured; skipping" and do nothing; with only some set, they raise. The recommendations page works either way (no model loaded means no collaborative signal). Set all three when the bucket exists (`docs/launch-todo.md`, section 3).
 - **Used By**: worker (Sidekiq cron), rake
 - **Security**: Never commit; lives in `secrets/.env.production`. Use a token scoped to this bucket, with object read and write (Rails writes exports and reads models; one bucket cannot split that by prefix).
+
+#### RECOMMENDATIONS_R2_ENDPOINT
+- **Description**: The bucket's S3 endpoint, `https://<account id>.r2.cloudflarestorage.com`
+- **Required**: No; defaults to `STORAGE_ENDPOINT` (the same R2 account), exactly as `PRIVATE_IMPORTS_STORAGE_ENDPOINT` does
+- **Used By**: worker, rake
 
 ### Legacy bucket (read-only)
 

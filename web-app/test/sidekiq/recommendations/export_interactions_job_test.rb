@@ -4,8 +4,8 @@ require "test_helper"
 
 module Recommendations
   class ExportInteractionsJobTest < ActiveSupport::TestCase
-    PARTIAL_ENV = {"RECOMMENDATIONS_R2_ACCOUNT_ID" => "acct", "RECOMMENDATIONS_R2_ACCESS_KEY" => nil,
-                   "RECOMMENDATIONS_R2_SECRET_KEY" => "s", "RECOMMENDATIONS_R2_BUCKET" => "b"}.freeze
+    PARTIAL_ENV = {"RECOMMENDATIONS_R2_ACCESS_KEY" => nil, "RECOMMENDATIONS_R2_SECRET_KEY" => "s",
+                   "RECOMMENDATIONS_R2_BUCKET" => "b"}.freeze
 
     test "runs on the low queue" do
       assert_equal "low", ExportInteractionsJob.get_sidekiq_options["queue"].to_s

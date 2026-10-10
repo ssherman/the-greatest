@@ -69,6 +69,6 @@ def test_r2_from_env_requires_all_four(monkeypatch):
     for key in R2.ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
     assert R2.from_env() is None
-    monkeypatch.setenv("RECOMMENDER_R2_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("RECOMMENDER_R2_ENDPOINT", "https://acct.r2.cloudflarestorage.com")
     with pytest.raises(RuntimeError, match="RECOMMENDER_R2"):
         R2.from_env()

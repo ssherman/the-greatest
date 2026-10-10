@@ -49,7 +49,7 @@ not configured; skipping" and do nothing; if only some of the `RECOMMENDATIONS_R
 set, they raise. Details: `docs/features/recommendations.md`, "Collaborative signal".
 
 1. **The bucket.** Create the private R2 bucket and a token scoped to it. Put
-   `RECOMMENDATIONS_R2_*` (all four) in the production SOPS secrets, and `RECOMMENDER_R2_*` +
+   `RECOMMENDATIONS_R2_ACCESS_KEY/SECRET_KEY/BUCKET` in the production SOPS secrets (the endpoint defaults to `STORAGE_ENDPOINT`), and `RECOMMENDER_R2_*` +
    `HC_RECOMMENDER` in `secrets/home-server.env`.
 2. **The check.** Create the healthchecks.io check `recommender-train` (period 1 day, grace 2 days).
 3. **The home server.** Run `deployment/home-server/provision` so the `ol` VM gets the units and env.

@@ -98,7 +98,7 @@ services:
     image: the-greatest/recommender:latest
     profiles: ["recommender"]
     environment:
-      RECOMMENDER_R2_ACCOUNT_ID: "${RECOMMENDER_R2_ACCOUNT_ID:-}"
+      RECOMMENDER_R2_ENDPOINT: "${RECOMMENDER_R2_ENDPOINT:-}"
       RECOMMENDER_R2_ACCESS_KEY: "${RECOMMENDER_R2_ACCESS_KEY:-}"
       RECOMMENDER_R2_SECRET_KEY: "${RECOMMENDER_R2_SECRET_KEY:-}"
       RECOMMENDER_R2_BUCKET: "${RECOMMENDER_R2_BUCKET:-}"

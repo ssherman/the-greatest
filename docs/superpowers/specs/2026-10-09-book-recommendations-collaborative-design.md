@@ -135,7 +135,7 @@ recommendations/export_interactions`), argument `domain`, scheduled in `config/s
 `30 2 * * *` for `books`. Both boxes run on America/Chicago, so the 04:00 train sees that
 night's export; if the zones ever differ the three-day age check (§4.3) is the only thing that
 notices, so the plan asserts the zone in `provision --verify`. It uses `Store.default`,
-which is `R2` when the four `RECOMMENDATIONS_R2_*` variables are set and otherwise refuses to
+which is `R2` when the `RECOMMENDATIONS_R2_*` variables are set (amended 2026-10-10: access key, secret key and bucket; the endpoint defaults to `STORAGE_ENDPOINT`) and otherwise refuses to
 run (a production job silently writing to a local directory is the failure to prevent).
 
 **Rake, for development:** `bin/rails recommendations:export [DIR=tmp/recommendations]
@@ -218,7 +218,7 @@ older than three days, else the run fails the same way.
 - `compose.ol.yml` sets the service's `mem_limit: 14g` and `cpus: 10`, the same share the dump
   build gets, and passes `RECOMMENDER_R2_*` through. The trainer writes only to its own scratch
   volume; it never touches `/srv/ol-data`.
-- Secrets: `RECOMMENDER_R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` and `HC_RECOMMENDER` in
+- Secrets: `RECOMMENDER_R2_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET` (amended 2026-10-10: endpoint, not account id) and `HC_RECOMMENDER` in
   `secrets/home-server.env`, rendered by `provision` into `/etc/the-greatest/home-server.env`
   as the existing `HC_*` values are (`deployment/home-server/lib/vm.sh`). One healthchecks.io
   check, `recommender-train`, period 1 day, grace 2 days.

@@ -202,8 +202,8 @@ the serving side's Ruby (`Interaction#trainable?(min_rating:)`).
 
 **Three legs and a store.** Each leg reads and writes files through `Recommendations::Store`
 (`Local`, a directory, for development; `R2`, a private bucket, in production). The Python side
-has the same two stores (`RECOMMENDER_R2_*`). The two Rails jobs build the store from the four
-`RECOMMENDATIONS_R2_*` variables: with none set they log "recommendations store not configured;
+has the same two stores (`RECOMMENDER_R2_*`). The two Rails jobs build the store from the three
+`RECOMMENDATIONS_R2_*` variables (access key, secret key, bucket; the endpoint defaults to `STORAGE_ENDPOINT`): with none set they log "recommendations store not configured;
 skipping" and return, so a deploy before the bucket exists is quiet; with only some set they raise
 `Store::NotConfigured`. The rake tasks without `DIR` use `Store.default`, which raises in both cases.
 

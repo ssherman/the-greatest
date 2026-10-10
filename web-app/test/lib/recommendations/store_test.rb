@@ -54,20 +54,30 @@ module Recommendations
       assert_nil store.read_pointer("k")
     end
 
-    test "default is R2 when the four variables are set and raises otherwise" do
-      with_env("RECOMMENDATIONS_R2_ACCOUNT_ID" => nil, "RECOMMENDATIONS_R2_ACCESS_KEY" => nil,
-        "RECOMMENDATIONS_R2_SECRET_KEY" => nil, "RECOMMENDATIONS_R2_BUCKET" => nil) do
+    test "default is R2 when the three variables are set and raises otherwise" do
+      with_env("RECOMMENDATIONS_R2_ACCESS_KEY" => nil, "RECOMMENDATIONS_R2_SECRET_KEY" => nil,
+        "RECOMMENDATIONS_R2_BUCKET" => nil, "RECOMMENDATIONS_R2_ENDPOINT" => nil, "STORAGE_ENDPOINT" => nil) do
         assert_nil Store::R2.from_env
         assert_raises(Store::NotConfigured) { Store.default }
       end
-      with_env("RECOMMENDATIONS_R2_ACCOUNT_ID" => "acct", "RECOMMENDATIONS_R2_ACCESS_KEY" => "a",
-        "RECOMMENDATIONS_R2_SECRET_KEY" => "s", "RECOMMENDATIONS_R2_BUCKET" => "b") do
+      with_env("RECOMMENDATIONS_R2_ACCESS_KEY" => "a", "RECOMMENDATIONS_R2_SECRET_KEY" => "s",
+        "RECOMMENDATIONS_R2_BUCKET" => "b", "RECOMMENDATIONS_R2_ENDPOINT" => nil,
+        "STORAGE_ENDPOINT" => "https://acct.r2.cloudflarestorage.com") do
         store = Store.default
         assert_kind_of Store::R2, store
         assert_equal "b", store.bucket
-        assert_equal "https://acct.r2.cloudflarestorage.com", store.client.config.endpoint.to_s
+        assert_equal "https://acct.r2.cloudflarestorage.com", store.client.config.endpoint.to_s, "the endpoint falls back to STORAGE_ENDPOINT"
       end
-      with_env("RECOMMENDATIONS_R2_ACCOUNT_ID" => "acct", "RECOMMENDATIONS_R2_ACCESS_KEY" => nil,
+      with_env("RECOMMENDATIONS_R2_ACCESS_KEY" => "a", "RECOMMENDATIONS_R2_SECRET_KEY" => "s",
+        "RECOMMENDATIONS_R2_BUCKET" => "b", "RECOMMENDATIONS_R2_ENDPOINT" => "https://other.r2.cloudflarestorage.com",
+        "STORAGE_ENDPOINT" => "https://acct.r2.cloudflarestorage.com") do
+        assert_equal "https://other.r2.cloudflarestorage.com", Store.default.client.config.endpoint.to_s, "an explicit endpoint wins"
+      end
+      with_env("RECOMMENDATIONS_R2_ACCESS_KEY" => "a", "RECOMMENDATIONS_R2_SECRET_KEY" => "s",
+        "RECOMMENDATIONS_R2_BUCKET" => "b", "RECOMMENDATIONS_R2_ENDPOINT" => nil, "STORAGE_ENDPOINT" => nil) do
+        assert_raises(Store::NotConfigured, "credentials without any endpoint") { Store.default }
+      end
+      with_env("RECOMMENDATIONS_R2_ACCESS_KEY" => nil,
         "RECOMMENDATIONS_R2_SECRET_KEY" => "s", "RECOMMENDATIONS_R2_BUCKET" => "b") do
         assert_raises(Store::NotConfigured) { Store.default }
       end
