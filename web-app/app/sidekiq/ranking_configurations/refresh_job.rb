@@ -1,10 +1,18 @@
 # frozen_string_literal: true
 
-# Recalculates one user-owned ranking configuration: list weights first, then
-# item rankings, as one unit of work. Status lives on the configuration row
-# (RankingConfiguration#refresh_status), which is why this never retries --
-# the Refresh button is the retry, and a Sidekiq retry would rerun invisibly
-# while the row still said "failed".
+# Recalculates one ranking configuration -- global or member-owned -- as one
+# unit of work: list weights first, then item rankings, so the ranking never
+# reads weights a separate job has not finished yet. Always queued through
+# Services::RankingConfigurations::RequestRefresh, whose claim on the row is
+# what keeps a burst of triggers down to one run.
+#
+# Status lives on the configuration row (RankingConfiguration#refresh_status),
+# which is why this never retries -- the next request is the retry, and a
+# Sidekiq retry would rerun invisibly while the row still said "failed".
+#
+# A run starts only from `queued`. A stale claim can put a second job in the
+# queue while the first is still waiting or working, and that second job must
+# not calculate alongside it.
 #
 # needs_refresh is cleared when the run STARTS, not when it ends: an edit made
 # while this job is running (Save, AddLists, remove) sets it back to true, and
@@ -14,8 +22,9 @@
 # rankings computed from stale, pre-edit data. A failure sets it back to true
 # unconditionally, since whatever it was computing didn't land either way.
 #
-# Calls the calculators directly rather than CalculateRankingsJob so none of
-# the primary-only side effects (author rankings, search reindex) can follow.
+# Only the books default primary feeds the author rankings and the ranked
+# fields in the search index, so only it requests them. A member's ranking or
+# a year rollup finishing must trigger neither.
 module RankingConfigurations
   class RefreshJob
     include Sidekiq::Job
@@ -25,8 +34,7 @@ module RankingConfigurations
     def perform(ranking_configuration_id)
       config = ::RankingConfiguration.find_by(id: ranking_configuration_id)
       return if config.nil? # deleted while queued -- not a failure
-
-      config.update_columns(refresh_status: ::RankingConfiguration.refresh_statuses[:running], needs_refresh: false)
+      return unless start(config)
 
       weights = Rankings::BulkWeightCalculator.new(config).call
       if weights[:errors].any?
@@ -43,6 +51,7 @@ module RankingConfigurations
         last_refresh_error: nil
       )
 
+      request_primary_follow_ups(config)
       request_csv_regenerate(config)
     rescue => e
       Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{ranking_configuration_id}: #{e.message}"
@@ -55,14 +64,34 @@ module RankingConfigurations
 
     private
 
+    # queued -> running in one conditional UPDATE; false means another job
+    # already holds this run, or nothing asked for one.
+    def start(config)
+      statuses = ::RankingConfiguration.refresh_statuses
+      ::RankingConfiguration.where(id: config.id, refresh_status: statuses[:queued])
+        .update_all(refresh_status: statuses[:running], needs_refresh: false) == 1
+    end
+
+    # Their own rescue, like the CSV request: the ranking already landed, and a
+    # hiccup here must not flip the row to "failed".
+    def request_primary_follow_ups(config)
+      return unless config.type == "Books::RankingConfiguration" && config.default_primary?
+
+      authors = ::Books::Authors::RankingConfiguration.default_primary
+      ::Services::RankingConfigurations::RequestRefresh.call(config: authors) if authors
+      ::Books::ReindexRankedFieldsJob.perform_async
+    rescue => e
+      Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{config.id}: follow-ups not requested: #{e.message}"
+    end
+
     # The CSV is a side effect of the refresh, not part of it: a failure here
     # must not flip a configuration whose rankings did land to "failed". Logged
     # rather than raised -- retry: false means a raise would only be logged
-    # anyway, and the next Refresh or member download re-claims the row.
+    # anyway, and the next request or member download re-claims the row.
     # rerun_if_generating: a run already in flight plucked its ids before
     # these ranks landed, so it must go again when it finishes.
     def request_csv_regenerate(config)
-      Services::CsvExports::RequestGenerate.call(ranking_configuration: config, rerun_if_generating: true)
+      ::Services::CsvExports::RequestGenerate.call(ranking_configuration: config, rerun_if_generating: true)
     rescue => e
       Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{config.id}: CSV regenerate not requested: #{e.message}"
     end
