@@ -139,8 +139,9 @@ reboots a VM at 05:30 only if a reboot is pending and no build lock is held. On 
 ## Alerts
 
 healthchecks.io, free tier. A missed or failed ping emails Shane. The periods and graces below are
-settings to create on healthchecks.io; the code only sends the pings. Deploy, refresh and train also send a
-plain success ping with a message when they defer because a lock or build is held.
+settings to create on healthchecks.io; the code only sends the pings. Deploy and refresh also send a
+plain success ping with a message when they defer because a lock or build is held; train logs its
+deferral to the check's `/log` endpoint instead, so a run that keeps deferring still alerts.
 
 | Check | Pinged by | Period / grace |
 |---|---|---|
