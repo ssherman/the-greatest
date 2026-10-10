@@ -18,3 +18,11 @@ services:
     # threads and was OOM-killed at 15.8 GB RSS. guest/ol-refresh.sh also
     # puts a 16 GB swap file on the data disk as a backstop.
     command: [python, -m, openlibrary.pipeline.build, --root, /data, --memory-limit, 8GB, --threads, "4"]
+  recommender:
+    # recommender-train.timer, 04:00: after the 03:00 refresh has either skipped
+    # or taken the build lock (then the train defers), so it never shares the
+    # VM with a build and gets the build's share. The fit held 3.2 GiB at
+    # 10,013 books in 2026-10; memory grows with the square of the books that
+    # have five or more readers.
+    mem_limit: 14g
+    cpus: 10
