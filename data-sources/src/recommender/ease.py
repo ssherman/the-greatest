@@ -5,7 +5,8 @@
 
 Pure numpy/scipy, no I/O. Memory is the gram matrix plus the inverse: at
 18k items in float64 about 2.6 GB each, which is why the home server runs
-this with a 14 GB limit and why the matrix is built in place.
+this with a 14 GB limit. The inverse takes `G.T`: G is symmetric and toarray() is
+C-ordered, so the F-ordered transpose view lets LAPACK overwrite G, not copy it.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ def fit(X: sp.csr_matrix, lam: float) -> np.ndarray:
     G = (X.T @ X).toarray().astype(np.float64)
     n = G.shape[0]
     G[np.diag_indices(n)] += lam
-    P = scipy.linalg.inv(G, overwrite_a=True, check_finite=False)
+    P = scipy.linalg.inv(G.T, overwrite_a=True, check_finite=False)
     diag = np.diag(P).copy()
     P /= -diag[None, :]
     np.fill_diagonal(P, 0.0)

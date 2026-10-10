@@ -17,11 +17,15 @@ def toy():
 
 
 def test_fit_has_a_zero_diagonal_and_ranks_co_readership():
-    W = fit(toy(), lam=1.0)
+    X = toy()
+    W = fit(X, lam=1.0)
     assert W.shape == (5, 5)
     assert np.allclose(np.diag(W), 0.0)
     assert W[A, B] > W[A, C] > W[A, D], "B is read with A every time, C once, D never"
     assert W[D, C] > W[D, A]
+    G = (X.T @ X).toarray().astype(np.float64) + 1.0 * np.eye(5)
+    off = ~np.eye(5, dtype=bool)
+    assert np.allclose((G @ W)[off], G[off]), "EASE stationarity: G·B equals G off the diagonal"
 
 
 def test_heavy_regularisation_shrinks_every_weight():
