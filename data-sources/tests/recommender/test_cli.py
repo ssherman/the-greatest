@@ -123,6 +123,7 @@ def test_run_pulls_latest_trains_pushes_and_moves_the_pointer(tmp_path: Path):
     assert s.exists(store.model_key("books", "2026-10-09"))
     manifest = json.loads(s.get(store.manifest_key("books", "2026-10-09")))
     assert manifest["previous"] is None
+    assert list(work.iterdir()) == [], "the downloaded export is removed"
 
     again = runner.invoke(
         app,
@@ -191,3 +192,31 @@ def test_run_refuses_a_stale_export(tmp_path: Path):
     )
     assert result.exit_code == 1
     assert "older than" in result.output
+
+
+def test_run_refuses_an_export_older_than_the_published_model(tmp_path: Path):
+    root = tmp_path / "store"
+    s = store.Local(root)
+    s.put(store.interactions_key("books", "2026-10-09"), export(tmp_path / "e.csv.gz").read_bytes())
+    s.write_pointer(store.interactions_latest("books"), "2026-10-09")
+    s.put(
+        store.manifest_key("books", "2026-10-10"), json.dumps({"eval": {"hit_at_10": 0.5}}).encode()
+    )
+    s.write_pointer(store.model_latest("books"), "2026-10-10")
+    work = tmp_path / "w"
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--store-dir",
+            str(root),
+            "--work-dir",
+            str(work),
+            "--max-export-age-days",
+            "100000",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "not newer" in result.output
+    assert s.read_pointer(store.model_latest("books")) == "2026-10-10"
+    assert not s.exists(store.model_key("books", "2026-10-09"))

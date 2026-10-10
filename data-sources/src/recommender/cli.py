@@ -99,6 +99,9 @@ def run(
         raise typer.Exit(1)
 
     previous = store.read_pointer(store_mod.model_latest(domain))
+    if previous and name < previous:
+        typer.echo(f"export {name} is not newer than the published model {previous}; not training")
+        raise typer.Exit(1)
     if previous == name:
         typer.echo(f"{name} already trained; nothing to do")
         return
@@ -110,16 +113,19 @@ def run(
     input_path = work_dir / f"{name}.csv.gz"
     input_path.write_bytes(store.get(store_mod.interactions_key(domain, name)))
 
-    result = train_model(
-        input_path,
-        domain=domain,
-        export_name=name,
-        lam=lam,
-        min_readers=min_readers,
-        top_k=top_k,
-        eval_seed=eval_seed,
-        previous=previous,
-    )
+    try:
+        result = train_model(
+            input_path,
+            domain=domain,
+            export_name=name,
+            lam=lam,
+            min_readers=min_readers,
+            top_k=top_k,
+            eval_seed=eval_seed,
+            previous=previous,
+        )
+    finally:
+        input_path.unlink(missing_ok=True)
     store.put(store_mod.model_key(domain, name), result.csv_gz)
     store.put(
         store_mod.manifest_key(domain, name),
