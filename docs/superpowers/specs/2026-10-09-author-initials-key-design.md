@@ -141,7 +141,14 @@ there; it only stops new duplicates of this kind.
 ## 8. Rollout
 
 1. Merge: the migration adds and fills the column during the deploy.
-2. Nothing manual. Authors the weekly legacy sync (`data_migration:sync`) adds are created through
-   `save!`, so their keys are set as they are written.
+2. **Once, after that deploy:** `docker restart the-greatest-worker`, then
+   `bin/rails books:refresh_author_name_keys`. The worker never runs migrations and starts without
+   waiting for the web container's `db:prepare`. A worker process that loaded `Books::Author`'s
+   columns before the migration committed keeps a column list without `name_keys`, and every
+   author save in it raises until it restarts. An author inserted by the old worker while the
+   migration held its lock commits with empty keys. The restart clears the first; the refresh
+   fills any rows the second left (its `updated` count shows how many, usually 0).
+3. After that, nothing manual. Authors the weekly legacy sync (`data_migration:sync`) adds are
+   created through `save!`, so their keys are set as they are written.
 3. The duplicate cleanup stays where it is: `books:goodreads_replay:duplicates` in the launch
    sequence.

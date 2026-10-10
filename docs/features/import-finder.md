@@ -98,12 +98,15 @@ record that holds its key.
 ## Author name keys
 
 `books_authors.name_keys` holds the `PersonNameKey` of an author's name and each alternate name,
-GIN-indexed. `Books::Author` sets it on every save. The migration that added it filled it in
-place, so it was complete the moment the finders began reading it. Both books finders match on
-it (`name_keys && ARRAY[...]`). So do their creator and name agreement, the list wizard's
-created-since-Match re-check, and the Open Library backfill's author-key step.
-`bin/rails books:refresh_author_name_keys` recomputes it. It is needed only if the key rule
-changes. Bare run-together initials (`JD`) and hyphenated ones (`J.-P.`) are not folded.
+GIN-indexed. `Books::Author` sets it on every save, and the migration that added it filled it in
+place. Both books finders' exact sources match on it (`name_keys && ARRAY[...]`). Their creator
+and name agreement, the list wizard's created-since-Match re-check and the Open Library
+backfill's author-key step compute the same `PersonNameKey` in Ruby.
+`bin/rails books:refresh_author_name_keys` recomputes the column and writes only rows that
+differ. Run it, after restarting the worker, once after the deploy that added the column: the
+worker does not wait for the migration, so a worker process can cache the old column list and
+an author written during the migration can miss its keys. After that it is needed only if the
+key rule changes. Bare run-together initials (`JD`) and hyphenated ones (`J.-P.`) are not folded.
 Existing authors that differ only in their initials are left to
 `bin/rails books:goodreads_replay:duplicates`.
 
