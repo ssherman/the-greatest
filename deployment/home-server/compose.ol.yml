@@ -25,4 +25,12 @@ services:
     # 10,013 books in 2026-10; memory grows with the square of the books that
     # have five or more readers.
     mem_limit: 14g
+    # memswap_limit equal to mem_limit: no swap, so an oversized model is killed
+    # (exit 137) instead of thrashing the data disk's swap file until the unit
+    # times out.
+    memswap_limit: 14g
     cpus: 10
+    environment:
+      # Typer's rich tracebacks wrap at 80 columns off a TTY, so the last line
+      # the ping carries would be a fragment. Plain tracebacks end in one line.
+      TYPER_STANDARD_TRACEBACK: "1"

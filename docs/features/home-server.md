@@ -39,7 +39,7 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 
 | VM | Role | vCPU | RAM | Disks | Network |
 |---|---|---|---|---|---|
-| 110 `ol` | Open Library API and dump builds | 12 | 24 GB, no ballooning | 32 GB OS disk on `local-zfs`; 300 GB data disk on `rpool2`, ext4, mounted at `/srv/ol-data` | `vmbr0`, LAN |
+| 110 `ol` | Open Library API, dump builds, recommendations trainer | 12 | 24 GB, no ballooning | 32 GB OS disk on `local-zfs`; 300 GB data disk on `rpool2`, ext4, mounted at `/srv/ol-data` | `vmbr0`, LAN |
 | 120 `fetcher` | Camoufox page fetcher | 4 | 4 GB, no ballooning | 40 GB OS disk on `local-zfs` | `vmbr1`, static `10.20.0.10`, gateway `10.20.0.1` |
 | 101 `musicbrainz` | MusicBrainz, built by hand | 8 | 16 GB | 1 TB on `rpool2` | LAN |
 
@@ -125,9 +125,9 @@ The firewall revert does not restore the old rules: it sets `enable: 0` in `clus
 |---|---|
 | Power cut | BIOS "Restore on AC Power Loss" boots the host. VMs with `onboot` start in order (`ol`, then `fetcher`). Docker starts at boot and every container is `restart: unless-stopped`. A build cut short runs again at the next 03:00 or 10 minutes after boot (`ol-refresh.timer`). |
 | A container exits | `restart: unless-stopped` restarts it. |
-| Bad deploy | `the-greatest-deploy.timer` (boot plus 2 minutes, then every 15 minutes) runs `deploy.sh` every 15 minutes. A failed build leaves the running container alone and the deployed SHA where it was, so the next run tries again; each failure pings `fail`. |
+| Bad deploy | `the-greatest-deploy.timer` (boot plus 2 minutes, then every 15 minutes) runs `deploy.sh` every 15 minutes. A failed build leaves the running container alone and the deployed SHA where it was, so the next run tries again; each failure pings `fail`. On `ol` the deploy builds the API and trainer images together, so a trainer image that fails to build also holds back an API change until it is fixed; the `fail` ping names both. |
 | Bad dump | `ol-refresh.sh` promotes a version only when every gate passes. A failed build keeps the previous version serving and pings `fail`. If the new API does not report the new date in time, it writes the previous date back. |
-| Stale model | `recommender-train.timer` (04:00, and 20 min after boot) runs `recommender-train.sh`. The trainer refuses an export older than three days or a model that fails its gate and exits non-zero, which pings `fail` with its last line; `model/latest` in the bucket and the model Rails serves stay as they were. A day under the build lock defers (`success` with `deferred: lock held`); the check's 2-day grace covers one. |
+| Stale model | `recommender-train.timer` (04:00, and 20 min after boot) runs `recommender-train.sh`. The trainer refuses an export older than three days or a model that fails its gate and exits non-zero, which pings `fail` with its last line; `model/latest` in the bucket and the model Rails serves stay as they were. A day under the build lock defers and logs `deferred: lock held` to the check without counting as a run, so about three days without a completed run (period 1 day, grace 2 days) alerts. |
 | Box offline | Nothing recovers it. `ol-heartbeat` and `fetcher-heartbeat` stop pinging and healthchecks.io emails Shane. |
 
 Security updates install on both VMs through `unattended-upgrades`, and `reboot-if-required.timer`
@@ -148,7 +148,7 @@ plain success ping with a message when they defer because a lock or build is hel
 | `fetcher-heartbeat` | timer every 5 min, only if `127.0.0.1:8081/health` answers | 5 min / 15 min |
 | `ol-deploy`, `fetcher-deploy` | `deploy.sh`: `success` on a deploy or a no-op, `fail` on error | 15 min / 1 h |
 | `ol-refresh` | `ol-refresh.sh`: `start`, then `success`, no-op or `fail` | 1 day / 6 h |
-| `recommender-train` | `recommender-train.sh`: `start`, then `success` with the trainer's last line, `deferred: lock held`, or `fail` | 1 day / 2 days |
+| `recommender-train` | `recommender-train.sh`: `start`, then `success` with the trainer's last line or `fail` with it; a deferral goes to `/log` and does not reset the period | 1 day / 2 days |
 
 `ol-heartbeat` is down until the first build finishes, because the API does not start without a
 built version.

@@ -28,11 +28,13 @@ if [ "$configured" = 0 ]; then log "RECOMMENDER_R2_* not set; nothing to train";
 [ "$configured" = 4 ] || fail "RECOMMENDER_R2_ENDPOINT, RECOMMENDER_R2_ACCESS_KEY, RECOMMENDER_R2_SECRET_KEY and RECOMMENDER_R2_BUCKET must all be set or all be unset"
 
 # A dump build (ol-refresh.sh, 03:00) holds this for hours and has the VM's
-# memory; the check's 2-day grace covers the one deferral.
+# memory. A deferral is logged (the check's /log endpoint), not counted as a
+# run: period 1 day + grace 2 days means about three days without a completed
+# run alerts.
 exec 9>"$BUILD_LOCK"
 if ! flock -n 9; then
   log "a build or deploy holds $BUILD_LOCK; trying next run"
-  hc "" "deferred: lock held"
+  hc log "deferred: lock held"
   exit 0
 fi
 
@@ -42,8 +44,13 @@ trap 'rm -f "$out"' EXIT
 # -T: no TTY under systemd. The trainer's last line says what happened
 # (published, nothing to do, refused, gate failed) and becomes the ping's
 # message, the only place the reason is visible off the box.
-if "$COMPOSE" run --rm --no-deps -T recommender run 2>&1 | tee "$out"; then
-  hc "" "$(tail -n 1 "$out")"
+rc=0
+"$COMPOSE" run --rm --no-deps -T recommender run 2>&1 | tee "$out" || rc=$?
+last="$(tail -n 1 "$out")"
+if [ "$rc" = 0 ]; then
+  hc "" "$last"
 else
-  fail "$(tail -n 1 "$out")"
+  # 137 is a kill, almost always the mem_limit in compose.ol.yml: the trainer
+  # prints nothing until the fit finishes, so the status is the only clue.
+  fail "exit $rc: ${last:-no output}"
 fi

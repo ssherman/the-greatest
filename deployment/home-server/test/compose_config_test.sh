@@ -34,6 +34,8 @@ t_recommender() {
   # `config` normalises 14g to bytes (as a number or a string); accept any of the three.
   cfg ol recommender | jq -e '.services.recommender as $r |
     ($r.mem_limit == 15032385536 or $r.mem_limit == "15032385536" or $r.mem_limit == "14g") and $r.cpus == 10 and
+    ($r.memswap_limit == 15032385536 or $r.memswap_limit == "15032385536" or $r.memswap_limit == "14g") and
+    ($r.environment.TYPER_STANDARD_TRACEBACK == "1") and
     ($r.environment | has("RECOMMENDER_R2_ENDPOINT") and has("RECOMMENDER_R2_ACCESS_KEY") and
       has("RECOMMENDER_R2_SECRET_KEY") and has("RECOMMENDER_R2_BUCKET")) and
     ($r.volumes[0].target == "/work")' >/dev/null
