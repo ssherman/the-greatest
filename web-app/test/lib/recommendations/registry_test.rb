@@ -21,5 +21,10 @@ module Recommendations
       assert_nil Registry.pages_class_for(:music)
       assert_nil Registry.membership_feature_for(:music)
     end
+
+    test "pairs class per domain" do
+      assert_equal Books::PositivePairs, Registry.pairs_class_for(:books)
+      assert_nil Registry.pairs_class_for(:music)
+    end
   end
 end

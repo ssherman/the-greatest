@@ -9,12 +9,20 @@ module Recommendations
     end
 
     test "interests name the two categories" do
-      render_inline(ReasonComponent.new(reason: reason(:interests, [1, 2]), names: {1 => "Dark", 2 => "Guilt"}))
+      render_inline(ReasonComponent.new(reason: reason(:interests, [1, 2]), names: {[:category, 1] => "Dark", [:category, 2] => "Guilt"}))
       assert_selector "[data-testid='recommendation-reason']", text: "Matches Dark and Guilt"
     end
 
     test "because_of names the book" do
-      render_inline(ReasonComponent.new(reason: reason(:because_of, [9]), names: {9 => "Molloy"}))
+      render_inline(ReasonComponent.new(reason: reason(:because_of, [9]), names: {[:item, 9] => "Molloy"}))
+      assert_text "Because you loved Molloy"
+    end
+
+    test "a category id and a book id that are the same integer each show their own name" do
+      names = {[:category, 5] => "Dark", [:item, 5] => "Molloy"}
+      render_inline(ReasonComponent.new(reason: reason(:interests, [5]), names: names))
+      assert_text "Matches Dark"
+      render_inline(ReasonComponent.new(reason: reason(:because_of, [5]), names: names))
       assert_text "Because you loved Molloy"
     end
 
@@ -24,7 +32,7 @@ module Recommendations
     end
 
     test "a missing name falls back to the id instead of raising" do
-      render_inline(ReasonComponent.new(reason: reason(:interests, [1, 404]), names: {1 => "Dark"}))
+      render_inline(ReasonComponent.new(reason: reason(:interests, [1, 404]), names: {[:category, 1] => "Dark"}))
       assert_text "Matches Dark and #404"
     end
 

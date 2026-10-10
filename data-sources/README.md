@@ -78,3 +78,24 @@ image never carries Firefox. Full doc: `docs/features/page-fetcher-service.md`.
 Tests need the extra (`uv sync --locked --extra fetcher`) but never a browser.
 The port binds to loopback by default (`FETCHER_BIND`): the same rule as the
 API above.
+
+## Running the recommender
+
+The collaborative-filtering trainer for book recommendations
+(`docs/features/recommendations.md`, "Collaborative signal"). Install with the
+`recommender` extra; it is never part of the Open Library or fetcher images.
+
+```bash
+uv sync --locked --extra fetcher --extra recommender
+# files in, files out (development, the Rails harness loop):
+uv run python -m recommender.cli train --input <export.csv.gz> --output-dir <dir> --name <export-name>
+# store in, store out (what the home server's timer runs; --store-dir for a local store):
+uv run python -m recommender.cli run --store-dir <dir> --work-dir /tmp/recommender
+```
+
+`train` writes `<name>.csv.gz` (`item_id,neighbor_id,weight`) and `<name>.json`
+(the manifest, including the trainer's own hold-one-out hit@10 and recall@50).
+`run` pulls the latest export, refuses one older than `--max-export-age-days`,
+trains, pushes, and moves the `latest` pointer only when the new model's hit@10
+is at least `--gate-ratio` × the previous model's. The image:
+`docker compose --profile recommender build recommender`.

@@ -5,13 +5,15 @@
 Personalized book recommendations for a signed-in user, ported from the legacy site's paid
 feature and rebuilt around a **taste profile**: which categories appear in the books a reader
 loves far more often than they appear in the catalog, with ratings as signed weights. The engine
-is domain-agnostic; books is the only adapter. Design record:
-`docs/superpowers/specs/2026-10-07-book-recommendations-design.md`.
+is domain-agnostic; books is the only adapter. Design records:
+`docs/superpowers/specs/2026-10-07-book-recommendations-design.md` (spec 1: the engine and the
+pages) and `docs/superpowers/specs/2026-10-09-book-recommendations-collaborative-design.md`
+(spec 2: the collaborative signal).
 
-State of delivery: increments 1 (preferences store, legacy migration) and 2 (engine, query,
-harness, first tuning pass) are done. **There are no pages yet.** The results page, gating,
-wizard and settings pages are increments 3 and 4. Everything below is reachable only from code,
-`bin/rails runner`, and the rake tasks.
+State of delivery: spec 1 is done (preferences store, engine, harness, tuning, the results,
+wizard and settings pages). Spec 2's first increment (export, trainer, load, signal, measured in
+development) is done; its second, the home-server timer that trains in production, is not, so
+production has no model and the signal is unavailable there until it lands.
 
 Where it lives:
 
@@ -20,8 +22,11 @@ Where it lives:
 - `Search::Books::Search::BookRecommendations` is the one OpenSearch query (the adapter calls it);
   `CategoryCountNormalization` is the shared score-normalization wrapper it and `BookSimilar` use.
 - `config/initializers/recommendations.rb` holds every knob (`config.x.recommendations`).
-- `lib/tasks/recommendations.rake` is the harness; `data_migration:recommendation_configs` is the
-  legacy migration.
+- `lib/tasks/recommendations.rake` is the harness (and the local collaborative loop);
+  `data_migration:recommendation_configs` is the legacy migration.
+- The collaborative signal: `Recommendations::Export`, `Store`, `LoadModel`, `NeighborScores`,
+  `Signals::Collaborative`, `Books::PositivePairs`, the two Sidekiq jobs under
+  `app/sidekiq/recommendations/`, and the Python trainer in `data-sources/src/recommender/`.
 
 ## Pipeline
 
@@ -31,7 +36,7 @@ Recommendations::Engine.call(user:, domain:, limit:, overrides: {})
   1. interactions     Adapter#interactions            -> [Interaction(item_id, weight, kind, rating)]
   2. profile          ProfileBuilder                  -> Profile (genres/subjects/locations, demoted, ...)
   3. signals          Signals::TasteProfile           -> ranked Candidates (one OpenSearch query)
-                      Signals::Collaborative          -> [] (unavailable until spec 2)
+                      Signals::Collaborative          -> ranked Candidates (one SQL read + one OpenSearch filter)
   4. fusion           Fusion                          weighted reciprocal-rank fusion + rank prior
   5. re-ranking       Reranker::SeriesRule -> AuthorCap -> GenreCalibration
   6. explanations     Explainer                       -> Reason(type, ids) per item
@@ -73,10 +78,10 @@ Signal#weight(positive_count)  -> Float    # fusion weight for this user; <= 0 m
 Signal#available?              -> Boolean  # false -> skipped
 ```
 
-Evidence: `{taste: true}` from `TasteProfile`; `{because_of: item_id}` is reserved for the
-collaborative signal. `Signals::Collaborative` is a **stub until spec 2**: `available?` is false and
-`call` returns `[]`, but its weight ramp `n / (n + collaborative_half_point)` already exists so
-fusion needs no change when it arrives.
+Evidence: `{taste: true}` from `TasteProfile`; `{term: Float}` from `Collaborative`, plus
+`because_of: item_id` when the shelf book that contributed most is loved (see "Collaborative
+signal"). The collaborative fusion weight is `n / (n + collaborative_half_point)`, `n` the user's
+positive count, so it grows with the shelf.
 
 ## Profile math
 
@@ -175,10 +180,99 @@ reach fusion at all; this prior is the smaller, second lever.
 
 **Explanation precedence** (`Explainer`, one `Reason(type, ids)` per item, first that applies):
 
-1. `because_of(item_id)`: collaborative evidence. Spec 2; never produced today.
+1. `because_of(item_id)`: collaborative evidence naming a favorite or a book rated at least
+   `because_of_rating` (4). Rendered as "Because you loved *Title*"; reason names are keyed by
+   `[kind, id]` (`[:item, id]` here, `[:category, id]` for interests) because a book id and a
+   category id can be the same integer.
 2. `interests(category_ids)`: the two highest-weight profile categories the book carries, each with
    weight at or above `explain_threshold` (1.0), so the page never says "because you like Fiction".
 3. `ranked(position)`: "Ranked #N of all time" when neither is strong.
+
+## Collaborative signal
+
+Readers-like-you, from an item-neighbour model (EASE) trained on who shelved what. Spec 2; measured
+in `docs/data-quality/recommendations-collaborative-2026-10-10.md`.
+
+**What a positive is.** A favorite, read or reading list item, or a review rated at least
+`collaborative_min_rating` (3). Want-to-read and ratings of 1-2 are never positives. A favorite, read
+or reading entry stays a positive even when the same book is rated 1 or 2: the rating floor
+applies to reviews of books on none of those lists. The definition lives
+in two places that tests hold equal: the export's SQL (`Recommendations::Books::PositivePairs`) and
+the serving side's Ruby (`Interaction#trainable?(min_rating:)`).
+
+**Three legs and a store.** Each leg reads and writes files through `Recommendations::Store`
+(`Local`, a directory, for development; `R2`, a private bucket, in production). The Python side
+has the same two stores (`RECOMMENDER_R2_*`). The two Rails jobs build the store from the three
+`RECOMMENDATIONS_R2_*` variables (access key, secret key, bucket; the endpoint defaults to `STORAGE_ENDPOINT`): with none set they log "recommendations store not configured;
+skipping" and return, so a deploy before the bucket exists is quiet; with only some set they raise
+`Store::NotConfigured`. The rake tasks without `DIR` use `Store.default`, which raises in both cases.
+
+1. **Export** (Rails, `Recommendations::ExportInteractionsJob`, nightly 02:30 UTC): every positive pair,
+   streamed through a server-side cursor, written as
+   `recommendations/books/interactions/<date>.csv.gz` (`user_id,item_id`, sorted, gzipped); then
+   `interactions/latest` is pointed at it. About 1.6M rows in development.
+2. **Train** (Python, `recommender.cli run`, on the home server): pull `latest`, drop books with
+   fewer than `--min-readers` readers and users with fewer than 2 positives, fit EASE, keep each
+   book's top `--top-k` positive neighbours, write `model/<version>.csv.gz`
+   (`item_id,neighbor_id,weight`) and `model/<version>.json` (the manifest, with the trainer's own
+   hit@10 / recall@50). The version is the export name. `model/latest` moves only when the gate
+   passes: no previous model, or hit@10 at least `--gate-ratio` × the previous one; an export older
+   than `--max-export-age-days` or not newer than the published model is refused.
+3. **Load** (Rails, `Recommendations::LoadModelJob`, hourly at :15): read `model/latest`; if that
+   version is new, insert it and swap it in.
+
+**The two tables and the swap.** `recommendation_models` (`RecommendationModel`: domain, version,
+manifest, state `loading`/`active`/`retired`; spec 2 called it `Recommendations::Model`) and
+`recommendation_item_neighbors` (`RecommendationItemNeighbor`: model, item, neighbour, weight;
+indexed on model and item). `LoadModel` takes a per-domain advisory lock, inserts the rows under a
+`loading` row in batches of 10,000, then in one transaction checks the table's row count against
+the manifest, marks the new model `active` and the previous one `retired`, and afterwards deletes
+the retired rows. A short file never replaces a good model, a crashed load is retried from scratch,
+and a version already loaded is skipped, so the hourly job is idempotent.
+
+**Per request.** `available?` is true when `collaborative` is on and the domain has an active model.
+`call` takes the user's trainable shelf (the interactions passing `trainable?`) and runs one
+grouped read: for every neighbour of a shelf book, not itself excluded, sum the stored weights,
+keep the shelf book with the largest weight as the candidate "because of" book, order by the sum,
+and take `collaborative_overfetch × candidate_size` rows (`NeighborScores`). Those ids go through
+the ranked-pool query with an `ids` filter (`Adapter#filter_candidate_ids`), so length, year range,
+rank cap and included and excluded categories apply to the collaborative list exactly as they do to the taste list. The depth setting (Safer bets / Deep cuts) does not: it shapes the taste list only, through the quality prior (`wrap_in_quality_prior`), and `ranked_only(ids:)` carries no prior. The collaborative list is ordered by co-readership score and gets its canon only through the rank prior in fusion.
+The survivors, in collaborative-score order, are the signal's candidates; fusion weights them
+`n / (n + collaborative_half_point)`. The evidence carries `because_of` only when that book is a
+favorite or rated at least `because_of_rating` (4), so the page never says "Because you loved" a
+book the reader merely read. No active model, or `collaborative: false`, means the page is exactly
+the taste-only engine.
+
+**The local loop**, from `web-app/` (Python from `data-sources/`, after
+`uv sync --locked --extra fetcher --extra recommender`):
+
+```bash
+bin/rails recommendations:export DIR=tmp/recommendations HOLDOUT_SEED=42 HOLDOUT_USERS=300 HOLDOUT_FRACTION=0.2
+uv run python -m recommender.cli train --input ../web-app/tmp/recommendations/recommendations/books/interactions/<name>.csv.gz \
+  --output-dir ../web-app/tmp/recommendations/recommendations/books/model --name <name>
+bin/rails recommendations:load DIR=tmp/recommendations VERSION=<name>
+bin/rails recommendations:eval USERS=300 SEED=42 FRACTION=0.2 VARIANTS="collaborative=false"
+bin/rails recommendations:show USER_ID=<id> LIMIT=20
+```
+
+`<name>` is what the export prints (`<date>-holdout-<seed>-u<users>-f<fraction>`, e.g. `2026-10-10-holdout-42-u300-f0.2`). For a model trained on everything, export
+without the `HOLDOUT_*` variables, run `uv run python -m recommender.cli run --store-dir
+../web-app/tmp/recommendations --work-dir <scratch dir>` (which moves `model/latest`), and load
+without `VERSION`. In development the train takes about 20 s and 3.2 GiB; the load about 14 s.
+`recommendations:load` is the one harness task that writes: it replaces the development database's
+active model (and deletes the previous one), so leave a full model loaded when you are done.
+
+**Production** runs the same three legs with `Store::R2`: the two Rails jobs on the Sidekiq cron,
+and the trainer as a `recommender` compose service under a systemd timer (04:00 Chicago) on the home
+server's `ol` VM, pinging a healthchecks.io check. Nothing on the home server listens, and nothing
+in Rails calls it; if it is off, the model goes stale, never down. That deployment is spec 2 §4.4
+and its increment 2, not yet built; until it is and the store is configured, the jobs log a skip
+and the signal stays unavailable. The launch steps are `docs/launch-todo.md`, section 3.
+
+**Time zones.** The Sidekiq crons run in the Rails server's zone, which is UTC (the app sets no
+`config.time_zone`), so "02:30" is 02:30 UTC. The home server's 04:00 Chicago train therefore runs
+6.5-7.5 h after the export, depending on daylight saving. The export's file name and the age check
+use UTC dates.
 
 ## Preferences store
 
@@ -229,14 +323,21 @@ succeeded, nothing matched) or `:unavailable` (a signal raised: `data[:degraded]
 
 ## Harness
 
-Read-only against the development database; needs the local OpenSearch. Every knob is a per-call
+Read-only against the development database, except `recommendations:load`; needs the local
+OpenSearch. Every knob is a per-call
 override, and `eval` rebuilds each variant's training interactions under that variant's config (the
 weight knobs act when interactions are built), so one process sweeps a range.
 
 ```bash
 bin/rails recommendations:show USER_ID=123 [LIMIT=50] [VARIANTS="lift=false; calibrate_genres=false"]
 bin/rails recommendations:eval [USERS=500] [SEED=42] [LIMIT=50] [FRACTION=0.2] [VARIANTS="..."]
+bin/rails recommendations:export [DIR=tmp/recommendations] [HOLDOUT_SEED=42 HOLDOUT_USERS=500 HOLDOUT_FRACTION=0.2]
+bin/rails recommendations:load [DIR=tmp/recommendations] [VERSION=<name>]
 ```
+
+`export` and `load` are the collaborative signal's first and last legs (see "Collaborative
+signal"); without `DIR` they use R2 and refuse to run unless it is configured. `load` writes the
+two model tables; everything else here is read-only.
 
 `VARIANTS` is a `;`-separated list of variants, each a `,`-separated list of `knob=value`. `show`
 prints the profile, the page and the reasons for one user. `eval` samples `USERS / 3` users per
@@ -245,15 +346,29 @@ i.e. favorites plus 4-star-or-better ratings, counted only on books in the ranke
 4-plus-rated books, recommends `LIMIT` from the rest, and checks whether the hidden books return.
 Columns: hit@10, recall@50, ndcg@50, `mean_rank` (mean global rank of the recommended books, the
 popularity check), `au_rep` (author repeats per page), `kl` (mean genre KL from history, averaged
-over pages that carry genres), `coverage` (share of the ranked pool ever recommended), `ms`. Two
-baselines print on every run: `rank` (the filtered pool in global-rank order) and
-`lift=false  quality_scale=0` (raw frequency share with the quality prior off, the legacy engine's
-behaviour; the records before 2026-10-08 print it as `lift=false`, when the prior did not exist).
-The baseline pins every knob the legacy engine lacked, so a default change never changes what it
-measures. That row is always present even when a variant combines `lift=false` with other knobs.
+over pages that carry genres), `coverage` (share of the ranked pool ever recommended), `ms`, and
+`cf` (how many evaluated users the collaborative signal fired for). Two baselines print on every
+run: `rank` (the filtered pool in global-rank order) and
+`lift=false  quality_scale=0  collaborative=false` (raw frequency share with the quality prior and
+the collaborative signal off, the legacy engine's behaviour; the records before 2026-10-08 print it
+as `lift=false`, when the prior did not exist, and the 2026-10-08 record as `lift=false
+quality_scale=0`). The baseline pins every knob the legacy engine lacked, so a default change or a
+loaded model never changes what it measures. That row is always present even when a variant combines `lift=false` with other knobs.
 
 Hold-outs are drawn only from the ranked pool, since that is all the engine can return: an unranked
 favorite can never come back, so holding it out would only deflate recall and NDCG.
+
+**Measuring the collaborative signal needs a hold-out model.** A model trained on the full export
+has already seen the books eval hides, so it would recover them for free. The hold-out plan
+(`Evaluation.hold_out_plan`) is deterministic for `(USERS, SEED, FRACTION)` and shared by `eval`
+and `export`: `export HOLDOUT_SEED=s HOLDOUT_USERS=u HOLDOUT_FRACTION=f` omits exactly the pairs
+`eval SEED=s USERS=u FRACTION=f` will hide, names the file `<date>-holdout-<seed>-u<users>-f<fraction>`
+(every value the plan depends on, so two runs on one day can never share a file), and leaves
+`interactions/latest` alone. Train on that file, `load VERSION=<that name>`, then run `eval` with the
+same three values; `eval` prints the active model's version and warns when it does not end in the
+suffix for those values. A version is loaded once: to re-train the same name (same day, same plan)
+and load the new file, pass `FORCE=1` to `load`. `VARIANTS="collaborative=false"` adds the taste-only engine to
+the same run, which is the comparison the bar is written against. Load a full model afterwards.
 
 The hold-out metric rewards famous books: hidden favorites are mostly canon, so the `rank` baseline
 is hard to beat on hit@10 and a deeper-cutting engine is penalised by construction. Read it next
@@ -283,17 +398,32 @@ All in `config/initializers/recommendations.rb`, each overridable per call.
 | `normalization_floor`, `min_score` | 10, 1.0 |
 | `quality_scale`, `quality_floor` | 1000, 0.3 (0 turns the prior off) |
 | `rrf_k`, `taste_weight`, `collaborative_half_point`, `rank_prior_weight` | 60, 1.0, 10, 0.3 |
+| `collaborative` | true (false: the signal reports itself unavailable; the harness's taste-only variant) |
+| `collaborative_min_rating` | 3 (a rating at or above this is a positive, for training and for the shelf scored per request) |
+| `collaborative_overfetch` | 2 (neighbour rows read = this × `candidate_size`, so the ranked-pool filter can drop some and still fill) |
+| `because_of_rating` | 4 ("Because you loved X" names only a favorite or a book rated at least this) |
 | `max_per_author` | 2 |
 | `calibrate_genres`, `calibration_lambda`, `calibration_alpha` | true, 0.3, 0.01 |
 | `explain_threshold` | 1.0 |
 
+The trainer's flags (`recommender.cli train` / `run`), with their defaults: `--lambda 500`,
+`--min-readers 5`, `--top-k 50`, `--eval-seed 1`, and for `run` only `--gate-ratio 0.9` and
+`--max-export-age-days 3`.
+
 Measured values are in `docs/data-quality/recommendations-2026-10-07.md` (the first pass, which
-found the pages too deep) and `docs/data-quality/recommendations-2026-10-08.md` (the quality prior,
-the revised bar, and why `quality_scale=1000` is the default). Regenerate before acting on them;
+found the pages too deep), `docs/data-quality/recommendations-2026-10-08.md` (the quality prior,
+the revised bar, and why `quality_scale=1000` is the default) and
+`docs/data-quality/recommendations-collaborative-2026-10-10.md` (the λ sweep and the collaborative
+signal against spec 2's bar). Regenerate before acting on them;
 the numbers describe the dev database on those days.
 
 ## Known gaps
 
+- **Depth does not reach the collaborative list.** For a reader with a large shelf the collaborative
+  list carries fusion weight of about 0.9 against taste's 1.0, so roughly half the page ignores the
+  depth setting. The spec's section 8.3 experiment, "apply the quality prior to the collaborative
+  list", is the planned fix; measure it with `VARIANTS="quality_floor=0.1; quality_floor=0.5"`, with
+  and without `collaborative=false`.
 - **The revised bar (spec §9.2, amended 2026-10-08) is met on hit@10 and page depth, and NOT met
   on recall@50 or KL.** With the quality prior the engine beats the frequency profile on hit@10 by
   about 1.6x on the 20-99 segment on both samples and returns pages at mean rank 750-800 instead
@@ -301,11 +431,20 @@ the numbers describe the dev database on those days.
   the other), and its KL sits 0.02-0.07 above the previous defaults. Shipping it as the default is
   a judgement, argued in the data-quality record. `lift_cap` and `lift_population` exist, measured,
   and off.
-- The collaborative signal is a stub until spec 2 (the CF service on the home server).
+- **The collaborative signal meets spec 2's bar on every condition, on two samples**: on 100+
+  hit@10 goes from 0.32-0.33 to 0.74 and recall@50 from 0.105 to 0.38-0.41 against the taste-only
+  engine, with lower KL and shallower pages
+  (`docs/data-quality/recommendations-collaborative-2026-10-10.md`). With it, the engine also beats
+  the frequency profile on recall@50 on 20-99 and 100+, the gap the bullet above records for the
+  taste-only engine. It costs about 140-215 ms more per page on the 20-99
+  and 100+ segments, mostly downstream of the signal's own two reads (not yet profiled), and the
+  neighbour read for the two largest shelves (5,794 and 18,534 trainable books) takes 0.4-1.1 s.
+  Production has no model until spec 2's increment 2 (the home-server timer) ships.
 - The wizard's "add" is the list widget's modal (pick a list), not a one-click add; the spec's
   "one click" is two.
 - Results run the engine on every request (~15 queries + the OpenSearch call + ~110 ms
-  calibration); no caching, by design, since the page is per-user.
+  calibration, and with a model loaded one neighbour read and a second OpenSearch call); no
+  caching, by design, since the page is per-user.
 - The rank prior at 0.3 can re-order roughly 20 places among the taste candidates at a 300-item
   pool (reciprocal-rank terms at `k = 60` are close together).
 - Fiction and Nonfiction are never scored; they only steer through `fiction_share` and the genre

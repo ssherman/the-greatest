@@ -2,6 +2,39 @@
 
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: books_open_library_backfills
+#
+#  id                   :bigint           not null, primary key
+#  attempts             :integer          default(1), not null
+#  author_changes       :jsonb            not null
+#  confirmed_on_abstain :boolean          default(FALSE), not null
+#  dump_date            :string
+#  duplicate_keys       :string           default([]), not null, is an Array
+#  error                :text
+#  lookup               :integer
+#  matcher_version      :integer
+#  new_key              :string
+#  old_keys             :string           default([]), not null, is an Array
+#  outcome              :integer          not null
+#  created_at           :datetime         not null
+#  updated_at           :datetime         not null
+#  book_id              :bigint           not null
+#  pair_book_id         :bigint
+#  run_id               :string           not null
+#
+# Indexes
+#
+#  index_books_open_library_backfills_on_book_id  (book_id) UNIQUE
+#  index_books_open_library_backfills_on_outcome  (outcome)
+#  index_books_open_library_backfills_on_run_id   (run_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (book_id => books_books.id) ON DELETE => cascade
+#  fk_rails_...  (pair_book_id => books_books.id) ON DELETE => nullify
+#
 module Books
   class OpenLibraryBackfillTest < ActiveSupport::TestCase
     setup do

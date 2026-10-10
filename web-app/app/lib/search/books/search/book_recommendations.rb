@@ -37,17 +37,22 @@ module Search
         end
 
         # The same pool and constraints with no taste applied: the cold-start
-        # fallback and the harness's rank baseline.
-        def self.ranked_only(criteria:, excluded_ids:, options: {})
+        # fallback, the harness's rank baseline, and (with `ids`) the filter
+        # the collaborative signal passes its candidates through, so length,
+        # year range, rank cap and categories apply to that list as to the taste list
+        # (spec 2 §6). The depth setting does not: it lives in the taste query's quality prior.
+        def self.ranked_only(criteria:, excluded_ids:, options: {}, ids: nil)
           opts = Rails.application.config.x.recommendations.merge(options)
           search_criteria = criteria.to_search_criteria
+          filter = CriteriaClauses.filter_clauses(search_criteria)
+          filter << {ids: {values: ids.map(&:to_s)}} if ids
           extract(search({
-            size: opts[:candidate_size],
+            size: ids ? ids.size : opts[:candidate_size],
             _source: false,
             docvalue_fields: ["ranked_position"],
             sort: RANK_SORT,
             query: {bool: {
-              filter: CriteriaClauses.filter_clauses(search_criteria),
+              filter: filter,
               must_not: CriteriaClauses.must_not_clauses(search_criteria, excluded_ids)
             }}
           }))

@@ -17,6 +17,10 @@ module Recommendations
         @config = config
       end
 
+      def domain
+        :books
+      end
+
       def interactions(user)
         list_weights, kinds = list_weights_for(user)
         reviews = user.reviews.where(reviewable_type: "Books::Book").pluck(:reviewable_id, :rating).to_h
@@ -114,6 +118,16 @@ module Recommendations
         ::Search::Books::Search::BookRecommendations.ranked_only(
           criteria: criteria, excluded_ids: excluded_ids, options: config.merge(candidate_size: size)
         ).map { |hit| Candidate.new(item_id: hit[:id], score: hit[:score], rank_position: hit[:rank_position], evidence: {}) }
+      end
+
+      # The ids that survive the user's constraints, mapped to their rank
+      # position (spec 2 §6 step 3). Empty in, empty out, no query.
+      def filter_candidate_ids(ids, criteria:, excluded_ids:)
+        return {} if ids.empty?
+
+        ::Search::Books::Search::BookRecommendations.ranked_only(
+          criteria: criteria, excluded_ids: excluded_ids, options: config.merge(candidate_size: ids.size), ids: ids
+        ).to_h { |hit| [hit[:id], hit[:rank_position]] }
       end
 
       private

@@ -157,6 +157,19 @@ module Recommendations
         assert_equal({}, candidates.first.evidence)
         assert_equal 1, candidates.first.rank_position
       end
+
+      test "domain names the registry key" do
+        assert_equal :books, @adapter.domain
+      end
+
+      test "filter_candidate_ids asks the query only when there is something to ask" do
+        assert_equal({}, @adapter.filter_candidate_ids([], criteria: ::Books::RecommendationCriteria.new({}), excluded_ids: []))
+        ::Search::Books::Search::BookRecommendations.expects(:ranked_only)
+          .with { |**kw| kw[:ids] == [5, 6] && kw[:options][:candidate_size] == 2 && kw[:excluded_ids] == [7] }
+          .returns([{id: 6, score: 0.0, rank_position: 12}])
+        kept = @adapter.filter_candidate_ids([5, 6], criteria: ::Books::RecommendationCriteria.new({}), excluded_ids: [7])
+        assert_equal({6 => 12}, kept)
+      end
     end
   end
 end

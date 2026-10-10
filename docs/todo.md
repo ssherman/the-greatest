@@ -44,8 +44,42 @@ Design constraints for whoever writes this:
   account. Uid is a fallback, used only when the email finds nothing.
 - **Do not delete the old Meta app.** It is the only thing keeping this possible.
 
+## Goodreads import: before the cutover
+
+The manual launch steps live in `docs/launch-todo.md`. These are code fixes, deferred from the
+increment 6 and 7 PRs (#355, #359), that a member or an admin would hit after launch.
+
+- **Viewer staff can read the admin import pages.** They follow the other books admin pages, but
+  spec §10 says admin-only. They show every member's shelves, dates and reviews.
+- **A failed upload save leaves the member stuck.** If saving the file to R2 fails at commit, the
+  import sits queued with no job. The one-import-at-a-time rule then blocks the member's next upload
+  until an admin acts on it (2 h later, when it shows as stuck).
+- **A shelf named only `-` fails the whole import.**
+- **The admin Created and Flagged tabs aren't paginated.** The two biggest legacy imports that
+  `finish_legacy` runs have 10,000 and 11,418 rows.
+- **A row decided while Open Library was failing is never re-matched** unless an admin re-checks
+  it. An Open Library outage during launch would leave flagged rows, and books created from
+  them, with no automatic retry. A task that re-checks decisions with `open_library` in
+  `sources_failed` would cover it.
+- **Smaller ones:**
+  - after Reject, the member's summary still shows rows as Matched; only the banner explains;
+  - a skipped row can still fill a blank read date, or take the book off the reading list;
+  - a summary recalculation that errors after the write isn't retried;
+  - an upload parameter that isn't a file returns 500 instead of 422.
+- **Test gaps:** no test that an editor is refused on untick, reject or delete, and no end-to-end
+  test of settle → resume → complete.
+- **Find what called `/resolve` from 16:55 to 17:17 UTC on 2026-10-06.** No Goodreads import or
+  test was running. Production Rails logs for that window would show the caller.
+- **After launch, watch the flag rate when many members upload at once.** Every caller shares one
+  Open Library `/resolve` slot (#358), at about 13 s each. A lookup that can't get the slot within
+  its 60 s budget is decided without Open Library.
+
 ## Data importers
 - google books integration
+- **port the legacy add-book modal** (Goodreads URL, Amazon URL, or title and author). A non-goal of
+  the Goodreads import spec, left as its own project.
+- **finder initials gap:** "J.D. Salinger" fails to match "J. D. Salinger" (found by the Goodreads
+  replay).
 
 ## Books data quality
 - Books Duplicate fixer
@@ -64,5 +98,12 @@ Design constraints for whoever writes this:
 - google analytics
 - move worker to a new server
 
-- Series populator
+- Series populator: `Books::Series` is empty. Cached Goodreads pages keep each book's Goodreads
+  series ids (`series` on the page rows), so they can seed it.
 - series UI
+
+- new books added are not automatically enriched
+- category importer
+- category cleanup
+- import from storygraph
+- series import (use goodreads data)
