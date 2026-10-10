@@ -118,9 +118,10 @@ rather than skipping it — a skipped row is a user who silently cannot sign in.
 
 ## Re-running it
 
-All of it is designed to be re-run, because the whole data migration is
-rehearsed against production more than once before books launches. Truncating
-resets `users.auth_uid`, so the backfill is re-run after **every** pass.
+All of it is designed to be re-run, because legacy users keep coming over until
+the cutover: first through the weekly `data_migration:all`, then through
+`data_migration:sync`. Both overwrite users from legacy, which resets
+`users.auth_uid`, so the backfill is re-run after **every** run.
 
 Two things about the Firebase import specifically:
 

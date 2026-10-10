@@ -137,4 +137,17 @@ class Services::BooksMigration::SyncPlanTest < ActiveSupport::TestCase
 
     assert_equal({merged: 1, deleted: 0}, plan.report[:redirects]["Books::Book"])
   end
+
+  test "the scope carries the books watermark the run advances to" do
+    init_watermarks(books: 1_000, authors: 500, book_identifiers: 5_000)
+    legacy = FakeLegacySource.new(book_rows: [[1_001, 3.days.ago], [1_002, 1.hour.ago]])
+
+    assert_equal 1_001, Services::BooksMigration::SyncPlan.build(legacy: legacy).scope.books_watermark
+  end
+
+  test "with no new books the scope's books watermark stays where it was" do
+    init_watermarks(books: 1_000, authors: 500, book_identifiers: 5_000)
+
+    assert_equal 1_000, Services::BooksMigration::SyncPlan.build(legacy: FakeLegacySource.new).scope.books_watermark
+  end
 end

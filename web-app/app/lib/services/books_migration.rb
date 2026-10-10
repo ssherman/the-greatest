@@ -108,6 +108,21 @@ module Services
       raise "legacy #{table} id #{id} reaches the reserved ceiling #{ceiling}; raise RESERVED_CEILINGS[#{table.inspect}]"
     end
 
+    # A sync deletes legacy-origin rows that legacy no longer has (spec §6). An
+    # empty or half-restored legacy database looks exactly like mass deletion, so
+    # a step refuses past max(DELETION_FLOOR, DELETION_SHARE of the table) unless
+    # SYNC_ALLOW_DELETES=1.
+    DELETION_FLOOR = 500
+    DELETION_SHARE = 0.05
+
+    def self.guard_deletion!(label, doomed, total)
+      return if doomed <= [DELETION_FLOOR, (total * DELETION_SHARE).floor].max
+      return if ENV["SYNC_ALLOW_DELETES"] == "1"
+
+      raise "#{label}: would delete #{doomed} of #{total} legacy-origin rows that legacy no longer has. " \
+        "Check the legacy database; if the deletions are real, re-run with SYNC_ALLOW_DELETES=1"
+    end
+
     # The highest id below the table's ceiling: the last legacy-origin row here.
     def self.max_legacy_origin_id(table)
       connection = ActiveRecord::Base.connection

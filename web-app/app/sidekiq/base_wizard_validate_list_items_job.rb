@@ -18,6 +18,10 @@ class BaseWizardValidateListItemsJob
 
   def perform(list_id)
     @list = list_class.find(list_id)
+    # Cleared before the items are chosen: the clearing resets rows an earlier run verified, and a
+    # re-run (an admin's, or Sidekiq requeueing this job at a deploy) must validate those too, even
+    # when every row was already verified. Outside batch mode the task picks its own items, after this.
+    clear_previous_validation_flags
     @items = enriched_items
 
     if @items.empty?
@@ -26,8 +30,6 @@ class BaseWizardValidateListItemsJob
     end
 
     @list.wizard_manager.update_step_status!(step: "validate", status: "running", progress: 0, metadata: {})
-
-    clear_previous_validation_flags
 
     data = if batch_mode?
       process_in_batches

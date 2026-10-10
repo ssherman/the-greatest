@@ -53,6 +53,12 @@ module Services
         @book_ids = ::Books::Book.pluck(:id).to_set
         @user_ids = ::User.pluck(:id).to_set
         @declared = ::Books::Book.correctable_field_names.to_set
+        @route = BookRoute.new(sync, book_ids_here: @book_ids) if sync
+        @stats = {inserted: 0, dropped: 0, waiting: 0, missing: 0}
+      end
+
+      def extra_result_data
+        sync ? @stats : {}
       end
 
       # insert_all with explicit ids never advances the sequence, so without this the
@@ -65,14 +71,8 @@ module Services
       def upsert_row(attrs)
         Services::BooksMigration.raise_if_at_ceiling!("corrections", attrs["id"])
 
-        book_id = attrs["changeable_id"]
-        # Skipped, not raised -- a departure from ReviewMigrator's fail-loud rule.
-        # Two legacy changesets point at books that no longer exist, and a
-        # correction for a deleted book has nothing to correct.
-        unless @book_ids.include?(book_id)
-          Rails.logger.warn("CorrectionMigrator: skipped legacy changeset id=#{attrs["id"]}, no Books::Book #{book_id}")
-          return
-        end
+        book_id = target_book_id(attrs)
+        return if book_id.nil?
 
         mappable, unmappable = partition_change_data(attrs["change_data"])
         applied = attrs["status"] == LEGACY_STATUS_APPLIED
@@ -87,10 +87,19 @@ module Services
         # index and unique_by: nil, so re-attempting them is a no-op once they exist
         # and a real recovery when they don't.
         ::Correction.transaction do
-          ::Correction.insert_all(
-            [correction_row(attrs, unmappable, applied)],
+          if sync && !@route.lock([book_id])
+            # A merge or delete committed since this run started, and route.lock
+            # reloaded the redirects: route the book again.
+            book_id = target_book_id(attrs)
+            next if book_id.nil?
+            raise "Books::Book #{book_id} vanished twice mid-run; re-run the sync" unless @route.lock([book_id])
+          end
+
+          inserted = ::Correction.insert_all(
+            [correction_row(attrs, book_id, unmappable, applied)],
             unique_by: nil, record_timestamps: false
           )
+          @stats[:inserted] += inserted.length
 
           next if mappable.empty?
 
@@ -101,11 +110,34 @@ module Services
         end
       end
 
-      def correction_row(attrs, unmappable, applied)
+      # The book the correction lands on, or nil to skip it (counted). Sync mode
+      # routes it through redirects (spec §6): a deleted book drops it, and a book
+      # still inside the delay makes it wait; this migrator is insert-only, so a
+      # later run picks it up. A book that is simply not here is skipped in both
+      # modes, not raised -- a departure from ReviewMigrator's fail-loud rule: two
+      # legacy changesets point at books legacy itself deleted, and a correction
+      # for a deleted book has nothing to correct.
+      def target_book_id(attrs)
+        book_id = attrs["changeable_id"]
+        routed = if sync
+          @route.call(book_id)
+        else
+          @book_ids.include?(book_id) ? book_id : :missing
+        end
+        return routed if routed.is_a?(Integer)
+
+        @stats[(routed == :deleted) ? :dropped : routed] += 1
+        if routed == :missing
+          Rails.logger.warn("CorrectionMigrator: skipped legacy changeset id=#{attrs["id"]}, no Books::Book #{book_id}")
+        end
+        nil
+      end
+
+      def correction_row(attrs, book_id, unmappable, applied)
         {
           id: attrs["id"],
           correctable_type: "Books::Book",
-          correctable_id: attrs["changeable_id"],
+          correctable_id: book_id,
           user_id: @user_ids.include?(attrs["user_id"]) ? attrs["user_id"] : nil,
           notes: notes_with_unmappable(attrs["notes"], unmappable),
           status: applied ? ::Correction.statuses[:resolved] : ::Correction.statuses[:pending],
