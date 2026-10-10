@@ -1,7 +1,7 @@
 # Coalesced ranking recalculation
 
 **Date:** 2026-10-10
-**Status:** design approved, awaiting spec review
+**Status:** implemented on branch worktree-coalesce-ranking-recalcs
 
 ## Problem
 
@@ -100,7 +100,8 @@ Merges from the admin UI never use it.
 
 1. Return if the configuration was deleted while queued.
 2. **Start only from `queued`:** one conditional UPDATE, `queued` → `running` with
-   `needs_refresh: false`. If no row changes, return without calculating. This keeps two runs of
+   `needs_refresh: false`, and the same UPDATE stamps `refresh_requested_at` to the start time, so
+   the stale window measures the run rather than the wait. If no row changes, return without calculating. This keeps two runs of
    the same configuration from overlapping even when a stale claim let a second job into the
    queue. That can happen if the queue is so backed up that a job waits longer than
    `REFRESH_STALE_AFTER` to start.

@@ -139,14 +139,13 @@ only (see "Merge requires delete permission" in the design doc).
   are deleted via a subquery first, then the rest are repointed in one statement. Both bulk
   operations skip `Books::BookAuthor`'s own `after_commit` reindex hook, which is the point: the
   merger owns the fan-out and does it once per book rather than once per link.
-- **Ranking recalculation is one argument-less job.** Books and games schedule
-  `BulkCalculateWeightsJob` + `CalculateRankingsJob` per affected ranking configuration, because
-  their rankings derive from lists. Author rankings derive from *book* rankings, so an author merge
-  fires `Books::CalculateAuthorRankingsJob.perform_async`, which resolves
-  `Books::Authors::RankingConfiguration.default_primary` itself. There is consequently no
-  `collect_affected_ranking_configurations` step in this merger, and no ordering constraint about
-  running it first. (The converse also holds: a *book* merge gets author recalculation for free,
-  because `CalculateRankingsJob` already cascades into that job.)
+- **Ranking recalculation is requested, not queued.** List-based mergers request
+  `RequestRefresh.call_for_ids(affected ids, delay: 5.minutes)`, because their rankings derive from
+  lists. Author rankings derive from *book* rankings, so the author merger requests a refresh of
+  `Books::Authors::RankingConfiguration.default_primary` with the same delay. There is consequently
+  no `collect_affected_ranking_configurations` step in this merger, and no ordering constraint
+  about running it first. (The converse also holds: a *book* merge gets author recalculation
+  because `RefreshJob` requests it when the books primary lands.)
 - **`credits` are deduped by the merger or not at all.** `books_credits` has no unique index, so
   the `(creditable_type, creditable_id, role)` key is enforced in application code. Two rows
   crediting the same person as translator of the same edition is exactly the duplicate a merge
@@ -248,8 +247,7 @@ special case above: `Books::Author#as_indexed_json` embeds no book data, so unli
 document (which embeds `author_names` and `author_ids`, and so needs every affected book
 re-indexed), an author's document is unaffected by which books it's credited on. There is nothing
 to fan out to. Author **rankings** still recalculate, though — not because the book merger
-schedules them, but because `CalculateRankingsJob` already cascades into
-`Books::CalculateAuthorRankingsJob` for any affected `Books::RankingConfiguration`.
+schedules them, but because `RefreshJob` requests them when the books primary lands.
 
 ### Redirects (books)
 
@@ -301,7 +299,7 @@ since testing only the transfer branch is how this kind of rule silently degrade
 repoint and starts raising `RecordNotUnique` in production.
 
 `test/lib/books/author/merger_test.rb` follows the same shape with two additions specific to
-authors. `Books::CalculateAuthorRankingsJob.perform_async` is stubbed in `setup`: Sidekiq runs
+authors. `Services::RankingConfigurations::RequestRefresh.call` is stubbed in `setup`: Sidekiq runs
 inline in tests and the author merger fires that job unconditionally, so an unstubbed merge would
 run a real ranking calculation in every test. And the two reindex tests call a
 `neutralize_scalar_confound` helper first — scalar reconciliation nearly always dirties the target

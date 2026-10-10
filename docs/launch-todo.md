@@ -17,9 +17,11 @@ Run these in this order after each `data_migration:all`.
 1. **`bin/rails data_migration:all`.** It includes `penalties:reconcile`, `author_countries`,
    `recommendation_configs` and the favorites-list rebuild.
 2. **Search and rankings.** The migrators load with search indexing off, so run
-   `bin/rails search:books:recreate_and_reindex_all`. Then recalculate the books list weights and
-   rankings. Author rankings follow from the book rankings: `Books::CalculateAuthorRankingsJob` runs
-   on the 04:00 UTC cron, or by hand.
+   `bin/rails search:books:recreate_and_reindex_all`.
+   Then use the admin **Refresh Rankings** action on the books primary. That one run reweighs,
+   ranks and requests the author rankings when it lands. The 04:00 UTC author cron is the safety
+   net. **The release after this one ships deletes the transitional `CalculateRankingsJob` shim**
+   (see `docs/superpowers/specs/2026-10-10-coalesced-ranking-recalculation-design.md` §4).
 3. **Cover images.** Make sure Sidekiq is up, because this queues about 148k jobs. Then run
    `bin/rails data_migration:book_images`. It is idempotent, and the primary-image count should
    come out close to 37,296.
