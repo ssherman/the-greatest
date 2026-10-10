@@ -174,6 +174,16 @@ module Services
             assert_nil @adapter.recheck(later)
           end
 
+          test "recheck for a text row agrees on an author whose initials are written differently" do
+            row = wizard_row(@list, position: 1, title: "Nine Stories", authors: ["J.D. Salinger"],
+              wizard: {bucket: "create", matched_at: 1.hour.ago.iso8601})
+            author = ::Books::Author.create!(name: "J. D. Salinger")
+            book = ::Books::Book.create!(title: "Nine Stories")
+            book.book_authors.create!(author: author, position: 1)
+
+            assert_equal book, @adapter.recheck(row)
+          end
+
           test "create sends a chosen work, trusted, as a normal enriched book with the rebuilt match" do
             book = books_books(:war_and_peace)
             row = wizard_row(@list, position: 1, title: "War and Peace", subtitle: "A Novel", authors: ["Leo Tolstoy"], year: 1869)

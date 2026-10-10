@@ -32,17 +32,17 @@ module DataImporters
     # ---- judgements the Decider and AiSelection ask for ----------------------
 
     def titles_agree?(query, record)
-      wanted = normalize(query_title(query))
+      wanted = title_key(query_title(query))
       return false if wanted.blank?
 
-      ([record_title(record)] + record_alternate_titles(record)).any? { |title| normalize(title) == wanted }
+      ([record_title(record)] + record_alternate_titles(record)).any? { |title| title_key(title) == wanted }
     end
 
     def creators_agree?(query, record)
-      wanted = query_creators(query).map { |name| normalize(name) }.compact_blank
+      wanted = query_creators(query).map { |name| creator_key(name) }.compact_blank
       return false if wanted.empty?
 
-      held = (record_creators(record) + record_creator_alternate_names(record)).map { |name| normalize(name) }.compact_blank
+      held = (record_creators(record) + record_creator_alternate_names(record)).map { |name| creator_key(name) }.compact_blank
       (wanted & held).any?
     end
 
@@ -181,6 +181,14 @@ module DataImporters
     def record_creator_alternate_names(_record)
       []
     end
+
+    # How titles and creator names compare. A domain whose titles are
+    # people's names (books authors) or whose creators are people (books)
+    # overrides these with Services::Text::PersonNameKey; music and games
+    # keep plain normalize.
+    def title_key(text) = normalize(text)
+
+    def creator_key(text) = normalize(text)
 
     def record_year(_record)
       nil
