@@ -602,15 +602,13 @@ module Books
         SearchIndexRequest.create!(parent: target_book, action: :index_item)
       end
 
-      # perform_async writes to Redis, which a rollback cannot undo -- hence
-      # post-commit, never inside the transaction. Author rankings come along for
-      # free: CalculateRankingsJob already cascades into
-      # Books::CalculateAuthorRankingsJob for any Books::RankingConfiguration.
+      # Post-commit: perform_in writes to Redis, which a rollback cannot undo.
+      # RequestRefresh claims each configuration, so a burst of merges sharing a
+      # configuration queues one run for it, not one per merge; the delay lets
+      # the burst collect. The run reweighs before it ranks.
+      # Author rankings follow: RefreshJob requests them when the books primary lands.
       def schedule_ranking_recalculation
-        @affected_ranking_configurations.each do |config_id|
-          BulkCalculateWeightsJob.perform_async(config_id)
-          CalculateRankingsJob.perform_in(5.minutes, config_id)
-        end
+        ::Services::RankingConfigurations::RequestRefresh.call_for_ids(@affected_ranking_configurations, delay: 5.minutes)
       end
 
       # merge_list_items deliberately skips (rather than repoints) a source row on
@@ -618,7 +616,7 @@ module Books
       # source and the generated list falls one item short. Only a full rebuild
       # produces the correct combined score, voter_count and position for the
       # survivor. Queuing it now runs it comfortably inside the 5 minutes before
-      # CalculateRankingsJob would otherwise read that short list.
+      # schedule_ranking_recalculation's RefreshJob would otherwise read that short list.
       def regenerate_user_favorites_list
         GenerateUserFavoritesListsJob.perform_async("Books::UserList")
       end

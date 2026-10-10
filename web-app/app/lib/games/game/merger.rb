@@ -387,11 +387,12 @@ module Games
         SearchIndexRequest.create!(parent: target_game, action: :index_item)
       end
 
+      # Post-commit: perform_in writes to Redis, which a rollback cannot undo.
+      # RequestRefresh claims each configuration, so a burst of merges sharing a
+      # configuration queues one run for it, not one per merge; the delay lets
+      # the burst collect. The run reweighs before it ranks.
       def schedule_ranking_recalculation
-        @affected_ranking_configurations.each do |config_id|
-          BulkCalculateWeightsJob.perform_async(config_id)
-          CalculateRankingsJob.perform_in(5.minutes, config_id)
-        end
+        ::Services::RankingConfigurations::RequestRefresh.call_for_ids(@affected_ranking_configurations, delay: 5.minutes)
       end
 
       # The generated "Our Users' Favorites" list is derived data: merge_list_items
@@ -401,7 +402,7 @@ module Games
       # row -- produces the correct combined score, voter_count and position for
       # the target game, so the list is regenerated here rather than waiting for
       # the nightly cron. Queuing it now runs it comfortably inside the 5 minutes
-      # before schedule_ranking_recalculation's CalculateRankingsJob would otherwise
+      # before schedule_ranking_recalculation's RefreshJob would otherwise
       # read that short list and bake the wrong result into the rankings.
       def regenerate_user_favorites_list
         GenerateUserFavoritesListsJob.perform_async("Games::UserList")
