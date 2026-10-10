@@ -69,7 +69,7 @@ module Recommendations
       rows = 0
       buffer = []
       flush = lambda do
-        RecommendationItemNeighbor.insert_all(buffer) if buffer.any?
+        RecommendationItemNeighbor.insert_all(buffer, returning: false) if buffer.any?
         rows += buffer.size
         buffer = []
       end

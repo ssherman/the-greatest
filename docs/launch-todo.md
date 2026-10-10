@@ -54,7 +54,7 @@ set, they raise. Details: `docs/features/recommendations.md`, "Collaborative sig
 2. **The check.** Create the healthchecks.io check `recommender-train` (period 1 day, grace 2 days).
 3. **The home server.** Run `deployment/home-server/provision` so the `ol` VM gets the units and env.
 4. **The first model.** `Recommendations::ExportInteractionsJob.perform_async("books")` from a
-   console (or wait for the 02:30 run), let the home server's `recommender-train` timer run (04:00;
+   console (or wait for the 02:30 UTC run), let the home server's `recommender-train` timer run (04:00 Chicago;
    or `systemctl start recommender-train` on the `ol` VM), then confirm `Recommendations::LoadModelJob`
    loaded it (`RecommendationModel.active_for(:books)`) and that
    `bin/rails recommendations:show USER_ID=…` lists `collaborative`.
@@ -62,6 +62,13 @@ set, they raise. Details: `docs/features/recommendations.md`, "Collaborative sig
 After that the nightly export, daily train and hourly load keep it current through every weekly
 `data_migration:sync`; after a sync, step 4's `perform_async` and `systemctl start` bring the model
 up to date the same day instead of the next.
+
+5. **Before books goes live.**
+   - Cap the shelf the signal scores (an 18,534-book shelf takes 1.1 s in the neighbour SQL today),
+     and profile the +140-215 ms (measured +200-255 ms in `Engine.call` when run after the
+     taste-only variant) the signal adds on the 20-99 and 100+ segments.
+   - Close the depth gap: the collaborative list ignores the depth setting (see "Known gaps" in
+     `docs/features/recommendations.md`).
 
 ## 4. Every week after the switch-over
 

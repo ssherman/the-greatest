@@ -63,3 +63,11 @@ def test_metrics_with_no_users():
         np.array([], dtype=np.int64),
     )
     assert out == {"users": 0, "hit_at_10": 0.0, "recall_at_50": 0.0}
+
+
+def test_metrics_do_not_count_a_held_item_nothing_leads_to():
+    train = matrix([[0, 1]])
+    model = sp.csr_matrix((6, 6), dtype=np.float64)  # no item leads anywhere: every score is 0
+    out = metrics(train, model, np.array([0]), np.array([4]), k_hit=10, k_recall=50)
+    assert out["hit_at_10"] == 0.0
+    assert out["recall_at_50"] == 0.0

@@ -60,9 +60,14 @@ def metrics(
             top = np.tile(np.arange(n_items), (len(rows), 1))
         order = np.argsort(-np.take_along_axis(scores, top, axis=1), axis=1, kind="stable")
         top = np.take_along_axis(top, order, axis=1)
-        target = held[start : start + batch][:, None]
-        hits += int(np.any(top[:, :k_hit] == target, axis=1).sum())
-        recalls += int(np.any(top == target, axis=1).sum())
+        held_batch = held[start : start + batch]
+        target = held_batch[:, None]
+        # A zero score means no shelf book leads to the item; argpartition may still
+        # have placed it in the top k among the ties, and that is not a recommendation.
+        held_scores = scores[np.arange(len(rows)), held_batch]
+        scored = held_scores > 0
+        hits += int((np.any(top[:, :k_hit] == target, axis=1) & scored).sum())
+        recalls += int((np.any(top == target, axis=1) & scored).sum())
     return {
         "users": int(len(users)),
         "hit_at_10": hits / len(users),

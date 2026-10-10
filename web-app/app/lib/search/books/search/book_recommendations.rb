@@ -46,7 +46,7 @@ module Search
           filter = CriteriaClauses.filter_clauses(search_criteria)
           filter << {ids: {values: ids.map(&:to_s)}} if ids
           extract(search({
-            size: opts[:candidate_size],
+            size: ids ? ids.size : opts[:candidate_size],
             _source: false,
             docvalue_fields: ["ranked_position"],
             sort: RANK_SORT,

@@ -296,6 +296,10 @@ neither table references users.
      so length, year range, rank cap, included and excluded categories and the depth setting
      apply exactly as they do to the taste list. The quality prior is not applied here: this
      list's order is the collaborative score; the rank prior in fusion already supplies canon.
+
+     > Amendment 2026-10-10: the depth setting does not reach this list. It acts only through the
+     > taste query's quality prior, which `ranked_only(ids:)` does not carry. See "Known gaps" in
+     > `docs/features/recommendations.md`.
   4. Return `Candidate(item_id:, score:, evidence: {because_of:, term:})` in score order, the
      first `size`.
 

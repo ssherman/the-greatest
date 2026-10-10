@@ -207,7 +207,7 @@ has the same two stores (`RECOMMENDER_R2_*`). The two Rails jobs build the store
 skipping" and return, so a deploy before the bucket exists is quiet; with only some set they raise
 `Store::NotConfigured`. The rake tasks without `DIR` use `Store.default`, which raises in both cases.
 
-1. **Export** (Rails, `Recommendations::ExportInteractionsJob`, nightly 02:30): every positive pair,
+1. **Export** (Rails, `Recommendations::ExportInteractionsJob`, nightly 02:30 UTC): every positive pair,
    streamed through a server-side cursor, written as
    `recommendations/books/interactions/<date>.csv.gz` (`user_id,item_id`, sorted, gzipped); then
    `interactions/latest` is pointed at it. About 1.6M rows in development.
@@ -236,7 +236,7 @@ grouped read: for every neighbour of a shelf book, not itself excluded, sum the 
 keep the shelf book with the largest weight as the candidate "because of" book, order by the sum,
 and take `collaborative_overfetch × candidate_size` rows (`NeighborScores`). Those ids go through
 the ranked-pool query with an `ids` filter (`Adapter#filter_candidate_ids`), so length, year range,
-rank cap, included and excluded categories and depth apply exactly as they do to the taste list.
+rank cap and included and excluded categories apply to the collaborative list exactly as they do to the taste list. The depth setting (Safer bets / Deep cuts) does not: it shapes the taste list only, through the quality prior (`wrap_in_quality_prior`), and `ranked_only(ids:)` carries no prior. The collaborative list is ordered by co-readership score and gets its canon only through the rank prior in fusion.
 The survivors, in collaborative-score order, are the signal's candidates; fusion weights them
 `n / (n + collaborative_half_point)`. The evidence carries `because_of` only when that book is a
 favorite or rated at least `because_of_rating` (4), so the page never says "Because you loved" a
@@ -263,11 +263,16 @@ without `VERSION`. In development the train takes about 20 s and 3.2 GiB; the lo
 active model (and deletes the previous one), so leave a full model loaded when you are done.
 
 **Production** runs the same three legs with `Store::R2`: the two Rails jobs on the Sidekiq cron,
-and the trainer as a `recommender` compose service under a systemd timer (04:00) on the home
+and the trainer as a `recommender` compose service under a systemd timer (04:00 Chicago) on the home
 server's `ol` VM, pinging a healthchecks.io check. Nothing on the home server listens, and nothing
 in Rails calls it; if it is off, the model goes stale, never down. That deployment is spec 2 §4.4
 and its increment 2, not yet built; until it is and the store is configured, the jobs log a skip
 and the signal stays unavailable. The launch steps are `docs/launch-todo.md`, section 3.
+
+**Time zones.** The Sidekiq crons run in the Rails server's zone, which is UTC (the app sets no
+`config.time_zone`), so "02:30" is 02:30 UTC. The home server's 04:00 Chicago train therefore runs
+6.5-7.5 h after the export, depending on daylight saving. The export's file name and the age check
+use UTC dates.
 
 ## Preferences store
 
@@ -411,6 +416,11 @@ the numbers describe the dev database on those days.
 
 ## Known gaps
 
+- **Depth does not reach the collaborative list.** For a reader with a large shelf the collaborative
+  list carries fusion weight of about 0.9 against taste's 1.0, so roughly half the page ignores the
+  depth setting. The spec's section 8.3 experiment, "apply the quality prior to the collaborative
+  list", is the planned fix; measure it with `VARIANTS="quality_floor=0.1; quality_floor=0.5"`, with
+  and without `collaborative=false`.
 - **The revised bar (spec §9.2, amended 2026-10-08) is met on hit@10 and page depth, and NOT met
   on recall@50 or KL.** With the quality prior the engine beats the frequency profile on hit@10 by
   about 1.6x on the 20-99 segment on both samples and returns pages at mean rank 750-800 instead

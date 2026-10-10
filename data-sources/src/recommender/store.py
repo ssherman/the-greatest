@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 _MISSING_CODES = {"NoSuchKey", "404", "NotFound"}
@@ -91,6 +92,11 @@ class R2:
             aws_access_key_id=access,
             aws_secret_access_key=secret,
             region_name="auto",
+            # R2 rejects boto3's default checksum headers; the Rails client sets the same.
+            config=Config(
+                request_checksum_calculation="when_required",
+                response_checksum_validation="when_required",
+            ),
         )
         return cls(client, bucket)
 

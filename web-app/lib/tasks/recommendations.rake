@@ -124,8 +124,12 @@ namespace :recommendations do
     segments = plan.segments
     pool_size = ::RankedItem.where(item_type: "Books::Book", ranking_configuration_id: ::Books::RankingConfiguration.default_primary&.id).count
 
+    model_version = RecommendationModel.active_for(:books)&.version
     eligible_users = Recommendations::Evaluation.eligible_positive_counts(domain: :books, candidate_ids: candidate_ids).size
-    puts "Recommendations evaluation  eligible users=#{eligible_users}  ranked pool=#{candidate_ids.size}  sampled=#{segments.values.sum(&:size)}  seed=#{seed}  hold-out=#{fraction}  limit=#{limit}"
+    puts "Recommendations evaluation  eligible users=#{eligible_users}  ranked pool=#{candidate_ids.size}  sampled=#{segments.values.sum(&:size)}  seed=#{seed}  hold-out=#{fraction}  limit=#{limit}  model=#{model_version || "none"}"
+    if model_version && !model_version.end_with?("-holdout-#{seed}")
+      puts "WARNING: model #{model_version} was not trained with seed #{seed} held out; collaborative numbers are inflated by a model that saw the held pairs."
+    end
     puts "variants: rank baseline | " + variants.map { |v| RecommendationsHarness.label(v) }.join(" | ")
     puts
 
