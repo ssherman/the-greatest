@@ -20,12 +20,12 @@ fail() { log "train failed: $1"; hc fail "$1"; exit 1; }
 # (and, with a check URL set, a missed ping that alerts after the grace); a
 # partial set is a mistake, reported.
 configured=0
-for value in "${RECOMMENDER_R2_ENDPOINT:-}" "${RECOMMENDER_R2_ACCESS_KEY:-}" \
-             "${RECOMMENDER_R2_SECRET_KEY:-}" "${RECOMMENDER_R2_BUCKET:-}"; do
+for value in "${RECOMMENDATIONS_R2_ENDPOINT:-}" "${RECOMMENDATIONS_R2_ACCESS_KEY:-}" \
+             "${RECOMMENDATIONS_R2_SECRET_KEY:-}" "${RECOMMENDATIONS_R2_BUCKET:-}"; do
   if [ -n "$value" ]; then configured=$((configured + 1)); fi
 done
-if [ "$configured" = 0 ]; then log "RECOMMENDER_R2_* not set; nothing to train"; exit 0; fi
-[ "$configured" = 4 ] || fail "RECOMMENDER_R2_ENDPOINT, RECOMMENDER_R2_ACCESS_KEY, RECOMMENDER_R2_SECRET_KEY and RECOMMENDER_R2_BUCKET must all be set or all be unset"
+if [ "$configured" = 0 ]; then log "RECOMMENDATIONS_R2_* not set; nothing to train"; exit 0; fi
+[ "$configured" = 4 ] || fail "RECOMMENDATIONS_R2_ENDPOINT, RECOMMENDATIONS_R2_ACCESS_KEY, RECOMMENDATIONS_R2_SECRET_KEY and RECOMMENDATIONS_R2_BUCKET must all be set or all be unset"
 
 # A dump build (ol-refresh.sh, 03:00) holds this for hours and has the VM's
 # memory. A deferral is logged (the check's /log endpoint), not counted as a

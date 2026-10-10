@@ -36,8 +36,8 @@ t_recommender() {
     ($r.mem_limit == 15032385536 or $r.mem_limit == "15032385536" or $r.mem_limit == "14g") and $r.cpus == 10 and
     ($r.memswap_limit == 15032385536 or $r.memswap_limit == "15032385536" or $r.memswap_limit == "14g") and
     ($r.environment.TYPER_STANDARD_TRACEBACK == "1") and
-    ($r.environment | has("RECOMMENDER_R2_ENDPOINT") and has("RECOMMENDER_R2_ACCESS_KEY") and
-      has("RECOMMENDER_R2_SECRET_KEY") and has("RECOMMENDER_R2_BUCKET")) and
+    ($r.environment | has("RECOMMENDATIONS_R2_ENDPOINT") and has("RECOMMENDATIONS_R2_ACCESS_KEY") and
+      has("RECOMMENDATIONS_R2_SECRET_KEY") and has("RECOMMENDATIONS_R2_BUCKET")) and
     ($r.volumes[0].target == "/work")' >/dev/null
 }
 t_recommender_off_by_default() { ! cfg ol | jq -e '.services | has("recommender")' >/dev/null; }

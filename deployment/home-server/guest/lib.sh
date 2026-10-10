@@ -13,7 +13,7 @@ BUILD_LOCK="${BUILD_LOCK:-/run/ol-build.lock}"
 COMPOSE="${COMPOSE:-$here/compose.sh}"
 
 # ROLE, REPO_REF, TUNNELS_ENABLED, TUNNEL_TOKEN, HC_HEARTBEAT, HC_DEPLOY, HC_REFRESH;
-# on ol also HC_RECOMMENDER and RECOMMENDER_R2_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET
+# on ol also HC_RECOMMENDER and RECOMMENDATIONS_R2_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET
 # (compose.sh exports them, which is how the recommender service gets them).
 load_env() {
   set -a
