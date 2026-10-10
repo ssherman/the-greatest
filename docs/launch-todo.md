@@ -37,6 +37,19 @@ survive the weekly run. Do not merge, delete or edit books yet: the next `:all` 
    `bin/rails runner 'puts LegacyBooks::BookIdentifier.maximum(:id)'`.
 2. Run the final `data_migration:all` and the section 1 steps after it.
 3. `BOOK_IDENTIFIERS_FROM=<that id> bin/rails data_migration:sync_init`.
+4. **The collaborative-filtering model.** Needs spec 2's increment 2 (the home-server timer)
+   merged. One-time setup first: the private R2 bucket and its token, `RECOMMENDATIONS_R2_*` in
+   the production secrets, `RECOMMENDER_R2_*` + `HC_RECOMMENDER` in `secrets/home-server.env`, the
+   healthchecks.io check `recommender-train` (period 1 day, grace 2 days), then
+   `deployment/home-server/provision`. Until `RECOMMENDATIONS_R2_*` is set, the nightly export and
+   the hourly load jobs raise on every run. Then `Recommendations::ExportInteractionsJob.perform_async("books")`
+   from a console (or wait for the 02:30 run), let the home server's `recommender-train` timer run
+   (04:00; or `systemctl start recommender-train` on the `ol` VM), then confirm
+   `Recommendations::LoadModelJob` loaded it (`RecommendationModel.active_for(:books)`), and that
+   `bin/rails recommendations:show USER_ID=…` lists `collaborative`. After that the nightly export,
+   daily train and hourly load keep it current, through every `data_migration:all` or
+   `data_migration:sync`; after a pass, the `perform_async` and `systemctl start` above bring it up
+   to date the same day instead of the next. `docs/features/recommendations.md`, "Collaborative signal".
 
 From then on `data_migration:all`, the catalog tasks and the user-data tasks the sync replaces refuse
 to run. Cleanup can start (section 4).
