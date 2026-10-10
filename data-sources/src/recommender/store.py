@@ -68,10 +68,10 @@ class Local:
 
 class R2:
     ENV_KEYS = (
-        "RECOMMENDER_R2_ENDPOINT",
-        "RECOMMENDER_R2_ACCESS_KEY",
-        "RECOMMENDER_R2_SECRET_KEY",
-        "RECOMMENDER_R2_BUCKET",
+        "RECOMMENDATIONS_R2_ENDPOINT",
+        "RECOMMENDATIONS_R2_ACCESS_KEY",
+        "RECOMMENDATIONS_R2_SECRET_KEY",
+        "RECOMMENDATIONS_R2_BUCKET",
     )
 
     def __init__(self, client, bucket: str) -> None:

@@ -92,7 +92,7 @@ The keys in `secrets/home-server.env` (SOPS-encrypted). Each VM receives only it
 | `OL_TUNNEL_TOKEN`, `FETCHER_TUNNEL_TOKEN` | `--enable-tunnels` | The two Cloudflare tunnel tokens |
 | `HC_OL_HEARTBEAT`, `HC_OL_DEPLOY`, `HC_OL_REFRESH`, `HC_FETCHER_HEARTBEAT`, `HC_FETCHER_DEPLOY` | optional | healthchecks.io ping URLs; blank means no ping |
 | `HC_RECOMMENDER` | optional | healthchecks.io ping URL for `recommender-train`, `ol` only |
-| `RECOMMENDER_R2_ENDPOINT`, `RECOMMENDER_R2_ACCESS_KEY`, `RECOMMENDER_R2_SECRET_KEY`, `RECOMMENDER_R2_BUCKET` | the trainer | The recommendations bucket (`docs/features/recommendations.md`, "Collaborative signal"): its S3 endpoint and a token scoped to it. All four or none; `ol` only. With none set, `recommender-train` logs a skip and does not ping. |
+| `RECOMMENDATIONS_R2_ENDPOINT`, `RECOMMENDATIONS_R2_ACCESS_KEY`, `RECOMMENDATIONS_R2_SECRET_KEY`, `RECOMMENDATIONS_R2_BUCKET` | the trainer | The recommendations bucket (`docs/features/recommendations.md`, "Collaborative signal"): its S3 endpoint and a token scoped to it. All four or none; `ol` only. With none set, `recommender-train` logs a skip and does not ping. |
 | `VM_STORAGE` | optional | OS disks and cloud-init drive. Default `local-lvm`; `local-zfs` here |
 | `DATA_STORAGE` | optional | The `ol` data disk. Default `VM_STORAGE`; `rpool2` here |
 | `IMAGE_STORAGE` | optional | Imported cloud images. Default `local` |

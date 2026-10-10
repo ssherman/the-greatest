@@ -7,8 +7,8 @@ set -uo pipefail
 # shellcheck source=helpers.sh
 . "$(dirname "$0")/helpers.sh"
 
-R2=(RECOMMENDER_R2_ENDPOINT=https://x.r2.test RECOMMENDER_R2_ACCESS_KEY=x
-    RECOMMENDER_R2_SECRET_KEY=x RECOMMENDER_R2_BUCKET=x)
+R2=(RECOMMENDATIONS_R2_ENDPOINT=https://x.r2.test RECOMMENDATIONS_R2_ACCESS_KEY=x
+    RECOMMENDATIONS_R2_SECRET_KEY=x RECOMMENDATIONS_R2_BUCKET=x)
 setup() {
   new_sandbox
   write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=0 HC_RECOMMENDER=https://hc.test/train "${R2[@]}"
@@ -57,8 +57,8 @@ t_not_configured() {
 }
 t_partial_config() {
   setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=0 HC_RECOMMENDER=https://hc.test/train \
-    RECOMMENDER_R2_ENDPOINT=https://x.r2.test RECOMMENDER_R2_BUCKET=x
-  ! train && ! called '^compose ' && called '^curl .*--data-raw .*RECOMMENDER_R2_.*hc\.test/train/fail$'
+    RECOMMENDATIONS_R2_ENDPOINT=https://x.r2.test RECOMMENDATIONS_R2_BUCKET=x
+  ! train && ! called '^compose ' && called '^curl .*--data-raw .*RECOMMENDATIONS_R2_.*hc\.test/train/fail$'
 }
 t_no_check_url() {
   setup; write_env ROLE=ol REPO_REF=main TUNNELS_ENABLED=0 "${R2[@]}"

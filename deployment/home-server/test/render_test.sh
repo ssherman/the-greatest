@@ -18,8 +18,8 @@ new_sandbox
 export REPO_REF=main TUNNELS_ENABLED=0 OL_TUNNEL_TOKEN=ol-token FETCHER_TUNNEL_TOKEN=fetcher-token
 export HC_OL_HEARTBEAT=https://hc.test/ol-beat HC_OL_DEPLOY=https://hc.test/ol-deploy HC_OL_REFRESH=https://hc.test/ol-refresh
 export HC_FETCHER_HEARTBEAT=https://hc.test/f-beat HC_FETCHER_DEPLOY=https://hc.test/f-deploy
-export HC_RECOMMENDER=https://hc.test/ol-train RECOMMENDER_R2_ENDPOINT=https://acct.r2.test
-export RECOMMENDER_R2_ACCESS_KEY=rec-access RECOMMENDER_R2_SECRET_KEY=rec-secret RECOMMENDER_R2_BUCKET=rec-bucket
+export HC_RECOMMENDER=https://hc.test/ol-train RECOMMENDATIONS_R2_ENDPOINT=https://acct.r2.test
+export RECOMMENDATIONS_R2_ACCESS_KEY=rec-access RECOMMENDATIONS_R2_SECRET_KEY=rec-secret RECOMMENDATIONS_R2_BUCKET=rec-bucket
 echo "ssh-ed25519 AAAATEST test@example.com" >"$SANDBOX/key.pub"
 export SSH_PUBKEY_FILE="$SANDBOX/key.pub"
 
@@ -47,14 +47,14 @@ t_fetcher_isolation() {
 }
 t_ol_trainer_env() {
   env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'HC_RECOMMENDER=https://hc.test/ol-train' &&
-    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'RECOMMENDER_R2_ENDPOINT=https://acct.r2.test' &&
-    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'RECOMMENDER_R2_SECRET_KEY=rec-secret' &&
-    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'RECOMMENDER_R2_BUCKET=rec-bucket'
+    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'RECOMMENDATIONS_R2_ENDPOINT=https://acct.r2.test' &&
+    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'RECOMMENDATIONS_R2_SECRET_KEY=rec-secret' &&
+    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'RECOMMENDATIONS_R2_BUCKET=rec-bucket'
 }
 t_env_keys() {
   local keys
   keys="$(env_from_yaml "$SANDBOX/ol.yaml" | cut -d= -f1 | tr '\n' ' ')"
-  [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH HC_RECOMMENDER RECOMMENDER_R2_ENDPOINT RECOMMENDER_R2_ACCESS_KEY RECOMMENDER_R2_SECRET_KEY RECOMMENDER_R2_BUCKET " ] || return 1
+  [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH HC_RECOMMENDER RECOMMENDATIONS_R2_ENDPOINT RECOMMENDATIONS_R2_ACCESS_KEY RECOMMENDATIONS_R2_SECRET_KEY RECOMMENDATIONS_R2_BUCKET " ] || return 1
   keys="$(env_from_yaml "$SANDBOX/fetcher.yaml" | cut -d= -f1 | tr '\n' ' ')"
   [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH " ]
 }
@@ -64,8 +64,8 @@ t_codename_literal() {
 t_key() { grep -q 'ssh-ed25519 AAAATEST' "$SANDBOX/ol.yaml"; }
 t_ref() { grep -q 'clone --depth 1 --branch main ' "$SANDBOX/ol.yaml"; }
 t_blank_secrets() {
-  (unset OL_TUNNEL_TOKEN HC_OL_HEARTBEAT RECOMMENDER_R2_BUCKET; render_vm_env ol "$SANDBOX/blank.env") &&
-    grep -qx 'TUNNEL_TOKEN=' "$SANDBOX/blank.env" && grep -qx 'RECOMMENDER_R2_BUCKET=' "$SANDBOX/blank.env"
+  (unset OL_TUNNEL_TOKEN HC_OL_HEARTBEAT RECOMMENDATIONS_R2_BUCKET; render_vm_env ol "$SANDBOX/blank.env") &&
+    grep -qx 'TUNNEL_TOKEN=' "$SANDBOX/blank.env" && grep -qx 'RECOMMENDATIONS_R2_BUCKET=' "$SANDBOX/blank.env"
 }
 
 t_cluster_fw() {
