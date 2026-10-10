@@ -86,6 +86,17 @@ module DataImporters
       assert_not @finder.creators_agree?({creators: []}, @book)
     end
 
+    # TestFinder keeps the default hooks, as the music and games finders do.
+    test "the default keys are normalize: initials written differently do not agree" do
+      author = ::Books::Author.create!(name: "J. D. Salinger")
+      book = ::Books::Book.create!(title: "Nine Stories")
+      ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+
+      assert_not @finder.creators_agree?({creators: ["J.D. Salinger"]}, book)
+      assert @finder.creators_agree?({creators: ["j. d. salinger"]}, book)
+      assert_not @finder.titles_agree?({title: "Nine  Stories."}, book)
+    end
+
     test "corroborated? is true when nothing can be compared, else when titles or creators agree" do
       candidate = Candidate.new(record: @book)
 

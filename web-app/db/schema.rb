@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_10_064004) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_10_173255) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -127,10 +127,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_10_064004) do
     t.boolean "exclude_from_rankings", default: false, null: false
     t.integer "gender"
     t.boolean "provisional", default: false, null: false
+    t.string "name_keys", default: [], null: false, array: true
     t.index "lower((name)::text)", name: "index_books_authors_on_lower_name"
     t.index ["alternate_names"], name: "index_books_authors_on_alternate_names", using: :gin
     t.index ["gender"], name: "index_books_authors_on_gender"
     t.index ["kind"], name: "index_books_authors_on_kind"
+    t.index ["name_keys"], name: "index_books_authors_on_name_keys", using: :gin
     t.index ["provisional"], name: "index_books_authors_on_provisional", where: "provisional"
     t.index ["slug"], name: "index_books_authors_on_slug", unique: true
   end

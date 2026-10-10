@@ -137,6 +137,44 @@ module DataImporters
           assert_equal [author, :rule], [match.record, match.decided_by]
         end
 
+        test "initials written differently are the same name for the exact rule, by name and by alternate name" do
+          salinger = ::Books::Author.create!(name: "J. D. Salinger")
+          tolkien = ::Books::Author.create!(name: "John Ronald Reuel Tolkien", alternate_names: ["J.R.R. Tolkien"])
+          expect_no_ai
+
+          assert_equal [salinger, :rule], @finder.call(query: ImportQuery.new(name: "J.D. Salinger")).then { |m| [m.record, m.decided_by] }
+          assert_equal [tolkien, :rule], @finder.call(query: ImportQuery.new(name: "J R R Tolkien")).then { |m| [m.record, m.decided_by] }
+        end
+
+        test "a different set of initials, a bare surname or run-together initials is not the same name" do
+          ::Books::Author.create!(name: "J. D. Salinger")
+          expect_no_ai
+
+          ["J. Salinger", "Salinger", "JD Salinger"].each do |name|
+            assert_nil @finder.call(query: ImportQuery.new(name: name)).record, name
+          end
+        end
+
+        test "a multi-letter word is not an initial: Jr. and JR stay apart" do
+          ::Books::Author.create!(name: "Walter M. Miller Jr.")
+          expect_no_ai
+
+          assert_nil @finder.call(query: ImportQuery.new(name: "Walter M. Miller JR")).record
+          assert_equal :rule, @finder.call(query: ImportQuery.new(name: "Walter M Miller Jr.")).decided_by
+        end
+
+        test "two authors whose names differ only in how the initials are written both go to the AI" do
+          a = ::Books::Author.create!(name: "J.D. Smith")
+          b = ::Books::Author.create!(name: "J. D. Smith")
+          TASK.expects(:new).with { |args| args[:candidate_lines].size == 2 }.returns(@task)
+          @task.stubs(:call).returns(::Services::Ai::Result.new(success: true, data: {selected_index: 1, confidence: "medium", reasoning: "Two people.", same_entity_groups: []}, ai_chat: ai_chats(:general_chat)))
+
+          match = @finder.call(query: ImportQuery.new(name: "J D Smith"))
+
+          assert_equal :ai, match.decided_by
+          assert_includes [a, b], match.record
+        end
+
         test "a birth-year conflict blocks the exact rule: the AI decides" do
           stub_ai(selected_index: 0, confidence: "high", reasoning: "Different century.", same_entity_groups: [])
 
