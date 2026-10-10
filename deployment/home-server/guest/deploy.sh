@@ -52,13 +52,19 @@ git checkout --quiet --force --detach "$target" || fail "checkout ${target:0:12}
 case "$ROLE" in
   # ol also builds the trainer image: recommender-train.timer runs it with
   # `run --rm`, so it is never brought up here, but a merged trainer change
-  # must reach the VM the same way an API change does.
-  ol) service=api; build=(api recommender) ;;
+  # must reach the VM the same way an API change does. The trainer goes first:
+  # api and the dump build share one image tag, so an API image tagged before
+  # a later failure would reach ol-refresh's `up -d api` with deployed-sha
+  # still on the previous commit.
+  ol) service=api; build=(recommender api) ;;
   fetcher) service=fetcher; build=(fetcher) ;;
   *) fail "unknown ROLE '$ROLE'" ;;
 esac
-# A failed build leaves the running container exactly as it was.
-"$COMPOSE" build "${build[@]}" || fail "image build for ${build[*]} at ${target:0:12}"
+# A failed build leaves the running container exactly as it was. One image per
+# command: a combined build can tag the first image before the second fails.
+for image in "${build[@]}"; do
+  "$COMPOSE" build "$image" || fail "image build for $image at ${target:0:12}"
+done
 
 if [ "$ROLE" = ol ] && [ ! -f "$OL_DATA/current-version" ]; then
   log "no Open Library version yet; ol-refresh starts api after the first build"
