@@ -536,17 +536,17 @@ module Services
         assert_match(/kaboom/, result.errors.first)
       end
 
-      test "queues the primary configuration's ranking recalculation" do
+      test "requests a refresh of the primary configuration" do
         rank(@books)
         main = ::Books::RankingConfiguration.default_primary
-        CalculateRankingsJob.expects(:perform_async).with(main.id).once
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call).with(config: main).once
 
         GenerateDynamicLists.call(ranking_configuration: @config)
       end
 
-      test "skips the primary recalculation when asked to" do
+      test "skips the primary refresh when asked to" do
         rank(@books)
-        CalculateRankingsJob.expects(:perform_async).never
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call).never
 
         GenerateDynamicLists.call(ranking_configuration: @config, recalculate_primary: false)
       end
