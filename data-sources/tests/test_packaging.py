@@ -1,6 +1,7 @@
 import common
 import fetcher
 import openlibrary
+import recommender
 
 
 def test_packages_are_importable_and_versioned():
@@ -17,3 +18,8 @@ def test_common_is_not_nested_inside_openlibrary():
 
 def test_fetcher_is_a_sibling_source_not_part_of_openlibrary():
     assert "openlibrary" not in fetcher.__file__
+
+
+def test_recommender_is_a_sibling_source():
+    assert recommender.__version__
+    assert "openlibrary" not in recommender.__file__

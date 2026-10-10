@@ -1,3 +1,42 @@
+# == Schema Information
+#
+# Table name: goodreads_books
+#
+#  id                        :bigint           not null, primary key
+#  additional_authors        :string
+#  asin                      :string
+#  author                    :string
+#  authors                   :string           default([]), is an Array
+#  average_rating            :decimal(, )
+#  binding                   :string
+#  description               :text
+#  format                    :string
+#  genres                    :string           default([]), is an Array
+#  image_url                 :string
+#  isbn                      :string
+#  isbn13                    :string
+#  language                  :string
+#  last_looked_up_at         :datetime
+#  last_refreshed_at         :datetime
+#  locations                 :string           default([]), is an Array
+#  number_of_pages           :integer
+#  number_of_ratings         :integer
+#  number_of_reviews         :integer
+#  original_publication_year :integer
+#  publisher                 :string
+#  series                    :string
+#  title                     :string
+#  year_published            :integer
+#  created_at                :datetime         not null
+#  updated_at                :datetime         not null
+#  goodreads_id              :string           not null
+#
+# Indexes
+#
+#  index_goodreads_books_on_goodreads_id       (goodreads_id) UNIQUE
+#  index_goodreads_books_on_last_looked_up_at  (last_looked_up_at)
+#  index_goodreads_books_on_last_refreshed_at  (last_refreshed_at)
+#
 module LegacyBooks
   # The legacy app's Goodreads cache. Only its scraped rows are read, by the
   # page-cache seed (Goodreads import spec §6, "Legacy seed").

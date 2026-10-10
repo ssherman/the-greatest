@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_09_025948) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_10_064004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1267,6 +1267,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_025948) do
     t.index ["user_id", "type"], name: "index_recommendation_configs_on_user_id_and_type", unique: true
   end
 
+  create_table "recommendation_item_neighbors", force: :cascade do |t|
+    t.bigint "recommendation_model_id", null: false
+    t.bigint "item_id", null: false
+    t.bigint "neighbor_id", null: false
+    t.float "weight", null: false
+    t.index ["recommendation_model_id", "item_id"], name: "idx_on_recommendation_model_id_item_id_65911a84a9"
+  end
+
+  create_table "recommendation_models", force: :cascade do |t|
+    t.string "domain", null: false
+    t.string "version", null: false
+    t.jsonb "manifest", default: {}, null: false
+    t.integer "state", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["domain", "state"], name: "index_recommendation_models_on_domain_and_state"
+    t.index ["domain", "version"], name: "index_recommendation_models_on_domain_and_version", unique: true
+  end
+
   create_table "record_redirects", force: :cascade do |t|
     t.string "item_type", null: false
     t.bigint "from_id", null: false
@@ -1511,6 +1530,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_025948) do
   add_foreign_key "ranking_configurations", "ranking_configurations", column: "inherited_from_id"
   add_foreign_key "ranking_configurations", "users"
   add_foreign_key "recommendation_configs", "users"
+  add_foreign_key "recommendation_item_neighbors", "recommendation_models"
   add_foreign_key "reviews", "users"
   add_foreign_key "saved_searches", "users"
   add_foreign_key "user_list_items", "user_lists"

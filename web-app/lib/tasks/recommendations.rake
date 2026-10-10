@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
-# Read-only development harness for the recommendation engine (spec §9). Never
-# writes to the database or the index. Every knob is a per-call override, and eval
+# Development harness for the recommendation engine (spec §9). Read-only except
+# `load`, which writes the two collaborative model tables (recommendation_models,
+# recommendation_item_neighbors); nothing writes to the index. `export` writes
+# files only. Every knob is a per-call override, and eval
 # rebuilds each variant's training interactions under that variant's config, so
 # one process sweeps a range:
 #
@@ -11,12 +13,17 @@
 # eval always reports two baselines beside the variants: `rank` (the filtered
 # pool in global-rank order) and the frequency baseline (raw frequency share
 # with the quality prior off, which is the legacy engine's behaviour). The
-# baseline pins every knob the legacy engine did not have, so changing a
-# default never changes what the baseline measures.
+# baseline pins every knob the legacy engine did not have (the quality prior,
+# lift, and the collaborative signal), so changing a default or loading a model
+# never changes what the baseline measures.
+#
+# The cf column counts the evaluated users whose run used the collaborative
+# signal. VARIANTS="collaborative=false" is the taste-only comparison: the same
+# users and hold-out with the collaborative signal switched off.
 module RecommendationsHarness
   module_function
 
-  FREQUENCY_BASELINE = {lift: false, quality_scale: 0}.freeze
+  FREQUENCY_BASELINE = {lift: false, quality_scale: 0, collaborative: false}.freeze
 
   def parse_variants(raw)
     specs = [{}]
@@ -44,6 +51,14 @@ module RecommendationsHarness
 
   def label(overrides)
     overrides.empty? ? "shipped defaults" : overrides.map { |k, v| "#{k}=#{v}" }.join("  ")
+  end
+
+  # The suffix a hold-out export (and the model trained on it) carries. Every
+  # value the plan depends on is in the name, so two runs on the same day with
+  # a different sample can never share a file, and eval can tell whether the
+  # active model was trained without the pairs it is about to hide.
+  def hold_out_suffix(seed:, users:, fraction:)
+    "-holdout-#{seed}-u#{users}-f#{fraction}"
   end
 
   def reason_text(reason, names)
@@ -110,30 +125,33 @@ namespace :recommendations do
     baseline = RecommendationsHarness::FREQUENCY_BASELINE
     variants << baseline unless variants.include?(baseline)
 
-    random = Random.new(seed)
-    candidate_ids = Recommendations::Evaluation.candidate_ids(domain: :books)
-    segments = Recommendations::Evaluation.sample_user_ids(domain: :books, per_segment: users_total / 3, random: random, candidate_ids: candidate_ids)
     config = Recommendations::Config.resolve
     adapter = Recommendations::Books::Adapter.new(config: config)
+    candidate_ids = Recommendations::Evaluation.candidate_ids(domain: :books)
+    plan = Recommendations::Evaluation.hold_out_plan(domain: :books, adapter: adapter, users: users_total, seed: seed, fraction: fraction)
+    segments = plan.segments
     pool_size = ::RankedItem.where(item_type: "Books::Book", ranking_configuration_id: ::Books::RankingConfiguration.default_primary&.id).count
 
+    model_version = RecommendationModel.active_for(:books)&.version
     eligible_users = Recommendations::Evaluation.eligible_positive_counts(domain: :books, candidate_ids: candidate_ids).size
-    puts "Recommendations evaluation  eligible users=#{eligible_users}  ranked pool=#{candidate_ids.size}  sampled=#{segments.values.sum(&:size)}  seed=#{seed}  hold-out=#{fraction}  limit=#{limit}"
+    puts "Recommendations evaluation  eligible users=#{eligible_users}  ranked pool=#{candidate_ids.size}  sampled=#{segments.values.sum(&:size)}  seed=#{seed}  hold-out=#{fraction}  limit=#{limit}  model=#{model_version || "none"}"
+    expected_suffix = RecommendationsHarness.hold_out_suffix(seed: seed, users: users_total, fraction: fraction)
+    if model_version && !model_version.end_with?(expected_suffix)
+      puts "WARNING: model #{model_version} was not trained with this hold-out plan (expected a version ending in #{expected_suffix}); collaborative numbers are inflated by a model that saw the held pairs."
+    end
     puts "variants: rank baseline | " + variants.map { |v| RecommendationsHarness.label(v) }.join(" | ")
     puts
 
     segments.each do |segment, user_ids|
-      rows = Hash.new { |h, k| h[k] = {hit: [], recall: [], ndcg: [], mean_rank: [], author_repeats: [], kl: [], ms: [], ids: Set.new} }
+      rows = Hash.new { |h, k| h[k] = {hit: [], recall: [], ndcg: [], mean_rank: [], author_repeats: [], kl: [], ms: [], cf: 0, ids: Set.new} }
       evaluated = 0
 
       user_ids.each do |user_id|
-        user = User.find(user_id)
-        interactions = adapter.interactions(user)
-        _, held = Recommendations::Evaluation.split(interactions, fraction: fraction, random: Random.new(seed + user_id), candidate_ids: candidate_ids)
-        next if held.size < 1 || interactions.count { |i| Recommendations::Evaluation.eligible?(i) && candidate_ids.include?(i.item_id) } < Recommendations::Evaluation::MIN_ELIGIBLE
+        held_ids = plan.held[user_id]
+        next if held_ids.nil?
 
+        user = User.find(user_id)
         evaluated += 1
-        held_ids = held.map(&:item_id)
         excluded = adapter.shelved_item_ids(user) - held_ids
         criteria = adapter.criteria_for(user)
 
@@ -172,6 +190,7 @@ namespace :recommendations do
           defaults_history = history if overrides.empty?
           row = rows[RecommendationsHarness.label(overrides)]
           row[:ms] << ms
+          row[:cf] += 1 if result.data[:signals_used].include?(:collaborative)
           record.call(row, result.data[:items].map { |i| i[:item_id] }, history)
         end
 
@@ -181,9 +200,9 @@ namespace :recommendations do
       end
 
       puts "-- segment #{segment}: #{evaluated} of #{user_ids.size} sampled users evaluated"
-      puts "   #{"variant".ljust(48)}  hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms"
+      puts "   #{"variant".ljust(48)}  hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms     cf"
       rows.each do |name, r|
-        puts format("   %-48s %7s %9s %8s %9s %8s %7s %9s %6s", name[0, 48],
+        puts format("   %-48s %7s %9s %8s %9s %8s %7s %9s %6s %6s", name[0, 48],
           RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:hit])),
           RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:recall])),
           RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:ndcg])),
@@ -191,9 +210,44 @@ namespace :recommendations do
           r[:author_repeats].empty? ? "-" : RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:author_repeats])),
           r[:kl].empty? ? "-" : RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:kl])),
           pool_size.zero? ? "-" : RecommendationsHarness.fmt(r[:ids].size.to_f / pool_size),
-          r[:ms].empty? ? "-" : RecommendationsHarness.mean(r[:ms]).round)
+          r[:ms].empty? ? "-" : RecommendationsHarness.mean(r[:ms]).round,
+          (name == "rank") ? "-" : r[:cf])
       end
       puts
     end
+  end
+
+  desc "Write the positive-pair export (DIR=dir for a local store, else R2; HOLDOUT_SEED/HOLDOUT_USERS/HOLDOUT_FRACTION omit the harness's hold-out)"
+  task export: :environment do
+    store = ENV["DIR"].present? ? Recommendations::Store::Local.new(ENV["DIR"]) : Recommendations::Store.default
+    name = Date.current.iso8601
+    hold_out = nil
+    if ENV["HOLDOUT_SEED"].present?
+      seed = ENV["HOLDOUT_SEED"].to_i
+      users = ENV.fetch("HOLDOUT_USERS", "500").to_i
+      fraction = ENV.fetch("HOLDOUT_FRACTION", "0.2").to_f
+      adapter = Recommendations::Books::Adapter.new(config: Recommendations::Config.resolve)
+      plan = Recommendations::Evaluation.hold_out_plan(domain: :books, adapter: adapter, users: users, seed: seed, fraction: fraction)
+      hold_out = plan.held
+      name = "#{name}#{RecommendationsHarness.hold_out_suffix(seed: seed, users: users, fraction: fraction)}"
+      puts "hold-out: #{hold_out.size} users, #{hold_out.values.sum(&:size)} pairs omitted"
+    end
+    result = Recommendations::Export.call(domain: :books, store: store, name: name, hold_out: hold_out)
+    abort result.errors.join(", ") unless result.success?
+    puts "wrote #{result.data[:rows]} rows to #{result.data[:key]}#{" (pointer not moved)" unless result.data[:pointer_moved]}"
+  end
+
+  desc "Load a published model into Postgres (DIR=dir for a local store, else R2; VERSION=name to load a hold-out model; FORCE=1 to reload a version already in the table)"
+  task load: :environment do
+    store = ENV["DIR"].present? ? Recommendations::Store::Local.new(ENV["DIR"]) : Recommendations::Store.default
+    version = ENV["VERSION"].presence || store.read_pointer(Recommendations::Paths.model_latest(:books))
+    if ENV["FORCE"] == "1" && version
+      # A version is loaded once; re-training the same name (same day, same plan) leaves
+      # the old rows in place. Dropping the row makes the loader read the new file.
+      RecommendationModel.where(domain: "books", version: version).find_each(&:destroy!)
+    end
+    result = Recommendations::LoadModel.call(domain: :books, store: store, version: ENV["VERSION"].presence)
+    abort result.errors.join(", ") unless result.success?
+    puts result.data[:loaded] ? "loaded #{result.data[:version]}: #{result.data[:rows]} rows" : "nothing loaded (#{result.data[:reason]})"
   end
 end

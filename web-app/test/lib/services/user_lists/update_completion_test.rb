@@ -47,7 +47,7 @@ module Services
 
       test "a stale cached Read association cannot update a row moved to Reading" do
         @item.user_list
-        UserListItem.where(id: @item.id).update_all(user_list_id: @reading_list.id) # rubocop:disable Rails/SkipsModelValidations
+        UserListItem.where(id: @item.id).update_all(user_list_id: @reading_list.id)
 
         result = UpdateCompletion.call(item: @item, completed_on: "2026-08-01")
 

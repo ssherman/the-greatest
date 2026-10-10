@@ -142,11 +142,12 @@ class RecommendationsController < ApplicationController
     Rails.application.config.x.recommendations
   end
 
-  # {id => name} for every id the page's reasons mention, two queries at most.
+  # {[kind, id] => name} for every id the page's reasons mention, two queries at most.
   def reason_names(items)
     by_type = items.group_by { |entry| entry[:reason].type }
     category_ids = by_type.fetch(:interests, []).flat_map { |e| e[:reason].ids }
     item_ids = by_type.fetch(:because_of, []).flat_map { |e| e[:reason].ids }
-    pages.category_names(category_ids.uniq).merge(pages.item_names(item_ids.uniq))
+    pages.category_names(category_ids.uniq).transform_keys { |id| [:category, id] }
+      .merge(pages.item_names(item_ids.uniq).transform_keys { |id| [:item, id] })
   end
 end

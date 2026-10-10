@@ -1,5 +1,19 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: legacy_sync_watermarks
+#
+#  id         :bigint           not null, primary key
+#  key        :string           not null
+#  value      :bigint           not null
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#
+# Indexes
+#
+#  index_legacy_sync_watermarks_on_key  (key) UNIQUE
+#
 class LegacySyncWatermarkTest < ActiveSupport::TestCase
   test "accepts the three sync keys" do
     LegacySyncWatermark::KEYS.each do |key|

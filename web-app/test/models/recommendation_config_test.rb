@@ -15,7 +15,6 @@ require "test_helper"
 #
 # Indexes
 #
-#  index_recommendation_configs_on_user_id           (user_id)
 #  index_recommendation_configs_on_user_id_and_type  (user_id,type) UNIQUE
 #
 # Foreign Keys
