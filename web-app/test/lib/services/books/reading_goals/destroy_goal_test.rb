@@ -85,7 +85,7 @@ module Services
 
         test "reloads a stale private instance before destroying a currently public goal" do
           goal = reading_goal(public: false)
-          ::Books::ReadingGoal.where(id: goal.id).update_all(public: true) # rubocop:disable Rails/SkipsModelValidations
+          ::Books::ReadingGoal.where(id: goal.id).update_all(public: true)
           expected = ["https://#{@host}/reading_goals/#{goal.id}"]
           ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with("books", expected)
 

@@ -153,7 +153,7 @@ module Services
         # convert_spoiler_markers only ever moves existing nodes or builds new
         # Nokogiri::XML::Text nodes (auto-escaped by Nokogiri on serialization) --
         # never a string that gets reparsed as markup.
-        fragment.to_html.html_safe # rubocop:disable Rails/OutputSafety
+        fragment.to_html.html_safe
       end
 
       private

@@ -116,7 +116,7 @@ module Services
 
         test "reloads a stale private instance before revoking a currently public goal" do
           goal = public_goal(public: false)
-          ::Books::ReadingGoal.where(id: goal.id).update_all(public: true) # rubocop:disable Rails/SkipsModelValidations
+          ::Books::ReadingGoal.where(id: goal.id).update_all(public: true)
           purge = mock("purge")
           purge.expects(:purge_urls).with(:books, [goal_url(goal)]).returns(success: true)
           Cloudflare::PurgeService.stubs(:new).returns(purge)
