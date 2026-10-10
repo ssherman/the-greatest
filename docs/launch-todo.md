@@ -52,10 +52,10 @@ set, they raise. Details: `docs/features/recommendations.md`, "Collaborative sig
    `RECOMMENDATIONS_R2_ACCESS_KEY/SECRET_KEY/BUCKET` in the production SOPS secrets (the endpoint defaults to `STORAGE_ENDPOINT`), and `RECOMMENDER_R2_*` +
    `HC_RECOMMENDER` in `secrets/home-server.env`.
 2. **The check.** Create the healthchecks.io check `recommender-train` (period 1 day, grace 2 days).
-3. **The home server.** Run `deployment/home-server/provision` so the `ol` VM gets the units and env.
+3. **The home server.** Run `deployment/home-server/provision` (`SOPS_AGE_KEY_FILE` set) so the `ol` VM gets the new env; its next deploy (within 15 minutes) installs `recommender-train.timer` and builds the trainer image. `provision --verify` then reports `ol: recommender-train.timer is enabled`. If the VMs were pointed at a branch to test this, `provision --ref main` goes **before** the merge: GitHub deletes the merged branch and a VM tracking it fails its next deploy.
 4. **The first model.** `Recommendations::ExportInteractionsJob.perform_async("books")` from a
-   console (or wait for the 02:30 UTC run), let the home server's `recommender-train` timer run (04:00 Chicago;
-   or `systemctl start recommender-train` on the `ol` VM), then confirm `Recommendations::LoadModelJob`
+   console (or wait for the 02:30 UTC run), let the home server's `recommender-train` timer run (04:00 UTC;
+   or `sudo systemctl start recommender-train` on the `ol` VM, then `journalctl -u recommender-train` for the trainer's output), then confirm `Recommendations::LoadModelJob`
    loaded it (`RecommendationModel.active_for(:books)`) and that
    `bin/rails recommendations:show USER_ID=…` lists `collaborative`.
 
