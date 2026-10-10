@@ -13,6 +13,7 @@ require "test_helper"
 #  gender                :integer
 #  kind                  :integer          default("person"), not null
 #  name                  :string           not null
+#  name_keys             :string           default([]), not null, is an Array
 #  provisional           :boolean          default(FALSE), not null
 #  slug                  :string           not null
 #  sort_name             :string
@@ -25,6 +26,7 @@ require "test_helper"
 #  index_books_authors_on_gender           (gender)
 #  index_books_authors_on_kind             (kind)
 #  index_books_authors_on_lower_name       (lower((name)::text))
+#  index_books_authors_on_name_keys        (name_keys) USING gin
 #  index_books_authors_on_provisional      (provisional) WHERE provisional
 #  index_books_authors_on_slug             (slug) UNIQUE
 #
@@ -43,6 +45,28 @@ module Books
     test "generates a slug from the name" do
       author = Books::Author.create!(name: "Fyodor Dostoevsky")
       assert_equal "fyodor-dostoevsky", author.slug
+    end
+
+    test "saving sets name_keys from the name and alternate names, initials folded, each once" do
+      author = Books::Author.create!(name: "J.D. Salinger", alternate_names: ["J. D. Salinger", "Jerome David Salinger"])
+
+      assert_equal ["j d salinger", "jerome david salinger"], author.name_keys
+    end
+
+    test "changing the name or an alternate name updates name_keys" do
+      author = Books::Author.create!(name: "J.D. Salinger")
+
+      author.update!(name: "Jerome Salinger", alternate_names: ["J. D. Salinger"])
+
+      assert_equal ["jerome salinger", "j d salinger"], author.reload.name_keys
+    end
+
+    # Fixtures are inserted without callbacks, so their name_keys are written
+    # by hand in authors.yml. This keeps them honest.
+    test "every author fixture carries the name_keys its names produce" do
+      Books::Author.find_each do |author|
+        assert_equal Services::Text::PersonNameKey.all([author.name, *author.alternate_names]), author.name_keys, author.name
+      end
     end
 
     test "defaults to person kind" do
