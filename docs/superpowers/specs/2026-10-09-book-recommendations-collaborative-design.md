@@ -214,7 +214,7 @@ older than three days, else the run fails the same way.
   installed by `install-units.sh` for role `ol` only. `OnCalendar=*-*-* 04:00`, `OnBootSec=20min`. (Amended 2026-10-10: the VM's clock is UTC and
   provision sets no time zone, so this is 04:00 UTC, 1.5 h after the 02:30 UTC export, not 04:00
   Chicago; `deploy.sh` builds the trainer image with the API's so merged trainer changes reach the
-  VM; the `RECOMMENDER_R2_*` pass-through lives in `data-sources/docker-compose.yml`, so
+  VM; the `RECOMMENDATIONS_R2_*` pass-through lives in `data-sources/docker-compose.yml`, so
   `compose.ol.yml` adds only the limits.)
 - Takes the same `BUILD_LOCK` as `ol-refresh.sh`, non-blocking: on a dump-build day it logs
   "deferred", pings the check with that message and exits 0. The check's grace (2 days) covers
@@ -222,9 +222,9 @@ older than three days, else the run fails the same way.
   check's `/log` endpoint, which records it without counting as a run; with period 1 day and
   grace 2 days, about three days without a completed run alerts.)
 - `compose.ol.yml` sets the service's `mem_limit: 14g` and `cpus: 10`, the same share the dump
-  build gets, and passes `RECOMMENDER_R2_*` through. The trainer writes only to its own scratch
+  build gets, and passes `RECOMMENDATIONS_R2_*` through. The trainer writes only to its own scratch
   volume; it never touches `/srv/ol-data`.
-- Secrets: `RECOMMENDER_R2_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET` (amended 2026-10-10: endpoint, not account id) and `HC_RECOMMENDER` in
+- Secrets: `RECOMMENDATIONS_R2_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET` (amended 2026-10-10: endpoint, not account id; and the same names as the Rails side, where the spec first said `RECOMMENDER_R2_*`, so one spelling serves both secrets files) and `HC_RECOMMENDER` in
   `secrets/home-server.env`, rendered by `provision` into `/etc/the-greatest/home-server.env`
   as the existing `HC_*` values are (`deployment/home-server/lib/vm.sh`). One healthchecks.io
   check, `recommender-train`, period 1 day, grace 2 days.
@@ -379,7 +379,7 @@ launch, so the model is a **repeating** step: every `data_migration:all` pass is
 export, a train and a load. Add to `docs/launch-todo.md`:
 
 1. Create the private R2 bucket and a token scoped to it; put `RECOMMENDATIONS_R2_*` in the
-   production SOPS secrets and `RECOMMENDER_R2_*` + `HC_RECOMMENDER` in `secrets/home-server.env`.
+   production SOPS secrets and `RECOMMENDATIONS_R2_*` + `HC_RECOMMENDER` in `secrets/home-server.env`.
 2. Create the `recommender-train` check on healthchecks.io (period 1 day, grace 2 days).
 3. `deployment/home-server/provision` (Shane runs it) so the `ol` VM gets the units and env.
 4. After each migration pass: run the export job, wait for (or `systemctl start`) the train,

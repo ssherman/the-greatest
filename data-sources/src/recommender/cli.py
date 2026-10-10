@@ -86,7 +86,7 @@ def run(
 ) -> None:
     store = store_mod.Local(store_dir) if store_dir else store_mod.R2.from_env()
     if store is None:
-        typer.echo("no store: pass --store-dir or set the RECOMMENDER_R2_* variables")
+        typer.echo("no store: pass --store-dir or set the RECOMMENDATIONS_R2_* variables")
         raise typer.Exit(1)
 
     name = store.read_pointer(store_mod.interactions_latest(domain))

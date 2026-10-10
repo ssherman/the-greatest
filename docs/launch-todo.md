@@ -53,7 +53,7 @@ not configured; skipping" and do nothing; if only some of the `RECOMMENDATIONS_R
 set, they raise. Details: `docs/features/recommendations.md`, "Collaborative signal".
 
 1. **The bucket.** Create the private R2 bucket and a token scoped to it. Put
-   `RECOMMENDATIONS_R2_ACCESS_KEY/SECRET_KEY/BUCKET` in the production SOPS secrets (the endpoint defaults to `STORAGE_ENDPOINT`), and `RECOMMENDER_R2_*` +
+   `RECOMMENDATIONS_R2_ACCESS_KEY/SECRET_KEY/BUCKET` in the production SOPS secrets (the endpoint defaults to `STORAGE_ENDPOINT`), and `RECOMMENDATIONS_R2_*` +
    `HC_RECOMMENDER` in `secrets/home-server.env`.
 2. **The check.** Create the healthchecks.io check `recommender-train` (period 1 day, grace 2 days).
 3. **The home server.** Run `deployment/home-server/provision` (`SOPS_AGE_KEY_FILE` set) so the `ol` VM gets the new env. A VM tracking `main` installs `recommender-train.timer` and builds the trainer image within 15 minutes of the merge, before anyone provisions; `provision` then pushes the env file and forces an immediate deploy. `provision --verify` then reports `ol: recommender-train.timer is enabled`. If the VMs were pointed at a branch to test this, `provision --ref main` goes **before** the merge: GitHub deletes the merged branch and a VM tracking it fails its next deploy. Until the first export exists in the bucket, each 04:00 run pings `fail` with `no export published for books`; that is expected, and step 4 the same day ends it.

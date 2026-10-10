@@ -203,7 +203,7 @@ the serving side's Ruby (`Interaction#trainable?(min_rating:)`).
 
 **Three legs and a store.** Each leg reads and writes files through `Recommendations::Store`
 (`Local`, a directory, for development; `R2`, a private bucket, in production). The Python side
-has the same two stores (`RECOMMENDER_R2_*`). The two Rails jobs build the store from the three
+has the same two stores, read from the same variable names (`RECOMMENDATIONS_R2_*` in `secrets/home-server.env`; there the endpoint is required, since the VM has no `STORAGE_ENDPOINT`). The two Rails jobs build the store from the three
 `RECOMMENDATIONS_R2_*` variables (access key, secret key, bucket; the endpoint defaults to `STORAGE_ENDPOINT`): with none set they log "recommendations store not configured;
 skipping" and return, so a deploy before the bucket exists is quiet; with only some set they raise
 `Store::NotConfigured`. The rake tasks without `DIR` use `Store.default`, which raises in both cases.
@@ -268,7 +268,7 @@ and the trainer as the `recommender` compose service under `recommender-train.ti
 20 minutes after boot) on the home server's `ol` VM, pinging the healthchecks.io check
 `recommender-train` (`docs/features/home-server.md`). Nothing on the home server listens, and nothing
 in Rails calls it; if it is off, the model goes stale, never down. Until the bucket's values are in
-both secrets files, the Rails jobs log a skip, the timer logs `RECOMMENDER_R2_* not set` and exits,
+both secrets files, the Rails jobs log a skip, the timer logs `RECOMMENDATIONS_R2_* not set` and exits,
 and the signal stays unavailable. The launch steps are `docs/launch-todo.md`, section 3.
 
 **Time zones.** The Sidekiq crons run in the Rails server's zone, which is UTC (the app sets no
