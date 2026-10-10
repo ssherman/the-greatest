@@ -1,1 +1,15 @@
 # Intentionally empty: any row here would make data_migration:all refuse in every test.
+# == Schema Information
+#
+# Table name: legacy_sync_watermarks
+#
+#  id         :bigint           not null, primary key
+#  key        :string           not null
+#  value      :bigint           not null
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#
+# Indexes
+#
+#  index_legacy_sync_watermarks_on_key  (key) UNIQUE
+#
