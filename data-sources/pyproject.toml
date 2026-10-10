@@ -55,5 +55,12 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's DI pattern calls Depends() in an argument default on purpose; the
 # call returns a sentinel FastAPI reads via introspection, never evaluated
-# per-request. This is ruff's documented allowlist for that idiom.
-extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]
+# per-request. This is ruff's documented allowlist for that idiom. Typer's
+# Option/Argument defaults are the same kind of declaration (recommender CLI).
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "typer.Option",
+    "typer.Argument",
+]

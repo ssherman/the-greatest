@@ -86,3 +86,24 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  # The collaborative-filtering trainer (docs/features/recommendations.md,
+  # "Collaborative signal"). A one-shot job the ol VM's timer runs with
+  # `compose run --rm recommender`; the profile keeps `compose up` from
+  # starting it. Memory and CPU limits live in deployment/home-server/compose.ol.yml.
+  recommender:
+    build:
+      context: .
+      dockerfile: recommender.Dockerfile
+    image: the-greatest/recommender:latest
+    profiles: ["recommender"]
+    environment:
+      RECOMMENDER_R2_ACCOUNT_ID: "${RECOMMENDER_R2_ACCOUNT_ID:-}"
+      RECOMMENDER_R2_ACCESS_KEY: "${RECOMMENDER_R2_ACCESS_KEY:-}"
+      RECOMMENDER_R2_SECRET_KEY: "${RECOMMENDER_R2_SECRET_KEY:-}"
+      RECOMMENDER_R2_BUCKET: "${RECOMMENDER_R2_BUCKET:-}"
+    volumes:
+      - recommender-work:/work
+
+volumes:
+  recommender-work:
