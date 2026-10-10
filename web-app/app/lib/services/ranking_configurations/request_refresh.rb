@@ -1,18 +1,28 @@
 # frozen_string_literal: true
 
-# Claims a user-owned configuration's refresh lock and enqueues the job.
+# Claims a configuration's refresh lock and enqueues the job. Every ranking
+# recalculation in the app comes through here: a member's Refresh, the admin
+# Refresh Rankings action, record merges, Goodreads verdicts, dynamic lists
+# and the author cron.
 #
 # The claim is one conditional UPDATE: two simultaneous callers serialize on
 # the row lock and the loser re-evaluates the WHERE against the winner's
-# committed value, so at most one caller ever sees a changed row. The stale
-# clause reclaims a row wedged by a worker killed mid-run, which no rescue in
-# the job can catch.
+# committed value, so at most one caller ever sees a changed row. That refusal
+# is what coalesces a burst -- 500 merges touching the primary queue one run,
+# not 500. A change that lands while the run is in progress waits for the next
+# trigger; that is accepted (see the 2026-10-10 coalesced ranking
+# recalculation spec). The stale clause reclaims a row wedged by a worker killed
+# mid-run, which no rescue in the job can catch.
 #
 # The claim commits before the enqueue, so an unreachable Redis would
-# otherwise leave the row "queued" -- and every Refresh click rejected -- for
-# the whole stale window. An enqueue failure therefore releases the claim
-# into `failed` with the reason, which the manage page shows and the button
+# otherwise leave the row "queued" -- and every request refused -- for the
+# whole stale window. An enqueue failure therefore releases the claim into
+# `failed` with the reason, which the manage page shows and the next request
 # can retry.
+#
+# `delay` lets automatic triggers collect a burst before the run starts.
+# Global configurations go on `default`; members' keep RefreshJob's own `low`,
+# which strict queue priority keeps behind everything site-wide.
 #
 # Model constants are root-anchored: Services::RankingConfiguration is an
 # existing module, so a bare RankingConfiguration here would resolve to it.
@@ -24,19 +34,26 @@ module Services
       ALREADY_RUNNING = "A refresh is already running for this ranking."
       ENQUEUE_FAILED = "The refresh could not be queued. Try again in a moment."
 
-      def self.call(config:)
-        new(config: config).call
+      def self.call(config:, delay: 0)
+        new(config: config, delay: delay).call
       end
 
-      def initialize(config:)
+      # The mergers, the Goodreads verdicts and the repair-verdicts controller
+      # hold ids, not records. Each configuration gets its own claim.
+      def self.call_for_ids(ids, delay: 0)
+        ::RankingConfiguration.where(id: Array(ids).compact.uniq).map { |config| call(config: config, delay: delay) }
+      end
+
+      def initialize(config:, delay: 0)
         @config = config
+        @delay = delay
       end
 
       def call
         return failure(:already_running, ALREADY_RUNNING) unless claim
 
         begin
-          ::RankingConfigurations::RefreshJob.perform_async(config.id)
+          enqueue
         rescue => error
           release(error)
           return failure(:enqueue_failed, ENQUEUE_FAILED)
@@ -47,7 +64,7 @@ module Services
 
       private
 
-      attr_reader :config
+      attr_reader :config, :delay
 
       def statuses
         ::RankingConfiguration.refresh_statuses
@@ -63,6 +80,11 @@ module Services
 
         config.reload
         true
+      end
+
+      def enqueue
+        job = config.user_owned? ? ::RankingConfigurations::RefreshJob : ::RankingConfigurations::RefreshJob.set(queue: "default")
+        delay.to_i.positive? ? job.perform_in(delay, config.id) : job.perform_async(config.id)
       end
 
       def release(error)

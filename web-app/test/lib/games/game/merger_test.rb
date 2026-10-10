@@ -461,33 +461,35 @@ module Games
 
         # Isolates the merger's own scheduling. The merger's regeneration call runs
         # inline under Sidekiq's test mode, and creating a generated list for the
-        # first time queues a BulkCalculateWeightsJob of its own -- which would land
-        # on these expectations. Regeneration has its own test below.
+        # first time queues a BulkCalculateWeightsJob of its own.
+        # Regeneration has its own test below.
         GenerateUserFavoritesListsJob.stubs(:perform_async)
 
-        BulkCalculateWeightsJob.expects(:perform_async).with(config.id)
-        CalculateRankingsJob.expects(:perform_in).with(5.minutes, config.id)
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).with([config.id], delay: 5.minutes).once
 
-        result = ::Games::Game::Merger.call(source: @source, target: @target)
+        merger = ::Games::Game::Merger.new(source: @source, target: @target)
+        result = merger.call
 
         assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_nil merger.stats[:post_commit_error]
       end
 
       test "schedules nothing when neither game is ranked" do
         GenerateUserFavoritesListsJob.stubs(:perform_async)
 
-        BulkCalculateWeightsJob.expects(:perform_async).never
-        CalculateRankingsJob.expects(:perform_in).never
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call).never
 
-        result = ::Games::Game::Merger.call(source: @source, target: @target)
+        merger = ::Games::Game::Merger.new(source: @source, target: @target)
+        result = merger.call
 
         assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_nil merger.stats[:post_commit_error]
       end
 
       # The generated favorites list is derived data: merge_list_items skips
       # (rather than repoints) a row on that list, so it is one item short until
       # regenerated. This must happen well inside the 5-minute window before
-      # CalculateRankingsJob reads the list, or the short list gets baked into
+      # RankingConfigurations::RefreshJob reads the list, or the short list gets baked into
       # the rankings.
       test "regenerates the generated favorites list after a committed merge" do
         GenerateUserFavoritesListsJob.expects(:perform_async).with("Games::UserList")

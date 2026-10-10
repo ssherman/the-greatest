@@ -69,13 +69,13 @@ namespace :dynamic_lists do
   # optional: `config/sidekiq.yml` runs 5 concurrent threads against the
   # `default` queue (the single-threaded `serial` capsule in
   # config/initializers/sidekiq.rb does not cover it), so enqueuing one job per
-  # year plus a trailing CalculateRankingsJob would let that refresh start
+  # year plus a trailing ranking refresh would let that refresh start
   # ALONGSIDE the generators and read each mapped list's pre-regeneration
   # list_items and stale ranked_lists.weight -- the exact stale-ordering bug
   # this feature exists to eliminate. Running inline here costs well under a
   # second per year configuration (weights + rankings) and guarantees every
   # generator has completed, and the primary's weights for those lists are
-  # current, before the single CalculateRankingsJob is enqueued.
+  # current, before the single ranking refresh is requested.
   desc "Regenerate every year configuration of a type in order, then queue one primary refresh"
   task :regenerate, [:type] => :environment do |_task, args|
     type = args[:type]
@@ -102,8 +102,8 @@ namespace :dynamic_lists do
 
     main = config_class.default_primary
     if main
-      puts "Queueing one ranking refresh for #{main.name.inspect}."
-      CalculateRankingsJob.perform_async(main.id)
+      puts "Requesting one ranking refresh for #{main.name.inspect}."
+      Services::RankingConfigurations::RequestRefresh.call(config: main)
     end
 
     puts "Done. Regenerated #{configs.count} configuration(s)."
