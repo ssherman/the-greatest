@@ -46,12 +46,13 @@ module Services
 
         private
 
-        # The key of the one work author whose name agrees, or nil.
+        # The key of the one work author whose name agrees (initials folded,
+        # Services::Text::PersonNameKey), or nil.
         def key_for(author)
-          names = [author.name, *Array(author.alternate_names)].filter_map { |name| Check.normalize(name) }
+          names = ::Services::Text::PersonNameKey.all([author.name, *Array(author.alternate_names)])
           names_on_work = Array(@work.author_names)
           keys_on_work = Array(@work.author_keys)
-          keys = names_on_work.each_index.select { |index| names.include?(Check.normalize(names_on_work[index])) }
+          keys = names_on_work.each_index.select { |index| names.include?(::Services::Text::PersonNameKey.call(names_on_work[index])) }
             .filter_map { |index| keys_on_work[index] }.uniq
           keys.first if keys.size == 1
         end

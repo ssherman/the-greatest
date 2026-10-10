@@ -56,6 +56,15 @@ module Services
           assert_equal [[@tolstoy.id, "OL26783A"]], AuthorKeys.call(book: @book.reload, work: work)["added"]
         end
 
+        test "a work author whose initials are written differently pairs the author" do
+          salinger = ::Books::Author.create!(name: "J. D. Salinger")
+          book = ::Books::Book.create!(title: "Nine Stories")
+          book.book_authors.create!(author: salinger, position: 1)
+          work = ol_work("OL2W", title: "Nine Stories", authors: [["OL57A", "J.D. Salinger"]])
+
+          assert_equal [[salinger.id, "OL57A"]], AuthorKeys.call(book: book, work: work)["added"]
+        end
+
         test "no work author with the name, or two with different keys, leaves the author alone" do
           nobody = ol_work("OL1W", title: "War and Peace", authors: [["OL5A", "Somebody Else"]])
           twins = ol_work("OL1W", title: "War and Peace", authors: [["OL5A", "Leo Tolstoy"], ["OL6A", "Leo Tolstoy"]])

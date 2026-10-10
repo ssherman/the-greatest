@@ -94,6 +94,9 @@ module DataImporters
 
         def record_creator_alternate_names(record) = record.authors.flat_map { |author| Array(author.alternate_names) }
 
+        # Authors are people: initials written differently are one name.
+        def creator_key(text) = ::Services::Text::PersonNameKey.call(text)
+
         def record_year(record) = record.first_published_year
 
         def record_extra_evidence(record)
@@ -116,8 +119,9 @@ module DataImporters
         end
 
         # Normalized title equality (served by the lower(title) expression
-        # index), joined to an author whose name or alternate name matches
-        # when the query names authors. A title-only query still yields
+        # index), joined to an author whose name keys
+        # (Services::Text::PersonNameKey, GIN-indexed books_authors.name_keys)
+        # meet the query's when the query names authors. A title-only query still yields
         # title matches: they are candidates for the AI, never a rule-4
         # match, because creators_required? is true for books.
         #
@@ -131,12 +135,10 @@ module DataImporters
           return ::Books::Book.none if query.title.blank?
 
           filtered = ::Books::Book.where("LOWER(books_books.title) = ?", normalize(query.title))
-          names = query.author_names.map { |name| normalize(name) }.compact_blank
-          if names.any?
-            filtered = filtered.joins(book_authors: :author).where(
-              "LOWER(books_authors.name) IN (:names) OR EXISTS (SELECT 1 FROM unnest(books_authors.alternate_names) AS alternate WHERE LOWER(alternate) IN (:names))",
-              names: names
-            )
+          keys = ::Services::Text::PersonNameKey.all(query.author_names)
+          if keys.any?
+            filtered = filtered.joins(book_authors: :author)
+              .where("books_authors.name_keys && ARRAY[:keys]::varchar[]", keys: keys)
           end
           ids = filtered.distinct.pluck(:id).sort.first(EXACT_LIMIT)
           ::Books::Book.where(id: ids).includes(:authors, :identifiers).order(:id)
