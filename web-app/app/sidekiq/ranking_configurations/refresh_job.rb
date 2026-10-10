@@ -52,14 +52,17 @@ module RankingConfigurations
       result = config.calculate_rankings
       raise "Ranking calculation failed: #{result.errors.join(", ")}" unless result.success?
 
+      # Before the row goes idle: a shutdown among the follow-ups still finds it
+      # `running`, hands it back, and the pushed-back job requests them again.
+      # None of them reads refresh_status, and each has its own rescue.
+      request_primary_follow_ups(config)
+      request_csv_regenerate(config)
+
       config.update_columns(
         refresh_status: ::RankingConfiguration.refresh_statuses[:idle],
         last_refreshed_at: Time.current,
         last_refresh_error: nil
       )
-
-      request_primary_follow_ups(config)
-      request_csv_regenerate(config)
     rescue ::Sidekiq::Shutdown
       # Sidekiq has already pushed this job back onto the queue, and the pushed-back
       # copy only runs from `queued`. Hand the row back (only if it is still ours,
@@ -89,28 +92,38 @@ module RankingConfigurations
         .update_all(refresh_status: statuses[:running], needs_refresh: false, refresh_requested_at: Time.current) == 1
     end
 
-    # Their own rescue, like the CSV request: the ranking already landed, and a
-    # hiccup here must not flip the row to "failed".
+    # Each follow-up is attempted on its own, so a failed author request (a DB
+    # blip in its claim) cannot cost the reindex as well.
     def request_primary_follow_ups(config)
-      return unless config.type == "Books::RankingConfiguration" && config.default_primary?
+      books_primary = follow_up(config, "primary check") { config.type == "Books::RankingConfiguration" && config.default_primary? }
+      return unless books_primary
 
-      authors = ::Books::Authors::RankingConfiguration.default_primary
-      ::Services::RankingConfigurations::RequestRefresh.call(config: authors) if authors
-      ::Books::ReindexRankedFieldsJob.perform_async
-    rescue => e
-      Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{config.id}: follow-ups not requested: #{e.message}"
+      follow_up(config, "author rankings refresh") do
+        authors = ::Books::Authors::RankingConfiguration.default_primary
+        ::Services::RankingConfigurations::RequestRefresh.call(config: authors) if authors
+      end
+      follow_up(config, "ranked-fields reindex") { ::Books::ReindexRankedFieldsJob.perform_async }
     end
 
-    # The CSV is a side effect of the refresh, not part of it: a failure here
-    # must not flip a configuration whose rankings did land to "failed". Logged
-    # rather than raised -- retry: false means a raise would only be logged
-    # anyway, and the next request or member download re-claims the row.
     # rerun_if_generating: a run already in flight plucked its ids before
     # these ranks landed, so it must go again when it finishes.
     def request_csv_regenerate(config)
-      ::Services::CsvExports::RequestGenerate.call(ranking_configuration: config, rerun_if_generating: true)
+      follow_up(config, "CSV regenerate") do
+        ::Services::CsvExports::RequestGenerate.call(ranking_configuration: config, rerun_if_generating: true)
+      end
+    end
+
+    # Follow-ups are side effects of the refresh, not part of it: the ranking
+    # already landed, and a failure here must not flip the row to "failed".
+    # Logged rather than raised -- retry: false means a raise would only be
+    # logged anyway, and the next request (or the nightly jobs) catch up.
+    # Sidekiq::Shutdown is not a StandardError and passes through, so the
+    # hand-back in #perform still sees it.
+    def follow_up(config, what)
+      yield
     rescue => e
-      Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{config.id}: CSV regenerate not requested: #{e.message}"
+      Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{config.id}: #{what} not requested: #{e.message}"
+      nil
     end
   end
 end
