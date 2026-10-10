@@ -13,6 +13,10 @@
 # with the quality prior off, which is the legacy engine's behaviour). The
 # baseline pins every knob the legacy engine did not have, so changing a
 # default never changes what the baseline measures.
+#
+# The cf column counts the evaluated users whose run used the collaborative
+# signal. VARIANTS="collaborative=false" is the taste-only comparison: the same
+# users and hold-out with the collaborative signal switched off.
 module RecommendationsHarness
   module_function
 
@@ -123,7 +127,7 @@ namespace :recommendations do
     puts
 
     segments.each do |segment, user_ids|
-      rows = Hash.new { |h, k| h[k] = {hit: [], recall: [], ndcg: [], mean_rank: [], author_repeats: [], kl: [], ms: [], ids: Set.new} }
+      rows = Hash.new { |h, k| h[k] = {hit: [], recall: [], ndcg: [], mean_rank: [], author_repeats: [], kl: [], ms: [], cf: 0, ids: Set.new} }
       evaluated = 0
 
       user_ids.each do |user_id|
@@ -170,6 +174,7 @@ namespace :recommendations do
           defaults_history = history if overrides.empty?
           row = rows[RecommendationsHarness.label(overrides)]
           row[:ms] << ms
+          row[:cf] += 1 if result.data[:signals_used].include?(:collaborative)
           record.call(row, result.data[:items].map { |i| i[:item_id] }, history)
         end
 
@@ -179,9 +184,9 @@ namespace :recommendations do
       end
 
       puts "-- segment #{segment}: #{evaluated} of #{user_ids.size} sampled users evaluated"
-      puts "   #{"variant".ljust(48)}  hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms"
+      puts "   #{"variant".ljust(48)}  hit@10 recall@50  ndcg@50 mean_rank   au_rep      kl  coverage     ms     cf"
       rows.each do |name, r|
-        puts format("   %-48s %7s %9s %8s %9s %8s %7s %9s %6s", name[0, 48],
+        puts format("   %-48s %7s %9s %8s %9s %8s %7s %9s %6s %6s", name[0, 48],
           RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:hit])),
           RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:recall])),
           RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:ndcg])),
@@ -189,7 +194,8 @@ namespace :recommendations do
           r[:author_repeats].empty? ? "-" : RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:author_repeats])),
           r[:kl].empty? ? "-" : RecommendationsHarness.fmt(RecommendationsHarness.mean(r[:kl])),
           pool_size.zero? ? "-" : RecommendationsHarness.fmt(r[:ids].size.to_f / pool_size),
-          r[:ms].empty? ? "-" : RecommendationsHarness.mean(r[:ms]).round)
+          r[:ms].empty? ? "-" : RecommendationsHarness.mean(r[:ms]).round,
+          (name == "rank") ? "-" : r[:cf])
       end
       puts
     end
