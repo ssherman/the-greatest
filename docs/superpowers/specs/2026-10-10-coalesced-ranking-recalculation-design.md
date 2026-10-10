@@ -80,8 +80,12 @@ Merges from the admin UI never use it.
   - User-owned configurations: `low`. That is `RefreshJob`'s current queue, and strict queue
     priority keeps these behind `critical` and `default`.
 - **Enqueue failure:** unchanged. The claim is released into `failed` with the reason.
-- `RankingConfiguration#calculate_rankings_async` is replaced by
-  `#request_refresh(delay: 0)`, which delegates to `RequestRefresh`.
+- **`RequestRefresh.call_for_ids(ids, delay: 0)`:** loads the configurations by id (nil, empty
+  and duplicate ids are fine; missing ids are skipped) and calls `call` for each. The mergers,
+  verdicts and the repair-verdicts controller hold ids, not records.
+- `RankingConfiguration#calculate_rankings_async` is deleted. Its one caller, the admin
+  "Refresh Rankings" action, calls `RequestRefresh` directly. Business logic stays in the
+  service, not on the model.
 
 **Delays:**
 
@@ -95,7 +99,11 @@ Merges from the admin UI never use it.
 `RankingConfigurations::RefreshJob#perform(ranking_configuration_id)` keeps its current shape:
 
 1. Return if the configuration was deleted while queued.
-2. `refresh_status: running`, `needs_refresh: false`.
+2. **Start only from `queued`:** one conditional UPDATE, `queued` → `running` with
+   `needs_refresh: false`. If no row changes, return without calculating. This keeps two runs of
+   the same configuration from overlapping even when a stale claim let a second job into the
+   queue. That can happen if the queue is so backed up that a job waits longer than
+   `REFRESH_STALE_AFTER` to start.
 3. `Rankings::BulkWeightCalculator.new(config).call`; raise on errors. A list-less
    configuration (books authors, music artists) has no `ranked_lists`, so this is a no-op for
    it.
@@ -104,6 +112,7 @@ Merges from the admin UI never use it.
 6. **New:** if the configuration is a `Books::RankingConfiguration` and
    `default_primary?`, then:
    - request a refresh of `Books::Authors::RankingConfiguration.default_primary` with `delay: 0`
+     (skipped if there is none)
    - enqueue `Books::ReindexRankedFieldsJob`
 
    This is the same gate `CalculateRankingsJob` uses today, so members' rankings and year
@@ -128,7 +137,7 @@ gate in step 6 is now what keeps them out.
 | `Admin::Books::RepairVerdictsController#revert_provisional` | `CalculateRankingsJob.perform_async` per id | `RequestRefresh(delay: 5.minutes)` per id |
 | `Services::Lists::GenerateDynamicLists#recalculate_primary` | `CalculateRankingsJob.perform_async(main.id)` | `RequestRefresh(delay: 0)` |
 | `lib/tasks/dynamic_lists.rake` | `CalculateRankingsJob.perform_async(main.id)` | `RequestRefresh(delay: 0)` |
-| `Actions::Admin::RefreshRankings` | `config.calculate_rankings_async`; always "queued" | `config.request_refresh`; on `:already_running`, report that a run is already queued or running instead of claiming success |
+| `Actions::Admin::RefreshRankings` | `config.calculate_rankings_async`; always "queued" | `RequestRefresh.call(config:)`; on `:already_running`, report that a run is already queued or running instead of claiming success |
 | `Books::CalculateAuthorRankingsJob` (04:00 cron) | runs `calculate_rankings` inline | `perform` becomes a `RequestRefresh(delay: 0)` on the authors primary, so it cannot overlap a run already scheduled |
 
 `GenerateDynamicLists#recalculate_primary` still runs `call_for_ids` on the two generated
@@ -150,7 +159,7 @@ Jobs already sitting in Redis at deploy time (scheduled, enqueued, retrying) nam
 and ends up a dead job.
 
 - **This release:** `CalculateRankingsJob#perform(id)` becomes a shim. It looks up the
-  configuration, returns if it is missing, and calls `RequestRefresh(delay: 0)`. The thousands
+  configuration, returns if it is missing, and calls `RequestRefresh.call(config:)`. The thousands
   of queued copies collapse into one run per configuration. The class comment says it is
   transitional and names the follow-up.
 - **Follow-up release:** delete the shim and its test. Add this as a line to the plan's
