@@ -163,19 +163,35 @@ With `max_age: 50` and `max_penalty_percentage: 80`:
 
 ## Background Processing
 
-### CalculateRankingsJob
+### Recalculation is coalesced
 
-Sidekiq job for asynchronous ranking calculations:
+Every ranking recalculation, for every domain, global or member-owned, is requested through
+`Services::RankingConfigurations::RequestRefresh` and run by `RankingConfigurations::RefreshJob`:
 
 ```ruby
-CalculateRankingsJob.perform_async(ranking_configuration_id)
+Services::RankingConfigurations::RequestRefresh.call(config: config)                       # now
+Services::RankingConfigurations::RequestRefresh.call_for_ids(ids, delay: 5.minutes)        # after a burst
 ```
 
-#### Error Handling
-
-- Logs successful calculations
-- Raises exceptions for failed calculations with detailed error messages
-- Handles `ActiveRecord::RecordNotFound` for invalid configuration IDs
+- **The claim is the coalescing.** One conditional UPDATE moves the row from `idle`/`failed` to
+  `queued`. While it is `queued` or `running`, every further request is refused, so 500 merges
+  touching the primary queue one run. A row stuck in progress for longer than
+  `RankingConfiguration::REFRESH_STALE_AFTER` (1 hour) can be claimed again.
+- **Delays:** automatic triggers (record merges, Goodreads verdicts, the provisional revert) wait
+  5 minutes so a burst collects. Buttons, dynamic lists and the 04:00 author cron run at once.
+- **Queues:** global configurations go on `default`, members' on `low`.
+- **One job, in order:** `RefreshJob` starts only from `queued`, reweighs, ranks, and then, for
+  the books default primary only, requests the authors primary refresh and enqueues
+  `Books::ReindexRankedFieldsJob`. Every run also requests a CSV regenerate.
+- **Graceful restart:** on `Sidekiq::Shutdown` mid-run the job hands the row back to `queued` and
+  re-raises, so the job Sidekiq pushed back reruns instead of finding a `running` row and skipping.
+- **Accepted trade-off:** a change that lands while a run is `running` is not guaranteed its own
+  run; it waits for the next trigger. Triggers are frequent and public pages are served from the
+  Cloudflare cache.
+- The 04:00 author cron no longer raises when its request is refused or fails to enqueue, so a
+  failed enqueue waits for the next nightly run or the next trigger.
+- `CalculateRankingsJob` remains for one release as a shim that forwards to `RequestRefresh`, so
+  jobs already in Redis at deploy collapse instead of dying. It is then deleted.
 
 ## Usage Examples
 
@@ -199,11 +215,9 @@ end
 ### Background Calculation
 
 ```ruby
-# Queue ranking calculation job
+# Queue a ranking refresh (refused if one is already queued or running)
 config = RankingConfiguration.find(1)
-config.calculate_rankings_async
-
-# Job will run in background and update database
+Services::RankingConfigurations::RequestRefresh.call(config: config)
 ```
 
 ### Accessing Results

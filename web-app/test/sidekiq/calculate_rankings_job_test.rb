@@ -2,149 +2,32 @@
 
 require "test_helper"
 
+# CalculateRankingsJob is a one-release shim (see the class). Delete this file
+# with it.
 class CalculateRankingsJobTest < ActiveSupport::TestCase
-  def setup
-    @ranking_configuration = ranking_configurations(:music_albums_global)
-    Services::CsvExports::RequestGenerate.stubs(:call).returns(
-      Services::CsvExports::RequestGenerate::Result.new(success?: true, data: {}, errors: [])
-    )
-  end
-
-  test "perform calls calculate_rankings on configuration" do
-    # Mock any ranking configuration instance to verify calculate_rankings is called
-    RankingConfiguration.any_instance.expects(:calculate_rankings).returns(
-      ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
-    )
-
-    CalculateRankingsJob.new.perform(@ranking_configuration.id)
-  end
-
-  test "perform raises exception when calculation fails" do
-    # Mock failed result
-    failed_result = ItemRankings::Calculator::Result.new(
-      success?: false,
-      data: nil,
-      errors: ["Test error message"]
-    )
-    RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(failed_result)
-
-    error = assert_raises StandardError do
-      CalculateRankingsJob.new.perform(@ranking_configuration.id)
-    end
-
-    assert_includes error.message, "Ranking calculation failed: Test error message"
-  end
-
-  test "perform raises error when ranking configuration not found" do
-    invalid_id = -1
-
-    error = assert_raises ActiveRecord::RecordNotFound do
-      CalculateRankingsJob.new.perform(invalid_id)
-    end
-
-    assert_includes error.message, "Couldn't find RankingConfiguration"
-  end
-
-  test "enqueues the author ranking job after a books configuration succeeds" do
-    config = ranking_configurations(:books_global)
-    RankingConfiguration.any_instance
-      .expects(:calculate_rankings)
-      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
-    Books::CalculateAuthorRankingsJob.expects(:perform_async).once
-    # Sidekiq::Testing.inline! (test_helper.rb) means an unstubbed perform_async here would
-    # really execute Books::ReindexRankedFieldsJob against the test OpenSearch index -- stub it
-    # so this test only exercises the author-ranking chain it's named for.
-    Books::ReindexRankedFieldsJob.stubs(:perform_async)
-
-    CalculateRankingsJob.new.perform(config.id)
-  end
-
-  test "does not enqueue the author ranking job for an author configuration" do
-    config = ranking_configurations(:books_authors_global)
-    RankingConfiguration.any_instance
-      .expects(:calculate_rankings)
-      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
-    Books::CalculateAuthorRankingsJob.expects(:perform_async).never
-
-    CalculateRankingsJob.new.perform(config.id)
-  end
-
-  test "enqueues the ranked-fields reindex after a books configuration succeeds" do
-    config = ranking_configurations(:books_global)
-    RankingConfiguration.any_instance
-      .expects(:calculate_rankings)
-      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
-    Books::CalculateAuthorRankingsJob.stubs(:perform_async)
-    Books::ReindexRankedFieldsJob.expects(:perform_async).once
-
-    CalculateRankingsJob.new.perform(config.id)
-  end
-
-  test "does not enqueue the ranked-fields reindex for a music configuration" do
+  test "forwards to a refresh request instead of calculating" do
     config = ranking_configurations(:music_albums_global)
-    RankingConfiguration.any_instance
-      .expects(:calculate_rankings)
-      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
-    Books::ReindexRankedFieldsJob.expects(:perform_async).never
+    ::Services::RankingConfigurations::RequestRefresh.expects(:call).with(config: config).once
+    RankingConfiguration.any_instance.expects(:calculate_rankings).never
 
     CalculateRankingsJob.new.perform(config.id)
   end
 
-  test "does not enqueue the ranked-fields reindex for a non-primary books configuration" do
-    config = ranking_configurations(:books_user)
-    RankingConfiguration.any_instance
-      .expects(:calculate_rankings)
-      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
-    Books::CalculateAuthorRankingsJob.stubs(:perform_async)
-    Books::ReindexRankedFieldsJob.expects(:perform_async).never
+  test "a configuration deleted since the job was queued is a silent no-op" do
+    ::Services::RankingConfigurations::RequestRefresh.expects(:call).never
 
-    CalculateRankingsJob.new.perform(config.id)
+    assert_nothing_raised { CalculateRankingsJob.new.perform(-1) }
   end
 
-  test "does not enqueue the author ranking job for a non-primary books configuration" do
-    config = ranking_configurations(:books_user)
-    RankingConfiguration.any_instance
-      .expects(:calculate_rankings)
-      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
-    Books::CalculateAuthorRankingsJob.expects(:perform_async).never
-    Books::ReindexRankedFieldsJob.expects(:perform_async).never
+  test "a backlog of old jobs for one configuration collapses into one refresh" do
+    config = ranking_configurations(:books_global)
 
-    CalculateRankingsJob.new.perform(config.id)
-  end
+    Sidekiq::Testing.fake! do
+      ::RankingConfigurations::RefreshJob.clear
 
-  test "requests a CSV export regenerate after a successful calculation" do
-    RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(
-      ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
-    )
-    Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: @ranking_configuration, rerun_if_generating: true).once
+      50.times { CalculateRankingsJob.new.perform(config.id) }
 
-    CalculateRankingsJob.new.perform(@ranking_configuration.id)
-  end
-
-  test "does not request a CSV export regenerate after a failed calculation" do
-    RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(
-      ItemRankings::Calculator::Result.new(success?: false, data: nil, errors: ["nope"])
-    )
-    Services::CsvExports::RequestGenerate.expects(:call).never
-
-    assert_raises(StandardError) { CalculateRankingsJob.new.perform(@ranking_configuration.id) }
-  end
-
-  test "requests a CSV export regenerate for a non-exportable type too; the service decides" do
-    config = ranking_configurations(:books_authors_global)
-    RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(
-      ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
-    )
-    Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: config, rerun_if_generating: true).once
-
-    CalculateRankingsJob.new.perform(config.id)
-  end
-  test "a failure requesting the CSV regenerate does not fail the job or trigger a retry" do
-    RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(
-      ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
-    )
-    Services::CsvExports::RequestGenerate.expects(:call).raises(StandardError, "csv_exports hiccup")
-
-    assert_nothing_raised { CalculateRankingsJob.new.perform(@ranking_configuration.id) }
+      assert_equal 1, ::RankingConfigurations::RefreshJob.jobs.size
+    end
   end
 end
