@@ -23,3 +23,9 @@ csv_exports_refresh_global:
   class: CsvExports::RefreshGlobalJob
   cron: "30 4 * * *"
   description: "Regenerate the pre-built CSV export of every global ranking configuration"
+
+recommendations_export_books:
+  class: Recommendations::ExportInteractionsJob
+  cron: "30 2 * * *"
+  args: ["books"]
+  description: "Export the books positive pairs for the collaborative-filtering trainer"

@@ -194,4 +194,23 @@ namespace :recommendations do
       puts
     end
   end
+
+  desc "Write the positive-pair export (DIR=dir for a local store, else R2; HOLDOUT_SEED/HOLDOUT_USERS/HOLDOUT_FRACTION omit the harness's hold-out)"
+  task export: :environment do
+    store = ENV["DIR"].present? ? Recommendations::Store::Local.new(ENV["DIR"]) : Recommendations::Store.default
+    name = Date.current.iso8601
+    hold_out = nil
+    if ENV["HOLDOUT_SEED"].present?
+      seed = ENV["HOLDOUT_SEED"].to_i
+      adapter = Recommendations::Books::Adapter.new(config: Recommendations::Config.resolve)
+      plan = Recommendations::Evaluation.hold_out_plan(domain: :books, adapter: adapter,
+        users: ENV.fetch("HOLDOUT_USERS", "500").to_i, seed: seed, fraction: ENV.fetch("HOLDOUT_FRACTION", "0.2").to_f)
+      hold_out = plan.held
+      name = "#{name}-holdout-#{seed}"
+      puts "hold-out: #{hold_out.size} users, #{hold_out.values.sum(&:size)} pairs omitted"
+    end
+    result = Recommendations::Export.call(domain: :books, store: store, name: name, hold_out: hold_out)
+    abort result.errors.join(", ") unless result.success?
+    puts "wrote #{result.data[:rows]} rows to #{result.data[:key]}#{" (pointer not moved)" unless result.data[:pointer_moved]}"
+  end
 end
