@@ -130,5 +130,40 @@ module Recommendations
       sample = Evaluation.sample_user_ids(domain: :books, per_segment: 10, random: Random.new(1))
       assert_equal [user.id], sample["5-19"]
     end
+
+    test "hold_out_plan is deterministic for a seed and holds out only eligible ranked items" do
+      config = ranking_configurations(:books_global)
+      user = users(:regular_user)
+      # Make regular_user eligible: five favorites in the ranked pool.
+      favorites = user_lists(:regular_user_books_favorites)
+      five = (1..5).map do |n|
+        book = ::Books::Book.create!(title: "Ranked #{n}")
+        ::RankedItem.create!(item: book, ranking_configuration: config, rank: n, score: 1)
+        favorites.user_list_items.create!(listable: book)
+        book.id
+      end
+      adapter = Books::Adapter.new(config: Config.resolve)
+
+      a = Evaluation.hold_out_plan(domain: :books, adapter: adapter, users: 30, seed: 7, fraction: 0.4)
+      b = Evaluation.hold_out_plan(domain: :books, adapter: adapter, users: 30, seed: 7, fraction: 0.4)
+      assert_equal a, b
+      assert_equal Evaluation::SEGMENTS.keys, a.segments.keys
+      assert_includes a.segments.values.flatten, user.id
+      held = a.held.fetch(user.id)
+      assert_equal 2, held.size, "0.4 of five eligible favorites, rounded up"
+      assert held.all? { |id| five.include?(id) }, "only ranked favorites are held out; the unranked fixture favorites stay"
+    end
+
+    test "hold_out_plan leaves out a sampled user who falls below MIN_ELIGIBLE on exact interactions" do
+      adapter = Books::Adapter.new(config: Config.resolve)
+      plan = Evaluation.hold_out_plan(domain: :books, adapter: adapter, users: 30, seed: 7, fraction: 0.2)
+      assert_empty plan.held.keys - plan.segments.values.flatten, "held users are always sampled users"
+      plan.segments.values.flatten.each do |user_id|
+        next unless plan.held.key?(user_id)
+
+        interactions = adapter.interactions(User.find(user_id))
+        assert_operator interactions.count { |i| Evaluation.eligible?(i) }, :>=, Evaluation::MIN_ELIGIBLE
+      end
+    end
   end
 end

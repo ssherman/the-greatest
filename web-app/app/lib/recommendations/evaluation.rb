@@ -9,6 +9,7 @@ module Recommendations
     SEGMENTS = {"5-19" => (5..19), "20-99" => (20..99), "100+" => (100..)}.freeze
     HOLD_OUT_RATING = 4
     MIN_ELIGIBLE = 5
+    HoldOutPlan = Struct.new(:segments, :held, keyword_init: true)
 
     module_function
 
@@ -105,6 +106,29 @@ module Recommendations
         ids = counts.select { |_, n| range.cover?(n) }.keys.sort
         [label, ids.sample(per_segment, random: random)]
       end
+    end
+
+    # The sample and the hold-out, computed once and shared by `recommendations:eval`
+    # and `recommendations:export HOLDOUT_SEED=` (spec 2 §8.2): the export omits
+    # exactly the pairs eval will test on, so a model trained on it has never
+    # seen them. Deterministic for (seed, users, fraction) against one database.
+    # Users whose exact interactions fall below MIN_ELIGIBLE (the SQL count is
+    # an approximation) are sampled but absent from `held`.
+    def hold_out_plan(domain:, adapter:, users:, seed:, fraction:)
+      random = Random.new(seed)
+      pool = candidate_ids(domain: domain)
+      segments = sample_user_ids(domain: domain, per_segment: users / 3, random: random, candidate_ids: pool)
+      held = {}
+      segments.each_value do |user_ids|
+        user_ids.each do |user_id|
+          interactions = adapter.interactions(::User.find(user_id))
+          _, out = split(interactions, fraction: fraction, random: Random.new(seed + user_id), candidate_ids: pool)
+          next if out.empty? || interactions.count { |i| eligible?(i) && pool.include?(i.item_id) } < MIN_ELIGIBLE
+
+          held[user_id] = out.map(&:item_id)
+        end
+      end
+      HoldOutPlan.new(segments: segments, held: held)
     end
   end
 end

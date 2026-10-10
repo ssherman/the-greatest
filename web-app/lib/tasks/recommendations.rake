@@ -110,11 +110,11 @@ namespace :recommendations do
     baseline = RecommendationsHarness::FREQUENCY_BASELINE
     variants << baseline unless variants.include?(baseline)
 
-    random = Random.new(seed)
-    candidate_ids = Recommendations::Evaluation.candidate_ids(domain: :books)
-    segments = Recommendations::Evaluation.sample_user_ids(domain: :books, per_segment: users_total / 3, random: random, candidate_ids: candidate_ids)
     config = Recommendations::Config.resolve
     adapter = Recommendations::Books::Adapter.new(config: config)
+    candidate_ids = Recommendations::Evaluation.candidate_ids(domain: :books)
+    plan = Recommendations::Evaluation.hold_out_plan(domain: :books, adapter: adapter, users: users_total, seed: seed, fraction: fraction)
+    segments = plan.segments
     pool_size = ::RankedItem.where(item_type: "Books::Book", ranking_configuration_id: ::Books::RankingConfiguration.default_primary&.id).count
 
     eligible_users = Recommendations::Evaluation.eligible_positive_counts(domain: :books, candidate_ids: candidate_ids).size
@@ -127,13 +127,11 @@ namespace :recommendations do
       evaluated = 0
 
       user_ids.each do |user_id|
-        user = User.find(user_id)
-        interactions = adapter.interactions(user)
-        _, held = Recommendations::Evaluation.split(interactions, fraction: fraction, random: Random.new(seed + user_id), candidate_ids: candidate_ids)
-        next if held.size < 1 || interactions.count { |i| Recommendations::Evaluation.eligible?(i) && candidate_ids.include?(i.item_id) } < Recommendations::Evaluation::MIN_ELIGIBLE
+        held_ids = plan.held[user_id]
+        next if held_ids.nil?
 
+        user = User.find(user_id)
         evaluated += 1
-        held_ids = held.map(&:item_id)
         excluded = adapter.shelved_item_ids(user) - held_ids
         criteria = adapter.criteria_for(user)
 
