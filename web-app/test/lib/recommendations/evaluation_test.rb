@@ -155,15 +155,27 @@ module Recommendations
     end
 
     test "hold_out_plan leaves out a sampled user who falls below MIN_ELIGIBLE on exact interactions" do
-      adapter = Books::Adapter.new(config: Config.resolve)
-      plan = Evaluation.hold_out_plan(domain: :books, adapter: adapter, users: 30, seed: 7, fraction: 0.2)
-      assert_empty plan.held.keys - plan.segments.values.flatten, "held users are always sampled users"
-      plan.segments.values.flatten.each do |user_id|
-        next unless plan.held.key?(user_id)
-
-        interactions = adapter.interactions(User.find(user_id))
-        assert_operator interactions.count { |i| Evaluation.eligible?(i) }, :>=, Evaluation::MIN_ELIGIBLE
+      config = ranking_configurations(:books_global)
+      user = User.create!(email: "overcounted@example.com")
+      favorites = user.default_user_list_for(::Books::UserList, :favorites)
+      read = user.default_user_list_for(::Books::UserList, :read)
+      # Three ranked books, each a favorite AND rated 4. The SQL approximation
+      # counts a favorite that is also rated 4-plus twice: 3 + 3 = 6 >= MIN_ELIGIBLE,
+      # so the user is sampled. Exactly, the three books are three interactions: 3 < 5.
+      3.times do |n|
+        book = ::Books::Book.create!(title: "Overcounted #{n}")
+        ::RankedItem.create!(item: book, ranking_configuration: config, rank: 100 + n, score: 1)
+        favorites.user_list_items.create!(listable: book)
+        ::Review.create!(user: user, reviewable: book, rating: 4)
       end
+      # Two more shelved books make 3 favorites + 2 read = 5 positive items: segment "5-19".
+      2.times { |n| read.user_list_items.create!(listable: ::Books::Book.create!(title: "Read #{n}")) }
+      adapter = Books::Adapter.new(config: Config.resolve)
+
+      plan = Evaluation.hold_out_plan(domain: :books, adapter: adapter, users: 30, seed: 7, fraction: 0.2)
+
+      assert_includes plan.segments["5-19"], user.id
+      assert_not plan.held.key?(user.id)
     end
   end
 end
