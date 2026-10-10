@@ -255,7 +255,7 @@ bin/rails recommendations:eval USERS=300 SEED=42 FRACTION=0.2 VARIANTS="collabor
 bin/rails recommendations:show USER_ID=<id> LIMIT=20
 ```
 
-`<name>` is what the export prints (`<date>-holdout-42`). For a model trained on everything, export
+`<name>` is what the export prints (`<date>-holdout-<seed>-u<users>-f<fraction>`, e.g. `2026-10-10-holdout-42-u300-f0.2`). For a model trained on everything, export
 without the `HOLDOUT_*` variables, run `uv run python -m recommender.cli run --store-dir
 ../web-app/tmp/recommendations --work-dir <scratch dir>` (which moves `model/latest`), and load
 without `VERSION`. In development the train takes about 20 s and 3.2 GiB; the load about 14 s.
@@ -362,9 +362,12 @@ favorite can never come back, so holding it out would only deflate recall and ND
 has already seen the books eval hides, so it would recover them for free. The hold-out plan
 (`Evaluation.hold_out_plan`) is deterministic for `(USERS, SEED, FRACTION)` and shared by `eval`
 and `export`: `export HOLDOUT_SEED=s HOLDOUT_USERS=u HOLDOUT_FRACTION=f` omits exactly the pairs
-`eval SEED=s USERS=u FRACTION=f` will hide, names the file `<date>-holdout-<seed>`, and leaves
-`interactions/latest` alone. Train on that file, `load VERSION=<date>-holdout-<seed>`, then run
-`eval` with the same three values. `VARIANTS="collaborative=false"` adds the taste-only engine to
+`eval SEED=s USERS=u FRACTION=f` will hide, names the file `<date>-holdout-<seed>-u<users>-f<fraction>`
+(every value the plan depends on, so two runs on one day can never share a file), and leaves
+`interactions/latest` alone. Train on that file, `load VERSION=<that name>`, then run `eval` with the
+same three values; `eval` prints the active model's version and warns when it does not end in the
+suffix for those values. A version is loaded once: to re-train the same name (same day, same plan)
+and load the new file, pass `FORCE=1` to `load`. `VARIANTS="collaborative=false"` adds the taste-only engine to
 the same run, which is the comparison the bar is written against. Load a full model afterwards.
 
 The hold-out metric rewards famous books: hidden favorites are mostly canon, so the `rank` baseline

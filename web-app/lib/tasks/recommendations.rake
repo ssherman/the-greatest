@@ -53,6 +53,14 @@ module RecommendationsHarness
     overrides.empty? ? "shipped defaults" : overrides.map { |k, v| "#{k}=#{v}" }.join("  ")
   end
 
+  # The suffix a hold-out export (and the model trained on it) carries. Every
+  # value the plan depends on is in the name, so two runs on the same day with
+  # a different sample can never share a file, and eval can tell whether the
+  # active model was trained without the pairs it is about to hide.
+  def hold_out_suffix(seed:, users:, fraction:)
+    "-holdout-#{seed}-u#{users}-f#{fraction}"
+  end
+
   def reason_text(reason, names)
     case reason.type
     when :because_of then "because you loved #{names[reason.ids.first] || reason.ids.first}"
@@ -127,8 +135,9 @@ namespace :recommendations do
     model_version = RecommendationModel.active_for(:books)&.version
     eligible_users = Recommendations::Evaluation.eligible_positive_counts(domain: :books, candidate_ids: candidate_ids).size
     puts "Recommendations evaluation  eligible users=#{eligible_users}  ranked pool=#{candidate_ids.size}  sampled=#{segments.values.sum(&:size)}  seed=#{seed}  hold-out=#{fraction}  limit=#{limit}  model=#{model_version || "none"}"
-    if model_version && !model_version.end_with?("-holdout-#{seed}")
-      puts "WARNING: model #{model_version} was not trained with seed #{seed} held out; collaborative numbers are inflated by a model that saw the held pairs."
+    expected_suffix = RecommendationsHarness.hold_out_suffix(seed: seed, users: users_total, fraction: fraction)
+    if model_version && !model_version.end_with?(expected_suffix)
+      puts "WARNING: model #{model_version} was not trained with this hold-out plan (expected a version ending in #{expected_suffix}); collaborative numbers are inflated by a model that saw the held pairs."
     end
     puts "variants: rank baseline | " + variants.map { |v| RecommendationsHarness.label(v) }.join(" | ")
     puts
@@ -215,11 +224,12 @@ namespace :recommendations do
     hold_out = nil
     if ENV["HOLDOUT_SEED"].present?
       seed = ENV["HOLDOUT_SEED"].to_i
+      users = ENV.fetch("HOLDOUT_USERS", "500").to_i
+      fraction = ENV.fetch("HOLDOUT_FRACTION", "0.2").to_f
       adapter = Recommendations::Books::Adapter.new(config: Recommendations::Config.resolve)
-      plan = Recommendations::Evaluation.hold_out_plan(domain: :books, adapter: adapter,
-        users: ENV.fetch("HOLDOUT_USERS", "500").to_i, seed: seed, fraction: ENV.fetch("HOLDOUT_FRACTION", "0.2").to_f)
+      plan = Recommendations::Evaluation.hold_out_plan(domain: :books, adapter: adapter, users: users, seed: seed, fraction: fraction)
       hold_out = plan.held
-      name = "#{name}-holdout-#{seed}"
+      name = "#{name}#{RecommendationsHarness.hold_out_suffix(seed: seed, users: users, fraction: fraction)}"
       puts "hold-out: #{hold_out.size} users, #{hold_out.values.sum(&:size)} pairs omitted"
     end
     result = Recommendations::Export.call(domain: :books, store: store, name: name, hold_out: hold_out)
@@ -227,9 +237,15 @@ namespace :recommendations do
     puts "wrote #{result.data[:rows]} rows to #{result.data[:key]}#{" (pointer not moved)" unless result.data[:pointer_moved]}"
   end
 
-  desc "Load a published model into Postgres (DIR=dir for a local store, else R2; VERSION=name to load a hold-out model)"
+  desc "Load a published model into Postgres (DIR=dir for a local store, else R2; VERSION=name to load a hold-out model; FORCE=1 to reload a version already in the table)"
   task load: :environment do
     store = ENV["DIR"].present? ? Recommendations::Store::Local.new(ENV["DIR"]) : Recommendations::Store.default
+    version = ENV["VERSION"].presence || store.read_pointer(Recommendations::Paths.model_latest(:books))
+    if ENV["FORCE"] == "1" && version
+      # A version is loaded once; re-training the same name (same day, same plan) leaves
+      # the old rows in place. Dropping the row makes the loader read the new file.
+      RecommendationModel.where(domain: "books", version: version).find_each(&:destroy!)
+    end
     result = Recommendations::LoadModel.call(domain: :books, store: store, version: ENV["VERSION"].presence)
     abort result.errors.join(", ") unless result.success?
     puts result.data[:loaded] ? "loaded #{result.data[:version]}: #{result.data[:rows]} rows" : "nothing loaded (#{result.data[:reason]})"

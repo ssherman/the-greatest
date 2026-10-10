@@ -7,6 +7,7 @@ module Recommendations
     test "keys follow the spec's five shapes" do
       assert_equal "recommendations/books/interactions/2026-10-09.csv.gz", Paths.interactions(:books, "2026-10-09")
       assert_equal "recommendations/books/interactions/latest", Paths.interactions_latest("books")
+      assert_equal "recommendations/books/model/2026-10-10-holdout-42-u300-f0.2.csv.gz", Paths.model(:books, "2026-10-10-holdout-42-u300-f0.2"), "hold-out names carry the plan's values"
       assert_equal "recommendations/books/model/2026-10-09.csv.gz", Paths.model(:books, "2026-10-09")
       assert_equal "recommendations/books/model/2026-10-09.json", Paths.model_manifest(:books, "2026-10-09")
       assert_equal "recommendations/books/model/latest", Paths.model_latest(:books)
