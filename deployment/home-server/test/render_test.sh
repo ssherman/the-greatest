@@ -18,6 +18,8 @@ new_sandbox
 export REPO_REF=main TUNNELS_ENABLED=0 OL_TUNNEL_TOKEN=ol-token FETCHER_TUNNEL_TOKEN=fetcher-token
 export HC_OL_HEARTBEAT=https://hc.test/ol-beat HC_OL_DEPLOY=https://hc.test/ol-deploy HC_OL_REFRESH=https://hc.test/ol-refresh
 export HC_FETCHER_HEARTBEAT=https://hc.test/f-beat HC_FETCHER_DEPLOY=https://hc.test/f-deploy
+export HC_RECOMMENDER=https://hc.test/ol-train RECOMMENDER_R2_ENDPOINT=https://acct.r2.test
+export RECOMMENDER_R2_ACCESS_KEY=rec-access RECOMMENDER_R2_SECRET_KEY=rec-secret RECOMMENDER_R2_BUCKET=rec-bucket
 echo "ssh-ed25519 AAAATEST test@example.com" >"$SANDBOX/key.pub"
 export SSH_PUBKEY_FILE="$SANDBOX/key.pub"
 
@@ -40,14 +42,21 @@ t_ol_env() {
 }
 t_fetcher_isolation() {
   local env; env="$(env_from_yaml "$SANDBOX/fetcher.yaml")"
-  grep -qx 'TUNNEL_TOKEN=fetcher-token' <<<"$env" && ! grep -q 'ol-' <<<"$env"
+  grep -qx 'TUNNEL_TOKEN=fetcher-token' <<<"$env" && ! grep -q 'ol-' <<<"$env" &&
+    ! grep -q 'RECOMMENDER' <<<"$env" && ! grep -q 'rec-' <<<"$env"
+}
+t_ol_trainer_env() {
+  env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'HC_RECOMMENDER=https://hc.test/ol-train' &&
+    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'RECOMMENDER_R2_ENDPOINT=https://acct.r2.test' &&
+    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'RECOMMENDER_R2_SECRET_KEY=rec-secret' &&
+    env_from_yaml "$SANDBOX/ol.yaml" | grep -qx 'RECOMMENDER_R2_BUCKET=rec-bucket'
 }
 t_env_keys() {
-  local r keys
-  for r in ol fetcher; do
-    keys="$(env_from_yaml "$SANDBOX/$r.yaml" | cut -d= -f1 | tr '\n' ' ')"
-    [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH " ] || return 1
-  done
+  local keys
+  keys="$(env_from_yaml "$SANDBOX/ol.yaml" | cut -d= -f1 | tr '\n' ' ')"
+  [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH HC_RECOMMENDER RECOMMENDER_R2_ENDPOINT RECOMMENDER_R2_ACCESS_KEY RECOMMENDER_R2_SECRET_KEY RECOMMENDER_R2_BUCKET " ] || return 1
+  keys="$(env_from_yaml "$SANDBOX/fetcher.yaml" | cut -d= -f1 | tr '\n' ' ')"
+  [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH " ]
 }
 t_codename_literal() {
   grep -qF '${distro_codename}-security' "$SANDBOX/ol.yaml" "$SANDBOX/fetcher.yaml"
@@ -55,8 +64,8 @@ t_codename_literal() {
 t_key() { grep -q 'ssh-ed25519 AAAATEST' "$SANDBOX/ol.yaml"; }
 t_ref() { grep -q 'clone --depth 1 --branch main ' "$SANDBOX/ol.yaml"; }
 t_blank_secrets() {
-  (unset OL_TUNNEL_TOKEN HC_OL_HEARTBEAT; render_vm_env ol "$SANDBOX/blank.env") &&
-    grep -qx 'TUNNEL_TOKEN=' "$SANDBOX/blank.env"
+  (unset OL_TUNNEL_TOKEN HC_OL_HEARTBEAT RECOMMENDER_R2_BUCKET; render_vm_env ol "$SANDBOX/blank.env") &&
+    grep -qx 'TUNNEL_TOKEN=' "$SANDBOX/blank.env" && grep -qx 'RECOMMENDER_R2_BUCKET=' "$SANDBOX/blank.env"
 }
 
 t_cluster_fw() {
@@ -181,8 +190,9 @@ check "both user-data files are valid YAML" t_yaml
 check "user-data starts with #cloud-config" t_first_line
 check "no template variable is left unrendered" t_no_leftovers
 check "ol gets its role, token and refresh check" t_ol_env
+check "ol gets the trainer's check and R2 values" t_ol_trainer_env
 check "fetcher holds nothing of ol's" t_fetcher_isolation
-check "each env has exactly the keys guest/lib.sh documents" t_env_keys
+check "each env has exactly the keys guest/lib.sh documents, ol with the trainer's" t_env_keys
 check "the security-only origin pattern survives rendering" t_codename_literal
 check "the dev key is authorized" t_key
 check "the VM clones the tracked ref" t_ref

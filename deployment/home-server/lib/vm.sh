@@ -28,13 +28,18 @@ vm_spec() {
 }
 
 # render_vm_env <role> <out>: the VM's /etc/the-greatest/home-server.env. Each
-# VM gets only its own token and check URLs.
+# VM gets only its own token and check URLs; the trainer's R2 values go to ol alone.
 render_vm_env() {
   local role=$1 out=$2
   case "$role" in
     ol) printf '%s\n' "ROLE=ol" "REPO_REF=$REPO_REF" "TUNNELS_ENABLED=$TUNNELS_ENABLED" \
           "TUNNEL_TOKEN=${OL_TUNNEL_TOKEN:-}" "HC_HEARTBEAT=${HC_OL_HEARTBEAT:-}" \
-          "HC_DEPLOY=${HC_OL_DEPLOY:-}" "HC_REFRESH=${HC_OL_REFRESH:-}" ;;
+          "HC_DEPLOY=${HC_OL_DEPLOY:-}" "HC_REFRESH=${HC_OL_REFRESH:-}" \
+          "HC_RECOMMENDER=${HC_RECOMMENDER:-}" \
+          "RECOMMENDER_R2_ENDPOINT=${RECOMMENDER_R2_ENDPOINT:-}" \
+          "RECOMMENDER_R2_ACCESS_KEY=${RECOMMENDER_R2_ACCESS_KEY:-}" \
+          "RECOMMENDER_R2_SECRET_KEY=${RECOMMENDER_R2_SECRET_KEY:-}" \
+          "RECOMMENDER_R2_BUCKET=${RECOMMENDER_R2_BUCKET:-}" ;;
     fetcher) printf '%s\n' "ROLE=fetcher" "REPO_REF=$REPO_REF" "TUNNELS_ENABLED=$TUNNELS_ENABLED" \
           "TUNNEL_TOKEN=${FETCHER_TUNNEL_TOKEN:-}" "HC_HEARTBEAT=${HC_FETCHER_HEARTBEAT:-}" \
           "HC_DEPLOY=${HC_FETCHER_DEPLOY:-}" "HC_REFRESH=" ;;
