@@ -44,11 +44,15 @@ test.describe('My Reviews', () => {
     const rowTriggers = page.locator('[data-testid="edit-review"], [data-testid="write-review"]');
     await expect(rowTriggers).toHaveCount(expectedCount);
 
-    // Every visible row is genuinely rated 3 -- not just a URL that says so.
+    // Every visible row is genuinely in the 3-star bucket -- not just a URL that says so.
+    // The bar is Goodreads' rounding (Review.rating_bucket): 2.75 through 3.5 count as 3,
+    // and a single rating's label reads it exactly ("3 out of 5 stars", "2.75 out of 5 stars").
     const stars = page.getByRole('img', { name: /out of 5 stars/ });
     await expect(stars).toHaveCount(expectedCount);
     for (const star of await stars.all()) {
-      await expect(star).toHaveAttribute('aria-label', '3.0 out of 5 stars');
+      const rating = Number((await star.getAttribute('aria-label'))?.match(/^([\d.]+) out of 5 stars$/)?.[1]);
+      expect(rating).toBeGreaterThan(2.5);
+      expect(rating).toBeLessThanOrEqual(3.5);
     }
   });
 
