@@ -29,6 +29,7 @@ module Services
           review_target: 5,
           anchor_slug: "war-and-peace",
           required_slugs: {books: %w[war-and-peace], books_categories: %w[fiction], games_categories: []},
+          scratch_book_slugs: %w[of-mice-and-men],
           sync_plans: sync,
           rate_limit_store: @store, **overrides)
       end
@@ -179,6 +180,28 @@ module Services
 
         assert_not result.success?
         assert_match(/books available/, result.errors.join)
+      end
+
+      test "removes the e2e accounts' own reviews from the scratch book" do
+        scratch = books_books(:of_mice_and_men)
+        @member.reviews.create!(reviewable: scratch, rating: 4)
+        @admin.reviews.create!(reviewable: scratch, rating: 2)
+
+        result = prepare
+        assert result.success?, result.errors.inspect
+        assert_equal 0, Review.where(reviewable: scratch).count
+      end
+
+      test "fails the preflight naming a non-e2e user's review on the scratch book" do
+        scratch = books_books(:of_mice_and_men)
+        @bystander.reviews.create!(reviewable: scratch, rating: 3)
+
+        result = prepare
+
+        assert_not result.success?
+        assert_match(/of-mice-and-men has 1 review\(s\) by non-e2e users: bystander@example.com/, result.errors.join)
+        assert Review.where(reviewable: scratch, user: @bystander).exists?, "a human's review is reported, never deleted"
+        assert_not File.exist?(@manifest_path)
       end
     end
   end

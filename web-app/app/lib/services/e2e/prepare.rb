@@ -34,18 +34,24 @@ module Services
         books_categories: %w[novels],
         games_categories: %w[action]
       }.freeze
+      # Books that other specs require to have NO reviews from anyone: the
+      # reviews specs write and remove their own review on headlong-hall and
+      # assert the book starts empty. A human review left there (it has
+      # happened) must fail in one line here, not in four specs.
+      SCRATCH_BOOK_SLUGS = %w[headlong-hall].freeze
       ROLES = {admin: :admin, user: :user, member: :user}.freeze
 
       def self.call(**) = new(**).call
 
       def initialize(emails:, manifest_path:, review_target: REVIEW_TARGET, anchor_slug: ANCHOR_SLUG,
-        required_slugs: REQUIRED_SLUGS, sync_plans: ::Services::Billing::SyncPlans,
+        required_slugs: REQUIRED_SLUGS, scratch_book_slugs: SCRATCH_BOOK_SLUGS, sync_plans: ::Services::Billing::SyncPlans,
         rate_limit_store: Rails.application.config.x.rate_limit_store, log: ->(_line) {})
         @emails = emails.slice(:admin, :user, :member)
         @manifest_path = Pathname(manifest_path)
         @review_target = review_target
         @anchor_slug = anchor_slug
         @required_slugs = required_slugs
+        @scratch_book_slugs = scratch_book_slugs
         @sync_plans = sync_plans
         @rate_limit_store = rate_limit_store
         @log = log
@@ -59,6 +65,7 @@ module Services
         assign_roles(accounts)
         reset_reviews(accounts[:user])
         lists = reset_lists(accounts[:user])
+        clear_scratch_books(accounts)
         sync_stripe(errors)
         return failure(errors) if errors.any?
 
@@ -74,7 +81,7 @@ module Services
       private
 
       attr_reader :emails, :manifest_path, :review_target, :anchor_slug, :required_slugs,
-        :sync_plans, :rate_limit_store, :log
+        :scratch_book_slugs, :sync_plans, :rate_limit_store, :log
 
       def failure(errors) = Result.new(success?: false, data: nil, errors: errors)
 
@@ -136,7 +143,7 @@ module Services
         user.reviews.create!(reviewable: anchor, rating: 5, body: "Seed review for the E2E /my/reviews search test.")
 
         needed = review_target - 1
-        books = ::Books::Book.where.not(slug: EXCLUDED_REVIEW_SLUGS).where.not(id: anchor.id).order(:id).limit(needed).to_a
+        books = ::Books::Book.where.not(slug: EXCLUDED_REVIEW_SLUGS + scratch_book_slugs).where.not(id: anchor.id).order(:id).limit(needed).to_a
         raise SeedError, "only #{books.size} books available for #{needed} seed reviews" if books.size < needed
 
         lookalike = books.find { |book| book.title.to_s.match?(/animal farm/i) }
@@ -198,11 +205,38 @@ module Services
         missing.concat(missing_slugs(::Books::Book, required_slugs.fetch(:books, [])))
         missing.concat(missing_slugs(::Books::Category, required_slugs.fetch(:books_categories, [])))
         missing.concat(missing_slugs(::Games::Category, required_slugs.fetch(:games_categories, [])))
+        scratch_errors = scratch_book_errors
+        errors.concat(scratch_errors)
         if missing.any?
           errors << "catalog preflight: missing #{missing.join(", ")}"
-        else
+        elsif scratch_errors.empty?
           log.call("catalog preflight: #{required_slugs.values.sum(&:size)} slug(s) present")
         end
+      end
+
+      # The e2e accounts' own reviews on scratch books are disposable: a spec
+      # that died mid-run leaves them, and the next run must start clean.
+      def clear_scratch_books(accounts)
+        scratch_books.each do |book|
+          ::Review.where(reviewable: book, user: accounts.values).each(&:destroy!)
+        end
+      end
+
+      # Anyone else's review on a scratch book is reported, never deleted:
+      # it is a human's data on a shared development database.
+      def scratch_book_errors
+        scratch_books.filter_map do |book|
+          reviews = ::Review.where(reviewable: book).includes(:user).to_a
+          next if reviews.empty?
+
+          emails = reviews.map { |review| review.user.email }.sort.join(", ")
+          "Books::Book #{book.slug} has #{reviews.size} review(s) by non-e2e users: #{emails}; " \
+            "the reviews specs need it review-free -- delete or move them"
+        end
+      end
+
+      def scratch_books
+        scratch_book_slugs.filter_map { |slug| ::Books::Book.find_by(slug: slug) }
       end
 
       def missing_slugs(model, slugs)
