@@ -18,7 +18,7 @@ module Recommendations
 
       def weight(positive_count)
         n = positive_count.to_f
-        n / (n + config[:collaborative_half_point])
+        config[:collaborative_weight].to_f * n / (n + config[:collaborative_half_point])
       end
 
       def call(profile:, interactions:, criteria:, excluded_ids:, size:)

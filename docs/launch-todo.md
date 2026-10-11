@@ -71,8 +71,9 @@ second export on the same day reuses the day's file name and the trainer reports
 5. **Before books goes live.**
    - Cap the shelf the signal scores (an 18,534-book shelf takes 1.1 s in the neighbour SQL today),
      and profile the +140-215 ms the signal adds on the 20-99 and 100+ segments (the harness `ms` column is confounded by variant order; see the data-quality record).
-   - Close the depth gap: the collaborative list ignores the depth setting (see "Known gaps" in
-     `docs/features/recommendations.md`).
+   - Depth: the three settings now build three different pages (2026-10-10); the collaborative
+     list still ignores the quality prior, which at its 0.25 weight is two picks in twenty (see
+     "Known gaps" in `docs/features/recommendations.md`).
 
 ## 4. Every week after the switch-over
 

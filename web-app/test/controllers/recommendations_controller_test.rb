@@ -75,10 +75,10 @@ class RecommendationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal true, @controller.view_assigns["member"]
   end
 
-  test "the stored depth reaches the engine as a quality floor override" do
+  test "the stored depth reaches the engine as its overrides" do
     ::Books::RecommendationConfig.for_user(@member).update!(criteria: {"depth" => "deep"})
     stub_candidates(@books.first(5))
-    Recommendations::Engine.expects(:call).with { |args| args[:overrides] == {quality_floor: 0.5} }.returns(engine_result)
+    Recommendations::Engine.expects(:call).with { |args| args[:overrides] == {rank_prior_weight: 0} }.returns(engine_result)
     sign_in_as @member, stub_auth: true
     get recommendations_path
     assert_response :success

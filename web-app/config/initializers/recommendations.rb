@@ -41,18 +41,26 @@ Rails.application.config.x.recommendations = ActiveSupport::OrderedOptions.new.m
   normalization_floor: 10,
   min_score: 1.0,
   # Quality prior inside the score: taste × (floor + (1 − floor) · scale / (scale + ranked_position)).
-  # scale 0 = off. Every candidate carries a rank (the pool filter requires one).
-  quality_scale: 1000,
+  # scale 0 = off, the default since 2026-10-10: on, it turned a 312-positive reader's page into
+  # the all-time top 100 minus their shelf (docs/data-quality/recommendations-canon-2026-10-10.md);
+  # the harness had scored it a win because held-out favorites are mostly famous books.
+  # min_score applies to the taste score BEFORE this multiplier (the query's script enforces it),
+  # so the prior re-orders the pool and never empties it.
+  quality_scale: 0,
   quality_floor: 0.3,
-  # The user-facing "depth" setting (spec §9.4 "deep cuts"): a stored depth maps
-  # to this quality_floor; "balanced" stores nothing and follows quality_floor.
-  depth_floors: {"safe" => 0.1, "deep" => 0.5}.freeze,
+  # The user-facing "depth" setting (spec §9.4 "deep cuts") as engine overrides: Safer bets turns
+  # the quality prior on, Deep cuts also drops the fusion rank prior, Balanced stores nothing.
+  depth_overrides: {"safe" => {quality_scale: 1000, quality_floor: 0.3}.freeze, "deep" => {rank_prior_weight: 0}.freeze}.freeze,
 
   # Fusion (spec §5.4) and the collaborative signal (spec 2 §6, §7)
   rrf_k: 60,
   taste_weight: 1.0,
   collaborative: true,            # false = the signal reports itself unavailable (the harness's taste-only variant)
   collaborative_half_point: 10,
+  # The list's fusion weight at a full shelf, against taste's 1.0: collaborative_weight × n / (n +
+  # collaborative_half_point). At 1.0 the model's neighbours of famous books (more famous books)
+  # took most of the page for a large shelf (same record as above); at 0.25, about two picks in twenty.
+  collaborative_weight: 0.25,
   collaborative_min_rating: 3,    # a rating at or above this is a positive, for training and for the shelf scored at serving time
   collaborative_overfetch: 2,     # neighbour rows fetched = overfetch × candidate_size, so the ranked-pool filter can drop some and still fill
   because_of_rating: 4,           # "Because you loved X" only names a favorite or a book rated at least this

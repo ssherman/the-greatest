@@ -81,8 +81,10 @@ Signal#available?              -> Boolean  # false -> skipped
 
 Evidence: `{taste: true}` from `TasteProfile`; `{term: Float}` from `Collaborative`, plus
 `because_of: item_id` when the shelf book that contributed most is loved (see "Collaborative
-signal"). The collaborative fusion weight is `n / (n + collaborative_half_point)`, `n` the user's
-positive count, so it grows with the shelf.
+signal"). The collaborative fusion weight is `collaborative_weight × n / (n + collaborative_half_point)`,
+`n` the user's positive count, so it grows with the shelf toward `collaborative_weight` (0.25 against
+taste's 1.0: at 1.0 the model's neighbours of famous books, which are more famous books, took most of
+a large reader's page; see "Known gaps").
 
 ## Profile math
 
@@ -150,12 +152,16 @@ One OpenSearch query against `Search::Books::BookIndex`; no mapping change.
    clause from (4), `negative_boost: 0.3`.
 6. **Normalization:** `function_score` dividing by `sqrt(max(similarity_category_count, floor))`,
    floor `normalization_floor` (10), so a heavily tagged book cannot win on volume.
-7. **Quality prior** (when `quality_scale` > 0): a second `function_score` multiplying by
+7. **Quality prior** (when `quality_scale` > 0; off by default since 2026-10-10, on under the
+   Safer bets depth): a second `function_score` multiplying by
    `quality_floor + (1 − quality_floor) · quality_scale / (quality_scale + ranked_position)`: 1 at
    the top of the ranking, half way to the floor at rank `quality_scale`, the floor far down. This
    puts the global ranking inside the score that builds the pool; the fusion rank prior below can
-   only re-order what the pool already holds. `min_score` applies after it, so deep books with a
-   weak taste match drop out.
+   only re-order what the pool already holds. `min_score` is enforced inside this script on the
+   taste score, before the multiplier (the body's `min_score` becomes an epsilon that drops the
+   zeros the script returns), so the prior re-orders the pool and never empties it. Until
+   2026-10-10 the threshold came after the multiplier, and a reader whose criteria left only deep
+   books (published after 2000, say) had no taste list at all.
 8. `size: candidate_size` (300), `min_score` (1.0), `_source: false`.
 
 ## Fusion, re-ranking, explanations
@@ -320,9 +326,12 @@ one `Recommendations::ReasonComponent` line beneath; `@state` is `:ok`, `:no_mat
 succeeded, nothing matched) or `:unavailable` (a signal raised: `data[:degraded]`).
 
 **Depth** is the one setting the spec did not list: stored as `criteria["depth"]` (`safe` or
-`deep`; balanced stores nothing) and mapped by `RecommendationCriteria#engine_overrides` to
-`quality_floor` through the `depth_floors` knob. Measured in
-`docs/data-quality/recommendations-2026-10-08.md`.
+`deep`; balanced stores nothing) and mapped by `RecommendationCriteria#engine_overrides` to engine
+overrides through the `depth_overrides` knob: Safer bets turns the quality prior on
+(`quality_scale: 1000, quality_floor: 0.3`), Deep cuts drops the fusion rank prior
+(`rank_prior_weight: 0`), Balanced follows the initializer (both priors as shipped: quality off,
+rank 0.3). Until 2026-10-10 depth moved only `quality_floor` under a prior that was always on, and
+the three pages were the same books (`docs/data-quality/recommendations-canon-2026-10-10.md`).
 
 ## Harness
 
@@ -399,8 +408,9 @@ All in `config/initializers/recommendations.rb`, each overridable per call.
 | `genre_multiplier`, `subject_multiplier`, `location_multiplier` | 1.0, 0.8, 0.4 |
 | `fiction_share_high`, `fiction_share_low` | 0.9, 0.1 |
 | `normalization_floor`, `min_score` | 10, 1.0 |
-| `quality_scale`, `quality_floor` | 1000, 0.3 (0 turns the prior off) |
-| `rrf_k`, `taste_weight`, `collaborative_half_point`, `rank_prior_weight` | 60, 1.0, 10, 0.3 |
+| `quality_scale`, `quality_floor` | 0 (prior off), 0.3; Safer bets sets 1000, 0.3 |
+| `depth_overrides` | `safe` → `{quality_scale: 1000, quality_floor: 0.3}`, `deep` → `{rank_prior_weight: 0}` |
+| `rrf_k`, `taste_weight`, `collaborative_weight`, `collaborative_half_point`, `rank_prior_weight` | 60, 1.0, 0.25, 10, 0.3 |
 | `collaborative` | true (false: the signal reports itself unavailable; the harness's taste-only variant) |
 | `collaborative_min_rating` | 3 (a rating at or above this is a positive, for training and for the shelf scored per request) |
 | `collaborative_overfetch` | 2 (neighbour rows read = this × `candidate_size`, so the ranked-pool filter can drop some and still fill) |
@@ -422,11 +432,20 @@ the numbers describe the dev database on those days.
 
 ## Known gaps
 
-- **Depth does not reach the collaborative list.** For a reader with a large shelf the collaborative
-  list carries fusion weight of about 0.9 against taste's 1.0, so roughly half the page ignores the
-  depth setting. The spec's section 8.3 experiment, "apply the quality prior to the collaborative
-  list", is the planned fix; measure it with `VARIANTS="quality_floor=0.1; quality_floor=0.5"`, with
-  and without `collaborative=false`.
+- **The offline harness rewards the canon, and the first live page proved it.** With the quality
+  prior on and the collaborative list at full weight, the owner's production page (312 positives,
+  top 15,000, no year filter) was the all-time top 100 minus his shelf, identical under all three
+  depths, with Tolstoy and Dostoevsky as the model's answer to The Brothers Karamazov. The harness
+  had called both a win because held-out favourites are mostly famous books. Fixed 2026-10-10 by
+  shipping the prior off (Safer bets turns it on), the collaborative weight at 0.25, and the
+  threshold before the prior; `docs/data-quality/recommendations-canon-2026-10-10.md` has the pages
+  before and after and the harness cost. The page the owner looks at is the acceptance test; a
+  harness metric that scores recovered favourites by rank percentile (so a rank-3,000 favourite
+  counts for more than a rank-30 one) is still not built.
+- **Depth does not reach the collaborative list.** The collaborative list ignores the quality prior,
+  so under Safer bets its picks are not pulled toward the canon the way the taste list's are. At
+  weight 0.25 that is two picks in twenty; the spec's section 8.3 experiment, "apply the quality
+  prior to the collaborative list", remains the fix if it matters.
 - **The revised bar (spec §9.2, amended 2026-10-08) is met on hit@10 and page depth, and NOT met
   on recall@50 or KL.** With the quality prior the engine beats the frequency profile on hit@10 by
   about 1.6x on the 20-99 segment on both samples and returns pages at mean rank 750-800 instead
