@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { seed } from '../../../support/seed';
 
-
 test.describe('Books My Lists', () => {
   test('the My Books desktop group is revealed when signed in and orders personal links', async ({ page }) => {
     await page.goto('/');

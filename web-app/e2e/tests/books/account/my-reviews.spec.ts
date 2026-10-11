@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { rateStars } from '../../../helpers/star-rating';
 
-// This spec depends on the e2e-admin account having a healthy body of reviews to
-// filter/sort/page through. `bin/rails e2e:prepare` (lib/tasks/e2e.rake) resets
-// the account to exactly 30 Books::Book reviews on every run, rather than
-// seeding additively (6 per rating, alternating written/rating-only, avoiding the 3 book slugs other specs
-// in this directory depend on). One of those 30, "Animal Farm", has a title no
-// other seeded review shares, which is what makes it a safe, exact search term
-// below.
+// This spec depends on the normal-user e2e account having a healthy body of
+// reviews to filter/sort/page through. `bin/rails e2e:prepare`
+// (lib/tasks/e2e.rake) resets the account to exactly 30 Books::Book reviews on
+// every run, rather than seeding additively (6 per rating, alternating
+// written/rating-only, avoiding the 3 book slugs other specs in this directory
+// depend on). One of those 30, "Animal Farm", has a title no other seeded
+// review shares, which is what makes it a safe, exact search term below.
 const SEARCH_TITLE = 'Animal Farm';
 // Exact, not a lower bound: playwright.config.ts runs with workers: 1 and
 // fullyParallel: false, so spec files run strictly sequentially in this worker,

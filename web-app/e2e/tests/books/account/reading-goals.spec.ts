@@ -98,7 +98,7 @@ async function completionDialog(page: Page, title: string): Promise<{ dialog: Lo
 async function submitCompletionDate(page: Page, title: string, completedOn: string | null): Promise<void> {
   const { dialog, input } = await completionDialog(page, title);
   const response = page.waitForResponse(
-    (candidate) => candidate.request().method() === 'POST' && candidate.url().includes('/user_list_items/'),
+    (candidate) => candidate.request().method() === 'POST' && candidate.url().includes('/completion'),
   );
 
   if (completedOn === null) {
@@ -267,7 +267,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
     await expect(completion.input).toHaveValue('');
     await completion.input.fill(inRangeDate);
     const completionResponse = page.waitForResponse(
-      (candidate) => candidate.request().method() === 'POST' && candidate.url().includes('/user_list_items/'),
+      (candidate) => candidate.request().method() === 'POST' && candidate.url().includes('/completion'),
     );
     await completion.dialog.getByRole('button', { name: 'Save', exact: true }).click();
     expect((await completionResponse).status()).toBe(303);
