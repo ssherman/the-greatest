@@ -20,10 +20,7 @@ Run these in this order after each `data_migration:all`.
    `bin/rails search:books:recreate_and_reindex_all`.
    Then use the admin **Refresh Rankings** action on the books primary. That one run reweighs,
    ranks and requests the author rankings when it lands. The 04:00 UTC author cron is the safety
-   net. **The release after this one ships deletes the transitional `CalculateRankingsJob` shim**
-   (see `docs/superpowers/specs/2026-10-10-coalesced-ranking-recalculation-design.md` §4).
-   Before deleting it, check Sidekiq's scheduled and retry sets for `CalculateRankingsJob`
-   entries. Any still waiting would die with `NameError`.
+   net.
 3. **Cover images.** Make sure Sidekiq is up, because this queues about 148k jobs. Then run
    `bin/rails data_migration:book_images`. It is idempotent, and the primary-image count should
    come out close to 37,296.
@@ -71,8 +68,9 @@ second export on the same day reuses the day's file name and the trainer reports
 5. **Before books goes live.**
    - Cap the shelf the signal scores (an 18,534-book shelf takes 1.1 s in the neighbour SQL today),
      and profile the +140-215 ms the signal adds on the 20-99 and 100+ segments (the harness `ms` column is confounded by variant order; see the data-quality record).
-   - Close the depth gap: the collaborative list ignores the depth setting (see "Known gaps" in
-     `docs/features/recommendations.md`).
+   - Depth: the three settings now build three different pages (2026-10-10); the collaborative
+     list still ignores the quality prior, which at its 0.25 weight is two picks in twenty (see
+     "Known gaps" in `docs/features/recommendations.md`).
 
 ## 4. Every week after the switch-over
 

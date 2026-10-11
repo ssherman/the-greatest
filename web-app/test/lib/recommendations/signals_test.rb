@@ -51,8 +51,10 @@ module Recommendations
       signal = Signals::Collaborative.new(adapter: @adapter, config: @config)
       assert_not signal.available?
       assert_in_delta 0.0, signal.weight(0), 0.001
-      assert_in_delta 0.5, signal.weight(10), 0.001
-      assert_in_delta 200.0 / 210, signal.weight(200), 0.001
+      assert_in_delta 0.25 * 0.5, signal.weight(10), 0.001, "half way to the shipped 0.25 at the half point"
+      assert_in_delta 0.25 * 200.0 / 210, signal.weight(200), 0.001
+      full = Signals::Collaborative.new(adapter: @adapter, config: Config.resolve(collaborative_weight: 1.0))
+      assert_in_delta 200.0 / 210, full.weight(200), 0.001, "collaborative_weight scales the ramp"
 
       model_with([])
       assert Signals::Collaborative.new(adapter: @adapter, config: @config).available?
