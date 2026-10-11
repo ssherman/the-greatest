@@ -158,6 +158,20 @@ module Search
           assert_equal [], ids(min_score: 100)
         end
 
+        test "with the prior on, min_score judges the taste score: a deep strong match survives, a weak one drops" do
+          index_book(1, genre_category_ids: [G1], ranked_position: 100_000)
+          raw = BookRecommendations.call(profile: profile, criteria: criteria, excluded_ids: [],
+            type_category_ids: TYPE_IDS, options: {min_score: 0, quality_scale: 0}).first[:score]
+          assert_operator raw, :>, 0
+          # The prior scales this book to a tenth of its taste score; the threshold must not see that.
+          kept = BookRecommendations.call(profile: profile, criteria: criteria, excluded_ids: [],
+            type_category_ids: TYPE_IDS, options: {min_score: raw * 0.9, quality_scale: 1000, quality_floor: 0.1})
+          assert_equal [1], kept.map { |h| h[:id] }, "a threshold the taste score clears keeps the book"
+          assert_in_delta raw * (0.1 + 0.9 * 1000.0 / 101_000), kept.first[:score], 0.001, "the prior still scales the score"
+          assert_equal [], ids(min_score: raw * 1.1, quality_scale: 1000, quality_floor: 0.1),
+            "a threshold the taste score misses drops it, prior or not"
+        end
+
         test "ranked_only returns the filtered pool in rank order" do
           index_book(1, ranked_position: 30)
           index_book(2, ranked_position: 10)

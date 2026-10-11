@@ -14,15 +14,25 @@ module Search
       # floor, exactly as BookSimilar does, so a heavily tagged book cannot win
       # by volume. Finally, when `quality_scale` is positive, the score is
       # multiplied by a rank decay with a floor, so the global ranking shapes
-      # the pool itself rather than only re-ordering it in fusion.
+      # the pool itself rather than only re-ordering it in fusion. `min_score`
+      # then judges the taste score, not the multiplied one: the prior's script
+      # zeroes a book under the threshold and the body's min_score becomes an
+      # epsilon, so the prior can re-order the pool but never empty it (with the
+      # threshold after the prior, a reader whose criteria left only deep books
+      # got no taste list at all).
       class BookRecommendations < ::Search::Base::Search
         FIELDS = {"genre" => :genre_category_ids, "subject" => :subject_category_ids, "location" => :location_category_ids}.freeze
         MULTIPLIERS = {"genre" => :genre_multiplier, "subject" => :subject_multiplier, "location" => :location_multiplier}.freeze
         RANK_SORT = [{ranked_position: {order: "asc", missing: "_last"}}, {_id: {order: "asc"}}].freeze
-        # floor + (1 − floor) · scale / (scale + rank): 1 at the top, half way to
-        # the floor at rank = scale, the floor alone for a book with no rank.
-        QUALITY_PRIOR_SOURCE = "if (doc['ranked_position'].size() == 0) { return params.floor; } " \
-          "return params.floor + (1 - params.floor) * params.scale / (params.scale + doc['ranked_position'].value);"
+        # taste × (floor + (1 − floor) · scale / (scale + rank)): the multiplier is 1 at the
+        # top, half way to the floor at rank = scale, the floor alone for a book with no
+        # rank; 0 when the taste score is under `min`, which the query's epsilon min_score drops.
+        QUALITY_PRIOR_SOURCE = "if (_score < params.min) { return 0; } " \
+          "double prior = doc['ranked_position'].size() == 0 ? params.floor : " \
+          "params.floor + (1 - params.floor) * params.scale / (params.scale + doc['ranked_position'].value); " \
+          "return _score * prior;"
+        # The body's min_score while the prior is on: only the zeros the script returns fall under it.
+        PRIOR_MIN_SCORE = 1e-9
 
         def self.index_name
           ::Search::Books::BookIndex.index_name
@@ -78,7 +88,7 @@ module Search
 
           {
             size: opts[:candidate_size],
-            min_score: opts[:min_score],
+            min_score: opts[:quality_scale].to_f.positive? ? PRIOR_MIN_SCORE : opts[:min_score],
             _source: false,
             docvalue_fields: ["ranked_position"],
             query: wrap_in_quality_prior(wrap_in_normalization(query, opts), opts)
@@ -127,8 +137,9 @@ module Search
           {
             function_score: {
               query: query,
-              script_score: {script: {source: QUALITY_PRIOR_SOURCE, params: {floor: opts[:quality_floor].to_f, scale: scale}}},
-              boost_mode: "multiply"
+              script_score: {script: {source: QUALITY_PRIOR_SOURCE,
+                                      params: {floor: opts[:quality_floor].to_f, scale: scale, min: opts[:min_score].to_f}}},
+              boost_mode: "replace"
             }
           }
         end

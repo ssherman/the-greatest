@@ -418,7 +418,12 @@ can have. The bar is now, on the 20–99 segment: beat the lift-off baseline on 
 recall@50 beyond the sample's noise band; a mean global rank within a factor of two of that
 baseline's; and KL no worse than the previous defaults'. Rank-only stays in every table as context.
 The §7 query gained a quality prior inside the score (`quality_scale`, `quality_floor`); §6.2
-gained `lift_cap` and `lift_population`, both off.
+gained `lift_cap` and `lift_population`, both off. (Amended 2026-10-10: the quality prior ships
+off; the first live page under it was the all-time top 100 minus the owner's shelf, identical
+under every depth, because the hold-out rewards famous books. Safer bets turns it on, Deep cuts
+drops the fusion rank prior, and `min_score` is judged on the taste score before the prior. The
+collaborative list of spec 2 fuses at `collaborative_weight` 0.25, not 1.0, for the same reason.
+`docs/data-quality/recommendations-canon-2026-10-10.md`.)
 
 ### 9.3 Initial knob values
 
