@@ -308,4 +308,12 @@ class CategoryTest < ActiveSupport::TestCase
 
     assert_not Category.find(category.id).deleted, "the inner change must have rolled back"
   end
+
+  test "a category cannot be its own parent" do
+    category = categories(:music_rock_genre)
+    category.parent = category
+
+    assert_not category.valid?
+    assert_includes category.errors[:parent_id], "can't be the category itself"
+  end
 end

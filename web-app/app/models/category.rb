@@ -67,6 +67,7 @@ class Category < ApplicationRecord
   # Validations
   validates :name, presence: true
   validates :type, presence: true
+  validate :parent_is_not_self
 
   # Scopes
   scope :active, -> { where(deleted: false) }
@@ -118,6 +119,10 @@ class Category < ApplicationRecord
   end
 
   private
+
+  def parent_is_not_self
+    errors.add(:parent_id, "can't be the category itself") if persisted? && parent_id == id
+  end
 
   def note_search_relevant_change
     return if @search_relevant_change

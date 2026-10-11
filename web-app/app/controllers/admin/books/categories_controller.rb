@@ -11,6 +11,8 @@ class Admin::Books::CategoriesController < Admin::CategoriesBaseController
 
   def categories_path = admin_books_categories_path
 
+  def categories_search_path = search_admin_books_categories_path
+
   def new_category_path = new_admin_books_category_path
 
   def edit_category_path(category) = edit_admin_books_category_path(category)
