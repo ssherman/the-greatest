@@ -27,6 +27,7 @@ export default class extends Controller {
   press(event) {
     if (event.pointerType === "mouse" && event.button !== 0) return
     this.dragging = true
+    this.beforePress = this.committed
     // Keeps a drag that wanders off the row attached to it. Throws
     // NotFoundError for a pointer the browser no longer tracks; the drag
     // still works without capture, so that is not worth failing over.
@@ -46,6 +47,14 @@ export default class extends Controller {
 
   release() {
     this.dragging = false
+  }
+
+  // pointercancel means the browser claimed the gesture as a scroll (touch-pan-y),
+  // so the press was never a rating: put back what it replaced.
+  cancel() {
+    if (!this.dragging) return
+    this.dragging = false
+    this.commit(this.beforePress)
   }
 
   leave() {

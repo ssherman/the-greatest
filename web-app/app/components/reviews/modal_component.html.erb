@@ -25,7 +25,7 @@
                data-testid="review-star-input"
                data-reviews--star-input-target="slider"
                data-reviews--modal-target="ratingSlider"
-               data-action="pointerdown->reviews--star-input#press pointermove->reviews--star-input#move pointerup->reviews--star-input#release pointercancel->reviews--star-input#release pointerleave->reviews--star-input#leave keydown->reviews--star-input#key">
+               data-action="pointerdown->reviews--star-input#press pointermove->reviews--star-input#move pointerup->reviews--star-input#release pointercancel->reviews--star-input#cancel pointerleave->reviews--star-input#leave keydown->reviews--star-input#key">
             <% stars.each do %>
               <span class="relative inline-block shrink-0" data-reviews--star-input-target="star">
                 <span class="flex text-base-content/30"><%= helpers.icon "star", library: "lucide", class: "size-10 shrink-0", aria_hidden: "true" %></span>
