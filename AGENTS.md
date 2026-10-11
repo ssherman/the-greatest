@@ -81,6 +81,7 @@ hours-long `data_migration:all` re-run against the legacy DB. It does not — it
 What a refresh does **not** bring back is anything created since the last nightly backup, and it
 replaces the database wholesale rather than merging. So this is still not a database to treat as
 disposable; the cost of losing it is just far lower than this section used to claim.
+
 A refresh needs no E2E steps: `yarn test:e2e` runs `bin/rails e2e:prepare` itself, which rebuilds the
 three Playwright accounts' roles, membership, seed data and Stripe sandbox plans from nothing.
 

@@ -43,7 +43,8 @@ module Services
       # The corrections spec applies this subtitle to headlong-hall (which has
       # none otherwise) and never reverts it; a second run would then submit a
       # correction that changes nothing and be refused. Only this exact value is
-      # cleared, so a real subtitle is never touched.
+      # cleared, so a real subtitle is never touched. Keep in sync with
+      # SUBTITLE_MARKER in e2e/tests/books/admin/corrections.spec.ts.
       SCRATCH_SUBTITLE_MARKER = "A Gothic Satire [e2e-corrections-spec]"
       ROLES = {admin: :admin, user: :user, member: :user}.freeze
 

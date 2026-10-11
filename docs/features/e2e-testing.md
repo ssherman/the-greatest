@@ -6,7 +6,7 @@ End-to-end testing suite for The Greatest using Playwright with TypeScript. Test
 ## Technology Stack
 - **Test runner**: `@playwright/test` (Node.js, TypeScript)
 - **Browser**: Chromium (default), Firefox and WebKit configurable
-- **Auth**: Real Firebase email/password login via dedicated test account
+- **Auth**: Real Firebase email/password login via three dedicated test accounts (admin, normal user, member)
 - **Target**: Local dev instances (not a test-mode Rails server)
 - **Package manager**: Yarn
 
@@ -23,14 +23,16 @@ from those rows (roles, membership, seeded reviews and lists, Stripe sandbox pla
 and writes `e2e/.auth/seed.json`. Every test project depends on `seed`, so a production-dump refresh
 needs **no manual E2E steps**: the next run recreates the accounts' rows and state itself.
 
-`prepare` also empties every Books list the three accounts own and removes the accounts' own reviews
-from the scratch book `headlong-hall` (its preflight fails, naming the reviewer, if anyone else has a
-review there), and it seeds every third review a quarter under its star rating.
+`prepare` also empties every Books list the normal user owns, seeds the normal user's 30 reviews (every
+third a quarter under its star), removes all three accounts' own reviews from the scratch book
+`headlong-hall` (its preflight fails, naming the reviewer, if anyone else has a review there), and
+clears the corrections spec's marker subtitle from `headlong-hall` (only when the subtitle equals the
+marker).
 
 ### Key Design Decisions
 - **Single worker, sequential execution** — tests run against a shared live database; parallelism would cause data conflicts
-- **StorageState reuse** — login once in `auth.setup.ts`, all subsequent tests reuse the session via saved cookies
-- **Read-only tests** — no CRUD mutations; tests only browse and verify page content
+- **StorageState reuse** — five sign-in setup projects (plus the `seed` project) run once; every test project reuses its saved session
+- **Tests clean up after themselves** — specs create and remove their own rows on the three e2e accounts; `e2e:prepare` resets the rest on every run
 - **Page Object Model** — reusable page classes encapsulate locators and actions
 - **No CI integration** — local-only for now; CI is a future improvement
 
@@ -85,30 +87,16 @@ web-app/
           songs-crud.spec.ts
           sidebar-nav.spec.ts
     .auth/                        # Generated auth state (gitignored)
-      user.json
+      user.json                   # admin, music
+      games-user.json             # admin, games
+      books-user.json             # admin, books
+      books-normal-user.json      # normal user, books
+      books-member.json           # member, books
       seed.json
 ```
 
-## Test Coverage (50 tests)
-
-### Auth (4 tests)
-- Full Firebase email/password login flow
-- Auth modal UI (steps, buttons, Google sign-in option)
-- Modal close behavior
-- Logout flow (login then logout)
-
-### Public Music Pages (15 tests)
-- Homepage: hero section, branding, featured albums grid, featured songs table
-- Navigation: navbar dropdowns (Albums, Songs), Artists link, Lists link, hero CTAs
-- Album browsing: all-time rankings, decade pages
-- Song browsing: all-time rankings, decade pages
-
-### Admin Pages (31 tests)
-- Dashboard: welcome heading, 4 stat cards with numeric counts, quick link cards, recent artists
-- Artists: index page, table, search, New Artist button, show page navigation
-- Albums: index page, table, search, New Album button, show page navigation
-- Songs: index page, table, search, New Song button, show page navigation
-- Sidebar navigation: all 11 sidebar links navigate to correct URLs
+## Test Coverage
+512 tests across music, games and books as of 2026-10-11; `yarn test:e2e --list` is the current inventory.
 
 ## Prerequisites
 
@@ -253,7 +241,7 @@ Read its output: `e2e:prepare` prints one line per step and aborts with the refu
 preflight → a slug the specs assume has changed). Fix the cause; there is no manual rake step to run.
 
 ### Stale auth state
-- Delete `e2e/.auth/user.json` and re-run — the setup will re-authenticate
+- Delete `e2e/.auth/*.json` (all of them) and re-run — the next run re-signs-in all three accounts and reseeds
 
 ### Connection refused
 - Ensure the Rails dev server is running at `https://dev.thegreatestmusic.org`
