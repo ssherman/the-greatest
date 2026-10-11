@@ -77,7 +77,7 @@ class ReviewTest < ActiveSupport::TestCase
     assert_equal [5, 2, nil], Review.where(reviewable: book).by_rating.map(&:rating)
   end
 
-  test "rejects a rating below 1" do
+  test "rejects a rating of zero" do
     review = Review.new(user: users(:regular_user), reviewable: books_books(:got), rating: 0)
     assert_not review.valid?
   end
@@ -315,5 +315,70 @@ class ReviewTest < ActiveSupport::TestCase
     assert_equal 1, summary.rating_2_count
     assert_equal 2, summary.rating_4_count
     assert_equal 0, summary.rating_5_count
+  end
+
+  test "accepts quarter, half and arbitrary two-place ratings" do
+    [0.25, 3.5, 3.75, 3.33, 5].each do |value|
+      review = Review.new(user: users(:regular_user), reviewable: books_books(:got), rating: value)
+      assert review.valid?, "expected #{value} to be valid: #{review.errors.full_messages}"
+    end
+  end
+
+  test "rejects a rating above five even by a hundredth" do
+    review = Review.new(user: users(:regular_user), reviewable: books_books(:got), rating: 5.01)
+    assert_not review.valid?
+  end
+
+  test "stores a fractional rating exactly and rounds to two places" do
+    review = Review.create!(user: users(:regular_user), reviewable: books_books(:got), rating: "3.333")
+    assert_equal BigDecimal("3.33"), review.reload.rating
+  end
+
+  test "the database rejects zero and above five" do
+    review = Review.create!(user: users(:contractor_user), reviewable: books_books(:got), rating: 4)
+    assert_raises(ActiveRecord::StatementInvalid) { review.update_columns(rating: 0) }
+  end
+
+  test "the database rejects a rating above five" do
+    review = Review.create!(user: users(:contractor_user), reviewable: books_books(:got), rating: 4)
+    assert_raises(ActiveRecord::StatementInvalid) { review.update_columns(rating: 5.01) }
+  end
+
+  test "the database accepts a quarter rating" do
+    review = Review.create!(user: users(:contractor_user), reviewable: books_books(:got), rating: 4)
+    review.update_columns(rating: 0.25)
+    assert_equal BigDecimal("0.25"), review.reload.rating
+  end
+
+  test "rating_bucket follows Goodreads: ties round down, floor of one" do
+    expected = {0.25 => 1, 1.5 => 1, 1.75 => 2, 2.4 => 2, 2.5 => 2, 2.6 => 3, 2.75 => 3, 4.5 => 4, 4.75 => 5, 5 => 5}
+    expected.each { |value, bucket| assert_equal bucket, Review.rating_bucket(BigDecimal(value.to_s)), "bucket for #{value}" }
+    assert_nil Review.rating_bucket(nil)
+  end
+
+  test "RATING_BUCKET_SQL agrees with rating_bucket" do
+    book = books_books(:got)
+    users = [users(:regular_user), users(:admin_user), users(:editor_user), users(:contractor_user)]
+    values = %w[1.5 1.75 2.5 2.75]
+    users.zip(values).each { |user, value| Review.create!(user: user, reviewable: book, rating: value) }
+
+    from_sql = Review.where(reviewable: book).order(:rating).pluck(Arel.sql(Review::RATING_BUCKET_SQL))
+    assert_equal values.map { |v| Review.rating_bucket(BigDecimal(v)) }, from_sql
+  end
+
+  test "format_rating drops trailing zeros and never uses exponent notation" do
+    assert_equal "4", Review.format_rating(BigDecimal(4))
+    assert_equal "4", Review.format_rating(BigDecimal("4.00"))
+    assert_equal "3.5", Review.format_rating(BigDecimal("3.50"))
+    assert_equal "3.75", Review.format_rating(BigDecimal("3.75"))
+    assert_equal "0.25", Review.format_rating(BigDecimal("0.25"))
+    assert_equal "10", Review.format_rating(10)
+    assert_equal "4", Review.format_rating(4)
+    assert_nil Review.format_rating(nil)
+  end
+
+  test "formatted_rating formats the review's own rating" do
+    assert_equal "3.75", Review.new(rating: "3.75").formatted_rating
+    assert_nil Review.new(rating: nil).formatted_rating
   end
 end

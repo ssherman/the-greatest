@@ -58,7 +58,8 @@ module Books
     }.freeze
 
     validates :row_number, presence: true, uniqueness: {scope: :import_id}
-    validates :rating, inclusion: {in: 0..5}, allow_nil: true
+    # 0 is Goodreads' "not rated"; anything else is a (possibly fractional) rating.
+    validates :rating, numericality: {greater_than_or_equal_to: 0, less_than_or_equal_to: 5}, allow_nil: true
 
     def member_status
       return :working if pending?
