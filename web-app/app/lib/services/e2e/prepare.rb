@@ -151,6 +151,10 @@ module Services
       end
 
       def reset_lists(user)
+        # A failed run can leave books on this account's default lists (reading
+        # goals add to Read/Reading); the next run must start from empty lists.
+        ::Books::UserList.where(user: user).find_each { |list| list.user_list_items.find_each(&:destroy!) }
+
         ::Books::UserList.where(user: user, name: [PUBLIC_LIST_NAME, PRIVATE_LIST_NAME]).find_each(&:destroy!)
 
         books = ::Books::Book.where(book_kind: :standalone).order(:id).limit(3).to_a

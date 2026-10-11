@@ -94,6 +94,19 @@ module Services
         assert_equal @user, public_list.user
       end
 
+      test "empties the account's default lists but leaves other users' lists alone" do
+        stray = ::Books::UserList.find_by!(user: @user, list_type: :read)
+        stray.user_list_items.create!(listable: books_books(:war_and_peace))
+        bystander_list = ::Books::UserList.find_by!(user: @bystander, list_type: :read)
+        bystander_list.user_list_items.create!(listable: books_books(:war_and_peace))
+
+        result = prepare
+        assert result.success?, result.errors.inspect
+
+        assert_equal 0, stray.reload.user_list_items.count
+        assert_equal 1, bystander_list.reload.user_list_items.count
+      end
+
       test "writes the manifest and creates its directory" do
         result = prepare
         assert result.success?, result.errors.inspect
