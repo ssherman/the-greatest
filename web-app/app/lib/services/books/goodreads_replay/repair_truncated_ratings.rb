@@ -21,7 +21,7 @@ module Services
       # integer, so every replay pass runs this again. It runs after the final
       # apply because merges have by then settled which book a review sits on.
       # update_all keeps timestamps and skips the summary callback, so each
-      # repaired book is recalculated once, after all the repairs.
+      # repaired book is recalculated once, after the repairs (also when one fails).
       class RepairTruncatedRatings
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         USER_BATCH = 500
@@ -34,20 +34,25 @@ module Services
           checked = 0
           repaired = 0
           repaired_book_ids = Set.new
-          candidates.distinct.pluck("books_goodreads_imports.user_id").each_slice(USER_BATCH) do |user_ids|
-            winners = winners_for(user_ids)
-            reviews = existing_reviews(winners)
-            winners.each do |(user_id, book_id), row|
-              checked += 1
-              review_id, stored = reviews[[user_id, book_id]]
-              next unless repairable?(review_id, stored, row.rating)
+          begin
+            candidates.distinct.pluck("books_goodreads_imports.user_id").each_slice(USER_BATCH) do |user_ids|
+              winners = winners_for(user_ids)
+              reviews = existing_reviews(winners)
+              winners.each do |(user_id, book_id), row|
+                checked += 1
+                review_id, stored = reviews[[user_id, book_id]]
+                next unless repairable?(review_id, stored, row.rating)
 
-              ::Review.where(id: review_id).update_all(rating: row.rating)
-              repaired_book_ids << book_id
-              repaired += 1
+                ::Review.where(id: review_id).update_all(rating: row.rating)
+                repaired_book_ids << book_id
+                repaired += 1
+              end
             end
+          ensure
+            # A failure part-way must not leave the books already written with a
+            # stale summary: a re-run would no longer find them repairable.
+            repaired_book_ids.each { |book_id| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book_id) }
           end
-          repaired_book_ids.each { |book_id| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book_id) }
           Result.new(success?: true, data: {checked: checked, repaired: repaired}, errors: [])
         end
 
@@ -72,8 +77,10 @@ module Services
         def winners_for(user_ids)
           examined = candidates.where(books_goodreads_imports: {user_id: user_ids}).distinct
             .pluck("books_goodreads_imports.user_id", "books_goodreads_editions.book_id").to_set
-          rated_rows.where(books_goodreads_imports: {user_id: user_ids})
-            .select("books_goodreads_import_rows.*, books_goodreads_imports.user_id AS user_id, " \
+          rated_rows.where(books_goodreads_imports: {user_id: examined.map(&:first).uniq},
+            books_goodreads_editions: {book_id: examined.map(&:last).uniq})
+            .select("books_goodreads_import_rows.rating, books_goodreads_import_rows.date_read, " \
+              "books_goodreads_import_rows.row_number, books_goodreads_imports.user_id AS user_id, " \
               "books_goodreads_editions.book_id AS book_id, " \
               "books_goodreads_imports.created_at AS import_created_at, books_goodreads_imports.id AS import_pk")
             .group_by { |row| [row.user_id, row.book_id] }

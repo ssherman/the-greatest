@@ -155,6 +155,19 @@ module Services
           assert_equal BigDecimal("3.5"), other_review.reload.rating
         end
 
+        test "books already repaired are recalculated even when a later repair fails" do
+          other_user = User.create!(email: "replayer2@example.com", role: :user, email_verified: false)
+          other_book = books_books(:got)
+          legacy_review(rating: 3)
+          legacy_review(rating: 3, id: LEGACY_REVIEW_ID + 1, user: other_user, book: other_book)
+          row(import, @book, rating: "3.75")
+          row(import(user: other_user), other_book, rating: "3.75")
+          ActiveRecord::Relation.any_instance.stubs(:update_all).returns(1).then.raises(ActiveRecord::StatementInvalid, "boom")
+          ::Services::Reviews::SummaryRecalculator.expects(:recalculate).once
+
+          assert_raises(ActiveRecord::StatementInvalid) { RepairTruncatedRatings.call }
+        end
+
         test "examining groups costs a fixed number of queries however many there are" do
           other_user = User.create!(email: "replayer2@example.com", role: :user, email_verified: false)
           books = [books_books(:war_and_peace), books_books(:got), *::Books::Book.where.not(id: [books_books(:war_and_peace).id, books_books(:got).id]).limit(4)]
@@ -169,8 +182,17 @@ module Services
           end
 
           small = count_queries { RepairTruncatedRatings.call }
-          row(uploads.first, books.first, rating: "3.5", number: 99)
-          books.each_with_index { |book, index| row(uploads[index % 2], book, rating: "3.25", number: 100 + index) }
+          third_user = User.create!(email: "replayer3@example.com", role: :user, email_verified: false)
+          third_upload = import(user: third_user)
+          books.each_with_index do |book, index|
+            legacy_review(rating: 2, id: 6000 + index, user: third_user, book: book)
+            row(third_upload, book, rating: "3.25", number: index + 1)
+          end
+          extra = ::Books::Book.where.not(id: books.map(&:id)).limit(2).to_a
+          extra.each_with_index do |book, index|
+            legacy_review(rating: 2, id: 7000 + index, user: @user, book: book)
+            row(uploads.first, book, rating: "3.5", number: 200 + index)
+          end
           large = count_queries { RepairTruncatedRatings.call }
 
           assert_equal small, large
