@@ -39,6 +39,12 @@ module Services
       # assert the book starts empty. A human review left there (it has
       # happened) must fail in one line here, not in four specs.
       SCRATCH_BOOK_SLUGS = %w[headlong-hall].freeze
+
+      # The corrections spec applies this subtitle to headlong-hall (which has
+      # none otherwise) and never reverts it; a second run would then submit a
+      # correction that changes nothing and be refused. Only this exact value is
+      # cleared, so a real subtitle is never touched.
+      SCRATCH_SUBTITLE_MARKER = "A Gothic Satire [e2e-corrections-spec]"
       ROLES = {admin: :admin, user: :user, member: :user}.freeze
 
       def self.call(**) = new(**).call
@@ -219,6 +225,7 @@ module Services
       def clear_scratch_books(accounts)
         scratch_books.each do |book|
           ::Review.where(reviewable: book, user: accounts.values).each(&:destroy!)
+          book.update!(subtitle: nil) if book.subtitle == SCRATCH_SUBTITLE_MARKER
         end
       end
 

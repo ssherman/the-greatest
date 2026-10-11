@@ -192,6 +192,17 @@ module Services
         assert_equal 0, Review.where(reviewable: scratch).count
       end
 
+      test "clears the corrections spec's subtitle from the scratch book but leaves a real one" do
+        scratch = books_books(:of_mice_and_men)
+        scratch.update!(subtitle: Services::E2e::Prepare::SCRATCH_SUBTITLE_MARKER)
+        assert prepare.success?
+        assert_nil scratch.reload.subtitle
+
+        scratch.update!(subtitle: "A real subtitle")
+        assert prepare.success?
+        assert_equal "A real subtitle", scratch.reload.subtitle
+      end
+
       test "fails the preflight naming a non-e2e user's review on the scratch book" do
         scratch = books_books(:of_mice_and_men)
         @bystander.reviews.create!(reviewable: scratch, rating: 3)
