@@ -125,10 +125,10 @@ test.describe('My Reviews', () => {
   // `edit-review` rows to a different rating on every run, and never restores it
   // -- unlike reviews-write.spec.ts, which creates a review and removes it again
   // in its own afterEach. There is no "original" rating to restore here: this
-  // row is itself seed data with an arbitrary rating to begin with, and
-  // `(currentRating % 5) + 1` is self-consistent and deterministic across
-  // repeated runs, so leaving the rotation in place is intentional, not an
-  // oversight.
+  // row is itself seed data with an arbitrary rating to begin with, and the
+  // quarter-step rotation (`currentRating + 0.25`, wrapping 5 -> 0.25) is
+  // self-consistent and deterministic across repeated runs, so leaving the
+  // rotation in place is intentional, not an oversight.
   test('opening the dialog from a row, changing the rating and saving reloads the row with the new value', async ({page}) => {
     await page.goto('/my/reviews');
 

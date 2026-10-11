@@ -169,10 +169,12 @@ namespace :e2e do
       # rating bucket -- e2e/tests/books/account/my-reviews.spec.ts's rating-bar-filter
       # test depends on every bucket having at least one row, and this keeps the
       # split even. Every third review is a quarter under its whole star (4.75,
-      # 0.75, ...): that stays in the same bucket (Review.rating_bucket) and makes
-      # the pages render fractional ratings. `n` continues from however many already exist so a resumed
-      # (previously interrupted) run still lands on an even split, not just this
-      # batch. The "Animal Farm" anchor the search test needs is guaranteed
+      # 0.75, ...): that stays in the same bucket (Review.rating_bucket). This task
+      # only adds missing reviews, so fractional values appear for a fresh E2E
+      # account; an existing account gains them through the my-reviews spec's
+      # quarter-step rotation. `n` continues from however many already exist so a
+      # resumed (previously interrupted) run still lands on an even split, not just
+      # this batch. The "Animal Farm" anchor the search test needs is guaranteed
       # above rather than relying on it being the lowest non-excluded id.
       books.each_with_index do |book, i|
         n = already_reviewed_ids.size + i

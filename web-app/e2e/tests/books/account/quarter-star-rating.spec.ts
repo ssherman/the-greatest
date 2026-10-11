@@ -47,17 +47,18 @@ test.describe('Quarter-star ratings', () => {
       await expect(readout).toHaveText(text);
     }
 
-    await page.mouse.move(box.x - 200, box.y - 200);
+    await page.mouse.move(5, 5);
     await expect(readout).toHaveText('Not rated');
 
     await rateStars(page, 3.75);
-    await page.mouse.move(box.x - 200, box.y - 200);
+    await page.mouse.move(5, 5);
     await expect(readout).toHaveText('3.75');
   });
 
   test('arrow keys step by a quarter', async ({ page }) => {
     await page.goto(BOOK);
     await page.getByTestId('review-widget-label').click();
+    await expect(page.locator('#review_modal')).toBeVisible();
     const slider = page.getByTestId('review-star-input');
     await slider.focus();
     await page.keyboard.press('End');
@@ -100,15 +101,16 @@ test.describe('Quarter-star ratings on a touch screen', () => {
     await expect(page.locator('#review_modal')).toBeVisible();
 
     const stars = page.getByTestId('review-star-input').locator('[data-reviews--star-input-target="star"]');
-    const first = (await stars.nth(1).boundingBox())!;
-    await stars.nth(1).tap({ position: { x: first.width * 0.375, y: first.height / 2 } });
+    const second = (await stars.nth(1).boundingBox())!;
+    await stars.nth(1).tap({ position: { x: second.width * 0.375, y: second.height / 2 } });
     await expect(page.getByTestId('review-rating-readout')).toHaveText('1.5');
 
-    // Drag: dispatch touch-type pointer events along the row.
+    // Drag: dispatch touch-type pointer events along the row. These synthetic events
+    // exercise the controller's logic, not the browser's touch-pan-y/pointercancel handling.
     const slider = page.getByTestId('review-star-input');
     const last = (await stars.nth(3).boundingBox())!;
-    const y = first.y + first.height / 2;
-    await slider.dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 7, clientX: first.x + 2, clientY: y, button: 0 });
+    const y = second.y + second.height / 2;
+    await slider.dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 7, clientX: second.x + 2, clientY: y, button: 0 });
     await slider.dispatchEvent('pointermove', { pointerType: 'touch', pointerId: 7, clientX: last.x + last.width * 0.9, clientY: y });
     await slider.dispatchEvent('pointerup', { pointerType: 'touch', pointerId: 7, clientX: last.x + last.width * 0.9, clientY: y });
     await expect(page.getByTestId('review-rating-readout')).toHaveText('4');
