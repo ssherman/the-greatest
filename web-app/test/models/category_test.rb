@@ -316,4 +316,12 @@ class CategoryTest < ActiveSupport::TestCase
     assert_not category.valid?
     assert_includes category.errors[:parent_id], "can't be the category itself"
   end
+
+  test "a row already its own parent from old data can still be edited" do
+    category = categories(:music_rock_genre)
+    category.update_column(:parent_id, category.id)
+    category.reload.description = "edited"
+
+    assert category.valid?
+  end
 end

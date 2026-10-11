@@ -1,7 +1,7 @@
 # E2E Testing Suite (Playwright)
 
 ## Overview
-End-to-end testing suite for The Greatest using Playwright with TypeScript. Tests run against local dev instances with real Firebase email/password authentication. The initial scope covers the **Music domain** — public pages, auth flows, and admin pages. Implemented February 2026.
+End-to-end testing suite for The Greatest using Playwright with TypeScript. Tests run against local dev instances with real Firebase email/password authentication. The suite covers music, games and books (512 tests as of 2026-10-11); music was the first domain, February 2026.
 
 ## Technology Stack
 - **Test runner**: `@playwright/test` (Node.js, TypeScript)
@@ -13,7 +13,7 @@ End-to-end testing suite for The Greatest using Playwright with TypeScript. Test
 ## Architecture
 
 ### How It Works
-Tests run against the live local development server at `https://dev.thegreatestmusic.org`. There is no test-mode Rails server — the developer starts their normal dev server and runs tests against it.
+Tests run against the live local development server through its three dev hosts (`dev.thegreatestmusic.org`, `dev.thegreatest.games`, `dev-new.thegreatestbooks.org`). There is no test-mode Rails server — the developer starts their normal dev server and runs tests against it.
 
 Authentication uses three real Firebase email/password accounts: an **admin** (global admin on every
 domain), a **normal user** (signed in, never admin, never a member) and a **member** (a plain user with
@@ -101,7 +101,7 @@ web-app/
 ## Prerequisites
 
 ### 1. Local Dev Server
-The Rails dev server must be running and accessible at `https://dev.thegreatestmusic.org`.
+The Rails dev server must be running and reachable at all three dev hosts (`dev.thegreatestmusic.org`, `dev.thegreatest.games`, `dev-new.thegreatestbooks.org`).
 
 ### 2. The three Firebase accounts (one-time)
 
@@ -241,10 +241,10 @@ Read its output: `e2e:prepare` prints one line per step and aborts with the refu
 preflight → a slug the specs assume has changed). Fix the cause; there is no manual rake step to run.
 
 ### Stale auth state
-- Delete `e2e/.auth/*.json` (all of them) and re-run — the next run re-signs-in all three accounts and reseeds
+- The setups sign in on every run anyway; deleting `e2e/.auth/*.json` (all of them) only forces a clean slate before the next run
 
 ### Connection refused
-- Ensure the Rails dev server is running at `https://dev.thegreatestmusic.org`
+- Ensure the Rails dev server is running and all three dev hosts (`dev.thegreatestmusic.org`, `dev.thegreatest.games`, `dev-new.thegreatestbooks.org`) resolve to it
 - `ignoreHTTPSErrors: true` is set in config for self-signed certificates
 
 ### Tests pass locally but navbar shows "Login" on auth tests

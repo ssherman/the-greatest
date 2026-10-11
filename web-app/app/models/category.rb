@@ -121,7 +121,7 @@ class Category < ApplicationRecord
   private
 
   def parent_is_not_self
-    errors.add(:parent_id, "can't be the category itself") if persisted? && parent_id == id
+    errors.add(:parent_id, "can't be the category itself") if persisted? && parent_id == id && will_save_change_to_parent_id?
   end
 
   def note_search_relevant_change

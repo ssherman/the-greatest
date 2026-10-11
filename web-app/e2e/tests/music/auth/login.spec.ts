@@ -25,6 +25,7 @@ test.describe('Login Flow', () => {
 
     const modal = page.locator('#login_modal');
     await expect(modal).toBeVisible();
+    await expect(modal.getByRole('heading', { name: 'Sign In' })).toBeVisible();
 
     // Verify step 1 elements
     await expect(modal.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { execSync } from "node:child_process";
 import path from "node:path";
+import { seed } from "../../../support/seed";
 
 // Uploads a one-row export whose only edition the seed already resolved, so
 // a dev worker that picks the import up resolves it from the cache with no
@@ -9,11 +10,14 @@ import path from "node:path";
 const WEB_APP = path.resolve(__dirname, "..", "..", "..", "..");
 // The books-account project runs as the normal user, so the seed and cleanup
 // must own their rows under that account, not the admin the tasks default to.
+// The email comes from the manifest prepare wrote (the row it resolved), since
+// the tasks look the user up by exact match. Call this inside a hook, never at
+// module load: the manifest does not exist until the seed project has run.
 const rails = (task: string) =>
   execSync(`bin/rails ${task}`, {
     cwd: WEB_APP,
     encoding: "utf8",
-    env: { ...process.env, E2E_GOODREADS_EMAIL: process.env.PLAYWRIGHT_USER_EMAIL },
+    env: { ...process.env, E2E_GOODREADS_EMAIL: seed().users.user.email },
   });
 
 test.describe("Books account — Goodreads import", () => {
