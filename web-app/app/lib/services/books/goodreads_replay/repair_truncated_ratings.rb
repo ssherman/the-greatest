@@ -15,13 +15,15 @@ module Services
       #   reader who later set it back to 3. The step repeats after every weekly
       #   sync, so a value test alone would overwrite deliberate ratings on each
       #   pass.
-      # - A replay import created the review iff its created_at falls in
-      #   [started_at, started_at + RUN_BOUND] (the original run) or
-      #   [finished_at - RUN_BOUND, finished_at] (the admin's "Re-execute
-      #   Import" re-runs it, and a run ends at the legacy updated_at). The
-      #   whole window is no proof: re-execution moves finished_at months on.
-      #   Any status counts, since a failed import may have created reviews
-      #   before failing. No matching import, or more than one, skips.
+      # - A replay import created the review iff its created_at is inside the
+      #   import's own window [started_at, finished_at] (nothing comes from an
+      #   import before its upload or after its last status update) and within
+      #   RUN_BOUND of either end: the original run starts at started_at, and
+      #   the admin's "Re-execute Import" re-runs it, ending at the legacy
+      #   updated_at. The whole window is no proof, because re-execution moves
+      #   finished_at months on. Any status counts, since a failed import may
+      #   have created reviews before failing. No matching import, or more than
+      #   one, skips.
       # - Untouched: updated_at == created_at, which is how the legacy importer
       #   creates. Any later edit (reader, relink, anything) changes it.
       # - The value is the creating import's rows for that book rated 1 or more
@@ -30,8 +32,11 @@ module Services
       #   only if the value is fractional and the stored rating is its floor.
       #
       # Every miss fails safe by leaving the truncated value. Gaps by design:
-      # runs longer than RUN_BOUND match only their nearest segment, stuck legacy
-      # imports (pending) never match, and a relinked review is never repaired.
+      # runs longer than RUN_BOUND match only their nearest end, the middle runs
+      # of an import re-executed more than once never match, stuck legacy
+      # imports (pending) never match, reviews created by the legacy
+      # reparse_all (it leaves the import's updated_at alone) never match, and
+      # a relinked review is never repaired.
       # Idempotent: the weekly data_migration:sync overwrites legacy-origin
       # reviews with legacy's integer and keeps legacy's timestamps, so each
       # replay pass repairs again. It runs after the final apply because merges
@@ -130,12 +135,12 @@ module Services
             .transform_values { |rows| rows.map { |_, id, started_at, finished_at| Window.new(id, started_at, finished_at) } }
         end
 
-        # The one import whose creation segments hold the review's creation, or
+        # The one import whose own window, clipped to RUN_BOUND of its ends, holds the review's creation, or
         # nil when none or several do.
         def creating_import(windows, created_at)
           matches = (windows || []).select do |window|
-            created_at.between?(window.started_at, window.started_at + RUN_BOUND) ||
-              created_at.between?(window.finished_at - RUN_BOUND, window.finished_at)
+            created_at.between?(window.started_at, window.finished_at) &&
+              (created_at <= window.started_at + RUN_BOUND || created_at >= window.finished_at - RUN_BOUND)
           end
           matches.first if matches.one?
         end

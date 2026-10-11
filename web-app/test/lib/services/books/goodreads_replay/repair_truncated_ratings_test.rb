@@ -173,6 +173,37 @@ module Services
           refute_repaired(review)
         end
 
+        test "a review created before the upload began is not the import's" do
+          review = legacy_review(rating: 3, created_at: UPLOADED - 1.hour)
+          row(import, @book, rating: "3.75")
+
+          refute_repaired(review)
+        end
+
+        test "a review created after a short import finished is not the import's" do
+          review = legacy_review(rating: 3, created_at: UPLOADED + 2.hours)
+          row(import(finished_at: UPLOADED + 2.minutes), @book, rating: "3.75")
+
+          refute_repaired(review)
+        end
+
+        test "a long window matches a review created shortly after its start" do
+          review = legacy_review(rating: 3, created_at: UPLOADED - 90.days + 1.hour)
+          row(import(started_at: UPLOADED - 90.days, finished_at: UPLOADED), @book, rating: "3.75")
+
+          assert_equal 1, RepairTruncatedRatings.call.data[:repaired]
+          assert_equal BigDecimal("3.75"), review.reload.rating
+        end
+
+        test "a retry shortly after a failed upload is the only import that matches" do
+          review = legacy_review(rating: 3, created_at: UPLOADED + 35.minutes)
+          row(import(status: :failed, finished_at: UPLOADED + 10.minutes), @book, rating: "3.25")
+          row(import(started_at: UPLOADED + 30.minutes, finished_at: UPLOADED + 40.minutes), @book, rating: "3.75")
+
+          assert_equal 1, RepairTruncatedRatings.call.data[:repaired]
+          assert_equal BigDecimal("3.75"), review.reload.rating
+        end
+
         test "a review created just before a long import's finish is a re-execution and is repaired" do
           review = legacy_review(rating: 3, created_at: UPLOADED - 1.hour)
           row(import(started_at: UPLOADED - 90.days, finished_at: UPLOADED), @book, rating: "3.75")

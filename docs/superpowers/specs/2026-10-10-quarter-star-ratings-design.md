@@ -258,11 +258,13 @@ selection is by provenance:
 1. Universe: legacy-origin reviews (id below the reserved ceiling) of a (user, book) that has a
    `legacy_replay` row (never a member's own import) with a fractional rating on that book.
 2. Creating import: among the user's `legacy_replay` imports of any status that have `started_at`
-   and `finished_at`, the one whose creation segments contain `review.created_at`:
-   `[started_at, started_at + RUN_BOUND]` (the original run) or `[finished_at - RUN_BOUND,
-   finished_at]` (the legacy admin's "Re-execute Import" re-runs it, and a run ends at the legacy
-   `updated_at`). `RUN_BOUND` is 6 hours (measured on the legacy restore 2026-10-11: p99 3.8 h,
-   max 19 h). The whole window is no proof, because re-execution moves `updated_at` months on for
+   and `finished_at`, the one whose own window `[started_at, finished_at]` contains
+   `review.created_at` (nothing comes from an import before its upload or after its last status
+   update) and which is within `RUN_BOUND` of either end: `created_at <= started_at + RUN_BOUND`
+   (the original run) or `created_at >= finished_at - RUN_BOUND` (the legacy admin's "Re-execute
+   Import" re-runs it, and a run ends at the legacy `updated_at`). `RUN_BOUND` is 6 hours
+   (measured on the legacy restore 2026-10-11: p99 3.8 h, max 19 h). The whole window is no
+   proof, because re-execution moves `updated_at` months on for
    about 16% of imports. `LoadImports` stamps the two columns from the legacy import's
    `created_at` and `updated_at`. A failed import counts, since it may have created reviews
    before failing. No match, or more than one, skips.
@@ -274,7 +276,9 @@ selection is by provenance:
 5. Repair iff that value is fractional and `stored == value.floor`.
 
 Every miss leaves the truncated value. Gaps by design: runs longer than `RUN_BOUND` match only
-their nearest segment, stuck legacy imports (status pending) never match, and a relinked review
+their nearest end, the middle runs of an import re-executed more than once never match, stuck
+legacy imports (status pending) never match, reviews created by the legacy `reparse_all` (it
+leaves the import's `updated_at` alone) never match, and a relinked review
 (`Apply::Relink#move_review` bumps `updated_at`) is never repaired. The step recalculates each repaired book's summary once,
 after all repairs. The body, title and timestamps are not touched.
 
