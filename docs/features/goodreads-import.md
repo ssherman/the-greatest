@@ -42,6 +42,8 @@ never refuses a row.
   `series_name`/`series_number`.
 - Only the primary `Author` is an author. `Additional Authors` is passed to the matching AI as
   context, because Goodreads mixes translators and illustrators into it.
+- `My Rating` is read as a decimal. Goodreads exports quarter stars since 2026-10-05, so `4.0` and `3.75` both parse;
+  0 means unrated. An unreadable value is dropped.
 - A value that does not parse is dropped and recorded in the row's `notes`.
 - `Private Notes` is never stored.
 
@@ -250,6 +252,7 @@ bin/rails books:goodreads_replay:resolve     # queues pass one (low) and pass tw
 bin/rails books:goodreads_replay:duplicates  # one AI check per author name group, then the book-pair rule
 bin/rails books:goodreads_replay:junk        # authorless books, books relinks leave unsupported
 bin/rails books:goodreads_replay:apply
+bin/rails books:goodreads_replay:repair_ratings  # restores quarter-star ratings legacy truncated; repeats every pass
 bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.md]"
 ```
 
@@ -283,6 +286,22 @@ bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.m
   recalculation, the favorites rebuild and the author rankings once, not once per merge.
 - **Before auto-apply:** hand-check 50 auto verdicts per kind with `books:goodreads_replay:sample[kind]`, then set
   `auto_apply: true` in `config/initializers/goodreads_replay.rb`.
+
+### Legacy truncation repair
+
+The legacy app stored ratings as integers, so it truncated a Goodreads `3.75` to 3 on import. `books:goodreads_replay:repair_ratings`
+(`RepairTruncatedRatings`, quarter-star spec §5.4) restores the CSV value on the review. It updates a review only when
+all four hold: the row's import is `source: legacy_replay` (never a member's own import); the review's id is below
+`RESERVED_CEILINGS["reviews"]` (250,000, so it came from legacy); the winning CSV rating is fractional (the winner is the
+latest upload, then latest Date Read, then lowest row number, among the user's rated replay rows for that book, so a later
+whole-number re-rating beats an earlier fraction); and the stored rating equals that CSV rating rounded down. The last
+condition is what makes a rating the member changed on purpose safe. It recalculates each repaired book's summary once,
+after all repairs, and does not touch the body, title or timestamps.
+
+It runs after the final `apply` of every pass, before `report`, and it **repeats**: `ReviewMigrator` in sync mode
+overwrites legacy-origin reviews from legacy every week, which puts the truncated 3 back. Each pass therefore ends correct,
+including the final launch pass, and running it twice in a row changes nothing. Known gap: legacy created no review for a
+rating under 1, and replay imports never write reviews, so a 0.25 or 0.5 rating is not restored.
 
 ### Finishing legacy imports
 

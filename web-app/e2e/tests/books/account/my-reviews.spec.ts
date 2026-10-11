@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { rateStars } from '../../../helpers/star-rating';
 
 // This spec depends on the e2e-admin account having a healthy body of reviews to
 // filter/sort/page through. Run `bin/rails e2e:my_reviews` (lib/tasks/e2e.rake)
@@ -134,12 +135,12 @@ test.describe('My Reviews', () => {
     const trigger = page.getByTestId('edit-review').first();
     await expect(trigger).toBeVisible();
     const currentRating = Number(await trigger.getAttribute('data-rating'));
-    const newRating = (currentRating % 5) + 1; // always different, wraps 5 -> 1
+    const newRating = currentRating >= 5 ? 0.25 : currentRating + 0.25; // always different, stays in range
 
     await trigger.click();
     await expect(page.locator('#review_modal')).toBeVisible();
 
-    await page.getByTestId('review-star-button').nth(newRating - 1).click();
+    await rateStars(page, newRating);
     await page.getByRole('button', { name: 'Save' }).click();
 
     // ReviewsController's turbo-stream response targets book-page element ids that
@@ -188,7 +189,7 @@ test.describe('My Reviews', () => {
       await page.goto(SCRATCH_BOOK);
       await page.getByTestId('review-widget-label').click();
       await expect(page.locator('#review_modal')).toBeVisible();
-      await page.getByTestId('review-star-button').nth(2).click();
+      await rateStars(page, 3);
       await page.getByRole('button', { name: 'Save' }).click();
       await expect(page.locator('#review_modal')).not.toBeVisible();
 
@@ -227,7 +228,7 @@ test.describe('My Reviews', () => {
       await page.goto(SCRATCH_BOOK);
       await page.getByTestId('review-widget-label').click();
       await expect(page.locator('#review_modal')).toBeVisible();
-      await page.getByTestId('review-star-button').nth(2).click();
+      await rateStars(page, 3);
       await page.getByRole('button', { name: 'Save' }).click();
       await expect(page.locator('#review_modal')).not.toBeVisible();
 

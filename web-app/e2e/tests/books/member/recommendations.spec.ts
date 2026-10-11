@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { rateStars } from '../../../helpers/star-rating';
 
 // A real book on the dev database with no migrated reviews, like reviews-write.spec.ts.
 const BOOK_TITLE = 'Headlong Hall';
@@ -102,7 +103,7 @@ test.describe('Recommendations, as a member', () => {
     const row = page.getByTestId('unrated-list').locator('[data-testid="wizard-book-row"]', { hasText: BOOK_TITLE });
     await row.getByTestId('review-widget-label').click();
     await expect(page.locator('#review_modal')).toBeVisible();
-    await page.getByTestId('review-star-button').nth(3).click();
+    await rateStars(page, 4);
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.locator('#review_modal')).not.toBeVisible();
 

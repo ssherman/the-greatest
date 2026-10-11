@@ -95,6 +95,9 @@ positive count, so it grows with the shelf.
 | Want to read | `+0.2` |
 | Rating `r` (any numeric granularity) | `0.75 × (r − 3)`, so 5 is +1.5, 4 is +0.75, 3 is 0, 2 is −0.75, 1 is −1.5 |
 
+Ratings are decimals (quarter stars), and every threshold compares the exact rating, so a 3.75 does not meet a
+threshold of 4 (`because_of_rating`) and does not count as a "loved" book. The same holds for `collaborative_min_rating`.
+
 A book on several lists takes its highest list weight, and its rating weight is added. **A review
 (rated or text-only) on a book that is on no list implies the read weight (0.4) as its base**, plus
 the rating weight if there is one. Custom lists contribute nothing but exclusion.
