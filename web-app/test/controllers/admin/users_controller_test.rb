@@ -313,6 +313,15 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "show prints a fractional rating as entered, never in exponent notation" do
+    Review.create!(user: @regular_user, reviewable: books_books(:got), rating: "3.75", body: "<p>Close.</p>")
+    get admin_user_url(@regular_user)
+
+    assert_response :success
+    assert_includes response.body, "3.75"
+    assert_not_includes response.body, "0.375e1"
+  end
+
   test "show renders for a user with an unrated review" do
     Review.create!(user: @regular_user, reviewable: books_books(:got), body: "<p>No stars.</p>")
     get admin_user_url(@regular_user)
