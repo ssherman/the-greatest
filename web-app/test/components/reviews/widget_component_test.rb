@@ -57,6 +57,13 @@ module Reviews
       assert_selector "[data-testid='review-widget-label']", text: "Edit your review"
     end
 
+    test "a whole-star rating labels without a trailing zero" do
+      review = Review.new(id: 1, rating: BigDecimal(4))
+      render_inline(Reviews::WidgetComponent.new(reviewable: books_books(:got), review: review))
+
+      assert_selector "[role='img'][aria-label='Your rating: 4 out of 5 stars']"
+    end
+
     test "a fractional rating labels and fills exactly" do
       review = Review.new(id: 1, rating: BigDecimal("4.25"))
       render_inline(Reviews::WidgetComponent.new(reviewable: books_books(:got), review: review))

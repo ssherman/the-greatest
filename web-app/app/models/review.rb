@@ -48,8 +48,8 @@ class Review < ApplicationRecord
     [1, (value.to_d - BigDecimal("0.5")).ceil].max
   end
 
-  # The one way a rating becomes text. BigDecimal#to_s is "0.375e1", so a raw
-  # interpolation is a bug, not a style choice.
+  # The one way a rating becomes text. Under Rails a whole-star BigDecimal prints
+  # as "4.0", so a raw interpolation reads "Rated 5.0 out of 5". Use this instead.
   def self.format_rating(value)
     return nil if value.nil?
 

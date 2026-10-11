@@ -41,17 +41,28 @@ module Admin
         assert_response :success
       end
 
-      test "a fractional rating prints as entered, never in exponent notation" do
+      test "a fractional rating prints as entered" do
         review = Review.create!(user: @regular_user, reviewable: books_books(:got), rating: "3.75", body: "<p>Close.</p>")
         sign_in_as(@admin_user, stub_auth: true)
 
-        [admin_books_reviews_path, admin_books_review_path(review)].each do |path|
-          get path
+        get admin_books_reviews_path
+        assert_select "td.tabular-nums", text: "3.75"
 
-          assert_response :success
-          assert_includes response.body, "3.75"
-          assert_not_includes response.body, "0.375e1"
-        end
+        get admin_books_review_path(review)
+        assert_select "span.tabular-nums", text: "3.75 / 5"
+      end
+
+      test "a whole-star rating prints without a trailing zero" do
+        review = Review.create!(user: @regular_user, reviewable: books_books(:got), rating: 2, body: "<p>Meh.</p>")
+        sign_in_as(@admin_user, stub_auth: true)
+
+        get admin_books_reviews_path
+        assert_select "td.tabular-nums", text: "2"
+        assert_select "td.tabular-nums", text: "2.0", count: 0
+
+        get admin_books_review_path(review)
+        assert_select "span.tabular-nums", text: "2 / 5"
+        assert_select "[role='img'][aria-label='Rated 2 out of 5 stars']"
       end
 
       test "index redirects unauthenticated users" do

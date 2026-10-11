@@ -71,12 +71,18 @@ module Reviews
       assert_selector "[data-testid='review-body']", text: "Words, no stars."
     end
 
-    test "a fractional rating reads as entered, never in exponent notation" do
+    test "a whole-star rating reads without a trailing zero" do
+      review = Review.new(id: 1, rating: BigDecimal(4), body: "<p>Good.</p>", created_at: 1.day.ago)
+      render_inline(Reviews::ReviewComponent.new(review: review))
+
+      assert_selector "[role='img'][aria-label='Rated 4 out of 5 stars']"
+    end
+
+    test "a fractional rating reads as entered" do
       review = Review.new(id: 1, rating: BigDecimal("3.75"), body: "<p>Close.</p>", created_at: 1.day.ago)
       render_inline(Reviews::ReviewComponent.new(review: review))
 
       assert_selector "[role='img'][aria-label='Rated 3.75 out of 5 stars']"
-      assert_no_text "e1"
     end
   end
 end

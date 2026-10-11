@@ -110,6 +110,14 @@ module Reviews
         assert_selector "form[data-my-reviews-delete-last='false']"
       end
 
+      test "the edit trigger carries a whole-star rating without a trailing zero" do
+        review = reviews(:regular_user_war_and_peace)
+        review.update!(rating: BigDecimal(4))
+        render_inline(Reviews::My::RowComponent.new(review: review))
+
+        assert_selector "[data-rating='4']"
+      end
+
       test "the edit trigger carries the formatted rating" do
         review = reviews(:regular_user_war_and_peace)
         review.update!(rating: BigDecimal("3.75"))

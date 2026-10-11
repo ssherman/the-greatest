@@ -313,13 +313,19 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "show prints a fractional rating as entered, never in exponent notation" do
+  test "show prints a fractional rating as entered" do
     Review.create!(user: @regular_user, reviewable: books_books(:got), rating: "3.75", body: "<p>Close.</p>")
     get admin_user_url(@regular_user)
 
-    assert_response :success
-    assert_includes response.body, "3.75"
-    assert_not_includes response.body, "0.375e1"
+    assert_select "td.tabular-nums", text: "3.75"
+  end
+
+  test "show prints a whole-star rating without a trailing zero" do
+    Review.create!(user: @regular_user, reviewable: books_books(:got), rating: 2, body: "<p>Meh.</p>")
+    get admin_user_url(@regular_user)
+
+    assert_select "td.tabular-nums", text: "2"
+    assert_select "td.tabular-nums", text: "2.0", count: 0
   end
 
   test "show renders for a user with an unrated review" do
