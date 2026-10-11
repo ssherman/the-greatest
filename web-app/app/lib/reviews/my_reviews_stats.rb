@@ -29,14 +29,13 @@ module Reviews
       body_counts[true].to_i
     end
 
-    # Explicit Float bounds, and Float on the way out. Integer#/ would floor, and
-    # a bare round can hand back an Integer -- both break the one-decimal contract
-    # the view formats against.
+    # The exact mean, not a bucket-weighted one: with fractional ratings the
+    # buckets are a rounding, and averaging the rounding drifts. Float on the way
+    # out so the one-decimal contract the view formats against holds.
     def average
       return nil if total.zero?
 
-      sum = counts_by_rating.sum { |rating, count| rating * count }
-      (sum.to_f / total).round(1)
+      (rating_sum.to_f / total).round(1)
     end
 
     # Relative to the tallest bar, so a spread of 3/1/1 still reads as a chart
@@ -59,8 +58,19 @@ module Reviews
       @body_counts ||= scope.group(Arel.sql("reviews.body IS NULL")).count
     end
 
+    # One grouped query yields both the bucket counts and the exact sum, so the
+    # average costs no extra query.
+    def bucket_rows
+      @bucket_rows ||= scope.group(Arel.sql(Review::RATING_BUCKET_SQL))
+        .pluck(Arel.sql(Review::RATING_BUCKET_SQL), Arel.sql("COUNT(reviews.rating)"), Arel.sql("COALESCE(SUM(reviews.rating), 0)"))
+    end
+
     def raw_counts
-      @raw_counts ||= scope.group(:rating).count
+      @raw_counts ||= bucket_rows.to_h { |bucket, count, _| [bucket, count] }
+    end
+
+    def rating_sum
+      bucket_rows.sum { |_, _, sum| sum }
     end
   end
 end

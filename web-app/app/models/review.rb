@@ -38,7 +38,9 @@ class Review < ApplicationRecord
   # and everything up to 1.5 is a 1. Integer-cast so grouped counts key on
   # Integers. Every bucketed consumer (summaries, the My Reviews filter and
   # stats) uses this or rating_bucket, never its own rounding.
-  RATING_BUCKET_SQL = "GREATEST(1, CEIL(reviews.rating - 0.5))::integer"
+  # NULL stays NULL: GREATEST ignores NULLs and would otherwise bucket an
+  # unrated review as a 1.
+  RATING_BUCKET_SQL = "CASE WHEN reviews.rating IS NULL THEN NULL ELSE GREATEST(1, CEIL(reviews.rating - 0.5))::integer END"
 
   def self.rating_bucket(value)
     return nil if value.nil?

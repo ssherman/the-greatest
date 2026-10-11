@@ -215,6 +215,29 @@ module Services
 
         assert_equal incremental, summary_for(@book).slice(:ratings_count, :ratings_sum, :text_reviews_count)
       end
+
+      test ".recalculate buckets fractional ratings by Goodreads' rule and sums exactly" do
+        [[users(:regular_user), "1.5"], [users(:admin_user), "1.75"], [users(:editor_user), "2.5"],
+          [users(:contractor_user), "4.75"]].each do |user, rating|
+          Review.create!(user: user, reviewable: @book, rating: rating)
+        end
+
+        recalculate(@book)
+        summary = summary_for(@book)
+
+        assert_equal [1, 2, 0, 0, 1], summary.rating_counts.values
+        assert_equal BigDecimal("10.5"), summary.ratings_sum
+        assert_in_delta 2.625, summary.average_rating, 0.0001
+      end
+
+      test ".recalculate does not count an unrated review in any bucket" do
+        Review.create!(user: users(:regular_user), reviewable: @book, rating: 4)
+        Review.create!(user: users(:admin_user), reviewable: @book, body: "<p>No stars.</p>")
+
+        recalculate(@book)
+
+        assert_equal [0, 0, 0, 1, 0], summary_for(@book).rating_counts.values
+      end
     end
   end
 end

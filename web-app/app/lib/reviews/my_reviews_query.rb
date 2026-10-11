@@ -28,7 +28,7 @@ module Reviews
 
     def call
       scope = base_scope
-      scope = scope.where(rating: rating) if rating
+      scope = scope.where("#{Review::RATING_BUCKET_SQL} = ?", rating) if rating
       scope = scope.where.not(body: nil) if kind == "written"
       scope = scope.where(body: nil) if kind == "rating_only"
       scope = reviewable_class.review_text_search(scope, term) if term
@@ -44,6 +44,8 @@ module Reviews
       available_sorts.include?(requested) ? requested : DEFAULT_SORT
     end
 
+    # The value is a bucket 1..5 (Review::RATING_BUCKET_SQL), not an exact rating.
+    #
     # A crafted `?rating[]=1` or `?rating[a]=1` hands back an Array or an
     # ActionController::Parameters instead of a scalar -- neither responds to
     # `#to_i`, so this must check the type before converting rather than
