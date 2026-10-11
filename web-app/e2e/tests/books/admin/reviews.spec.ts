@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { rateStars } from "../../../helpers/star-rating";
 
 // headlong-hall is the scratch book: lib/tasks/e2e.rake excludes it from the
 // /my/reviews seed precisely so specs can create and destroy reviews on it.
@@ -50,7 +51,7 @@ test.describe("Books admin — reviews", () => {
       await page.goto(SCRATCH_BOOK);
       await page.getByTestId("review-widget-label").click();
       await expect(page.locator("#review_modal")).toBeVisible();
-      await page.getByTestId("review-star-button").nth(2).click();
+      await rateStars(page, 3);
       await page.locator("#review_modal textarea").fill(body);
       await page.getByRole("button", { name: "Save" }).click();
       await expect(page.locator("#review_modal")).not.toBeVisible();

@@ -4,38 +4,43 @@ require "test_helper"
 
 module Reviews
   class StarsComponentTest < ViewComponent::TestCase
-    test "clips the fill layer to the rating as a percentage of five" do
-      render_inline(Reviews::StarsComponent.new(rating: 4))
-
-      assert_selector "[data-testid='stars-fill'][style*='width: 80.0%']"
+    def fills
+      page.all("[data-testid='star-fill']", visible: :all).map { |el| el[:style] }
     end
 
-    test "clips a fractional average proportionally rather than rounding it" do
+    test "fills each star separately: 3.75 is three full, three quarters, empty" do
+      render_inline(Reviews::StarsComponent.new(rating: BigDecimal("3.75")))
+
+      assert_equal ["width: 100.0%", "width: 100.0%", "width: 100.0%", "width: 75.0%", "width: 0.0%"], fills
+    end
+
+    test "a fractional average fills its partial star proportionally" do
       render_inline(Reviews::StarsComponent.new(rating: 3.96))
 
-      assert_selector "[data-testid='stars-fill'][style*='width: 79.2%']"
+      assert_equal "width: 96.0%", fills[3]
+      assert_equal "width: 0.0%", fills[4]
     end
 
-    test "renders five stars in each of the two layers" do
+    test "renders a track and a filled star for each of five stars" do
       render_inline(Reviews::StarsComponent.new(rating: 5))
 
-      assert_selector "[data-testid='stars-track'] svg", count: 5
-      assert_selector "[data-testid='stars-fill'] svg", count: 5
+      assert_selector "[data-testid='star']", count: 5
+      assert_selector "[data-testid='star-track'] svg", count: 5
+      assert_selector "[data-testid='star-fill'] svg.fill-current", count: 5
+      assert_no_selector "[data-testid='star-track'] svg.fill-current"
     end
 
-    test "fills the overlay stars and leaves the track stars outlined" do
-      render_inline(Reviews::StarsComponent.new(rating: 5))
-
-      assert_selector "[data-testid='stars-fill'] svg.fill-current", count: 5
-      assert_no_selector "[data-testid='stars-track'] svg.fill-current"
-    end
-
-    test "exposes a single accessible label and hides the decorative layers" do
+    test "an average label keeps one decimal" do
       render_inline(Reviews::StarsComponent.new(rating: 4.25))
 
       assert_selector "[role='img'][aria-label='4.3 out of 5 stars']"
-      assert_selector "[data-testid='stars-track'][aria-hidden='true']"
-      assert_selector "[data-testid='stars-fill'][aria-hidden='true']"
+      assert_selector "[data-testid='star'][aria-hidden='true']", count: 5
+    end
+
+    test "an exact label reads a single rating as entered" do
+      render_inline(Reviews::StarsComponent.new(rating: BigDecimal("3.75"), exact: true))
+
+      assert_selector "[role='img'][aria-label='3.75 out of 5 stars']"
     end
 
     test "accepts a caller-supplied label" do
@@ -44,23 +49,17 @@ module Reviews
       assert_selector "[role='img'][aria-label='Average rating 4.0 out of 5']"
     end
 
-    test "renders an empty track for a nil rating" do
+    test "a nil rating renders empty stars and says so" do
       render_inline(Reviews::StarsComponent.new(rating: nil))
 
-      assert_selector "[data-testid='stars-fill'][style*='width: 0.0%']"
+      assert_equal ["width: 0.0%"] * 5, fills
       assert_selector "[role='img'][aria-label='Not yet rated']"
     end
 
-    test "clamps a rating outside one to five" do
+    test "clamps a rating above five, and the label matches the fill" do
       render_inline(Reviews::StarsComponent.new(rating: 9))
 
-      assert_selector "[data-testid='stars-fill'][style*='width: 100.0%']"
-    end
-
-    test "clamps the accessible label to match the clamped fill" do
-      render_inline(Reviews::StarsComponent.new(rating: 9))
-
-      assert_selector "[data-testid='stars-fill'][style*='width: 100.0%']"
+      assert_equal ["width: 100.0%"] * 5, fills
       assert_selector "[role='img'][aria-label='5.0 out of 5 stars']"
     end
 

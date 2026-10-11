@@ -6,7 +6,7 @@ import { Controller } from "@hotwired/stimulus"
 export default class extends Controller {
   static targets = [
     "form", "token", "methodField", "reviewableType", "reviewableId",
-    "rating", "title", "body", "star", "remove", "heading", "error", "clearRating"
+    "rating", "title", "body", "ratingSlider", "remove", "heading", "error", "clearRating"
   ]
 
   connect() {
@@ -53,20 +53,17 @@ export default class extends Controller {
     if (this.element.showModal) this.element.showModal()
   }
 
-  setRating(event) {
-    const value = parseInt(event.currentTarget.dataset.rating, 10)
-    this.setRatingValue(value)
+  // The star input owns the hidden field and the drawing; this only hands it
+  // a value. It answers with reviews--star-input:change, which ratingChanged
+  // uses to show or hide "Clear rating".
+  setRatingValue(value) {
+    this.ratingTarget.closest('[data-controller~="reviews--star-input"]')
+      .dispatchEvent(new CustomEvent("star-input:set", { detail: { value: value ?? null } }))
   }
 
-  setRatingValue(value) {
-    this.ratingTarget.value = value || ""
-    this.starTargets.forEach((star) => {
-      const starValue = parseInt(star.dataset.rating, 10)
-      const on = value != null && starValue <= value
-      star.setAttribute("aria-pressed", on ? "true" : "false")
-      star.querySelectorAll("svg").forEach((svg) => svg.classList.toggle("fill-current", on))
-    })
-    if (this.hasClearRatingTarget) this.clearRatingTarget.classList.toggle("hidden", !value)
+  ratingChanged(event) {
+    const value = event.detail?.value
+    if (this.hasClearRatingTarget) this.clearRatingTarget.classList.toggle("hidden", value == null)
   }
 
   // Stars are optional when there is text: Goodreads (and so an import) allows a
@@ -74,7 +71,7 @@ export default class extends Controller {
   clearRating() {
     this.setRatingValue(null)
     // The button hides itself, which would drop keyboard focus out of the dialog.
-    this.starTargets[0]?.focus()
+    this.ratingSliderTarget.focus()
   }
 
   // A review needs a rating or some text -- the server enforces the same rule

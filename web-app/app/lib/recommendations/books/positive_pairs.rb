@@ -10,8 +10,10 @@ module Recommendations
     class PositivePairs
       LIST_TYPES = %w[favorites read reading].freeze
 
+      # A decimal, so a fractional floor (3.5) can be configured; ratings are
+      # quarter stars and are compared exactly.
       def initialize(min_rating:)
-        @min_rating = min_rating.to_i
+        @min_rating = BigDecimal(min_rating.to_s)
       end
 
       def each_batch(batch_size: 50_000)
@@ -45,7 +47,7 @@ module Recommendations
             SELECT user_id, reviewable_id
               FROM reviews
              WHERE reviewable_type = 'Books::Book'
-               AND rating >= #{@min_rating}
+               AND rating >= #{@min_rating.to_s("F")}
           ) pairs
           ORDER BY user_id, item_id
         SQL

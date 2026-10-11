@@ -15,7 +15,7 @@ module Reviews
 
     private
 
-    def ratings
+    def stars
       1..MAX_RATING
     end
   end

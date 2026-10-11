@@ -212,15 +212,15 @@ module Services
           by_book.each do |book_id, rows|
             next if reviewed.include?(book_id)
 
-            winner = rows.select { |row| row.rating.to_i.positive? || row.review_body.present? }
-              .min_by { |row| [row.rating.to_i.positive? ? 0 : 1, -(row.date_read&.jd || 0), row.row_number] }
+            winner = rows.select { |row| row.rating&.positive? || row.review_body.present? }
+              .min_by { |row| [row.rating&.positive? ? 0 : 1, -(row.date_read&.jd || 0), row.row_number] }
             write_review(book_id, winner) if winner
           end
         end
 
         def write_review(book_id, row)
           review = ::Review.new(user: @user, reviewable_type: "Books::Book", reviewable_id: book_id,
-            rating: (row.rating if row.rating.to_i.positive?), body: row.review_body&.gsub(REVIEW_BREAK, "\n"))
+            rating: (row.rating if row.rating&.positive?), body: row.review_body&.gsub(REVIEW_BREAK, "\n"))
           unless review.valid?
             row.update!(error: "review not imported: #{review.errors.full_messages.to_sentence}")
             return

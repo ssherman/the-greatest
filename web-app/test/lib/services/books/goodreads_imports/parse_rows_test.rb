@@ -81,6 +81,15 @@ module Services
           assert_not row.raw.key?("Private Notes")
           assert_equal ["unreadable Date Read dropped: someday"], row.notes
         end
+
+        test "a current-format export (no Average Rating column) keeps fractional ratings" do
+          rows = ::Books::Goodreads::ExportFile.parse(file_fixture("goodreads/quarter_star_export.csv").read).data[:rows]
+
+          ParseRows.call(import: @import, rows: rows)
+
+          assert_equal [BigDecimal("3.75"), BigDecimal("4.25"), BigDecimal(4), BigDecimal(0)],
+            @import.rows.order(:row_number).pluck(:rating)
+        end
       end
     end
   end

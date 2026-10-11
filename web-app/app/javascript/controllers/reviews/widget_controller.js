@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { starFills, formatRating } from "./star_rating"
 
 // Per-book "Rate this book" control. The book page is edge-cached, so this ships
 // identical for everyone and fills itself in from the uncached /review_state.
@@ -84,8 +85,8 @@ export default class extends Controller {
   }
 
   // Reviews::WidgetComponent always renders Reviews::StarsComponent, even with no
-  // review (rating 0, clipped to an empty fill) -- that keeps the cached HTML
-  // identical for every visitor. So hydration only ever adjusts the fill width and
+  // review (rating 0, so all five per-star fills sit at 0%) -- that keeps the cached HTML
+  // identical for every visitor. So hydration only ever adjusts the five per-star fill widths and
   // the accessible name here; it never reveals or hides the element, which would
   // otherwise flash an empty box the instant the label switches to "Edit your
   // review" and before this fetch has actually delivered a rating.
@@ -93,11 +94,10 @@ export default class extends Controller {
     if (!this.hasStarsTarget) return
 
     const rating = this.review && this.review.rating != null ? this.review.rating : 0
-    const clamped = Math.max(0, Math.min(5, rating))
-    const fillPercentage = ((clamped / 5) * 100).toFixed(1)
-
-    const fill = this.starsTarget.querySelector('[data-testid="stars-fill"]')
-    if (fill) fill.style.width = `${fillPercentage}%`
+    const fills = starFills(rating)
+    this.starsTarget.querySelectorAll('[data-testid="star-fill"]').forEach((fill, index) => {
+      fill.style.width = `${fills[index]}%`
+    })
 
     const img = this.starsTarget.querySelector('[role="img"]')
     if (img) img.setAttribute("aria-label", this.starsLabel())
@@ -108,7 +108,7 @@ export default class extends Controller {
   starsLabel() {
     if (!this.review) return "Not yet rated"
     if (this.review.rating == null) return "Reviewed without a rating"
-    return `Your rating: ${this.review.rating} out of 5 stars`
+    return `Your rating: ${formatRating(this.review.rating)} out of 5 stars`
   }
 
   async open(event) {

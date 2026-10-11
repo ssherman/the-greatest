@@ -20,6 +20,15 @@ class ReviewStateControllerTest < ActionDispatch::IntegrationTest
     assert_equal "A monumental achievement", body["review"]["title"]
   end
 
+  test "returns a fractional rating as a JSON number" do
+    @review.update!(rating: BigDecimal("3.75"))
+    sign_in_as(@user, stub_auth: true)
+
+    get review_state_path(reviewable_type: "Books::Book", reviewable_id: @book.id), as: :json
+
+    assert_equal 3.75, response.parsed_body["review"]["rating"]
+  end
+
   test "returns a null review when the user has not reviewed the item" do
     sign_in_as(@user, stub_auth: true)
 
