@@ -67,7 +67,8 @@ module Services
 
         reviews = @user.reviews.where(reviewable_type: "Books::Book")
         assert_equal 5, reviews.count
-        assert_equal [1, 2, 3, 4, 5], reviews.pluck(:rating).sort
+        assert_equal [1, 2, 3, 4, 5], reviews.pluck(:rating).map { |r| Review.rating_bucket(r) }.sort
+        assert reviews.pluck(:rating).any? { |r| r.to_d % 1 != 0 }, "some seeded ratings are fractional"
         assert reviews.exists?(reviewable: books_books(:war_and_peace))
       end
 

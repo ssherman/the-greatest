@@ -143,8 +143,13 @@ module Services
         raise SeedError, "seed book ##{lookalike.id} (#{lookalike.title}) would be a second 'Animal Farm' search hit" if lookalike
 
         # (i % 5) + 1 after a rating-5 anchor gives six per rating at 30.
+        # Every third review is a quarter under its whole star (4.75, 0.75, ...);
+        # that stays in the same bucket (Review.rating_bucket), so the my-reviews
+        # rating-bar test sees fractional values without the per-rating split changing.
         books.each_with_index do |book, i|
-          user.reviews.create!(reviewable: book, rating: (i % 5) + 1,
+          rating = (i % 5) + 1
+          rating -= 0.25 if (i % 3).zero?
+          user.reviews.create!(reviewable: book, rating: rating,
             body: i.odd? ? "Seed review #{i} for the E2E /my/reviews spec." : nil)
         end
         log.call("#{user.email}: #{review_target} Books::Book reviews")
