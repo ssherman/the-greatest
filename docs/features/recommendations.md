@@ -425,10 +425,13 @@ The trainer's flags (`recommender.cli train` / `run`), with their defaults: `--l
 
 Measured values are in `docs/data-quality/recommendations-2026-10-07.md` (the first pass, which
 found the pages too deep), `docs/data-quality/recommendations-2026-10-08.md` (the quality prior,
-the revised bar, and why `quality_scale=1000` is the default) and
+the revised bar, and why `quality_scale=1000` was the default until 2026-10-10),
 `docs/data-quality/recommendations-collaborative-2026-10-10.md` (the λ sweep and the collaborative
-signal against spec 2's bar). Regenerate before acting on them;
-the numbers describe the dev database on those days.
+signal against spec 2's bar, measured at fusion weight 1.0) and
+`docs/data-quality/recommendations-canon-2026-10-10.md` (the first live page, why the prior now
+ships off and the model at 0.25, and what that costs on the harness). Regenerate before acting on
+them; the numbers describe the dev database on those days, and the first three describe defaults
+that no longer ship.
 
 ## Known gaps
 
@@ -446,22 +449,22 @@ the numbers describe the dev database on those days.
   so under Safer bets its picks are not pulled toward the canon the way the taste list's are. At
   weight 0.25 that is two picks in twenty; the spec's section 8.3 experiment, "apply the quality
   prior to the collaborative list", remains the fix if it matters.
-- **The revised bar (spec §9.2, amended 2026-10-08) is met on hit@10 and page depth, and NOT met
-  on recall@50 or KL.** With the quality prior the engine beats the frequency profile on hit@10 by
-  about 1.6x on the 20-99 segment on both samples and returns pages at mean rank 750-800 instead
-  of 5,500; on recall@50 it trails that profile by 0.02-0.06 (a tie on the fresh sample, a loss on
-  the other), and its KL sits 0.02-0.07 above the previous defaults. Shipping it as the default is
-  a judgement, argued in the data-quality record. `lift_cap` and `lift_population` exist, measured,
+- **The revised bar (spec §9.2, amended 2026-10-08) is no longer the shipped target.** It was met
+  on hit@10 and page depth with the quality prior on (hit@10 about 1.6x the frequency profile on
+  the 20-99 segment, pages at mean rank 750-800), and that is now the Safer bets page, not the
+  default. The shipped defaults sit below the frequency profile on hit@10 in the two larger
+  segments and return pages at mean rank 5,500-6,000, on purpose: the 2026-10-10 record overrides
+  the bar, because the bar rewards famous books. `lift_cap` and `lift_population` exist, measured,
   and off.
-- **The collaborative signal meets spec 2's bar on every condition, on two samples**: on 100+
-  hit@10 goes from 0.32-0.33 to 0.74 and recall@50 from 0.105 to 0.38-0.41 against the taste-only
-  engine, with lower KL and shallower pages
-  (`docs/data-quality/recommendations-collaborative-2026-10-10.md`). With it, the engine also beats
-  the frequency profile on recall@50 on 20-99 and 100+, the gap the bullet above records for the
-  taste-only engine. It costs about 140-215 ms more per page on the 20-99
-  and 100+ segments, mostly downstream of the signal's own two reads (not yet profiled), and the
-  neighbour read for the two largest shelves (5,794 and 18,534 trainable books) takes 0.4-1.1 s.
-  Production has no model until spec 2's increment 2 (the home-server timer) ships.
+- **The collaborative signal met spec 2's bar on every condition, on two samples, at fusion
+  weight 1.0**: on 100+ hit@10 went from 0.32-0.33 to 0.74 and recall@50 from 0.105 to 0.38-0.41
+  against the taste-only engine, with lower KL and shallower pages
+  (`docs/data-quality/recommendations-collaborative-2026-10-10.md`). At the shipped 0.25 it adds
+  about two picks in twenty and a fraction of that lift; the canon record explains why the weight
+  came down. It costs about 140-215 ms more per page on the 20-99 and 100+ segments, mostly
+  downstream of the signal's own two reads (not yet profiled), and the neighbour read for the two
+  largest shelves (5,794 and 18,534 trainable books) takes 0.4-1.1 s. Production has trained and
+  loaded a model daily since 2026-10-10.
 - The wizard's "add" is the list widget's modal (pick a list), not a one-click add; the spec's
   "one click" is two.
 - Results run the engine on every request (~15 queries + the OpenSearch call + ~110 ms
