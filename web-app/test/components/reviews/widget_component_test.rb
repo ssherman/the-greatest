@@ -26,7 +26,7 @@ module Reviews
     test "the neutral stars ship with a zero fill, not a hidden element" do
       render_inline(Reviews::WidgetComponent.new(reviewable: @book))
 
-      assert_selector "[data-testid='review-widget-stars'] [data-testid='stars-fill'][style='width: 0.0%']"
+      assert_selector "[data-testid='review-widget-stars'] [data-testid='star-fill'][style='width: 0.0%']", count: 5
     end
 
     test "renders the rating when a review is given" do
@@ -55,6 +55,21 @@ module Reviews
 
       assert_selector "[role='img'][aria-label='Reviewed without a rating']"
       assert_selector "[data-testid='review-widget-label']", text: "Edit your review"
+    end
+
+    test "a whole-star rating labels without a trailing zero" do
+      review = Review.new(id: 1, rating: BigDecimal(4))
+      render_inline(Reviews::WidgetComponent.new(reviewable: books_books(:got), review: review))
+
+      assert_selector "[role='img'][aria-label='Your rating: 4 out of 5 stars']"
+    end
+
+    test "a fractional rating labels and fills exactly" do
+      review = Review.new(id: 1, rating: BigDecimal("4.25"))
+      render_inline(Reviews::WidgetComponent.new(reviewable: books_books(:got), review: review))
+
+      assert_selector "[role='img'][aria-label='Your rating: 4.25 out of 5 stars']"
+      assert_selector "[data-testid='star-fill'][style='width: 25.0%']", count: 1
     end
   end
 end

@@ -12,12 +12,17 @@ module Services
       #   gets its file and rows, for increment 7 to finish;
       # - a non-CSV upload is failed and never downloaded.
       #
+      # A replay import's started_at and finished_at are the legacy upload time
+      # and last status change (when it completed or failed), not the load time:
+      # RepairTruncatedRatings reads them as the window in which the legacy
+      # importer could have created a review.
+      #
       # Repeatable: an import already loaded is reused and its file is never
       # downloaded again. ParseRows skips rows already written, so a run after
       # the books re-migration truncated the rows parses the kept file again.
       class LoadImports
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
-        LegacyImport = Data.define(:id, :user_id, :status, :error, :blob_key, :content_type, :filename)
+        LegacyImport = Data.define(:id, :user_id, :status, :error, :blob_key, :content_type, :filename, :created_at, :updated_at)
         # The legacy bucket no longer holds the upload's blob (measured: a
         # development load met one). That import fails; the rest still load.
         MissingBlob = Class.new(StandardError)
@@ -33,7 +38,8 @@ module Services
               yield LegacyImport.new(
                 id: import.id, user_id: import.user_id, error: import.error,
                 status: ::LegacyBooks::GoodreadsImport::STATUSES.fetch(import.status, import.status.to_s),
-                blob_key: blob&.key, content_type: blob&.content_type, filename: blob&.filename
+                blob_key: blob&.key, content_type: blob&.content_type, filename: blob&.filename,
+                created_at: import.created_at, updated_at: import.updated_at
               )
             end
           end
@@ -61,7 +67,10 @@ module Services
           return :missing_user unless user
 
           import = ::Books::GoodreadsImport.find_by(legacy_import_id: legacy.id) ||
-            ::Books::GoodreadsImport.create!(user: user, source: :legacy_replay, legacy_import_id: legacy.id, **initial_state(legacy))
+            ::Books::GoodreadsImport.create!(user: user, source: :legacy_replay, legacy_import_id: legacy.id,
+              started_at: legacy.created_at, finished_at: legacy.updated_at, **initial_state(legacy))
+          # Imports loaded before the timing was kept get it once.
+          import.update_columns(started_at: legacy.created_at, finished_at: legacy.updated_at) if import.started_at.nil?
           return :not_csv unless legacy.content_type == CSV_TYPE
           return :missing_file if legacy.blob_key.blank? && !import.file.attached?
 

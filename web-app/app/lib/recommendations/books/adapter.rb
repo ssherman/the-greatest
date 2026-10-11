@@ -23,7 +23,8 @@ module Recommendations
 
       def interactions(user)
         list_weights, kinds = list_weights_for(user)
-        reviews = user.reviews.where(reviewable_type: "Books::Book").pluck(:reviewable_id, :rating).to_h
+        reviews = user.reviews.where(reviewable_type: "Books::Book").pluck(:reviewable_id, :rating)
+          .to_h { |item_id, rating| [item_id, rating&.to_f] }
 
         (list_weights.keys | reviews.keys).map do |item_id|
           rating = reviews[item_id]

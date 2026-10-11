@@ -27,7 +27,7 @@
       <ul data-testid="rated-list">
         <% @rated.each do |book, review| %>
           <%= render "recommendations/books/book_row", book: book,
-                trailing: render(Reviews::StarsComponent.new(rating: review.rating, size: "size-4", label: "#{review.rating} stars")) %>
+                trailing: render(Reviews::StarsComponent.new(rating: review.rating, size: "size-4", label: "#{review.formatted_rating} stars")) %>
         <% end %>
       </ul>
     <% end %>

@@ -207,6 +207,9 @@ applies to reviews of books on none of those lists. The definition lives
 in two places that tests hold equal: the export's SQL (`Recommendations::Books::PositivePairs`) and
 the serving side's Ruby (`Interaction#trainable?(min_rating:)`).
 
+Ratings are decimals (quarter stars), and every threshold compares the exact rating, so a 3.75 does not meet a
+threshold of 4 (`because_of_rating`) and does not count as a "loved" book. The same holds for `collaborative_min_rating`.
+
 **Three legs and a store.** Each leg reads and writes files through `Recommendations::Store`
 (`Local`, a directory, for development; `R2`, a private bucket, in production). The Python side
 has the same two stores, read from the same variable names (`RECOMMENDATIONS_R2_*` in `secrets/home-server.env`; there the endpoint is required, since the VM has no `STORAGE_ENDPOINT`). The two Rails jobs build the store from the three

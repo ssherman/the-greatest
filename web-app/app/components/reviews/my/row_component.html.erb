@@ -21,7 +21,7 @@
 
     <div class="flex items-center gap-2 mt-1 text-sm">
       <% if review.rating %>
-        <%= render Reviews::StarsComponent.new(rating: review.rating) %>
+        <%= render Reviews::StarsComponent.new(rating: review.rating, exact: true) %>
       <% end %>
       <span class="text-base-content/60"><%= time_ago_in_words(review.created_at) %> ago</span>
     </div>
@@ -44,7 +44,7 @@
             data-review-id="<%= review.id %>"
             data-reviewable-type="<%= review.reviewable_type %>"
             data-reviewable-id="<%= review.reviewable_id %>"
-            data-rating="<%= review.rating %>"
+            data-rating="<%= review.formatted_rating %>"
             data-title="<%= review.title %>"
             data-body="<%= review.body %>">
       <%= written? ? "Edit" : "Write a review" %>

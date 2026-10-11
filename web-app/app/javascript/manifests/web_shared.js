@@ -39,6 +39,9 @@ application.register("reviews--my-reviews", Reviews__MyReviewsController)
 import Reviews__SpoilerController from "../controllers/reviews/spoiler_controller"
 application.register("reviews--spoiler", Reviews__SpoilerController)
 
+import Reviews__StarInputController from "../controllers/reviews/star_input_controller"
+application.register("reviews--star-input", Reviews__StarInputController)
+
 import Reviews__WidgetController from "../controllers/reviews/widget_controller"
 application.register("reviews--widget", Reviews__WidgetController)
 

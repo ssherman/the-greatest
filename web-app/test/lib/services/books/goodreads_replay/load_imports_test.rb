@@ -17,7 +17,8 @@ module Services
 
         def legacy(**attributes)
           LoadImports::LegacyImport.new(id: 501, user_id: @user.id, status: "complete", error: nil,
-            blob_key: "legacy-key-501", content_type: "text/csv", filename: "goodreads_library_export.csv", **attributes)
+            blob_key: "legacy-key-501", content_type: "text/csv", filename: "goodreads_library_export.csv",
+            created_at: Time.utc(2020, 3, 1, 10), updated_at: Time.utc(2020, 3, 1, 10, 5), **attributes)
         end
 
         def load(*imports, bytes: @csv)
@@ -38,6 +39,25 @@ module Services
           assert_equal @csv, import.file.download
           assert_equal [1, 2], import.rows.order(:row_number).pluck(:row_number)
           assert_equal 2, import.editions_count
+        end
+
+        test "a new replay import takes the legacy upload and completion times as started_at and finished_at" do
+          load(legacy)
+
+          import = ::Books::GoodreadsImport.find_by!(legacy_import_id: 501)
+          assert_equal [Time.utc(2020, 3, 1, 10), Time.utc(2020, 3, 1, 10, 5)], [import.started_at, import.finished_at]
+        end
+
+        test "a replay import loaded before timing existed gets it, and a re-run changes nothing" do
+          ::Books::GoodreadsImport.create!(user: @user, source: :legacy_replay, legacy_import_id: 501, status: :complete)
+
+          load(legacy)
+          import = ::Books::GoodreadsImport.find_by!(legacy_import_id: 501)
+          assert_equal [Time.utc(2020, 3, 1, 10), Time.utc(2020, 3, 1, 10, 5)], [import.started_at, import.finished_at]
+
+          import.update_columns(finished_at: Time.utc(2021, 1, 1))
+          load(legacy(updated_at: Time.utc(2022, 1, 1)))
+          assert_equal [Time.utc(2020, 3, 1, 10), Time.utc(2021, 1, 1)], [import.reload.started_at, import.finished_at]
         end
 
         test "loading twice downloads once and writes nothing new" do

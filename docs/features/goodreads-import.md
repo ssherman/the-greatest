@@ -42,6 +42,8 @@ never refuses a row.
   `series_name`/`series_number`.
 - Only the primary `Author` is an author. `Additional Authors` is passed to the matching AI as
   context, because Goodreads mixes translators and illustrators into it.
+- `My Rating` is read as a decimal. Goodreads exports quarter stars since 2026-10-05, so `4.0` and `3.75` both parse;
+  0 means unrated. An unreadable value is dropped.
 - A value that does not parse is dropped and recorded in the row's `notes`.
 - `Private Notes` is never stored.
 
@@ -250,6 +252,7 @@ bin/rails books:goodreads_replay:resolve     # queues pass one (low) and pass tw
 bin/rails books:goodreads_replay:duplicates  # one AI check per author name group, then the book-pair rule
 bin/rails books:goodreads_replay:junk        # authorless books, books relinks leave unsupported
 bin/rails books:goodreads_replay:apply
+bin/rails books:goodreads_replay:repair_ratings  # restores quarter-star ratings legacy truncated; repeats every pass
 bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.md]"
 ```
 
@@ -283,6 +286,31 @@ bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.m
   recalculation, the favorites rebuild and the author rankings once, not once per merge.
 - **Before auto-apply:** hand-check 50 auto verdicts per kind with `books:goodreads_replay:sample[kind]`, then set
   `auto_apply: true` in `config/initializers/goodreads_replay.rb`.
+
+### Legacy truncation repair
+
+The legacy app stored ratings as integers, so it truncated a Goodreads `3.75` to 3 on import. `books:goodreads_replay:repair_ratings`
+(`RepairTruncatedRatings`, quarter-star spec §5.4) restores the CSV value on the review, but only for a review the creating
+import provably wrote, because `stored == csv.floor` alone also matches a review that predates the upload (legacy used
+`find_or_create_by`) or one the reader later set back to 3. `LoadImports` stamps each replay import's `started_at` and
+`finished_at` from the legacy import's upload time and last status change. A legacy-origin review (id below
+`RESERVED_CEILINGS["reviews"]`) is repaired only when exactly one of the user's timed replay imports (any status, since a
+failed import may have created reviews before failing) has a window `[started_at, finished_at]` containing the review's `created_at` (nothing comes from an import before its
+upload or after its last status update) with `created_at` within 6 h of either end: the original run starts at
+`started_at`, and the legacy admin's "Re-execute Import" re-runs it, ending at the legacy `updated_at`, which it moves months
+on, so the whole window proves nothing (6 h is above the p99 of 3.8 h measured on the legacy restore); the review's `updated_at` equals its `created_at` (any later edit changes it); the import's rows for the
+book rated 1 or more all carry the same rating (else the new app may have resolved rows differently from legacy); and the
+stored rating equals the floor of that fractional rating. Any miss leaves the truncated value. Gaps by design: runs longer
+than 6 h match only their nearest end, the middle runs of an import re-executed more than once never match, stuck legacy
+imports (pending) never match, reviews created by the legacy `reparse_all` (it leaves the import's `updated_at` alone) never
+match, and a relinked review is never
+repaired (`Apply::Relink#move_review` bumps `updated_at`). It recalculates each repaired book's summary once, after all
+repairs, and does not touch the body, title or timestamps.
+
+It runs after the final `apply` of every pass, before `report`, and it **repeats**: `ReviewMigrator` in sync mode
+overwrites legacy-origin reviews from legacy every week, which puts the truncated 3 back. Each pass therefore restores every review the
+rule can prove, including the final launch pass, and running it twice in a row changes nothing. Known gap: legacy created no review for a
+rating under 1, and replay imports never write reviews, so a 0.25 or 0.5 rating is not restored.
 
 ### Finishing legacy imports
 

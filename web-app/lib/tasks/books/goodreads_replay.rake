@@ -1,6 +1,6 @@
 # The legacy Goodreads replay (Goodreads import spec §12). A full pass, after
 # every books migration pass and in the launch sequence:
-#   load -> fix_slugs -> apply -> resolve (wait for the jobs) -> duplicates -> junk -> apply -> report
+#   load -> fix_slugs -> apply -> resolve (wait for the jobs) -> duplicates -> junk -> apply -> repair_ratings -> report
 #   then finish_legacy, on the final launch pass only
 # apply does nothing while config.x.goodreads_replay.auto_apply is false.
 namespace :books do
@@ -58,6 +58,13 @@ namespace :books do
 
       puts "applied verdicts: #{tally.call(result.data[:tally])}; " \
         "ranking recalculations queued: #{result.data[:ranking_configuration_ids].size}"
+    end
+
+    desc "Restore quarter-star ratings the legacy importer truncated (3.75 stored as 3). Idempotent; " \
+      "run after the final apply of every pass."
+    task repair_ratings: :environment do
+      counts = Services::Books::GoodreadsReplay::RepairTruncatedRatings.call.data
+      puts "ratings: #{tally.call(counts)}"
     end
 
     desc "Write the replay report (spec §12.9) to a path, or print it. " \

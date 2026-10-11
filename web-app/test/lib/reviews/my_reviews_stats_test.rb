@@ -44,5 +44,25 @@ module Reviews
     test "percentage_for is a whole number out of the largest bar" do
       assert_includes 0..100, @stats.percentage_for(5)
     end
+
+    test "counts by bucket and averages the exact ratings" do
+      user = User.create!(email: "stats-buckets@example.com", role: :user, email_verified: false)
+      books = %i[got war_and_peace clash].map { |name| books_books(name) }
+      books.zip(%w[3.75 4.5 1.25]).each { |book, rating| Review.create!(user: user, reviewable: book, rating: rating) }
+
+      stats = Reviews::MyReviewsStats.new(user: user, reviewable_class: ::Books::Book)
+
+      assert_equal({1 => 1, 2 => 0, 3 => 0, 4 => 2, 5 => 0}, stats.counts_by_rating)
+      assert_equal 3.2, stats.average
+    end
+
+    test "an unrated review is in no bucket" do
+      user = User.create!(email: "stats-unrated@example.com", role: :user, email_verified: false)
+      Review.create!(user: user, reviewable: books_books(:got), body: "<p>No stars.</p>")
+
+      stats = Reviews::MyReviewsStats.new(user: user, reviewable_class: ::Books::Book)
+
+      assert_equal 0, stats.total
+    end
   end
 end
