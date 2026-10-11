@@ -203,41 +203,19 @@ module Services
         # One deterministic review per book (spec §7): the row with a rating,
         # then the latest Date Read, then the lowest row number. Rating 0 with
         # text is an unrated review; rating 0 and no text is nothing. An
-        # existing review by the user is left as it is, except for the one
-        # repair below. Validated as a model (the sanitizer and the length rule
-        # run) and inserted in bulk, so the per-review summary callback does not
-        # fire; `call` recalculates once per book instead.
+        # existing review by the user is left as it is. Validated as a model
+        # (the sanitizer and the length rule run) and inserted in bulk, so the
+        # per-review summary callback does not fire; `call` recalculates once
+        # per book instead.
         def write_reviews(by_book)
-          existing = ::Review.where(user: @user, reviewable_type: "Books::Book", reviewable_id: by_book.keys)
-            .pluck(:reviewable_id, :id, :rating).to_h { |book_id, id, rating| [book_id, [id, rating]] }
+          reviewed = ::Review.where(user: @user, reviewable_type: "Books::Book", reviewable_id: by_book.keys).pluck(:reviewable_id).to_set
           by_book.each do |book_id, rows|
+            next if reviewed.include?(book_id)
+
             winner = rows.select { |row| row.rating&.positive? || row.review_body.present? }
               .min_by { |row| [row.rating&.positive? ? 0 : 1, -(row.date_read&.jd || 0), row.row_number] }
-            next unless winner
-
-            if existing.key?(book_id)
-              repair_truncated_rating(book_id, *existing.fetch(book_id), winner)
-            else
-              write_review(book_id, winner)
-            end
+            write_review(book_id, winner) if winner
           end
-        end
-
-        # Quarter-star spec §5.4. The legacy site's importer did "3.75".to_i, so
-        # a legacy review copied here says 3 where the reader's CSV says 3.75.
-        # Repaired only when the match is that exact, so a rating the reader
-        # changed is never touched. The weekly sync puts legacy's 3 back, and the
-        # next replay pass (which runs after it) restores 3.75; a pass with
-        # nothing to fix writes nothing. Timestamps are left alone on purpose.
-        def repair_truncated_rating(book_id, review_id, stored, row)
-          return unless @import.legacy_replay?
-          return unless review_id < ::Services::BooksMigration::RESERVED_CEILINGS.fetch("reviews")
-
-          imported = row.rating
-          return if imported.nil? || imported.frac.zero? || stored.nil? || stored != imported.floor
-
-          ::Review.where(id: review_id).update_all(rating: imported)
-          @touched_book_ids << book_id
         end
 
         def write_review(book_id, row)

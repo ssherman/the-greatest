@@ -122,6 +122,7 @@ the sync never undoes them.
    bin/rails books:goodreads_replay:duplicates
    bin/rails books:goodreads_replay:junk
    bin/rails books:goodreads_replay:apply
+   bin/rails books:goodreads_replay:repair_ratings   # quarter-star ratings the legacy importer truncated
    bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.md]"
    ```
 
@@ -131,7 +132,8 @@ the sync never undoes them.
      replay only records proposed fixes, under Books → Repair Verdicts. Turn it on only after the
      50-per-kind hand check (spec §12.9).
    - Its merges and provisional marks are catalog changes and stick. Its relinks of legacy users'
-     list items and reviews are undone by each sync and re-applied by `apply` (section 4).
+     list items and reviews are undone by each sync and re-applied by `apply` (section 4). `repair_ratings` repeats every pass for the same reason: each
+     sync puts legacy's truncated integer rating (3 for a 3.75) back.
    - Details: `docs/features/goodreads-import.md`, "Legacy seed" and "Legacy replay".
 5. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
    resolving at once left `/resolve` timing out at 60 s for 25 minutes, until the API container was

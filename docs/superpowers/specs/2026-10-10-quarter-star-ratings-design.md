@@ -55,7 +55,7 @@ carries them across exactly.
 | Input on desktop | Hover previews in quarter steps, click commits. |
 | Input on touch | The same control: the touch point sets the value, dragging along the row adjusts it live, lifting commits. |
 | Histogram | Five bars, Goodreads' rule (§4.3). |
-| Legacy truncation | Repaired during the legacy replay (§5.4). |
+| Legacy truncation | Repaired by a dedicated replay step, `books:goodreads_replay:repair_ratings` (§5.4). |
 | Recommendation thresholds | Unchanged values, compared against the exact decimal (§6.2). |
 
 Rejected storage alternatives:
@@ -237,22 +237,24 @@ remove a rating.
   `row.rating&.positive?`.
 - **Without this change a 0.25 or 0.5 is treated as unrated and discarded.** `0.25.to_i` is 0.
 
-### 5.4 Repairing legacy truncation (legacy replay only)
+### 5.4 Repairing legacy truncation (dedicated replay step)
 
 **Background.**
 
 - Reviews copied from legacy keep their legacy ids, all below
   `Services::BooksMigration::RESERVED_CEILINGS["reviews"]` (250,000). New-app reviews are at or
   above it.
-- `write_reviews` today leaves any existing review alone. So when the replay re-reads a CSV holding
-  3.75 for a book whose legacy-origin review says 3, the 3 survives.
+- `write_reviews` leaves any existing review alone, and legacy replay imports are created already
+  complete, so they never pass through `WriteLibrary`. The repair is its own step,
+  `Services::Books::GoodreadsReplay::RepairTruncatedRatings`
+  (`books:goodreads_replay:repair_ratings`), run after the final `apply` of every pass.
 
-**Rule.** In `write_reviews`, for a book that already has a review by the user, update that
+**Rule.** For a (user, book) with a replay-import row and an existing review, update that
 review's rating to the CSV value **only when all four hold**:
 
-1. the import is `source: legacy_replay` (never a member's own import)
+1. the import is `source: legacy_replay` (never a member's own import); this is the candidate query
 2. the existing review's id is below the reserved ceiling (legacy origin)
-3. the CSV rating (on the row `write_reviews` already picks as the winner) is fractional
+3. the CSV rating (on the winning row: the latest upload, then the latest Date Read, then the lowest row number) is fractional
 4. the stored rating equals the CSV rating rounded down: `stored == csv.floor`, which is what the
    legacy `to_i` produced
 
@@ -264,7 +266,7 @@ timestamps are not touched.
 
 - `ReviewMigrator` (sync mode) **overwrites** legacy-origin reviews from legacy each week, so it
   puts the 3 back.
-- The replay is a repeating step that runs after each sync, and it restores 3.75.
+- `repair_ratings` runs after each sync's replay pass (after the final `apply`, once merges have settled which book a review sits on), and it restores 3.75.
 - Each cycle therefore ends correct, including the final launch pass, after which legacy is shut
   down. Running the replay twice in a row changes nothing the second time.
 

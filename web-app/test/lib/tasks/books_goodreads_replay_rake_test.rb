@@ -54,6 +54,12 @@ class BooksGoodreadsReplayRakeTest < ActiveSupport::TestCase
     assert_output(/mark_provisional verdicts: 37 authorless, 4 with no support after relinks/) { Rake::Task["books:goodreads_replay:junk"].invoke }
   end
 
+  test "repair_ratings prints how many it checked and repaired" do
+    REPLAY::RepairTruncatedRatings.expects(:call).returns(result(checked: 12, repaired: 5))
+
+    assert_output(/checked 12, repaired 5/) { Rake::Task["books:goodreads_replay:repair_ratings"].invoke }
+  end
+
   test "apply aborts with the gate's reason while auto_apply is off" do
     REPLAY::ApplyVerdicts.expects(:call).returns(Struct.new(:success?, :data, :errors, keyword_init: true)
       .new(success?: false, data: {tally: {}}, errors: ["auto_apply is off (config.x.goodreads_replay.auto_apply); nothing was applied"]))
