@@ -57,7 +57,11 @@
 
         <!-- Parent Category -->
         <div>
-          <%= f.label :parent_id, class: "label" do %>
+          <%# The label targets the visible search box, not the hidden parent_id
+              field AutocompleteComponent names after `id`; the box's id is that
+              plus "_autocomplete". Without `for:` the label would point at the
+              hidden input and the box would have no accessible name. %>
+          <%= f.label :parent_id, class: "label", for: "#{f.object_name}_parent_id_autocomplete" do %>
             <span class="font-semibold">Parent Category</span>
           <% end %>
           <%= render AutocompleteComponent.new(

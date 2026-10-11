@@ -35,6 +35,10 @@ class Admin::Categories::FormComponentTest < ViewComponent::TestCase
     assert_no_selector "select[name='books_category[parent_id]']"
     assert_selector "input[type=hidden][name='books_category[parent_id]']", visible: :all
     assert_selector "[data-controller=autocomplete][data-autocomplete-url-value='#{search_admin_books_categories_path}']"
+    # The label must name the visible search box, not the hidden submission field.
+    assert_selector "label[for='books_category_parent_id_autocomplete']", text: "Parent Category"
+    assert_selector "input[type=search]#books_category_parent_id_autocomplete"
+    assert_no_selector "label[for='books_category_parent_id']"
   end
 
   test "editing a child preselects its parent by id and shows the parent's name" do
