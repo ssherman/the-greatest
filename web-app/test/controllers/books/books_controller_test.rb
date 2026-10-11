@@ -178,7 +178,7 @@ module Books
       # (test/components/reviews/widget_component_test.rb) -- the stars span is
       # always present (Task 6), so "no user-specific state" now means a zero
       # fill rather than an absent element.
-      assert_select "#review_widget [data-testid='review-widget-stars'] [data-testid='stars-fill'][style='width: 0.0%']"
+      assert_select "#review_widget [data-testid='review-widget-stars'] [data-testid='star-fill'][style='width: 0.0%']", count: 5
     end
 
     # The very first rating on an unrated book has to have something to replace.
