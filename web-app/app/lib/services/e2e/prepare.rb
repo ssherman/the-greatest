@@ -12,8 +12,9 @@ module Services
     # password account's email is untrusted, so a pre-created row would make
     # sign-in refuse the account). The only rows it deletes are reviews and
     # lists OWNED by the three e2e accounts, which exist for this suite alone.
-    # It never touches a table, and it refuses any account that holds a Stripe
-    # membership, because that is a real customer, not an e2e account.
+    # It never touches a table, and it refuses (before any write) production
+    # and any account that looks like a real person's: a Stripe or legacy
+    # membership, a legacy migration, a duplicated email, or staff in a user slot.
     class Prepare
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
       class SeedError < StandardError; end
@@ -94,6 +95,10 @@ module Services
 
       # Every check here runs before any write, so a bad .env changes nothing.
       def resolve_accounts(errors)
+        if Rails.env.production?
+          errors << "e2e:prepare never runs in production"
+          return {}
+        end
         missing_keys = ROLES.keys - emails.keys
         if missing_keys.any?
           errors << "missing e2e account emails: #{missing_keys.join(", ")}"
@@ -104,15 +109,39 @@ module Services
           return {}
         end
 
-        emails.transform_values do |email|
-          user = ::User.person.where("LOWER(email) = ?", email.to_s.downcase).order(:id).first
+        emails.to_h do |key, email|
+          matches = ::User.person.where("LOWER(email) = ?", email.to_s.downcase).order(:id).to_a
+          user = matches.first
           if user.nil?
             errors << "no User for #{email}; the seed project signs it in first (a browser sign-in creates the row)"
-          elsif user.memberships.source_stripe.exists?
-            errors << "#{email} holds a Stripe membership, so it is a real customer, not an e2e account; refusing to touch it"
+          elsif matches.size > 1
+            errors << "#{matches.size} User rows share #{email}; refusing to guess"
+          else
+            errors.concat(refusals_for(key, email, user))
           end
-          user
+          [key, user]
         end
+      end
+
+      # An e2e account is a plain throwaway sign-in. Anything that marks the row
+      # as a real person's (a paying or legacy membership, a legacy migration,
+      # a staff role in a slot that should hold a plain user) means the .env
+      # address is wrong, and prepare deletes reviews and list items for it.
+      def refusals_for(key, email, user)
+        refusals = []
+        if user.memberships.source_stripe.exists?
+          refusals << "#{email} holds a Stripe membership, so it is a real customer, not an e2e account; refusing to touch it"
+        end
+        if user.memberships.source_legacy.exists?
+          refusals << "#{email} holds a legacy membership, so it is a real customer, not an e2e account; refusing to touch it"
+        end
+        if user.legacy_migrated == true || user.legacy_v1_data.present?
+          refusals << "#{email} was migrated from the legacy site, so it is a real person, not an e2e account; refusing to touch it"
+        end
+        if key != :admin && %w[admin editor].include?(user.role)
+          refusals << "#{email} is currently #{user.role}; the user/member slots must be plain users (is this the right address?)"
+        end
+        refusals
       end
 
       def assign_roles(accounts)

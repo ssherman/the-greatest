@@ -36,8 +36,6 @@ module Services
 
       test "promotes the admin, strips the user's comp, comps the member, and all three stay non-admin except the admin" do
         @user.memberships.create!(source: :comped, status: :active, current_period_end: nil, note: "stray comp")
-        @member.update!(role: :editor)
-
         result = prepare
         assert result.success?, result.errors.inspect
 
@@ -142,6 +140,45 @@ module Services
         assert_match(/Stripe membership/, result.errors.join)
         assert_equal "user", @admin.reload.role
         assert_equal 0, @user.reviews.count
+      end
+
+      def assert_refused_and_untouched(result, pattern)
+        assert_not result.success?
+        assert_match(pattern, result.errors.join)
+        assert_equal "user", @admin.reload.role
+        assert_equal 0, @user.reviews.count
+        assert_not File.exist?(@manifest_path)
+      end
+
+      test "refuses to run in production" do
+        Rails.env.stubs(:production?).returns(true)
+        assert_refused_and_untouched(prepare, /never runs in production/)
+      end
+
+      test "refuses an account holding a legacy membership" do
+        @member.memberships.create!(source: :legacy, status: :active, current_period_end: nil)
+        assert_refused_and_untouched(prepare, /legacy membership/)
+      end
+
+      test "refuses a legacy-migrated account" do
+        @member.update!(legacy_migrated: true)
+        assert_refused_and_untouched(prepare, /migrated from the legacy site/)
+      end
+
+      test "refuses an account with legacy v1 data" do
+        @member.update!(legacy_v1_data: "{}")
+        assert_refused_and_untouched(prepare, /migrated from the legacy site/)
+      end
+
+      test "refuses duplicate User rows for one email" do
+        User.create!(email: @member.email.upcase)
+        assert_refused_and_untouched(prepare, /2 User rows share e2e-member@example.com; refusing to guess/)
+      end
+
+      test "refuses an admin or editor in the user slot" do
+        @user.update!(role: :editor)
+        assert_refused_and_untouched(prepare, /is currently editor; the user\/member slots must be plain users/)
+        assert_equal "editor", @user.reload.role
       end
 
       test "refuses duplicate emails" do
