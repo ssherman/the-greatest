@@ -7,14 +7,19 @@ module Services
         include GoodreadsImportHelper
 
         LEGACY_REVIEW_ID = 4242
+        # The legacy upload window every happy-path review sits inside.
+        UPLOADED = Time.utc(2020, 3, 1, 10)
+        COMPLETED = UPLOADED + 1.hour
+        DURING = UPLOADED + 10.minutes
 
         setup do
           @user = User.create!(email: "replayer@example.com", role: :user, email_verified: false)
           @book = books_books(:war_and_peace)
         end
 
-        def import(source: :legacy_replay, created_at: Time.current, user: @user, id: nil)
-          ::Books::GoodreadsImport.create!({user: user, status: :complete, source: source, created_at: created_at}.merge({id: id}.compact))
+        def import(source: :legacy_replay, user: @user, status: :complete, started_at: UPLOADED, finished_at: COMPLETED, id: nil)
+          ::Books::GoodreadsImport.create!({user: user, status: status, source: source, started_at: started_at,
+                                            finished_at: finished_at}.merge({id: id}.compact))
         end
 
         def row(import, book, rating:, number: 1, **attributes)
@@ -22,12 +27,19 @@ module Services
           import.rows.create!({row_number: number, goodreads_edition: edition, exclusive_shelf: "read", rating: BigDecimal(rating)}.merge(attributes))
         end
 
-        def legacy_review(rating:, id: LEGACY_REVIEW_ID, user: @user, book: @book)
-          ::Review.create!(id: id, user: user, reviewable: book, rating: rating, body: "From legacy.")
+        # By default a review the legacy importer created inside the window and nothing touched since.
+        def legacy_review(rating:, id: LEGACY_REVIEW_ID, user: @user, book: @book, created_at: DURING, updated_at: created_at)
+          ::Review.create!(id: id, user: user, reviewable: book, rating: rating, body: "From legacy.", created_at: created_at, updated_at: updated_at)
         end
 
         def sum
           ::ReviewSummary.find_by!(reviewable_type: "Books::Book", reviewable_id: @book.id).ratings_sum
+        end
+
+        def refute_repaired(review, stored: BigDecimal(3))
+          ::Services::Reviews::SummaryRecalculator.expects(:recalculate).never
+          assert_equal 0, RepairTruncatedRatings.call.data[:repaired]
+          assert_equal stored, review.reload.rating
         end
 
         test "restores a rating the legacy site truncated, touching nothing else" do
@@ -48,32 +60,28 @@ module Services
           review = legacy_review(rating: 3)
           row(import(source: :member), @book, rating: "3.75")
 
-          assert_equal 0, RepairTruncatedRatings.call.data[:repaired]
-          assert_equal BigDecimal(3), review.reload.rating
+          refute_repaired(review)
         end
 
         test "a review at the reserved ceiling is never repaired" do
           review = legacy_review(rating: 3, id: ::Services::BooksMigration::RESERVED_CEILINGS.fetch("reviews"))
           row(import, @book, rating: "3.75")
 
-          assert_equal 0, RepairTruncatedRatings.call.data[:repaired]
-          assert_equal BigDecimal(3), review.reload.rating
+          refute_repaired(review)
         end
 
         test "whole-star ratings are never touched" do
-          legacy_review(rating: 4)
+          review = legacy_review(rating: 4)
           row(import, @book, rating: "4")
-          ::Services::Reviews::SummaryRecalculator.expects(:recalculate).never
 
-          assert_equal 0, RepairTruncatedRatings.call.data[:repaired]
+          refute_repaired(review, stored: BigDecimal(4))
         end
 
         test "a rating the reader changed is kept" do
           review = legacy_review(rating: 2)
           row(import, @book, rating: "3.75")
 
-          assert_equal 0, RepairTruncatedRatings.call.data[:repaired]
-          assert_equal BigDecimal(2), review.reload.rating
+          refute_repaired(review, stored: BigDecimal(2))
         end
 
         test "no review on the book writes nothing" do
@@ -85,15 +93,77 @@ module Services
           assert_equal 0, ::Review.where(user: @user).count
         end
 
-        test "the latest upload wins" do
+        test "a review that predates every import window is left alone" do
+          review = legacy_review(rating: 3, created_at: UPLOADED - 1.day)
+          row(import, @book, rating: "3.75")
+
+          refute_repaired(review)
+        end
+
+        test "a review edited after the import finished is left alone" do
+          review = legacy_review(rating: 3, updated_at: COMPLETED + 1.minute)
+          row(import, @book, rating: "3.75")
+
+          refute_repaired(review)
+        end
+
+        test "a reader who set 3 deliberately after the CSV said 3.75 is not overwritten" do
+          review = legacy_review(rating: 3, updated_at: COMPLETED + 2.days)
+          row(import, @book, rating: "3.75")
+
+          refute_repaired(review)
+        end
+
+        test "a review created inside a failed import's window is repaired" do
           review = legacy_review(rating: 3)
-          row(import(created_at: 2.days.ago), @book, rating: "3.5")
-          row(import(created_at: 1.day.ago), @book, rating: "3.75")
+          row(import(status: :failed), @book, rating: "3.75")
 
-          result = RepairTruncatedRatings.call
-
-          assert_equal [1, 1], [result.data[:checked], result.data[:repaired]]
+          assert_equal 1, RepairTruncatedRatings.call.data[:repaired]
           assert_equal BigDecimal("3.75"), review.reload.rating
+        end
+
+        test "a newer failed upload whose window misses the review is ignored" do
+          review = legacy_review(rating: 3)
+          row(import, @book, rating: "3.75")
+          row(import(status: :failed, started_at: UPLOADED + 5.days, finished_at: UPLOADED + 5.days + 1.minute), @book, rating: "3.25")
+
+          assert_equal 1, RepairTruncatedRatings.call.data[:repaired]
+          assert_equal BigDecimal("3.75"), review.reload.rating
+        end
+
+        test "two imports whose windows both contain the review is ambiguous and repairs nothing" do
+          review = legacy_review(rating: 3)
+          row(import, @book, rating: "3.75")
+          row(import(started_at: UPLOADED + 5.minutes, finished_at: COMPLETED + 1.hour), @book, rating: "3.5")
+
+          refute_repaired(review)
+        end
+
+        test "a replay import with no timing proves nothing" do
+          review = legacy_review(rating: 3)
+          row(import(started_at: nil, finished_at: nil), @book, rating: "3.75")
+
+          refute_repaired(review)
+        end
+
+        test "the first row rated 1 or more is the value the legacy parser kept" do
+          review = legacy_review(rating: 3)
+          upload = import
+          row(upload, @book, rating: "0.5", number: 1)
+          row(upload, @book, rating: "3.75", number: 2)
+          row(upload, @book, rating: "4.25", number: 3)
+
+          assert_equal 1, RepairTruncatedRatings.call.data[:repaired]
+          assert_equal BigDecimal("3.75"), review.reload.rating
+        end
+
+        test "a whole-star first row means the parser stored that value and nothing is repaired" do
+          review = legacy_review(rating: 3)
+          upload = import
+          row(upload, @book, rating: "3", number: 1)
+          row(upload, @book, rating: "3.75", number: 2)
+
+          refute_repaired(review)
         end
 
         test "a second run after the sync reverts it repairs again, and a run with nothing to fix writes nothing" do
@@ -102,45 +172,12 @@ module Services
           RepairTruncatedRatings.call
           assert_equal BigDecimal("3.75"), review.reload.rating
 
+          # The sync writes legacy's integer back and keeps legacy's timestamps.
           review.update_columns(rating: 3)
           RepairTruncatedRatings.call
           assert_equal BigDecimal("3.75"), review.reload.rating
 
-          ::Services::Reviews::SummaryRecalculator.expects(:recalculate).never
-          assert_equal 0, RepairTruncatedRatings.call.data[:repaired]
-        end
-
-        test "a newer whole-star upload beats an older fractional one" do
-          review = legacy_review(rating: 3)
-          row(import(created_at: 2.days.ago), @book, rating: "3.25")
-          row(import(created_at: 1.day.ago), @book, rating: "3")
-          ::Services::Reviews::SummaryRecalculator.expects(:recalculate).never
-
-          assert_equal 0, RepairTruncatedRatings.call.data[:repaired]
-          assert_equal BigDecimal(3), review.reload.rating
-        end
-
-        test "the latest upload is decided by created_at, not by id" do
-          review = legacy_review(rating: 3)
-          newer = import(created_at: 1.day.ago, id: 900_000)
-          older = import(created_at: 2.days.ago, id: 900_001)
-          row(newer, @book, rating: "3.75")
-          row(older, @book, rating: "3.5")
-
-          RepairTruncatedRatings.call
-
-          assert_equal BigDecimal("3.75"), review.reload.rating
-        end
-
-        test "within one upload the dated row beats the undated one, then the lowest row number" do
-          review = legacy_review(rating: 3)
-          upload = import
-          row(upload, @book, rating: "3.5", number: 1)
-          row(upload, @book, rating: "3.75", number: 2, date_read: Date.new(2024, 1, 1))
-          row(upload, @book, rating: "3.25", number: 3, date_read: Date.new(2024, 1, 1))
-
-          RepairTruncatedRatings.call
-          assert_equal BigDecimal("3.75"), review.reload.rating
+          refute_repaired(review, stored: BigDecimal("3.75"))
         end
 
         test "a book repaired for two users is recalculated once" do

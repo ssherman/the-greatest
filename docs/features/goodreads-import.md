@@ -290,13 +290,16 @@ bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.m
 ### Legacy truncation repair
 
 The legacy app stored ratings as integers, so it truncated a Goodreads `3.75` to 3 on import. `books:goodreads_replay:repair_ratings`
-(`RepairTruncatedRatings`, quarter-star spec §5.4) restores the CSV value on the review. It updates a review only when
-all four hold: the row's import is `source: legacy_replay` (never a member's own import); the review's id is below
-`RESERVED_CEILINGS["reviews"]` (250,000, so it came from legacy); the winning CSV rating is fractional (the winner is the
-latest upload, then latest Date Read, then lowest row number, among the user's rated replay rows for that book, so a later
-whole-number re-rating beats an earlier fraction); and the stored rating equals that CSV rating rounded down. The last
-condition is what makes a rating the member changed on purpose safe. It recalculates each repaired book's summary once,
-after all repairs, and does not touch the body, title or timestamps.
+(`RepairTruncatedRatings`, quarter-star spec §5.4) restores the CSV value on the review, but only for a review the creating
+import provably wrote, because `stored == csv.floor` alone also matches a review that predates the upload (legacy used
+`find_or_create_by`) or one the reader later set back to 3. `LoadImports` stamps each replay import's `started_at` and
+`finished_at` from the legacy import's upload time and last status change. A legacy-origin review (id below
+`RESERVED_CEILINGS["reviews"]`) is repaired only when exactly one of the user's timed replay imports (any status, since a
+failed import may have created reviews before failing) has a window containing the review's `created_at`, the review's
+`updated_at` is not after that import's `finished_at`, and the stored rating equals the floor of the value the legacy
+parser wrote: the import's first row for the book rated 1 or more, which must be fractional. Any miss leaves the
+truncated value. It recalculates each repaired book's summary once, after all repairs, and does not touch the body,
+title or timestamps.
 
 It runs after the final `apply` of every pass, before `report`, and it **repeats**: `ReviewMigrator` in sync mode
 overwrites legacy-origin reviews from legacy every week, which puts the truncated 3 back. Each pass therefore ends correct,

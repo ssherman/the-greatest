@@ -250,20 +250,25 @@ remove a rating.
   `Services::Books::GoodreadsReplay::RepairTruncatedRatings`
   (`books:goodreads_replay:repair_ratings`), run after the final `apply` of every pass.
 
-**Rule.** For a (user, book) with a replay-import row and an existing review, update that
-review's rating to the CSV value **only when all four hold**:
+**Rule.** Repair only what the creating import provably wrote. A value test (`stored == csv.floor`)
+is not proof: the legacy importer used `find_or_create_by`, so a review that predates the upload,
+or one a reader later set back to 3, matches too, and the step repeats after every sync. So
+selection is by provenance:
 
-1. the import is `source: legacy_replay` (never a member's own import); this is the candidate query
-2. the existing review's id is below the reserved ceiling (legacy origin)
-3. the CSV rating on the winning row is fractional. The winner is chosen among all the user's
-   rated replay rows for the book (latest upload, then latest Date Read, then lowest row number),
-   so a later whole-number re-rating beats an earlier fraction
-4. the stored rating equals the CSV rating rounded down: `stored == csv.floor`, which is what the
-   legacy `to_i` produced
+1. Universe: legacy-origin reviews (id below the reserved ceiling) of a (user, book) that has a
+   `legacy_replay` row (never a member's own import) with a fractional rating on that book.
+2. Creating import: among the user's `legacy_replay` imports of any status that have `started_at`
+   and `finished_at`, the one with `started_at <= review.created_at <= finished_at`. `LoadImports`
+   stamps those two columns from the legacy import's `created_at` (upload) and `updated_at` (last
+   status change). A failed import counts, since it may have created reviews before failing; one
+   whose window misses the review never touched it. No match, or more than one, skips.
+3. Untouched since: `review.updated_at <= creating_import.finished_at`.
+4. Value the legacy parser wrote: the creating import's first row for the book, in CSV order, rated
+   1 or more (the parser skipped ratings under 1 and `find_or_create_by` kept the first).
+5. Repair iff that value is fractional and `stored == value.floor`.
 
-The match is that precise, so a rating the member deliberately changed is never touched. The step
-recalculates each repaired book's summary once, after all repairs. The body, title and timestamps
-are not touched.
+Every miss leaves the truncated value. The step recalculates each repaired book's summary once,
+after all repairs. The body, title and timestamps are not touched.
 
 **Interaction with the weekly sync.**
 
