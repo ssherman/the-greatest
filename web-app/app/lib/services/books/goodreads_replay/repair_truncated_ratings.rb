@@ -21,7 +21,7 @@ module Services
       # integer, so every replay pass runs this again. It runs after the final
       # apply because merges have by then settled which book a review sits on.
       # update_all keeps timestamps and skips the summary callback, so each
-      # repaired book is recalculated once here.
+      # repaired book is recalculated once, after all the repairs.
       class RepairTruncatedRatings
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         USER_BATCH = 500
@@ -33,6 +33,7 @@ module Services
         def call
           checked = 0
           repaired = 0
+          repaired_book_ids = Set.new
           candidates.distinct.pluck("books_goodreads_imports.user_id").each_slice(USER_BATCH) do |user_ids|
             winners = winners_for(user_ids)
             reviews = existing_reviews(winners)
@@ -42,30 +43,41 @@ module Services
               next unless repairable?(review_id, stored, row.rating)
 
               ::Review.where(id: review_id).update_all(rating: row.rating)
-              ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book_id)
+              repaired_book_ids << book_id
               repaired += 1
             end
           end
+          repaired_book_ids.each { |book_id| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book_id) }
           Result.new(success?: true, data: {checked: checked, repaired: repaired}, errors: [])
         end
 
         private
 
+        # Rows that make a (user, book) worth examining: a fractional rating.
         def candidates
+          rated_rows.where("books_goodreads_import_rows.rating <> TRUNC(books_goodreads_import_rows.rating)")
+        end
+
+        def rated_rows
           ::Books::GoodreadsImportRow.joins(:import, :goodreads_edition)
             .where(books_goodreads_imports: {source: ::Books::GoodreadsImport.sources.fetch("legacy_replay")})
             .where.not(books_goodreads_editions: {book_id: nil})
-            .where("books_goodreads_import_rows.rating > 0 AND books_goodreads_import_rows.rating <> TRUNC(books_goodreads_import_rows.rating)")
+            .where("books_goodreads_import_rows.rating > 0")
         end
 
-        # One row per (user, book): the latest import, then the latest Date
-        # Read (undated last), then the lowest row number.
+        # One row per examined (user, book), chosen among ALL the user's rated
+        # replay rows for the book, not only the fractional ones: the latest
+        # import, then the latest Date Read (undated last), then the lowest row
+        # number. A reader who re-rated 3.25 as 3 in a newer upload has the 3.
         def winners_for(user_ids)
-          candidates.where(books_goodreads_imports: {user_id: user_ids})
+          examined = candidates.where(books_goodreads_imports: {user_id: user_ids}).distinct
+            .pluck("books_goodreads_imports.user_id", "books_goodreads_editions.book_id").to_set
+          rated_rows.where(books_goodreads_imports: {user_id: user_ids})
             .select("books_goodreads_import_rows.*, books_goodreads_imports.user_id AS user_id, " \
               "books_goodreads_editions.book_id AS book_id, " \
               "books_goodreads_imports.created_at AS import_created_at, books_goodreads_imports.id AS import_pk")
             .group_by { |row| [row.user_id, row.book_id] }
+            .slice(*examined)
             .transform_values do |rows|
               rows.min_by { |row| [-row.import_created_at.to_f, -row.import_pk, -(row.date_read&.jd || 0), row.row_number] }
             end

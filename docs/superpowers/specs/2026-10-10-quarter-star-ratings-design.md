@@ -254,24 +254,28 @@ review's rating to the CSV value **only when all four hold**:
 
 1. the import is `source: legacy_replay` (never a member's own import); this is the candidate query
 2. the existing review's id is below the reserved ceiling (legacy origin)
-3. the CSV rating (on the winning row: the latest upload, then the latest Date Read, then the lowest row number) is fractional
+3. the CSV rating on the winning row is fractional. The winner is chosen among all the user's
+   rated replay rows for the book (latest upload, then latest Date Read, then lowest row number),
+   so a later whole-number re-rating beats an earlier fraction
 4. the stored rating equals the CSV rating rounded down: `stored == csv.floor`, which is what the
    legacy `to_i` produced
 
-The match is that precise, so a rating the member deliberately changed is never touched. When the
-rule fires, the book joins `@touched_book_ids` so its summary is recalculated. The body, title and
-timestamps are not touched.
+The match is that precise, so a rating the member deliberately changed is never touched. The step
+recalculates each repaired book's summary once, after all repairs. The body, title and timestamps
+are not touched.
 
 **Interaction with the weekly sync.**
 
 - `ReviewMigrator` (sync mode) **overwrites** legacy-origin reviews from legacy each week, so it
   puts the 3 back.
-- `repair_ratings` runs after each sync's replay pass (after the final `apply`, once merges have settled which book a review sits on), and it restores 3.75.
+- `repair_ratings` runs after each sync's replay pass (after the final `apply`, once merges have settled which book a review
+  sits on), and it restores 3.75.
 - Each cycle therefore ends correct, including the final launch pass, after which legacy is shut
   down. Running the replay twice in a row changes nothing the second time.
 
-**0.25 and 0.5** need no repair: legacy created no review for them, so the replay's normal path
-creates one from the CSV.
+**0.25 and 0.5 are a known gap.** Legacy created no review for a rating under 1 (its
+`rating >= 1` check), and replay imports never write reviews, so those ratings are not restored.
+Out of scope for this step.
 
 ## 6. Other consumers
 

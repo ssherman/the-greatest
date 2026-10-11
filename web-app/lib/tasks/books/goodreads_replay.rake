@@ -64,7 +64,7 @@ namespace :books do
       "run after the final apply of every pass."
     task repair_ratings: :environment do
       counts = Services::Books::GoodreadsReplay::RepairTruncatedRatings.call.data
-      puts "ratings: checked #{counts[:checked]}, repaired #{counts[:repaired]}"
+      puts "ratings: #{tally.call(counts)}"
     end
 
     desc "Write the replay report (spec §12.9) to a path, or print it. " \
