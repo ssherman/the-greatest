@@ -1,10 +1,22 @@
 import { test, expect } from '@playwright/test';
+import { execSync } from 'node:child_process';
+import path from 'node:path';
+
+const WEB_APP = path.resolve(__dirname, '..', '..', '..');
 
 // The contact form is one FooterComponent shared by books, music and games, and
 // is covered per-domain by test/components/footer_component_test.rb. These run
 // against books alone because it is the one e2e project here that needs no auth
 // setup.
 test.describe('Contact form', () => {
+  // ContactMessagesController allows 5 anonymous sends per IP per hour and this
+  // file sends about 4, so a rerun within the hour fails with confirmation
+  // panels that never appear. e2e:prepare clears the limiter for a full run;
+  // this covers running the file on its own.
+  test.beforeAll(() => {
+    execSync('bin/rails e2e:rate_limit_reset', { cwd: WEB_APP, encoding: 'utf8' });
+  });
+
   test('opens from the footer', async ({ page }) => {
     await page.goto('/');
 

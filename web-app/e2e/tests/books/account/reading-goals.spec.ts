@@ -51,7 +51,7 @@ async function progressCount(scope: Page | Locator): Promise<number> {
 
 async function openListDialog(page: Page, book: { path: string; title: string }): Promise<Locator> {
   await page.goto(book.path);
-  await page.getByRole('button', { name: /^(Add to list|On \d+ lists)$/ }).first().click();
+  await page.getByRole('button', { name: /^(Add to list|On \d+ lists?)$/ }).first().click();
 
   const dialog = page.getByRole('dialog').filter({ hasText: 'Your lists' });
   await expect(dialog).toBeVisible();
@@ -156,7 +156,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
     await page.getByLabel('Target books').fill('4');
     await expect(page.getByLabel('Start date')).toHaveValue(initialStart);
     await expect(page.getByLabel('End date')).toHaveValue(initialEnd);
-    await expect(page.getByLabel('Public')).not.toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Public', exact: true })).not.toBeChecked();
     await page.getByRole('button', { name: 'Create Reading Goal', exact: true }).click();
 
     await expect(page.getByRole('heading', { name: 'Active goals', level: 2 })).toBeVisible();
@@ -175,7 +175,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
     await page.getByLabel('Target books').fill(String(TARGET_COUNT));
     await page.getByLabel('Start date').fill(inRangeDate);
     await page.getByLabel('End date').fill(today);
-    await page.getByLabel('Public').check();
+    await page.getByRole('checkbox', { name: 'Public', exact: true }).check();
     await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
 
     card = goalCard(page, publicGoalName);

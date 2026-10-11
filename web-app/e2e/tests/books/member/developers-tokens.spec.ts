@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 // Matched by `books-member`: PLAYWRIGHT_MEMBER_EMAIL, comped by
-// `bin/rails e2e:member`. Creates a real token on the shared dev database, so
+// `bin/rails e2e:prepare` on every run. Creates a real token on the shared dev database, so
 // it cleans up after itself and also before it starts, in case an earlier run
 // died between create and revoke (the account holds at most 10 tokens).
 const TOKEN_NAME = 'E2E token';

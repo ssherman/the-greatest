@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 // This spec depends on the e2e-admin account having a healthy body of reviews to
-// filter/sort/page through. Run `bin/rails e2e:my_reviews` (lib/tasks/e2e.rake)
-// first -- it idempotently seeds 30 Books::Book reviews for that account (6 per
-// rating, alternating written/rating-only, avoiding the 3 book slugs other specs
+// filter/sort/page through. `bin/rails e2e:prepare` (lib/tasks/e2e.rake) resets
+// the account to exactly 30 Books::Book reviews on every run, rather than
+// seeding additively (6 per rating, alternating written/rating-only, avoiding the 3 book slugs other specs
 // in this directory depend on). One of those 30, "Animal Farm", has a title no
 // other seeded review shares, which is what makes it a safe, exact search term
 // below.
@@ -104,7 +104,7 @@ test.describe('My Reviews', () => {
 
     const searchInput = page.getByLabel('Search your reviews');
     await searchInput.fill(SEARCH_TITLE);
-    await page.getByRole('button', { name: 'Search' }).click();
+    await page.locator('form[action="/my/reviews"]').getByRole('button', { name: 'Search' }).click();
 
     // If the reload guard regressed, this URL would fall back to the pre-search
     // "/my/reviews" with no query -- assert the query actually survived.
@@ -153,7 +153,7 @@ test.describe('My Reviews', () => {
 
   // Deleting from a row is destructive and irreversible, so this test creates its
   // own review to destroy rather than touching the seeded 30 -- on the one book
-  // e2e:my_reviews deliberately excludes. The afterEach is a safety net for a
+  // e2e:prepare deliberately excludes. The afterEach is a safety net for a
   // mid-test failure: without it a crashed run would leave a 31st review behind
   // and the exact-count assertion at the top of this file would fail on every
   // later run, for a reason nowhere near where it broke.

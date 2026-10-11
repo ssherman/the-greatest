@@ -82,7 +82,7 @@ test.describe("Books admin — reviews", () => {
   // The second Playwright flow the spec promises (docs/superpowers/specs/
   // 2026-08-14-reviews-admin-design.md, Testing section). Purely read-only: it
   // never deletes or mutates a review. The Playwright admin account itself
-  // always has reviews -- `bin/rails e2e:my_reviews` idempotently seeds it with
+  // always has reviews -- `bin/rails e2e:prepare` resets it to exactly
   // 30 -- so this opens the admin's own user record rather than creating or
   // guessing at another user's id. The one thing only a real browser proves
   // here is that the card's link is reachable: Admin::UsersControllerTest only

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// Matched by `books-account`: PLAYWRIGHT_ADMIN_EMAIL, signed in, NOT a member.
+// Matched by `books-account`: PLAYWRIGHT_USER_EMAIL, signed in, NOT a member.
 // This is the first feature gate (as opposed to the members' area itself), so
 // the non-member side is worth its own check. Do not comp this account; the
 // member flow uses the separate PLAYWRIGHT_MEMBER_EMAIL account.

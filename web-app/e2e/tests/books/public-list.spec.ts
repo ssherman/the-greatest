@@ -1,7 +1,14 @@
 import { test, expect } from '@playwright/test';
+import { seed } from '../../support/seed';
 
-const publicId = process.env.PLAYWRIGHT_PUBLIC_BOOKS_LIST_ID!;
-const privateId = process.env.PLAYWRIGHT_PRIVATE_BOOKS_LIST_ID!;
+let publicId: number;
+let privateId: number;
+
+// The lists belong to the normal-user e2e account; this project only views
+// them, which is why `books` depends on `seed` too.
+test.beforeAll(() => {
+  ({ public_books: publicId, private_books: privateId } = seed().lists);
+});
 
 test.describe('Public books user list', () => {
   test('an anonymous visitor can read a public list', async ({ page }) => {

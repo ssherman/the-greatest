@@ -4,10 +4,9 @@ import { test, expect } from '@playwright/test';
 // from books-auth.setup.ts) -- see e2e/playwright.config.ts.
 //
 // Deliberately NOT covered here: the members'-area view for an actual member.
-// The e2e user is not a member, and comping it from a spec would leave shared
-// dev-database state behind that later runs depend on. That case is covered
-// by MembersControllerTest, where a fixture makes the membership exact. Do
-// not "fix" this by granting the e2e user membership.
+// That lives in tests/books/member/. This project runs as the normal-user
+// e2e account, and `bin/rails e2e:prepare` cancels any membership that account
+// holds on every run, so these tests cannot go vacuous by someone comping it.
 
 test.describe('Books membership, signed in', () => {
   test('a signed-in non-member is redirected away from the members area', async ({ page }) => {

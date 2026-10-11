@@ -7,7 +7,14 @@ import path from "node:path";
 // finder or AI call. Without a worker the import stays queued; the page is
 // tested either way. Cleanup removes the upload and the seed.
 const WEB_APP = path.resolve(__dirname, "..", "..", "..", "..");
-const rails = (task: string) => execSync(`bin/rails ${task}`, { cwd: WEB_APP, encoding: "utf8" });
+// The books-account project runs as the normal user, so the seed and cleanup
+// must own their rows under that account, not the admin the tasks default to.
+const rails = (task: string) =>
+  execSync(`bin/rails ${task}`, {
+    cwd: WEB_APP,
+    encoding: "utf8",
+    env: { ...process.env, E2E_GOODREADS_EMAIL: process.env.PLAYWRIGHT_USER_EMAIL },
+  });
 
 test.describe("Books account — Goodreads import", () => {
   test.describe.configure({ mode: "serial" });
