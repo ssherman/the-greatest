@@ -7,6 +7,8 @@ class Admin::Games::CategoriesController < Admin::CategoriesBaseController
   def param_key = :games_category
   def category_path(category) = admin_games_category_path(category)
   def categories_path = admin_games_categories_path
+
+  def categories_search_path = search_admin_games_categories_path
   def new_category_path = new_admin_games_category_path
   def edit_category_path(category) = edit_admin_games_category_path(category)
   def domain_label = "Games"

@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
-const openModal = async (page) => {
+const openModal = async (page: Page) => {
   await page.getByRole('button', { name: 'Filters' }).click();
   await expect(page.locator('dialog#books_filter_modal')).toBeVisible();
 };
@@ -9,7 +9,7 @@ const openModal = async (page) => {
 // anything about a row. A tag reading Subject or Setting does: FilterFacetsQuery
 // .genres only ever returns genre-type rows, so such a row cannot be in the
 // browse facet list, which is the structural guarantee two tests below need.
-const nonGenreResult = (page) =>
+const nonGenreResult = (page: Page) =>
   page
     .locator('turbo-frame#books_filter_results_category label')
     .filter({ has: page.locator('.badge', { hasText: /^(Subject|Setting)$/ }) });

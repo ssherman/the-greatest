@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // Matched by `books-member`: PLAYWRIGHT_MEMBER_EMAIL, comped by
-// `bin/rails e2e:member`. A member never sees the top-500 dialog.
+// `bin/rails e2e:prepare` on every run. A member never sees the top-500 dialog.
 test.describe('Books rankings CSV export (member)', () => {
   test('a member is taken straight to the file on a filtered page', async ({ page }) => {
     await page.goto('/the-greatest/novels/books');

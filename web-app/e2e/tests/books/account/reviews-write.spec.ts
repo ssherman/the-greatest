@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { rateStars } from '../../../helpers/star-rating';
 
 // A book with no migrated reviews, so this spec never disturbs real data.
 const BOOK = '/book/headlong-hall';
 
-async function removeExistingReview(page) {
+async function removeExistingReview(page: Page) {
   await page.getByTestId('review-widget-label').click();
 
   // widget_controller#open() is async (it may still be awaiting its /review_state

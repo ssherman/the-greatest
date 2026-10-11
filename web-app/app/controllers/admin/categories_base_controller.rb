@@ -95,6 +95,7 @@ class Admin::CategoriesBaseController < Admin::BaseController
       model_class: model_class,
       category_path_proc: method(:category_path),
       categories_path: categories_path,
+      categories_search_path: categories_search_path,
       new_category_path: new_category_path,
       edit_category_path_proc: method(:edit_category_path),
       domain_label: domain_label,
@@ -118,6 +119,10 @@ class Admin::CategoriesBaseController < Admin::BaseController
 
   def categories_path
     raise NotImplementedError, "Subclass must implement categories_path"
+  end
+
+  def categories_search_path
+    raise NotImplementedError, "Subclass must implement categories_search_path"
   end
 
   def new_category_path

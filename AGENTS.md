@@ -82,6 +82,9 @@ What a refresh does **not** bring back is anything created since the last nightl
 replaces the database wholesale rather than merging. So this is still not a database to treat as
 disposable; the cost of losing it is just far lower than this section used to claim.
 
+A refresh needs no E2E steps: `yarn test:e2e` runs `bin/rails e2e:prepare` itself, which rebuilds the
+three Playwright accounts' roles, membership, seed data and Stripe sandbox plans from nothing.
+
 Do not swing the other way on the production side either. **Production's books data is not live
 user data yet, but it stops being disposable at the legacy-sync switch-over.** Books has not
 launched and nobody signs in as those rows today. There is no pre-launch truncate any more

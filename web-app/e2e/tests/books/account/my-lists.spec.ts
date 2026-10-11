@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
-
-const publicListId = process.env.PLAYWRIGHT_PUBLIC_BOOKS_LIST_ID!;
+import { seed } from '../../../support/seed';
 
 test.describe('Books My Lists', () => {
   test('the My Books desktop group is revealed when signed in and orders personal links', async ({ page }) => {
@@ -14,8 +13,11 @@ test.describe('Books My Lists', () => {
     await expect(myBooks.getByRole('link')).toHaveText([
       'Lists',
       'Reading Goals',
+      'Import from Goodreads',
+      'My Rankings',
       'Reviews',
       'Saved Searches',
+      'Recommendations',
     ]);
   });
 
@@ -75,8 +77,11 @@ test.describe('Books My Lists mobile navigation', () => {
     await expect(myBooks.getByRole('link')).toHaveText([
       'Lists',
       'Reading Goals',
+      'Import from Goodreads',
+      'My Rankings',
       'Reviews',
       'Saved Searches',
+      'Recommendations',
     ]);
   });
 });
@@ -87,6 +92,7 @@ test.describe('Books My Lists item links', () => {
   // writes "Content missing" instead of navigating.
   for (const [label, viewMode] of [['grid', 'grid_view'], ['list', 'list_view']] as const) {
     test(`a book title in ${label} view navigates to the book page`, async ({ page }) => {
+      const publicListId = seed().lists.public_books;
       await page.goto(`/my/lists/${publicListId}?view_mode=${viewMode}`);
 
       const link = page.locator('#list_items a[href^="/book/"]').first();

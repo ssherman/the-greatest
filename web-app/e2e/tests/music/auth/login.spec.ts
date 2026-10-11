@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { credentials, signIn } from '../../../support/sign-in';
 
 // This test exercises the full login flow directly (not using saved storageState)
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -11,26 +12,9 @@ test.describe('Login Flow', () => {
     const loginButton = page.locator('#navbar_login_button');
     await expect(loginButton).toHaveText('Login');
 
-    // Open the auth modal
-    await loginButton.click();
-
-    const modal = page.locator('#login_modal');
-    await expect(modal).toBeVisible();
-    await expect(modal.getByRole('heading', { name: 'Sign In' })).toBeVisible();
-
-    // Step 1: Enter email
-    await modal.getByPlaceholder('Email address').first().fill(process.env.PLAYWRIGHT_ADMIN_EMAIL!);
-    await modal.getByRole('button', { name: 'Continue' }).click();
-
-    // Step 2: Wait for password step, enter password, and submit
-    const passwordInput = modal.getByPlaceholder('Password');
-    await expect(passwordInput).toBeVisible();
-    await passwordInput.fill(process.env.PLAYWRIGHT_ADMIN_PASSWORD!);
-    await modal.getByRole('button', { name: 'Sign In' }).click();
-
-    // Wait for reload and Firebase auth state propagation
-    await page.waitForLoadState('networkidle');
-    await expect(loginButton).toHaveText('Logout', { timeout: 15000 });
+    await signIn(page, credentials('ADMIN'));
+    await expect(loginButton).toHaveAttribute('data-auth-state', 'signed-in', { timeout: 15_000 });
+    await expect(loginButton).toHaveText('Logout');
   });
 
   test('shows auth modal with email and password steps', async ({ page }) => {
@@ -41,6 +25,7 @@ test.describe('Login Flow', () => {
 
     const modal = page.locator('#login_modal');
     await expect(modal).toBeVisible();
+    await expect(modal.getByRole('heading', { name: 'Sign In' })).toBeVisible();
 
     // Verify step 1 elements
     await expect(modal.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();

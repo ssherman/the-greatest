@@ -16,7 +16,7 @@ async function untickEveryList(page: Page) {
       await expect(box).not.toBeChecked();
     }
   }
-  await page.keyboard.press('Escape');
+  await modal.press('Escape');
   await expect(modal).not.toBeVisible();
 }
 
@@ -80,7 +80,7 @@ test.describe('Recommendations, as a member', () => {
     const favorites = modal.getByRole('checkbox', { name: /favorite/i }).first();
     await favorites.check();
     await expect(favorites).toBeChecked();
-    await page.keyboard.press('Escape');
+    await modal.press('Escape');
     await expect(modal).not.toBeVisible();
 
     await page.reload();
@@ -96,7 +96,7 @@ test.describe('Recommendations, as a member', () => {
     const read = modal.getByRole('checkbox', { name: /^read$|books i.ve read|have read/i }).first();
     await read.check();
     await expect(read).toBeChecked();
-    await page.keyboard.press('Escape');
+    await modal.press('Escape');
     await expect(modal).not.toBeVisible();
 
     await page.goto('/recommendations/wizard/3');

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { rateStars } from "../../../helpers/star-rating";
+import { seed } from "../../../support/seed";
 
 // headlong-hall is the scratch book: lib/tasks/e2e.rake excludes it from the
 // /my/reviews seed precisely so specs can create and destroy reviews on it.
@@ -82,18 +83,18 @@ test.describe("Books admin — reviews", () => {
 
   // The second Playwright flow the spec promises (docs/superpowers/specs/
   // 2026-08-14-reviews-admin-design.md, Testing section). Purely read-only: it
-  // never deletes or mutates a review. The Playwright admin account itself
-  // always has reviews -- `bin/rails e2e:my_reviews` idempotently seeds it with
-  // 30 -- so this opens the admin's own user record rather than creating or
+  // never deletes or mutates a review. The normal-user e2e account always has
+  // reviews because `bin/rails e2e:prepare` resets it to exactly 30 on every
+  // run, so this opens that account's user record rather than creating or
   // guessing at another user's id. The one thing only a real browser proves
   // here is that the card's link is reachable: Admin::UsersControllerTest only
   // asserts the books host STRING appears in the response body, never that a
   // click on it actually lands on the review.
   test("an admin opens a user with reviews and sees the Reviews card", async ({ page }) => {
-    const adminEmail = process.env.PLAYWRIGHT_ADMIN_EMAIL!;
+    const userEmail = seed().users.user.email;
 
-    await page.goto(`/admin/users?q=${encodeURIComponent(adminEmail)}`);
-    await page.getByRole("link", { name: adminEmail, exact: true }).first().click();
+    await page.goto(`/admin/users?q=${encodeURIComponent(userEmail)}`);
+    await page.getByRole("link", { name: userEmail, exact: true }).first().click();
     await expect(page).toHaveURL(/\/admin\/users\/\d+$/);
 
     const reviewsCard = page

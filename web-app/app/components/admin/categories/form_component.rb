@@ -27,7 +27,13 @@ class Admin::Categories::FormComponent < ViewComponent::Base
     "#{action} Category"
   end
 
-  def parent_categories
-    domain_config[:model_class].active.where.not(id: category.id).sorted_by_name
+  # A typeahead, not a <select>: books has 83k categories and a select of all
+  # of them made the admin form unusable on production data.
+  def parent_search_url
+    domain_config.fetch(:categories_search_path)
+  end
+
+  def parent_selected_text
+    category.parent&.name_with_type
   end
 end
