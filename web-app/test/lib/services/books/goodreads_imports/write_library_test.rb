@@ -174,6 +174,97 @@ module Services
           assert_equal 1, again.reload.skipped_count
         end
 
+        LEGACY_REVIEW_ID = 4242
+
+        def legacy_replay!
+          @import.update!(source: :legacy_replay)
+        end
+
+        def legacy_review(book, rating:, id: LEGACY_REVIEW_ID, body: "From legacy.")
+          ::Review.create!(id: id, user: @user, reviewable: book, rating: rating, body: body)
+        end
+
+        test "a legacy replay restores a rating the legacy site truncated" do
+          legacy_replay!
+          review = legacy_review(@book, rating: 3)
+          row(@book, rating: BigDecimal("3.75"), review_body: "Imported.")
+          sum_before = ReviewSummary.find_by!(reviewable_type: "Books::Book", reviewable_id: @book.id).ratings_sum
+
+          WriteLibrary.call(import: @import)
+
+          review.reload
+          assert_equal [BigDecimal("3.75"), "From legacy."], [review.rating, review.body]
+          sum_after = ReviewSummary.find_by!(reviewable_type: "Books::Book", reviewable_id: @book.id).ratings_sum
+          assert_equal BigDecimal("0.75"), sum_after - sum_before
+        end
+
+        test "a member's own import never repairs" do
+          review = legacy_review(@book, rating: 3)
+          row(@book, rating: BigDecimal("3.75"))
+
+          WriteLibrary.call(import: @import)
+
+          assert_equal BigDecimal(3), review.reload.rating
+        end
+
+        test "a review made on the new site is never repaired" do
+          legacy_replay!
+          review = legacy_review(@book, rating: 3, id: ::Services::BooksMigration::RESERVED_CEILINGS.fetch("reviews"))
+          row(@book, rating: BigDecimal("3.75"))
+
+          WriteLibrary.call(import: @import)
+
+          assert_equal BigDecimal(3), review.reload.rating
+        end
+
+        test "a whole-star CSV rating repairs nothing" do
+          legacy_replay!
+          review = legacy_review(@book, rating: 3)
+          row(@book, rating: BigDecimal(4))
+
+          WriteLibrary.call(import: @import)
+
+          assert_equal BigDecimal(3), review.reload.rating
+        end
+
+        test "a rating that is not the truncation of the CSV value is the reader's own and is kept" do
+          legacy_replay!
+          review = legacy_review(@book, rating: 2)
+          row(@book, rating: BigDecimal("3.75"))
+
+          WriteLibrary.call(import: @import)
+
+          assert_equal BigDecimal(2), review.reload.rating
+        end
+
+        # A replay pass in production is a fresh import, so each pass here is a
+        # new import on the same edition -- the pattern of "running the same
+        # import twice changes nothing" above.
+        def replay_pass(book, rating:)
+          @import.update!(status: :complete) unless @import.complete?
+          edition = @import.rows.first.goodreads_edition
+          @import = ::Books::GoodreadsImport.create!(user: @user, status: :writing, source: :legacy_replay)
+          @import.rows.create!(row_number: 1, goodreads_edition: edition, exclusive_shelf: "read", rating: rating)
+          WriteLibrary.call(import: @import)
+        end
+
+        test "repair survives the weekly sync's revert and a pass with nothing to fix is a no-op" do
+          legacy_replay!
+          review = legacy_review(@book, rating: 3)
+          row(@book, rating: BigDecimal("3.75"))
+          WriteLibrary.call(import: @import)
+          assert_equal BigDecimal("3.75"), review.reload.rating
+
+          # The weekly sync upserts legacy's integer back over the repair.
+          review.update_columns(rating: 3)
+          replay_pass(@book, rating: BigDecimal("3.75"))
+          assert_equal BigDecimal("3.75"), review.reload.rating
+
+          updated_at = review.updated_at
+          replay_pass(@book, rating: BigDecimal("3.75"))
+          assert_equal [BigDecimal("3.75"), updated_at], [review.reload.rating, review.updated_at]
+        end
+
         test "a parked edition's rows are parked; an unresolved one's are failed with its error" do
           parked = goodreads_edition(title: "Invented", resolution: :parked, verification: :not_found, resolved_at: Time.current)
           unresolved = goodreads_edition(title: "Broken")
