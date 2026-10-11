@@ -88,7 +88,10 @@ second export on the same day reuses the day's file name and the trainer reports
 4. **`bin/rails books:goodreads_replay:apply`.** The sync puts legacy users' list items and reviews
    back the way legacy has them, which undoes the replay's approved relinks until this re-applies
    them.
-5. **Rankings.** The books list weights and book rankings. Author rankings follow.
+5. **`bin/rails books:goodreads_replay:repair_ratings`.** Run it after `apply`. The sync overwrites
+   legacy-origin reviews with legacy's truncated integer rating (3 for a 3.75), and this puts the
+   fractional rating back.
+6. **Rankings.** The books list weights and book rankings. Author rankings follow.
 
 ## 5. Cleanup, after the switch-over
 
@@ -112,6 +115,10 @@ the sync never undoes them.
 3. **Duplicates.** Review the pairs the sweep found in the Duplicates queue and merge them. Every
    merge is recorded as a redirect, so the sync never brings the merged book back.
 4. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
+   Deploy the quarter-star ratings branch before the first production `books:goodreads_replay:load`.
+   `ParseRows` skips rows it already wrote, and pre-branch code drops fractional and `4.0` ratings
+   as unreadable. After that, `repair_ratings` finds no candidates and `finish_legacy` writes
+   unrated reviews.
 
    ```bash
    bin/rails books:goodreads:seed_legacy_pages   # legacy scraped Goodreads pages into the page cache (~39k)
@@ -160,7 +167,7 @@ the sync never undoes them.
 1. Take legacy offline.
 2. `FINAL=1 bin/rails data_migration:sync`. `FINAL=1` drops the 24-hour delay, so the last day's
    books come over too. Run `sync_report` with `FINAL=1` first.
-3. Section 4, steps 3-5.
+3. Section 4, steps 3-6.
 4. **Finish the failed and stuck legacy Goodreads imports.** Only now: they write into legacy users'
    lists, which every sync rewrites to match legacy, so a finishing import run earlier is undone by
    the next sync.

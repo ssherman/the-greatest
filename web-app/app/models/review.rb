@@ -4,7 +4,7 @@
 #
 #  id              :bigint           not null, primary key
 #  body            :text
-#  rating          :integer
+#  rating          :decimal(3, 2)
 #  reviewable_type :string           not null
 #  title           :string
 #  created_at      :datetime         not null

@@ -13,7 +13,7 @@ require "test_helper"
 #  notes                :string           default([]), not null, is an Array
 #  outcome              :integer          default("pending"), not null
 #  outcome_detail       :string
-#  rating               :integer
+#  rating               :decimal(3, 2)
 #  raw                  :jsonb            not null
 #  read_count           :integer
 #  replay_finding       :integer

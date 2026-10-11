@@ -65,7 +65,7 @@ export default class extends Controller {
     let value
     if (event.key === "Home") value = STEP
     else if (event.key === "End") value = MAX_RATING
-    else if (event.key in KEY_DELTAS) value = (this.committed ?? 0) + KEY_DELTAS[event.key]
+    else if (event.key in KEY_DELTAS) value = Math.round((this.committed ?? 0) / STEP) * STEP + KEY_DELTAS[event.key]
     else return
 
     event.preventDefault()
@@ -93,7 +93,7 @@ export default class extends Controller {
     if (value == null) {
       this.sliderTarget.removeAttribute("aria-valuenow")
     } else {
-      this.sliderTarget.setAttribute("aria-valuenow", String(value))
+      this.sliderTarget.setAttribute("aria-valuenow", formatRating(value))
     }
     this.sliderTarget.setAttribute("aria-valuetext", value == null ? "Not rated" : `${formatRating(value)} stars`)
     this.paint(value)

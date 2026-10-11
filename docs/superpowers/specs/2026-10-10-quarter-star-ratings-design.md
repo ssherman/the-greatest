@@ -90,8 +90,9 @@ Rejected storage alternatives:
   consumer uses it: summaries, My Reviews filter, stats and profile strip.
 - **`Review.format_rating(value)`** returns display text with trailing zeros dropped: `4` → `"4"`,
   `3.5` → `"3.5"`, `3.75` → `"3.75"`. `Review#formatted_rating` delegates to it.
-  - **This is a correctness fix, not a nicety.** `BigDecimal#to_s` is `"0.375e1"`. Every view that
-    interpolates a raw rating today would print that.
+  - **This is a correctness fix, not a nicety.** Under Rails a whole-star `BigDecimal` prints
+    `"4.0"` (fractional values print as `3.75`), so a view that interpolates a raw rating would
+    say "Rated 4.0 out of 5". The formatter prevents that.
   - Display strings belong on models (project convention).
 
 ### 3.3 `review_summaries`
@@ -320,7 +321,7 @@ fixtures never contain the case that should fail.
 - Existing integer ratings survive the migration unchanged.
 - The constraint accepts 0.25, 3.33 and 5, and rejects 0, -1 and 5.01. The model validation agrees.
 - `Review.rating_bucket` at 0.25, 1.5, 1.75, 2.5, 2.75, 4.5, 4.75 and 5.
-- `Review.format_rating`: 4 → "4", 3.5 → "3.5", 3.75 → "3.75", and never `0.375e1`.
+- `Review.format_rating`: 4 → "4", 3.5 → "3.5", 3.75 → "3.75", and a whole-star case asserts "4" and not "4.0".
 
 **Summaries / display**
 

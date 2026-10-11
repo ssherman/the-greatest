@@ -13,7 +13,7 @@
 
       <fieldset class="mt-4">
         <legend class="text-sm font-semibold" id="review_rating_legend">Your rating</legend>
-        <div class="mt-2 flex items-center gap-3"
+        <div class="mt-2 flex flex-wrap items-center gap-3"
              data-controller="reviews--star-input"
              data-action="star-input:set->reviews--star-input#set reviews--star-input:change->reviews--modal#ratingChanged">
           <input type="hidden" name="review[rating]" value=""

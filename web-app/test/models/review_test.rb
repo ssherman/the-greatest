@@ -6,7 +6,7 @@ require "test_helper"
 #
 #  id              :bigint           not null, primary key
 #  body            :text
-#  rating          :integer
+#  rating          :decimal(3, 2)
 #  reviewable_type :string           not null
 #  title           :string
 #  created_at      :datetime         not null
@@ -334,7 +334,7 @@ class ReviewTest < ActiveSupport::TestCase
     assert_equal BigDecimal("3.33"), review.reload.rating
   end
 
-  test "the database rejects zero and above five" do
+  test "the database rejects zero" do
     review = Review.create!(user: users(:contractor_user), reviewable: books_books(:got), rating: 4)
     assert_raises(ActiveRecord::StatementInvalid) { review.update_columns(rating: 0) }
   end

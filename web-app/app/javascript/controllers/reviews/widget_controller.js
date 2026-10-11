@@ -85,7 +85,7 @@ export default class extends Controller {
   }
 
   // Reviews::WidgetComponent always renders Reviews::StarsComponent, even with no
-  // review (rating 0, clipped to an empty fill) -- that keeps the cached HTML
+  // review (rating 0, so all five per-star fills sit at 0%) -- that keeps the cached HTML
   // identical for every visitor. So hydration only ever adjusts the five per-star fill widths and
   // the accessible name here; it never reveals or hides the element, which would
   // otherwise flash an empty box the instant the label switches to "Edit your
