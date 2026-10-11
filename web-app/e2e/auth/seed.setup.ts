@@ -12,6 +12,8 @@ setup('prepare the three e2e accounts and their data', async () => {
   try {
     const out = execSync('bin/rails e2e:prepare', {
       cwd: WEB_APP,
+      // execSync blocks the event loop, so setup.setTimeout cannot fire while it runs; this is the real limit.
+      timeout: 170_000,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
