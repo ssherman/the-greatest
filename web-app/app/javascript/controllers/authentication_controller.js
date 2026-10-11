@@ -216,7 +216,11 @@ export default class extends Controller {
     this.updateNavbarButton(null)
   }
 
-  // Update navbar button based on auth state
+  // Update navbar button based on auth state. data-auth-state is written here
+  // and nowhere else, so it says "Firebase has resolved and the click is
+  // wired". The label alone does not: the hint script paints "Logout" before
+  // that, while the inline onclick still opens the login modal. E2E waits on
+  // the attribute.
   updateNavbarButton(user) {
     const navbarButton = document.getElementById('navbar_login_button')
     if (navbarButton) {
@@ -224,10 +228,12 @@ export default class extends Controller {
         navbarButton.textContent = 'Logout'
         navbarButton.onclick = () => this.signOut()
         navbarButton.className = 'btn btn-outline btn-error'
+        navbarButton.dataset.authState = 'signed-in'
       } else {
         navbarButton.textContent = 'Login'
         navbarButton.onclick = () => this.openModal()
         navbarButton.className = 'btn btn-primary'
+        navbarButton.dataset.authState = 'signed-out'
       }
     }
   }

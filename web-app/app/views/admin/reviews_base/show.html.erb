@@ -12,8 +12,8 @@
     <div class="flex flex-wrap items-center gap-3">
       <% if @review.rating %>
         <%= render Reviews::StarsComponent.new(rating: @review.rating, size: "size-5",
-              label: "Rated #{@review.rating} out of 5 stars") %>
-        <span class="tabular-nums text-base-content/70"><%= @review.rating %> / 5</span>
+              label: "Rated #{@review.formatted_rating} out of 5 stars") %>
+        <span class="tabular-nums text-base-content/70"><%= @review.formatted_rating %> / 5</span>
       <% else %>
         <span class="text-base-content/70">No rating</span>
       <% end %>

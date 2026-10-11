@@ -4,7 +4,7 @@
 #
 #  id              :bigint           not null, primary key
 #  body            :text
-#  rating          :integer
+#  rating          :decimal(3, 2)
 #  reviewable_type :string           not null
 #  title           :string
 #  created_at      :datetime         not null
@@ -34,6 +34,29 @@ class Review < ApplicationRecord
   # spare.
   MAX_TITLE_LENGTH = 255
 
+  # Goodreads' five-bar rule: round to the nearest whole star, ties round down,
+  # and everything up to 1.5 is a 1. Integer-cast so grouped counts key on
+  # Integers. Every bucketed consumer (summaries, the My Reviews filter and
+  # stats) uses this or rating_bucket, never its own rounding.
+  # NULL stays NULL: GREATEST ignores NULLs and would otherwise bucket an
+  # unrated review as a 1.
+  RATING_BUCKET_SQL = "CASE WHEN reviews.rating IS NULL THEN NULL ELSE GREATEST(1, CEIL(reviews.rating - 0.5))::integer END"
+
+  def self.rating_bucket(value)
+    return nil if value.nil?
+
+    [1, (value.to_d - BigDecimal("0.5")).ceil].max
+  end
+
+  # The one way a rating becomes text. Under Rails a whole-star BigDecimal prints
+  # as "4.0", so a raw interpolation reads "Rated 5.0 out of 5". Use this instead.
+  def self.format_rating(value)
+    return nil if value.nil?
+
+    text = value.to_d.round(2).to_s("F")
+    text.sub(/0+\z/, "").sub(/\.\z/, "")
+  end
+
   belongs_to :user
   belongs_to :reviewable, polymorphic: true
 
@@ -42,10 +65,9 @@ class Review < ApplicationRecord
   before_validation :sanitize_body
 
   # Optional: Goodreads, and so an import, allows a written review with no stars.
-  # rating_or_body_present is what stops an empty review.
-  validates :rating, numericality: {
-    only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 5
-  }, allow_nil: true
+  # rating_or_body_present is what stops an empty review. Fractional since
+  # Goodreads went to quarter stars; 0 is Goodreads' "not rated", never a rating.
+  validates :rating, numericality: {greater_than: 0, less_than_or_equal_to: 5}, allow_nil: true
   validates :title, length: {maximum: MAX_TITLE_LENGTH}
   validates :body, length: {maximum: MAX_BODY_LENGTH}
   validates :user_id, uniqueness: {scope: [:reviewable_type, :reviewable_id]}
@@ -66,6 +88,10 @@ class Review < ApplicationRecord
   # Bulk paths (the increment-2 migrator) bypass this by design and call
   # SummaryRecalculator.backfill_all! once at the end instead.
   after_commit :recalculate_summary
+
+  def formatted_rating
+    self.class.format_rating(rating)
+  end
 
   private
 

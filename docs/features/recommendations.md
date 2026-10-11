@@ -12,8 +12,9 @@ pages) and `docs/superpowers/specs/2026-10-09-book-recommendations-collaborative
 
 State of delivery: spec 1 is done (preferences store, engine, harness, tuning, the results,
 wizard and settings pages). Spec 2's first increment (export, trainer, load, signal, measured in
-development) is done; its second, the home-server timer that trains in production, is not, so
-production has no model and the signal is unavailable there until it lands.
+development) is done; its second, the home-server timer that trains in production, is built
+(`deployment/home-server/guest/recommender-train.sh`); the one-time setup that gives production its
+first model is `docs/launch-todo.md`, section 3.
 
 Where it lives:
 
@@ -80,8 +81,10 @@ Signal#available?              -> Boolean  # false -> skipped
 
 Evidence: `{taste: true}` from `TasteProfile`; `{term: Float}` from `Collaborative`, plus
 `because_of: item_id` when the shelf book that contributed most is loved (see "Collaborative
-signal"). The collaborative fusion weight is `n / (n + collaborative_half_point)`, `n` the user's
-positive count, so it grows with the shelf.
+signal"). The collaborative fusion weight is `collaborative_weight × n / (n + collaborative_half_point)`,
+`n` the user's positive count, so it grows with the shelf toward `collaborative_weight` (0.25 against
+taste's 1.0: at 1.0 the model's neighbours of famous books, which are more famous books, took most of
+a large reader's page; see "Known gaps").
 
 ## Profile math
 
@@ -149,12 +152,16 @@ One OpenSearch query against `Search::Books::BookIndex`; no mapping change.
    clause from (4), `negative_boost: 0.3`.
 6. **Normalization:** `function_score` dividing by `sqrt(max(similarity_category_count, floor))`,
    floor `normalization_floor` (10), so a heavily tagged book cannot win on volume.
-7. **Quality prior** (when `quality_scale` > 0): a second `function_score` multiplying by
+7. **Quality prior** (when `quality_scale` > 0; off by default since 2026-10-10, on under the
+   Safer bets depth): a second `function_score` multiplying by
    `quality_floor + (1 − quality_floor) · quality_scale / (quality_scale + ranked_position)`: 1 at
    the top of the ranking, half way to the floor at rank `quality_scale`, the floor far down. This
    puts the global ranking inside the score that builds the pool; the fusion rank prior below can
-   only re-order what the pool already holds. `min_score` applies after it, so deep books with a
-   weak taste match drop out.
+   only re-order what the pool already holds. `min_score` is enforced inside this script on the
+   taste score, before the multiplier (the body's `min_score` becomes an epsilon that drops the
+   zeros the script returns), so the prior re-orders the pool and never empties it. Until
+   2026-10-10 the threshold came after the multiplier, and a reader whose criteria left only deep
+   books (published after 2000, say) had no taste list at all.
 8. `size: candidate_size` (300), `min_score` (1.0), `_source: false`.
 
 ## Fusion, re-ranking, explanations
@@ -200,9 +207,12 @@ applies to reviews of books on none of those lists. The definition lives
 in two places that tests hold equal: the export's SQL (`Recommendations::Books::PositivePairs`) and
 the serving side's Ruby (`Interaction#trainable?(min_rating:)`).
 
+Ratings are decimals (quarter stars), and every threshold compares the exact rating, so a 3.75 does not meet a
+threshold of 4 (`because_of_rating`) and does not count as a "loved" book. The same holds for `collaborative_min_rating`.
+
 **Three legs and a store.** Each leg reads and writes files through `Recommendations::Store`
 (`Local`, a directory, for development; `R2`, a private bucket, in production). The Python side
-has the same two stores (`RECOMMENDER_R2_*`). The two Rails jobs build the store from the three
+has the same two stores, read from the same variable names (`RECOMMENDATIONS_R2_*` in `secrets/home-server.env`; there the endpoint is required, since the VM has no `STORAGE_ENDPOINT`). The two Rails jobs build the store from the three
 `RECOMMENDATIONS_R2_*` variables (access key, secret key, bucket; the endpoint defaults to `STORAGE_ENDPOINT`): with none set they log "recommendations store not configured;
 skipping" and return, so a deploy before the bucket exists is quiet; with only some set they raise
 `Store::NotConfigured`. The rake tasks without `DIR` use `Store.default`, which raises in both cases.
@@ -263,15 +273,17 @@ without `VERSION`. In development the train takes about 20 s and 3.2 GiB; the lo
 active model (and deletes the previous one), so leave a full model loaded when you are done.
 
 **Production** runs the same three legs with `Store::R2`: the two Rails jobs on the Sidekiq cron,
-and the trainer as a `recommender` compose service under a systemd timer (04:00 Chicago) on the home
-server's `ol` VM, pinging a healthchecks.io check. Nothing on the home server listens, and nothing
-in Rails calls it; if it is off, the model goes stale, never down. That deployment is spec 2 §4.4
-and its increment 2, not yet built; until it is and the store is configured, the jobs log a skip
+and the trainer as the `recommender` compose service under `recommender-train.timer` (04:00 UTC, and
+20 minutes after boot) on the home server's `ol` VM, pinging the healthchecks.io check
+`recommender-train` (`docs/features/home-server.md`). Nothing on the home server listens, and nothing
+in Rails calls it; if it is off, the model goes stale, never down. Until the bucket's values are in
+both secrets files, the Rails jobs log a skip, the timer logs `RECOMMENDATIONS_R2_* not set` and exits,
 and the signal stays unavailable. The launch steps are `docs/launch-todo.md`, section 3.
 
 **Time zones.** The Sidekiq crons run in the Rails server's zone, which is UTC (the app sets no
-`config.time_zone`), so "02:30" is 02:30 UTC. The home server's 04:00 Chicago train therefore runs
-6.5-7.5 h after the export, depending on daylight saving. The export's file name and the age check
+`config.time_zone`), so "02:30" is 02:30 UTC. The `ol` VM's clock is UTC too, so the 04:00 train runs
+1.5 h after the export, an hour after the 03:00 dump refresh (a refresh that starts a build holds
+the lock, and the train defers to the next day). The export's file name and the age check
 use UTC dates.
 
 ## Preferences store
@@ -317,9 +329,12 @@ one `Recommendations::ReasonComponent` line beneath; `@state` is `:ok`, `:no_mat
 succeeded, nothing matched) or `:unavailable` (a signal raised: `data[:degraded]`).
 
 **Depth** is the one setting the spec did not list: stored as `criteria["depth"]` (`safe` or
-`deep`; balanced stores nothing) and mapped by `RecommendationCriteria#engine_overrides` to
-`quality_floor` through the `depth_floors` knob. Measured in
-`docs/data-quality/recommendations-2026-10-08.md`.
+`deep`; balanced stores nothing) and mapped by `RecommendationCriteria#engine_overrides` to engine
+overrides through the `depth_overrides` knob: Safer bets turns the quality prior on
+(`quality_scale: 1000, quality_floor: 0.3`), Deep cuts drops the fusion rank prior
+(`rank_prior_weight: 0`), Balanced follows the initializer (both priors as shipped: quality off,
+rank 0.3). Until 2026-10-10 depth moved only `quality_floor` under a prior that was always on, and
+the three pages were the same books (`docs/data-quality/recommendations-canon-2026-10-10.md`).
 
 ## Harness
 
@@ -396,8 +411,9 @@ All in `config/initializers/recommendations.rb`, each overridable per call.
 | `genre_multiplier`, `subject_multiplier`, `location_multiplier` | 1.0, 0.8, 0.4 |
 | `fiction_share_high`, `fiction_share_low` | 0.9, 0.1 |
 | `normalization_floor`, `min_score` | 10, 1.0 |
-| `quality_scale`, `quality_floor` | 1000, 0.3 (0 turns the prior off) |
-| `rrf_k`, `taste_weight`, `collaborative_half_point`, `rank_prior_weight` | 60, 1.0, 10, 0.3 |
+| `quality_scale`, `quality_floor` | 0 (prior off), 0.3; Safer bets sets 1000, 0.3 |
+| `depth_overrides` | `safe` → `{quality_scale: 1000, quality_floor: 0.3}`, `deep` → `{rank_prior_weight: 0}` |
+| `rrf_k`, `taste_weight`, `collaborative_weight`, `collaborative_half_point`, `rank_prior_weight` | 60, 1.0, 0.25, 10, 0.3 |
 | `collaborative` | true (false: the signal reports itself unavailable; the harness's taste-only variant) |
 | `collaborative_min_rating` | 3 (a rating at or above this is a positive, for training and for the shelf scored per request) |
 | `collaborative_overfetch` | 2 (neighbour rows read = this × `candidate_size`, so the ranked-pool filter can drop some and still fill) |
@@ -412,34 +428,46 @@ The trainer's flags (`recommender.cli train` / `run`), with their defaults: `--l
 
 Measured values are in `docs/data-quality/recommendations-2026-10-07.md` (the first pass, which
 found the pages too deep), `docs/data-quality/recommendations-2026-10-08.md` (the quality prior,
-the revised bar, and why `quality_scale=1000` is the default) and
+the revised bar, and why `quality_scale=1000` was the default until 2026-10-10),
 `docs/data-quality/recommendations-collaborative-2026-10-10.md` (the λ sweep and the collaborative
-signal against spec 2's bar). Regenerate before acting on them;
-the numbers describe the dev database on those days.
+signal against spec 2's bar, measured at fusion weight 1.0) and
+`docs/data-quality/recommendations-canon-2026-10-10.md` (the first live page, why the prior now
+ships off and the model at 0.25, and what that costs on the harness). Regenerate before acting on
+them; the numbers describe the dev database on those days, and the first three describe defaults
+that no longer ship.
 
 ## Known gaps
 
-- **Depth does not reach the collaborative list.** For a reader with a large shelf the collaborative
-  list carries fusion weight of about 0.9 against taste's 1.0, so roughly half the page ignores the
-  depth setting. The spec's section 8.3 experiment, "apply the quality prior to the collaborative
-  list", is the planned fix; measure it with `VARIANTS="quality_floor=0.1; quality_floor=0.5"`, with
-  and without `collaborative=false`.
-- **The revised bar (spec §9.2, amended 2026-10-08) is met on hit@10 and page depth, and NOT met
-  on recall@50 or KL.** With the quality prior the engine beats the frequency profile on hit@10 by
-  about 1.6x on the 20-99 segment on both samples and returns pages at mean rank 750-800 instead
-  of 5,500; on recall@50 it trails that profile by 0.02-0.06 (a tie on the fresh sample, a loss on
-  the other), and its KL sits 0.02-0.07 above the previous defaults. Shipping it as the default is
-  a judgement, argued in the data-quality record. `lift_cap` and `lift_population` exist, measured,
+- **The offline harness rewards the canon, and the first live page proved it.** With the quality
+  prior on and the collaborative list at full weight, the owner's production page (312 positives,
+  top 15,000, no year filter) was the all-time top 100 minus his shelf, identical under all three
+  depths, with Tolstoy and Dostoevsky as the model's answer to The Brothers Karamazov. The harness
+  had called both a win because held-out favourites are mostly famous books. Fixed 2026-10-10 by
+  shipping the prior off (Safer bets turns it on), the collaborative weight at 0.25, and the
+  threshold before the prior; `docs/data-quality/recommendations-canon-2026-10-10.md` has the pages
+  before and after and the harness cost. The page the owner looks at is the acceptance test; a
+  harness metric that scores recovered favourites by rank percentile (so a rank-3,000 favourite
+  counts for more than a rank-30 one) is still not built.
+- **Depth does not reach the collaborative list.** The collaborative list ignores the quality prior,
+  so under Safer bets its picks are not pulled toward the canon the way the taste list's are. At
+  weight 0.25 that is two picks in twenty; the spec's section 8.3 experiment, "apply the quality
+  prior to the collaborative list", remains the fix if it matters.
+- **The revised bar (spec §9.2, amended 2026-10-08) is no longer the shipped target.** It was met
+  on hit@10 and page depth with the quality prior on (hit@10 about 1.6x the frequency profile on
+  the 20-99 segment, pages at mean rank 750-800), and that is now the Safer bets page, not the
+  default. The shipped defaults sit below the frequency profile on hit@10 in the two larger
+  segments and return pages at mean rank 5,500-6,000, on purpose: the 2026-10-10 record overrides
+  the bar, because the bar rewards famous books. `lift_cap` and `lift_population` exist, measured,
   and off.
-- **The collaborative signal meets spec 2's bar on every condition, on two samples**: on 100+
-  hit@10 goes from 0.32-0.33 to 0.74 and recall@50 from 0.105 to 0.38-0.41 against the taste-only
-  engine, with lower KL and shallower pages
-  (`docs/data-quality/recommendations-collaborative-2026-10-10.md`). With it, the engine also beats
-  the frequency profile on recall@50 on 20-99 and 100+, the gap the bullet above records for the
-  taste-only engine. It costs about 140-215 ms more per page on the 20-99
-  and 100+ segments, mostly downstream of the signal's own two reads (not yet profiled), and the
-  neighbour read for the two largest shelves (5,794 and 18,534 trainable books) takes 0.4-1.1 s.
-  Production has no model until spec 2's increment 2 (the home-server timer) ships.
+- **The collaborative signal met spec 2's bar on every condition, on two samples, at fusion
+  weight 1.0**: on 100+ hit@10 went from 0.32-0.33 to 0.74 and recall@50 from 0.105 to 0.38-0.41
+  against the taste-only engine, with lower KL and shallower pages
+  (`docs/data-quality/recommendations-collaborative-2026-10-10.md`). At the shipped 0.25 it adds
+  about two picks in twenty and a fraction of that lift; the canon record explains why the weight
+  came down. It costs about 140-215 ms more per page on the 20-99 and 100+ segments, mostly
+  downstream of the signal's own two reads (not yet profiled), and the neighbour read for the two
+  largest shelves (5,794 and 18,534 trainable books) takes 0.4-1.1 s. Production has trained and
+  loaded a model daily since 2026-10-10.
 - The wizard's "add" is the list widget's modal (pick a list), not a one-click add; the spec's
   "one click" is two.
 - Results run the engine on every request (~15 queries + the OpenSearch call + ~110 ms

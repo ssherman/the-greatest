@@ -91,7 +91,7 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
 
   def revert_provisional
     result = ::Services::Books::GoodreadsReplay::Apply::MarkProvisional.revert(verdict: @verdict)
-    Array(result.data[:ranking_configuration_ids]).each { |id| ::CalculateRankingsJob.perform_async(id) }
+    ::Services::RankingConfigurations::RequestRefresh.call_for_ids(result.data[:ranking_configuration_ids], delay: 5.minutes)
     @verdict.update!(applied_at: nil)
   end
 

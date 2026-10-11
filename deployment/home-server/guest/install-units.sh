@@ -11,7 +11,7 @@ SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 
 units=(the-greatest-deploy the-greatest-heartbeat reboot-if-required)
 case "$ROLE" in
-  ol) units+=(ol-refresh) ;;
+  ol) units+=(ol-refresh recommender-train) ;;
   fetcher) ;;
   *) echo "install-units: unknown ROLE '$ROLE'" >&2; exit 1 ;;
 esac

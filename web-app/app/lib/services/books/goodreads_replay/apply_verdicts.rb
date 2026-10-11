@@ -56,18 +56,20 @@ module Services
 
         private
 
-        # The merges defer their per-merge jobs, so a run of thousands of merges
-        # queues each recalculation once. A configuration a merge touched is
-        # reweighed first, then recalculated, as Books::Book::Merger does; one
-        # only a provisional flag touched is just recalculated.
+        # The merges defer their per-merge requests, so a run of thousands of
+        # merges asks for each configuration once. Every refresh reweighs before
+        # it ranks, so a configuration a merge touched and one only a provisional
+        # flag touched get the same request. Sorted so the request is
+        # deterministic.
         def queue_follow_ups
-          @reweigh.each do |id|
-            ::BulkCalculateWeightsJob.perform_async(id)
-            ::CalculateRankingsJob.perform_in(5.minutes, id)
-          end
-          (@rankings - @reweigh).each { |id| ::CalculateRankingsJob.perform_async(id) }
+          ::Services::RankingConfigurations::RequestRefresh.call_for_ids((@rankings | @reweigh).sort, delay: 5.minutes)
           ::GenerateUserFavoritesListsJob.perform_async("Books::UserList") if @follow_ups.include?(:user_favorites)
-          ::Books::CalculateAuthorRankingsJob.perform_async if @follow_ups.include?(:author_rankings)
+          request_author_rankings if @follow_ups.include?(:author_rankings)
+        end
+
+        def request_author_rankings
+          authors = ::Books::Authors::RankingConfiguration.default_primary
+          ::Services::RankingConfigurations::RequestRefresh.call(config: authors, delay: 5.minutes) if authors
         end
 
         def apply(verdict, handler)

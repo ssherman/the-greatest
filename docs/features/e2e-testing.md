@@ -1,26 +1,38 @@
 # E2E Testing Suite (Playwright)
 
 ## Overview
-End-to-end testing suite for The Greatest using Playwright with TypeScript. Tests run against local dev instances with real Firebase email/password authentication. The initial scope covers the **Music domain** — public pages, auth flows, and admin pages. Implemented February 2026.
+End-to-end testing suite for The Greatest using Playwright with TypeScript. Tests run against local dev instances with real Firebase email/password authentication. The suite covers music, games and books (512 tests as of 2026-10-11); music was the first domain, February 2026.
 
 ## Technology Stack
 - **Test runner**: `@playwright/test` (Node.js, TypeScript)
 - **Browser**: Chromium (default), Firefox and WebKit configurable
-- **Auth**: Real Firebase email/password login via dedicated test account
+- **Auth**: Real Firebase email/password login via three dedicated test accounts (admin, normal user, member)
 - **Target**: Local dev instances (not a test-mode Rails server)
 - **Package manager**: Yarn
 
 ## Architecture
 
 ### How It Works
-Tests run against the live local development server at `https://dev.thegreatestmusic.org`. There is no test-mode Rails server — the developer starts their normal dev server and runs tests against it.
+Tests run against the live local development server through its three dev hosts (`dev.thegreatestmusic.org`, `dev.thegreatest.games`, `dev-new.thegreatestbooks.org`). There is no test-mode Rails server — the developer starts their normal dev server and runs tests against it.
 
-Authentication uses a real Firebase email/password account. The auth setup project logs in once via the browser, saves the session cookies to disk, and all subsequent tests reuse that saved session. Admin tests access pages via the Rails session cookie; public tests don't need auth at all.
+Authentication uses three real Firebase email/password accounts: an **admin** (global admin on every
+domain), a **normal user** (signed in, never admin, never a member) and a **member** (a plain user with
+a comped membership). Five setup projects sign them in through the real login modal and save storage
+state; a `seed` project then runs `bin/rails e2e:prepare`, which rebuilds everything database-side
+from those rows (roles, membership, seeded reviews and lists, Stripe sandbox plans, the rate limiter)
+and writes `e2e/.auth/seed.json`. Every test project depends on `seed`, so a production-dump refresh
+needs **no manual E2E steps**: the next run recreates the accounts' rows and state itself.
+
+`prepare` also empties every Books list the normal user owns, seeds the normal user's 30 reviews (every
+third a quarter under its star), removes all three accounts' own reviews from the scratch book
+`headlong-hall` (its preflight fails, naming the reviewer, if anyone else has a review there), and
+clears the corrections spec's marker subtitle from `headlong-hall` (only when the subtitle equals the
+marker).
 
 ### Key Design Decisions
 - **Single worker, sequential execution** — tests run against a shared live database; parallelism would cause data conflicts
-- **StorageState reuse** — login once in `auth.setup.ts`, all subsequent tests reuse the session via saved cookies
-- **Read-only tests** — no CRUD mutations; tests only browse and verify page content
+- **StorageState reuse** — five sign-in setup projects (plus the `seed` project) run once; every test project reuses its saved session
+- **Tests clean up after themselves** — specs create and remove their own rows on the three e2e accounts; `e2e:prepare` resets the rest on every run
 - **Page Object Model** — reusable page classes encapsulate locators and actions
 - **No CI integration** — local-only for now; CI is a future improvement
 
@@ -36,9 +48,17 @@ web-app/
   e2e/
     playwright.config.ts          # Playwright configuration
     tsconfig.json                 # TypeScript config for e2e tests
-    .env                          # PLAYWRIGHT_ADMIN_EMAIL, PLAYWRIGHT_ADMIN_PASSWORD, PLAYWRIGHT_MEMBER_EMAIL, PLAYWRIGHT_MEMBER_PASSWORD (gitignored)
+    .env                          # PLAYWRIGHT_{ADMIN,USER,MEMBER}_{EMAIL,PASSWORD} (gitignored)
     auth/
-      auth.setup.ts               # Global auth setup: login + save storage state
+      auth.setup.ts               # Admin sign-in (music): save storage state
+      games-auth.setup.ts
+      books-auth.setup.ts
+      books-user-auth.setup.ts
+      books-member-auth.setup.ts
+      seed.setup.ts               # Runs bin/rails e2e:prepare, writes .auth/seed.json
+    support/
+      sign-in.ts                  # Shared login-modal sign-in helper
+      seed.ts                     # Reads ids from .auth/seed.json
     fixtures/
       auth.ts                     # Custom test fixture extending base with page objects
     pages/                        # Page Object Models
@@ -67,91 +87,62 @@ web-app/
           songs-crud.spec.ts
           sidebar-nav.spec.ts
     .auth/                        # Generated auth state (gitignored)
-      user.json
+      user.json                   # admin, music
+      games-user.json             # admin, games
+      books-user.json             # admin, books
+      books-normal-user.json      # normal user, books
+      books-member.json           # member, books
+      seed.json
 ```
 
-## Test Coverage (50 tests)
-
-### Auth (4 tests)
-- Full Firebase email/password login flow
-- Auth modal UI (steps, buttons, Google sign-in option)
-- Modal close behavior
-- Logout flow (login then logout)
-
-### Public Music Pages (15 tests)
-- Homepage: hero section, branding, featured albums grid, featured songs table
-- Navigation: navbar dropdowns (Albums, Songs), Artists link, Lists link, hero CTAs
-- Album browsing: all-time rankings, decade pages
-- Song browsing: all-time rankings, decade pages
-
-### Admin Pages (31 tests)
-- Dashboard: welcome heading, 4 stat cards with numeric counts, quick link cards, recent artists
-- Artists: index page, table, search, New Artist button, show page navigation
-- Albums: index page, table, search, New Album button, show page navigation
-- Songs: index page, table, search, New Song button, show page navigation
-- Sidebar navigation: all 11 sidebar links navigate to correct URLs
+## Test Coverage
+512 tests across music, games and books as of 2026-10-11; `yarn test:e2e --list` is the current inventory.
 
 ## Prerequisites
 
 ### 1. Local Dev Server
-The Rails dev server must be running and accessible at `https://dev.thegreatestmusic.org`.
+The Rails dev server must be running and reachable at all three dev hosts (`dev.thegreatestmusic.org`, `dev.thegreatest.games`, `dev-new.thegreatestbooks.org`).
 
-### 2. Firebase Test Account
-Create a dedicated test account:
-1. In Firebase Console, create an email/password user
-2. Sign in once through the browser as that account — Rails creates the `User` record on first sign-in, with the default `user` role
-3. Give that user the **global admin role** (`role: :admin`):
-   ```bash
-   bin/rails e2e:admin
-   ```
-   The task reads `PLAYWRIGHT_ADMIN_EMAIL` from `e2e/.env` and promotes that user.
+### 2. The three Firebase accounts (one-time)
 
-   `e2e/tests/books/admin/import-finder-audit.spec.ts` seeds its own rows by shelling out to
-   `bin/rails e2e:import_finder_seed` and removes them with `e2e:import_finder_cleanup`; both are
-   idempotent and safe to re-run after an interrupted run.
+Create three email/password users in the Firebase console (Authentication → Users → Add user). The
+suite never signs up: a signup creates a real account in the shared production Firebase project.
 
-   `e2e/tests/books/admin/reject-link.spec.ts` seeds a placeholder author through
-   `bin/rails e2e:reject_link_seed`, reads its link state back with `e2e:reject_link_state`, and
-   removes it with `e2e:reject_link_cleanup`. The author is a placeholder
-   (`exclude_from_rankings: true`), so the Wikidata run the reject queues makes no external or
-   model call.
-4. Verify you can manually log in at `https://dev.thegreatestmusic.org` with these credentials
+| Account | Role on every run | Membership | Drives |
+|---------|-------------------|------------|--------|
+| admin   | global `admin`    | none, enforced | music, games, `books-admin` |
+| user    | `user`            | none, enforced | `books-account` |
+| member  | `user`            | comped, active | `books-member` |
 
-A music-only `DomainRole` is **not** enough. The same account drives both the music and games
-suites, and the sidebar specs click **Penalties** and **Users**, which are guarded by
-`require_admin_role!` — a global-admin-only check. Anything less and the admin specs fail in a
-confusing way (see Troubleshooting).
+Nothing else to do by hand. The first run's sign-ins create the `User` rows and `e2e:prepare` sets
+every cell of that table, cancelling any membership the admin or user holds and comping the member.
+`prepare` refuses an email that resolves to an account with a Stripe membership (a real customer),
+refuses duplicate emails, and lists any famous slug the specs assume that the catalog no longer has.
 
-**Re-run `bin/rails e2e:admin` after any dev-database reseed.** The books data migrations rebuild
-the `users` table; the test account survives in Firebase but comes back as a plain `user`, and every
-admin spec then fails.
+### 3. Environment file
 
-### The member account
+`web-app/e2e/.env` (gitignored; copy `e2e/.env.example`):
 
-`PLAYWRIGHT_ADMIN_EMAIL` is deliberately **not** a member: `tests/books/account/membership.spec.ts`
-proves the paywall turns a signed-in non-member away, and comping that account would make those
-tests vacuous. Members-only flows (the first is the API token page, `tests/books/member/`) use a
-second account:
-
-1. Create another email/password user in the Firebase project.
-2. Put it in `e2e/.env` as `PLAYWRIGHT_MEMBER_EMAIL` and `PLAYWRIGHT_MEMBER_PASSWORD`.
-3. Sign in once through the browser on `dev-new.thegreatestbooks.org` so the Rails `User` row exists.
-4. `bin/rails e2e:member` grants it a comped membership. Idempotent; re-run after a dev-database refresh,
-   like `e2e:admin`.
-
-The `books-member` Playwright project signs this account in (`auth/books-member-auth.setup.ts`) and
-matches `tests/books/member/**`. Specs there create real rows on the shared dev database and must
-clean up after themselves; `developers-tokens.spec.ts` revokes its own tokens before and after.
-
-### 3. Environment File
-Create `web-app/e2e/.env` (gitignored):
 ```env
-PLAYWRIGHT_ADMIN_EMAIL=your-test-account@example.com
-PLAYWRIGHT_ADMIN_PASSWORD="your-password-here"
-PLAYWRIGHT_MEMBER_EMAIL=your-member-test-account@example.com
-PLAYWRIGHT_MEMBER_PASSWORD="your-password-here"
+PLAYWRIGHT_ADMIN_EMAIL=...
+PLAYWRIGHT_ADMIN_PASSWORD="..."
+PLAYWRIGHT_USER_EMAIL=...
+PLAYWRIGHT_USER_PASSWORD="..."
+PLAYWRIGHT_MEMBER_EMAIL=...
+PLAYWRIGHT_MEMBER_PASSWORD="..."
 ```
-**Important**: Quote the password value if it contains `#` or other special characters — dotenv treats unquoted `#` as an inline comment delimiter.
+
+Quote a password containing `#`. There are no ids in this file any more: specs read seeded ids from
+`e2e/.auth/seed.json` through `e2e/support/seed.ts`, inside a test or `beforeAll`.
+
+### Per-spec seeds
+
+Some admin specs seed their own rows through rake tasks and clean up after themselves
+(`e2e:import_finder_seed`/`_cleanup`, `e2e:reject_link_seed`/`_state`/`_cleanup`,
+`e2e:provisional_seed`/`_cleanup`, `e2e:goodreads_import_seed`/`_cleanup`,
+`e2e:repair_verdicts_seed`/`_cleanup`, `e2e:list_wizard_cleanup`). All are idempotent. The contact
+spec runs `e2e:rate_limit_reset` first, because the contact form allows five anonymous sends per IP
+per hour.
 
 ### 4. Install Dependencies
 ```bash
@@ -186,6 +177,9 @@ npx playwright test --config=e2e/playwright.config.ts -g "Admin Dashboard"
 # Generate test code interactively
 yarn test:e2e:codegen
 ```
+
+`yarn test:e2e` installs Chromium for the pinned Playwright version first (a no-op when present), so a
+Playwright upgrade cannot kill the suite before its first page.
 
 ## Page Object Model Pattern
 
@@ -241,48 +235,25 @@ Available fixtures: `homePage`, `loginPage`, `dashboardPage`, `artistsPage`, `al
 - Check that the Firebase account exists and credentials match `e2e/.env`
 - If the password contains `#`, ensure it's quoted: `PLAYWRIGHT_ADMIN_PASSWORD="pass#word"`
 
-### Auth setup passes but admin tests time out on the public homepage
-This is the most common failure, and it does not look like an auth problem. Every admin spec fails
-with `locator.click: Test timeout` waiting for a sidebar link, and the failure screenshot shows the
-**public homepage with a Login button**.
-
-The login actually succeeded. `authenticate_admin!` denied the user and redirected to
-`domain_root_path` — which *is* the public homepage. The account is authenticated but not authorized.
-
-Fix:
-```bash
-bin/rails e2e:admin
-```
-
-This happens whenever the dev database is reseeded: the Firebase account still exists, so sign-in
-works and Rails auto-creates a fresh `User` with the default `user` role — no admin, no domain roles.
-
-Confirm with:
-```bash
-bin/rails runner 'u = User.find_by(email: "<PLAYWRIGHT_ADMIN_EMAIL>"); puts({role: u&.role, domain_roles: u&.domain_roles&.map(&:domain)}.inspect)'
-```
-You want `role: "admin"`. A music-only `DomainRole` is not enough — see Firebase Test Account above.
-
-Also check that the Rails session cookie domain matches `dev.thegreatestmusic.org`.
+### The seed project fails
+Read its output: `e2e:prepare` prints one line per step and aborts with the refusing step's message
+(no User for an email → that sign-in failed; a Stripe membership → wrong email in `.env`; catalog
+preflight → a slug the specs assume has changed). Fix the cause; there is no manual rake step to run.
 
 ### Stale auth state
-- Delete `e2e/.auth/user.json` and re-run — the setup will re-authenticate
+- The setups sign in on every run anyway; deleting `e2e/.auth/*.json` (all of them) only forces a clean slate before the next run
 
 ### Connection refused
-- Ensure the Rails dev server is running at `https://dev.thegreatestmusic.org`
+- Ensure the Rails dev server is running and all three dev hosts (`dev.thegreatestmusic.org`, `dev.thegreatest.games`, `dev-new.thegreatestbooks.org`) resolve to it
 - `ignoreHTTPSErrors: true` is set in config for self-signed certificates
 
 ### Tests pass locally but navbar shows "Login" on auth tests
 - This is expected. StorageState doesn't capture Firebase IndexedDB. The Rails session cookie handles admin page access. Auth-specific tests (login/logout) perform fresh Firebase logins.
 
 ## Future Improvements
-- CI/CD integration (GitHub Actions with Playwright browser caching)
-- Expand to Movies, Games, Books domains
-- Mobile viewport testing (responsive)
-- Visual regression testing with `toHaveScreenshot()`
-- CRUD mutation tests with database cleanup strategy
+- CI: a staging stack (Rails, Sidekiq, Redis, OpenSearch, Caddy, restored database) with a self-hosted
+  runner. Out of scope on 2026-10-10; this suite needs no changes to run there.
 - Cross-browser projects (Firefox, WebKit)
-- Test data seeding via Rails API endpoint or rake task
 
 ## Related Files
 - `web-app/package.json` — devDependencies and test scripts

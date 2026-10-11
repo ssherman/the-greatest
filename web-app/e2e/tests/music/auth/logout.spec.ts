@@ -1,33 +1,27 @@
 import { test, expect } from '@playwright/test';
+import { credentials, signIn } from '../../../support/sign-in';
 
-// Logout test needs fresh login since storageState doesn't capture Firebase IndexedDB
+// Fresh login per test: storageState does not capture Firebase's IndexedDB.
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test.describe('Logout Flow', () => {
   test('can log out via navbar button', async ({ page }) => {
+    await signIn(page, credentials('ADMIN'));
+
+    // Sign-in reloads the page once Rails has a session. Navigating again here
+    // collapses that race into a known fresh page (page.reload() is aborted by
+    // the page's own reload), on which the button is
+    // wired only when data-auth-state appears. Clicking on the "Logout" label
+    // alone used to open the login modal: the hint paints the label before
+    // Firebase rewires the inline onclick.
     await page.goto('/');
+    const button = page.locator('#navbar_login_button');
+    await expect(button).toHaveAttribute('data-auth-state', 'signed-in', { timeout: 15_000 });
+    await expect(button).toHaveText('Logout');
 
-    // First, log in
-    const loginButton = page.locator('#navbar_login_button');
-    await loginButton.click();
+    await button.click();
 
-    const modal = page.locator('#login_modal');
-    await modal.getByPlaceholder('Email address').first().fill(process.env.PLAYWRIGHT_ADMIN_EMAIL!);
-    await modal.getByRole('button', { name: 'Continue' }).click();
-
-    const passwordInput = modal.getByPlaceholder('Password');
-    await expect(passwordInput).toBeVisible();
-    await passwordInput.fill(process.env.PLAYWRIGHT_ADMIN_PASSWORD!);
-    await modal.getByRole('button', { name: 'Sign In' }).click();
-
-    // Wait for login to complete
-    await page.waitForLoadState('networkidle');
-    await expect(loginButton).toHaveText('Logout', { timeout: 15000 });
-
-    // Now test logout
-    await loginButton.click();
-
-    // Wait for Firebase auth state propagation and button update
-    await expect(loginButton).toHaveText('Login', { timeout: 10000 });
+    await expect(button).toHaveAttribute('data-auth-state', 'signed-out', { timeout: 10_000 });
+    await expect(button).toHaveText('Login');
   });
 });

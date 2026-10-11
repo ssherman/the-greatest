@@ -11,6 +11,7 @@
 #  gender                :integer
 #  kind                  :integer          default("person"), not null
 #  name                  :string           not null
+#  name_keys             :string           default([]), not null, is an Array
 #  provisional           :boolean          default(FALSE), not null
 #  slug                  :string           not null
 #  sort_name             :string
@@ -23,6 +24,7 @@
 #  index_books_authors_on_gender           (gender)
 #  index_books_authors_on_kind             (kind)
 #  index_books_authors_on_lower_name       (lower((name)::text))
+#  index_books_authors_on_name_keys        (name_keys) USING gin
 #  index_books_authors_on_provisional      (provisional) WHERE provisional
 #  index_books_authors_on_slug             (slug) UNIQUE
 #
@@ -72,6 +74,7 @@ class Books::Author < ApplicationRecord
 
   before_validation :normalize_name
   before_validation :normalize_alternate_names
+  before_validation :set_name_keys
   after_destroy { Services::BooksMigration::RedirectRecorder.deleted(item_type: "Books::Author", from_id: id) }
 
   def as_indexed_json
@@ -95,6 +98,13 @@ class Books::Author < ApplicationRecord
     self.alternate_names = Array(alternate_names)
       .map { |value| Services::Text::NameNormalizer.call(Services::Text::QuoteNormalizer.call(value)) }
       .compact_blank.uniq
+  end
+
+  # The finders' exact match compares these, GIN-indexed (see
+  # Services::Text::PersonNameKey). Every write to name or alternate_names
+  # saves through the model, so the keys cannot go stale.
+  def set_name_keys
+    self.name_keys = Services::Text::PersonNameKey.all([name, *Array(alternate_names)])
   end
 
   def queue_books_for_reindexing

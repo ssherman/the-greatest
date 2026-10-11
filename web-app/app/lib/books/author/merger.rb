@@ -452,13 +452,14 @@ module Books
         end
       end
 
-      # Author rankings derive from book rankings rather than from lists, so unlike
-      # the games and books mergers there are no per-configuration jobs to schedule.
-      # This one job resolves Books::Authors::RankingConfiguration.default_primary
-      # itself. perform_async writes to Redis, which a rollback cannot undo -- hence
-      # post-commit, never inside the transaction.
+      # Author rankings derive from book rankings rather than from lists, so
+      # there are no per-configuration ids to collect: the one configuration to
+      # refresh is the authors primary. RequestRefresh claims it, so a burst of
+      # author merges queues one run. Post-commit: perform_in writes to Redis,
+      # which a rollback cannot undo.
       def schedule_ranking_recalculation
-        ::Books::CalculateAuthorRankingsJob.perform_async
+        authors = ::Books::Authors::RankingConfiguration.default_primary
+        ::Services::RankingConfigurations::RequestRefresh.call(config: authors, delay: 5.minutes) if authors
       end
 
       # The (source, target) pair on duplicate_candidates becomes merged, other

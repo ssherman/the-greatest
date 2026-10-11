@@ -48,10 +48,14 @@ module Books
       assert_equal "balanced", RecommendationCriteria.new("depth" => "sideways").depth
     end
 
-    test "engine_overrides maps depth to the quality floor and balanced to nothing" do
+    test "engine_overrides maps depth to engine knobs and balanced to nothing" do
       assert_equal({}, RecommendationCriteria.new({}).engine_overrides)
-      assert_equal({quality_floor: 0.1}, RecommendationCriteria.new("depth" => "safe").engine_overrides)
-      assert_equal({quality_floor: 0.5}, RecommendationCriteria.new("depth" => "deep").engine_overrides)
+      assert_equal({quality_scale: 1000, quality_floor: 0.3}, RecommendationCriteria.new("depth" => "safe").engine_overrides,
+        "safer bets turns the quality prior on")
+      assert_equal({rank_prior_weight: 0}, RecommendationCriteria.new("depth" => "deep").engine_overrides,
+        "deep cuts drops the fusion rank prior")
+      assert_not_equal RecommendationCriteria.new("depth" => "safe").engine_overrides,
+        RecommendationCriteria.new("depth" => "deep").engine_overrides, "the three depths build three different pages"
     end
 
     test "depth never reaches the search criteria" do

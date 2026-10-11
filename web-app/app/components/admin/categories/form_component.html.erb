@@ -57,15 +57,23 @@
 
         <!-- Parent Category -->
         <div>
-          <%= f.label :parent_id, class: "label" do %>
+          <%# The label targets the visible search box, not the hidden parent_id
+              field AutocompleteComponent names after `id`; the box's id is that
+              plus "_autocomplete". Without `for:` the label would point at the
+              hidden input and the box would have no accessible name. %>
+          <%= f.label :parent_id, class: "label", for: "#{f.object_name}_parent_id_autocomplete" do %>
             <span class="font-semibold">Parent Category</span>
           <% end %>
-          <%= f.select :parent_id,
-              parent_categories.map { |c| [c.name, c.id] },
-              { include_blank: "None (top-level category)" },
-              class: "select w-full" %>
+          <%= render AutocompleteComponent.new(
+                name: "#{f.object_name}[parent_id]",
+                id: "#{f.object_name}_parent_id",
+                url: parent_search_url,
+                value: category.parent_id,
+                selected_text: parent_selected_text,
+                placeholder: "Search for a parent category..."
+              ) %>
           <label class="label">
-            <span>Optional: Select a parent to create a subcategory</span>
+            <span>Optional: pick a parent to make this a subcategory. Leave empty for a top-level category.</span>
           </label>
         </div>
 

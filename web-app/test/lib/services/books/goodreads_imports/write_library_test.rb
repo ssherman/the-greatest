@@ -284,6 +284,25 @@ module Services
           assert reviewed.reload.applied?
           assert_equal [], Array(reviewed.applied["list_item_ids"])
         end
+
+        test "a quarter-star rating becomes a review, not an unrated row" do
+          row(@book, rating: BigDecimal("0.25"))
+          row(@other, rating: BigDecimal("3.75"), review_body: "Nearly.")
+
+          WriteLibrary.call(import: @import)
+
+          assert_equal BigDecimal("0.25"), ::Review.find_by!(user: @user, reviewable: @book).rating
+          assert_equal BigDecimal("3.75"), ::Review.find_by!(user: @user, reviewable: @other).rating
+        end
+
+        test "a rated row beats a text-only row even when the rating is under one" do
+          row(@book, number: 1, rating: 0, review_body: "Text only.", date_read: Date.new(2025, 1, 1))
+          row(@book, number: 2, rating: BigDecimal("0.5"), review_body: "Half a star.", date_read: Date.new(2020, 1, 1))
+
+          WriteLibrary.call(import: @import)
+
+          assert_equal [BigDecimal("0.5"), "Half a star."], ::Review.find_by!(user: @user, reviewable: @book).then { |r| [r.rating, r.body] }
+        end
       end
     end
   end

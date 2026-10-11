@@ -15,6 +15,9 @@ module Books
       SHELF_POSITION = /\A(?<shelf>.+?)\s*\(#(?<position>\d+)\)\z/
       YEAR = /\A-?\d{1,4}\z/
       DATE_FORMAT = "%Y/%m/%d"
+      # Plain digits with an optional fraction. Stricter than BigDecimal(),
+      # which also accepts "NaN", "Infinity", "1e2" and "1_0".
+      RATING = /\A\d+(\.\d+)?\z/
 
       attr_reader :row_number, :raw, :notes,
         :goodreads_book_id, :title, :series_name, :series_number, :primary_author, :additional_authors,
@@ -101,7 +104,7 @@ module Books
         @exclusive_shelf = clean(field("Exclusive Shelf"))&.downcase
         @shelves = list(field("Bookshelves")).map(&:downcase).uniq
         @shelf_positions = shelf_positions_from(field("Bookshelves with positions"))
-        @rating = integer("My Rating", minimum: 0, maximum: 5)
+        @rating = decimal_rating("My Rating")
         @review_body = field("My Review").presence
         @date_read = date("Date Read")
         @date_added = date("Date Added")
@@ -160,6 +163,21 @@ module Books
 
         number = Integer(value, 10, exception: false)
         return number if number && number >= minimum && (maximum.nil? || number <= maximum)
+
+        @notes << "unreadable #{header} dropped: #{value}"
+        nil
+      end
+
+      # Goodreads rates in quarter stars since 2026-10-05 and writes "3.75",
+      # and "4.0" for a whole star. 0 is its "not rated". Rounded to the
+      # column's two places; anything else is dropped with a note, like every
+      # other unreadable field.
+      def decimal_rating(header)
+        value = field(header).strip
+        return nil if value.empty?
+
+        number = BigDecimal(value) if value.match?(RATING)
+        return number.round(2) if number && number <= 5
 
         @notes << "unreadable #{header} dropped: #{value}"
         nil

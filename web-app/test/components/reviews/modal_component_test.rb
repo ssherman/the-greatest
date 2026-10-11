@@ -20,18 +20,20 @@ module Reviews
       assert_selector "#review_modal form[data-reviews--modal-target='form']"
     end
 
-    test "renders five star buttons that announce their pressed state" do
+    test "renders a quarter-step slider of five stars with a readout" do
       render_inline(Reviews::ModalComponent.new)
 
-      assert_selector "[data-testid='review-star-button']", count: 5
-      assert_selector "[data-testid='review-star-button'][aria-pressed='false']", count: 5
-      assert_selector "[data-testid='review-star-button'][data-rating='3']"
+      assert_selector "[data-controller='reviews--star-input'] [role='slider'][data-testid='review-star-input']" \
+        "[aria-valuemin='0.25'][aria-valuemax='5'][aria-valuetext='Not rated'][tabindex='0']"
+      assert_selector "[data-testid='review-star-input'] [data-reviews--star-input-target='star']", count: 5
+      assert_selector "[data-testid='review-rating-readout']", text: "Not rated"
     end
 
-    test "carries a hidden rating field for the form to submit" do
+    test "the hidden rating field lives inside the star input so it can write it" do
       render_inline(Reviews::ModalComponent.new)
 
-      assert_selector "input[type='hidden'][name='review[rating]']", visible: :all
+      assert_selector "[data-controller='reviews--star-input'] input[type='hidden'][name='review[rating]']" \
+        "[data-reviews--star-input-target='input'][data-reviews--modal-target='rating']", visible: :all
     end
 
     test "carries optional title and body fields" do

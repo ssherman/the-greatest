@@ -107,32 +107,22 @@ class DynamicListsRakeTest < ActiveSupport::TestCase
     assert_equal 2025, @config.reload.year
   end
 
-  # Mocha's two independent `.once` expectations pass regardless of call order,
-  # so a regression that hoists the terminal CalculateRankingsJob call above (or
-  # into) the per-year loop -- recalculating the primary against stale mapped
-  # lists, defeating the whole point of running each generator inline before it
-  # -- would still pass. Recording invocation order with plain `.with { ... }`
-  # blocks, as generate_dynamic_lists_test.rb does, pins the sequence instead.
+  # A regression that hoists the primary refresh above (or into) the per-year
+  # loop would recalculate the primary against stale mapped lists. A Mocha
+  # sequence pins the order; two independent `.once` expectations would not.
   #
   # Stubs GenerateDynamicListsJob's instance `perform` (not `perform_async`):
-  # the task now runs each year's generator inline and synchronously, in the
-  # same process, so nothing is ever enqueued for it.
-  test "regenerate runs each year configuration inline, then queues the single primary refresh, in that order" do
+  # the task runs each year's generator inline and synchronously, in the same
+  # process, so nothing is ever enqueued for it.
+  test "regenerate runs each year configuration inline, then requests the single primary refresh, in that order" do
     @config.update_column(:year, 2025)
-    call_order = []
+    order = sequence("generate then refresh")
 
-    GenerateDynamicListsJob.any_instance.expects(:perform).with { |id, recalculate_primary|
-      call_order << :generate
-      id == @config.id && recalculate_primary == false
-    }.once
-    CalculateRankingsJob.expects(:perform_async).with { |id|
-      call_order << :calculate
-      id == ::Books::RankingConfiguration.default_primary.id
-    }.once
+    GenerateDynamicListsJob.any_instance.expects(:perform).with(@config.id, false).once.in_sequence(order)
+    ::Services::RankingConfigurations::RequestRefresh.expects(:call)
+      .with(config: ::Books::RankingConfiguration.default_primary).once.in_sequence(order)
 
     run_task("dynamic_lists:regenerate", "Books::RankingConfiguration")
-
-    assert_equal [:generate, :calculate], call_order
   end
 
   # Defense in depth alongside the guard in Services::Lists::GenerateDynamicLists#guard_failure:
@@ -148,7 +138,7 @@ class DynamicListsRakeTest < ActiveSupport::TestCase
       generated_ids << id
       true
     }
-    CalculateRankingsJob.stubs(:perform_async)
+    ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
 
     run_task("dynamic_lists:regenerate", "Books::RankingConfiguration")
 
@@ -173,7 +163,7 @@ class DynamicListsRakeTest < ActiveSupport::TestCase
       generated_ids << id
       true
     }
-    CalculateRankingsJob.stubs(:perform_async)
+    ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
 
     run_task("dynamic_lists:regenerate", "Books::RankingConfiguration")
 

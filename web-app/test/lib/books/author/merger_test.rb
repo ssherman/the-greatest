@@ -7,12 +7,12 @@ module Books
         @source = books_authors(:bachman)
         @target = books_authors(:king)
 
-        # Sidekiq test mode is :inline, and the merger fires this job
-        # unconditionally (author rankings recalculate globally, so there are no
-        # configuration ids to gate on). Left unstubbed it runs a real ranking
-        # calculation on every test in this file. The scheduling test in Task 8
-        # re-declares this with `expects`, which Mocha checks ahead of this stub.
-        ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+        # Sidekiq test mode is :inline, and the merger requests an authors-primary
+        # refresh unconditionally (author rankings recalculate globally, so there
+        # are no configuration ids to gate on). Left unstubbed it runs a real
+        # refresh inline on every test in this file. The scheduling test re-declares
+        # this with `expects`, which Mocha checks ahead of this stub.
+        ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
       end
 
       test "merges successfully and returns the target author" do
@@ -558,7 +558,7 @@ module Books
       end
 
       test "defer_rankings leaves the author ranking recalculation to the caller" do
-        ::Books::CalculateAuthorRankingsJob.expects(:perform_async).never
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call).never
 
         merger = ::Books::Author::Merger.new(source: @source, target: @target, defer_rankings: true)
         result = merger.call
@@ -568,8 +568,9 @@ module Books
           "a violated Mocha expectation in a post-commit step is swallowed into this key"
       end
 
-      test "schedules the author ranking recalculation" do
-        ::Books::CalculateAuthorRankingsJob.expects(:perform_async).once
+      test "requests a delayed refresh of the authors primary" do
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call)
+          .with(config: ranking_configurations(:books_authors_global), delay: 5.minutes).once
 
         merger = ::Books::Author::Merger.new(source: @source, target: @target)
         result = merger.call
@@ -577,6 +578,16 @@ module Books
         assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
         assert_nil merger.stats[:post_commit_error],
           "a violated Mocha expectation in a post-commit step is swallowed into this key"
+      end
+
+      test "requests nothing when there is no authors primary" do
+        ranking_configurations(:books_authors_global).update_columns(primary: false)
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call).never
+
+        merger = ::Books::Author::Merger.new(source: @source, target: @target)
+
+        assert merger.call.success?
+        assert_nil merger.stats[:post_commit_error]
       end
 
       test "still reports success when scheduling the ranking job fails" do

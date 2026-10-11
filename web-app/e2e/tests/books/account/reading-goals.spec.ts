@@ -51,7 +51,7 @@ async function progressCount(scope: Page | Locator): Promise<number> {
 
 async function openListDialog(page: Page, book: { path: string; title: string }): Promise<Locator> {
   await page.goto(book.path);
-  await page.getByRole('button', { name: /^(Add to list|On \d+ lists)$/ }).first().click();
+  await page.getByRole('button', { name: /^(Add to list|On \d+ lists?)$/ }).first().click();
 
   const dialog = page.getByRole('dialog').filter({ hasText: 'Your lists' });
   await expect(dialog).toBeVisible();
@@ -93,10 +93,12 @@ async function completionDialog(page: Page, title: string): Promise<{ dialog: Lo
   return { dialog, trigger, input };
 }
 
+// The form is submitted as a POST carrying _method=patch (Rack::MethodOverride
+// turns it into a PATCH server-side), so the browser-level request is a POST.
 async function submitCompletionDate(page: Page, title: string, completedOn: string | null): Promise<void> {
   const { dialog, input } = await completionDialog(page, title);
   const response = page.waitForResponse(
-    (candidate) => candidate.request().method() === 'PATCH' && candidate.url().includes('/user_list_items/'),
+    (candidate) => candidate.request().method() === 'POST' && candidate.url().includes('/completion'),
   );
 
   if (completedOn === null) {
@@ -156,7 +158,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
     await page.getByLabel('Target books').fill('4');
     await expect(page.getByLabel('Start date')).toHaveValue(initialStart);
     await expect(page.getByLabel('End date')).toHaveValue(initialEnd);
-    await expect(page.getByLabel('Public')).not.toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Public', exact: true })).not.toBeChecked();
     await page.getByRole('button', { name: 'Create Reading Goal', exact: true }).click();
 
     await expect(page.getByRole('heading', { name: 'Active goals', level: 2 })).toBeVisible();
@@ -175,7 +177,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
     await page.getByLabel('Target books').fill(String(TARGET_COUNT));
     await page.getByLabel('Start date').fill(inRangeDate);
     await page.getByLabel('End date').fill(today);
-    await page.getByLabel('Public').check();
+    await page.getByRole('checkbox', { name: 'Public', exact: true }).check();
     await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
 
     card = goalCard(page, publicGoalName);
@@ -265,7 +267,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
     await expect(completion.input).toHaveValue('');
     await completion.input.fill(inRangeDate);
     const completionResponse = page.waitForResponse(
-      (candidate) => candidate.request().method() === 'PATCH' && candidate.url().includes('/user_list_items/'),
+      (candidate) => candidate.request().method() === 'POST' && candidate.url().includes('/completion'),
     );
     await completion.dialog.getByRole('button', { name: 'Save', exact: true }).click();
     expect((await completionResponse).status()).toBe(303);
@@ -287,7 +289,12 @@ test.describe.serial('Books reading goals lifecycle', () => {
     expect(publicGoalId).toMatch(/^\d+$/);
     expect(privateGoalId).toMatch(/^\d+$/);
 
-    const anonymous = await browser.newContext({ baseURL: BASE_URL, ignoreHTTPSErrors: true });
+    const anonymous = await browser.newContext({
+      baseURL: BASE_URL,
+      ignoreHTTPSErrors: true,
+      // newContext inherits the project's storageState; without this the "anonymous" visitor is the signed-in user.
+      storageState: { cookies: [], origins: [] },
+    });
     const anonymousPage = await anonymous.newPage();
     try {
       const publicResponse = await anonymousPage.goto(`/reading_goals/${publicGoalId}`);

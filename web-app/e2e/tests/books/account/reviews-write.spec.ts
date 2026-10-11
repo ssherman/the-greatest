@@ -1,9 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import { rateStars } from '../../../helpers/star-rating';
 
 // A book with no migrated reviews, so this spec never disturbs real data.
 const BOOK = '/book/headlong-hall';
 
-async function removeExistingReview(page) {
+async function removeExistingReview(page: Page) {
   await page.getByTestId('review-widget-label').click();
 
   // widget_controller#open() is async (it may still be awaiting its /review_state
@@ -39,7 +40,7 @@ test.describe('Writing a review', () => {
     await page.getByTestId('review-widget-label').click();
     await expect(page.locator('#review_modal')).toBeVisible();
 
-    await page.getByTestId('review-star-button').nth(3).click();
+    await rateStars(page, 4);
     await page.getByRole('button', { name: 'Save' }).click();
 
     await expect(page.locator('#review_modal')).not.toBeVisible();
@@ -51,7 +52,7 @@ test.describe('Writing a review', () => {
     await page.goto(BOOK);
 
     await page.getByTestId('review-widget-label').click();
-    await page.getByTestId('review-star-button').nth(4).click();
+    await rateStars(page, 5);
     await page.locator('#review_modal textarea').fill('A strange little book.');
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.locator('#review_modal')).not.toBeVisible();
@@ -74,7 +75,7 @@ test.describe('Writing a review', () => {
     await page.goto(BOOK);
 
     await page.getByTestId('review-widget-label').click();
-    await page.getByTestId('review-star-button').nth(2).click();
+    await rateStars(page, 3);
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByTestId('review-widget-label')).toHaveText('Edit your review');
 
@@ -90,7 +91,7 @@ test.describe('Writing a review', () => {
     await page.goto(BOOK);
 
     await page.getByTestId('review-widget-label').click();
-    await page.getByTestId('review-star-button').nth(3).click();
+    await rateStars(page, 4);
     await page.locator('#review_modal textarea').fill('He ||dies|| at the end.');
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.locator('#review_modal')).not.toBeVisible();
@@ -149,12 +150,12 @@ test.describe('Writing a review', () => {
     await page.goto(BOOK);
 
     await page.getByTestId('review-widget-label').click();
-    await page.getByTestId('review-star-button').nth(2).click();
+    await rateStars(page, 3);
     await expect(page.getByTestId('review-clear-rating')).toBeVisible();
     await page.getByTestId('review-clear-rating').click();
     await expect(page.getByTestId('review-clear-rating')).toBeHidden();
     // The button hides itself, so focus must land somewhere inside the dialog.
-    await expect(page.getByTestId('review-star-button').first()).toBeFocused();
+    await expect(page.getByTestId('review-star-input')).toBeFocused();
 
     // No stars and no text: the modal refuses before anything is sent.
     await page.getByRole('button', { name: 'Save' }).click();

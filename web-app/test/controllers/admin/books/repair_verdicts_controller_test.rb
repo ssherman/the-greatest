@@ -104,7 +104,7 @@ module Admin
         @book.update!(provisional: true)
         flagged = verdict(:mark_provisional, "book:#{@book.id}", status: :approved, payload: {"book_id" => @book.id})
         flagged.update!(applied_at: Time.current)
-        ::CalculateRankingsJob.stubs(:perform_async)
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).with(anything, delay: 5.minutes).once
         sign_in_as(@admin, stub_auth: true)
 
         post reject_admin_books_repair_verdict_path(flagged)

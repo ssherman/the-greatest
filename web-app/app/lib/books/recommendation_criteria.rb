@@ -46,10 +46,10 @@ module Books
     end
 
     # Per-call engine knobs this criteria implies (Recommendations::Engine
-    # `overrides:`). Balanced overrides nothing, so it follows the initializer.
+    # `overrides:`), from the `depth_overrides` knob. Balanced overrides
+    # nothing, so it follows the initializer.
     def engine_overrides
-      floor = Rails.application.config.x.recommendations[:depth_floors][depth]
-      floor ? {quality_floor: floor} : {}
+      Rails.application.config.x.recommendations[:depth_overrides][depth] || {}
     end
   end
 end

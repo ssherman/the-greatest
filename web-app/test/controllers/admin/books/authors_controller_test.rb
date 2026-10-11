@@ -257,7 +257,7 @@ module Admin
       # Execute Action
 
       test "admin can merge one author into another" do
-        ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+        ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
         sign_in_as(@admin_user, stub_auth: true)
         target = books_authors(:king)
         source = books_authors(:bachman)
@@ -273,7 +273,7 @@ module Admin
       end
 
       test "merge via turbo_stream replaces the flash target and still performs the merge" do
-        ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+        ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
         sign_in_as(@admin_user, stub_auth: true)
         target = books_authors(:king)
         source = books_authors(:bachman)
@@ -291,7 +291,7 @@ module Admin
       end
 
       test "a books domain editor cannot merge" do
-        ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+        ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
         @regular_user.domain_roles.create!(domain: :books, permission_level: :editor)
         sign_in_as(@regular_user, stub_auth: true)
         target = books_authors(:king)
@@ -308,7 +308,7 @@ module Admin
       end
 
       test "a books domain moderator can merge" do
-        ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+        ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
         @regular_user.domain_roles.create!(domain: :books, permission_level: :moderator)
         sign_in_as(@regular_user, stub_auth: true)
         target = books_authors(:king)

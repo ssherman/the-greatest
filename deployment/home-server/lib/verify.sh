@@ -77,6 +77,7 @@ verify_vms() {
     expect "$role: cloud-init done" vm_ssh "$role" "cloud-init status | grep -q done"
     expect "$role: cloud-init instance-id is pinned" vm_ssh "$role" "sudo grep -qx the-greatest-$role /var/lib/cloud/data/instance-id"
   done
+  expect "ol: recommender-train.timer is enabled" vm_ssh ol "systemctl is-enabled --quiet recommender-train.timer"
   expect "fetcher: /health answers" vm_ssh fetcher "curl -fsS 127.0.0.1:8081/health"
   if vm_ssh ol "test -f /srv/ol-data/current-version"; then
     expect "ol: /version answers" vm_ssh ol "curl -fsS 127.0.0.1:8080/version"

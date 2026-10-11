@@ -20,6 +20,7 @@ import { test, expect } from '@playwright/test';
 // covered by Admin::CorrectionsControllerTest, not here.
 const APPLY_BOOK = '/book/headlong-hall';
 const REJECT_BOOK = '/book/war-and-peace';
+// Keep in sync with Services::E2e::Prepare::SCRATCH_SUBTITLE_MARKER, which clears this marker on every run.
 const SUBTITLE_MARKER = 'A Gothic Satire [e2e-corrections-spec]';
 const NOTES_MARKER = 'E2E corrections spec: reject-with-reason case';
 const REJECT_REASON = 'Not a real issue -- E2E spec';

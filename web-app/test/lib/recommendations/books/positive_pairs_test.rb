@@ -19,6 +19,18 @@ module Recommendations
         Review.create!(user: @user, reviewable: books_books(:clash), rating: 2)
       end
 
+      test "the floor compares the exact rating, so a decimal floor works" do
+        Review.create!(user: @user, reviewable: books_books(:of_mice_and_men), rating: "3.75")
+        Review.create!(user: @user, reviewable: books_books(:combo_steinbeck), rating: "3.25")
+        above = books_books(:of_mice_and_men).id
+        below = books_books(:combo_steinbeck).id
+
+        at_three_and_a_half = pairs(min_rating: 3.5).select { |u, _| u == @user.id }.map(&:last)
+        assert_includes at_three_and_a_half, above
+        assert_not_includes at_three_and_a_half, below
+        assert_not_includes pairs(min_rating: 4).select { |u, _| u == @user.id }.map(&:last), above
+      end
+
       def pairs(min_rating: 3, batch_size: 50_000)
         out = []
         PositivePairs.new(min_rating: min_rating).each_batch(batch_size: batch_size) { |rows| out.concat(rows) }

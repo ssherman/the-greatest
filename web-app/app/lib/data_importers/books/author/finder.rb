@@ -59,6 +59,9 @@ module DataImporters
 
         def model_class = ::Books::Author
 
+        # An author's "title" is its name and alternate names.
+        def title_key(text) = ::Services::Text::PersonNameKey.call(text)
+
         def ranking_configuration_class = ::Books::Authors::RankingConfiguration
 
         def candidate_sources(query)
@@ -105,19 +108,16 @@ module DataImporters
         end
 
         # The query's name and alternate names against every stored name and
-        # alternate name. Measured on the 71k development authors
-        # (2026-09-27): the name half uses the lower(name) index (1 ms); the
-        # alternate-name half scans (50 ms). Accepted: the finder mostly runs
-        # inside slow list imports. Ids are plucked first, as in the books
+        # alternate name, compared as Services::Text::PersonNameKey keys
+        # through the GIN-indexed books_authors.name_keys, so initials written
+        # differently still meet. Ids are plucked first, as in the books
         # finder, so no ORDER BY + LIMIT steers the planner.
         def exact_scope(query)
-          names = ([query.name] + query.alternate_names).map { |name| normalize(name) }.compact_blank.uniq
-          return ::Books::Author.none if names.empty?
+          keys = ::Services::Text::PersonNameKey.all([query.name, *query.alternate_names])
+          return ::Books::Author.none if keys.empty?
 
-          ids = ::Books::Author.where(
-            "LOWER(books_authors.name) IN (:names) OR EXISTS (SELECT 1 FROM unnest(books_authors.alternate_names) AS alternate WHERE LOWER(alternate) IN (:names))",
-            names: names
-          ).pluck(:id).sort.first(EXACT_LIMIT)
+          ids = ::Books::Author.where("books_authors.name_keys && ARRAY[:keys]::varchar[]", keys: keys)
+            .pluck(:id).sort.first(EXACT_LIMIT)
           ::Books::Author.where(id: ids).includes(:identifiers).order(:id)
         end
 

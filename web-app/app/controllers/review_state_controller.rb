@@ -41,7 +41,8 @@ class ReviewStateController < ApplicationController
   def serialize(review)
     {
       id: review.id,
-      rating: review.rating,
+      # A number, not Rails' BigDecimal string: the dialog does arithmetic on it.
+      rating: review.rating&.to_f,
       title: review.title,
       body: review.body
     }

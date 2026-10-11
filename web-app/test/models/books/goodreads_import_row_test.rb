@@ -13,7 +13,7 @@ require "test_helper"
 #  notes                :string           default([]), not null, is an Array
 #  outcome              :integer          default("pending"), not null
 #  outcome_detail       :string
-#  rating               :integer
+#  rating               :decimal(3, 2)
 #  raw                  :jsonb            not null
 #  read_count           :integer
 #  replay_finding       :integer
@@ -80,6 +80,14 @@ module Books
       assert_equal [:not_found, :skipped, :failed, :working],
         %i[parked skipped failed pending].map { |outcome| row.tap { |r| r.outcome = outcome }.member_status }
       assert(GoodreadsImportRow::MEMBER_STATUS_LABELS.keys.to_set >= %i[working matched new_pending_review flagged not_found skipped failed].to_set)
+    end
+
+    test "a fractional rating is valid, zero means unrated, above five is not" do
+      import = ::Books::GoodreadsImport.create!(user: users(:editor_user), status: :parsing)
+      assert import.rows.new(row_number: 1, rating: "3.75").valid?
+      assert import.rows.new(row_number: 2, rating: 0).valid?
+      assert_not import.rows.new(row_number: 3, rating: "5.5").valid?
+      assert_not import.rows.new(row_number: 4, rating: "-1").valid?
     end
   end
 end

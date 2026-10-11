@@ -79,17 +79,17 @@ a penalty deleted from the catalogue drops out automatically.
 - `low` is strict-priority behind `critical` and `default` (`config/sidekiq.yml`).
 - Admin bypasses all of this: `Admin::RankingConfigurationsController`'s
   bulk actions run against every row of the type, user-owned included, when no
-  ids are selected, and its per-row "Refresh Rankings" action calls
-  `calculate_rankings_async` directly -- it does not go through
-  `Services::RankingConfigurations::RequestRefresh`, so it ignores the owner lock and never touches
-  `refresh_status`/`needs_refresh`/`last_refresh_error`.
+  ids are selected, and its per-row "Refresh Rankings" action goes through
+  `Services::RankingConfigurations::RequestRefresh` like the member's button, so it respects the
+  same claim and updates `refresh_status`. Bulk admin actions (`BulkCalculateWeights`) still run
+  against every row of the type.
 
 ## Search indexing
 
 Nothing indexes a user-owned configuration: `Books::Book#primary_ranked_item`
 is scoped to `default_primary`, `Books::ReindexRankedFieldsJob` loads the
-primary itself, and the refresh job enqueues no reindex. `CalculateRankingsJob`
-only triggers author rankings and the reindex for the primary.
+primary itself, and the refresh job enqueues no reindex. `RankingConfigurations::RefreshJob`
+only requests author rankings and the reindex for the books default primary.
 
 ## Switching on a domain
 

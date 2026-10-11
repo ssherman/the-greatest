@@ -164,21 +164,23 @@ module Services
           def book_created_from_text_since_match(item, state)
             metadata = item.metadata || {}
             title = ::Services::Lists::Wizard::Core::Signature.normalize(metadata["title"])
-            names = Array(metadata["authors"]).map { |name| ::Services::Lists::Wizard::Core::Signature.normalize(name) }.compact_blank
+            names = ::Services::Text::PersonNameKey.all(metadata["authors"])
             return nil if title.blank? || names.empty?
 
             # SQL narrows to books created since the row's Match that have an
-            # author (a handful during one run); the comparison is in Ruby with
-            # the wizard's own normalization, which SQL LOWER() cannot match
-            # (curly quotes, Unicode width, spacing).
+            # author (a handful during one run); the comparison is in Ruby,
+            # which SQL LOWER() cannot match (curly quotes, Unicode width,
+            # spacing). The title uses the wizard's own normalization; author
+            # names compare by Services::Text::PersonNameKey, so initials
+            # written differently agree.
             ::Books::Book
               .where("books_books.created_at > ?", state.matched_at || item.created_at)
               .where(id: ::Books::BookAuthor.select(:book_id))
               .includes(:authors).order(:id)
               .find do |book|
                 ::Services::Lists::Wizard::Core::Signature.normalize(book.title) == title &&
-                  book.authors.flat_map { |author| [author.name, *Array(author.alternate_names)] }
-                    .map { |name| ::Services::Lists::Wizard::Core::Signature.normalize(name) }.intersect?(names)
+                  ::Services::Text::PersonNameKey.all(book.authors.flat_map { |author| [author.name, *Array(author.alternate_names)] })
+                    .intersect?(names)
               end
           end
 

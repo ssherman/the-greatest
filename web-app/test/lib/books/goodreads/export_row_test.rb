@@ -76,12 +76,23 @@ module Books
         assert_equal [], parsed.notes
       end
 
-      test "a rating of zero is kept; one out of range is dropped and noted" do
-        assert_equal 0, row("My Rating" => "0").rating
-        parsed = row("My Rating" => "7")
+      test "My Rating reads whole, '.0' and fractional values as decimals; zero means unrated" do
+        assert_equal BigDecimal(4), row("My Rating" => "4").rating
+        assert_equal BigDecimal(4), row("My Rating" => "4.0").rating
+        assert_equal BigDecimal("3.75"), row("My Rating" => "3.75").rating
+        assert_equal BigDecimal("0.25"), row("My Rating" => "0.25").rating
+        assert_equal BigDecimal("3.33"), row("My Rating" => "3.333").rating
+        assert_equal BigDecimal(0), row("My Rating" => "0").rating
+        assert_nil row("My Rating" => "").rating
+      end
 
-        assert_nil parsed.rating
-        assert_includes parsed.notes, "unreadable My Rating dropped: 7"
+      test "an out-of-range or unreadable My Rating is dropped and noted" do
+        %w[7 5.5 -1 NaN Infinity abc 1e2 4,5 1_0].each do |value|
+          parsed = row("My Rating" => value)
+
+          assert_nil parsed.rating, "expected #{value.inspect} to be dropped"
+          assert_includes parsed.notes, "unreadable My Rating dropped: #{value}"
+        end
       end
 
       test "a bad date is dropped and noted" do

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { rateStars } from '../../../helpers/star-rating';
 
 // A real book on the dev database with no migrated reviews, like reviews-write.spec.ts.
 const BOOK_TITLE = 'Headlong Hall';
@@ -15,7 +16,7 @@ async function untickEveryList(page: Page) {
       await expect(box).not.toBeChecked();
     }
   }
-  await page.keyboard.press('Escape');
+  await modal.press('Escape');
   await expect(modal).not.toBeVisible();
 }
 
@@ -79,7 +80,7 @@ test.describe('Recommendations, as a member', () => {
     const favorites = modal.getByRole('checkbox', { name: /favorite/i }).first();
     await favorites.check();
     await expect(favorites).toBeChecked();
-    await page.keyboard.press('Escape');
+    await modal.press('Escape');
     await expect(modal).not.toBeVisible();
 
     await page.reload();
@@ -95,14 +96,14 @@ test.describe('Recommendations, as a member', () => {
     const read = modal.getByRole('checkbox', { name: /^read$|books i.ve read|have read/i }).first();
     await read.check();
     await expect(read).toBeChecked();
-    await page.keyboard.press('Escape');
+    await modal.press('Escape');
     await expect(modal).not.toBeVisible();
 
     await page.goto('/recommendations/wizard/3');
     const row = page.getByTestId('unrated-list').locator('[data-testid="wizard-book-row"]', { hasText: BOOK_TITLE });
     await row.getByTestId('review-widget-label').click();
     await expect(page.locator('#review_modal')).toBeVisible();
-    await page.getByTestId('review-star-button').nth(3).click();
+    await rateStars(page, 4);
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.locator('#review_modal')).not.toBeVisible();
 

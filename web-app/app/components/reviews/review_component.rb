@@ -25,7 +25,7 @@ module Reviews
     end
 
     def stars_label
-      "Rated #{review.rating} out of 5 stars"
+      "Rated #{review.formatted_rating} out of 5 stars"
     end
   end
 end

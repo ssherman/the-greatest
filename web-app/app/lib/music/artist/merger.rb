@@ -250,11 +250,12 @@ module Music
         )
       end
 
+      # Post-commit: perform_in writes to Redis, which a rollback cannot undo.
+      # RequestRefresh claims each configuration, so a burst of merges sharing a
+      # configuration queues one run for it, not one per merge; the delay lets
+      # the burst collect. The run reweighs before it ranks.
       def schedule_ranking_recalculation
-        @affected_ranking_configurations.each do |config_id|
-          BulkCalculateWeightsJob.perform_async(config_id)
-          CalculateRankingsJob.perform_in(5.minutes, config_id)
-        end
+        ::Services::RankingConfigurations::RequestRefresh.call_for_ids(@affected_ranking_configurations, delay: 5.minutes)
       end
 
       # The (source, target) pair on duplicate_candidates becomes merged, other

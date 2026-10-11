@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
+import { rateStars } from '../../../helpers/star-rating';
 
-// This spec depends on the e2e-admin account having a healthy body of reviews to
-// filter/sort/page through. Run `bin/rails e2e:my_reviews` (lib/tasks/e2e.rake)
-// first -- it idempotently seeds 30 Books::Book reviews for that account (6 per
-// rating, alternating written/rating-only, avoiding the 3 book slugs other specs
-// in this directory depend on). One of those 30, "Animal Farm", has a title no
-// other seeded review shares, which is what makes it a safe, exact search term
-// below.
+// This spec depends on the normal-user e2e account having a healthy body of
+// reviews to filter/sort/page through. `bin/rails e2e:prepare`
+// (lib/tasks/e2e.rake) resets the account to exactly 30 Books::Book reviews on
+// every run, rather than seeding additively (6 per rating, alternating
+// written/rating-only, avoiding the 3 book slugs other specs in this directory
+// depend on). One of those 30, "Animal Farm", has a title no other seeded
+// review shares, which is what makes it a safe, exact search term below.
 const SEARCH_TITLE = 'Animal Farm';
 // Exact, not a lower bound: playwright.config.ts runs with workers: 1 and
 // fullyParallel: false, so spec files run strictly sequentially in this worker,
@@ -43,11 +44,15 @@ test.describe('My Reviews', () => {
     const rowTriggers = page.locator('[data-testid="edit-review"], [data-testid="write-review"]');
     await expect(rowTriggers).toHaveCount(expectedCount);
 
-    // Every visible row is genuinely rated 3 -- not just a URL that says so.
+    // Every visible row is genuinely in the 3-star bucket -- not just a URL that says so.
+    // The bar is Goodreads' rounding (Review.rating_bucket): 2.75 through 3.5 count as 3,
+    // and a single rating's label reads it exactly ("3 out of 5 stars", "2.75 out of 5 stars").
     const stars = page.getByRole('img', { name: /out of 5 stars/ });
     await expect(stars).toHaveCount(expectedCount);
     for (const star of await stars.all()) {
-      await expect(star).toHaveAttribute('aria-label', '3.0 out of 5 stars');
+      const rating = Number((await star.getAttribute('aria-label'))?.match(/^([\d.]+) out of 5 stars$/)?.[1]);
+      expect(rating).toBeGreaterThan(2.5);
+      expect(rating).toBeLessThanOrEqual(3.5);
     }
   });
 
@@ -104,7 +109,7 @@ test.describe('My Reviews', () => {
 
     const searchInput = page.getByLabel('Search your reviews');
     await searchInput.fill(SEARCH_TITLE);
-    await page.getByRole('button', { name: 'Search' }).click();
+    await page.locator('form[action="/my/reviews"]').getByRole('button', { name: 'Search' }).click();
 
     // If the reload guard regressed, this URL would fall back to the pre-search
     // "/my/reviews" with no query -- assert the query actually survived.
@@ -124,22 +129,22 @@ test.describe('My Reviews', () => {
   // `edit-review` rows to a different rating on every run, and never restores it
   // -- unlike reviews-write.spec.ts, which creates a review and removes it again
   // in its own afterEach. There is no "original" rating to restore here: this
-  // row is itself seed data with an arbitrary rating to begin with, and
-  // `(currentRating % 5) + 1` is self-consistent and deterministic across
-  // repeated runs, so leaving the rotation in place is intentional, not an
-  // oversight.
+  // row is itself seed data with an arbitrary rating to begin with, and the
+  // quarter-step rotation (`currentRating + 0.25`, wrapping 5 -> 0.25) is
+  // self-consistent and deterministic across repeated runs, so leaving the
+  // rotation in place is intentional, not an oversight.
   test('opening the dialog from a row, changing the rating and saving reloads the row with the new value', async ({page}) => {
     await page.goto('/my/reviews');
 
     const trigger = page.getByTestId('edit-review').first();
     await expect(trigger).toBeVisible();
     const currentRating = Number(await trigger.getAttribute('data-rating'));
-    const newRating = (currentRating % 5) + 1; // always different, wraps 5 -> 1
+    const newRating = currentRating >= 5 ? 0.25 : currentRating + 0.25; // always different, stays in range
 
     await trigger.click();
     await expect(page.locator('#review_modal')).toBeVisible();
 
-    await page.getByTestId('review-star-button').nth(newRating - 1).click();
+    await rateStars(page, newRating);
     await page.getByRole('button', { name: 'Save' }).click();
 
     // ReviewsController's turbo-stream response targets book-page element ids that
@@ -153,7 +158,7 @@ test.describe('My Reviews', () => {
 
   // Deleting from a row is destructive and irreversible, so this test creates its
   // own review to destroy rather than touching the seeded 30 -- on the one book
-  // e2e:my_reviews deliberately excludes. The afterEach is a safety net for a
+  // e2e:prepare deliberately excludes. The afterEach is a safety net for a
   // mid-test failure: without it a crashed run would leave a 31st review behind
   // and the exact-count assertion at the top of this file would fail on every
   // later run, for a reason nowhere near where it broke.
@@ -188,7 +193,7 @@ test.describe('My Reviews', () => {
       await page.goto(SCRATCH_BOOK);
       await page.getByTestId('review-widget-label').click();
       await expect(page.locator('#review_modal')).toBeVisible();
-      await page.getByTestId('review-star-button').nth(2).click();
+      await rateStars(page, 3);
       await page.getByRole('button', { name: 'Save' }).click();
       await expect(page.locator('#review_modal')).not.toBeVisible();
 
@@ -227,7 +232,7 @@ test.describe('My Reviews', () => {
       await page.goto(SCRATCH_BOOK);
       await page.getByTestId('review-widget-label').click();
       await expect(page.locator('#review_modal')).toBeVisible();
-      await page.getByTestId('review-star-button').nth(2).click();
+      await rateStars(page, 3);
       await page.getByRole('button', { name: 'Save' }).click();
       await expect(page.locator('#review_modal')).not.toBeVisible();
 

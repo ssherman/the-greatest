@@ -36,7 +36,7 @@ module Services
           Apply::StripIdentifier.expects(:call).with(verdict: strip).in_sequence(order).returns(answer(:applied))
           Apply::MarkProvisional.expects(:call).with(verdict: provisional).in_sequence(order)
             .returns(answer(:applied, ranking_configuration_ids: [42]))
-          ::CalculateRankingsJob.expects(:perform_async).with(42).once
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).with([42], delay: 5.minutes).once
 
           result = ApplyVerdicts.call(auto_apply: true)
 
@@ -57,13 +57,10 @@ module Services
           Apply::MergeAuthors.stubs(:call).with(verdict: authors).returns(answer(:applied, follow_ups: [:author_rankings]))
           Apply::MergeAuthors.stubs(:call).with(verdict: more_authors).returns(answer(:applied, follow_ups: [:author_rankings]))
           Apply::MarkProvisional.stubs(:call).with(verdict: flagged).returns(answer(:applied, ranking_configuration_ids: [2, 3]))
-          ::BulkCalculateWeightsJob.expects(:perform_async).with(1).once
-          ::BulkCalculateWeightsJob.expects(:perform_async).with(2).once
-          ::CalculateRankingsJob.expects(:perform_in).with(5.minutes, 1).once
-          ::CalculateRankingsJob.expects(:perform_in).with(5.minutes, 2).once
-          ::CalculateRankingsJob.expects(:perform_async).with(3).once
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).with([1, 2, 3], delay: 5.minutes).once
           ::GenerateUserFavoritesListsJob.expects(:perform_async).with("Books::UserList").once
-          ::Books::CalculateAuthorRankingsJob.expects(:perform_async).once
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call)
+            .with(config: ranking_configurations(:books_authors_global), delay: 5.minutes).once
 
           ApplyVerdicts.call(auto_apply: true)
         end
@@ -93,7 +90,7 @@ module Services
         end
 
         test "an author merge chain applies in id order, and a link whose author is gone is a harmless no-op" do
-          ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+          ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
           a = ::Books::Author.create!(name: "Chain Author")
           b = ::Books::Author.create!(name: "Chain  Author")
           c = ::Books::Author.create!(name: "Chain Author.")
@@ -120,9 +117,8 @@ module Services
              "stamp_identifiers" => [["books_work_goodreads_id", "777"]]})
           goodreads = ->(book) { book.identifiers.where(identifier_type: :books_work_goodreads_id).where("value LIKE '777%'").pluck(:value) }
           # The fixture user has the wrong book on their favorites, so the relink
-          # queues the favorites rebuild and ranking jobs; Sidekiq is inline here.
-          ::BulkCalculateWeightsJob.stubs(:perform_async)
-          ::CalculateRankingsJob.stubs(:perform_in)
+          # queues the favorites rebuild and a ranking refresh; Sidekiq is inline here.
+          ::Services::RankingConfigurations::RequestRefresh.stubs(:call_for_ids)
           ::GenerateUserFavoritesListsJob.stubs(:perform_async)
 
           ApplyVerdicts.call(auto_apply: true)

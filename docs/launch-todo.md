@@ -17,9 +17,10 @@ Run these in this order after each `data_migration:all`.
 1. **`bin/rails data_migration:all`.** It includes `penalties:reconcile`, `author_countries`,
    `recommendation_configs` and the favorites-list rebuild.
 2. **Search and rankings.** The migrators load with search indexing off, so run
-   `bin/rails search:books:recreate_and_reindex_all`. Then recalculate the books list weights and
-   rankings. Author rankings follow from the book rankings: `Books::CalculateAuthorRankingsJob` runs
-   on the 04:00 UTC cron, or by hand.
+   `bin/rails search:books:recreate_and_reindex_all`.
+   Then use the admin **Refresh Rankings** action on the books primary. That one run reweighs,
+   ranks and requests the author rankings when it lands. The 04:00 UTC author cron is the safety
+   net.
 3. **Cover images.** Make sure Sidekiq is up, because this queues about 148k jobs. Then run
    `bin/rails data_migration:book_images`. It is idempotent, and the primary-image count should
    come out close to 37,296.
@@ -49,25 +50,27 @@ not configured; skipping" and do nothing; if only some of the `RECOMMENDATIONS_R
 set, they raise. Details: `docs/features/recommendations.md`, "Collaborative signal".
 
 1. **The bucket.** Create the private R2 bucket and a token scoped to it. Put
-   `RECOMMENDATIONS_R2_ACCESS_KEY/SECRET_KEY/BUCKET` in the production SOPS secrets (the endpoint defaults to `STORAGE_ENDPOINT`), and `RECOMMENDER_R2_*` +
+   `RECOMMENDATIONS_R2_ACCESS_KEY/SECRET_KEY/BUCKET` in the production SOPS secrets (the endpoint defaults to `STORAGE_ENDPOINT`), and `RECOMMENDATIONS_R2_*` +
    `HC_RECOMMENDER` in `secrets/home-server.env`.
 2. **The check.** Create the healthchecks.io check `recommender-train` (period 1 day, grace 2 days).
-3. **The home server.** Run `deployment/home-server/provision` so the `ol` VM gets the units and env.
+3. **The home server.** Run `deployment/home-server/provision` (`SOPS_AGE_KEY_FILE` set) so the `ol` VM gets the new env. A VM tracking `main` installs `recommender-train.timer` and builds the trainer image within 15 minutes of the merge, before anyone provisions; `provision` then pushes the env file and forces an immediate deploy. `provision --verify` then reports `ol: recommender-train.timer is enabled`. If the VMs were pointed at a branch to test this, `provision --ref main` goes **before** the merge: GitHub deletes the merged branch and a VM tracking it fails its next deploy. Until the first export exists in the bucket, each 04:00 run pings `fail` with `no export published for books`; that is expected, and step 4 the same day ends it.
 4. **The first model.** `Recommendations::ExportInteractionsJob.perform_async("books")` from a
-   console (or wait for the 02:30 UTC run), let the home server's `recommender-train` timer run (04:00 Chicago;
-   or `systemctl start recommender-train` on the `ol` VM), then confirm `Recommendations::LoadModelJob`
+   console (or wait for the 02:30 UTC run), let the home server's `recommender-train` timer run (04:00 UTC;
+   or `sudo systemctl start recommender-train` on the `ol` VM, then `journalctl -u recommender-train` for the trainer's output), then confirm `Recommendations::LoadModelJob`
    loaded it (`RecommendationModel.active_for(:books)`) and that
    `bin/rails recommendations:show USER_ID=…` lists `collaborative`.
 
 After that the nightly export, daily train and hourly load keep it current through every weekly
-`data_migration:sync`; after a sync, step 4's `perform_async` and `systemctl start` bring the model
-up to date the same day instead of the next.
+`data_migration:sync`; after a sync, the next 02:30 export and 04:00 train pick it up by themselves; running step 4's
+`perform_async` and `systemctl start` by hand only helps before that day's 04:00 run, because a
+second export on the same day reuses the day's file name and the trainer reports it already trained.
 
 5. **Before books goes live.**
    - Cap the shelf the signal scores (an 18,534-book shelf takes 1.1 s in the neighbour SQL today),
      and profile the +140-215 ms the signal adds on the 20-99 and 100+ segments (the harness `ms` column is confounded by variant order; see the data-quality record).
-   - Close the depth gap: the collaborative list ignores the depth setting (see "Known gaps" in
-     `docs/features/recommendations.md`).
+   - Depth: the three settings now build three different pages (2026-10-10); the collaborative
+     list still ignores the quality prior, which at its 0.25 weight is two picks in twenty (see
+     "Known gaps" in `docs/features/recommendations.md`).
 
 ## 4. Every week after the switch-over
 
@@ -83,7 +86,10 @@ up to date the same day instead of the next.
 4. **`bin/rails books:goodreads_replay:apply`.** The sync puts legacy users' list items and reviews
    back the way legacy has them, which undoes the replay's approved relinks until this re-applies
    them.
-5. **Rankings.** The books list weights and book rankings. Author rankings follow.
+5. **`bin/rails books:goodreads_replay:repair_ratings`.** Run it after `apply`. The sync overwrites
+   legacy-origin reviews with legacy's truncated integer rating (3 for a 3.75), and this puts the
+   fractional rating back.
+6. **Rankings.** The books list weights and book rankings. Author rankings follow.
 
 ## 5. Cleanup, after the switch-over
 
@@ -107,6 +113,10 @@ the sync never undoes them.
 3. **Duplicates.** Review the pairs the sweep found in the Duplicates queue and merge them. Every
    merge is recorded as a redirect, so the sync never brings the merged book back.
 4. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
+   Deploy the quarter-star ratings branch before the first production `books:goodreads_replay:load`.
+   `ParseRows` skips rows it already wrote, and pre-branch code drops fractional and `4.0` ratings
+   as unreadable. After that, `repair_ratings` finds no candidates and `finish_legacy` writes
+   unrated reviews.
 
    ```bash
    bin/rails books:goodreads:seed_legacy_pages   # legacy scraped Goodreads pages into the page cache (~39k)
@@ -117,6 +127,7 @@ the sync never undoes them.
    bin/rails books:goodreads_replay:duplicates
    bin/rails books:goodreads_replay:junk
    bin/rails books:goodreads_replay:apply
+   bin/rails books:goodreads_replay:repair_ratings   # quarter-star ratings the legacy importer truncated
    bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.md]"
    ```
 
@@ -127,6 +138,8 @@ the sync never undoes them.
      50-per-kind hand check (spec §12.9).
    - Its merges and provisional marks are catalog changes and stick. Its relinks of legacy users'
      list items and reviews are undone by each sync and re-applied by `apply` (section 4).
+     `repair_ratings` repeats every pass for the same reason: each sync puts
+     legacy's truncated integer rating (3 for a 3.75) back.
    - Details: `docs/features/goodreads-import.md`, "Legacy seed" and "Legacy replay".
 5. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
    resolving at once left `/resolve` timing out at 60 s for 25 minutes, until the API container was
@@ -152,7 +165,7 @@ the sync never undoes them.
 1. Take legacy offline.
 2. `FINAL=1 bin/rails data_migration:sync`. `FINAL=1` drops the 24-hour delay, so the last day's
    books come over too. Run `sync_report` with `FINAL=1` first.
-3. Section 4, steps 3-5.
+3. Section 4, steps 3-6.
 4. **Finish the failed and stuck legacy Goodreads imports.** Only now: they write into legacy users'
    lists, which every sync rewrites to match legacy, so a finishing import run earlier is undone by
    the next sync.

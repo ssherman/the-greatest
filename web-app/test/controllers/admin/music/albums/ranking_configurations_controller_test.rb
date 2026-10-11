@@ -316,7 +316,9 @@ module Admin
           sign_in_as(@admin_user, stub_auth: true)
 
           # Mock the async call on any instance since controller loads fresh from DB
-          ::Music::Albums::RankingConfiguration.any_instance.expects(:calculate_rankings_async)
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call).returns(
+            ::Services::RankingConfigurations::RequestRefresh::Result.new(success?: true, data: {}, errors: [])
+          )
 
           post execute_action_admin_albums_ranking_configuration_path(
             @ranking_configuration,
@@ -329,7 +331,9 @@ module Admin
           sign_in_as(@admin_user, stub_auth: true)
 
           # Mock the async call on any instance since controller loads fresh from DB
-          ::Music::Albums::RankingConfiguration.any_instance.expects(:calculate_rankings_async)
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call).returns(
+            ::Services::RankingConfigurations::RequestRefresh::Result.new(success?: true, data: {}, errors: [])
+          )
 
           post execute_action_admin_albums_ranking_configuration_path(
             @ranking_configuration,
@@ -343,7 +347,9 @@ module Admin
         test "should execute action for editor" do
           sign_in_as(@editor_user, stub_auth: true)
 
-          ::Music::Albums::RankingConfiguration.any_instance.expects(:calculate_rankings_async)
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call).returns(
+            ::Services::RankingConfigurations::RequestRefresh::Result.new(success?: true, data: {}, errors: [])
+          )
 
           post execute_action_admin_albums_ranking_configuration_path(
             @ranking_configuration,
@@ -355,7 +361,7 @@ module Admin
         test "should not execute action for regular user" do
           sign_in_as(@regular_user, stub_auth: true)
 
-          @ranking_configuration.expects(:calculate_rankings_async).never
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call).never
 
           post execute_action_admin_albums_ranking_configuration_path(
             @ranking_configuration,

@@ -183,11 +183,15 @@ t_push_env_refuses_a_mismatch() {
   [ "$rc" = 1 ] && grep -q 'does not match' <<<"$out" && ! grep -q 'systemctl start' <<<"$out"
 }
 
-# The build's CPU cap must fit inside the ol VM.
+# Every service's CPU cap must fit inside the ol VM (build and recommender).
 t_build_cpus_fit_vm() {
-  local cpus
-  cpus="$(sed -n 's/^ *cpus: *\([0-9]*\)$/\1/p' "$HS_DIR/compose.ol.yml")"
-  vm_spec ol && [ -n "$cpus" ] && [ "$cpus" -le "$CORES" ]
+  local cpus found=0
+  vm_spec ol || return 1
+  while read -r cpus; do
+    found=1
+    [ "$cpus" -le "$CORES" ] || return 1
+  done < <(sed -n 's/^ *cpus: *\([0-9]*\)$/\1/p' "$HS_DIR/compose.ol.yml")
+  [ "$found" = 1 ]
 }
 
 check "secrets: a value ending in a single = keeps it" t_single_trailing_equals

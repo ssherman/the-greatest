@@ -273,17 +273,21 @@ module Music
           rank: 1
         )
 
-        BulkCalculateWeightsJob.expects(:perform_async).with(config.id)
-        CalculateRankingsJob.expects(:perform_in).with(5.minutes, config.id)
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).with([config.id], delay: 5.minutes).once
 
-        Music::Artist::Merger.call(source: @source_artist, target: @target_artist)
+        merger = Music::Artist::Merger.new(source: @source_artist, target: @target_artist)
+        merger.call
+
+        assert_nil merger.stats[:post_commit_error]
       end
 
       test "should not schedule jobs if no ranked_items exist" do
-        BulkCalculateWeightsJob.expects(:perform_async).never
-        CalculateRankingsJob.expects(:perform_in).never
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call).never
 
-        Music::Artist::Merger.call(source: @source_artist, target: @target_artist)
+        merger = Music::Artist::Merger.new(source: @source_artist, target: @target_artist)
+        merger.call
+
+        assert_nil merger.stats[:post_commit_error]
       end
 
       test "should return error result on exception" do

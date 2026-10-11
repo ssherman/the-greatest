@@ -9,7 +9,7 @@ module Actions
           @target = books_authors(:king)
           @source = books_authors(:bachman)
 
-          ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+          ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
         end
 
         def call(fields)

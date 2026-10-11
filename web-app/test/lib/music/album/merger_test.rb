@@ -114,7 +114,7 @@ module Music
       end
 
       test "should destroy source ranked_items when source album is destroyed" do
-        CalculateRankingsJob.stubs(:perform_in)
+        ::Services::RankingConfigurations::RequestRefresh.stubs(:call_for_ids)
         config = Music::Albums::RankingConfiguration.create!(
           name: "Test Ranking",
           description: "Test"
@@ -149,14 +149,16 @@ module Music
 
         # Isolates the merger's own scheduling. The merger's regeneration call runs
         # inline under Sidekiq's test mode, and creating a generated list for the
-        # first time queues a BulkCalculateWeightsJob of its own -- which would land
-        # on these expectations. Regeneration has its own test below.
+        # first time queues a BulkCalculateWeightsJob of its own.
+        # Regeneration has its own test below.
         GenerateUserFavoritesListsJob.stubs(:perform_async)
 
-        BulkCalculateWeightsJob.expects(:perform_async).with(config.id)
-        CalculateRankingsJob.expects(:perform_in).with(5.minutes, config.id)
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).with([config.id], delay: 5.minutes).once
 
-        Music::Album::Merger.call(source: @source_album, target: @target_album)
+        merger = Music::Album::Merger.new(source: @source_album, target: @target_album)
+        merger.call
+
+        assert_nil merger.stats[:post_commit_error]
       end
 
       test "should schedule jobs for both source and target configurations" do
@@ -168,27 +170,29 @@ module Music
 
         GenerateUserFavoritesListsJob.stubs(:perform_async)
 
-        BulkCalculateWeightsJob.expects(:perform_async).with(config1.id)
-        BulkCalculateWeightsJob.expects(:perform_async).with(config2.id)
-        CalculateRankingsJob.expects(:perform_in).with(5.minutes, config1.id)
-        CalculateRankingsJob.expects(:perform_in).with(5.minutes, config2.id)
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).with([config1.id, config2.id], delay: 5.minutes).once
 
-        Music::Album::Merger.call(source: @source_album, target: @target_album)
+        merger = Music::Album::Merger.new(source: @source_album, target: @target_album)
+        merger.call
+
+        assert_nil merger.stats[:post_commit_error]
       end
 
       test "should not schedule jobs if no ranked_items exist" do
         GenerateUserFavoritesListsJob.stubs(:perform_async)
 
-        BulkCalculateWeightsJob.expects(:perform_async).never
-        CalculateRankingsJob.expects(:perform_in).never
+        ::Services::RankingConfigurations::RequestRefresh.expects(:call).never
 
-        Music::Album::Merger.call(source: @source_album, target: @target_album)
+        merger = Music::Album::Merger.new(source: @source_album, target: @target_album)
+        merger.call
+
+        assert_nil merger.stats[:post_commit_error]
       end
 
       # The generated favorites list is derived data: merge_list_items skips
       # (rather than repoints) a row on that list, so it is one item short until
       # regenerated. This must happen well inside the 5-minute window before
-      # CalculateRankingsJob reads the list, or the short list gets baked into
+      # RankingConfigurations::RefreshJob reads the list, or the short list gets baked into
       # the rankings.
       test "regenerates the generated favorites list after a committed merge" do
         GenerateUserFavoritesListsJob.expects(:perform_async).with("Music::Albums::UserList")

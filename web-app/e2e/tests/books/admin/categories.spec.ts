@@ -74,4 +74,23 @@ test.describe("Books admin — categories", () => {
     await page.getByRole("button", { name: "Delete" }).click();
     await expect(page).toHaveURL(/\/admin\/categories$/);
   });
+
+  test("chooses a parent through the typeahead and the show page links it", async ({ page }) => {
+    const parent = `E2E Parent Genre ${Date.now()}`;
+    await page.goto("/admin/categories/new");
+    await page.locator('input[name="books_category[name]"]').fill(parent);
+    await page.getByRole("button", { name: "Create Category" }).click();
+    await expect(page.getByRole("heading", { name: parent, level: 1 })).toBeVisible();
+
+    const child = `E2E Child Genre ${Date.now()}`;
+    await page.goto("/admin/categories/new");
+    await page.locator('input[name="books_category[name]"]').fill(child);
+    await page.getByPlaceholder("Search for a parent category...").fill(parent);
+    await page.locator("li.cursor-pointer", { hasText: parent }).first().click();
+    await expect(page.locator('input[name="books_category[parent_id]"]')).not.toHaveValue("");
+    await page.getByRole("button", { name: "Create Category" }).click();
+
+    await expect(page.getByRole("heading", { name: child, level: 1 })).toBeVisible();
+    await expect(page.getByRole("link", { name: parent })).toBeVisible();
+  });
 });

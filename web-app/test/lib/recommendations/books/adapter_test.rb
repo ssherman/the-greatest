@@ -45,6 +45,16 @@ module Recommendations
         assert_equal :review, interaction(:crime_and_punishment).kind
       end
 
+      test "a fractional rating weighs continuously and stays a plain number" do
+        Review.create!(user: @user, reviewable: books_books(:combo_steinbeck), rating: "3.75")
+
+        found = interaction(:combo_steinbeck)
+
+        assert_equal 3.75, found.rating
+        assert_kind_of Float, found.rating
+        assert_in_delta 0.4 + 0.75 * 0.75, found.weight, 0.001, "unlisted review: read weight 0.4 plus 0.75 x (3.75 - 3)"
+      end
+
       test "a text-only review counts as read" do
         Review.create!(user: @user, reviewable: books_books(:combo_steinbeck), body: "Fine.")
         assert_in_delta 0.4, interaction(:combo_steinbeck).weight, 0.001

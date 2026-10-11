@@ -181,6 +181,28 @@ module DataImporters
           assert_equal book, match.record
         end
 
+        test "an author's initials written differently still make an exact title-and-author match" do
+          author = ::Books::Author.create!(name: "J. D. Salinger")
+          book = ::Books::Book.create!(title: "Nine Stories")
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(title: "Nine Stories", author_names: ["J.D. Salinger"]))
+
+          assert_equal [book, :high, :rule], [match.record, match.confidence, match.decided_by]
+        end
+
+        test "creators_agree? folds initials but the same title by different initials is no match" do
+          author = ::Books::Author.create!(name: "J. D. Salinger")
+          book = ::Books::Book.create!(title: "Nine Stories")
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          expect_no_ai
+
+          assert @finder.creators_agree?(ImportQuery.new(title: "Nine Stories", author_names: ["J D Salinger"]), book)
+          assert_not @finder.creators_agree?(ImportQuery.new(title: "Nine Stories", author_names: ["J. Salinger"]), book)
+          assert_nil @finder.call(query: ImportQuery.new(title: "Nine Stories", author_names: ["J. Salinger"])).record
+        end
+
         test "a title with no author names is never an exact match: the candidate goes to the AI" do
           stub_ai({selected_index: 0, confidence: "low", reasoning: "Ambiguous.", same_entity_groups: []})
 

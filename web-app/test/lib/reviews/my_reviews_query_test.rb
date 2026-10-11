@@ -141,5 +141,25 @@ module Reviews
     test "a blank search term is ignored" do
       assert_equal query.call.count, query(q: "   ").call.count
     end
+
+    test "the rating filter is a bucket: 4 holds 3.75 through 4.5, not 3.5 or 4.75" do
+      user = User.create!(email: "buckets@example.com", role: :user, email_verified: false)
+      books = %i[got war_and_peace clash crime_and_punishment].map { |name| books_books(name) }
+      ratings = %w[3.5 3.75 4.5 4.75]
+      books.zip(ratings).each { |book, rating| Review.create!(user: user, reviewable: book, rating: rating) }
+
+      query = Reviews::MyReviewsQuery.new(user: user, reviewable_class: ::Books::Book, params: {rating: "4"})
+
+      assert_equal [BigDecimal("3.75"), BigDecimal("4.5")], query.call.map(&:rating).sort
+    end
+
+    test "the rating filter excludes unrated reviews" do
+      user = User.create!(email: "unrated-filter@example.com", role: :user, email_verified: false)
+      Review.create!(user: user, reviewable: books_books(:got), body: "<p>No stars.</p>")
+
+      query = Reviews::MyReviewsQuery.new(user: user, reviewable_class: ::Books::Book, params: {rating: "1"})
+
+      assert_empty query.call.to_a
+    end
   end
 end

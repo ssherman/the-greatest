@@ -50,43 +50,52 @@ module Actions
           assert_equal "This action can only be performed on a single configuration.", result.message
         end
 
-        test "calls calculate_rankings_async on configuration" do
-          @ranking_config.expects(:calculate_rankings_async)
-
-          action = RefreshRankings.new(user: @user, models: [@ranking_config])
-          result = action.call
-
-          assert result.success?
+        def refresh_result(success:, reason: nil, errors: [])
+          ::Services::RankingConfigurations::RequestRefresh::Result.new(
+            success?: success, data: {ranking_configuration: @ranking_config, reason: reason}, errors: errors
+          )
         end
 
-        test "returns success message with configuration name" do
-          @ranking_config.stubs(:calculate_rankings_async)
+        test "requests a refresh of the configuration" do
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call)
+            .with(config: @ranking_config).returns(refresh_result(success: true))
 
-          action = RefreshRankings.new(user: @user, models: [@ranking_config])
-          result = action.call
+          result = RefreshRankings.new(user: @user, models: [@ranking_config]).call
 
           assert result.success?
           assert_equal "Ranking calculation queued for #{@ranking_config.name}.", result.message
         end
 
-        test "can be called using class method" do
-          @ranking_config.stubs(:calculate_rankings_async)
+        test "warns instead of claiming success when a run is already queued or running" do
+          ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
+            .returns(refresh_result(success: false, reason: :already_running,
+              errors: [::Services::RankingConfigurations::RequestRefresh::ALREADY_RUNNING]))
 
-          result = RefreshRankings.call(user: @user, models: [@ranking_config])
+          result = RefreshRankings.new(user: @user, models: [@ranking_config]).call
 
-          assert result.success?
-          assert_equal "Ranking calculation queued for #{@ranking_config.name}.", result.message
+          assert result.warning?
+          assert_equal "A ranking calculation is already queued or running for #{@ranking_config.name}.", result.message
         end
 
-        test "works with different configuration types" do
-          songs_config = ranking_configurations(:music_songs_global)
-          songs_config.stubs(:calculate_rankings_async)
+        test "reports an error when the refresh could not be queued" do
+          ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
+            .returns(refresh_result(success: false, reason: :enqueue_failed,
+              errors: [::Services::RankingConfigurations::RequestRefresh::ENQUEUE_FAILED]))
 
-          action = RefreshRankings.new(user: @user, models: [songs_config])
-          result = action.call
+          result = RefreshRankings.new(user: @user, models: [@ranking_config]).call
 
-          assert result.success?
-          assert_equal "Ranking calculation queued for #{songs_config.name}.", result.message
+          assert result.error?
+          assert_equal ::Services::RankingConfigurations::RequestRefresh::ENQUEUE_FAILED, result.message
+        end
+
+        test "a second click while the first is queued only warns, end to end" do
+          Sidekiq::Testing.fake! do
+            ::RankingConfigurations::RefreshJob.clear
+
+            assert RefreshRankings.call(user: @user, models: [@ranking_config]).success?
+            assert RefreshRankings.call(user: @user, models: [::RankingConfiguration.find(@ranking_config.id)]).warning?
+            assert_equal 1, ::RankingConfigurations::RefreshJob.jobs.size
+          end
         end
       end
     end

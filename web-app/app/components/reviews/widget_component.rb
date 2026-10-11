@@ -38,7 +38,7 @@ module Reviews
       return "Not yet rated" unless review
       return "Reviewed without a rating" if review.rating.nil?
 
-      "Your rating: #{review.rating} out of 5 stars"
+      "Your rating: #{review.formatted_rating} out of 5 stars"
     end
   end
 end

@@ -298,10 +298,10 @@ module Services
       # books that is 623 lists, and the two generated lists are the only ones
       # whose weight inputs changed.
       #
-      # The ranking recalculation is safe as perform_async because the lists are
-      # fully written and re-weighted by the time it is enqueued. It is the same
-      # job the Refresh Rankings button queues, so this adds no new load to a
-      # queue that is already a throughput bottleneck.
+      # The refresh request is safe to make now because the lists are fully
+      # written and re-weighted by the time it is enqueued. It goes through the
+      # same RequestRefresh claim as the Refresh Rankings button, so a run that
+      # is already queued absorbs it.
       def recalculate_primary(lists)
         main = @config.class.default_primary
         return if main.nil?
@@ -315,7 +315,7 @@ module Services
           end
         end
 
-        ::CalculateRankingsJob.perform_async(main.id) if @recalculate_primary
+        ::Services::RankingConfigurations::RequestRefresh.call(config: main) if @recalculate_primary
       end
 
       def format_weight_errors(errors)

@@ -17,9 +17,11 @@ module Actions
         return error("This action can only be performed on a single configuration.") if models.count != 1
 
         config = models.first
-        config.calculate_rankings_async
+        result = Services::RankingConfigurations::RequestRefresh.call(config: config)
+        return succeed("Ranking calculation queued for #{config.name}.") if result.success?
+        return warn("A ranking calculation is already queued or running for #{config.name}.") if result.data[:reason] == :already_running
 
-        succeed "Ranking calculation queued for #{config.name}."
+        error(result.errors.first)
       end
     end
   end

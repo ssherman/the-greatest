@@ -1,0 +1,9 @@
+[Unit]
+Description=Train the book-recommendations model daily, and at boot
+
+[Timer]
+OnCalendar=*-*-* 04:00
+OnBootSec=20min
+
+[Install]
+WantedBy=timers.target
