@@ -190,8 +190,6 @@ Services::RankingConfigurations::RequestRefresh.call_for_ids(ids, delay: 5.minut
   Cloudflare cache.
 - The 04:00 author cron no longer raises when its request is refused or fails to enqueue, so a
   failed enqueue waits for the next nightly run or the next trigger.
-- `CalculateRankingsJob` remains for one release as a shim that forwards to `RequestRefresh`, so
-  jobs already in Redis at deploy collapse instead of dying. It is then deleted.
 
 ## Usage Examples
 
