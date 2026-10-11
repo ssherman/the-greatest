@@ -100,8 +100,8 @@ module Services
           refute_repaired(review)
         end
 
-        test "a review edited after the import finished is left alone" do
-          review = legacy_review(rating: 3, updated_at: COMPLETED + 1.minute)
+        test "a review edited later is left alone, even inside the creation segment" do
+          review = legacy_review(rating: 3, updated_at: DURING + 1.minute)
           row(import, @book, rating: "3.75")
 
           refute_repaired(review)
@@ -146,24 +146,39 @@ module Services
           refute_repaired(review)
         end
 
-        test "the first row rated 1 or more is the value the legacy parser kept" do
+        test "rows rated under 1 are ignored when the rest agree" do
           review = legacy_review(rating: 3)
           upload = import
           row(upload, @book, rating: "0.5", number: 1)
           row(upload, @book, rating: "3.75", number: 2)
-          row(upload, @book, rating: "4.25", number: 3)
+          row(upload, @book, rating: "3.75", number: 3)
 
           assert_equal 1, RepairTruncatedRatings.call.data[:repaired]
           assert_equal BigDecimal("3.75"), review.reload.rating
         end
 
-        test "a whole-star first row means the parser stored that value and nothing is repaired" do
+        test "rows for the book that disagree on the rating are skipped" do
           review = legacy_review(rating: 3)
           upload = import
-          row(upload, @book, rating: "3", number: 1)
-          row(upload, @book, rating: "3.75", number: 2)
+          row(upload, @book, rating: "3.75", number: 1)
+          row(upload, @book, rating: "3.25", number: 2)
 
           refute_repaired(review)
+        end
+
+        test "a long window does not match a review created in its middle" do
+          review = legacy_review(rating: 3, created_at: UPLOADED - 45.days)
+          row(import(started_at: UPLOADED - 90.days, finished_at: UPLOADED), @book, rating: "3.75")
+
+          refute_repaired(review)
+        end
+
+        test "a review created just before a long import's finish is a re-execution and is repaired" do
+          review = legacy_review(rating: 3, created_at: UPLOADED - 1.hour)
+          row(import(started_at: UPLOADED - 90.days, finished_at: UPLOADED), @book, rating: "3.75")
+
+          assert_equal 1, RepairTruncatedRatings.call.data[:repaired]
+          assert_equal BigDecimal("3.75"), review.reload.rating
         end
 
         test "a second run after the sync reverts it repairs again, and a run with nothing to fix writes nothing" do

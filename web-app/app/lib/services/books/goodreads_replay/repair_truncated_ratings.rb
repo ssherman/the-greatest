@@ -15,28 +15,36 @@ module Services
       #   reader who later set it back to 3. The step repeats after every weekly
       #   sync, so a value test alone would overwrite deliberate ratings on each
       #   pass.
-      # - So the review must have been created inside one legacy_replay import's
-      #   window (started_at..finished_at, the legacy upload time and last
-      #   status change, stamped by LoadImports) and not updated after that
-      #   import finished. Any status counts: a failed import may have created
-      #   reviews before it failed, while one whose window misses the review
-      #   never touched it. Imports with no timing, no window containing the
-      #   review, or more than one, prove nothing.
-      # - The value is what the legacy parser stored: the creating import's
-      #   first row for the book rated 1 or more (it skipped lower ratings and
-      #   find_or_create_by kept the first). Repair only if that is fractional
-      #   and the stored rating is its floor.
+      # - A replay import created the review iff its created_at falls in
+      #   [started_at, started_at + RUN_BOUND] (the original run) or
+      #   [finished_at - RUN_BOUND, finished_at] (the admin's "Re-execute
+      #   Import" re-runs it, and a run ends at the legacy updated_at). The
+      #   whole window is no proof: re-execution moves finished_at months on.
+      #   Any status counts, since a failed import may have created reviews
+      #   before failing. No matching import, or more than one, skips.
+      # - Untouched: updated_at == created_at, which is how the legacy importer
+      #   creates. Any later edit (reader, relink, anything) changes it.
+      # - The value is the creating import's rows for that book rated 1 or more
+      #   (the parser skipped lower ratings). If they disagree the new app may
+      #   have resolved rows to books differently from legacy, so skip. Repair
+      #   only if the value is fractional and the stored rating is its floor.
       #
-      # Every miss fails safe by leaving the truncated value. Idempotent: the
-      # weekly data_migration:sync overwrites legacy-origin reviews with
-      # legacy's integer and keeps legacy's timestamps, so each replay pass
-      # repairs again. It runs after the final apply because merges have by then
-      # settled which book a review sits on. update_all keeps timestamps and
-      # skips the summary callback, so each repaired book is recalculated once,
-      # after the repairs (also when one fails).
+      # Every miss fails safe by leaving the truncated value. Gaps by design:
+      # runs longer than RUN_BOUND match only their nearest segment, stuck legacy
+      # imports (pending) never match, and a relinked review is never repaired.
+      # Idempotent: the weekly data_migration:sync overwrites legacy-origin
+      # reviews with legacy's integer and keeps legacy's timestamps, so each
+      # replay pass repairs again. It runs after the final apply because merges
+      # have by then settled which book a review sits on. update_all keeps
+      # timestamps and skips the summary callback, so each repaired book is
+      # recalculated once, after the repairs (also when one fails).
       class RepairTruncatedRatings
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         USER_BATCH = 500
+        # How long one legacy import run can take. Measured on the legacy
+        # restore (2026-10-11): single runs p50 149 s, p99 3.8 h, max 19 h. A
+        # longer run skips, which fails safe.
+        RUN_BOUND = 6.hours
         Window = Struct.new(:id, :started_at, :finished_at)
 
         def self.call
@@ -48,18 +56,21 @@ module Services
           repaired = 0
           repaired_book_ids = Set.new
           begin
-            candidate_pairs.each_slice(USER_BATCH) do |pairs|
-              user_ids = pairs.map(&:first).uniq
+            candidate_user_ids.each_slice(USER_BATCH) do |user_ids|
+              pairs = candidate_pairs(user_ids)
               reviews = legacy_reviews(pairs)
               imports = imports_by_user(user_ids)
-              values = first_rated_rows(reviews, imports)
+              values = rated_values(reviews, imports)
               reviews.each do |(user_id, book_id), (review_id, stored, created_at, updated_at)|
                 checked += 1
-                creating = creating_import(imports[user_id], created_at)
-                next unless creating && updated_at <= creating.finished_at
+                next unless updated_at == created_at
 
-                imported = values[[creating.id, book_id]]
-                next unless imported && !imported.frac.zero? && stored == imported.floor
+                creating = creating_import(imports[user_id], created_at)
+                imported = creating && values[[creating.id, book_id]]
+                next unless imported && imported.size == 1
+
+                imported = imported.first
+                next unless !imported.frac.zero? && stored == imported.floor
 
                 ::Review.where(id: review_id).update_all(rating: imported)
                 repaired_book_ids << book_id
@@ -76,12 +87,18 @@ module Services
 
         private
 
+        def candidate_user_ids
+          fractional_rows.distinct.order("books_goodreads_imports.user_id").pluck("books_goodreads_imports.user_id")
+        end
+
         # (user, book) pairs with a fractional rating in some replay import.
-        # call slices them, so every later query is bounded by the slice.
-        def candidate_pairs
-          rated_rows.where("books_goodreads_import_rows.rating <> TRUNC(books_goodreads_import_rows.rating)")
-            .distinct.order("books_goodreads_imports.user_id")
+        def candidate_pairs(user_ids)
+          fractional_rows.where(books_goodreads_imports: {user_id: user_ids}).distinct
             .pluck("books_goodreads_imports.user_id", "books_goodreads_editions.book_id")
+        end
+
+        def fractional_rows
+          rated_rows.where("books_goodreads_import_rows.rating <> TRUNC(books_goodreads_import_rows.rating)")
         end
 
         def rated_rows
@@ -113,25 +130,29 @@ module Services
             .transform_values { |rows| rows.map { |_, id, started_at, finished_at| Window.new(id, started_at, finished_at) } }
         end
 
-        # The one import whose window holds the review's creation, or nil when
-        # none or several do.
+        # The one import whose creation segments hold the review's creation, or
+        # nil when none or several do.
         def creating_import(windows, created_at)
-          matches = (windows || []).select { |window| created_at.between?(window.started_at, window.finished_at) }
+          matches = (windows || []).select do |window|
+            created_at.between?(window.started_at, window.started_at + RUN_BOUND) ||
+              created_at.between?(window.finished_at - RUN_BOUND, window.finished_at)
+          end
           matches.first if matches.one?
         end
 
-        # {[import_id, book_id] => rating}: the first row rated 1 or more, in CSV
-        # order, for each import and book that can be a review's creator.
-        def first_rated_rows(reviews, imports)
+        # {[import_id, book_id] => [distinct ratings]}: the ratings of the rows
+        # rated 1 or more, for each import and book that can be a review's creator.
+        def rated_values(reviews, imports)
           return {} if reviews.empty?
 
           import_ids = imports.values_at(*reviews.keys.map(&:first).uniq).compact.flatten.map(&:id)
           rated_rows.where(import_id: import_ids)
             .where(books_goodreads_editions: {book_id: reviews.keys.map(&:last).uniq})
             .where("books_goodreads_import_rows.rating >= 1")
-            .order("books_goodreads_import_rows.row_number")
+            .distinct
             .pluck("books_goodreads_import_rows.import_id", "books_goodreads_editions.book_id", "books_goodreads_import_rows.rating")
-            .each_with_object({}) { |(import_id, book_id, rating), first| first[[import_id, book_id]] ||= rating }
+            .group_by { |import_id, book_id, _| [import_id, book_id] }
+            .transform_values { |rows| rows.map(&:last) }
         end
       end
     end

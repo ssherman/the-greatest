@@ -258,16 +258,24 @@ selection is by provenance:
 1. Universe: legacy-origin reviews (id below the reserved ceiling) of a (user, book) that has a
    `legacy_replay` row (never a member's own import) with a fractional rating on that book.
 2. Creating import: among the user's `legacy_replay` imports of any status that have `started_at`
-   and `finished_at`, the one with `started_at <= review.created_at <= finished_at`. `LoadImports`
-   stamps those two columns from the legacy import's `created_at` (upload) and `updated_at` (last
-   status change). A failed import counts, since it may have created reviews before failing; one
-   whose window misses the review never touched it. No match, or more than one, skips.
-3. Untouched since: `review.updated_at <= creating_import.finished_at`.
-4. Value the legacy parser wrote: the creating import's first row for the book, in CSV order, rated
-   1 or more (the parser skipped ratings under 1 and `find_or_create_by` kept the first).
+   and `finished_at`, the one whose creation segments contain `review.created_at`:
+   `[started_at, started_at + RUN_BOUND]` (the original run) or `[finished_at - RUN_BOUND,
+   finished_at]` (the legacy admin's "Re-execute Import" re-runs it, and a run ends at the legacy
+   `updated_at`). `RUN_BOUND` is 6 hours (measured on the legacy restore 2026-10-11: p99 3.8 h,
+   max 19 h). The whole window is no proof, because re-execution moves `updated_at` months on for
+   about 16% of imports. `LoadImports` stamps the two columns from the legacy import's
+   `created_at` and `updated_at`. A failed import counts, since it may have created reviews
+   before failing. No match, or more than one, skips.
+3. Untouched: `review.updated_at == review.created_at`, which is how the legacy importer creates
+   a review. Any later edit changes it.
+4. Value: the creating import's rows for the book rated 1 or more (the parser skipped lower
+   ratings). If they do not all carry the same rating, skip, since the new app may resolve rows
+   to books differently from legacy.
 5. Repair iff that value is fractional and `stored == value.floor`.
 
-Every miss leaves the truncated value. The step recalculates each repaired book's summary once,
+Every miss leaves the truncated value. Gaps by design: runs longer than `RUN_BOUND` match only
+their nearest segment, stuck legacy imports (status pending) never match, and a relinked review
+(`Apply::Relink#move_review` bumps `updated_at`) is never repaired. The step recalculates each repaired book's summary once,
 after all repairs. The body, title and timestamps are not touched.
 
 **Interaction with the weekly sync.**
@@ -276,7 +284,7 @@ after all repairs. The body, title and timestamps are not touched.
   puts the 3 back.
 - `repair_ratings` runs after each sync's replay pass (after the final `apply`, once merges have settled which book a review
   sits on), and it restores 3.75.
-- Each cycle therefore ends correct, including the final launch pass, after which legacy is shut
+- Each cycle therefore restores every review the rule can prove, including the final launch pass, after which legacy is shut
   down. Running the replay twice in a row changes nothing the second time.
 
 **0.25 and 0.5 are a known gap.** Legacy created no review for a rating under 1 (its

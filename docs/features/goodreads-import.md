@@ -295,15 +295,19 @@ import provably wrote, because `stored == csv.floor` alone also matches a review
 `find_or_create_by`) or one the reader later set back to 3. `LoadImports` stamps each replay import's `started_at` and
 `finished_at` from the legacy import's upload time and last status change. A legacy-origin review (id below
 `RESERVED_CEILINGS["reviews"]`) is repaired only when exactly one of the user's timed replay imports (any status, since a
-failed import may have created reviews before failing) has a window containing the review's `created_at`, the review's
-`updated_at` is not after that import's `finished_at`, and the stored rating equals the floor of the value the legacy
-parser wrote: the import's first row for the book rated 1 or more, which must be fractional. Any miss leaves the
-truncated value. It recalculates each repaired book's summary once, after all repairs, and does not touch the body,
-title or timestamps.
+failed import may have created reviews before failing) has a creation segment containing the review's `created_at`:
+`[started_at, started_at + 6h]` (the original run) or `[finished_at - 6h, finished_at]` (the legacy admin's "Re-execute
+Import" moves `updated_at` months on, so the whole window proves nothing; the 6 h bound is the p99 of 3.8 h measured on the
+legacy restore); the review's `updated_at` equals its `created_at` (any later edit changes it); the import's rows for the
+book rated 1 or more all carry the same rating (else the new app may have resolved rows differently from legacy); and the
+stored rating equals the floor of that fractional rating. Any miss leaves the truncated value. Gaps by design: runs longer
+than 6 h match only their nearest segment, stuck legacy imports (pending) never match, and a relinked review is never
+repaired (`Apply::Relink#move_review` bumps `updated_at`). It recalculates each repaired book's summary once, after all
+repairs, and does not touch the body, title or timestamps.
 
 It runs after the final `apply` of every pass, before `report`, and it **repeats**: `ReviewMigrator` in sync mode
-overwrites legacy-origin reviews from legacy every week, which puts the truncated 3 back. Each pass therefore ends correct,
-including the final launch pass, and running it twice in a row changes nothing. Known gap: legacy created no review for a
+overwrites legacy-origin reviews from legacy every week, which puts the truncated 3 back. Each pass therefore restores every review the
+rule can prove, including the final launch pass, and running it twice in a row changes nothing. Known gap: legacy created no review for a
 rating under 1, and replay imports never write reviews, so a 0.25 or 0.5 rating is not restored.
 
 ### Finishing legacy imports
