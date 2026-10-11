@@ -93,10 +93,12 @@ async function completionDialog(page: Page, title: string): Promise<{ dialog: Lo
   return { dialog, trigger, input };
 }
 
+// The form is submitted as a POST carrying _method=patch (Rack::MethodOverride
+// turns it into a PATCH server-side), so the browser-level request is a POST.
 async function submitCompletionDate(page: Page, title: string, completedOn: string | null): Promise<void> {
   const { dialog, input } = await completionDialog(page, title);
   const response = page.waitForResponse(
-    (candidate) => candidate.request().method() === 'PATCH' && candidate.url().includes('/user_list_items/'),
+    (candidate) => candidate.request().method() === 'POST' && candidate.url().includes('/user_list_items/'),
   );
 
   if (completedOn === null) {
@@ -265,7 +267,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
     await expect(completion.input).toHaveValue('');
     await completion.input.fill(inRangeDate);
     const completionResponse = page.waitForResponse(
-      (candidate) => candidate.request().method() === 'PATCH' && candidate.url().includes('/user_list_items/'),
+      (candidate) => candidate.request().method() === 'POST' && candidate.url().includes('/user_list_items/'),
     );
     await completion.dialog.getByRole('button', { name: 'Save', exact: true }).click();
     expect((await completionResponse).status()).toBe(303);
@@ -287,7 +289,12 @@ test.describe.serial('Books reading goals lifecycle', () => {
     expect(publicGoalId).toMatch(/^\d+$/);
     expect(privateGoalId).toMatch(/^\d+$/);
 
-    const anonymous = await browser.newContext({ baseURL: BASE_URL, ignoreHTTPSErrors: true });
+    const anonymous = await browser.newContext({
+      baseURL: BASE_URL,
+      ignoreHTTPSErrors: true,
+      // newContext inherits the project's storageState; without this the "anonymous" visitor is the signed-in user.
+      storageState: { cookies: [], origins: [] },
+    });
     const anonymousPage = await anonymous.newPage();
     try {
       const publicResponse = await anonymousPage.goto(`/reading_goals/${publicGoalId}`);
