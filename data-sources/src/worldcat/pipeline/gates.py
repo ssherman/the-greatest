@@ -2,14 +2,19 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import duckdb
 
 from common.gates import GateResult
 from common.normalize import isbn_checksum_ok_sql, normalize_isbn
 from worldcat.pipeline.distill import PASS_ORDER, shards_glob
-from worldcat.pipeline.extract import ExtractStats
 from worldcat.pipeline.paths import TABLES, WorldcatPaths
+
+if TYPE_CHECKING:
+    # Annotation only. extract imports zstandard, a build-time extra the API image
+    # does not install, and the API imports this module for PIPELINE_VERSION.
+    from worldcat.pipeline.extract import ExtractStats
 
 # (isbn13 or None, oclc, expected genre or None): real records chosen on the spike.
 CANARIES: tuple[tuple[str | None, int, str | None], ...] = (
@@ -192,7 +197,7 @@ def _catalogue_coverage(con, paths, t: Thresholds, catalogue_isbns: Path | None)
     )
 
 
-def _bad_frames(extract_stats: list[ExtractStats]) -> GateResult:
+def _bad_frames(extract_stats: list["ExtractStats"]) -> GateResult:
     bad = [list(item) for s in extract_stats for item in s.bad_frames]
     return GateResult(
         "bad_frames",
@@ -214,7 +219,7 @@ def run_gates(
     con: duckdb.DuckDBPyConnection,
     paths: WorldcatPaths,
     *,
-    extract_stats: list[ExtractStats],
+    extract_stats: list["ExtractStats"],
     thresholds: Thresholds,
     catalogue_isbns: Path | None,
 ) -> list[GateResult]:

@@ -93,3 +93,15 @@ def test_a_good_version_opens_with_the_manifest_and_report(tmp_path, worldcat_ar
         assert one == 1
     finally:
         state.connection.close()
+
+
+def test_api_imports_without_the_build_only_zstandard_extra():
+    # The API image installs no extras. Blocking the module in a fresh
+    # interpreter reproduces it; any API-side import of worldcat.pipeline.extract
+    # (directly or through report/gates) would fail here.
+    import subprocess
+    import sys
+
+    code = "import sys; sys.modules[\"zstandard\"] = None; import worldcat.api.main"
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr

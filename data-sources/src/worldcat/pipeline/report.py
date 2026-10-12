@@ -3,13 +3,18 @@
 import datetime
 import json
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import duckdb
 
 from common.gates import GateResult
-from worldcat.pipeline.extract import ExtractStats
 from worldcat.pipeline.gates import gates_passed
 from worldcat.pipeline.paths import TABLES, WorldcatPaths
+
+if TYPE_CHECKING:
+    # Annotation only. extract imports zstandard, a build-time extra the API image
+    # does not install, and the API imports this module for PIPELINE_VERSION.
+    from worldcat.pipeline.extract import ExtractStats
 
 PIPELINE_VERSION = 1
 
@@ -49,7 +54,7 @@ def write_build_report(
     source_fingerprint: str,
     gate_results: list[GateResult],
     timings: StageTimings,
-    extract: list[ExtractStats],
+    extract: list["ExtractStats"],
 ) -> dict:
     tables = _table_stats(con, paths)
     report = {
