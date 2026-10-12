@@ -68,14 +68,19 @@ def fetch_records(
 
 def resolve_oclc(
     cur: duckdb.DuckDBPyConnection, paths: WorldcatPaths, number: int
-) -> tuple[int, int | None]:
-    """(current number, redirected_from). A cycle resolves to nothing: (number, None), no record."""
+) -> tuple[int | None, int | None]:
+    """(current number, redirected_from). A number with no redirect is its own current number.
+    A cycle (or a chain past the hop limit) resolves to nothing: (None, None). Records and
+    redirects are distilled independently, so a cycle source can still own a stale record;
+    returning None keeps the route from serving it."""
     row = cur.execute(
         f"SELECT to_oclc, is_cycle FROM '{paths.table('redirects')}' WHERE from_oclc = ?",
         [number],
     ).fetchone()
-    if row is None or row[1]:
+    if row is None:
         return number, None
+    if row[1]:
+        return None, None
     return row[0], number
 
 
@@ -127,7 +132,7 @@ def get_isbn(isbn: str, state: ArtifactState = Depends(get_state)):
 def get_oclc(number: int, state: ArtifactState = Depends(get_state)):
     def run(cur):
         current, redirected_from = resolve_oclc(cur, state.paths, number)
-        record = fetch_records(cur, state.paths, [current]).get(current)
+        record = fetch_records(cur, state.paths, [current]).get(current) if current else None
         if record is None:
             raise HTTPException(status_code=404, detail=f"unknown OCLC number: {number}")
         return record.model_copy(update={"redirected_from": redirected_from})

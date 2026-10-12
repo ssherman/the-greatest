@@ -90,6 +90,9 @@ second export on the same day reuses the day's file name and the trainer reports
    legacy-origin reviews with legacy's truncated integer rating (3 for a 3.75), and this puts the
    fractional rating back.
 6. **Rankings.** The books list weights and book rankings. Author rankings follow.
+7. **`bin/rails worldcat:backfill[all]`** (once section 9 is live). The sync brings over new books
+   without WorldCat-derived categories; the backfill is additive and idempotent, so a full run only
+   adds links for books that have none yet. It is a repeating step, not a one-off.
 
 ## 5. Cleanup, after the switch-over
 
@@ -165,7 +168,7 @@ the sync never undoes them.
 1. Take legacy offline.
 2. `FINAL=1 bin/rails data_migration:sync`. `FINAL=1` drops the 24-hour delay, so the last day's
    books come over too. Run `sync_report` with `FINAL=1` first.
-3. Section 4, steps 3-6.
+3. Section 4, steps 3-7.
 4. **Finish the failed and stuck legacy Goodreads imports.** Only now: they write into legacy users'
    lists, which every sync rewrites to match legacy, so a finishing import run earlier is undone by
    the next sync.
@@ -212,11 +215,13 @@ the sync never undoes them.
 - **Remove the stale `FIREBASE_PROJECT_ID`** from production secrets. The project id is hardcoded
   now, so the variable does nothing and could mislead someone later.
 
-## 9. WorldCat genre data (once)
+## 9. WorldCat genre data (the service once; the backfill repeats)
 
 Adds the WorldCat exact-lookup service on the home server and backfills genre categories from it.
 Independent of section 2: the switch-over ran on 2026-10-10 (`data_migration:sync_init`), so the
 category links the backfill writes in production are kept across the weekly `data_migration:sync`.
+The sync does add new books, though, so the backfill (step 13) is also section 4 step 7: it re-runs
+after every sync and again at cutover (section 6, step 3).
 Details: `docs/features/worldcat-data-service.md`; the VM runbook is
 `docs/features/home-server.md`, "Loading the WorldCat artifact (once)".
 
