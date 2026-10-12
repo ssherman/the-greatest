@@ -44,11 +44,10 @@ module Services
         end
         section(lines, "Undecided head-tier categories") { undecided_head_rows }
         section(lines, "Largest merges (links moved)") { largest_merges }
+        section(lines, "Largest deletes (links lost)") { largest_deletes }
         section(lines, "Merges into a category with its own pending terminal decision") { chained_merges }
         section(lines, "Locations apply would create") { would_create }
-        section(lines, "Proposed roots") do
-          decisions.proposed.action_keep.where.not(place_kind: nil).includes(:category).map { |d| "#{d.category.name} (#{d.place_kind})" }.sort
-        end
+        section(lines, "Proposed roots") { proposed_roots }
         section(lines, "Ambiguous names") { decisions.where(ambiguous: true).map { |d| d.category_snapshot["name"] }.uniq.sort }
         section(lines, "Failed") { decisions.failed.map { |d| "#{d.category_snapshot["name"]} [#{d.action}]: #{d.error}" } }
         ::CategoryCleanupDecision.actions.each_key do |action|
@@ -85,6 +84,25 @@ module Services
         decisions.proposed.action_merge.includes(:target_category)
           .order(Arel.sql("(category_snapshot->>'item_count')::int DESC NULLS LAST")).limit(TOP_MERGES)
           .map { |d| "#{d.category_snapshot["name"]} (#{d.category_snapshot["item_count"]}) -> #{d.target_category&.name}" }
+      end
+
+      # A junk verdict on a big category must be visible before apply.
+      def largest_deletes
+        decisions.proposed.action_delete
+          .order(Arel.sql("(category_snapshot->>'item_count')::int DESC NULLS LAST")).limit(TOP_MERGES)
+          .map { |d| "#{d.category_snapshot["name"]} (#{d.category_snapshot["item_count"]})" }
+      end
+
+      # Places the location stages leave without a parent: a keep or a rename
+      # that names a place kind, with no proposed set_parent and no terminal
+      # decision (a merge, retype or delete moves it elsewhere).
+      def proposed_roots
+        proposed = decisions.proposed
+        parented = proposed.action_set_parent.select(:category_id)
+        terminal = proposed.where(action: TERMINAL_ACTIONS).select(:category_id)
+        proposed.where(action: %w[keep rename], stage: %w[locations_head locations_tail])
+          .where.not(place_kind: nil).where.not(category_id: parented).where.not(category_id: terminal)
+          .includes(:category).map { |d| "#{d.category.name} (#{d.place_kind})" }.uniq.sort
       end
 
       # A merge whose target is itself being merged, retyped or deleted in this

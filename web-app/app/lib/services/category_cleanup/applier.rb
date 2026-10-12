@@ -64,13 +64,17 @@ module Services
       # A category with a proposed merge, retype or delete cannot also be
       # renamed, re-parented or kept: the terminal decision wins and the rest go
       # stale. With several terminal decisions the first by phase order (merge,
-      # retype, delete; ties by id) is kept.
+      # retype, delete; ties by id) is kept. The one exception: a RENAME that
+      # accompanies a winning retype survives (the rename phase runs first, so
+      # "not a place -> subject, under a cleaner name" applies as a pair).
       def supersede_conflicting
         pending.order(:id).to_a.group_by(&:category_id).each_value do |decisions|
           winner = decisions.select { |d| TERMINAL_RANK.key?(d.action) }.min_by { |d| [TERMINAL_RANK[d.action], d.id] }
           next if winner.nil?
 
-          (decisions - [winner]).each do |loser|
+          losers = decisions - [winner]
+          losers = losers.reject(&:action_rename?) if winner.action_retype?
+          losers.each do |loser|
             loser.update_columns(status: ::CategoryCleanupDecision.statuses.fetch("stale"),
               error: "superseded by #{winner.action} decision ##{winner.id}", updated_at: Time.current)
             @stats["stale"] += 1

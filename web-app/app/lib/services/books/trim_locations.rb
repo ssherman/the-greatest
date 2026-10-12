@@ -6,7 +6,9 @@ module Services
     # (Running The World had 361) gets one AI call that keeps its primary
     # settings. Only `legacy` links are removed -- an admin's pick always
     # stays -- and the reconciler then drops inherited ancestors nothing needs.
-    # Every run writes an Enrichment ledger row, so a book is trimmed once.
+    # A completed run (a trim, or a guard hit as a skipped row) writes an
+    # Enrichment ledger row, so a book is trimmed once. Failed AI calls and dry
+    # runs write none and are retried.
     class TrimLocations
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 

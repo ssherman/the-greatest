@@ -120,6 +120,36 @@ module Services
         assert_not_includes listed, "Delta"
       end
 
+      test "proposed roots include renamed roots and exclude parented or terminal places" do
+        renamed = place("Frnace")
+        parented = place("Lyon")
+        merged = place("Parys")
+        decide(renamed, :rename, new_name: "France", place_kind: "country")
+        decide(parented, :rename, new_name: "Lyon, France", place_kind: "city")
+        decide(parented, :set_parent, parent_chain: ["France"])
+        decide(merged, :keep, place_kind: "city")
+        decide(merged, :merge, target_category: renamed)
+
+        roots = section(report_text, "Proposed roots")
+
+        assert_includes roots, "Frnace (country)"
+        refute_includes roots, "Lyon"
+        refute_includes roots, "Parys"
+      end
+
+      test "largest deletes list proposed deletes by link count" do
+        big = place("Big Junk")
+        small = place("Small Junk")
+        big.update_columns(item_count: 900)
+        small.update_columns(item_count: 3)
+        decide(small, :delete, category_snapshot: CategoryCleanupDecision.snapshot_of(small.reload))
+        decide(big, :delete, category_snapshot: CategoryCleanupDecision.snapshot_of(big.reload))
+
+        lines = section(report_text, "Largest deletes (links lost)").lines.map(&:strip)
+
+        assert_equal ["Big Junk (900)", "Small Junk (3)"], lines
+      end
+
       test "the three new sections say none when empty" do
         text = report_text
 

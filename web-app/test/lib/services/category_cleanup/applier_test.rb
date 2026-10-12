@@ -308,6 +308,19 @@ module Services
         assert parent.reload.stale?
       end
 
+      test "a retype and the rename that accompanies it both apply" do
+        place = location("Hope")
+        retype = decide(place, :retype, new_category_type: ::Category.category_types["subject"], decided_by: :ai, stage: "locations_head")
+        rename = decide(place, :rename, new_name: "Hope (virtue)", decided_by: :ai, stage: "locations_head")
+
+        Applier.call(run: "r1")
+
+        assert_equal %w[applied applied], [retype, rename].map { |d| d.reload.status }
+        place.reload
+        assert_equal "Hope (virtue)", place.name
+        assert place.subject?
+      end
+
       test "failure messages carry the exception class" do
         gone = location("Gone Target")
         source = location("Source")
