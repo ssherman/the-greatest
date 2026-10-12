@@ -118,9 +118,19 @@
                     no type restriction, so genre, subject and location all route through
                     the same grammar. FilterPath adds the /rc/ prefix when one applies. %>
                 <% categories.each do |category| %>
-                  <%= link_to category.name,
-                        Books::FilterPath.call(categories: [category], ranking_configuration: @ranking_configuration),
-                        class: "badge badge-ghost hover:badge-primary" %>
+                  <% if category_type == "location" %>
+                    <span class="badge badge-ghost h-auto py-1" data-testid="location-trail">
+                      <% @location_trails.fetch(category.id, [category]).each_with_index do |place, index| %>
+                        <%= ", " if index.positive? %><%= link_to place.name,
+                              Books::FilterPath.call(categories: [place], ranking_configuration: @ranking_configuration),
+                              class: "hover:underline" %>
+                      <% end %>
+                    </span>
+                  <% else %>
+                    <%= link_to category.name,
+                          Books::FilterPath.call(categories: [category], ranking_configuration: @ranking_configuration),
+                          class: "badge badge-ghost hover:badge-primary" %>
+                  <% end %>
                 <% end %>
               </div>
             </div>
