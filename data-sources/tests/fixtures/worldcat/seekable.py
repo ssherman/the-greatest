@@ -11,12 +11,27 @@ SEEKABLE_MAGIC = 0x8F92EAB1
 SKIPPABLE_MAGIC = 0x184D2A5E
 
 
-def write_seekable(lines: list[bytes], path: Path, *, frame_lines: int) -> int:
+def write_seekable(
+    lines: list[bytes],
+    path: Path,
+    *,
+    frame_lines: int | None = None,
+    frame_bytes: int | None = None,
+) -> int:
+    if (frame_lines is None) == (frame_bytes is None):
+        raise ValueError("give exactly one of frame_lines or frame_bytes")
+    if frame_lines is not None:
+        chunks = [
+            b"".join(line + b"\n" for line in lines[i : i + frame_lines])
+            for i in range(0, len(lines), frame_lines)
+        ]
+    else:
+        stream = b"".join(line + b"\n" for line in lines)
+        chunks = [stream[i : i + frame_bytes] for i in range(0, len(stream), frame_bytes)]
     compressor = zstandard.ZstdCompressor(level=3)
     entries: list[tuple[int, int]] = []
     with path.open("wb") as out:
-        for start in range(0, len(lines), frame_lines):
-            raw = b"".join(line + b"\n" for line in lines[start : start + frame_lines])
+        for raw in chunks:
             frame = compressor.compress(raw)
             out.write(frame)
             entries.append((len(frame), len(raw)))
