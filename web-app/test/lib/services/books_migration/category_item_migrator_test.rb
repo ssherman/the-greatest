@@ -142,4 +142,27 @@ class Services::BooksMigration::CategoryItemMigratorTest < ActiveSupport::TestCa
       assert result[:success], result[:error]
     end
   end
+
+  test "a new row is written as legacy" do
+    category = make_category(8201)
+    book = ::Books::Book.create!(title: "New Row Book")
+    run_migrator([{"id" => 1, "category_id" => 8201, "book_id" => book.id}])
+    assert CategoryItem.find_by!(category: category, item: book).source_legacy?
+  end
+
+  test "an existing inherited row is promoted to legacy when legacy supplies it" do
+    category = make_category(8202)
+    book = ::Books::Book.create!(title: "Inherited Book")
+    CategoryItem.create!(category: category, item: book, source: :inherited)
+    run_migrator([{"id" => 1, "category_id" => 8202, "book_id" => book.id}])
+    assert CategoryItem.find_by!(category: category, item: book).source_legacy?
+  end
+
+  test "an existing admin row stays admin" do
+    category = make_category(8203)
+    book = ::Books::Book.create!(title: "Admin Book")
+    CategoryItem.create!(category: category, item: book, source: :admin)
+    run_migrator([{"id" => 1, "category_id" => 8203, "book_id" => book.id}])
+    assert CategoryItem.find_by!(category: category, item: book).source_admin?
+  end
 end

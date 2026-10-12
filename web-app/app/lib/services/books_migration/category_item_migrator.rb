@@ -64,7 +64,23 @@ module Services
       # Two legacy categories merged into one target can put the same
       # (category, book) pair twice in one batch, which upsert_all rejects.
       def flush(rows)
-        super(rows.uniq { |row| row.values_at(:category_id, :item_type, :item_id) })
+        rows = rows.uniq { |row| row.values_at(:category_id, :item_type, :item_id) }
+        # Plain upsert_all leaves omitted columns alone on conflict, so a row the
+        # ancestor reconciler wrote as inherited would stay inherited -- and be
+        # deleted by a later reconcile -- even though legacy now supplies it
+        # directly. Promote inherited to legacy; leave admin and legacy rows as is.
+        inherited = ::CategoryItem.sources.fetch("inherited")
+        legacy = ::CategoryItem.sources.fetch("legacy")
+        ::CategoryItem.upsert_all(
+          rows,
+          unique_by: unique_by,
+          record_timestamps: record_timestamps?,
+          on_duplicate: Arel.sql(<<~SQL.squish)
+            source = CASE WHEN category_items.source = #{inherited} THEN #{legacy} ELSE category_items.source END,
+            updated_at = CASE WHEN category_items.source = #{inherited} THEN NOW() ELSE category_items.updated_at END
+          SQL
+        )
+        @count += rows.size
       end
 
       def finalize
