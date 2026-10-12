@@ -20,7 +20,13 @@ module Services
         "Washington D.C." => "Washington D.C.",
         "Kolkata (Calcutta)" => "Kolkata (Calcutta)",
         "9/11" => "9/11",
-        "iPhone culture" => "iPhone Culture"
+        "iPhone culture" => "iPhone Culture",
+        "coming-of-age" => "Coming-of-age",
+        "women's studies" => "Women's Studies",
+        "human-robot relations" => "Human-robot Relations",
+        "Kolkata (Calcutta (India)" => "Kolkata",
+        "(Japan" => "Japan",
+        "Japan, (" => "Japan"
       }.freeze
 
       TARGETS.each do |input, expected|
@@ -34,6 +40,17 @@ module Services
         assert_equal NameNormalizer.twin_key("Decision-making"), NameNormalizer.twin_key("Decision making")
         assert_equal NameNormalizer.twin_key("Women's Studies"), NameNormalizer.twin_key("Womens Studies")
         refute_equal NameNormalizer.twin_key("Georgia"), NameNormalizer.twin_key("Georgia (U.S. state)")
+      end
+
+      test "C, C++ and C# are not twins but LGBTQ+ and LGBTQ are" do
+        refute_equal NameNormalizer.twin_key("C Language"), NameNormalizer.twin_key("C++ Language")
+        refute_equal NameNormalizer.twin_key("C Language"), NameNormalizer.twin_key("C# Language")
+        refute_equal NameNormalizer.twin_key("C++ Language"), NameNormalizer.twin_key("C# Language")
+        assert_equal NameNormalizer.twin_key("LGBTQ+"), NameNormalizer.twin_key("LGBTQ")
+      end
+
+      test "twin_key is nil when nothing alphanumeric remains" do
+        assert_nil NameNormalizer.twin_key("(-)")
       end
 
       test "clean maps typographic dashes and quotes to ASCII" do

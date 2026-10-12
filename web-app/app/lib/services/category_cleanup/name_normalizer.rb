@@ -20,8 +20,13 @@ module Services
 
       # Case, spacing and punctuation-insensitive. "&" is NOT folded into "and"
       # here; target_name rewrites "&" first so those twins meet.
+      # Returns nil when nothing alphanumeric is left, so callers can skip it.
+      # "C++" and "C#" are encoded first so C, C++ and C# are never twins, while
+      # "LGBTQ+" and "LGBTQ" still are.
       def twin_key(name)
-        clean(name).downcase.gsub(/[^[:alnum:]]/, "")
+        encoded = clean(name).gsub(/(?<![[:alnum:]])([[:alpha:]])(\+\+|#)/) { "#{$1}#{($2 == "#") ? "sharp" : "plusplus"}" }
+        key = encoded.downcase.gsub(/[^[:alnum:]]/, "")
+        key.presence
       end
 
       # The name a category should have, or :delete for a bracket fragment with
@@ -30,31 +35,48 @@ module Services
       def target_name(name)
         cleaned = clean(name).sub(/[\s,;:]+\z/, "")
         repaired = repair_brackets(cleaned)
-        return :delete if repaired == :delete || repaired.blank?
+        return :delete if repaired == :delete
+
+        repaired = repaired.sub(/[\s,;:]+\z/, "")
+        return :delete if repaired.blank?
 
         repaired = repaired.gsub(/\s*&\s*/, " and ")
         repaired = title_case(repaired) if repaired.match?(/\A[[:lower:]]/)
         repaired
       end
 
+      # Cuts at the first unmatched "(" (or drops a trailing unmatched ")").
+      # A leading unmatched "(" is just dropped: "(Japan" is "Japan".
       def repair_brackets(name)
-        opens = name.count("(")
-        closes = name.count(")")
-        return name if opens == closes
+        depth_stack = []
+        name.each_char.with_index do |char, index|
+          if char == "("
+            depth_stack << index
+          elsif char == ")" && depth_stack.any?
+            depth_stack.pop
+          end
+        end
+        extra_closes = name.count(")") - (name.count("(") - depth_stack.size)
+        return name if depth_stack.empty? && extra_closes.zero?
 
-        remainder = (opens > closes) ? name[0...name.rindex("(")] : name.sub(/\)\s*\z/, "")
+        remainder = if depth_stack.any?
+          cut = depth_stack.first
+          cut.zero? ? name[1..] : name[0...cut]
+        else
+          name.sub(/\)\s*\z/, "")
+        end
         remainder = remainder.strip
         remainder.match?(/[[:alpha:]]/) ? remainder : :delete
       end
 
-      # Capitalises all-lowercase words, keeps minor words lowercase after the
+      # Capitalises the first letter of words with no capitals, keeps minor words lowercase after the
       # first, and leaves mixed-case words ("iPhone") alone.
       def title_case(name)
         name.split(" ").each_with_index.map do |word, index|
           if index.positive? && MINOR_WORDS.include?(word)
             word
-          elsif word.match?(/\A[[:lower:]]+\z/)
-            word.capitalize
+          elsif word.match?(/\A[^[:upper:]]*\z/)
+            word.sub(/\A[[:lower:]]/, &:upcase)
           else
             word
           end

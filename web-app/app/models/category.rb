@@ -54,6 +54,11 @@ class Category < ApplicationRecord
   has_many :child_categories, class_name: "Category", foreign_key: :parent_id, dependent: :nullify
   has_many :category_items, dependent: :destroy, inverse_of: :category
   has_many :ai_chats, as: :parent, dependent: :destroy
+  # Cleanup decisions are working records for a run; a hard destroy takes them
+  # with it, including decisions on other categories that targeted this one
+  # (nullifying would leave a merge decision with no target).
+  has_many :category_cleanup_decisions, dependent: :delete_all
+  has_many :targeted_cleanup_decisions, class_name: "CategoryCleanupDecision", foreign_key: :target_category_id, dependent: :delete_all
 
   # Search indexing: requeue this category's items when the category row itself
   # changes in a way as_indexed_json reads. CategoryItem covers adding and removing

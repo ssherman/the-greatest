@@ -15,7 +15,7 @@ class CategoryCleanupDecision < ApplicationRecord
   enum :decided_by, {rule: 0, ai: 1}, prefix: true
   enum :status, {proposed: 0, rejected: 1, applied: 2, stale: 3, failed: 4}
 
-  validates :run, presence: true
+  validates :run, :action, :decided_by, presence: true
   validates :stage, inclusion: {in: STAGES}
   validates :new_name, presence: true, if: -> { proposed? && action_rename? }
   validates :target_category, presence: true, if: -> { proposed? && action_merge? }

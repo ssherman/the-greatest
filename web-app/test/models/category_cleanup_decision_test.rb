@@ -29,9 +29,13 @@ class CategoryCleanupDecisionTest < ActiveSupport::TestCase
   test "terminal covers merge, retype and delete" do
     category = categories(:books_france_location)
     merge = CategoryCleanupDecision.create!(category: category, run: "t", stage: "rules", action: :merge, decided_by: :rule, target_category: categories(:books_american_location))
+    retype = CategoryCleanupDecision.create!(category: category, run: "t", stage: "rules", action: :retype, decided_by: :rule, new_category_type: 2)
+    delete = CategoryCleanupDecision.create!(category: category, run: "t", stage: "rules", action: :delete, decided_by: :rule)
     keep = CategoryCleanupDecision.create!(category: category, run: "t", stage: "rules", action: :keep, decided_by: :rule)
 
     assert_includes CategoryCleanupDecision.terminal, merge
+    assert_includes CategoryCleanupDecision.terminal, retype
+    assert_includes CategoryCleanupDecision.terminal, delete
     refute_includes CategoryCleanupDecision.terminal, keep
   end
 
@@ -47,5 +51,18 @@ class CategoryCleanupDecisionTest < ActiveSupport::TestCase
     snapshot = CategoryCleanupDecision.snapshot_of(category)
     assert_equal %w[category_type deleted item_count name parent_id], snapshot.keys.sort
     assert_equal "France", snapshot["name"]
+  end
+
+  test "hard-destroying a category removes decisions on either side without raising" do
+    source = Books::Category.create!(name: "Cleanup Source", category_type: :genre)
+    target = Books::Category.create!(name: "Cleanup Target", category_type: :genre)
+    own = CategoryCleanupDecision.create!(category: source, run: "t", stage: "rules", action: :keep, decided_by: :rule)
+    targeted = CategoryCleanupDecision.create!(category: categories(:books_france_location), run: "t", stage: "rules", action: :merge, decided_by: :rule, target_category: target)
+
+    source.destroy!
+    target.destroy!
+
+    refute CategoryCleanupDecision.exists?(own.id)
+    refute CategoryCleanupDecision.exists?(targeted.id)
   end
 end
