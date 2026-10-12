@@ -194,5 +194,25 @@ module Categories
 
       Categories::Deleter.new(category: category, soft: true).delete
     end
+
+    test "refuses to delete a protected books category" do
+      fiction = categories(:books_fiction_genre)
+      ::Books::Category.stubs(:protected_ids).returns([fiction.id])
+
+      assert_raises(Categories::Refused) { Categories::Deleter.new(category: fiction, soft: true).delete }
+      refute fiction.reload.deleted?
+    end
+
+    test "soft-deleting a location drops the inherited links it justified" do
+      us = ::Books::Category.create!(name: "United States", category_type: :location)
+      chicago = ::Books::Category.create!(name: "Chicago", category_type: :location, parent: us)
+      book = books_books(:war_and_peace)
+      CategoryItem.create!(category: chicago, item: book)
+      Categories::AncestorReconciler.call(item_ids: [book.id])
+
+      Categories::Deleter.new(category: chicago, soft: true).delete
+
+      refute CategoryItem.exists?(category: us, item: book)
+    end
   end
 end
