@@ -49,4 +49,17 @@ namespace :worldcat do
     line += "; genres named by the map but missing: #{d[:missing_genres].join(", ")}" if d[:missing_genres].any?
     puts line
   end
+
+  desc "Queue one WorldCat genre/subject backfill run over <count> books (id order) or all: worldcat:backfill[<count>|all]"
+  task :backfill, [:limit] => :environment do |_task, args|
+    usage = "usage: worldcat:backfill[<count>|all]"
+    limit = case args[:limit]
+    when "all" then nil
+    when /\A[1-9]\d*\z/ then args[:limit].to_i
+    else abort usage
+    end
+    run_id = SecureRandom.uuid
+    Books::WorldCatBackfillJob.perform_async(limit, run_id)
+    puts "queued WorldCat backfill run #{run_id}: #{limit || "all"} books. One run at a time; a second exits at once. Progress: the worker log."
+  end
 end

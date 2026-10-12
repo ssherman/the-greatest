@@ -2,7 +2,7 @@ require "test_helper"
 require "rake"
 
 class WorldcatRakeTest < ActiveSupport::TestCase
-  TASKS = %w[worldcat:export_isbns worldcat:vocabulary worldcat:map worldcat:report worldcat:apply_aliases].freeze
+  TASKS = %w[worldcat:export_isbns worldcat:vocabulary worldcat:map worldcat:report worldcat:apply_aliases worldcat:backfill].freeze
 
   setup do
     unless Rake::Task.task_defined?("worldcat:export_isbns")
@@ -42,5 +42,18 @@ class WorldcatRakeTest < ActiveSupport::TestCase
     result = Services::Books::WorldCat::ApplyAliases::Result.new(success?: true, data: {categories_updated: 2, aliases_added: 5, missing_genres: ["Nope"]}, errors: [])
     Services::Books::WorldCat::ApplyAliases.expects(:call).returns(result)
     assert_output(/added 5 aliases on 2 genres; genres named by the map but missing: Nope/) { Rake::Task["worldcat:apply_aliases"].invoke }
+  end
+
+  test "backfill queues one run with a count or all" do
+    Books::WorldCatBackfillJob.expects(:perform_async).with(100, instance_of(String))
+    assert_output(/queued WorldCat backfill run .*: 100 books/) { Rake::Task["worldcat:backfill"].invoke("100") }
+    Rake::Task["worldcat:backfill"].reenable
+    Books::WorldCatBackfillJob.expects(:perform_async).with(nil, instance_of(String))
+    assert_output(/all books/) { Rake::Task["worldcat:backfill"].invoke("all") }
+  end
+
+  test "backfill aborts with usage on anything else" do
+    Books::WorldCatBackfillJob.expects(:perform_async).never
+    assert_output(nil, /usage: worldcat:backfill/) { assert_raises(SystemExit) { Rake::Task["worldcat:backfill"].invoke("soon") } }
   end
 end
