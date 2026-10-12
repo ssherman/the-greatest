@@ -37,9 +37,9 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 │   cloudflared ─► openlibrary:8080     cloudflared ─► page-fetcher:8081 │
 │   build, train (timers)                                               │
 │   /srv/ol-data (own disk)           VM 101 "musicbrainz" (by hand)    │
-│                                     VM 130 "worldcat"                 │
-│                                      cloudflared ─► worldcat:8082     │
-│                                      /srv/wc-data (own disk)          │
+│  VM 130 "worldcat"                                                    │
+│   cloudflared ─► worldcat:8082                                        │
+│   /srv/wc-data (own disk)                                             │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -107,7 +107,7 @@ The keys in `secrets/home-server.env` (SOPS-encrypted). Each VM receives only it
 | `HC_RECOMMENDER` | optional | healthchecks.io ping URL for `recommender-train`, `ol` only |
 | `RECOMMENDATIONS_R2_ENDPOINT`, `RECOMMENDATIONS_R2_ACCESS_KEY`, `RECOMMENDATIONS_R2_SECRET_KEY`, `RECOMMENDATIONS_R2_BUCKET` | the trainer | The recommendations bucket (`docs/features/recommendations.md`, "Collaborative signal"): its S3 endpoint and a token scoped to it. All four or none; `ol` only. With none set, `recommender-train` logs a skip and does not ping. |
 | `VM_STORAGE` | optional | OS disks and cloud-init drive. Default `local-lvm`; `local-zfs` here |
-| `DATA_STORAGE` | optional | The `ol` data disk. Default `VM_STORAGE`; `rpool2` here |
+| `DATA_STORAGE` | optional | The `ol` and `worldcat` data disks. Default `VM_STORAGE`; `rpool2` here |
 | `IMAGE_STORAGE` | optional | Imported cloud images. Default `local` |
 | `PVE_LAN_DNS` | optional | The host's resolver. Default `PVE_LAN_GATEWAY4` |
 | `ARC_MAX_BYTES` | optional | ZFS ARC cap. Default 8 GiB |
@@ -187,8 +187,8 @@ Whole machine:
    mismatch. *(manual)*
 4. Run `deployment/home-server/provision`. If it stops and says to reboot, reboot the host (guests
    with `onboot` come back by themselves) and run it again. If the reinstall re-imported an old
-   `rpool2`, it may still hold `vm-110-*` zvols from the previous `ol` VM, which nothing references
-   any more; `zfs list -r rpool2` shows them, and deleting them is a decision for Shane.
+   `rpool2`, it may still hold `vm-110-*` and `vm-130-*` zvols from the previous `ol` and `worldcat` VMs,
+   which nothing references any more; `zfs list -r rpool2` shows them, and deleting them is a decision for Shane.
 5. Put the tunnel tokens and ping URLs into the secrets, then run `provision --enable-tunnels` once
    Access is in place (below). `--enable-tunnels` needs all three tokens, `WORLDCAT_TUNNEL_TOKEN`
    included. The Open Library build does not wait for this: its timer starts about
@@ -228,19 +228,27 @@ the dev machine (`data-sources/README.md`, "Running the WorldCat API") and copie
 never builds it. Do this after `provision` has created VM 130. Until then the API container does not
 start and `worldcat-heartbeat` stays silent.
 
+The VM takes its address from DHCP on the LAN. Get it from the host:
+`ssh pve-mini qm guest cmd 130 network-get-interfaces`. The only SSH user on the VM is `debian`, and
+`/srv/wc-data` is a root-owned ext4 root with no `versions/` directory, so rsync runs `sudo rsync` on
+the far side, which also creates the directories.
+
 ```bash
-rsync -a --info=progress2 /home/shane/wc-data/versions/2025-09-04/ \
-    <worldcat-vm>:/srv/wc-data/versions/2025-09-04/
-ssh <worldcat-vm> 'sudo chmod -R a+rX /srv/wc-data/versions/2025-09-04 && echo 2025-09-04 | sudo tee /srv/wc-data/current-version && sudo touch /var/lib/the-greatest/force-deploy && sudo systemctl start the-greatest-deploy.service'
+rsync -a --info=progress2 --rsync-path="sudo rsync" /home/shane/wc-data/versions/2025-09-04/ \
+    debian@<vm-address>:/srv/wc-data/versions/2025-09-04/
+ssh debian@<vm-address> 'sudo chmod -R a+rX /srv/wc-data/versions/2025-09-04 && echo 2025-09-04 | sudo tee /srv/wc-data/current-version && sudo touch /var/lib/the-greatest/force-deploy && sudo systemctl start the-greatest-deploy.service'
 curl -fsS https://worldcat-api.thegreatestbooks.org/version -H "CF-Access-Client-Id: ..." -H "CF-Access-Client-Secret: ..."
 ```
 
 - **The `chmod` is required.** The container runs as uid 10001, not as the user that owns the rsynced
   files, so without `a+rX` it cannot read the artifact and the API fails to boot.
 - **`current-version` pins the served version.** It holds `2025-09-04` and nothing else.
-- **The marker is `/var/lib/the-greatest/force-deploy`.** Until `current-version` exists, deploy logs
-  that there is no WorldCat version yet and waits; the marker and the `systemctl start` make it
-  deploy now rather than at the next 15-minute run.
+- **The marker is `/var/lib/the-greatest/force-deploy`.** Until `current-version` exists, a deploy
+  logs that there is no WorldCat version yet, starts only `cloudflared`, then finishes anyway: it
+  records the deployed SHA and removes the marker. It does not wait. Without the marker, the next
+  deploy that starts the API happens only after a commit touches `data-sources/` or
+  `deployment/home-server/`. The marker plus `systemctl start` make a deploy run now, with the
+  version in place, and bring the API up.
 - **The API serves `GET /version` and has no health route.** That is why the heartbeat and the
   `curl` above use `/version`. The `curl` carries the `prod-rails` service token.
 - **There is no refresh timer and never will be.** The dump is frozen. A different version would mean

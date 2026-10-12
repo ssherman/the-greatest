@@ -215,9 +215,9 @@ the sync never undoes them.
 ## 9. WorldCat genre data (once)
 
 Adds the WorldCat exact-lookup service on the home server and backfills genre categories from it.
-Independent of the other sections, with one exception: steps 10 and 11 write to production books, so run them
-after the switch-over (section 2). Before it, the weekly `data_migration:all` overwrites books from
-legacy. Details: `docs/features/worldcat-data-service.md`; the VM runbook is
+Independent of section 2: the switch-over ran on 2026-10-10 (`data_migration:sync_init`), so the
+category links the backfill writes in production are kept across the weekly `data_migration:sync`.
+Details: `docs/features/worldcat-data-service.md`; the VM runbook is
 `docs/features/home-server.md`, "Loading the WorldCat artifact (once)".
 
 Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an agent does not run them.
@@ -248,16 +248,24 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    host, so `provision --enable-tunnels` is not needed again; it dies unless all three tunnel tokens
    are set. The API will not start until step 7 puts an artifact on the VM.
 7. **Load the artifact.** Follow "Loading the WorldCat artifact (once)" in `docs/features/home-server.md`:
-   rsync the version directory, `sudo chmod -R a+rX /srv/wc-data/versions/2025-09-04` (the container
-   runs as uid 10001), write `/srv/wc-data/current-version`, touch
+   find the VM's address (`ssh pve-mini qm guest cmd 130 network-get-interfaces`; DHCP on the LAN),
+   rsync the version directory as `debian@<vm-address>` with `--rsync-path="sudo rsync"` (the only SSH
+   user is `debian` and `/srv/wc-data` is root-owned),
+   `sudo chmod -R a+rX /srv/wc-data/versions/2025-09-04` (the container runs as uid 10001), write
+   `/srv/wc-data/current-version`, touch
    `/var/lib/the-greatest/force-deploy` and start `the-greatest-deploy.service`. Then curl
    `https://worldcat-api.thegreatestbooks.org/version` with the service token. `worldcat-heartbeat`
    should go green within a few minutes.
 8. **Production setting. Shane runs with `!`.** Add
    `WORLDCAT_SERVICE_URL=https://worldcat-api.thegreatestbooks.org` to the production SOPS secrets and
    deploy.
-9. **The genre map, in development.** Run `bin/rails worldcat:vocabulary`, `worldcat:map` and
-   `worldcat:report`. Review and edit `config/worldcat/genre_map.yml` by hand, then commit it.
-10. **Aliases, in production.** `bin/rails worldcat:apply_aliases`.
-11. **The backfill, in production.** `bin/rails "worldcat:backfill[all]"`.
-12. **The report, again.** Re-run `worldcat:report` and commit the data-quality page it writes.
+9. **The genre map, in development.** `worldcat:vocabulary` and `worldcat:map` need the local WorldCat
+   API running: `docker compose --profile worldcat up -d worldcat` in `data-sources/`. Run
+   `bin/rails worldcat:vocabulary`, `worldcat:map` and `worldcat:report`. Review and edit
+   `config/worldcat/genre_map.yml` by hand, then commit it. The reviewed map must be merged and
+   deployed before steps 10 and 11 run in production.
+10. **Aliases, in production. Shane runs with `!`.** `bin/rails worldcat:apply_aliases`.
+11. **The backfill, in production. Shane runs with `!`.** `bin/rails "worldcat:backfill[all]"`.
+12. **The report, if the map changed.** After the backfill, if the map was edited during review, re-run
+    `bin/rails worldcat:report` in development and commit the regenerated
+    `docs/data-quality/worldcat-genre-mapping.md`. It depends only on the map file, not on the backfill.
