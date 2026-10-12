@@ -174,16 +174,17 @@ A kept line that cannot be reduced (valid JSON of an unexpected shape, say a str
 
 Built 2026-10-12 on the development machine from the 281,575,216,478-byte dump (fingerprint
 `a36a4883ce0a…`). Extract ran once, 3,646 s with 8 workers; the distill stages ran from its shards
-with `--resume --memory-limit 30GB --threads 16` after the original single-window `records` query ran
-out of memory twice.
+with `--resume --memory-limit 30GB --threads 16` (twice: the second run added `lookup` and the
+20,000-row groups on `records`).
 
 | Table | Rows | Bytes |
 |---|---|---|
-| `records` | 165,272,991 | 22,948,976,270 |
-| `isbns` | 185,854,875 | 904,668,429 |
-| `redirects` | 73,370,411 | 363,694,914 |
-| `holdings` | 71,808,132 | 171,255,464 |
-| total | | 24,388,595,077 |
+| `records` | 165,272,991 | 23,627,650,537 |
+| `isbns` | 185,854,875 | 904,575,246 |
+| `redirects` | 73,370,411 | 363,664,911 |
+| `holdings` | 71,808,132 | 171,244,081 |
+| `lookup` | 185,854,875 | 5,471,537,660 |
+| total | | 30,538,672,435 |
 
 Extract: 2,223,520,143 lines read, 444,209,700 kept (299,028,904 record rows, 73,372,664 redirect
 rows, 71,808,132 holdings rows), 0 bad frames, 0 bad lines. Every record pass prefix was already in
@@ -192,10 +193,11 @@ rows, 71,808,132 holdings rows), 0 bad frames, 0 bad lines. Every record pass pr
 | Stage | Seconds |
 |---|---|
 | extract | 3,646 |
-| records | 799 |
-| isbns | 765 |
-| redirects | 30 |
+| records | 815 |
+| isbns | 693 |
+| redirects | 29 |
 | holdings | 3 |
+| lookup | 122 |
 
 | Gate | Result |
 |---|---|
@@ -208,6 +210,19 @@ rows, 71,808,132 holdings rows), 0 bad frames, 0 bad lines. Every record pass pr
 | `bad_frames` | pass |
 
 The `Thresholds` defaults in `gates.py` are tightened to these values.
+
+Through the container on the development machine (2 threads, 2 GB), against the first build's
+layout:
+
+| Request | First layout | Now |
+|---|---|---|
+| `POST /lookup`, 100 catalogue ISBNs | `504` | 1.0 to 1.2 s |
+| `POST /lookup`, 500 catalogue ISBNs | `500` (the interrupt bug) | 2.7 to 3.0 s |
+| `GET /isbns/9780316067928` (a popular novel, many records) | 4.9 to 5.2 s | 3.0 to 3.5 s |
+
+The single-ISBN route still pays one `records` row group per record found, so a popular ISBN stays
+in the seconds; the backfill never calls it. If that route ever matters, read the OCLC numbers from
+`lookup` and fetch `records` one `oclc = ?` at a time (30 ms each), or move it to `lookup` too.
 
 ## HTTP contract
 
