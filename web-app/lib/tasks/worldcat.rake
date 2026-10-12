@@ -15,4 +15,17 @@ namespace :worldcat do
     d = result.data
     puts "#{d[:books_matched]} of #{d[:books_seen]} books matched; #{d[:head].size} head terms, #{d[:tail].size} tail terms -> config/worldcat/"
   end
+
+  desc "Run the one-time AI pass mapping config/worldcat/genre_terms.csv onto our genre categories -> config/worldcat/genre_map.yml"
+  task map: :environment do
+    genres = Books::Category.active.genre.order(:name).pluck(:name)
+    result = Services::Books::WorldCat::MapVocabulary.call(
+      terms_path: Rails.root.join("config", "worldcat", "genre_terms.csv"),
+      out_path: Rails.root.join("config", "worldcat", "genre_map.yml"),
+      genres: genres
+    )
+    abort result.errors.join("; ") unless result.success?
+    d = result.data
+    puts "mapped #{d[:mapped]} terms (#{d[:skipped_existing]} already mapped) in #{d[:batches]} batch#{"es" unless d[:batches] == 1}; review config/worldcat/genre_map.yml"
+  end
 end
