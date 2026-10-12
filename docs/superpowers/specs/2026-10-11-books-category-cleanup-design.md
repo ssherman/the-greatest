@@ -116,29 +116,30 @@ always also `deleted: true`. `Merger` flattens on write: when A merges into B, e
 
 `Category#canonical` returns `self` for an active category, the `merged_into` target for a merged
 one, and `nil` for a deleted-without-merge one. One class method,
-`Category.resolve_ids(ids)` → `{given_id => canonical_id_or_nil}`, does the same in bulk. Every
-reader below uses one of the two.
+`Category.replace_merged_ids(ids)` returns the ids with each merged id swapped for its target
+(deduplicated, order kept) and every other id unchanged. Every reader below uses one of the two.
 
 ### 1.2 Readers that follow merges
 
 - **Public filter URLs.** `Books::FilterParams` gets a slug miss on `Books::Category.active`, then
-  looks the slug up among merged categories. If every missing slug resolves, it raises a new
-  `Books::FilterParams::Redirect` carrying the canonical categories; `Books::RankedItemsController`
-  and `Books::FiltersController` rescue it and 301 to `Books::FilterPath.call(...)` with the
-  canonical slugs, keeping every other path segment. A slug that resolves to nothing still 404s.
+  looks the slug up among merged categories and in friendly_id slug history. If every missing slug
+  resolves, the result carries the canonical categories and `redirect? = true`;
+  `Books::RankedItemsController#index` then 301s to `Books::FilterPath.call(...)` with the canonical
+  slugs, keeping every other path segment. `Books::FiltersController` (the modal pane) and the CSV
+  export just use the canonical categories. A slug that resolves to nothing still 404s.
 - **Renames.** Add friendly_id `:history` to `Category` (the `friendly_id_slugs` table already
   exists, with a `scope` column). An old slug resolves through history and 301s the same way. The
   admin rename keeps going through `update`; history makes that safe.
 - **Legacy `/genres/:id`.** `Books::LegacyCategoriesController#find_category!` resolves slug or
   legacy id to any category, then takes `canonical`; `nil` → 404.
-- **Saved searches and recommendation configs.** `CriteriaClauses` maps stored ids through
-  `Category.resolve_ids` before building the query, dropping `nil`s (deleted-as-junk) as today.
-  `SavedSearchFilterLabels` resolves the same way so the label matches the search. Stored ids are
-  not rewritten.
+- **Saved searches and recommendation configs.** `CriteriaClauses` passes stored ids through
+  `Category.replace_merged_ids` before building the query, so behaviour for deleted-without-merge ids
+  is exactly today's. `SavedSearchFilterLabels` resolves the same way so the label matches the
+  search. Stored ids are not rewritten.
 - **Weekly legacy sync.** `CategoryItemMigrator#preload_context` builds its map from every mapped
   category's `canonical` instead of only the active ones. A link to a merged category lands on the
   target; a link to a deleted-without-merge category is still dropped (legacy's own corruption
-  case stays a deliberate drop). New links go through `Categories::AncestorLinker` (§3.3).
+  case stays a deliberate drop). The sync then runs the ancestor reconciler (§3.3).
 
 ### 1.3 `Categories::Merger` rework
 
@@ -155,16 +156,17 @@ reader below uses one of the two.
   Religion & Spirituality, resolved through `LegacyIdMap`). `Merger` and `Deleter` refuse them, and
   so does the admin destroy action. `BookTypeCategoryMigrator` raises if one is soft-deleted, so a
   merge would break the sync.
-- If a location merges, inherited links on the target are reconciled for the moved items (§3.3).
+- If a location merges, the ancestor reconciler runs for the moved items (§3.3).
 
 ### 1.4 Admin
 
-On the books category show page: a "Merge into…" action (target picked through the existing
-category search, with a confirmation that names how many links move), built on the
-`Actions::Admin` pattern. The category form permits `parent_id` (already) and `alternative_names`
-(new, as a comma-separated field). Deleting from admin goes through `Categories::Deleter`
-(soft delete *and* remove links), not the bare `soft_delete!` it calls today, which leaves links
-attached.
+On the books category show page: a "Merge into…" form (target picked through the existing
+category autocomplete, with a confirm checkbox), posting to a new `merge` member route on
+`Admin::Books::CategoriesController`. The categories admin has no `Actions::Admin` plumbing, and a
+member route is smaller than adding it. The category form permits `parent_id` (already) and `alternative_names`
+(new, as a comma-separated field). Deleting a books category from admin goes through
+`Categories::Deleter` (soft delete *and* remove links), not the bare `soft_delete!` it calls today,
+which leaves links attached. Music and games keep today's behaviour.
 
 ## 2. Naming rules
 
@@ -236,23 +238,19 @@ Add `category_items.source`, an integer enum, `null: false, default: 0`:
 `legacy: 0, admin: 1, inherited: 2`. Spec B adds `ai`. Every existing row becomes `legacy`; there is
 no way to tell legacy-AI links from admin links added in this app since the migration, and this spec
 doesn't try. The admin add-category action writes `admin`. The sync writes `legacy`. The book merger
-(`app/lib/books/book/merger.rb`) copies `source` with each link, and then calls `AncestorLinker` for
-the survivor.
+(`app/lib/books/book/merger.rb`) copies `source` with each direct link, and then runs the ancestor reconciler
+for the survivor.
 
 `source` records why a link exists *directly*. A row is `inherited` only when it exists solely
 because a descendant location is linked to the same item. If a direct link to the same category is
 added later, the row's source is upgraded to that direct source; it is never downgraded.
 
-### 3.3 `Categories::AncestorLinker`
+### 3.3 `Categories::AncestorReconciler`
 
-`Categories::AncestorLinker.call(item:, categories:)` inserts `inherited` links for every ancestor
-of the given location categories that the item doesn't already have, in one `insert_all` with
-conflicts ignored, then queues one reindex for the item. Callers: the admin add-category action,
-`Merger`, the sync's `CategoryItemMigrator` (bulk form: `call_bulk(item_ids:)`), the over-tagged
-trim (§5), and Spec B's applier.
-
-`Categories::AncestorReconciler` (rake `categories:reconcile_ancestors`) makes all books consistent
-and is idempotent:
+One service keeps inherited links right for every caller: the admin add/remove-category actions,
+`Merger`, the book merger, the weekly sync, the over-tagged trim (§5), cleanup apply, and Spec B's
+applier. `Categories::AncestorReconciler.call(item_ids: nil)` (all books when `nil`; rake
+`categories:reconcile_ancestors`) is idempotent:
 
 1. Insert missing `inherited` links for every direct location link's ancestors (set-based SQL over a
    recursive CTE of the location tree).
@@ -289,7 +287,7 @@ are shallow; one recursive CTE for the book's direct locations). Subjects render
 | `action` | enum: `keep, rename, merge, retype, set_parent, delete` |
 | `new_name` | for `rename`, and for a `merge` whose target doesn't exist yet |
 | `target_category_id` | for `merge` |
-| `parent_name` / `parent_category_id` | for `set_parent`; name when the parent will be created |
+| `parent_chain` | string array, for `set_parent`: immediate parent first, root last |
 | `new_category_type` | for `retype` |
 | `place_kind` | for locations: `continent, region, country, subdivision, city, site, historical_state, fictional, global` |
 | `decided_by` | enum: `rule, ai` |
@@ -299,7 +297,8 @@ are shallow; one recursive CTE for the book's direct locations). Subjects render
 | `status` | enum: `proposed, rejected, applied, stale, failed` |
 | `error` | text |
 
-A category can have several decisions in one run (a `rename` and a `set_parent`). The model is
+A category can have several decisions in one run (a `rename` and a `set_parent`). An AI `keep`
+is written too, so a category the AI has seen is never sent again in that run. The model is
 `CategoryCleanupDecision`, global namespace (it references `Category`, a shared model), with only
 validations and scopes; all logic is in services under `app/lib/services/categories/cleanup/`.
 
@@ -324,13 +323,15 @@ validations and scopes; all logic is in services under `app/lib/services/categor
    holds the rules from §2 and §3.1 plus the current list of head location names with their
    proposed parents, so merges and parents point at known names. Output (strict schema):
    `verdict` (`real_place, fictional_place, not_a_place, junk`), `canonical_name`,
-   `merge_into` (an existing name or null), `parent` (a name or null), `place_kind`,
+   `merge_into` (an existing name or null), `parent_chain` (names from the immediate parent up to a
+   root, e.g. `["Illinois", "United States", "North America"]`; empty for a root), `place_kind`,
    `retype_to` (`subject` or null, for `not_a_place`), `ambiguous` (bool: the sample titles show
    two different places under one name), `reason`. A `not_a_place` verdict with `retype_to:
-   subject` becomes a `retype` decision, or a `merge` into an existing subject of that name. The
-   head runs in two rounds: round 1 settles continents and countries (`place_kind` in
-   continent/region/country/global); round 2 runs the rest of the head with round 1's results in
-   the prompt.
+   subject` becomes a `retype` decision, or a `merge` into an existing subject of that name.
+   Because the cached prompt lists every head location name, one round suffices: Chicago can name
+   Illinois as its parent before Illinois itself has been processed. A chain name that matches no
+   category is created at apply time, with its parent taken from the next name in the first chain
+   (by decision id) that mentions it; the report lists every created category and its parent.
 3. **AI location pass, tail.** Same task, prompt carrying the settled head. Batch size from §4.4.
 4. **AI subject pass** (`SubjectTask`), head then tail, same structure. Head = subjects with ≥ 20
    links. Output: `action` (`keep, rename, merge, delete, is_location`), `name`, `merge_into`,
@@ -359,8 +360,9 @@ re-running `propose` for a run only processes categories with no decision in tha
 - `categories:cleanup:reject[run,ids]` marks decisions `rejected`. Re-running a stage after a
   prompt change replaces that stage's `proposed` decisions; `rejected` and `applied` ones are kept.
 - `categories:cleanup:apply[run]` applies `proposed` decisions in dependency order: create missing
-  parents → rename → merge → retype → set parent → delete. Before each decision it compares the
-  category to `category_snapshot`; if it changed, the decision is marked `stale` and skipped. Each
+  parents → rename → merge → retype → set parent → delete. Before applying anything it compares
+  every decision's category to its `category_snapshot`; a decision whose category changed is marked
+  `stale` and skipped. Each
   decision is its own transaction; a failure marks it `failed` and the run continues. Afterwards:
   `categories:reconcile_ancestors`, then one `ItemReindexer` pass over touched items. Re-running
   apply is a no-op for `applied` decisions.
@@ -450,8 +452,7 @@ Minitest, AI stubbed with Mocha, fixtures named for what they are.
   slug 301s through history; a deleted slug 404s; `/genres/:id` follows a merge; saved-search
   criteria and labels resolve merged ids; `CategoryItemMigrator` links new legacy items to the
   target and still drops deleted-without-merge.
-- **Hierarchy**: parent validation (location only, no cycles); `AncestorLinker` adds missing
-  ancestors only; reconciler adds and removes correctly and keeps an inherited link another
+- **Hierarchy**: parent validation (location only, no cycles); reconciler adds and removes correctly and keeps an inherited link another
   descendant still needs; a direct link upgrades an inherited row.
 - **Rules pass**: a table test built from real names in today's data (`Japan (`, `61)`,
   `Self‑discovery`, `Washington, D.C.`, `secrets`, `Death & Grief`).
