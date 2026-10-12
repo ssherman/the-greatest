@@ -120,6 +120,20 @@ module DataImporters
       evidence_for(record)
     end
 
+    # summarize for a page of records, keyed by id. The ranked position and
+    # list count are read in one query each for the whole page rather than
+    # two per record. Preload whatever record_creators and the identifiers
+    # need before calling.
+    def summarize_all(records)
+      return {} if records.empty?
+
+      ranks = ranked_positions(records)
+      lists = list_counts(records)
+      records.to_h do |record|
+        [record.id, evidence_for(record, rank: ranks[record.id], lists: lists.fetch(record.id, 0))]
+      end
+    end
+
     protected
 
     # ---- hooks a domain subclass overrides ------------------------------------
@@ -266,15 +280,31 @@ module DataImporters
       (candidate.sources.include?(:identifier) || candidate.external_accepted?) && corroborated?(query, candidate)
     end
 
-    def evidence_for(record)
+    # rank and lists default to a query each; summarize_all passes them in.
+    def evidence_for(record, rank: ranked_position(record), lists: list_count(record))
       {
         title: record_title(record),
         creators: record_creators(record),
         year: record_year(record),
-        ranked_position: ranked_position(record),
-        list_count: list_count(record),
+        ranked_position: rank,
+        list_count: lists,
         identifiers: record_identifiers(record)
       }.merge(record_extra_evidence(record))
+    end
+
+    def ranked_positions(records)
+      configuration = ranking_configuration_class&.default_primary
+      return {} unless configuration
+
+      ::RankedItem.where(item_type: records.first.class.polymorphic_name, item_id: records.map(&:id),
+        ranking_configuration_id: configuration.id).pluck(:item_id, :rank).to_h
+    end
+
+    def list_counts(records)
+      return {} unless records.first.respond_to?(:list_items)
+
+      ::ListItem.where(listable_type: records.first.class.polymorphic_name, listable_id: records.map(&:id))
+        .group(:listable_id).count
     end
 
     # Local and multi-source candidates first, then by best score; stable.

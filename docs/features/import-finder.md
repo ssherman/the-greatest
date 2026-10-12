@@ -199,29 +199,41 @@ rest), else the created record of an unmatched import (or it would match itself)
 A re-check's own row is written with `verify: true`, so it appears in the queue only under
 `verify=include`; the admin is redirected to it, and the original stays in the queue until reviewed.
 
-**Duplicates** opens on pending pairs, newest first, each record summarized live through
-`FinderBase#summarize` (title, creators, year, ranked position, list count, identifiers) with
+**Duplicates** opens on pending pairs, newest first, 100 to a page, each record summarized live
+through `FinderBase#summarize_all` (title, creators, year, ranked position, list count,
+identifiers; the ranked positions and list counts are one query each for the whole page) with
 the evidence reason, source, occurrence count and a link to the raising decision. Tabs for
 merged and dismissed pairs. Actions for writers: **Not a duplicate** with a note (the pair
 becomes `not_duplicate`, which `Flag` never reopens and the rules never merge); **Merge A into
 B** and **Merge B into A**. A record that no longer exists shows as missing and the pair offers
 dismissal only.
 
-Merges are never performed by these controllers. Every merge form posts to the domain's
-existing `execute_action` endpoint with the same required confirm checkbox as the record
-pages' merge modal, so the endpoint's delete gate (`authorize :destroy?`) and the merger's
-`RecordMerge` hook apply unchanged; the form submits without Turbo, so the browser lands on the
-surviving record with the result as flash. `Games::Company` has no merge action and offers
-dismissal and review only.
+The match decisions page's merge form posts to the domain's `execute_action` endpoint and lands
+on the surviving record. The duplicates page merges in place instead: its forms post to the
+page's own `merge` action, which runs the same `Actions::Admin::<Domain>::Merge*` action behind
+the same delete gate (`authorize source, :destroy?`) and required confirm checkbox, so the
+merger's `RecordMerge` hook applies unchanged. Each form names the source and target ids it
+displayed, and the action refuses when they no longer match the pair: `RecordMerge` re-keys
+every pending pair naming a merged source onto its survivor in place, so a stale page could
+otherwise merge a record its admin never saw. Merge and dismiss both redirect to the exact index
+URL the form was posted from (`return_to`, accepted only when it is this domain's index). Turbo
+treats a redirect to the current URL as a page refresh, and the index declares
+`turbo_refreshes_with method: :morph, scroll: :preserve`, so the resolved pair drops out, cards a
+merge re-keyed come back current, and the scroll position stays put. A page past the end (the
+last page's final pair resolved) redirects to the new last page. `Games::Company` has no merge
+action and offers dismissal and review only.
 
-Reading needs domain access; review, re-check and dismiss need write access
+Reading needs domain access; review, re-check, dismiss and merge need write access
 (`require_domain_write!`); the merge forms render only for users with delete permission, which
-is what the `execute_action` endpoint requires (`authorize :destroy?`).
+is what a merge requires (`authorize :destroy?`).
 
 E2E: `e2e/tests/books/admin/import-finder-audit.spec.ts` seeds one decision and one pair with
 `bin/rails e2e:import_finder_seed` (idempotent; `E2E_BOOK_A` / `E2E_BOOK_B` override the
 default `nightmare-abbey` + `war-and-peace`), drives filters, review, both merge forms to the
-confirm gate, and dismissal, then runs `e2e:import_finder_cleanup`. It never merges. Both rake
+confirm gate, and dismissal, then runs `e2e:import_finder_cleanup`. It never merges, so the
+in-place return is checked on dismissal, which shares merge's redirect: the URL keeps its query
+string, and a JS property set on the heading survives (a morph keeps the element; a full page
+replace would not). Both rake
 tasks share one marker, `IMPORT_FINDER_MARKER = "E2E import finder audit seed"` in
 `lib/tasks/e2e.rake`; cleanup deletes only rows whose `match_decisions.reason` or
 `duplicate_candidates.evidence->>'reason'` equals that marker, so a run never touches decisions

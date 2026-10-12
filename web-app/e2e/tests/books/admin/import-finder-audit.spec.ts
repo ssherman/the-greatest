@@ -78,10 +78,24 @@ test.describe("Books admin — import finder audit", () => {
     await expect(page).toHaveURL(/\/admin\/duplicate_candidates$/);
     await expect(pair).toBeVisible();
 
+    // Dismiss (and merge, which shares the redirect) returns to this exact
+    // URL, query string included, and Turbo morphs the page in place rather
+    // than swapping it. An expando property, unlike an attribute, is invisible
+    // to the morph: it survives only if the heading element itself is kept.
+    await page.goto("/admin/duplicate_candidates?status=pending");
+    await page.getByRole("heading", { name: "Duplicate Candidates" }).evaluate((el) => {
+      (el as HTMLElement & { e2eKept?: boolean }).e2eKept = true;
+    });
+
     await pair.getByTestId("dismiss-form").getByPlaceholder("Why not a duplicate (optional)").fill("E2E import finder audit spec");
     await pair.getByRole("button", { name: "Not a duplicate" }).click();
     await expect(page.getByRole("alert")).toContainText("Marked as not a duplicate.");
     await expect(pair).toHaveCount(0);
+    await expect(page).toHaveURL(/\/admin\/duplicate_candidates\?status=pending$/);
+    const kept = await page
+      .getByRole("heading", { name: "Duplicate Candidates" })
+      .evaluate((el) => (el as HTMLElement & { e2eKept?: boolean }).e2eKept === true);
+    expect(kept).toBe(true);
 
     await page.goto("/admin/duplicate_candidates?status=not_duplicate");
     await expect(pair).toBeVisible();
