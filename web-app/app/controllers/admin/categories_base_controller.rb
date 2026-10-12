@@ -76,8 +76,13 @@ class Admin::CategoriesBaseController < Admin::BaseController
     authorize @category
   end
 
+  # alternative_names arrives as one comma-separated text field.
   def category_params
-    params.require(param_key).permit(:name, :description, :category_type, :parent_id)
+    permitted = params.require(param_key).permit(:name, :description, :category_type, :parent_id, :alternative_names)
+    if permitted.key?(:alternative_names)
+      permitted[:alternative_names] = permitted[:alternative_names].to_s.split(",").map(&:strip).reject(&:blank?)
+    end
+    permitted
   end
 
   def sortable_column(column)

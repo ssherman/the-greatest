@@ -38,6 +38,17 @@
           <% end %>
         </div>
 
+        <!-- Alternative names -->
+        <div class="md:col-span-2">
+          <%= f.label :alternative_names, class: "label" do %>
+            <span class="font-semibold">Alternative names</span>
+          <% end %>
+          <%= f.text_field :alternative_names,
+              value: category.alternative_names.join(", "),
+              class: "input w-full",
+              placeholder: "Old names and spellings, separated by commas" %>
+        </div>
+
         <!-- Category Type -->
         <div>
           <%= f.label :category_type, class: "label" do %>

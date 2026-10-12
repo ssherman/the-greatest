@@ -152,6 +152,93 @@ module Admin
 
         assert_equal [], response.parsed_body
       end
+
+      # Merge
+
+      test "merge moves links and redirects to the target" do
+        sign_in_as(@admin_user, stub_auth: true)
+        target = categories(:books_france_location)
+        source = ::Books::Category.create!(name: "France (country)", category_type: :location)
+        CategoryItem.create!(category: source, item: books_books(:war_and_peace))
+
+        post merge_admin_books_category_path(source), params: {target_category_id: target.id, confirm_merge: "1"}
+
+        assert_redirected_to admin_books_category_path(target)
+        assert_equal target, source.reload.merged_into
+      end
+
+      test "merge without confirmation changes nothing" do
+        sign_in_as(@admin_user, stub_auth: true)
+        source = ::Books::Category.create!(name: "France (country)", category_type: :location)
+
+        post merge_admin_books_category_path(source), params: {target_category_id: categories(:books_france_location).id}
+
+        assert_redirected_to admin_books_category_path(source)
+        refute source.reload.deleted?
+      end
+
+      test "a refused merge redirects back with the reason" do
+        sign_in_as(@admin_user, stub_auth: true)
+        source = ::Books::Category.create!(name: "Lonely", category_type: :location)
+
+        post merge_admin_books_category_path(source), params: {target_category_id: source.id, confirm_merge: "1"}
+
+        assert_redirected_to admin_books_category_path(source)
+        assert_match "itself", flash[:alert]
+      end
+
+      test "merge is forbidden to a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        source = ::Books::Category.create!(name: "France (country)", category_type: :location)
+
+        post merge_admin_books_category_path(source), params: {target_category_id: categories(:books_france_location).id, confirm_merge: "1"}
+
+        refute source.reload.deleted?
+      end
+
+      # Alternative names and delete
+
+      test "update saves comma-separated alternative names" do
+        sign_in_as(@admin_user, stub_auth: true)
+        category = categories(:books_france_location)
+
+        patch admin_books_category_path(category), params: {books_category: {alternative_names: "La France, République française"}}
+
+        assert_equal ["La France", "République française"], category.reload.alternative_names
+      end
+
+      test "destroy removes the category's links" do
+        sign_in_as(@admin_user, stub_auth: true)
+        category = ::Books::Category.create!(name: "Doomed", category_type: :subject)
+        CategoryItem.create!(category: category, item: books_books(:war_and_peace))
+
+        delete admin_books_category_path(category)
+
+        assert category.reload.deleted?
+        assert_equal 0, CategoryItem.where(category: category).count
+      end
+
+      test "destroy refuses a protected category" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Books::Category.stubs(:protected_ids).returns([@category.id])
+
+        delete admin_books_category_path(@category)
+
+        refute @category.reload.deleted?
+        assert_redirected_to admin_books_category_path(@category)
+      end
+
+      test "re-parenting a location rebuilds inherited links" do
+        sign_in_as(@admin_user, stub_auth: true)
+        us = ::Books::Category.create!(name: "United States", category_type: :location)
+        chicago = ::Books::Category.create!(name: "Chicago", category_type: :location)
+        book = books_books(:war_and_peace)
+        CategoryItem.create!(category: chicago, item: book)
+
+        patch admin_books_category_path(chicago), params: {books_category: {parent_id: us.id}}
+
+        assert CategoryItem.exists?(category: us, item: book, source: :inherited)
+      end
     end
   end
 end

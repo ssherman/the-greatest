@@ -12,9 +12,8 @@ class Admin::CategoryItemsController < Admin::BaseController
   end
 
   def create
-    @category_item = @item.category_items.build(category_item_params)
-
-    if @category_item.save
+    if save_category_item
+      reconcile_ancestors(@item)
       @item.reload
       respond_to do |format|
         format.turbo_stream do
@@ -58,6 +57,7 @@ class Admin::CategoryItemsController < Admin::BaseController
   def destroy
     @item = @category_item.item
     @category_item.destroy!
+    reconcile_ancestors(@item)
     @item.reload
 
     respond_to do |format|
@@ -86,6 +86,24 @@ class Admin::CategoryItemsController < Admin::BaseController
   end
 
   private
+
+  # An admin pick is a direct link. If the item already carries the category
+  # only as an inherited ancestor, upgrade that row instead of failing the
+  # uniqueness check.
+  def save_category_item
+    existing = @item.category_items.find_by(category_id: category_item_params[:category_id])
+    if existing&.source_inherited?
+      @category_item = existing
+      return existing.update(source: :admin)
+    end
+
+    @category_item = @item.category_items.build(category_item_params.merge(source: :admin))
+    @category_item.save
+  end
+
+  def reconcile_ancestors(item)
+    ::Categories::AncestorReconciler.call(item_ids: [item.id]) if item.is_a?(::Books::Book)
+  end
 
   def domain_auth_parent
     if action_name == "destroy"
