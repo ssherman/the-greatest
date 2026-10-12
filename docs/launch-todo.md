@@ -178,7 +178,7 @@ the sync never undoes them.
      `bin/rails "books:goodreads_replay:finish_legacy[1]"`, one import at a time, and wait until it is
      no longer in progress before running the next. Running imports are skipped, not counted, so
      starting them back to back queues them all at once. Four at once overloaded the Open Library VM
-     on 2026-10-06 (section 5, item 5). Each import also fetches Goodreads pages on the line member
+     on 2026-10-06 (section 5, item 6). Each import also fetches Goodreads pages on the line member
      uploads use.
    - Approve or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`,
      "Finishing legacy imports".

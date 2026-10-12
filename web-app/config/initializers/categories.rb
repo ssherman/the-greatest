@@ -3,9 +3,10 @@
 # Books subject/location settings. Rails config, not an admin UI.
 # Spec: docs/superpowers/specs/2026-10-11-books-category-cleanup-design.md
 Rails.application.configure do
-  # Subject and location categories with fewer ranked books than this are not
-  # listed on browse pages or in the public filter search (spec §6). Their
-  # pages still render; genres are exempt.
+  # Subject and location categories are not listed on browse pages when they
+  # have fewer ranked books than this, nor in the public filter search when
+  # their catalog item_count (all links, ranked or not) is below it (spec §6).
+  # Their pages still render; genres are exempt.
   config.x.books.browse_min_category_books = 5
 
   # Cleanup pipeline (spec §4).

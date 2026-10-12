@@ -59,8 +59,7 @@ admin add and remove category actions, `Categories::Merger` and `Categories::Del
 merger, the weekly sync (`location_ancestors` step), cleanup apply, the location trim, and an admin
 re-parent. `bin/rails categories:reconcile_ancestors` runs it for every book.
 
-The book page shows only direct (non-inherited) location links, each as a trail of links running up
-to but not including the root (`Chicago, Illinois, United States`; only the root, the continent, is dropped). `Books::LocationTrails` builds them with one
+The book page shows only direct (non-inherited) location links, each as a trail: the location with its ancestors up to, but not including, the root (a continent, a cross-continent region, Fictional Location or a global place), so `Chicago, Illinois, United States`. A link to a root itself shows the root. `Books::LocationTrails` builds them with one
 query per tree level. Subjects render as before.
 
 ## Merging and renaming
@@ -86,19 +85,19 @@ The saved-search category picker has no threshold. That is deliberate.
 
 ## The cleanup runbook
 
-Every `propose` stage is resumable. The rules stage rebuilds its own proposed decisions each time. An AI stage skips categories already decided in that type's head or tail stages of the run (a category with only a rules decision is still sent). Run
+Every `propose` stage is resumable. The rules stage rebuilds its own proposed decisions each time. An AI stage skips categories already decided in that type's head or tail stages of the run (a category whose only decision is a rules rename is still sent; rules merges and deletes remove a category from the AI stages). Run
 these from `web-app/`, with `RUN` a label such as `2026-10-15-prod`.
 
 1. Snapshot: `bin/snapshot-dev-db.sh --label pre-category-cleanup` in dev, a fresh backup in production.
 2. `bin/rails 'categories:cleanup:propose[RUN,rules]'`. No AI. Case and punctuation twins merge into the most-linked member, except that when that member would need a rename, the member already holding the clean name wins outright. Broken names are repaired, and letterless bracket fragments (`61)`) are deleted. Empty categories are never deleted, because the weekly sync brings categories before their books and a link to a deleted category is lost for good. Legacy alternative names never drive a merge. `C`, `C++` and `C#` stay apart.
 3. `bin/rails 'categories:cleanup:propose[RUN,locations_head]'`, then `subjects_head`. Head means a category's own direct link count is at least `head_min_links` (20), one category per AI call. A head category whose call failed is retried by running the head stage again.
-4. `bin/rails 'categories:cleanup:calibrate[RUN,location]'` and `[RUN,subject]`. It writes no decisions. It compares batch sizes against one-at-a-time answers on 200 random tail categories. Set `tail_batch_size` to the largest size with at least 97% agreement, or leave it at 1.
-5. `bin/rails 'categories:cleanup:propose[RUN,locations_tail]'`, then `subjects_tail`. Tail runs print how many head-tier categories are still undecided.
+4. `bin/rails 'categories:cleanup:calibrate[RUN,location]'` and `[RUN,subject]`. It writes no decisions. It compares batch sizes against one-at-a-time answers on 200 random tail categories. Set `tail_batch_size` to the largest size with at least 97% agreement, or leave it at 1. Changing it means editing `config/initializers/categories.rb` and deploying (merge = deploy).
+5. `bin/rails 'categories:cleanup:propose[RUN,locations_tail]'`, then `subjects_tail`. Tail runs print how many head-tier categories are still undecided. At batch size 1 these stages exceed the $50 guard (about $63 for locations and $165 for subjects at current estimates) and need `FORCE=1`.
 6. `bin/rails 'categories:cleanup:report[RUN]'`. It prints counts by stage, action and status; undecided head-tier categories; the largest merges; merges into a category with its own pending terminal decision; locations apply would create (with their slugs); proposed roots; ambiguous names; failures; and samples per action. The full list goes to a CSV in `tmp/`.
 7. `bin/rails 'categories:cleanup:reject[RUN,12 15 19]'` for decisions you do not want. Rejected decisions are kept and skipped.
 8. `bin/rails 'categories:cleanup:apply[RUN]'`. Details below.
-9. `DRY_RUN=1 bin/rails 'categories:trim_locations[100]'` and read the output, then the same without `DRY_RUN`. Details below.
-10. Propose again with the SAME run label: `propose[RUN,locations_head]`, `locations_tail`, `subjects_head` and `subjects_tail`, then `apply[RUN]` again. Only categories with no decision in those stages yet are sent: ones retyped by the first apply (subjects now locations and the reverse), created parents, and categories the sync added. A new label would re-send the whole vocabulary and apply a second full wave, so do not use one.
+9. `DRY_RUN=1 bin/rails 'categories:trim_locations[100]'` and read the output, then the same without `DRY_RUN`, and repeat the real run until it reports no candidates. The dry run's answers are a sample: the real run makes fresh AI calls. Details below.
+10. Propose again with the SAME run label: `propose[RUN,locations_head]`, `locations_tail`, `subjects_head` and `subjects_tail`. Then review as in steps 6 and 7 (`report[RUN]`, `reject`), and only then `apply[RUN]` again. Only categories with no decision in those stages yet are sent: ones retyped by the first apply (subjects now locations and the reverse), created parents, and categories the sync added. A new label would re-send the whole vocabulary and apply a second full wave, so do not use one.
 11. After this the weekly sync keeps new legacy categories in line (last paragraph below).
 
 Switches, as environment variables on `propose`: `LIMIT=n` caps the number of categories sent in a stage (the same as calls only at batch size 1). `REDO=1` deletes
