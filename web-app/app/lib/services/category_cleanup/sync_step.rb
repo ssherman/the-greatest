@@ -4,7 +4,7 @@ module Services
   module CategoryCleanup
     # Spec §4.5: until cutover the weekly sync keeps bringing new legacy
     # categories. Once a cleanup has been applied, each sync runs the rules
-    # pass for categories no run has decided yet (case/punctuation twins merge
+    # pass for categories no run has decided yet (failed or stale decisions don't count: those retry next week) (case/punctuation twins merge
     # into the existing vocabulary; renames and deletes follow the same rules)
     # and applies those rule decisions straight away. AI decisions are never
     # auto-applied; what the rules can't settle waits for the owner's next
@@ -21,7 +21,7 @@ module Services
 
         new_ids = ::Books::Category.active
           .where(category_type: RulePass::TYPES)
-          .where.not(id: ::CategoryCleanupDecision.select(:category_id))
+          .where.not(id: ::CategoryCleanupDecision.where(status: %i[proposed applied rejected]).select(:category_id))
           .pluck(:id)
         return result(new_categories: 0) if new_ids.empty?
 

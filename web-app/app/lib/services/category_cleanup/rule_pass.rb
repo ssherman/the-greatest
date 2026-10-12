@@ -3,8 +3,11 @@
 module Services
   module CategoryCleanup
     # Spec §4.2 step 1: the decisions no AI is needed for. Every live books
-    # location and subject gets a target name (or :delete); categories whose
-    # target names are twins within a type merge into the most-linked one.
+    # location and subject gets a target name (or :delete, only for a broken
+    # name fragment); categories whose target names are twins within a type
+    # merge into the most-linked one. A category with no links is never deleted:
+    # the sync brings categories over a day before their books, and legacy may
+    # tag books with an empty category later.
     # Alternative names are deliberately not used: they come from legacy merge
     # history and include broader, narrower and reversed matches. Names the
     # rules can't improve get no decision and wait for the AI.
@@ -43,11 +46,10 @@ module Services
         categories = load_categories
         counts = link_counts
         settled = ::CategoryCleanupDecision.for_run(@run).where.not(status: :proposed).distinct.pluck(:category_id).to_set
-        parents = ::Books::Category.active.where.not(parent_id: nil).distinct.pluck(:parent_id).to_set
-        targets = categories.to_h { |c| [c.id, target_for(c, counts, parents)] }
+        targets = categories.to_h { |c| [c.id, NameNormalizer.target_name(c.name)] }
 
         decisions = categories.filter_map do |c|
-          build(c, :delete, reason: delete_reason(c, counts)) if targets[c.id] == :delete && writable?(c, settled)
+          build(c, :delete, reason: "Broken name fragment") if targets[c.id] == :delete && writable?(c, settled)
         end
 
         live = categories.reject { |c| targets[c.id] == :delete }
@@ -80,18 +82,6 @@ module Services
           .where(categories: {type: "Books::Category", category_type: TYPES, deleted: false})
           .group(:category_id)
           .count
-      end
-
-      # A category with places under it is never deleted, even with no links of
-      # its own: it is a node of the location tree.
-      def target_for(category, counts, parents)
-        return :delete if counts[category.id].to_i.zero? && !parents.include?(category.id)
-
-        NameNormalizer.target_name(category.name)
-      end
-
-      def delete_reason(category, counts)
-        counts[category.id].to_i.zero? ? "No books" : "Broken name fragment"
       end
 
       # Most links wins (preferring existing over incoming in a sync). If that

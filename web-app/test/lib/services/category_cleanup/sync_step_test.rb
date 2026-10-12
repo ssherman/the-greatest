@@ -40,6 +40,52 @@ module Services
         assert CategoryCleanupDecision.where(category: fresh).none?
         refute fresh.reload.deleted?
       end
+
+      test "never deletes a new category that has no links yet" do
+        mark_decided(place("Georgia"))
+        empty = place("Brand New Place", links: 0)
+
+        SyncStep.call
+
+        refute empty.reload.deleted?
+        assert CategoryCleanupDecision.where(category: empty).none?
+      end
+
+      test "retries categories whose only decisions failed or went stale" do
+        mark_decided(place("Georgia"))
+        failed = place("secrets", links: 1)
+        CategoryCleanupDecision.create!(category: failed, run: "old", stage: "rules", action: :rename, new_name: "Secrets",
+          decided_by: :rule, status: :failed, category_snapshot: CategoryCleanupDecision.snapshot_of(failed))
+
+        result = SyncStep.call
+
+        assert_operator result.data[:new_categories], :>=, 1
+        assert_equal "Secrets", failed.reload.name
+      end
+
+      test "ignores categories with a proposed, applied or rejected decision" do
+        mark_decided(place("Georgia"))
+        pending = place("Pending Place")
+        CategoryCleanupDecision.create!(category: pending, run: "old", stage: "rules", action: :keep,
+          decided_by: :ai, status: :proposed, category_snapshot: CategoryCleanupDecision.snapshot_of(pending))
+
+        SyncStep.call
+
+        assert_equal ["old"], CategoryCleanupDecision.where(category: pending).pluck(:run)
+      end
+
+      test "applies a rename and reports the result shape" do
+        mark_decided(place("Georgia"))
+        lower = ::Books::Category.create!(name: "secrets", category_type: :subject)
+        ::Books::Book.order(:id).limit(1).each { |book| CategoryItem.create!(category: lower, item: book) }
+
+        result = SyncStep.call
+
+        assert_equal "Secrets", lower.reload.name
+        assert_equal [:applied, :decisions, :new_categories], result.data.keys.sort
+        assert_operator result.data[:new_categories], :>=, 1
+        assert_operator result.data[:decisions], :>=, 1
+      end
     end
   end
 end

@@ -49,22 +49,22 @@ module Services
         assert_equal "Podgorica", rename.new_name
       end
 
-      test "deletes letterless fragments and categories with no links" do
+      test "deletes letterless fragments" do
         fragment = category("61)")
-        empty = category("Nowhere At All", links: 0)
 
         RulePass.call(run: "r1")
 
         assert decisions_for(fragment).sole.action_delete?
-        assert decisions_for(empty).sole.action_delete?
       end
 
-      test "never deletes an empty category that has places under it" do
+      test "never deletes a category with no links, with or without places under it" do
+        empty = category("Nowhere At All", links: 0)
         parent = category("North America", links: 0)
         ::Books::Category.create!(name: "Canada", category_type: :location, parent: parent)
 
         RulePass.call(run: "r1")
 
+        assert decisions_for(empty).none?
         assert decisions_for(parent).none?
       end
 
