@@ -78,13 +78,32 @@ module Services
         assert_equal "Death and Grief", decisions_for(amp).sole.new_name
       end
 
-      test "merges into a category whose alternative names include the name" do
-        kolkata = category("Kolkata", links: 2, alternative_names: ["Calcutta"])
+      test "never merges on alternative names" do
+        category("Kolkata", links: 2, alternative_names: ["Calcutta"])
         calcutta = category("Calcutta")
 
         RulePass.call(run: "r1")
 
-        assert_equal kolkata.id, decisions_for(calcutta).sole.target_category_id
+        assert decisions_for(calcutta).none?
+      end
+
+      test "a twin winner that would be renamed yields to the member already holding the clean name" do
+        long = category("Ufa (Russian Federation", links: 2)
+        clean = category("Ufa", links: 1)
+
+        RulePass.call(run: "r1")
+
+        assert_equal clean.id, decisions_for(long).sole.target_category_id
+        assert decisions_for(clean).none?
+      end
+
+      test "excludes protected categories" do
+        protected_category = category("secrets", type: :subject)
+        ::Books::Category.stubs(:protected_ids).returns([protected_category.id])
+
+        RulePass.call(run: "r1")
+
+        assert decisions_for(protected_category).none?
       end
 
       test "twins in different types are not merged" do
@@ -127,10 +146,9 @@ module Services
         assert decisions_for(existing).none?
       end
 
-      test "categories whose names have no alphanumerics are never twinned or alias-matched" do
+      test "categories whose names have no alphanumerics are never twinned" do
         first = category("!!", links: 2)
         second = category("??", links: 1)
-        category("Holder", links: 1, alternative_names: ["--"])
 
         RulePass.call(run: "r1")
 

@@ -4,9 +4,10 @@ module Services
   module CategoryCleanup
     # Spec §4.2 step 1: the decisions no AI is needed for. Every live books
     # location and subject gets a target name (or :delete); categories whose
-    # target names are twins within a type merge into the most-linked one; a
-    # lone name that matches another category's alternative name merges into
-    # it. Names the rules can't improve get no decision and wait for the AI.
+    # target names are twins within a type merge into the most-linked one.
+    # Alternative names are deliberately not used: they come from legacy merge
+    # history and include broader, narrower and reversed matches. Names the
+    # rules can't improve get no decision and wait for the AI.
     #
     # `only_ids` (the post-sync step) limits which categories may receive a
     # decision; every live category still takes part in twin matching, and an
@@ -27,7 +28,18 @@ module Services
       end
 
       def call
-        ::CategoryCleanupDecision.for_run(@run).where(stage: @stage, status: :proposed).delete_all
+        decisions = []
+        ::CategoryCleanupDecision.transaction do
+          ::CategoryCleanupDecision.for_run(@run).where(stage: @stage, status: :proposed).delete_all
+          decisions = build_decisions
+          persist(decisions)
+        end
+        Result.new(success?: true, data: {decisions: decisions.size, by_action: decisions.map { |d| d[:action_name] }.tally}, errors: [])
+      end
+
+      private
+
+      def build_decisions
         categories = load_categories
         counts = link_counts
         settled = ::CategoryCleanupDecision.for_run(@run).where.not(status: :proposed).distinct.pluck(:category_id).to_set
@@ -39,28 +51,21 @@ module Services
         end
 
         live = categories.reject { |c| targets[c.id] == :delete }
-        aliases = alias_index(live)
-        live.group_by { |c| [c.category_type, NameNormalizer.twin_key(targets[c.id]) || [:solo, c.id]] }.each do |(type, key), members|
-          winner = pick_winner(members, counts)
+        live.group_by { |c| [c.category_type, NameNormalizer.twin_key(targets[c.id]) || [:solo, c.id]] }.each_value do |members|
+          winner = pick_winner(members, counts, targets)
           members.each do |c|
             next unless writable?(c, settled)
 
             if c.id != winner.id
               decisions << build(c, :merge, target_category_id: winner.id,
                 reason: "Same name as #{winner.name.inspect} apart from case, punctuation or brackets")
-            elsif members.one? && (alias_target = aliases[[type, key]]) && alias_target != c.id
-              decisions << build(c, :merge, target_category_id: alias_target, reason: "Matches another category's alternative name")
             elsif targets[c.id] != c.name
               decisions << build(c, :rename, new_name: targets[c.id], reason: "Name clean-up")
             end
           end
         end
-
-        persist(decisions)
-        Result.new(success?: true, data: {decisions: decisions.size, by_action: decisions.map { |d| d[:action_name] }.tally}, errors: [])
+        decisions
       end
-
-      private
 
       def load_categories
         ::Books::Category.active
@@ -89,19 +94,18 @@ module Services
         counts[category.id].to_i.zero? ? "No books" : "Broken name fragment"
       end
 
-      def alias_index(categories)
-        categories.each_with_object({}) do |c, index|
-          c.alternative_names.each do |alt|
-            key = NameNormalizer.twin_key(alt)
-            index[[c.category_type, key]] ||= c.id if key
-          end
-        end
-      end
-
-      def pick_winner(members, counts)
+      # Most links wins (preferring existing over incoming in a sync). If that
+      # winner is about to be renamed and another member already holds exactly
+      # the clean name, that member wins: it keeps its name and slug.
+      def pick_winner(members, counts, targets)
         pool = @only_ids ? members.reject { |c| @only_ids.include?(c.id) } : []
         pool = members if pool.empty?
-        pool.max_by { |c| [counts[c.id].to_i, -c.id] }
+        winner = pool.max_by { |c| [counts[c.id].to_i, -c.id] }
+        if targets[winner.id] != winner.name
+          holder = members.find { |c| c.id != winner.id && c.name == targets[winner.id] }
+          return holder if holder
+        end
+        winner
       end
 
       def writable?(category, settled)
