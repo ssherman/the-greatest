@@ -27,17 +27,20 @@ CANARY_REDIRECT = (1003236695, 37975719)
 
 @dataclass(frozen=True)
 class Thresholds:
-    """Production floors. Deliberately loose for the first build; tighten them to
-    the measured values afterwards and record the measurement in the feature doc."""
+    """Production floors, tightened to the 2025-09-04 build (measured 2026-10-12):
+    165,272,991 records, 73,370,411 redirects, genre on 27.7%, subjects on 67.9%,
+    year on 98.4%, every raw ISBN check digit valid, 86.1% of the catalogue
+    resolving. The dump is frozen, so these guard a rebuild of the same data
+    against a pipeline regression, not a new dump."""
 
-    min_records: int = 20_000_000
-    max_records: int = 200_000_000  # the 2025-09-04 build has 165,272,991
-    min_redirects: int = 10_000_000
-    min_genre_share: float = 0.25
-    min_subject_share: float = 0.50
-    min_year_share: float = 0.80
-    min_checksum_share: float = 0.98
-    min_catalogue_coverage: float = 0.80
+    min_records: int = 160_000_000
+    max_records: int = 170_000_000
+    min_redirects: int = 70_000_000
+    min_genre_share: float = 0.27
+    min_subject_share: float = 0.65
+    min_year_share: float = 0.98
+    min_checksum_share: float = 0.99
+    min_catalogue_coverage: float = 0.80  # the catalogue grows weekly; modern books resolve less
 
 
 def _one(con, sql, params=()):

@@ -150,9 +150,9 @@ run, so that failure writes no `build_report.json` or `manifest.json`. Add the p
 
 | Gate | Rule |
 |---|---|
-| `row_counts` | `records` between 20,000,000 and 200,000,000 (the ceiling was 120,000,000 until the first build measured 165,272,991); `isbns` at least `records`; `redirects` at least 10,000,000; all four tables present. Loose on purpose for a first build; tighten to the measured values afterwards. |
-| `field_coverage` | `genre` on at least 25% of records, non-empty `subjects` on at least 50%, `year` on at least 80%. |
-| `isbn_checksums` | At least 98% of the raw ISBNs on kept records pass their check digit. |
+| `row_counts` | `records` between 160,000,000 and 170,000,000; `isbns` at least `records`; `redirects` at least 70,000,000; all four tables present. The first build ran with loose bounds (20M to 120M records, and the ceiling had to rise to 200M mid-build); these are the measured values, so a rebuild of the frozen dump that drifts is a pipeline regression. |
+| `field_coverage` | `genre` on at least 27% of records, non-empty `subjects` on at least 65%, `year` on at least 98%. |
+| `isbn_checksums` | At least 99% of the raw ISBNs on kept records pass their check digit. |
 | `pass_prefixes` | Every observed record pass prefix is in `PASS_ORDER`. |
 | `canaries` | ISBN 9780735211292 maps to OCLC 1055766559 with genre "Nonfiction"; 9780395476901 to 1000415078; 9780553103540 to 1002380292; OCLC 1003236695 redirects to 37975719. |
 | `catalogue_coverage` | At least 80% of the ISBN-13s in `--catalogue-isbns` resolve to a record. `skipped` only when the option is absent; a given file that is missing or has no valid ISBN-13 is a `fail`. |
@@ -162,17 +162,42 @@ A kept line that cannot be reduced (valid JSON of an unexpected shape, say a str
 
 ### Measured build
 
-**Not yet built.** There are no row counts, sizes, times or gate results to report, and this
-document does not carry estimates. After the first build, copy these from
-`/home/shane/wc-data/versions/2025-09-04/build_report.json` into this section:
+Built 2026-10-12 on the development machine from the 281,575,216,478-byte dump (fingerprint
+`a36a4883ce0a…`). Extract ran once, 3,646 s with 8 workers; the distill stages ran from its shards
+with `--resume --memory-limit 30GB --threads 16` after the original single-window `records` query ran
+out of memory twice.
 
-- `tables.<name>.rows` and `.bytes` for each of the four tables, and `total_bytes`;
-- `extract.lines`, `extract.kept`, `extract.bad_frames` and `extract.bad_lines`;
-- `timings`: seconds per stage (`extract`, `records`, `isbns`, `redirects`, `holdings`);
-- `gates`: name, status and detail for each of the seven gates, including the observed catalogue
-  coverage.
+| Table | Rows | Bytes |
+|---|---|---|
+| `records` | 165,272,991 | 22,948,976,270 |
+| `isbns` | 185,854,875 | 904,668,429 |
+| `redirects` | 73,370,411 | 363,694,914 |
+| `holdings` | 71,808,132 | 171,255,464 |
+| total | | 24,388,595,077 |
 
-Then tighten the `Thresholds` defaults in `gates.py` to the measured values.
+Extract: 2,223,520,143 lines read, 444,209,700 kept (299,028,904 record rows, 73,372,664 redirect
+rows, 71,808,132 holdings rows), 0 bad frames, 0 bad lines. Every record pass prefix was already in
+`PASS_ORDER`.
+
+| Stage | Seconds |
+|---|---|
+| extract | 3,646 |
+| records | 799 |
+| isbns | 765 |
+| redirects | 30 |
+| holdings | 3 |
+
+| Gate | Result |
+|---|---|
+| `row_counts` | pass |
+| `field_coverage` | pass: genre 0.277, subjects 0.679, year 0.984 |
+| `isbn_checksums` | pass: 1.0000 of 680,764,346 raw ISBNs |
+| `pass_prefixes` | pass |
+| `canaries` | pass |
+| `catalogue_coverage` | pass: 145,377 of 168,931 catalogue ISBN-13s resolve (0.861) |
+| `bad_frames` | pass |
+
+The `Thresholds` defaults in `gates.py` are tightened to these values.
 
 ## HTTP contract
 
