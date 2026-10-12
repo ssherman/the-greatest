@@ -1,0 +1,9 @@
+version: 1
+genres: ["Fiction", "Nonfiction", "Novels"]
+terms:
+  "Fiction": {verdict: genre, genre: "Fiction", language: en, uses: 100, books: 80}
+  "Romans": {verdict: genre, genre: "Fiction", language: fr, uses: 50, books: 40}
+  "novels": {verdict: genre, genre: "Novels", language: en, uses: 20, books: 15}
+  "History": {verdict: subject, subject: "Politics", language: en, uses: 30, books: 25}
+  "Large type books": {verdict: drop, reason: format, language: en, uses: 10, books: 9}
+  "Bildungsromans": {verdict: drop, reason: not_a_genre, language: en, uses: 8, books: 7}

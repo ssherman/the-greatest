@@ -2,7 +2,7 @@ require "test_helper"
 require "rake"
 
 class WorldcatRakeTest < ActiveSupport::TestCase
-  TASKS = %w[worldcat:export_isbns worldcat:vocabulary worldcat:map].freeze
+  TASKS = %w[worldcat:export_isbns worldcat:vocabulary worldcat:map worldcat:report worldcat:apply_aliases].freeze
 
   setup do
     unless Rake::Task.task_defined?("worldcat:export_isbns")
@@ -30,5 +30,17 @@ class WorldcatRakeTest < ActiveSupport::TestCase
     result = Services::Books::WorldCat::MapVocabulary::Result.new(success?: true, data: {mapped: 5, skipped_existing: 1, batches: 1}, errors: [])
     Services::Books::WorldCat::MapVocabulary.expects(:call).with { |args| args[:genres].include?("Fiction") && args[:out_path].to_s.end_with?("genre_map.yml") }.returns(result)
     assert_output(/mapped 5 terms \(1 already mapped\) in 1 batch/) { Rake::Task["worldcat:map"].invoke }
+  end
+
+  test "report writes the data-quality page" do
+    result = Services::Books::WorldCat::MappingReport::Result.new(success?: true, data: {top: [], unplaced: [1, 2], counts: {genre: 3, subject: 1, drop: 2}}, errors: [])
+    Services::Books::WorldCat::MappingReport.expects(:call).with { |args| args[:out_path].to_s.end_with?("docs/data-quality/worldcat-genre-mapping.md") }.returns(result)
+    assert_output(/3 genre, 1 subject, 2 drop; 2 terms with no genre/) { Rake::Task["worldcat:report"].invoke }
+  end
+
+  test "apply_aliases reports what it added" do
+    result = Services::Books::WorldCat::ApplyAliases::Result.new(success?: true, data: {categories_updated: 2, aliases_added: 5, missing_genres: ["Nope"]}, errors: [])
+    Services::Books::WorldCat::ApplyAliases.expects(:call).returns(result)
+    assert_output(/added 5 aliases on 2 genres; genres named by the map but missing: Nope/) { Rake::Task["worldcat:apply_aliases"].invoke }
   end
 end

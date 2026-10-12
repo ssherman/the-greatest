@@ -28,4 +28,25 @@ namespace :worldcat do
     d = result.data
     puts "mapped #{d[:mapped]} terms (#{d[:skipped_existing]} already mapped) in #{d[:batches]} batch#{"es" unless d[:batches] == 1}; review config/worldcat/genre_map.yml"
   end
+
+  desc "Write docs/data-quality/worldcat-genre-mapping.md from config/worldcat/genre_map.yml"
+  task report: :environment do
+    result = Services::Books::WorldCat::MappingReport.call(
+      map: Books::WorldCat::GenreMap.load,
+      out_path: Rails.root.join("..", "docs", "data-quality", "worldcat-genre-mapping.md").expand_path
+    )
+    abort result.errors.join("; ") unless result.success?
+    c = result.data[:counts]
+    puts "#{c[:genre]} genre, #{c[:subject]} subject, #{c[:drop]} drop; #{result.data[:unplaced].size} terms with no genre -> docs/data-quality/worldcat-genre-mapping.md"
+  end
+
+  desc "Add every mapped WorldCat term as an alternative name on its genre category (idempotent)"
+  task apply_aliases: :environment do
+    result = Services::Books::WorldCat::ApplyAliases.call(map: Books::WorldCat::GenreMap.load)
+    abort result.errors.join("; ") unless result.success?
+    d = result.data
+    line = "added #{d[:aliases_added]} aliases on #{d[:categories_updated]} genres"
+    line += "; genres named by the map but missing: #{d[:missing_genres].join(", ")}" if d[:missing_genres].any?
+    puts line
+  end
 end
