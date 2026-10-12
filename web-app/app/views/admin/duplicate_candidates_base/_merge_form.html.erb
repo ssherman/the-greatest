@@ -1,0 +1,24 @@
+<%# web-app/app/views/admin/duplicate_candidates_base/_merge_form.html.erb
+    Locals: pair, source, target (records of the pair's type), label (submit text).
+
+    Posts to this page's merge endpoint, naming the records shown so a pair
+    re-keyed by another merge is refused rather than merged blind. return_to
+    is this page's exact URL: the endpoint redirects there and Turbo morphs
+    the list in place. The same required confirm checkbox as the record
+    pages' merge modal. %>
+<%= form_with url: merge_duplicate_path(pair), method: :post, class: "space-y-2", data: {testid: "merge-form"} do |form| %>
+  <%= hidden_field_tag :source_id, source.id, id: nil %>
+  <%= hidden_field_tag :target_id, target.id, id: nil %>
+  <%= hidden_field_tag :return_to, request.fullpath, id: nil %>
+  <p class="text-sm [overflow-wrap:anywhere]">
+    Merge <strong><%= audit_record_label(source) %></strong> (#<%= source.id %>)
+    into <strong><%= audit_record_label(target) %></strong> (#<%= target.id %>).
+    The first is permanently deleted; its associations move to the second.
+  </p>
+  <label class="label cursor-pointer justify-start gap-2">
+    <%= check_box_tag :confirm_merge, "1", false, class: "checkbox checkbox-sm", required: true, id: nil %>
+    <span>I understand this action cannot be undone</span>
+  </label>
+  <%# Disabled while the merge runs: a second click would only be refused as already merged. %>
+  <%= form.submit label, class: "btn btn-warning btn-sm", data: {turbo_submits_with: "Merging…"} %>
+<% end %>

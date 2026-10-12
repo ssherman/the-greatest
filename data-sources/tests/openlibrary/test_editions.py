@@ -5,6 +5,7 @@ import pytest
 from openlibrary.pipeline.duck import connect
 from openlibrary.pipeline.editions import MIN_EDITION_YEAR, build_editions, stage_editions
 from openlibrary.pipeline.paths import ArtifactPaths
+from openlibrary.pipeline.sort_order import order_by
 
 
 @pytest.fixture()
@@ -188,3 +189,15 @@ def test_no_identifier_row_has_a_null_or_empty_value(built):
         f"SELECT count(*) FROM '{paths.table('identifiers')}' WHERE value IS NULL OR value = ''"
     ).fetchone()
     assert bad == 0
+
+
+def test_identifiers_is_written_in_lookup_order(built):
+    """GET /identifiers prunes row groups by min/max only on a sorted file."""
+    con, paths, _, _ = built
+    rows = con.execute(
+        f"SELECT {order_by('identifiers')} "
+        f"FROM read_parquet('{paths.table('identifiers')}', file_row_number = true) "
+        "ORDER BY file_row_number"
+    ).fetchall()
+    assert len(rows) > 1
+    assert rows == sorted(rows)

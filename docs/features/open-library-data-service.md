@@ -37,6 +37,29 @@ convention:
 
 Row counts and on-disk sizes for the real 2026-07-31 build are in "Measured build" below.
 
+### Sort order
+
+No table carries an index, so a point lookup is fast only when DuckDB can skip
+row groups by their min/max statistics. The build writes the three tables the
+API looks rows up in by key sorted by those keys
+(`openlibrary/pipeline/sort_order.py`): `identifiers` by `(id_type, value)`,
+`works` by `work_key`, `redirects` by `(entity, source_key)`. Order is physical
+only. No query depends on it, and no answer changes, so `PIPELINE_VERSION` did
+not move.
+
+Before this, `GET /identifiers` read every row group of its identifier type and
+hash-joined all of `works`. Measured on the 2026-07-31 artifact, single-threaded:
+1,660 ms of CPU a lookup, against 32 ms sorted with the endpoint's three key
+lookups (identifiers, then `_resolve_terminals`, then `works` by an `IN` list);
+77 of 77 sampled identifiers gave identical answers. During the 2026-10 Goodreads
+replay, about 6,100 of those lookups an hour held the home server's `ol` VM at
+100% CPU and slowed every `/resolve` beside them.
+
+An artifact built before the sort is fixed in place with
+`openlibrary.pipeline.resort` (`stage`, then `install`). See "Re-sorting a served
+version" in `docs/features/home-server.md`. On the 2026-07-31 artifact, `stage`
+took 57 s at 4 threads and a 6 GB memory limit (7 GB peak RSS).
+
 ## Building an artifact
 
     cd data-sources

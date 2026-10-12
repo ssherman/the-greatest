@@ -255,6 +255,44 @@ curl -fsS https://worldcat-api.thegreatestbooks.org/version -H "CF-Access-Client
   `curl` above use `/version`. The `curl` carries the `prod-rails` service token.
 - **There is no refresh timer and never will be.** The dump is frozen. A different version would mean
   a new build, a new directory under `versions/` and a new `current-version`.
+## Re-sorting a served version
+
+A version built before `pipeline/sort_order.py` has unsorted `identifiers`, `works` and
+`redirects`. It serves correct answers, just slowly (`docs/features/open-library-data-service.md`,
+"Sort order"). Re-sort it in place instead of rebuilding. On the `ol` VM, with the merged code
+deployed (the deploy takes the build lock itself, so finish it first):
+
+```bash
+cd /opt/the-greatest/deployment/home-server/guest
+v=$(cat /srv/ol-data/current-version)
+# The whole sequence holds the build lock, as deploy, ol-refresh, the trainer
+# and the 05:30 reboot do: otherwise a deploy can restart the API mid-swap, or
+# the reboot can stop the VM between two renames. -n: if a build or deploy holds
+# it, nothing runs; try again once it is done.
+sudo flock -n /run/ol-build.lock bash -euc '
+  # 1. Sorted copies into $1/_resorted/, checked. The API keeps serving.
+  ./compose.sh run --rm --no-deps -T build python -m openlibrary.pipeline.resort stage \
+    --root /data --dump-date "$1" --memory-limit 6GB --threads 4
+  # 2. Swap. Each table is briefly absent, so the API is stopped for it.
+  ./compose.sh stop api
+  ./compose.sh run --rm --no-deps -T build python -m openlibrary.pipeline.resort install \
+    --root /data --dump-date "$1"
+  ./compose.sh up -d api
+' resort "$v"
+```
+
+If `install` fails, the API stays stopped and the lock is released. A failed check moves
+nothing, so `./compose.sh up -d api` serves the old files again. Anything else: see the rollback
+below before starting the API.
+
+`install` checks every staged file (row count against the served file, row-group order) before
+moving any, and moves the served files to `$v/_presort/`. To roll back, stop the API and move them
+back. Delete `_presort/` once the API is confirmed good. A second `install` refuses while it exists.
+
+Stopping the API fails Rails' Open Library calls, and a failed source is never retried: the finder
+decides without it. Stop whatever is calling it first (for the Goodreads replay, delete the
+`Books::GoodreadsReplay::ResolveEditionJob` jobs and re-run `books:goodreads_replay:resolve`
+afterwards; it queues only what is unfinished).
 
 ## Done once by hand
 

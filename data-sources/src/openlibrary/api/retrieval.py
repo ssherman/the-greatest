@@ -588,22 +588,35 @@ def _fetch_identifier_hits(
 ) -> list[IdentifierHit]:
     """R83: resolve `identifiers.work_key` through redirects (COALESCE to
     terminal), drop rows whose terminal is not in `works`, and return one
-    `IdentifierHit` per distinct terminal work, ordered by work key."""
-    rows = cur.execute(
+    `IdentifierHit` per distinct terminal work, ordered by work key.
+
+    Three key lookups, not one join: with the tables sorted
+    (`pipeline.sort_order`) each reads a row group or two, where the join
+    probed every row of `works` (1.1 CPU-s a lookup against 27 ms)."""
+    matched = cur.execute(
         f"""
-        WITH matched AS (
-          SELECT i.edition_key, i.work_key AS requested_work,
-                 COALESCE(r.terminal_key, i.work_key) AS terminal
-          FROM '{paths.table("identifiers")}' i
-          {_terminal_join(paths, "i.work_key", entity="work")}
-          WHERE i.id_type = ? AND i.value = ? AND i.work_key IS NOT NULL
-        )
-        SELECT m.terminal, m.requested_work, m.edition_key
-        FROM matched m
-        JOIN '{paths.table("works")}' w ON w.work_key = m.terminal
+        SELECT edition_key, work_key FROM '{paths.table("identifiers")}'
+        WHERE id_type = ? AND value = ? AND work_key IS NOT NULL
         """,
         [id_type, value],
     ).fetchall()
+    if not matched:
+        return []
+    terminal_of = _resolve_terminals(cur, paths, [w for _, w in matched], entity="work")
+    terminals = sorted(set(terminal_of.values()))
+    present = {
+        key
+        for (key,) in cur.execute(
+            f"SELECT work_key FROM '{paths.table('works')}' "
+            f"WHERE work_key IN ({', '.join('?' * len(terminals))})",
+            terminals,
+        ).fetchall()
+    }
+    rows = [
+        (terminal_of[work_key], work_key, edition_key)
+        for edition_key, work_key in matched
+        if terminal_of[work_key] in present
+    ]
 
     by_terminal: dict[str, dict[str, set[str]]] = {}
     for terminal, requested_work, edition_key in rows:

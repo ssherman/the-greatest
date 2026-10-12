@@ -66,6 +66,15 @@ module DataImporters
       @task = mock("select_candidate_task")
     end
 
+    def queries_during(&block)
+      count = 0
+      # Cached hits count: the query cache only spares the database, not the
+      # N+1 a cold request would pay.
+      counter = ->(*, payload) { count += 1 unless payload[:name] == "SCHEMA" }
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+      count
+    end
+
     def stub_ai(data, success: true, error: nil)
       ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).returns(@task)
       @task.stubs(:call).returns(::Services::Ai::Result.new(success: success, data: data, error: error, ai_chat: ai_chats(:general_chat)))
@@ -130,6 +139,24 @@ module DataImporters
 
       assert_equal 7, @finder.ranked_position(@book)
       assert @finder.ranked?(@book)
+    end
+
+    test "summarize_all returns what summarize does, keyed by id, in queries that do not grow with the records" do
+      RankedItem.create!(item: @book, ranking_configuration: ranking_configurations(:books_global), rank: 7, score: 1.0)
+      ::ListItem.create!(list: lists(:basic_list), listable: @book, position: 1)
+      load = ->(ids) { ::Books::Book.where(id: ids).includes(:identifiers, :authors).to_a }
+      one = load.call([@book.id])
+      three = load.call([@book.id, @other.id, books_books(:got).id])
+      expected = three.to_h { |record| [record.id, @finder.summarize(record)] }
+
+      assert_equal 7, expected[@book.id][:ranked_position]
+      assert_equal 1, expected[@book.id][:list_count]
+      assert_equal expected, @finder.summarize_all(three)
+      assert_equal queries_during { @finder.summarize_all(one) }, queries_during { @finder.summarize_all(three) }
+    end
+
+    test "summarize_all of nothing is empty" do
+      assert_equal({}, @finder.summarize_all([]))
     end
 
     test "never_merge? consults the duplicate_candidates verdict" do

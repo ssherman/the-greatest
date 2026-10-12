@@ -3,6 +3,7 @@ import pytest
 
 from openlibrary.pipeline.duck import connect
 from openlibrary.pipeline.paths import ArtifactPaths
+from openlibrary.pipeline.sort_order import order_by
 from openlibrary.pipeline.works import _DECLARED_YEAR_PATTERN, build_works, stage_works
 
 
@@ -31,6 +32,18 @@ def test_works_table_has_one_row_per_work(built):
         f"SELECT count(DISTINCT work_key) FROM '{paths.table('works')}'"
     ).fetchone()
     assert distinct == staged
+
+
+def test_works_is_written_in_lookup_order(built):
+    """Lookups by work_key prune row groups by min/max only on a sorted file."""
+    con, paths, _, _ = built
+    rows = con.execute(
+        f"SELECT {order_by('works')} "
+        f"FROM read_parquet('{paths.table('works')}', file_row_number = true) "
+        "ORDER BY file_row_number"
+    ).fetchall()
+    assert len(rows) > 1
+    assert rows == sorted(rows)
 
 
 def test_description_object_is_unwrapped_to_its_text(built):

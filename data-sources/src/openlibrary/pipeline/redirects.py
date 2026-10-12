@@ -26,6 +26,7 @@ from __future__ import annotations
 import duckdb
 
 from .paths import ArtifactPaths
+from .sort_order import order_by
 from .works import read_dump_sql
 
 MAX_REDIRECT_DEPTH = 25
@@ -172,6 +173,7 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
               ELSE NULL
             END                                                             AS is_dangling
           FROM {current} s
+          ORDER BY {order_by("redirects")}
         ) TO '{paths.table("redirects")}' (FORMAT parquet, COMPRESSION zstd);
         """
     )
