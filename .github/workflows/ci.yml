@@ -124,7 +124,7 @@ jobs:
       # classes. No browser is ever downloaded. The recommender extra is
       # installed so the collaborative-filtering trainer's tests run.
       - name: Install dependencies (fails on lockfile drift)
-        run: uv sync --locked --extra fetcher --extra recommender
+        run: uv sync --locked --extra fetcher --extra recommender --extra worldcat
 
       - name: Lint
         run: uv run ruff check .

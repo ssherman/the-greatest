@@ -6,3 +6,5 @@ tests/
 *.parquet
 *.txt.gz
 README.md
+*.zst
+*.jsonl
