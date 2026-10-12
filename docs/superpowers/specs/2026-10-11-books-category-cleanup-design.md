@@ -320,8 +320,9 @@ validations and scopes; all logic is in services under `app/lib/services/categor
    - `&` → `and` renames (merging if the `and` form exists).
    - Zero-link categories → `delete`.
    - Names the rules can't settle are left without a decision for the AI passes.
-2. **AI location pass, head first** (`LocationTask`). Head = locations with ≥ 20 links after the
-   rules pass (configurable). One category per call. Input: the name, its link count, up to 5
+2. **AI location pass, head first** (`LocationTask`). Head = locations whose own direct link count
+   is ≥ 20 (configurable); merged-in links never move a category between tiers, and a head category
+   whose call failed is retried by re-running the head stage. One category per call. Input: the name, its link count, up to 5
    sample book titles with authors, and its current `alternative_names`. The system prompt (cached)
    holds the rules from §2 and §3.1 plus the current list of head location names with their
    proposed parents, so merges and parents point at known names. Output (strict schema):
@@ -336,9 +337,10 @@ validations and scopes; all logic is in services under `app/lib/services/categor
    category is created at apply time, with its parent taken from the next name in the first chain
    (by decision id) that mentions it; the report lists every created category and its parent.
 3. **AI location pass, tail.** Same task, prompt carrying the settled head. Batch size from §4.4.
-4. **AI subject pass** (`SubjectTask`), head then tail, same structure. Head = subjects with ≥ 20
-   links. Output: `action` (`keep, rename, merge, delete, is_location`), `name`, `merge_into`,
-   `reason`. `is_location` hands the category to the location tail pass. `delete` is reserved for
+4. **AI subject pass** (`SubjectTask`), head then tail, same structure. Head = subjects whose own
+   direct link count is ≥ 20. Output: `action` (`keep, rename, merge, delete, is_location`), `name`, `merge_into`,
+   `reason`. `is_location` retypes the category; after apply, the next locations propose (head
+   and tail, by its own link count) picks it up. `delete` is reserved for
    junk and things that aren't subjects (`Book titles`, `Packages`); a vague but real subject is
    `keep` or `merge`. The head first dedupes against itself (`Death and Grief` vs `Grief` is a
    judgement the prompt spells out: merge only true synonyms, never a broader/narrower pair).
