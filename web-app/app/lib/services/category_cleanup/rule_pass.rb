@@ -102,7 +102,7 @@ module Services
         pool = members if pool.empty?
         winner = pool.max_by { |c| [counts[c.id].to_i, -c.id] }
         if targets[winner.id] != winner.name
-          holder = members.find { |c| c.id != winner.id && c.name == targets[winner.id] }
+          holder = pool.find { |c| c.id != winner.id && c.name == targets[winner.id] }
           return holder if holder
         end
         winner

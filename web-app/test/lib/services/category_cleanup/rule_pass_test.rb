@@ -97,6 +97,16 @@ module Services
         assert decisions_for(clean).none?
       end
 
+      test "in sync mode the clean-name tie-break never promotes an incoming category" do
+        existing = category("Ufa (Russian Federation", links: 1)
+        incoming = category("Ufa", links: 1)
+
+        RulePass.call(run: "r1", only_ids: [incoming.id], stage: "sync")
+
+        assert_equal existing.id, decisions_for(incoming).sole.target_category_id
+        assert decisions_for(existing).none?
+      end
+
       test "excludes protected categories" do
         protected_category = category("secrets", type: :subject)
         ::Books::Category.stubs(:protected_ids).returns([protected_category.id])
