@@ -51,6 +51,8 @@ module Services
                 be useful. Set "reason" to one of: format, language_of_material,
                 not_a_genre, too_specific.
 
+              Copy each term's number into `index`; `index` is how the verdict is matched,
+              the echoed `term` text is not.
               Always set "language" to the ISO 639-1 code of the term's language.
               Never invent a genre: a "genre" verdict must name one from the list.
               Answer with JSON matching the schema, one verdict per term, in order.
@@ -74,8 +76,15 @@ module Services
 
           def process_and_persist(provider_response)
             asked = terms.map(&:first)
-            raw = Array(provider_response[:parsed][:verdicts]).map { |v| normalize(v) }
-            verdicts = raw.select { |v| asked.include?(v[:term]) }.uniq { |v| v[:term] }
+            seen = Set.new
+            verdicts = []
+            Array(provider_response[:parsed][:verdicts]).each do |raw|
+              verdict = normalize(raw)
+              index = verdict.delete(:index)
+              next if index.nil? || index < 1 || index > asked.size || !seen.add?(index)
+
+              verdicts << verdict.merge(term: asked[index - 1])
+            end
 
             missing = asked - verdicts.map { |v| v[:term] }
             return failure("No verdict for: #{missing.join(", ")}") if missing.any?
@@ -98,7 +107,7 @@ module Services
           def normalize(verdict)
             hash = verdict.respond_to?(:to_h) ? verdict.to_h : verdict
             hash = JSON.parse(hash.to_json, symbolize_names: true)
-            {term: hash[:term].to_s, verdict: hash[:verdict].to_s, genre: hash[:genre].presence,
+            {index: Integer(hash[:index], exception: false), term: hash[:term].to_s, verdict: hash[:verdict].to_s, genre: hash[:genre].presence,
              subject: hash[:subject].presence, language: hash[:language].presence, reason: hash[:reason].presence}
           end
 
@@ -107,7 +116,8 @@ module Services
           end
 
           class Verdict < OpenAI::BaseModel
-            required :term, String, doc: "The term exactly as given"
+            required :index, Integer, doc: "The term's number in the list, starting at 1"
+            required :term, String, doc: "The term as given (informational; the index is what matches)"
             required :verdict, String, doc: "genre, subject or drop"
             required :genre, String, nil?: true, doc: "For genre: a site genre name, exactly as listed"
             required :subject, String, nil?: true, doc: "For subject: a short canonical English phrase"
