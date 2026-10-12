@@ -131,7 +131,9 @@ SYNTHETIC = [
             "metadata": {
                 "oclc_number": "0001055766559",
                 "type": "search_holdings_summary_all_editions",
-                "from_filenames": ["search_holdings_summary_all_editions/2025-01-01_02.tar/9"],
+                "from_filenames": [
+                    "search_holdings_summary_all_editions/1055766559/index/99999999"
+                ],
                 "record": {
                     "oclc_number": 1055766559,
                     "total_holding_count": 4000,
@@ -191,18 +193,21 @@ def lines_for(path: Path, frames, oclc: int) -> list[bytes]:
                 return m.group(1)
         return None
 
+    # Last frame whose first key is strictly below `key`: lines for `key` may begin at the
+    # end of that frame, so it is scanned too.
     lo, hi = 0, len(frames) - 1
     while lo < hi:
         mid = (lo + hi + 1) // 2
         k = first_key(mid)
-        if k is not None and k <= key:
+        if k is not None and k < key:
             lo = mid
         else:
             hi = mid - 1
     out = []
-    for i in (lo, lo + 1):
-        if i >= len(frames):
-            continue
+    for i in range(lo, len(frames)):
+        k = first_key(i)
+        if i > lo and k is not None and k > key:
+            break
         for ln in frame(i).split(b"\n"):
             if b'"oclc_number":"' + key + b'"' in ln:
                 try:

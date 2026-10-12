@@ -73,7 +73,7 @@ def test_corpus_contains_a_redirect_chain_and_a_cycle():
         )
         for r in _records("redirect_title_json")
     }
-    assert any(target in to for target in to.values()), "no chain"
+    assert any(t in to and to[t] != s for s, t in to.items()), "no chain"
     assert any(to.get(to[src]) == src for src in to), "no cycle"
 
 
@@ -100,3 +100,16 @@ def test_corpus_contains_a_brief_record_whose_subjects_are_dicts():
         isinstance((r["metadata"]["record"].get("subjects") or [None])[0], dict)
         for r in _records("briefrecords_json")
     )
+
+
+def test_later_holdings_row_has_the_largest_index_for_its_number():
+    rows = [
+        r
+        for r in _records("search_holdings_summary_all_editions")
+        if r["metadata"]["oclc_number"] == "0001055766559"
+    ]
+
+    def index(row):
+        return int(row["metadata"]["from_filenames"][0].rsplit("/", 1)[-1])
+
+    assert max(rows, key=index)["metadata"].get("_synthetic") == "later_holdings"
