@@ -18,17 +18,18 @@
 class CategorySearchQuery
   DEFAULT_LIMIT = 10
 
-  def self.call(query, scope:, types: [], limit: DEFAULT_LIMIT, min_items: 0, min_items_types: [])
-    new(query, scope: scope, types: types, limit: limit, min_items: min_items, min_items_types: min_items_types).call
+  def self.call(query, scope:, types: [], limit: DEFAULT_LIMIT, min_items: 0, min_items_types: [], min_items_item_type: nil)
+    new(query, scope: scope, types: types, limit: limit, min_items: min_items, min_items_types: min_items_types, min_items_item_type: min_items_item_type).call
   end
 
-  def initialize(query, scope:, types: [], limit: DEFAULT_LIMIT, min_items: 0, min_items_types: [])
+  def initialize(query, scope:, types: [], limit: DEFAULT_LIMIT, min_items: 0, min_items_types: [], min_items_item_type: nil)
     @query = query.to_s.strip
     @scope = scope
     @types = Array(types)
     @limit = limit
     @min_items = min_items.to_i
     @min_items_types = Array(min_items_types).map(&:to_s)
+    @min_items_item_type = min_items_item_type
   end
 
   def call
@@ -52,6 +53,13 @@ class CategorySearchQuery
     return relation if @min_items <= 0 || @min_items_types.empty?
 
     type_values = @min_items_types.map { |type| ::Category.category_types.fetch(type) }
-    relation.where("categories.category_type NOT IN (:types) OR categories.item_count >= :min", types: type_values, min: @min_items)
+    # item_count counts every polymorphic link (authors included); a caller that
+    # cares about one kind of item names it and gets a correlated count instead.
+    count_sql = if @min_items_item_type
+      "(SELECT COUNT(*) FROM category_items ci WHERE ci.category_id = categories.id AND ci.item_type = :item_type)"
+    else
+      "categories.item_count"
+    end
+    relation.where("categories.category_type NOT IN (:types) OR #{count_sql} >= :min", types: type_values, min: @min_items, item_type: @min_items_item_type)
   end
 end

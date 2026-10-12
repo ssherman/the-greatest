@@ -97,4 +97,19 @@ class CategorySearchQueryTest < ActiveSupport::TestCase
     refute_includes results, small_place
     assert_includes results, small_genre
   end
+
+  test "min_items_item_type counts only links of that item type" do
+    place = ::Books::Category.create!(name: "Authorville", category_type: :location)
+    5.times do |n|
+      CategoryItem.create!(category: place, item: ::Books::Author.create!(name: "Author #{n}"))
+    end
+    CategoryItem.create!(category: place, item: ::Books::Book.create!(title: "Only Book"))
+    place.update_columns(item_count: 6)
+
+    by_count = search("authorville", min_items: 5, min_items_types: %w[location])
+    by_books = search("authorville", min_items: 5, min_items_types: %w[location], min_items_item_type: "Books::Book")
+
+    assert_includes by_count, place
+    refute_includes by_books, place
+  end
 end

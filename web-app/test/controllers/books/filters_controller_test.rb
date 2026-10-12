@@ -132,7 +132,20 @@ module Books
       assert_select "input[name='category_slugs[]'][value=fiction]"
     end
 
+    # The public threshold counts book links, not item_count, so a fixture's
+    # item_count alone no longer makes a subject or setting findable.
+    def link_a_book(*category_fixtures)
+      book = books_books(:war_and_peace)
+      category_fixtures.each { |name| CategoryItem.find_or_create_by!(category: categories(name), item: book) }
+      original = Rails.configuration.x.books.browse_min_category_books
+      Rails.configuration.x.books.browse_min_category_books = 1
+      @restore_minimum = -> { Rails.configuration.x.books.browse_min_category_books = original }
+    end
+
+    teardown { @restore_minimum&.call }
+
     test "search reaches subjects and locations, not only genres" do
+      link_a_book(:books_politics_subject)
       get "/filters/categories", params: {q: "politics"}
 
       assert_response :success
@@ -165,6 +178,7 @@ module Books
     # The Category axis spans genres, subjects and settings deliberately.
     # Scoping it here would break e2e/tests/books/filters.spec.ts.
     test "a category search still returns every category type, each tagged" do
+      link_a_book(:books_american_history_subject, :books_american_location)
       get "/filters/categories", params: {q: "americ"}
 
       assert_select "label[data-option-value=american-history] .badge", text: "Subject"

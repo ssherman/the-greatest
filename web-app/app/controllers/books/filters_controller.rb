@@ -51,7 +51,8 @@ class Books::FiltersController < ApplicationController
         params[:q],
         scope: ::Books::Category,
         min_items: Rails.configuration.x.books.browse_min_category_books,
-        min_items_types: %w[location subject]
+        min_items_types: %w[location subject],
+        min_items_item_type: "Books::Book"
       )
     else
       ::Books::CountrySearchQuery.call(params[:q])
