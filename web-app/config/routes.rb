@@ -319,6 +319,7 @@ Rails.application.routes.draw do
       resources :duplicate_candidates, only: [:index] do
         member do
           post :dismiss
+          post :merge
         end
       end
 
@@ -798,6 +799,7 @@ Rails.application.routes.draw do
       resources :duplicate_candidates, only: [:index] do
         member do
           post :dismiss
+          post :merge
         end
       end
       # The Goodreads replay's findings (Goodreads import spec §12.7).
@@ -1282,6 +1284,7 @@ Rails.application.routes.draw do
       resources :duplicate_candidates, only: [:index] do
         member do
           post :dismiss
+          post :merge
         end
       end
 

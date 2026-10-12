@@ -26,6 +26,7 @@
     <% if pair.pending? && current_user_can_write? %>
       <div class="flex flex-wrap gap-4 items-start" data-testid="pair-actions">
         <%= form_with url: dismiss_duplicate_path(pair), method: :post, class: "flex gap-2 items-end", data: {testid: "dismiss-form"} do |form| %>
+          <%= hidden_field_tag :return_to, request.fullpath, id: nil %>
           <%= form.text_field :resolution_note, placeholder: "Why not a duplicate (optional)", class: "input input-sm w-64", id: nil %>
           <%= form.submit "Not a duplicate", class: "btn btn-sm" %>
         <% end %>
@@ -33,13 +34,13 @@
           <details class="collapse collapse-arrow bg-base-200 w-auto" data-testid="merge-a-into-b">
             <summary class="collapse-title text-sm font-semibold">Merge A into B</summary>
             <div class="collapse-content">
-              <%= render "admin/shared/merge_form", entry: entry, source: a, target: b, label: "Merge A into B" %>
+              <%= render "admin/duplicate_candidates_base/merge_form", pair: pair, source: a, target: b, label: "Merge A into B" %>
             </div>
           </details>
           <details class="collapse collapse-arrow bg-base-200 w-auto" data-testid="merge-b-into-a">
             <summary class="collapse-title text-sm font-semibold">Merge B into A</summary>
             <div class="collapse-content">
-              <%= render "admin/shared/merge_form", entry: entry, source: b, target: a, label: "Merge B into A" %>
+              <%= render "admin/duplicate_candidates_base/merge_form", pair: pair, source: b, target: a, label: "Merge B into A" %>
             </div>
           </details>
         <% end %>
