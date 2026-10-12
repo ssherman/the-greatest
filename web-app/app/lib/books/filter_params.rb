@@ -42,22 +42,8 @@ module Books
       missing = slugs - active.keys
       return [active.values.sort_by(&:slug), false] if missing.empty?
 
-      replacements = missing.map { |slug| canonical_for(slug) || raise(ActiveRecord::RecordNotFound) }
+      replacements = missing.map { |slug| Books::CategorySlugResolver.call(slug) || raise(ActiveRecord::RecordNotFound) }
       [(active.values + replacements).uniq.sort_by(&:slug), true]
-    end
-
-    # A merged category's own slug, or a slug the category had before a rename
-    # (friendly_id history), resolved to the category a reader should land on.
-    def canonical_for(slug)
-      merged = Books::Category.merged.find_by(slug: slug)
-      return merged.canonical if merged
-
-      historical = FriendlyId::Slug
-        .where(sluggable_type: "Category", scope: "type:Books::Category", slug: slug)
-        .order(id: :desc).first
-      return nil if historical.nil?
-
-      Books::Category.find_by(id: historical.sluggable_id)&.canonical
     end
 
     def parse_slugs(raw, max)

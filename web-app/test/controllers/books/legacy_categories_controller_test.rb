@@ -140,6 +140,17 @@ module Books
       assert_redirected_to "/the-greatest/france/books"
     end
 
+    test "an old slug from before a rename redirects to the new filter page" do
+      category = ::Books::Category.create!(name: "Romance & Love", category_type: :genre)
+      old_slug = category.slug
+      category.update!(name: "Romance and Love")
+
+      get "/genres/#{old_slug}"
+
+      assert_response :moved_permanently
+      assert_redirected_to "/the-greatest/#{category.reload.slug}/books"
+    end
+
     test "a legacy id of a merged category redirects to the target" do
       target = categories(:books_france_location)
       merged = ::Books::Category.create!(name: "France (country)", category_type: :location, deleted: true, merged_into: target)

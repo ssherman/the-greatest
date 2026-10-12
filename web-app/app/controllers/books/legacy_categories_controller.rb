@@ -14,12 +14,8 @@ class Books::LegacyCategoriesController < ApplicationController
   # coincidentally equal legacy id. A merged category resolves to its target;
   # a category deleted without a merge still 404s, as on legacy.
   def find_category!
-    category = find_by_slug || find_by_legacy_id
+    category = Books::CategorySlugResolver.call(params[:id]) || find_by_legacy_id
     category&.canonical || raise(ActiveRecord::RecordNotFound)
-  end
-
-  def find_by_slug
-    Books::Category.active.find_by(slug: params[:id]) || Books::Category.merged.find_by(slug: params[:id])
   end
 
   # Category ids were not preserved by the migration, so a numeric id resolves

@@ -35,7 +35,7 @@ class Category < ApplicationRecord
 
   # FriendlyId configuration with scoping by STI type and finders for find() support
   # :history keeps every old slug in friendly_id_slugs, so a rename no longer
-  # breaks the old URL (Books::FilterParams and the legacy redirect resolve it).
+  # breaks the old URL (Books::CategorySlugResolver serves the filter URLs and the legacy redirect).
   friendly_id :name, use: [:slugged, :scoped, :finders, :history], scope: :type
 
   # Rails 8 enum syntax
