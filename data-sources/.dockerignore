@@ -7,4 +7,3 @@ tests/
 *.txt.gz
 README.md
 *.zst
-*.jsonl
