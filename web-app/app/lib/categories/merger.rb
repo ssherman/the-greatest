@@ -28,9 +28,9 @@ module Categories
         update_alternative_names
         # update! (not update_column) so Category's reindex callback still fires.
         source.update!(deleted: true, merged_into: target)
+        ItemCounter.call([source.id, target.id])
       end
 
-      ItemCounter.call([source.id, target.id])
       ItemReindexer.queue_items(moved)
       reconcile(moved) if source.location? || target.location?
       target
@@ -47,18 +47,31 @@ module Categories
       raise Refused, "Categories from different sites can't be merged." if source.type != target.type
       raise Refused, "Deleted categories can't be merged." if source.deleted? || target.deleted?
 
+      raise Refused, "Merged categories can't be merge targets." if target.merged_into_id.present?
+      raise Refused, "A category can't be merged into a place inside it." if descendant?(target)
+
       return unless source.is_a?(::Books::Category)
 
       protected_ids = ::Books::Category.protected_ids
       if protected_ids.include?(source.id) || protected_ids.include?(target.id)
         raise Refused, "Fiction, Nonfiction, Poetry and Religion & Spirituality can't be merged."
       end
-      if target.ancestors.include?(source)
-        raise Refused, "A category can't be merged into a place inside it."
-      end
-      if source.child_categories.exists? && !target.location?
+      if source.child_categories.where(deleted: false).exists? && !target.location?
         raise Refused, "#{source.name} has places under it, so it can only merge into a location."
       end
+    end
+
+    # True when node sits below source. Generic (not Books::Category#ancestors)
+    # because children move for every site; capped so a cycle can't loop.
+    def descendant?(node)
+      parent = node.parent
+      ::Books::Category::MAX_DEPTH.times do
+        return false if parent.nil?
+        return true if parent.id == source.id
+
+        parent = parent.parent
+      end
+      false
     end
 
     # Copies every link to the target. On a conflict a direct source beats an

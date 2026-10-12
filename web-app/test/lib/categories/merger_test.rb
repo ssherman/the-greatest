@@ -346,12 +346,57 @@ module Categories
       music = categories(:music_rock_genre)
       deleted = categories(:books_deleted_genre)
       fiction = categories(:books_fiction_genre)
+      lone = books_location("Lone Place")
       ::Books::Category.stubs(:protected_ids).returns([fiction.id])
 
-      [[us, us], [us, music], [deleted, us], [us, ohio], [fiction, us], [us, fiction]].each do |source, target|
+      [[us, us], [us, music], [deleted, us], [us, deleted], [us, ohio], [fiction, us], [lone, fiction]].each do |source, target|
         assert_raises(Categories::Refused, "#{source.name} -> #{target.name}") do
           Categories::Merger.new(category: source, category_to_merge_with: target).merge
         end
+      end
+    end
+
+    test "refuses to merge a music category into its own child" do
+      parent = Music::Category.create!(name: "Parent Genre", category_type: "genre")
+      child = Music::Category.create!(name: "Child Genre", category_type: "genre", parent: parent)
+
+      assert_raises(Categories::Refused) do
+        Categories::Merger.new(category: parent, category_to_merge_with: child).merge
+      end
+      assert_equal parent, child.reload.parent
+    end
+
+    test "refuses a target that was itself merged away" do
+      a = books_location("Mumbai")
+      b = books_location("Bombay")
+      c = books_location("Mumbai City")
+      Categories::Merger.new(category: a, category_to_merge_with: b).merge
+      a.update_columns(deleted: false)
+
+      assert_raises(Categories::Refused) do
+        Categories::Merger.new(category: c, category_to_merge_with: a.reload).merge
+      end
+    end
+
+    test "never downgrades a direct target link to an inherited source link" do
+      target = books_location("Rome")
+      source = books_location("Roma")
+      book = books_books(:war_and_peace)
+      CategoryItem.create!(category: target, item: book, source: :admin)
+      CategoryItem.create!(category: source, item: book, source: :inherited)
+
+      Categories::Merger.new(category: source, category_to_merge_with: target).merge
+
+      assert_equal "admin", CategoryItem.find_by(category: target, item: book).source
+    end
+
+    test "ignores soft-deleted children when checking the non-location target rule" do
+      source = books_location("Old Place")
+      books_location("Gone Child", parent: source).update_columns(deleted: true)
+      target = ::Books::Category.create!(name: "Old Place Topic", category_type: :subject)
+
+      assert_nothing_raised do
+        Categories::Merger.new(category: source, category_to_merge_with: target).merge
       end
     end
 
