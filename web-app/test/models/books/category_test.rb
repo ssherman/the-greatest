@@ -100,5 +100,52 @@ module Books
       CategoryItem.create!(category: russia, item: books_authors(:tolstoy))
       assert_includes Books::Category.by_author_ids([books_authors(:tolstoy).id]), russia
     end
+
+    def location(name, parent: nil)
+      ::Books::Category.create!(name: name, category_type: :location, parent: parent)
+    end
+
+    test "ancestors walks up the parent chain, nearest first" do
+      na = location("North America")
+      us = location("United States", parent: na)
+      il = location("Illinois", parent: us)
+      chicago = location("Chicago", parent: il)
+
+      assert_equal [il, us, na], chicago.ancestors
+      assert_equal [], na.ancestors
+    end
+
+    test "a location's parent must be a books location" do
+      subject = ::Books::Category.create!(name: "War", category_type: :subject)
+      place = ::Books::Category.new(name: "Somewhere", category_type: :location, parent: subject)
+
+      refute place.valid?
+      assert_includes place.errors[:parent_id], "must be a books location"
+    end
+
+    test "a location can't be re-parented under its own descendant" do
+      us = location("United States")
+      il = location("Illinois", parent: us)
+      us.parent = il
+
+      refute us.valid?
+      assert_includes us.errors[:parent_id], "would create a cycle"
+    end
+
+    test "genres keep their existing freedom to have any parent" do
+      parent = ::Books::Category.create!(name: "Speculative", category_type: :genre)
+      child = ::Books::Category.new(name: "Space Opera", category_type: :genre, parent: parent)
+      assert child.valid?
+    end
+
+    test "protected_ids are the four book-type categories resolved through LegacyIdMap" do
+      fiction = categories(:books_fiction_genre)
+      LegacyIdMap.record(model: "Books::Category", legacy_id: ::Books::BookType::LEGACY_CATEGORY_IDS[0], new_id: fiction.id)
+      ::Books::BookType.reset_category_ids!
+
+      assert_includes ::Books::Category.protected_ids, fiction.id
+    ensure
+      ::Books::BookType.reset_category_ids!
+    end
   end
 end

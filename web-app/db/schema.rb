@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_11_060037) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_133119) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -457,8 +457,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_11_060037) do
     t.bigint "parent_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "merged_into_id"
     t.index ["category_type"], name: "index_categories_on_category_type"
     t.index ["deleted"], name: "index_categories_on_deleted"
+    t.index ["merged_into_id"], name: "index_categories_on_merged_into_id"
     t.index ["name"], name: "index_categories_on_name"
     t.index ["parent_id"], name: "index_categories_on_parent_id"
     t.index ["slug"], name: "index_categories_on_slug"
@@ -472,6 +474,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_11_060037) do
     t.bigint "item_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "source", default: 0, null: false
     t.index ["category_id", "item_type", "item_id"], name: "index_category_items_on_category_id_and_item_type_and_item_id", unique: true
     t.index ["category_id"], name: "index_category_items_on_category_id"
     t.index ["item_type", "item_id"], name: "index_category_items_on_item_type_and_item_id"
@@ -1476,6 +1479,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_11_060037) do
   add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
   add_foreign_key "books_series_books", "books_books", column: "book_id"
   add_foreign_key "books_series_books", "books_series", column: "series_id"
+  add_foreign_key "categories", "categories", column: "merged_into_id"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_items", "categories"
   add_foreign_key "contact_messages", "users"

@@ -35,6 +35,12 @@ module Books
     has_many :books, through: :category_items, source: :item, source_type: "Books::Book"
     has_many :authors, through: :category_items, source: :item, source_type: "Books::Author"
 
+    # Location trees are shallow; this caps any walk so a cycle written around
+    # the validation (raw SQL) can't loop forever.
+    MAX_DEPTH = 8
+
+    validate :location_parent_is_valid, if: -> { location? && parent_id.present? && will_save_change_to_parent_id? }
+
     scope :by_book_ids, ->(book_ids) { joins(:category_items).where(category_items: {item_type: "Books::Book", item_id: book_ids}) }
     scope :by_author_ids, ->(author_ids) { joins(:category_items).where(category_items: {item_type: "Books::Author", item_id: author_ids}) }
 
@@ -52,7 +58,33 @@ module Books
       super || saved_change_to_category_type? || book_type_membership_changed?
     end
 
+    # The four book-type categories (Fiction, Nonfiction, Religion & Spirituality,
+    # Poetry). BookTypeCategoryMigrator raises if one is soft-deleted and saved
+    # searches filter on them, so nothing may merge, delete or rename them.
+    def self.protected_ids
+      ::Books::BookType::LABELS.keys.filter_map { |value| ::Books::BookType.category_id(value) }
+    end
+
+    # Nearest first: Chicago -> [Illinois, United States, North America].
+    def ancestors
+      chain = []
+      node = parent
+      while node && chain.size < MAX_DEPTH
+        chain << node
+        node = node.parent
+      end
+      chain
+    end
+
     private
+
+    def location_parent_is_valid
+      unless parent.is_a?(::Books::Category) && parent.location?
+        errors.add(:parent_id, "must be a books location")
+        return
+      end
+      errors.add(:parent_id, "would create a cycle") if parent == self || parent.ancestors.include?(self)
+    end
 
     def book_type_membership_changed?
       return false unless saved_change_to_name?

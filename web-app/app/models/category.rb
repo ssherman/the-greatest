@@ -34,7 +34,9 @@ class Category < ApplicationRecord
   extend FriendlyId
 
   # FriendlyId configuration with scoping by STI type and finders for find() support
-  friendly_id :name, use: [:slugged, :scoped, :finders], scope: :type
+  # :history keeps every old slug in friendly_id_slugs, so a rename no longer
+  # breaks the old URL (Books::FilterParams and the legacy redirect resolve it).
+  friendly_id :name, use: [:slugged, :scoped, :finders, :history], scope: :type
 
   # Rails 8 enum syntax
   # genre/location/subject: all domains
@@ -46,6 +48,9 @@ class Category < ApplicationRecord
 
   # Associations
   belongs_to :parent, class_name: "Category", optional: true
+  # Set when this category was merged into another. Always paired with
+  # deleted: true, and flattened by Categories::Merger so it never chains.
+  belongs_to :merged_into, class_name: "Category", optional: true
   has_many :child_categories, class_name: "Category", foreign_key: :parent_id, dependent: :nullify
   has_many :category_items, dependent: :destroy, inverse_of: :category
   has_many :ai_chats, as: :parent, dependent: :destroy
@@ -72,6 +77,7 @@ class Category < ApplicationRecord
   # Scopes
   scope :active, -> { where(deleted: false) }
   scope :soft_deleted, -> { where(deleted: true) }
+  scope :merged, -> { where.not(merged_into_id: nil) }
   scope :sorted_by_name, -> { order(:name) }
   scope :sorted_by_item_count, -> { order(item_count: :desc) }
   scope :search, ->(query) { where("name ILIKE ?", "%#{query}%") }
@@ -86,6 +92,26 @@ class Category < ApplicationRecord
       WHERE lower(unnested) = ?
     )", name.downcase)
   }
+
+  # Ids with every merged one swapped for its target, order kept, duplicates
+  # dropped. Ids that are not merged (active, or deleted as junk) pass through
+  # unchanged so callers keep their existing behaviour for them.
+  def self.replace_merged_ids(ids)
+    ids = Array(ids)
+    return ids if ids.empty?
+
+    targets = where(id: ids).merged.pluck(:id, :merged_into_id).to_h
+    ids.map { |id| targets.fetch(id, id) }.uniq
+  end
+
+  # The category a reader should use in place of this one: itself when active,
+  # its merge target when merged into an active category, nil otherwise.
+  def canonical
+    return self unless deleted?
+    return nil if merged_into.nil? || merged_into.deleted?
+
+    merged_into
+  end
 
   # Soft delete the category (sets deleted: true instead of destroying)
   def soft_delete!
