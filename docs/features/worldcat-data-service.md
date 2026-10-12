@@ -36,7 +36,9 @@ Same four boundaries, enforced structurally:
 - `records` holds only ISBN-bearing records whose top-level `generalFormat` is `Book`. It is sorted
   and row-grouped by `oclc`; `isbns` is sorted by `isbn13`, so an exact lookup touches one row group.
 - `isbns` indexes only check-digit-valid ISBN-13s (ISBN-10s are converted). The invalid share is
-  observed by the `isbn_checksums` gate, not stored.
+  observed by the `isbn_checksums` gate, not stored. `records.isbn13s`, by contrast, is the union of
+  what the record's passes said and can include ISBN-13s with a bad check digit; anything that
+  writes identifiers from it (increment 2) must filter first.
 - `records.isbn13s` is the union across every scrape pass of that OCLC number; every other scalar
   field comes from the newest pass.
 - `redirects` is resolved transitively (up to 10 hops). `is_cycle` is true when the resolved target
@@ -125,6 +127,10 @@ confirmed.
 A failed gate raises `BuildFailed` after `build_report.json` is written, keeps `_staging/`, and
 writes `manifest.json` with `gates_passed: false`, which the API refuses to serve. A gate never
 raises: an exception inside one is recorded as that gate's `fail`.
+
+An unknown pass prefix is different: it raises `UnknownPass` in the records stage, before the gates
+run, so that failure writes no `build_report.json` or `manifest.json`. Add the prefix to
+`PASS_ORDER` with its recency and rebuild.
 
 | Gate | Rule |
 |---|---|

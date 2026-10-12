@@ -234,7 +234,9 @@ implementation").
 | `holdings` | one per OCLC number with a summary | `oclc`, `total_holding_count`, `total_editions` |
 
 `isbns` indexes only check-digit-valid ISBN-13s; the invalid share is the `isbn_checksums` gate's
-observation, not a column. `records` is sorted and row-grouped by `oclc`; `isbns` by `isbn13`.
+observation, not a column. `records.isbn13s` is the union of what the record's passes said and can
+include ISBN-13s with a bad check digit, so increment 2 must filter before writing identifiers.
+`records` is sorted and row-grouped by `oclc`; `isbns` by `isbn13`.
 Exact lookups then touch one row group. `manifest.json` records `dump_date`, `source_fingerprint`
 (sha256 over the file size and the first and last frame, not the whole 281 GB), row counts,
 `gates_passed` and the pipeline version; the API refuses to boot without `gates_passed: true`, as
@@ -315,7 +317,7 @@ pair it already sends to the Open Library and fetcher services (one name per sha
 client's `BaseClient`, `CircuitBreaker` and `Configuration` pattern: `record_by_isbn(isbn)`,
 `record_by_oclc(number)`, `lookup(isbn13s)` (chunks at 500), `version`. One value object,
 `Books::WorldCat::Record`. Timeouts: 5 s single, 20 s batch. The breaker trips the same way as the
-Open Library one; a tripped breaker makes the backfill stop and reschedule, never skip books.
+Open Library one; a tripped breaker makes the backfill stop with `stopped: true` and the reason logged; rerun it by hand with `worldcat:backfill`; it never skips books.
 
 ### Vocabulary mapping (one-time, owner-reviewed)
 
@@ -331,8 +333,8 @@ Open Library one; a tripped breaker makes the backfill stop and reschedule, neve
    `subject` (a canonical English phrase) or `reason` (`format`, `language_of_material`,
    `not_a_genre`, `too_specific`). Writes `config/worldcat/genre_map.yml`. Runs once; the file is
    checked in and edited by hand afterwards. Cost: a few thousand short strings, well under a dollar.
-3. `worldcat:report` — two reports to stdout and `docs/data-quality/worldcat-genre-mapping.md`:
-   the top 300 terms with verdicts, and the terms the pass could not place on a genre, ranked by
+3. `worldcat:report` — writes `docs/data-quality/worldcat-genre-mapping.md` and prints a one-line summary
+   (it does not print the reports). The page holds the top 300 terms with verdicts, and the terms the pass could not place on a genre, ranked by
    how many of our books carry them. That second list is the owner's input for adding genres.
 4. `worldcat:apply_aliases` — adds each genre-verdict term to its genre category's
    `alternative_names` (the merger's own mechanism), so the mapping is visible in the admin and
