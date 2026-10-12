@@ -235,4 +235,12 @@ class Services::BooksMigration::SyncTest < ActiveSupport::TestCase
     assert_operator labels.index("location_ancestors"), :>, labels.index("book_type_categories")
     assert_operator labels.index("location_ancestors"), :<, labels.index("countries")
   end
+
+  test "runs the category cleanup step just before reconciling location ancestors" do
+    result = Services::BooksMigration::Sync.call(legacy: legacy)
+
+    assert result.success?, result.errors.inspect
+    labels = result.data[:steps].map(&:first)
+    assert_equal labels.index("location_ancestors") - 1, labels.index("category_cleanup")
+  end
 end
