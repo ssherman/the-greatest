@@ -20,6 +20,12 @@ module Services
         record
       end
 
+      # The tail takes everything the head did not decide, so tail tests run
+      # after the head has handled the United States.
+      def decide_head
+        CategoryCleanupDecision.create!(category: @us, run: "r1", stage: "locations_head", action: :keep, decided_by: :ai)
+      end
+
       def answer(key, name, chain)
         {key: key, verdict: "real_place", canonical_name: name, merge_into: nil, parent_chain: chain,
          place_kind: "city", retype_to: nil, ambiguous: false, reason: "r"}
@@ -45,15 +51,63 @@ module Services
       end
 
       test "the tail batches, and a category missing from a batch answer is retried alone" do
-        stub_task([
+        decide_head
+        sizes = []
+        results = [
           {"1" => answer("1", "Chicago", ["United States"])},
           {"1" => answer("1", "Boston", ["United States"])}
-        ])
+        ]
+        LocationTask.stubs(:new).with { |**kwargs| sizes << kwargs[:entries].size }.returns(
+          stub(call: ::Services::Ai::Result.new(success: true, data: {results: results[0]}, ai_chat: nil)),
+          stub(call: ::Services::Ai::Result.new(success: true, data: {results: results[1]}, ai_chat: nil))
+        )
 
         AiPass.new(run: "r1", category_type: "location", tier: :tail, batch_size: 2).call
 
-        assert CategoryCleanupDecision.exists?(run: "r1", category: @chicago, action: :set_parent)
-        assert CategoryCleanupDecision.exists?(run: "r1", category: @boston, action: :set_parent)
+        assert_equal [2, 1], sizes
+        [@chicago, @boston].each do |category|
+          assert_equal 1, CategoryCleanupDecision.where(run: "r1", category: category).count
+          assert CategoryCleanupDecision.exists?(run: "r1", category: category, action: :set_parent)
+        end
+      end
+
+      test "the tail still sends a category a head merge grew past the head threshold" do
+        CategoryCleanupDecision.create!(category: @us, run: "r1", stage: "locations_head", action: :merge,
+          target_category: @chicago, decided_by: :ai)
+        assert_operator NameIndex.new(run: "r1", category_type: "location").entries.find { |e| e.id == @chicago.id }.links, :>=, 3
+        stub_task([{"1" => answer("1", "Chicago", ["United States"])}, {"1" => answer("1", "Boston", ["United States"])}])
+
+        result = AiPass.new(run: "r1", category_type: "location", tier: :tail).call
+
+        assert_equal 2, result.data[:candidates]
+        assert CategoryCleanupDecision.exists?(run: "r1", category: @chicago, stage: "locations_tail")
+      end
+
+      test "the decision links the ai chat of the answer" do
+        chat = ai_chats(:general_chat)
+        LocationTask.any_instance.stubs(:call).returns(
+          ::Services::Ai::Result.new(success: true, data: {results: {"1" => answer("1", "United States", [])}}, ai_chat: chat)
+        )
+
+        AiPass.new(run: "r1", category_type: "location", tier: :head).call
+
+        assert_equal chat, CategoryCleanupDecision.find_by!(run: "r1", category: @us).ai_chat
+      end
+
+      test "progress is reported every PROGRESS_EVERY calls with the running stats" do
+        stub_const_every = AiPass::PROGRESS_EVERY
+        AiPass.send(:remove_const, :PROGRESS_EVERY)
+        AiPass.const_set(:PROGRESS_EVERY, 1)
+        reports = []
+        stub_task([{"1" => answer("1", "United States", [])}])
+
+        AiPass.new(run: "r1", category_type: "location", tier: :head, progress: ->(stats) { reports << stats }).call
+
+        assert_equal 1, reports.size
+        assert_equal [1, 1, 1], [reports.first[:calls], reports.first[:candidates], reports.first[:decided]]
+      ensure
+        AiPass.send(:remove_const, :PROGRESS_EVERY)
+        AiPass.const_set(:PROGRESS_EVERY, stub_const_every)
       end
 
       test "a rerun skips categories already decided in that stage" do
@@ -67,6 +121,7 @@ module Services
       end
 
       test "categories removed by a rule decision are not sent" do
+        decide_head
         CategoryCleanupDecision.create!(category: @chicago, run: "r1", stage: "rules", action: :delete, decided_by: :rule)
         stub_task([{"1" => answer("1", "Boston", ["United States"])}])
 
@@ -85,9 +140,11 @@ module Services
       end
 
       test "call_count reflects the pending candidates, the batch size and the limit" do
+        decide_head
         assert_equal 1, AiPass.new(run: "r1", category_type: "location", tier: :tail, batch_size: 25).call_count
         assert_equal 2, AiPass.new(run: "r1", category_type: "location", tier: :tail, batch_size: 1).call_count
         assert_equal 1, AiPass.new(run: "r1", category_type: "location", tier: :tail, batch_size: 1, limit: 1).call_count
+        assert_equal 2, AiPass.new(run: "r1", category_type: "location", tier: :tail, batch_size: 0).call_count
       end
     end
   end

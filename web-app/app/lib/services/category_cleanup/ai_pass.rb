@@ -5,9 +5,14 @@ module Services
     # Spec §4.2 steps 2-4: sends one type's undecided head or tail categories
     # to the AI, most-linked first, and writes the answers as decisions. The
     # head always goes one per call; the tail uses the calibrated batch size.
+    # Run head first: the tail takes every undecided entry of the type, with no
+    # link filter, because a head merge can grow a tail category's effective
+    # link count past the head threshold and it must still be sent.
     # Resumable: a category already decided in this stage is never re-sent, so
     # an interrupted run just continues (REDO=1 on the rake task starts over).
     class AiPass
+      PROGRESS_EVERY = 100
+
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
       TASKS = {
@@ -27,15 +32,20 @@ module Services
 
       attr_reader :stage
 
-      def initialize(run:, category_type:, tier:, batch_size: nil, limit: nil)
+      def initialize(run:, category_type:, tier:, batch_size: nil, limit: nil, progress: nil)
         @run = run
         @category_type = category_type.to_s
         @tier = tier.to_sym
-        @batch_size = (@tier == :head) ? 1 : (batch_size || Rails.configuration.x.categories_cleanup.tail_batch_size)
+        computed = (@tier == :head) ? 1 : (batch_size || Rails.configuration.x.categories_cleanup.tail_batch_size)
+        @batch_size = [computed.to_i, 1].max
+        @progress = progress
+        @calls = 0
         @limit = limit.to_i.positive? ? limit.to_i : nil
         @stage = "#{@category_type.pluralize}_#{@tier}"
       end
 
+      # Exact at batch size 1; a lower bound for larger batches, since
+      # retry-alone calls for categories missing from an answer are not counted.
       def call_count
         (candidates.size / @batch_size.to_f).ceil
       end
@@ -43,7 +53,13 @@ module Services
       def call
         stats = {candidates: candidates.size, decided: 0, failed_calls: 0, missing: 0}
         known = own_index.head_names
-        candidates.each_slice(@batch_size) { |batch| process(batch, known, stats) }
+        candidates.each_slice(@batch_size) do |batch|
+          process(batch, known, stats)
+          if @report_due
+            @report_due = false
+            @progress&.call(stats.merge(calls: @calls))
+          end
+        end
         Result.new(success?: true, data: stats, errors: [])
       end
 
@@ -62,7 +78,7 @@ module Services
             .distinct.pluck(:category_id).to_set
           head_min = Rails.configuration.x.categories_cleanup.head_min_links
           list = own_index.entries
-            .select { |entry| (@tier == :head) == (entry.links >= head_min) }
+            .select { |entry| @tier == :tail || entry.links >= head_min }
             .reject { |entry| seen.include?(entry.id) }
             .sort_by { |entry| [-entry.links, entry.id] }
           @limit ? list.first(@limit) : list
@@ -73,6 +89,8 @@ module Services
         entries = batch.each_with_index.map { |entry, index| self.class.task_entry(entry, (index + 1).to_s) }
         parent = batch.one? ? batch.first.category : nil
         result = self.class.task_class(@category_type).new(entries: entries, known_names: known, tier: @tier, parent: parent).call
+        @calls += 1
+        @report_due = true if (@calls % PROGRESS_EVERY).zero?
         unless result.success?
           stats[:failed_calls] += 1
           return
