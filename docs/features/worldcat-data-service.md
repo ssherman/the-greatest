@@ -34,7 +34,7 @@ Same four boundaries, enforced structurally:
 | `holdings` | one per OCLC number with a summary | `oclc`, `total_holding_count`, `total_editions` |
 
 - `records` holds only ISBN-bearing records whose top-level `generalFormat` is `Book`. It is sorted
-  and row-grouped by `oclc`; `isbns` is sorted by `isbn13`. A single lookup prunes to one row group; a batch of hundreds of OCLC numbers becomes a hash join that scans the key columns (measured about 0.3 s on a 30M-row table with 2 threads), which is why the launch todo times a 500-ISBN batch on the VM.
+  and row-grouped by `oclc`; `isbns` is sorted by `isbn13`. A single lookup prunes to one row group; a batch of hundreds of OCLC numbers becomes a hash join that scans the key columns (a synthetic 30M-row benchmark during review measured it in the hundreds of milliseconds; the real figure comes from the launch-todo timing step on the VM), which is why the launch todo times a 500-ISBN batch on the VM.
 - `isbns` indexes only check-digit-valid ISBN-13s (ISBN-10s are converted). The invalid share is
   observed by the `isbn_checksums` gate, not stored. `records.isbn13s`, by contrast, is the union of
   what the record's passes said and can include ISBN-13s with a bad check digit; anything that

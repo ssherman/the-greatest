@@ -259,8 +259,9 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
 8. **Time a full batch on the VM. Shane runs with `!`.** The service has a 5 s per-request deadline
    and a 500-ISBN batch is the largest `/lookup` accepts (the backfill sends 100). Time one from the
    dev machine through the VM's loopback, twice (cold, then warm):
-   `head -500 web-app/tmp/our_isbn13s.txt | jq -R . | jq -sc '{isbn13s: .}' | ssh debian@<vm-address> "curl -s -o /dev/null -w '%{time_total}\n' -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8082/lookup"`
-   (`tmp/our_isbn13s.txt` is what `worldcat:export_isbns` writes by default). Both times must be well
+   `test "$(wc -l < /home/shane/wc-data/our_isbns.txt)" -ge 500 || { echo "export has fewer than 500 ISBNs"; exit 1; }; head -500 /home/shane/wc-data/our_isbns.txt | jq -R . | jq -sc '{isbn13s: .}' | ssh debian@<vm-address> "curl -s -o /dev/null -w '%{time_total}\n' -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8082/lookup"`
+   (`/home/shane/wc-data/our_isbns.txt` is the export step 1 writes; the guard stops the step on a
+   missing or short file, which would otherwise "pass" in milliseconds on an empty batch). Both times must be well
    under 5 s before the backfill; a `504` or a time near the deadline means stop and lower the
    backfill's batch size or raise `WC_API_DEADLINE_S`.
 9. **Production setting. Shane runs with `!`.** Add
@@ -273,8 +274,9 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    deployed before steps 12 and 13 run in production.
 11. **Rehearse the backfill in development.** The dev database is not disposable, so snapshot it
     first: `bin/snapshot-dev-db.sh --label pre-worldcat` (from the repo root). Then, with the local WorldCat API running,
-    `bin/rails "worldcat:backfill[2000]"`. Read the worker log's counts (`genres_linked`,
-    `subjects_unresolved`, `type_conflicts`) and spot-check ten of those books in the admin: each
+    `bin/rails "worldcat:backfill[2000]"`. Read the worker log's line for the run (grep the Sidekiq
+    log for "WorldCat backfill") and its counts ("genre links", "unresolved subject phrases",
+    "type conflicts"), then spot-check ten of those books in the admin: each
     genre should be one you would have chosen, and none should carry both Fiction and Nonfiction.
     Fix the map and rerun if not. Restore with `bin/snapshot-dev-db.sh --restore` if the links look
     wrong.
