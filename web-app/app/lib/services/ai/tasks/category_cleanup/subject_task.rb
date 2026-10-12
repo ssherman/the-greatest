@@ -21,14 +21,13 @@ module Services
               For each subject choose an action:
               - "keep": a good subject whose name already follows the rules.
               - "rename": a good subject whose name breaks the rules; give the new name in "name".
-              - "merge": the same subject as one of the known subjects below; give its exact name in "merge_into".
+              - "merge": the same subject as a DIFFERENT known subject below (never its own name), per the merge rule below; give its exact name in "merge_into".
               - "delete": junk or not a subject: a truncated fragment, a placeholder ("Book titles", "Packages"), a genre ("Science Fiction"), a format ("Anthology") or an audience ("Young Adult").
               - "is_location": a place, which belongs with locations.
-              Merge only true synonyms and variant spellings ("Decision Making" and "Decision-Making"; "Womens Studies" and "Women's Studies").
               #{merge_scope_rule}
               A vague but real theme ("Identity", "Family") is a keep.
 
-              Naming rules: Title Case with minor words lowercase unless first, "and" not "&", straight apostrophes, no trailing punctuation, a noun or noun phrase.
+              Naming rules: Title Case with minor words lowercase unless first, "and" not "&", straight apostrophes, no trailing punctuation, a noun or noun phrase. Don't rename only to change singular/plural.
 
               #{known_names_block}
             SYSTEM
@@ -36,9 +35,9 @@ module Services
 
           def merge_scope_rule
             if tier == :tail
-              "This subject is rare. If it is too narrow to stand on its own and one known subject clearly covers it, merge it into that subject (\"Spacecraft Missions\" into \"Space Exploration\"). Never merge into a subject that only overlaps."
+              "Merge true synonyms and variant spellings (\"Decision Making\" and \"Decision-Making\"; \"Womens Studies\" and \"Women's Studies\"), and also: this subject is rare, so if it is too narrow to stand on its own and one known subject clearly covers it, merge it into that subject (\"Spacecraft Missions\" into \"Space Exploration\"). Never merge into a subject that only overlaps."
             else
-              "Never merge a narrower subject into a broader one, or a broader into a narrower one: \"Grief\" is not \"Death\"."
+              "Merge only true synonyms and variant spellings (\"Decision Making\" and \"Decision-Making\"; \"Womens Studies\" and \"Women's Studies\"). Never merge a narrower subject into a broader one, or a broader into a narrower one: \"Grief\" is not \"Death\"."
             end
           end
 

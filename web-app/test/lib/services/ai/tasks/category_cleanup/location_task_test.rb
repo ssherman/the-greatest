@@ -38,6 +38,9 @@ module Services
             assert_includes system, "A country's parent is always its continent"
             assert_includes system, "\"Paris\", not \"Paris, France\""
             assert_includes system, "Illinois\nUnited States\nNorth America"
+            assert_includes system, "a DIFFERENT known location (never its own name)"
+            assert_includes system, "unless merge_into is set"
+            assert_includes system, "Empty only for a root"
           end
 
           test "keeps valid results keyed by number and drops unknown keys, repeats and verdicts" do

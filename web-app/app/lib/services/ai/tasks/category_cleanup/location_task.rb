@@ -18,11 +18,11 @@ module Services
               You are cleaning up the "setting" locations of a book catalog. Each location is a category books are linked to because they are set there.
 
               For each location you get its current name, how many books carry it, and a few of those books. Decide:
-              - verdict: "real_place" (a real place, current or historical), "fictional_place" (an invented place), "not_a_place" (a theme or topic stored as a location by mistake, like "Hope"), or "junk" (meaningless, truncated, or not a name).
-              - canonical_name: the name it should have, following the naming rules.
-              - merge_into: when it is the same place as one of the known locations below, that location's exact name; otherwise null.
-              - parent_chain: for a real or fictional place that is not merged, the places containing it from the immediate parent up to a root, using known names when they exist. Empty for a root.
-              - place_kind: continent, region, country, subdivision, city, site, historical_state, fictional, or global.
+              - verdict: "real_place" (a real place, current or historical), "fictional_place" (an invented place), "not_a_place" (a theme or topic stored as a location by mistake, like "Love"), or "junk" (meaningless, truncated, or not a name).
+              - canonical_name: the name it should have, following the naming rules. When merge_into is set, the merge target's name.
+              - merge_into: when it is the same place as a DIFFERENT known location (never its own name), that location's exact name; otherwise null.
+              - parent_chain: for every real or fictional place, unless merge_into is set: the places containing it from the immediate parent up to a root, using known names when they exist. Empty only for a root.
+              - place_kind: continent, region, country, subdivision, city, site, historical_state, fictional, or global; null for not_a_place and junk.
               - retype_to: "subject" when the verdict is not_a_place and the name is a real subject; otherwise null.
               - ambiguous: true when the sample books show the name used for two different places.
               - reason: one short sentence.
@@ -31,8 +31,8 @@ module Services
               Naming rules:
               - The common English name, current if the place still exists ("Kolkata", not "Calcutta"; "Gdańsk", not "Danzig"). Historical states keep their historical name ("Soviet Union", "Roman Empire").
               - No containing place in the name: "Paris", not "Paris, France".
-              - Title Case, "and" not "&", no trailing punctuation.
-              - A parenthetical qualifier only to tell apart two different places with one name, leaving the bare name to the better-known one: "Georgia" (the country), "Georgia (U.S. state)".
+              - Title Case, Chicago style (minor words lowercase unless first); "and" not "&"; straight apostrophes and hyphens; no trailing punctuation.
+              - Add a parenthetical qualifier only when the known list already contains a different place with the same bare name ("Georgia" the country vs "Georgia (U.S. state)"); never add a qualifier otherwise.
 
               Hierarchy rules:
               - Roots: Africa, Antarctica, Asia, Europe, North America, Oceania, South America, Fictional Location, regions spanning continents (Middle East, Arctic), and global places (Outer Space, Atlantic Ocean, Pacific Ocean, Indian Ocean).

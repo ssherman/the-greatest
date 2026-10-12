@@ -19,6 +19,9 @@ module Services
             assert_includes task(:head).send(:system_message), "Never merge a narrower subject into a broader one"
             assert_includes task(:tail).send(:system_message), "too narrow to stand on its own"
             refute_includes task(:head).send(:system_message), "too narrow to stand on its own"
+            assert_includes task(:head).send(:system_message), "Merge only true synonyms and variant spellings"
+            refute_includes task(:tail).send(:system_message), "Merge only true synonyms and variant spellings"
+            assert_includes task(:tail).send(:system_message), "a DIFFERENT known subject below (never its own name)"
           end
 
           test "keeps a valid result and drops an unknown action" do
