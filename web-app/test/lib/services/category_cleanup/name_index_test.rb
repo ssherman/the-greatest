@@ -25,6 +25,7 @@ module Services
 
         refute by_id.key?(twin.id)
         assert_equal 3, by_id[dc.id].links
+        assert_equal 2, by_id[dc.id].own_links
         assert_equal "Paris", by_id[lower.id].name
       end
 

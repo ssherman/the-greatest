@@ -5,9 +5,9 @@ module Services
     # Spec §4.2 steps 2-4: sends one type's undecided head or tail categories
     # to the AI, most-linked first, and writes the answers as decisions. The
     # head always goes one per call; the tail uses the calibrated batch size.
-    # Run head first: the tail takes every undecided entry of the type, with no
-    # link filter, because a head merge can grow a tail category's effective
-    # link count past the head threshold and it must still be sent.
+    # Tiers are decided by a category's OWN direct link count, so merged-in
+    # growth never moves a category between tiers. A head category whose call
+    # failed is retried by re-running the head stage; the tail never takes it.
     # Resumable: a category already decided in this stage is never re-sent, so
     # an interrupted run just continues (REDO=1 on the rake task starts over).
     class AiPass
@@ -78,7 +78,7 @@ module Services
             .distinct.pluck(:category_id).to_set
           head_min = Rails.configuration.x.categories_cleanup.head_min_links
           list = own_index.entries
-            .select { |entry| @tier == :tail || entry.links >= head_min }
+            .select { |entry| (@tier == :head) == (entry.own_links >= head_min) }
             .reject { |entry| seen.include?(entry.id) }
             .sort_by { |entry| [-entry.links, entry.id] }
           @limit ? list.first(@limit) : list

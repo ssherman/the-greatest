@@ -20,12 +20,6 @@ module Services
         record
       end
 
-      # The tail takes everything the head did not decide, so tail tests run
-      # after the head has handled the United States.
-      def decide_head
-        CategoryCleanupDecision.create!(category: @us, run: "r1", stage: "locations_head", action: :keep, decided_by: :ai)
-      end
-
       def answer(key, name, chain)
         {key: key, verdict: "real_place", canonical_name: name, merge_into: nil, parent_chain: chain,
          place_kind: "city", retype_to: nil, ambiguous: false, reason: "r"}
@@ -51,7 +45,6 @@ module Services
       end
 
       test "the tail batches, and a category missing from a batch answer is retried alone" do
-        decide_head
         sizes = []
         results = [
           {"1" => answer("1", "Chicago", ["United States"])},
@@ -81,6 +74,15 @@ module Services
 
         assert_equal 2, result.data[:candidates]
         assert CategoryCleanupDecision.exists?(run: "r1", category: @chicago, stage: "locations_tail")
+      end
+
+      test "a head-sized category with no decision is not sent by the tail stage" do
+        stub_task([{"1" => answer("1", "Chicago", ["United States"])}, {"1" => answer("1", "Boston", ["United States"])}])
+
+        result = AiPass.new(run: "r1", category_type: "location", tier: :tail).call
+
+        assert_equal 2, result.data[:candidates]
+        assert_not CategoryCleanupDecision.exists?(run: "r1", category: @us)
       end
 
       test "the decision links the ai chat of the answer" do
@@ -121,7 +123,6 @@ module Services
       end
 
       test "categories removed by a rule decision are not sent" do
-        decide_head
         CategoryCleanupDecision.create!(category: @chicago, run: "r1", stage: "rules", action: :delete, decided_by: :rule)
         stub_task([{"1" => answer("1", "Boston", ["United States"])}])
 
@@ -140,7 +141,6 @@ module Services
       end
 
       test "call_count reflects the pending candidates, the batch size and the limit" do
-        decide_head
         assert_equal 1, AiPass.new(run: "r1", category_type: "location", tier: :tail, batch_size: 25).call_count
         assert_equal 2, AiPass.new(run: "r1", category_type: "location", tier: :tail, batch_size: 1).call_count
         assert_equal 1, AiPass.new(run: "r1", category_type: "location", tier: :tail, batch_size: 1, limit: 1).call_count

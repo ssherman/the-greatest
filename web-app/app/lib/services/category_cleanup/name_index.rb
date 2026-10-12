@@ -8,7 +8,9 @@ module Services
     # Applied decisions are already in the database, so only proposed ones are read. The AI passes build prompts from it and resolve the model's
     # names back to category ids with #lookup.
     class NameIndex
-      Entry = Struct.new(:category, :name, :links, keyword_init: true) do
+      # links is the effective count (merged-in links added); own_links is the
+      # category's own direct count and decides its head/tail tier.
+      Entry = Struct.new(:category, :name, :links, :own_links, keyword_init: true) do
         def id = category.id
       end
 
@@ -59,7 +61,7 @@ module Services
         end
 
         @entries = categories.reject { |c| removed.include?(c.id) }.map do |c|
-          Entry.new(category: c, name: renames[c.id] || c.name, links: links[c.id])
+          Entry.new(category: c, name: renames[c.id] || c.name, links: links[c.id], own_links: counts[c.id].to_i)
         end
         index_names
       end
