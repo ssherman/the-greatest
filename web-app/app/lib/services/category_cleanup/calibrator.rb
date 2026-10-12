@@ -10,8 +10,9 @@ module Services
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
       SIZES = [1, 10, 25].freeze
+      SAMPLE_SIZE = 200
 
-      def self.call(run:, category_type:, sample_size: 200, seed: 42, sizes: SIZES)
+      def self.call(run:, category_type:, sample_size: SAMPLE_SIZE, seed: 42, sizes: SIZES)
         new(run: run, category_type: category_type, sample_size: sample_size, seed: seed, sizes: sizes).call
       end
 
@@ -57,7 +58,8 @@ module Services
       def signature(answer)
         key = ->(name) { NameNormalizer.twin_key(name.to_s) }
         if @category_type == "location"
-          [answer[:verdict], key.call(answer[:merge_into]), key.call(Array(answer[:parent_chain]).first), key.call(answer[:canonical_name])]
+          [answer[:verdict], key.call(answer[:merge_into]), key.call(Array(answer[:parent_chain]).first), key.call(answer[:canonical_name]),
+            answer[:retype_to]]
         else
           [answer[:action], key.call(answer[:name]), key.call(answer[:merge_into])]
         end

@@ -17,16 +17,20 @@ namespace :categories do
         next
       end
 
-      ::CategoryCleanupDecision.for_run(run).where(stage: stage, status: %i[proposed failed]).delete_all if ENV["REDO"] == "1"
       type, tier = ai_stages.fetch(stage)
       progress = lambda do |stats|
         puts format("  calls=%d decided=%d failed_calls=%d missing=%d candidates=%d",
           stats[:calls], stats[:decided], stats[:failed_calls], stats[:missing], stats[:candidates])
       end
       pass = ::Services::CategoryCleanup::AiPass.new(run: run, category_type: type, tier: tier, limit: ENV["LIMIT"], progress: progress)
-      calls = pass.call_count
+      calls = estimate = nil
       begin
-        estimate = ::Services::CategoryCleanup::CostGuard.check!(calls: calls, force: ENV["FORCE"] == "1")
+        # One transaction: a TooExpensive raised below rolls the REDO delete back.
+        ::CategoryCleanupDecision.transaction do
+          ::CategoryCleanupDecision.for_run(run).where(stage: stage, status: %i[proposed failed]).delete_all if ENV["REDO"] == "1"
+          calls = pass.call_count
+          estimate = ::Services::CategoryCleanup::CostGuard.check!(calls: calls, force: ENV["FORCE"] == "1")
+        end
       rescue ::Services::CategoryCleanup::CostGuard::TooExpensive => e
         abort e.message
       end
@@ -65,8 +69,12 @@ namespace :categories do
     task :calibrate, [:run, :type] => :environment do |_task, args|
       abort "Usage: bin/rails 'categories:cleanup:calibrate[RUN,location|subject]'" unless args[:run].present? && %w[location subject].include?(args[:type])
       sizes = ::Services::CategoryCleanup::Calibrator::SIZES
-      calls = sizes.sum { |size| (200 / size.to_f).ceil }
-      ::Services::CategoryCleanup::CostGuard.check!(calls: calls, force: ENV["FORCE"] == "1")
+      calls = sizes.sum { |size| (::Services::CategoryCleanup::Calibrator::SAMPLE_SIZE / size.to_f).ceil }
+      begin
+        ::Services::CategoryCleanup::CostGuard.check!(calls: calls, force: ENV["FORCE"] == "1")
+      rescue ::Services::CategoryCleanup::CostGuard::TooExpensive => e
+        abort e.message
+      end
       result = ::Services::CategoryCleanup::Calibrator.call(run: args[:run], category_type: args[:type])
       puts "Sample: #{result.data[:sample]} tail #{args[:type]}s"
       result.data[:sizes].each do |row|

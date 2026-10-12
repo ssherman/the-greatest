@@ -82,8 +82,8 @@ module Services
       end
 
       def largest_merges
-        decisions.proposed.action_merge.includes(:target_category).to_a
-          .sort_by { |d| -d.category_snapshot["item_count"].to_i }.first(TOP_MERGES)
+        decisions.proposed.action_merge.includes(:target_category)
+          .order(Arel.sql("(category_snapshot->>'item_count')::int DESC NULLS LAST")).limit(TOP_MERGES)
           .map { |d| "#{d.category_snapshot["name"]} (#{d.category_snapshot["item_count"]}) -> #{d.target_category&.name}" }
       end
 
@@ -97,7 +97,7 @@ module Services
 
       def would_create
         lookup = LocationLookup.new
-        names = decisions.proposed.action_set_parent.flat_map(&:parent_chain)
+        names = decisions.proposed.action_set_parent.pluck(:parent_chain).flatten
           .select { |name| NameNormalizer.twin_key(name) }
           .uniq { |name| NameNormalizer.twin_key(name) }
           .reject { |name| lookup.find(name) }
@@ -130,7 +130,7 @@ module Services
         path = @out_dir.join("category_cleanup_#{@run.parameterize}.csv")
         CSV.open(path, "w") do |csv|
           csv << %w[id stage status decided_by action category_id name category_type links new_name target parent_chain new_category_type place_kind ambiguous reason error]
-          decisions.includes(:target_category).order(:id).find_each do |d|
+          decisions.includes(:target_category).find_each do |d|
             snapshot = d.category_snapshot
             csv << [d.id, d.stage, d.status, d.decided_by, d.action, d.category_id, snapshot["name"], snapshot["category_type"], snapshot["item_count"],
               d.new_name, d.target_category&.name, d.parent_chain.join(" > "), d.new_category_type && ::Category.category_types.key(d.new_category_type),

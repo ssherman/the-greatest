@@ -55,11 +55,40 @@ module Services
 
       test "a null comparison key on both sides compares equal instead of crashing" do
         nil_answer = answer("1", ["???"]).merge(canonical_name: "???")
-        LocationTask.any_instance.stubs(:call).returns(ai_result({"1" => nil_answer, "2" => nil_answer}))
+        LocationTask.any_instance.stubs(:call).returns(ai_result({"1" => nil_answer}), ai_result({"1" => nil_answer}),
+          ai_result({"1" => nil_answer, "2" => nil_answer}))
 
-        result = Calibrator.call(run: "r1", category_type: "location", sample_size: 2, seed: 1, sizes: [2, 2])
+        result = Calibrator.call(run: "r1", category_type: "location", sample_size: 2, seed: 1, sizes: [1, 2])
 
         assert_in_delta 1.0, result.data[:sizes].sole[:agreement]
+      end
+
+      test "a location retype and a location delete do not count as agreeing" do
+        retype = answer("1", []).merge(verdict: "not_a_place", retype_to: "genre")
+        delete = answer("1", []).merge(verdict: "not_a_place", retype_to: nil)
+        LocationTask.any_instance.stubs(:call).returns(ai_result({"1" => retype}), ai_result({"1" => delete}),
+          ai_result({"1" => delete, "2" => delete}))
+
+        result = Calibrator.call(run: "r1", category_type: "location", sample_size: 2, seed: 1, sizes: [1, 2])
+
+        assert_in_delta 0.5, result.data[:sizes].sole[:agreement]
+      end
+
+      test "subject signatures compare action and merge target" do
+        ::Books::Category.where(category_type: :subject).update_all(deleted: true)
+        2.times do |i|
+          record = ::Books::Category.create!(name: "Subj #{i}", category_type: :subject)
+          CategoryItem.create!(category: record, item: books_books(:war_and_peace))
+        end
+        subject = ->(action, into) { {key: "1", action: action, name: "x", merge_into: into, reason: ""} }
+        ::Services::Ai::Tasks::CategoryCleanup::SubjectTask.any_instance.stubs(:call).returns(
+          ai_result({"1" => subject.call("keep", nil)}), ai_result({"1" => subject.call("merge", "Fiction")}),
+          ai_result({"1" => subject.call("delete", nil), "2" => subject.call("merge", "Fiction")})
+        )
+
+        result = Calibrator.call(run: "r1", category_type: "subject", sample_size: 2, seed: 1, sizes: [1, 2])
+
+        assert_in_delta 0.5, result.data[:sizes].sole[:agreement]
       end
     end
   end
