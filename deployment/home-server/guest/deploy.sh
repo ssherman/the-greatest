@@ -58,6 +58,7 @@ case "$ROLE" in
   # still on the previous commit.
   ol) service=api; build=(recommender api) ;;
   fetcher) service=fetcher; build=(fetcher) ;;
+  worldcat) service=worldcat; build=(worldcat) ;;
   *) fail "unknown ROLE '$ROLE'" ;;
 esac
 # A failed build leaves the running container exactly as it was. One image per
@@ -68,6 +69,9 @@ done
 
 if [ "$ROLE" = ol ] && [ ! -f "$OL_DATA/current-version" ]; then
   log "no Open Library version yet; ol-refresh starts api after the first build"
+  if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then "$COMPOSE" up -d cloudflared || fail "compose up cloudflared"; fi
+elif [ "$ROLE" = worldcat ] && [ ! -f "$WC_DATA/current-version" ]; then
+  log "no WorldCat version yet; copy the artifact and write $WC_DATA/current-version, then touch force-deploy"
   if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then "$COMPOSE" up -d cloudflared || fail "compose up cloudflared"; fi
 else
   # Both services are defined on both VMs: name only this VM's.

@@ -1,7 +1,7 @@
 # deployment/home-server/lib/vm.sh
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # the spec variables and image constants are read by provision, which sources this file
-# The two VMs: their shape (spec §5), what they are told at first boot, and
+# The VMs: their shape (spec §5), what they are told at first boot, and
 # their creation, rebuild and settings.
 
 DEBIAN_IMAGE=debian-13-genericcloud-amd64.qcow2
@@ -23,7 +23,10 @@ vm_spec() {
       VMID=120 NAME=fetcher CORES=4 MEM=4096 OSDISK=40 DATADISK=0
       NET="virtio,bridge=vmbr1,firewall=1" IPCONFIG="ip=10.20.0.10/24,gw=10.20.0.1"
       NAMESERVER="1.1.1.1 1.0.0.1" STARTUP="order=2" ;;
-    *) die "unknown VM role '$1' (ol or fetcher)" ;;
+    worldcat)
+      VMID=130 NAME=worldcat CORES=2 MEM=4096 OSDISK=32 DATADISK=40
+      NET="virtio,bridge=vmbr0,firewall=1" IPCONFIG="ip=dhcp,ip6=auto" NAMESERVER="" STARTUP="order=3" ;;
+    *) die "unknown VM role '$1' (ol, fetcher or worldcat)" ;;
   esac
 }
 
@@ -43,6 +46,9 @@ render_vm_env() {
     fetcher) printf '%s\n' "ROLE=fetcher" "REPO_REF=$REPO_REF" "TUNNELS_ENABLED=$TUNNELS_ENABLED" \
           "TUNNEL_TOKEN=${FETCHER_TUNNEL_TOKEN:-}" "HC_HEARTBEAT=${HC_FETCHER_HEARTBEAT:-}" \
           "HC_DEPLOY=${HC_FETCHER_DEPLOY:-}" "HC_REFRESH=" ;;
+    worldcat) printf '%s\n' "ROLE=worldcat" "REPO_REF=$REPO_REF" "TUNNELS_ENABLED=$TUNNELS_ENABLED" \
+          "TUNNEL_TOKEN=${WORLDCAT_TUNNEL_TOKEN:-}" "HC_HEARTBEAT=${HC_WORLDCAT_HEARTBEAT:-}" \
+          "HC_DEPLOY=${HC_WORLDCAT_DEPLOY:-}" "HC_REFRESH=" ;;
     *) die "unknown VM role '$role'" ;;
   esac >"$out"
 }
@@ -238,13 +244,13 @@ rebuild_vm() { # replace only the OS disk; the data disk is never touched (spec 
 }
 
 enable_tunnels() {
-  if [ -z "${OL_TUNNEL_TOKEN:-}" ] || [ -z "${FETCHER_TUNNEL_TOKEN:-}" ]; then
-    die "both tunnel tokens must be set in secrets/home-server.env first (sops secrets/home-server.env)"
+  if [ -z "${OL_TUNNEL_TOKEN:-}" ] || [ -z "${FETCHER_TUNNEL_TOKEN:-}" ] || [ -z "${WORLDCAT_TUNNEL_TOKEN:-}" ]; then
+    die "all three tunnel tokens must be set in secrets/home-server.env first (sops secrets/home-server.env)"
   fi
   on_host "touch $HOST_STATE/tunnels-enabled"
   TUNNELS_ENABLED=1
   local role
-  for role in fetcher ol; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
+  for role in fetcher ol worldcat; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
 }
 
 # disable_tunnels: clear the flag and push TUNNELS_ENABLED=0; the forced deploy
@@ -253,5 +259,5 @@ disable_tunnels() {
   on_host "rm -f $HOST_STATE/tunnels-enabled"
   TUNNELS_ENABLED=0
   local role
-  for role in fetcher ol; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
+  for role in fetcher ol worldcat; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
 }

@@ -89,8 +89,14 @@ This document lists all environment variables required for production deployment
 - **Value**: `https://page-fetcher.thegreatestbooks.org`
 - **Used By**: web, worker
 
+#### WORLDCAT_SERVICE_URL
+- **Description**: WorldCat lookup service base URL
+- **Required**: Yes, for the WorldCat genre backfill
+- **Value**: `https://worldcat-api.thegreatestbooks.org`
+- **Used By**: web, worker
+
 #### CLOUDFLARE_ACCESS_CLIENT_ID / CLOUDFLARE_ACCESS_CLIENT_SECRET
-- **Description**: The `prod-rails` Access service token, sent by both clients (docs/features/home-server.md)
+- **Description**: The `prod-rails` Access service token, sent by all three clients (docs/features/home-server.md)
 - **Required**: Yes, both, in production; neither in development
 - **Used By**: web, worker
 - **Security**: Never commit; lives in `secrets/.env.production`

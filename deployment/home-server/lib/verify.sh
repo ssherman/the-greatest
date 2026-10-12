@@ -70,7 +70,7 @@ verify_host() {
 
 verify_vms() {
   local role
-  for role in ol fetcher; do
+  for role in ol fetcher worldcat; do
     vm_spec "$role"
     expect "$role: running" on_host "qm status $VMID | grep -q running"
     expect "$role: starts on boot" on_host "qm config $VMID | grep -qx 'onboot: 1'"
@@ -83,6 +83,11 @@ verify_vms() {
     expect "ol: /version answers" vm_ssh ol "curl -fsS 127.0.0.1:8080/version"
   else
     echo "SKIP  ol: no Open Library version yet (first build running or failed: journalctl -u ol-refresh)"
+  fi
+  if vm_ssh worldcat "test -f /srv/wc-data/current-version"; then
+    expect "worldcat: /version answers" vm_ssh worldcat "curl -fsS 127.0.0.1:8082/version"
+  else
+    echo "SKIP  worldcat: no WorldCat version yet (copy the artifact and write current-version: docs/features/worldcat-data-service.md)"
   fi
 }
 
@@ -155,7 +160,7 @@ verify_egress() {
 verify_idempotent() {
   CHANGES=()
   converge_host_dns; converge_host_packages; converge_host_network; converge_host_firewall
-  local role; for role in fetcher ol; do ensure_vm "$role"; done
+  local role; for role in fetcher ol worldcat; do ensure_vm "$role"; done
   if [ "${#CHANGES[@]}" = 0 ]; then ok "a second provision changes nothing"; else bad "a second provision changed: ${CHANGES[*]}"; fi
 }
 
@@ -231,6 +236,9 @@ verify_recovery() {
   crash_service fetcher the-greatest-fetcher-1 "curl -fsS 127.0.0.1:8081/health"
   if vm_ssh ol "test -f /srv/ol-data/current-version"; then
     crash_service ol the-greatest-api-1 "curl -fsS 127.0.0.1:8080/version"
+  fi
+  if vm_ssh worldcat "test -f /srv/wc-data/current-version"; then
+    crash_service worldcat the-greatest-worldcat-1 "curl -fsS 127.0.0.1:8082/version"
   fi
   log "rebooting the host"
   on_host "systemctl reboot" || true
