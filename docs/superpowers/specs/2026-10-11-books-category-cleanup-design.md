@@ -164,7 +164,7 @@ On the books category show page: a "Merge into…" form (target picked through t
 category autocomplete, with a confirm checkbox), posting to a new `merge` member route on
 `Admin::Books::CategoriesController`. The categories admin has no `Actions::Admin` plumbing, and a
 member route is smaller than adding it. The category form permits `parent_id` (already) and `alternative_names`
-(new, as a comma-separated field). Deleting a books category from admin goes through
+(new, as a textarea with one name per line — names themselves contain commas, e.g. "Oakland, California", so a comma-separated field would split them). Deleting a books category from admin goes through
 `Categories::Deleter` (soft delete *and* remove links), not the bare `soft_delete!` it calls today,
 which leaves links attached. Music and games keep today's behaviour.
 
