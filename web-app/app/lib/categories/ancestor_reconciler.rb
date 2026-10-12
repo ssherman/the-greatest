@@ -25,16 +25,17 @@ module Categories
     def call
       return result(0, 0) if @item_ids && @item_ids.empty?
 
-      added = removed = []
+      added = removed = nil
       ::CategoryItem.transaction do
-        added = select_rows(insert_sql)
-        removed = select_rows(delete_sql)
+        added = aggregate(insert_sql)
+        removed = aggregate(delete_sql)
+        # Inside the transaction so a crash can't leave item_count stale.
+        ItemCounter.call(added[:category_ids] | removed[:category_ids])
       end
 
-      touched = added + removed
-      ItemCounter.call(touched.map { |row| row["category_id"] })
-      ItemReindexer.queue_items(touched.map { |row| [row["item_type"], row["item_id"]] })
-      result(added.size, removed.size)
+      # Every row touched is a Books::Book link (ITEM_TYPE).
+      ItemReindexer.queue_items((added[:item_ids] | removed[:item_ids]).map { |id| [ITEM_TYPE, id] })
+      result(added[:count], removed[:count])
     end
 
     private
@@ -43,8 +44,17 @@ module Categories
       Result.new(success?: true, data: {added: added, removed: removed}, errors: [])
     end
 
-    def select_rows(sql)
-      ::CategoryItem.connection.exec_query(sql).to_a
+    # Runs a statement that ends in summary_select and returns its aggregate, so
+    # a whole-catalog run never materialises the changed rows in Ruby.
+    # cast_values decodes the Postgres arrays through the adapter's type map.
+    def aggregate(sql)
+      count, category_ids, item_ids = ::CategoryItem.connection.select_all(sql).cast_values.first
+      {count: count.to_i, category_ids: Array(category_ids), item_ids: Array(item_ids)}
+    end
+
+    def summary_select
+      "SELECT COUNT(*) AS n, ARRAY_AGG(DISTINCT category_id) AS category_ids, " \
+        "ARRAY_AGG(DISTINCT item_id) AS item_ids FROM changed"
     end
 
     def inherited = ::CategoryItem.sources.fetch("inherited")
@@ -58,19 +68,21 @@ module Categories
     end
 
     # (descendant_id, ancestor_id) for every live books location and every live
-    # ancestor above it. A soft-deleted parent ends the chain.
+    # books-location ancestor above it. A soft-deleted or foreign parent ends the chain.
     def ancestry_cte
       <<~SQL
         WITH RECURSIVE ancestry(descendant_id, ancestor_id, depth) AS (
           SELECT c.id, p.id, 1
           FROM categories c
           JOIN categories p ON p.id = c.parent_id AND p.deleted = false
+            AND p.type = 'Books::Category' AND p.category_type = #{location}
           WHERE c.type = 'Books::Category' AND c.category_type = #{location} AND c.deleted = false
           UNION ALL
           SELECT a.descendant_id, p.id, a.depth + 1
           FROM ancestry a
           JOIN categories c ON c.id = a.ancestor_id
           JOIN categories p ON p.id = c.parent_id AND p.deleted = false
+            AND p.type = 'Books::Category' AND p.category_type = #{location}
           WHERE a.depth < #{::Books::Category::MAX_DEPTH}
         )
       SQL
@@ -78,32 +90,38 @@ module Categories
 
     def insert_sql
       <<~SQL
-        #{ancestry_cte}
-        INSERT INTO category_items (category_id, item_type, item_id, source, created_at, updated_at)
-        SELECT DISTINCT a.ancestor_id, d.item_type, d.item_id, #{inherited}, NOW(), NOW()
-        FROM category_items d
-        JOIN ancestry a ON a.descendant_id = d.category_id
-        WHERE d.item_type = '#{ITEM_TYPE}' AND d.source <> #{inherited} #{item_filter("d")}
-        ON CONFLICT (category_id, item_type, item_id) DO NOTHING
-        RETURNING category_id, item_type, item_id
+        #{ancestry_cte},
+        changed AS (
+          INSERT INTO category_items (category_id, item_type, item_id, source, created_at, updated_at)
+          SELECT DISTINCT a.ancestor_id, d.item_type, d.item_id, #{inherited}, NOW(), NOW()
+          FROM category_items d
+          JOIN ancestry a ON a.descendant_id = d.category_id
+          WHERE d.item_type = '#{ITEM_TYPE}' AND d.source <> #{inherited} #{item_filter("d")}
+          ON CONFLICT (category_id, item_type, item_id) DO NOTHING
+          RETURNING category_id, item_id
+        )
+        #{summary_select}
       SQL
     end
 
     def delete_sql
       <<~SQL
-        #{ancestry_cte}
-        DELETE FROM category_items i
-        USING categories c
-        WHERE c.id = i.category_id AND c.type = 'Books::Category'
-          AND i.item_type = '#{ITEM_TYPE}' AND i.source = #{inherited} #{item_filter("i")}
-          AND NOT EXISTS (
-            SELECT 1
-            FROM category_items d
-            JOIN ancestry a ON a.descendant_id = d.category_id
-            WHERE d.item_type = i.item_type AND d.item_id = i.item_id
-              AND d.source <> #{inherited} AND a.ancestor_id = i.category_id
-          )
-        RETURNING i.category_id, i.item_type, i.item_id
+        #{ancestry_cte},
+        changed AS (
+          DELETE FROM category_items i
+          USING categories c
+          WHERE c.id = i.category_id AND c.type = 'Books::Category'
+            AND i.item_type = '#{ITEM_TYPE}' AND i.source = #{inherited} #{item_filter("i")}
+            AND NOT EXISTS (
+              SELECT 1
+              FROM category_items d
+              JOIN ancestry a ON a.descendant_id = d.category_id
+              WHERE d.item_type = i.item_type AND d.item_id = i.item_id
+                AND d.source <> #{inherited} AND a.ancestor_id = i.category_id
+            )
+          RETURNING i.category_id, i.item_id
+        )
+        #{summary_select}
       SQL
     end
   end

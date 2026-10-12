@@ -108,13 +108,47 @@ module Categories
     end
 
     test "leaves music categories alone" do
-      rock = categories(:music_rock_genre)
-      before = CategoryItem.where(category: rock).pluck(:id, :source)
+      parent = ::Music::Category.create!(name: "Music Region", category_type: :location)
+      child = ::Music::Category.create!(name: "Music City", category_type: :location)
+      child.update_column(:parent_id, parent.id)
+      CategoryItem.create!(category: child, item: music_albums(:animals), source: :legacy)
+      CategoryItem.create!(category: parent, item: music_albums(:animals), source: :inherited)
+      music_ids = [parent.id, child.id]
+      before_rows = CategoryItem.where(category_id: music_ids).order(:id).pluck(:id, :category_id, :source)
+      before_counts = Category.where(id: music_ids).order(:id).pluck(:id, :item_count)
       link(@chicago)
 
       AncestorReconciler.call
 
-      assert_equal before, CategoryItem.where(category: rock).pluck(:id, :source)
+      assert_equal before_rows, CategoryItem.where(category_id: music_ids).order(:id).pluck(:id, :category_id, :source)
+      assert_equal before_counts, Category.where(id: music_ids).order(:id).pluck(:id, :item_count)
+    end
+
+    test "never links a book to a non-books parent of a books location" do
+      rock = categories(:music_rock_genre)
+      before_count = rock.reload.item_count
+      @na.update_column(:parent_id, rock.id)
+      link(@chicago)
+
+      AncestorReconciler.call(item_ids: [@book.id])
+
+      assert_not CategoryItem.exists?(category_id: rock.id, item: @book)
+      assert_equal before_count, rock.reload.item_count
+    end
+
+    test "moves inherited links when a location is re-parented" do
+      indiana = location("Indiana", parent: @us)
+      link(@chicago)
+      AncestorReconciler.call(item_ids: [@book.id])
+      assert_equal 1, @il.reload.item_count
+
+      @chicago.update!(parent: indiana)
+      AncestorReconciler.call(item_ids: [@book.id])
+
+      assert_not CategoryItem.exists?(category: @il, item: @book)
+      assert CategoryItem.exists?(category: indiana, item: @book, source: :inherited)
+      assert_equal 0, @il.reload.item_count
+      assert_equal 1, indiana.reload.item_count
     end
   end
 end
