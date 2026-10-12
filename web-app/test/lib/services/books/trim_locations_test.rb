@@ -19,6 +19,13 @@ module Services
         ::Categories::AncestorReconciler.call(item_ids: [@book.id])
       end
 
+      def assert_skipped_row(reason)
+        rows = @book.enrichments.for_kind(TrimLocations::KIND)
+        assert_equal [["skipped", reason]], rows.map { |row| [row.outcome, row.reason] }
+        refute_includes TrimLocations.candidate_ids, @book.id
+        assert_includes TrimLocations.candidate_ids(force: true), @book.id
+      end
+
       def stub_keep(ids)
         TrimTask.any_instance.stubs(:call).returns(::Services::Ai::Result.new(success: true, data: {keep_ids: ids, reason: "Set in Moscow."}))
       end
@@ -100,7 +107,7 @@ module Services
         refute result.success?
         assert_equal ["model returned no offered ids"], result.errors
         assert CategoryItem.exists?(category: @peru, item: @book)
-        assert @book.enrichments.for_kind(TrimLocations::KIND).none?
+        assert_skipped_row("model returned no offered ids")
       end
 
       test "an empty keep on a book not marked nonfiction needs review and writes nothing" do
@@ -111,6 +118,14 @@ module Services
         assert result.success?
         assert_equal "needs review: empty keep on a book not marked nonfiction", result.data[:skipped]
         assert CategoryItem.exists?(category: @peru, item: @book)
+        assert_skipped_row("needs review: empty keep on a book not marked nonfiction")
+      end
+
+      test "a dry run that hits a guard writes no review row" do
+        stub_keep([])
+
+        TrimLocations.call(book: @book, dry_run: true)
+
         assert @book.enrichments.for_kind(TrimLocations::KIND).none?
       end
 
@@ -141,14 +156,16 @@ module Services
         assert_equal ["nothing_to_apply"], @book.enrichments.for_kind(TrimLocations::KIND).pluck(:outcome)
       end
 
-      test "music categories are untouched" do
-        music = ::Music::Category.create!(name: "Rock", category_type: :genre)
+      test "music items with many location links are never candidates and survive a books trim" do
+        album = music_albums(:dark_side_of_the_moon)
+        music = Array.new(3) { |n| ::Music::Category.create!(name: "Music Place #{n}", category_type: :location) }
+        music.each { |category| CategoryItem.create!(category: category, item: album) }
         stub_keep([@moscow.id])
 
+        refute_includes TrimLocations.candidate_ids, album.id
         TrimLocations.call(book: @book)
 
-        assert ::Music::Category.exists?(music.id)
-        assert_equal [], TrimLocations.direct_location_links.where(category_id: music.id).to_a
+        assert_equal 3, CategoryItem.where(item: album, category: music).count
       end
 
       test "the offer carries the full chain with its root and marks admin links fixed" do

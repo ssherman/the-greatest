@@ -54,9 +54,15 @@ module Services
 
         keep = result.data[:keep_ids]
         if result.data[:raw_count].to_i.positive? && keep.empty?
-          return Result.new(success?: false, data: {}, errors: ["model returned no offered ids"])
+          reason = "model returned no offered ids"
+          record_review(result, links, reason)
+          return Result.new(success?: false, data: {}, errors: [reason])
         end
-        return skipped("needs review: empty keep on a book not marked nonfiction") if keep.empty? && !nonfiction?
+        if keep.empty? && !nonfiction?
+          reason = "needs review: empty keep on a book not marked nonfiction"
+          record_review(result, links, reason)
+          return skipped(reason)
+        end
         removable = links.select { |link| link.source_legacy? && !keep.include?(link.category_id) }
         data = {kept: keep, removed: removable.map(&:category_id), reason: result.data[:reason]}
         return Result.new(success?: true, data: data.merge(dry_run: true), errors: []) if @dry_run
@@ -74,6 +80,18 @@ module Services
       end
 
       private
+
+      # A guard hit gets a skipped ledger row (the review queue) so the book
+      # leaves candidate_ids until FORCE=1. A dry run writes nothing.
+      def record_review(result, links, reason)
+        return if @dry_run
+
+        @book.enrichments.create!(
+          kind: KIND, mode: :knowledge, outcome: :skipped, reason: reason,
+          facts: {raw_count: result.data[:raw_count], offered_ids: links.map(&:category_id)},
+          ai_chat: result.ai_chat, provider: result.ai_chat&.provider, model: result.ai_chat&.model
+        )
+      end
 
       def nonfiction?
         id = ::Books::BookType.category_id(1)
