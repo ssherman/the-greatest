@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_133834) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -466,6 +466,33 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_133834) do
     t.index ["slug"], name: "index_categories_on_slug"
     t.index ["type", "slug"], name: "index_categories_on_type_and_slug"
     t.index ["type"], name: "index_categories_on_type"
+  end
+
+  create_table "category_cleanup_decisions", force: :cascade do |t|
+    t.bigint "category_id", null: false
+    t.string "run", null: false
+    t.string "stage", null: false
+    t.integer "action", null: false
+    t.integer "decided_by", null: false
+    t.integer "status", default: 0, null: false
+    t.string "new_name"
+    t.bigint "target_category_id"
+    t.string "parent_chain", default: [], null: false, array: true
+    t.integer "new_category_type"
+    t.string "place_kind"
+    t.boolean "ambiguous", default: false, null: false
+    t.text "reason"
+    t.bigint "ai_chat_id"
+    t.jsonb "category_snapshot", default: {}, null: false
+    t.text "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ai_chat_id"], name: "index_category_cleanup_decisions_on_ai_chat_id"
+    t.index ["category_id"], name: "index_category_cleanup_decisions_on_category_id"
+    t.index ["run", "category_id"], name: "index_category_cleanup_decisions_on_run_and_category_id"
+    t.index ["run", "stage"], name: "index_category_cleanup_decisions_on_run_and_stage"
+    t.index ["run", "status"], name: "index_category_cleanup_decisions_on_run_and_status"
+    t.index ["target_category_id"], name: "index_category_cleanup_decisions_on_target_category_id"
   end
 
   create_table "category_items", force: :cascade do |t|
@@ -1481,6 +1508,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_133834) do
   add_foreign_key "books_series_books", "books_series", column: "series_id"
   add_foreign_key "categories", "categories", column: "merged_into_id"
   add_foreign_key "categories", "categories", column: "parent_id"
+  add_foreign_key "category_cleanup_decisions", "ai_chats"
+  add_foreign_key "category_cleanup_decisions", "categories"
+  add_foreign_key "category_cleanup_decisions", "categories", column: "target_category_id"
   add_foreign_key "category_items", "categories"
   add_foreign_key "contact_messages", "users"
   add_foreign_key "correction_fields", "corrections"
