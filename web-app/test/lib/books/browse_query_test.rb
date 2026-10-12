@@ -19,7 +19,9 @@ module Books
     end
 
     test "categories returns only the requested type" do
-      types = categories_for(type: "subject").map { |c| c.category_type.to_s }.uniq
+      # The fixture subject has one ranked book; lower the card minimum so the
+      # type filter is what is under test.
+      types = with_browse_minimum(1) { categories_for(type: "subject").map { |c| c.category_type.to_s }.uniq }
 
       assert_equal ["subject"], types
     end
@@ -129,6 +131,32 @@ module Books
         assert_kind_of Integer, relation.count(:all)
         assert_equal 1, relation.limit(1).offset(0).to_a.size
       end
+    end
+
+    test "subject and location cards need the minimum number of ranked books; genres do not" do
+      with_browse_minimum(2) do
+        rare_place = ::Books::Category.create!(name: "Kilwa", category_type: :location)
+        rare_genre = ::Books::Category.create!(name: "Tiny Genre", category_type: :genre)
+        book = books_books(:war_and_peace)
+        CategoryItem.create!(category: rare_place, item: book)
+        CategoryItem.create!(category: rare_genre, item: book)
+
+        place_ids = categories_for(type: "location").map(&:id)
+        genre_ids = categories_for(type: "genre").map(&:id)
+
+        refute_includes place_ids, rare_place.id
+        assert_includes genre_ids, rare_genre.id
+      end
+    end
+
+    private
+
+    def with_browse_minimum(value)
+      original = Rails.configuration.x.books.browse_min_category_books
+      Rails.configuration.x.books.browse_min_category_books = value
+      yield
+    ensure
+      Rails.configuration.x.books.browse_min_category_books = original
     end
   end
 end

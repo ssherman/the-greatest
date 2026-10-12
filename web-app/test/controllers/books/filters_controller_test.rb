@@ -250,5 +250,14 @@ module Books
       # instead of 404ing it.
       assert_redirected_to "/rc/#{config.id}"
     end
+
+    test "the public category search hides locations under the browse minimum" do
+      ::Books::Category.create!(name: "Zzyzx Springs", category_type: :location, item_count: 1)
+
+      get "/filters/categories", params: {q: "Zzyzx"}
+
+      assert_response :success
+      assert_no_match "Zzyzx Springs", response.body
+    end
   end
 end

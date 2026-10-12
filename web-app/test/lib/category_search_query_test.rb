@@ -81,4 +81,20 @@ class CategorySearchQueryTest < ActiveSupport::TestCase
   test "escapes LIKE wildcards in the query" do
     assert_empty search("%", limit: 100)
   end
+
+  test "matches alternative names" do
+    kolkata = ::Books::Category.create!(name: "Kolkata", category_type: :location, alternative_names: ["Calcutta"])
+
+    assert_includes search("calcutta"), kolkata
+  end
+
+  test "min_items hides small categories of the listed types only" do
+    small_place = ::Books::Category.create!(name: "Smallville", category_type: :location, item_count: 1)
+    small_genre = ::Books::Category.create!(name: "Smallgenre", category_type: :genre, item_count: 1)
+
+    results = search("small", min_items: 5, min_items_types: %w[location subject])
+
+    refute_includes results, small_place
+    assert_includes results, small_genre
+  end
 end
