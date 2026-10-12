@@ -1,7 +1,7 @@
 # The `worldcat` VM's production settings (docs/features/worldcat-data-service.md),
 # merged over data-sources/docker-compose.yml by guest/compose.sh. Sized for a
 # 2-vCPU, 4 GB VM: 2 GB for DuckDB, the rest is page cache over the artifact.
-# Exact lookups touch one row group; nothing here spills.
+# Single lookups prune to one row group; a 500-ISBN batch scans the key columns. Nothing here spills.
 services:
   worldcat:
     mem_limit: 3g

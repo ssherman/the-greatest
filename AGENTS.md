@@ -60,11 +60,13 @@ boundaries, enforced structurally: it never writes to Rails; it holds nothing th
 rebuildable from a dump; it is never on a public request path; no covers, no public search, no
 serving. See `docs/features/open-library-data-service.md`.
 
-`data-sources/` now holds two services with separate images: the Open Library API
-and the **page fetcher** (`docs/features/page-fetcher-service.md`), which returns
-rendered HTML through one Camoufox browser per fetch. Its dependencies are the
-`fetcher` extra: `uv sync --locked --extra fetcher --extra recommender --extra worldcat`, which CI also runs
-(`recommender` is the collaborative-filtering trainer: its own image, never in the OL or fetcher images).
+`data-sources/` now holds three services with separate images: the Open Library API, the
+**page fetcher** (`docs/features/page-fetcher-service.md`), which returns rendered HTML through one
+Camoufox browser per fetch, and the **WorldCat lookup API** (`docs/features/worldcat-data-service.md`).
+The page fetcher's dependencies are the `fetcher` extra. Development and CI install every extra with
+`uv sync --locked --extra fetcher --extra recommender --extra worldcat`. `recommender` is the
+collaborative-filtering trainer: its own image, never in the OL or fetcher images. `worldcat` is the
+build-only zstd reader for the artifact build; no image installs it.
 
 ## The development database is not disposable
 

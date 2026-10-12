@@ -34,7 +34,7 @@ Same four boundaries, enforced structurally:
 | `holdings` | one per OCLC number with a summary | `oclc`, `total_holding_count`, `total_editions` |
 
 - `records` holds only ISBN-bearing records whose top-level `generalFormat` is `Book`. It is sorted
-  and row-grouped by `oclc`; `isbns` is sorted by `isbn13`, so an exact lookup touches one row group.
+  and row-grouped by `oclc`; `isbns` is sorted by `isbn13`. A single lookup prunes to one row group; a batch of hundreds of OCLC numbers becomes a hash join that scans the key columns (measured about 0.3 s on a 30M-row table with 2 threads), which is why the launch todo times a 500-ISBN batch on the VM.
 - `isbns` indexes only check-digit-valid ISBN-13s (ISBN-10s are converted). The invalid share is
   observed by the `isbn_checksums` gate, not stored. `records.isbn13s`, by contrast, is the union of
   what the record's passes said and can include ISBN-13s with a bad check digit; anything that
@@ -142,6 +142,8 @@ run, so that failure writes no `build_report.json` or `manifest.json`. Add the p
 | `catalogue_coverage` | At least 80% of the ISBN-13s in `--catalogue-isbns` resolve to a record. `skipped` only when the option is absent; a given file that is missing or has no valid ISBN-13 is a `fail`. |
 | `bad_frames` | No frame failed to decompress. |
 
+A kept line that cannot be reduced (valid JSON of an unexpected shape, say a string where `contributors` expects objects) is skipped and counted in `extract.bad_lines`; it never fails the build and is not a gate. A lone surrogate escape (`\ud800`) in a kept line is written as U+FFFD rather than aborting the shard. `build` also deletes any `shard_*.parquet` and `progress_*.txt` left in `_staging/` by an earlier run before it extracts.
+
 ### Measured build
 
 **Not yet built.** There are no row counts, sizes, times or gate results to report, and this
@@ -149,7 +151,7 @@ document does not carry estimates. After the first build, copy these from
 `/home/shane/wc-data/versions/2025-09-04/build_report.json` into this section:
 
 - `tables.<name>.rows` and `.bytes` for each of the four tables, and `total_bytes`;
-- `extract.lines`, `extract.kept` and `extract.bad_frames`;
+- `extract.lines`, `extract.kept`, `extract.bad_frames` and `extract.bad_lines`;
 - `timings`: seconds per stage (`extract`, `records`, `isbns`, `redirects`, `holdings`);
 - `gates`: name, status and detail for each of the seven gates, including the observed catalogue
   coverage.
@@ -183,7 +185,7 @@ There is no health route. The container does not start without an open artifact,
 and any manual check use `/version`.
 
 Limits: one DuckDB connection with a cursor per request, `memory_limit` 2 GB, 2 threads, a 5-second
-per-request deadline (`504`). No concurrency cap: a point lookup is milliseconds. Settings come from
+per-request deadline (`504`). No concurrency cap: a single lookup is milliseconds, and a full 500-ISBN batch is a hash join over the key columns (see the notes under the tables above), so it is timed on the VM before the backfill. Settings come from
 `WC_DATA_ROOT` (default `/data`), `WC_DATA_VERSION` (required), `WC_API_MEMORY_LIMIT`,
 `WC_API_TEMP_DIR`, `WC_API_THREADS` and `WC_API_DEADLINE_S`.
 
@@ -294,6 +296,14 @@ breaker never looks like completion. The job logs the totals and any stop reason
 - Links go through `category_items` with `find_or_create_by!`: additive only, never unlinks,
   idempotent. A genre the map names that no longer exists is skipped. Nonfiction is never inferred
   from the absence of a Fiction term.
+- Records whose OCLC number appears in another matched record's `merged_oclc` are dropped before
+  counting: a later pass redirected the old number, so the two are one edition.
+- A book is Fiction or Nonfiction, not both. If a supported genre is Fiction or Nonfiction and the
+  book already holds the other, the link is skipped and counted in `type_conflicts` (in the result
+  data, summed over the run in the backfill's stats, and in the job's log line). It is a count to
+  review, not an error.
+- An empty map (`config/worldcat/genre_map.yml` missing or without terms) makes both `Backfill` and
+  `ApplyAliases` return a failure before taking the lock or touching a category.
 
 Rerun the backfill after any edit to the mapping file. Because the legacy sync keeps production
 edits after `sync_init`, links made in production persist across the weekly sync.

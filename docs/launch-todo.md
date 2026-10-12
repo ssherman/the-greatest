@@ -249,23 +249,37 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    are set. The API will not start until step 7 puts an artifact on the VM.
 7. **Load the artifact.** Follow "Loading the WorldCat artifact (once)" in `docs/features/home-server.md`:
    find the VM's address (`ssh pve-mini qm guest cmd 130 network-get-interfaces`; DHCP on the LAN),
-   rsync the version directory as `debian@<vm-address>` with `--rsync-path="sudo rsync"` (the only SSH
-   user is `debian` and `/srv/wc-data` is root-owned),
+   rsync the version directory as `debian@<vm-address>` with `--mkpath --rsync-path="sudo rsync"` (the
+   only SSH user is `debian`, `/srv/wc-data` is root-owned and has no `versions/` yet),
    `sudo chmod -R a+rX /srv/wc-data/versions/2025-09-04` (the container runs as uid 10001), write
    `/srv/wc-data/current-version`, touch
    `/var/lib/the-greatest/force-deploy` and start `the-greatest-deploy.service`. Then curl
    `https://worldcat-api.thegreatestbooks.org/version` with the service token. `worldcat-heartbeat`
    should go green within a few minutes.
-8. **Production setting. Shane runs with `!`.** Add
+8. **Time a full batch on the VM. Shane runs with `!`.** The service has a 5 s per-request deadline
+   and a 500-ISBN batch is the largest `/lookup` accepts (the backfill sends 100). Time one from the
+   dev machine through the VM's loopback, twice (cold, then warm):
+   `head -500 web-app/tmp/our_isbn13s.txt | jq -R . | jq -sc '{isbn13s: .}' | ssh debian@<vm-address> "curl -s -o /dev/null -w '%{time_total}\n' -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8082/lookup"`
+   (`tmp/our_isbn13s.txt` is what `worldcat:export_isbns` writes by default). Both times must be well
+   under 5 s before the backfill; a `504` or a time near the deadline means stop and lower the
+   backfill's batch size or raise `WC_API_DEADLINE_S`.
+9. **Production setting. Shane runs with `!`.** Add
    `WORLDCAT_SERVICE_URL=https://worldcat-api.thegreatestbooks.org` to the production SOPS secrets and
    deploy.
-9. **The genre map, in development.** `worldcat:vocabulary` and `worldcat:map` need the local WorldCat
+10. **The genre map, in development.** `worldcat:vocabulary` and `worldcat:map` need the local WorldCat
    API running: `docker compose --profile worldcat up -d worldcat` in `data-sources/`. Run
    `bin/rails worldcat:vocabulary`, `worldcat:map` and `worldcat:report`. Review and edit
    `config/worldcat/genre_map.yml` by hand, then commit it. The reviewed map must be merged and
-   deployed before steps 10 and 11 run in production.
-10. **Aliases, in production. Shane runs with `!`.** `bin/rails worldcat:apply_aliases`.
-11. **The backfill, in production. Shane runs with `!`.** `bin/rails "worldcat:backfill[all]"`.
-12. **The report, if the map changed.** After the backfill, if the map was edited during review, re-run
+   deployed before steps 12 and 13 run in production.
+11. **Rehearse the backfill in development.** The dev database is not disposable, so snapshot it
+    first: `bin/snapshot-dev-db.sh --label pre-worldcat` (from the repo root). Then, with the local WorldCat API running,
+    `bin/rails "worldcat:backfill[2000]"`. Read the worker log's counts (`genres_linked`,
+    `subjects_unresolved`, `type_conflicts`) and spot-check ten of those books in the admin: each
+    genre should be one you would have chosen, and none should carry both Fiction and Nonfiction.
+    Fix the map and rerun if not. Restore with `bin/snapshot-dev-db.sh --restore` if the links look
+    wrong.
+12. **Aliases, in production. Shane runs with `!`.** `bin/rails worldcat:apply_aliases`.
+13. **The backfill, in production. Shane runs with `!`.** `bin/rails "worldcat:backfill[all]"`.
+14. **The report, if the map changed.** After the backfill, if the map was edited during review, re-run
     `bin/rails worldcat:report` in development and commit the regenerated
     `docs/data-quality/worldcat-genre-mapping.md`. It depends only on the map file, not on the backfill.

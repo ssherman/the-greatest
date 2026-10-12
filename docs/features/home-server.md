@@ -231,10 +231,12 @@ start and `worldcat-heartbeat` stays silent.
 The VM takes its address from DHCP on the LAN. Get it from the host:
 `ssh pve-mini qm guest cmd 130 network-get-interfaces`. The only SSH user on the VM is `debian`, and
 `/srv/wc-data` is a root-owned ext4 root with no `versions/` directory, so rsync runs `sudo rsync` on
-the far side, which also creates the directories.
+the far side, and `--mkpath` makes it create the missing parent directory (`--mkpath` needs
+rsync >= 3.2.3 on both ends; otherwise run `ssh debian@<vm-address> sudo mkdir -p /srv/wc-data/versions`
+first).
 
 ```bash
-rsync -a --info=progress2 --rsync-path="sudo rsync" /home/shane/wc-data/versions/2025-09-04/ \
+rsync -a --info=progress2 --mkpath --rsync-path="sudo rsync" /home/shane/wc-data/versions/2025-09-04/ \
     debian@<vm-address>:/srv/wc-data/versions/2025-09-04/
 ssh debian@<vm-address> 'sudo chmod -R a+rX /srv/wc-data/versions/2025-09-04 && echo 2025-09-04 | sudo tee /srv/wc-data/current-version && sudo touch /var/lib/the-greatest/force-deploy && sudo systemctl start the-greatest-deploy.service'
 curl -fsS https://worldcat-api.thegreatestbooks.org/version -H "CF-Access-Client-Id: ..." -H "CF-Access-Client-Secret: ..."
