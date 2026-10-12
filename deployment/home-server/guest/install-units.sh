@@ -13,6 +13,7 @@ units=(the-greatest-deploy the-greatest-heartbeat reboot-if-required)
 case "$ROLE" in
   ol) units+=(ol-refresh recommender-train) ;;
   fetcher) ;;
+  worldcat) ;;
   *) echo "install-units: unknown ROLE '$ROLE'" >&2; exit 1 ;;
 esac
 

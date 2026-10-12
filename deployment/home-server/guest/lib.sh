@@ -9,6 +9,7 @@ REPO_DIR="${REPO_DIR:-/opt/the-greatest}"
 ENV_FILE="${ENV_FILE:-/etc/the-greatest/home-server.env}"
 STATE_DIR="${STATE_DIR:-/var/lib/the-greatest}"
 OL_DATA="${OL_DATA:-/srv/ol-data}"
+WC_DATA="${WC_DATA:-/srv/wc-data}"
 BUILD_LOCK="${BUILD_LOCK:-/run/ol-build.lock}"
 COMPOSE="${COMPOSE:-$here/compose.sh}"
 

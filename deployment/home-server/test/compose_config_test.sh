@@ -48,6 +48,17 @@ t_api_alias() {
 t_fetcher_alias() {
   cfg fetcher | jq -e '.services.fetcher.networks | has("default") and (.default.aliases | index("page-fetcher") != null)' >/dev/null
 }
+t_worldcat_api() {
+  # `config` renders 3g as bytes (a number or a string); accept either.
+  cfg worldcat worldcat | jq -e '.services.worldcat as $w |
+    $w.environment.WC_API_MEMORY_LIMIT == "2GB" and $w.environment.WC_API_THREADS == "2" and
+    $w.volumes[0].read_only == true and $w.volumes[0].source == "/home/shane/wc-data" and
+    ($w.mem_limit == 3221225472 or $w.mem_limit == "3221225472" or $w.mem_limit == "3g")' >/dev/null
+}
+t_worldcat_alias() {
+  cfg worldcat worldcat | jq -e '.services.worldcat.networks.default.aliases == ["worldcat"]' >/dev/null
+}
+t_worldcat_off_by_default() { ! cfg worldcat | jq -e '.services | has("worldcat")' >/dev/null; }
 
 if ! command -v docker >/dev/null; then echo "SKIP  docker not installed"; exit 0; fi
 check "build is capped at 10 CPUs and 8GB" t_build
@@ -60,4 +71,7 @@ check "the trainer is off until named or its profile is on" t_recommender_off_by
 check "the fetcher's compose does not cap the trainer" t_recommender_not_on_fetcher
 check "api is on the default network with alias openlibrary" t_api_alias
 check "fetcher is on the default network with alias page-fetcher" t_fetcher_alias
+check "worldcat gets 2GB, 2 threads, 3g and a read-only data volume" t_worldcat_api
+check "worldcat is on the default network with alias worldcat" t_worldcat_alias
+check "worldcat is off until its profile or name selects it" t_worldcat_off_by_default
 finish

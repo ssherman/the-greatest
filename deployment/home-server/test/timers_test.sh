@@ -28,6 +28,10 @@ t_ol_beats_on_version() {
 t_fetcher_beats_on_health() {
   setup; "$GUEST/heartbeat.sh" && called 'curl .*127\.0\.0\.1:8081/health' && ! called '8080/version'
 }
+t_worldcat_beats_on_version() {
+  setup; write_env ROLE=worldcat HC_HEARTBEAT=https://hc.test/beat
+  "$GUEST/heartbeat.sh" && called 'curl .*127\.0\.0\.1:8082/version' && called 'hc\.test/beat$'
+}
 t_no_flag_no_reboot() { setup; "$GUEST/reboot-if-required.sh" && ! called 'systemctl reboot'; }
 t_flag_reboots() { setup; touch "$REBOOT_FLAG"; "$GUEST/reboot-if-required.sh" && called '^systemctl reboot$'; }
 t_build_defers_reboot() {
@@ -49,6 +53,13 @@ t_units_for_fetcher() {
   setup; "$GUEST/install-units.sh" && [ ! -f "$SYSTEMD_DIR/ol-refresh.timer" ] &&
     [ ! -f "$SYSTEMD_DIR/recommender-train.timer" ] && [ -f "$SYSTEMD_DIR/the-greatest-deploy.timer" ]
 }
+t_units_for_worldcat() {
+  setup; write_env ROLE=worldcat
+  "$GUEST/install-units.sh" && [ -f "$SYSTEMD_DIR/the-greatest-deploy.timer" ] &&
+    [ -f "$SYSTEMD_DIR/the-greatest-heartbeat.timer" ] && [ -f "$SYSTEMD_DIR/reboot-if-required.timer" ] &&
+    [ ! -f "$SYSTEMD_DIR/ol-refresh.timer" ] && [ ! -f "$SYSTEMD_DIR/recommender-train.timer" ] &&
+    [ "$(find "$SYSTEMD_DIR" -type f | wc -l)" = 6 ]
+}
 t_units_idempotent() {
   setup; "$GUEST/install-units.sh" && : >"$CALLS" &&
     "$GUEST/install-units.sh" && ! called 'daemon-reload'
@@ -58,10 +69,12 @@ check "heartbeat pings when the service answers" t_beat_when_up
 check "heartbeat stays silent when the service is down" t_silent_when_down
 check "the ol heartbeat asks /version" t_ol_beats_on_version
 check "the fetcher heartbeat asks /health" t_fetcher_beats_on_health
+check "the worldcat heartbeat asks /version on 8082" t_worldcat_beats_on_version
 check "no reboot-required flag, no reboot" t_no_flag_no_reboot
 check "the flag reboots" t_flag_reboots
 check "a running build defers the reboot" t_build_defers_reboot
 check "ol gets the refresh and train timers" t_units_for_ol
 check "fetcher gets neither" t_units_for_fetcher
+check "worldcat gets the three base units and nothing else" t_units_for_worldcat
 check "a second install changes nothing" t_units_idempotent
 finish
