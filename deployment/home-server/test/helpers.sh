@@ -23,8 +23,8 @@ finish() {
 
 new_sandbox() {
   SANDBOX="$(mktemp -d)"
-  mkdir -p "$SANDBOX"/{bin,state,data/versions,run,log}
-  export SANDBOX STATE_DIR="$SANDBOX/state" OL_DATA="$SANDBOX/data"
+  mkdir -p "$SANDBOX"/{bin,state,data/versions,wc-data,run,log}
+  export SANDBOX STATE_DIR="$SANDBOX/state" OL_DATA="$SANDBOX/data" WC_DATA="$SANDBOX/wc-data"
   export BUILD_LOCK="$SANDBOX/run/ol-build.lock" ENV_FILE="$SANDBOX/home-server.env"
   export CALLS="$SANDBOX/log/calls" PATH="$SANDBOX/bin:$ORIGINAL_PATH"
   : >"$CALLS"

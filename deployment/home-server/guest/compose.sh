@@ -15,6 +15,12 @@ if [ -z "${OL_DATA_VERSION:-}" ] && [ -f "$OL_DATA/current-version" ]; then
   OL_DATA_VERSION="$(cat "$OL_DATA/current-version")"
   export OL_DATA_VERSION
 fi
+# Same for the worldcat artifact: the version is the one written to current-version.
+export WC_DATA_HOST="$WC_DATA"
+if [ -z "${WC_DATA_VERSION:-}" ] && [ -f "$WC_DATA/current-version" ]; then
+  WC_DATA_VERSION="$(cat "$WC_DATA/current-version")"
+  export WC_DATA_VERSION
+fi
 
 hs="$REPO_DIR/deployment/home-server"
 files=(-f "$REPO_DIR/data-sources/docker-compose.yml" -f "$hs/compose.tunnel.yml")

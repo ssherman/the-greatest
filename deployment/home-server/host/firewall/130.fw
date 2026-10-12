@@ -1,0 +1,12 @@
+# VM 130 `worldcat`, on the LAN. Nothing listens beyond SSH: the API publishes
+# on loopback and leaves through cloudflared.
+[OPTIONS]
+enable: 1
+policy_in: DROP
+policy_out: ACCEPT
+dhcp: 1
+ndp: 1
+radv: 0
+
+[RULES]
+IN ACCEPT -source +lan -p tcp -dport 22 -log nolog

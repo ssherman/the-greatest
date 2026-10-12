@@ -118,3 +118,36 @@ def fixture_labelled_cases(fixture_labelled_works) -> list:
         )
     )
     return built
+
+
+WORLDCAT_FIXTURE = Path(__file__).parent / "fixtures" / "worldcat" / "sample.jsonl"
+WORLDCAT_DUMP_DATE = "2025-09-04"
+
+
+@pytest.fixture(scope="session")
+def worldcat_source(tmp_path_factory) -> Path:
+    """The committed corpus as a seekable-zstd file cut every 4 KiB, so lines span frames."""
+    from tests.fixtures.worldcat.seekable import write_seekable
+
+    path = tmp_path_factory.mktemp("wc-source") / "sample.jsonl.seekable.zst"
+    write_seekable(WORLDCAT_FIXTURE.read_bytes().splitlines(), path, frame_bytes=4096)
+    return path
+
+
+@pytest.fixture(scope="session")
+def worldcat_artifact(tmp_path_factory, worldcat_source):
+    """A real build of the corpus, once per session. Read-only for its consumers."""
+    from worldcat.pipeline.build import build
+    from worldcat.pipeline.gates import Thresholds
+    from worldcat.pipeline.paths import WorldcatPaths
+
+    root = tmp_path_factory.mktemp("wc-artifact")
+    build(
+        source=worldcat_source,
+        root=root,
+        dump_date=WORLDCAT_DUMP_DATE,
+        workers=2,
+        memory_limit="1GB",
+        thresholds=Thresholds(min_records=1, max_records=10**9, min_redirects=1),
+    )
+    return WorldcatPaths(root=root, dump_date=WORLDCAT_DUMP_DATE)

@@ -67,6 +67,28 @@ the same host, and never put the service on a public request path.
 Request bodies are strict: an unknown field (`"author"`, `"isbn"`) is a 422
 naming it, never a 200 that silently ignored it.
 
+## Running the WorldCat API
+
+The `worldcat` package serves exact ISBN and OCLC lookups from a frozen
+WorldCat dump (Anna's Archive, 2025-09-04). Full doc:
+`docs/features/worldcat-data-service.md`. The artifact is built once on the
+development machine (the zstd reader is a build-only extra, never in the
+image):
+
+    uv run python -m worldcat.pipeline.build \
+        --source "/mnt/e/annas archive worldcat/<aacid file>.jsonl.seekable.zst" \
+        --root /home/shane/wc-data --dump-date 2025-09-04 --workers 8 --memory-limit 16GB \
+        --catalogue-isbns /home/shane/wc-data/our_isbns.txt
+
+The API (`worldcat.Dockerfile`) refuses to boot unless the version directory's
+`manifest.json` has `gates_passed: true`. Its compose service sits behind the
+`worldcat` profile, so a plain `docker compose up` never starts it:
+
+    docker compose --profile worldcat up -d --build worldcat   # serves 127.0.0.1:8082
+    curl -s localhost:8082/version
+
+There is no refresh: the dump is frozen, so a new version means a new build.
+
 ## Running the page fetcher
 
 Its own image (`fetcher.Dockerfile`) and compose service, so the Open Library

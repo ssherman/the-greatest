@@ -91,12 +91,12 @@ load_host_state() {
   export REPO_REF TUNNELS_ENABLED
 }
 
-# running_foreign_vmids: the running VMIDs other than 110 and 120 (guests
+# running_foreign_vmids: the running VMIDs other than 110, 120 and 130 (guests
 # provision did not create). Fails if the host cannot be asked.
 running_foreign_vmids() {
   local out
   out="$(on_host "qm list")" || return 1
-  printf '%s\n' "$out" | awk '$3 == "running" && $1 != 110 && $1 != 120 {print $1}'
+  printf '%s\n' "$out" | awk '$3 == "running" && $1 != 110 && $1 != 120 && $1 != 130 {print $1}'
 }
 
 # assert_foreign_guests_running <ids>: die if any of them stopped.

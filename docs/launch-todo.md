@@ -90,6 +90,9 @@ second export on the same day reuses the day's file name and the trainer reports
    legacy-origin reviews with legacy's truncated integer rating (3 for a 3.75), and this puts the
    fractional rating back.
 6. **Rankings.** The books list weights and book rankings. Author rankings follow.
+7. **`bin/rails worldcat:backfill[all]`** (once section 9 is live). The sync brings over new books
+   without WorldCat-derived categories; the backfill is additive and idempotent, so a full run only
+   adds links for books that have none yet. It is a repeating step, not a one-off.
 
 ## 5. Cleanup, after the switch-over
 
@@ -170,7 +173,7 @@ the sync never undoes them.
 1. Take legacy offline.
 2. `FINAL=1 bin/rails data_migration:sync`. `FINAL=1` drops the 24-hour delay, so the last day's
    books come over too. Run `sync_report` with `FINAL=1` first.
-3. Section 4, steps 3-6.
+3. Section 4, steps 3-7.
 4. **Finish the failed and stuck legacy Goodreads imports.** Only now: they write into legacy users'
    lists, which every sync rewrites to match legacy, so a finishing import run earlier is undone by
    the next sync.
@@ -216,3 +219,79 @@ the sync never undoes them.
   the last cover-image run.
 - **Remove the stale `FIREBASE_PROJECT_ID`** from production secrets. The project id is hardcoded
   now, so the variable does nothing and could mislead someone later.
+
+## 9. WorldCat genre data (the service once; the backfill repeats)
+
+Adds the WorldCat exact-lookup service on the home server and backfills genre categories from it.
+Independent of section 2: the switch-over ran on 2026-10-10 (`data_migration:sync_init`), so the
+category links the backfill writes in production are kept across the weekly `data_migration:sync`.
+The sync does add new books, though, so the backfill (step 13) is also section 4 step 7: it re-runs
+after every sync and again at cutover (section 6, step 3).
+Details: `docs/features/worldcat-data-service.md`; the VM runbook is
+`docs/features/home-server.md`, "Loading the WorldCat artifact (once)".
+
+Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an agent does not run them.
+
+1. **Build the artifact on the dev machine.** Export our ISBNs for the coverage gate, then build with
+   them (the `--catalogue-isbns` file is what the gate checks against; the command is in
+   `data-sources/README.md`, "Running the WorldCat API"):
+   `bin/rails "worldcat:export_isbns[/home/shane/wc-data/our_isbns.txt]"`, then
+   `uv run python -m worldcat.pipeline.build ... --catalogue-isbns /home/shane/wc-data/our_isbns.txt`
+   from `data-sources/`. The result will be `/home/shane/wc-data/versions/2025-09-04/`, and the build
+   fails unless every gate passes.
+2. **Cloudflare, before anything touches the home server. Shane runs with `!`.** Create the
+   `home-worldcat` tunnel and copy its token. Add the `worldcat-api.thegreatestbooks.org` hostname with
+   ingress `http://worldcat:8082`. Add the Access application on that hostname reusing the `prod-rails`
+   service token, with `bin/cfzerotrust apply` in the cloudflare repo. Exempt the hostname from Bot Fight
+   Mode and any bot or WAF rule, as for the other two.
+3. **healthchecks.io.** Create `worldcat-heartbeat` (period 5 min, grace 15 min) and `worldcat-deploy`
+   (period 15 min, grace 1 h), and copy their ping URLs.
+4. **Secrets, before the first `provision`. Shane runs with `!`.** Add `WORLDCAT_TUNNEL_TOKEN`,
+   `HC_WORLDCAT_HEARTBEAT` and `HC_WORLDCAT_DEPLOY` to `secrets/home-server.env`
+   (`sops secrets/home-server.env`). The host already has tunnels enabled, so the VM that `provision`
+   creates starts `cloudflared` at once. With the token missing it starts with an empty one and nothing
+   alerts.
+5. **Confirm VMID 130 is unused.** `ssh pve-mini qm list` must not list 130. `provision` adopts a VM it
+   finds at that id instead of creating one.
+6. **Create the VM. Shane runs with `!`.** `deployment/home-server/provision` (`SOPS_AGE_KEY_FILE`
+   set) creates VM 130 `worldcat` and installs its env and units. Tunnels are already enabled on the
+   host, so `provision --enable-tunnels` is not needed again; it dies unless all three tunnel tokens
+   are set. The API will not start until step 7 puts an artifact on the VM.
+7. **Load the artifact.** Follow "Loading the WorldCat artifact (once)" in `docs/features/home-server.md`:
+   find the VM's address (`ssh pve-mini qm guest cmd 130 network-get-interfaces`; DHCP on the LAN),
+   rsync the version directory as `debian@<vm-address>` with `--mkpath --rsync-path="sudo rsync"` (the
+   only SSH user is `debian`, `/srv/wc-data` is root-owned and has no `versions/` yet),
+   `sudo chmod -R a+rX /srv/wc-data/versions/2025-09-04` (the container runs as uid 10001), write
+   `/srv/wc-data/current-version`, touch
+   `/var/lib/the-greatest/force-deploy` and start `the-greatest-deploy.service`. Then curl
+   `https://worldcat-api.thegreatestbooks.org/version` with the service token. `worldcat-heartbeat`
+   should go green within a few minutes.
+8. **Time a full batch on the VM. Shane runs with `!`.** The service has a 5 s per-request deadline
+   and a 500-ISBN batch is the largest `/lookup` accepts (the backfill sends 100). Time one from the
+   dev machine through the VM's loopback, twice (cold, then warm):
+   `test "$(wc -l < /home/shane/wc-data/our_isbns.txt)" -ge 500 || { echo "export has fewer than 500 ISBNs"; exit 1; }; head -500 /home/shane/wc-data/our_isbns.txt | jq -R . | jq -sc '{isbn13s: .}' | ssh debian@<vm-address> "curl -s -o /dev/null -w '%{time_total}\n' -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8082/lookup"`
+   (`/home/shane/wc-data/our_isbns.txt` is the export step 1 writes; the guard stops the step on a
+   missing or short file, which would otherwise "pass" in milliseconds on an empty batch). Both times must be well
+   under 5 s before the backfill; a `504` or a time near the deadline means stop and lower the
+   backfill's batch size or raise `WC_API_DEADLINE_S`.
+9. **Production setting. Shane runs with `!`.** Add
+   `WORLDCAT_SERVICE_URL=https://worldcat-api.thegreatestbooks.org` to the production SOPS secrets and
+   deploy.
+10. **The genre map, in development.** `worldcat:vocabulary` and `worldcat:map` need the local WorldCat
+   API running: `docker compose --profile worldcat up -d worldcat` in `data-sources/`. Run
+   `bin/rails worldcat:vocabulary`, `worldcat:map` and `worldcat:report`. Review and edit
+   `config/worldcat/genre_map.yml` by hand, then commit it. The reviewed map must be merged and
+   deployed before steps 12 and 13 run in production.
+11. **Rehearse the backfill in development.** The dev database is not disposable, so snapshot it
+    first: `bin/snapshot-dev-db.sh --label pre-worldcat` (from the repo root). Then, with the local WorldCat API running,
+    `bin/rails "worldcat:backfill[2000]"`. Read the worker log's line for the run (grep the Sidekiq
+    log for "WorldCat backfill") and its counts ("genre links", "unresolved subject phrases",
+    "type conflicts"), then spot-check ten of those books in the admin: each
+    genre should be one you would have chosen, and none should carry both Fiction and Nonfiction.
+    Fix the map and rerun if not. Restore with `bin/snapshot-dev-db.sh --restore` if the links look
+    wrong.
+12. **Aliases, in production. Shane runs with `!`.** `bin/rails worldcat:apply_aliases`.
+13. **The backfill, in production. Shane runs with `!`.** `bin/rails "worldcat:backfill[all]"`.
+14. **The report, if the map changed.** After the backfill, if the map was edited during review, re-run
+    `bin/rails worldcat:report` in development and commit the regenerated
+    `docs/data-quality/worldcat-genre-mapping.md`. It depends only on the map file, not on the backfill.

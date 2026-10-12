@@ -159,6 +159,20 @@ t_recovery_rechecks_guests() {
     grep -q '^FAIL  pre-existing guest 102 still running after the reboot' <<<"$out"
 }
 
+# The VMs provision made (110, 120, 130) are never "foreign"; any other running guest is.
+t_foreign_vmids_ignore_ours() {
+  local out
+  out="$(
+    on_host() {
+      printf '%s\n' '      VMID NAME   STATUS     MEM(MB)' '       110 ol     running    24576' \
+        '       120 fetcher running    4096' '       130 worldcat running   4096' \
+        '       101 other  running    2048' '       102 off    stopped    1024'
+    }
+    running_foreign_vmids
+  )"
+  [ "$out" = 101 ]
+}
+
 # ol's address comes from an ssh to the host; that ssh must not eat the stdin
 # meant for the VM (it once left ol with an empty env file).
 t_vm_ssh_stdin_reaches_vm() {
@@ -209,6 +223,7 @@ check "the house's public IPv4 is read from the trace" t_house_ip_read
 check "an unreadable or non-IPv4 trace fails instead of returning nothing" t_house_ip_unreadable_fails
 check "the firewall step dies before writing anything when the public IPv4 can't be read" t_firewall_dies_without_house_ip
 check "--recovery re-checks the pre-existing guests after the reboot" t_recovery_rechecks_guests
+check "running_foreign_vmids ignores 110, 120 and 130 and stopped guests" t_foreign_vmids_ignore_ours
 check "vm_ssh to ol passes its stdin to the VM, not to the host lookup" t_vm_ssh_stdin_reaches_vm
 check "an env file that lands different from what was sent stops before the deploy" t_push_env_refuses_a_mismatch
 check "the build's cpus cap fits in the ol VM's vCPUs" t_build_cpus_fit_vm
