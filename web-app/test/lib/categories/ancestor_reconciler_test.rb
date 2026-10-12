@@ -136,6 +136,22 @@ module Categories
       assert_equal before_count, rock.reload.item_count
     end
 
+    test "re-runs its writes inside a query-cached scope" do
+      link(@chicago)
+
+      ActiveRecord::Base.cache do
+        AncestorReconciler.call(item_ids: [@book.id])
+        # A no-op run writes nothing, so its summaries stay in the query cache.
+        AncestorReconciler.call(item_ids: [@book.id])
+        CategoryItem.connection.raw_connection.exec("DELETE FROM category_items WHERE source = #{CategoryItem.sources.fetch("inherited")}")
+
+        result = AncestorReconciler.call(item_ids: [@book.id])
+
+        assert_equal 3, result.data[:added]
+      end
+      assert_equal [@na.id, @us.id, @il.id].sort, inherited_ids
+    end
+
     test "moves inherited links when a location is re-parented" do
       indiana = location("Indiana", parent: @us)
       link(@chicago)

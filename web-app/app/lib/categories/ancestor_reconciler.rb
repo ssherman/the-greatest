@@ -47,8 +47,10 @@ module Categories
     # Runs a statement that ends in summary_select and returns its aggregate, so
     # a whole-catalog run never materialises the changed rows in Ruby.
     # cast_values decodes the Postgres arrays through the adapter's type map.
+    # exec_query, not select_all: select_all goes through the query cache, which
+    # would replay a cached summary and skip the INSERT/DELETE inside a request or job.
     def aggregate(sql)
-      count, category_ids, item_ids = ::CategoryItem.connection.select_all(sql).cast_values.first
+      count, category_ids, item_ids = ::CategoryItem.connection.exec_query(sql).cast_values.first
       {count: count.to_i, category_ids: Array(category_ids), item_ids: Array(item_ids)}
     end
 
