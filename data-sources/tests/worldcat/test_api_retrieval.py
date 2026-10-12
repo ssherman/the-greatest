@@ -68,6 +68,50 @@ def test_lookup_batch_keys_every_request_as_given(client):
     assert body["results"]["9783161484100"] == []
 
 
+def test_lookup_batch_carries_the_category_fields_not_the_text(client):
+    body = client.post("/lookup", json={"isbn13s": ["9780735211292"]}).json()
+    (record,) = body["results"]["9780735211292"]
+    assert record["genre"] == "Nonfiction" and record["oclc"] == 1055766559
+    assert "9780735211292" in record["isbn13s"] and isinstance(record["subjects"], list)
+    assert "title" not in record and "summary" not in record
+    full = client.get("/oclc/1055766559").json()
+    assert full["title"].startswith("Atomic") and full["genre"] == record["genre"]
+
+
+def test_a_duckdb_failure_after_the_deadline_is_a_504(worldcat_artifact, tmp_path_factory):
+    import dataclasses
+    import time
+
+    import duckdb
+    from fastapi import HTTPException
+
+    from worldcat.api.retrieval import _with_deadline
+
+    state = open_artifact(
+        Settings(
+            data_root=worldcat_artifact.root,
+            data_version=worldcat_artifact.dump_date,
+            temp_dir=tmp_path_factory.mktemp("wc-tmp-deadline"),
+        )
+    )
+    short = dataclasses.replace(state, deadline_s=0.05)
+
+    def interrupted_mid_fetch(cur):
+        time.sleep(0.2)
+        raise duckdb.InvalidInputException("closed pending query result")
+
+    with pytest.raises(HTTPException) as info:
+        _with_deadline(short, interrupted_mid_fetch)
+    assert info.value.status_code == 504
+
+    def failed_before_the_deadline(cur):
+        raise duckdb.InvalidInputException("something else")
+
+    with pytest.raises(duckdb.InvalidInputException):
+        _with_deadline(state, failed_before_the_deadline)
+    state.connection.close()
+
+
 def test_lookup_rejects_more_than_500_or_an_invalid_isbn(client):
     assert client.post("/lookup", json={"isbn13s": ["9780735211292"] * 501}).status_code == 422
     response = client.post("/lookup", json={"isbn13s": ["9780735211292", "garbage"]})

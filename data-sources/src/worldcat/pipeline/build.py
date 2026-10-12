@@ -6,7 +6,7 @@
         --catalogue-isbns /home/shane/wc-data/our_isbns.txt
 
 Stages: extract (frame-parallel) -> records -> isbns -> redirects -> holdings ->
-gates -> report + manifest. A failed gate raises BuildFailed, leaves _staging in
+lookup -> gates -> report + manifest. A failed gate raises BuildFailed, leaves _staging in
 place for inspection, and writes gates_passed=false so the API refuses the
 version. There is no download, refresh or promotion: the dump is frozen.
 
@@ -113,6 +113,7 @@ def build(
     stage("isbns", lambda: distill.build_isbns(con, paths))
     stage("redirects", lambda: distill.build_redirects(con, paths))
     stage("holdings", lambda: distill.build_holdings(con, paths))
+    stage("lookup", lambda: distill.build_lookup(con, paths))
 
     results = run_gates(
         con, paths, extract_stats=extract, thresholds=thresholds, catalogue_isbns=catalogue_isbns

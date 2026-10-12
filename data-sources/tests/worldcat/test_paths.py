@@ -20,5 +20,5 @@ def test_ensure_creates_every_directory(tmp_path: Path):
         assert directory.is_dir()
 
 
-def test_tables_are_the_four_in_the_spec():
-    assert TABLES == ("records", "isbns", "redirects", "holdings")
+def test_tables_are_the_four_in_the_spec_plus_the_batch_lookup():
+    assert TABLES == ("records", "isbns", "redirects", "holdings", "lookup")

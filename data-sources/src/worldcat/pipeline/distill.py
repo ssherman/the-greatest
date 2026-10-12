@@ -20,6 +20,28 @@ PASS_ORDER: tuple[str, ...] = (
 )
 MAX_REDIRECT_HOPS = 10
 ROW_GROUP = 100_000
+# A lookup pays for every row group it touches, whole: 14 MB of wide text per
+# 100,000-row group of `records` cost 80 ms a hit at two threads, and one ISBN
+# fans out to ten records in ten groups. So `records` keeps smaller groups for the
+# single-item routes, and the batch route reads `lookup`: one narrow row per
+# (isbn13, oclc), sorted by ISBN so an ISBN's records share a 10,000-row group.
+# Measured on the 2025-09-04 build at two threads: 100 ISBNs in 1.2 s, 500 in 3.3 s.
+RECORDS_ROW_GROUP = 20_000
+LOOKUP_ROW_GROUP = 10_000
+# What a batch lookup returns: the fields the category backfill reads, none of the text.
+LOOKUP_COLUMNS: tuple[str, ...] = (
+    "oclc",
+    "year",
+    "cataloging_language",
+    "specific_format",
+    "genre",
+    "subjects",
+    "isbn13s",
+    "merged_oclc",
+    "other_format_oclc",
+    "total_editions",
+    "source_type",
+)
 
 
 class UnknownPass(RuntimeError):
@@ -128,7 +150,7 @@ def build_records(con: duckdb.DuckDBPyConnection, paths: WorldcatPaths) -> int:
           JOIN isbn_union u ON u.oclc = s.oclc
           WHERE s.kind = 'record'
           ORDER BY s.oclc
-        ) TO '{target}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {ROW_GROUP})
+        ) TO '{target}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {RECORDS_ROW_GROUP})
         """
     )
     for temp in ("shards", "winners", "isbn_union"):
@@ -207,6 +229,23 @@ def build_holdings(con: duckdb.DuckDBPyConnection, paths: WorldcatPaths) -> int:
           WHERE kind = 'holdings'
           GROUP BY oclc ORDER BY oclc
         ) TO '{target}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {ROW_GROUP})
+        """
+    )
+    return _count(con, target)
+
+
+def build_lookup(con: duckdb.DuckDBPyConnection, paths: WorldcatPaths) -> int:
+    """`isbns` joined to the category fields of `records`, sorted by ISBN: the table
+    the batch route reads. Built last, from the two finished tables."""
+    target = paths.table("lookup")
+    columns = ", ".join(f"r.{c}" for c in LOOKUP_COLUMNS)
+    con.execute(
+        f"""
+        COPY (
+          SELECT i.isbn13, {columns}
+          FROM '{paths.table("isbns")}' i JOIN '{paths.table("records")}' r USING (oclc)
+          ORDER BY i.isbn13, r.oclc
+        ) TO '{target}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {LOOKUP_ROW_GROUP})
         """
     )
     return _count(con, target)

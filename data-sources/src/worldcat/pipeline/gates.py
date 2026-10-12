@@ -65,6 +65,12 @@ def _row_counts(con, paths, t: Thresholds) -> GateResult:
         problems.append(f"isbns={counts['isbns']:,} < records={counts['records']:,}")
     if counts["redirects"] is not None and counts["redirects"] < t.min_redirects:
         problems.append(f"redirects={counts['redirects']:,} < {t.min_redirects:,}")
+    if (
+        counts["lookup"] is not None
+        and counts["isbns"] is not None
+        and counts["lookup"] != counts["isbns"]
+    ):
+        problems.append(f"lookup={counts['lookup']:,} != isbns={counts['isbns']:,}")
     return GateResult(
         "row_counts",
         "fail" if problems else "pass",

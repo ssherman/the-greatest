@@ -267,9 +267,11 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    dev machine through the VM's loopback, twice (cold, then warm):
    `test "$(wc -l < /home/shane/wc-data/our_isbns.txt)" -ge 500 || { echo "export has fewer than 500 ISBNs"; exit 1; }; head -500 /home/shane/wc-data/our_isbns.txt | jq -R . | jq -sc '{isbn13s: .}' | ssh debian@<vm-address> "curl -s -o /dev/null -w '%{time_total}\n' -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8082/lookup"`
    (`/home/shane/wc-data/our_isbns.txt` is the export step 1 writes; the guard stops the step on a
-   missing or short file, which would otherwise "pass" in milliseconds on an empty batch). Both times must be well
-   under 5 s before the backfill; a `504` or a time near the deadline means stop and lower the
-   backfill's batch size or raise `WC_API_DEADLINE_S`.
+   missing or short file, which would otherwise "pass" in milliseconds on an empty batch). On the
+   development machine at the container's two threads the same batch took 3.3 s and a 100-ISBN
+   one 1.2 s, so expect the VM to be slower than that. Both times must be under 5 s before the
+   backfill; a `504` or a time near the deadline means stop and lower the backfill's batch size
+   or raise `WC_API_DEADLINE_S`.
 9. **Production setting. Shane runs with `!`.** Add
    `WORLDCAT_SERVICE_URL=https://worldcat-api.thegreatestbooks.org` to the production SOPS secrets and
    deploy.

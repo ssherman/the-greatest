@@ -24,7 +24,7 @@ Same four boundaries, enforced structurally:
 4. **No covers, no public search, no serving.** Nothing from WorldCat is displayed verbatim. What
    reaches the site is a link from a book to one of our own curated categories.
 
-### The four tables
+### The five tables
 
 | Table | Grain | Columns |
 |---|---|---|
@@ -32,9 +32,19 @@ Same four boundaries, enforced structurally:
 | `isbns` | one per (isbn13, oclc) | `isbn13`, `oclc` |
 | `redirects` | one per redirected number | `from_oclc`, `to_oclc`, `is_cycle` |
 | `holdings` | one per OCLC number with a summary | `oclc`, `total_holding_count`, `total_editions` |
+| `lookup` | one per (isbn13, oclc), sorted by `isbn13` | `isbn13` plus the category-bearing fields of `records`: `oclc`, `year`, `cataloging_language`, `specific_format`, `genre`, `subjects`, `isbn13s`, `merged_oclc`, `other_format_oclc`, `total_editions`, `source_type` (`LOOKUP_COLUMNS` in `distill.py`) |
 
 - `records` holds only ISBN-bearing records whose top-level `generalFormat` is `Book`. It is sorted
-  and row-grouped by `oclc`; `isbns` is sorted by `isbn13`. A single lookup prunes to one row group; a batch of hundreds of OCLC numbers becomes a hash join that scans the key columns (a synthetic 30M-row benchmark during review measured it in the hundreds of milliseconds; the real figure comes from the launch-todo timing step on the VM), which is why the launch todo times a 500-ISBN batch on the VM.
+  by `oclc` in 20,000-row groups; `isbns` is sorted by `isbn13`.
+- `lookup` exists because a Parquet lookup pays for every row group it touches, whole. On the
+  first build `records` had 100,000-row groups of 14 MB (the text columns: `summary` 6 GB,
+  `subjects` 4.6 GB, `title` 4.2 GB), each hit cost 80 ms at two threads, and one ISBN fans out to
+  about ten records in ten different groups, so a 100-ISBN batch (975 records, 642 groups) could
+  not finish inside the 5 s deadline and a single popular ISBN took 5 s. No query shape fixes
+  that; the layout has to. `lookup` is the `isbns` table joined to the narrow fields, sorted by
+  ISBN in 10,000-row groups of about 300 KB, so an ISBN's records share one small group. Measured
+  at two threads on the development machine: 100 ISBNs in 1.2 s, 500 in 3.3 s, against a timeout
+  before. The batch route reads only this table; the single-item routes still read `records`.
 - `isbns` indexes only check-digit-valid ISBN-13s (ISBN-10s are converted). The invalid share is
   observed by the `isbn_checksums` gate, not stored. `records.isbn13s`, by contrast, is the union of
   what the record's passes said and can include ISBN-13s with a bad check digit; anything that
@@ -91,7 +101,7 @@ joins the wide columns back by shard and row, which is what fits (see "Stage 2")
 Where things live (`worldcat.pipeline.paths.WorldcatPaths` owns the layout):
 
 ```
-<root>/versions/<dump-date>/records.parquet  isbns.parquet  redirects.parquet  holdings.parquet
+<root>/versions/<dump-date>/records.parquet  isbns.parquet  redirects.parquet  holdings.parquet  lookup.parquet
 <root>/versions/<dump-date>/manifest.json    build_report.json
 <root>/versions/<dump-date>/_staging/        shards; deleted on success
 <root>/tmp/                                  DuckDB spill
@@ -219,14 +229,19 @@ All responses are JSON. `worldcat.api.schemas.Record` is the one record shape:
 |---|---|
 | `GET /isbns/{isbn}` | ISBN-10 or -13, normalised to 13. Returns `{"isbn13": ..., "records": [...]}`. An unknown ISBN is `200` with an empty list (absence is an answer). An invalid ISBN or check digit is `422`. |
 | `GET /oclc/{number}` | Follows a redirect; the record carries `redirected_from`. A cycle is not followed. Unknown is `404`. |
-| `POST /lookup` | `{"isbn13s": [...]}`, at most 500 (more is `422`). Returns `{"results": {"<isbn as sent>": [records...]}}` with every requested key present. **One invalid ISBN makes the whole batch a `422`.** |
+| `POST /lookup` | `{"isbn13s": [...]}`, at most 500 (more is `422`). Returns `{"results": {"<isbn as sent>": [records...]}}` with every requested key present. Each record is the **category-bearing subset** (`worldcat.api.schemas.LookupRecord`: `oclc`, `year`, `cataloging_language`, `specific_format`, `genre`, `subjects`, `isbn13s`, `merged_oclc`, `other_format_oclc`, `total_editions`, `source_type`), never the text fields or holdings; `GET /oclc/{number}` has the full record. **One invalid ISBN makes the whole batch a `422`.** |
 | `GET /version` | `source`, `dump_date`, `pipeline_version`, `built_at`, `gates_passed`, `source_fingerprint`, per-table row counts, and the build's gate results. |
 
 There is no health route. The container does not start without an open artifact, so the heartbeat
 and any manual check use `/version`.
 
 Limits: one DuckDB connection with a cursor per request, `memory_limit` 2 GB, 2 threads, a 5-second
-per-request deadline (`504`). No concurrency cap: a single lookup is milliseconds, and a full 500-ISBN batch is a hash join over the key columns (see the notes under the tables above), so it is timed on the VM before the backfill. Settings come from
+per-request deadline (`504`; a DuckDB error of any class after the deadline is reported as the
+deadline, because an interrupt that lands between a query and its fetch surfaces as
+`InvalidInputException`, not `InterruptException`). No concurrency cap: a single-item route
+touches one 20,000-row group of `records` per record found, and a 500-ISBN batch read the
+`lookup` table in 3.3 s at two threads on the development machine (see the notes under the
+tables above), so the launch todo still times one on the VM before the backfill. Settings come from
 `WC_DATA_ROOT` (default `/data`), `WC_DATA_VERSION` (required), `WC_API_MEMORY_LIMIT`,
 `WC_API_TEMP_DIR`, `WC_API_THREADS` and `WC_API_DEADLINE_S`.
 
@@ -265,7 +280,9 @@ tables is missing, `manifest.json` is missing, its `gates_passed` is not `true`,
 
 `Books::WorldCat::Client` (`web-app/app/lib/books/world_cat/`): `record_by_isbn`, `record_by_oclc`
 (`nil` for a 404), `lookup(isbn13s)` (chunks at 500) and `version`. Results are
-`Books::WorldCat::Record` value objects. It has its own `BaseClient`, `Configuration` and
+`Books::WorldCat::Record` value objects; the ones `lookup` returns carry only the category-bearing
+fields (`title`, `summary` and the other text fields are `nil`, holdings absent), which is all
+`VocabularySnapshot`, `Backfill` and `ApplyCategories` read. It has its own `BaseClient`, `Configuration` and
 `Exceptions`, so callers rescue by source, but it reuses `Books::OpenLibrary::CircuitBreaker` (key
 `books:world_cat`, 5 failures, 60 s cooldown). Timeouts: 5 s, 3 s to open, 20 s for a batch.
 `WORLDCAT_SERVICE_URL` defaults to `http://127.0.0.1:8082` in development.
