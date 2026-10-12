@@ -2,7 +2,7 @@ require "test_helper"
 require "rake"
 
 class WorldcatRakeTest < ActiveSupport::TestCase
-  TASKS = %w[worldcat:export_isbns].freeze
+  TASKS = %w[worldcat:export_isbns worldcat:vocabulary].freeze
 
   setup do
     unless Rake::Task.task_defined?("worldcat:export_isbns")
@@ -18,5 +18,11 @@ class WorldcatRakeTest < ActiveSupport::TestCase
     assert_output(/wrote 3 ISBNs to #{Regexp.escape(path)}/) { Rake::Task["worldcat:export_isbns"].invoke(path) }
   ensure
     File.delete(path) if path && File.exist?(path)
+  end
+
+  test "vocabulary writes the two CSVs under config/worldcat and prints the split" do
+    result = Services::Books::WorldCat::VocabularySnapshot::Result.new(success?: true, data: {books_seen: 10, books_matched: 7, terms: {}, head: %w[a b], tail: %w[c]}, errors: [])
+    Services::Books::WorldCat::VocabularySnapshot.expects(:call).with { |args| args[:out_dir].to_s.end_with?("config/worldcat") }.returns(result)
+    assert_output(/7 of 10 books matched; 2 head terms, 1 tail terms/) { Rake::Task["worldcat:vocabulary"].invoke }
   end
 end
