@@ -1,0 +1,82 @@
+require "test_helper"
+
+module Services
+  module Books
+    class TrimLocationsTest < ActiveSupport::TestCase
+      TrimTask = ::Services::Ai::Tasks::Books::LocationTrimTask
+
+      setup do
+        Rails.configuration.x.categories_cleanup.stubs(:max_direct_locations).returns(2)
+        @book = books_books(:war_and_peace)
+        @book.category_items.destroy_all
+        @russia = ::Books::Category.create!(name: "Russia", category_type: :location)
+        @moscow = ::Books::Category.create!(name: "Moscow", category_type: :location, parent: @russia)
+        @peru = ::Books::Category.create!(name: "Peru", category_type: :location)
+        @chile = ::Books::Category.create!(name: "Chile", category_type: :location)
+        CategoryItem.create!(category: @moscow, item: @book)
+        CategoryItem.create!(category: @peru, item: @book)
+        CategoryItem.create!(category: @chile, item: @book, source: :admin)
+        ::Categories::AncestorReconciler.call(item_ids: [@book.id])
+      end
+
+      def stub_keep(ids)
+        TrimTask.any_instance.stubs(:call).returns(::Services::Ai::Result.new(success: true, data: {keep_ids: ids, reason: "Set in Moscow."}))
+      end
+
+      test "removes the legacy links the model did not keep, never admin links, and keeps inherited ones right" do
+        stub_keep([@moscow.id])
+
+        result = TrimLocations.call(book: @book)
+
+        assert result.success?
+        refute CategoryItem.exists?(category: @peru, item: @book)
+        assert CategoryItem.exists?(category: @chile, item: @book)
+        assert CategoryItem.exists?(category: @russia, item: @book, source: :inherited)
+        assert_equal [@peru.id], result.data[:removed]
+      end
+
+      test "writes one ledger row and does not trim the same book twice unless forced" do
+        stub_keep([@moscow.id])
+        TrimLocations.call(book: @book)
+
+        assert_equal 1, @book.enrichments.for_kind(TrimLocations::KIND).count
+        assert_equal "already trimmed", TrimLocations.call(book: @book).data[:skipped]
+      end
+
+      test "a dry run writes nothing" do
+        stub_keep([@moscow.id])
+
+        result = TrimLocations.call(book: @book, dry_run: true)
+
+        assert_equal [@peru.id], result.data[:removed]
+        assert CategoryItem.exists?(category: @peru, item: @book)
+        assert @book.enrichments.for_kind(TrimLocations::KIND).none?
+      end
+
+      test "a book at or under the limit is skipped without calling the AI" do
+        CategoryItem.where(category: @peru, item: @book).destroy_all
+        TrimTask.any_instance.expects(:call).never
+
+        assert_equal "not over the limit", TrimLocations.call(book: @book).data[:skipped]
+      end
+
+      test "a failed AI call changes nothing" do
+        TrimTask.any_instance.stubs(:call).returns(::Services::Ai::Result.new(success: false, error: "timeout"))
+
+        result = TrimLocations.call(book: @book)
+
+        refute result.success?
+        assert CategoryItem.exists?(category: @peru, item: @book)
+      end
+
+      test "candidate_ids lists books over the limit that were not trimmed yet" do
+        assert_includes TrimLocations.candidate_ids, @book.id
+
+        stub_keep([@moscow.id])
+        TrimLocations.call(book: @book)
+
+        refute_includes TrimLocations.candidate_ids, @book.id
+      end
+    end
+  end
+end
