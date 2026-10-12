@@ -235,6 +235,22 @@ module Admin
         refute CategoryItem.exists?(category: us, item: book)
       end
 
+      test "retyping a location that has places under it is rejected and keeps inherited links" do
+        sign_in_as(@admin_user, stub_auth: true)
+        us = ::Books::Category.create!(name: "United States", category_type: :location)
+        chicago = ::Books::Category.create!(name: "Chicago", category_type: :location, parent: us)
+        book = books_books(:war_and_peace)
+        CategoryItem.create!(category: chicago, item: book)
+        ::Categories::AncestorReconciler.call(item_ids: [book.id])
+
+        patch admin_books_category_path(us), params: {books_category: {category_type: "subject"}}
+
+        assert_response :unprocessable_entity
+        assert us.reload.location?
+        assert_equal us.id, chicago.reload.parent_id
+        assert CategoryItem.exists?(category: us, item: book)
+      end
+
       test "update saves alternative names one per line" do
         sign_in_as(@admin_user, stub_auth: true)
         category = categories(:books_france_location)

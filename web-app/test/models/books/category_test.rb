@@ -155,5 +155,37 @@ module Books
       refute child.update(category_type: :location)
       assert_includes child.errors[:parent_id], "must be a books location"
     end
+
+    test "a location with active child places can't be retyped" do
+      us = location("United States")
+      location("Illinois", parent: us)
+
+      refute us.update(category_type: :subject)
+      assert_includes us.errors[:category_type], "can't change while places are listed under it"
+    end
+
+    test "a location with only a soft-deleted child can be retyped" do
+      us = location("United States")
+      child = location("Illinois", parent: us)
+      child.update!(deleted: true)
+
+      assert us.update(category_type: :subject)
+    end
+
+    test "retyping a leaf location clears its parent" do
+      us = location("United States")
+      il = location("Illinois", parent: us)
+
+      assert il.update(category_type: :subject)
+      assert_nil il.reload.parent_id
+    end
+
+    test "a subject keeps its parent when its type is unchanged" do
+      parent = ::Books::Category.create!(name: "History", category_type: :subject)
+      child = ::Books::Category.create!(name: "Wars", category_type: :subject, parent: parent)
+
+      assert child.update(name: "Wars and Battles")
+      assert_equal parent.id, child.reload.parent_id
+    end
   end
 end

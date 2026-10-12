@@ -41,6 +41,11 @@ module Books
 
     validate :location_parent_is_valid, if: -> { location? && parent_id.present? && (will_save_change_to_parent_id? || will_save_change_to_category_type?) }
 
+    validate :location_has_no_places_under_it, if: -> { will_save_change_to_category_type? && category_type_was == "location" && !location? }
+
+    # A retyped leaf location can no longer have a location parent.
+    before_validation :clear_parent_when_leaving_location, if: -> { persisted? && will_save_change_to_category_type? && category_type_was == "location" && !location? }
+
     scope :by_book_ids, ->(book_ids) { joins(:category_items).where(category_items: {item_type: "Books::Book", item_id: book_ids}) }
     scope :by_author_ids, ->(author_ids) { joins(:category_items).where(category_items: {item_type: "Books::Author", item_id: author_ids}) }
 
@@ -84,6 +89,16 @@ module Books
         return
       end
       errors.add(:parent_id, "would create a cycle") if parent == self || parent.ancestors.include?(self)
+    end
+
+    def location_has_no_places_under_it
+      return unless child_categories.where(deleted: false).exists?
+
+      errors.add(:category_type, "can't change while places are listed under it")
+    end
+
+    def clear_parent_when_leaving_location
+      self.parent_id = nil
     end
 
     def book_type_membership_changed?
