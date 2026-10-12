@@ -119,12 +119,15 @@
                     the same grammar. FilterPath adds the /rc/ prefix when one applies. %>
                 <% categories.each do |category| %>
                   <% if category_type == "location" %>
-                    <span class="badge badge-ghost h-auto py-1" data-testid="location-trail">
-                      <% @location_trails.fetch(category.id, [category]).each_with_index do |place, index| %>
-                        <%= ", " if index.positive? %><%= link_to place.name,
-                              Books::FilterPath.call(categories: [place], ranking_configuration: @ranking_configuration),
-                              class: "hover:underline" %>
-                      <% end %>
+                    <%# One inline child inside the badge: the badge is inline-flex, so separate
+                        text runs would become flex items with a gap around each comma. %>
+                    <% place_links = @location_trails.fetch(category.id, [category]).map do |place|
+                         link_to place.name,
+                           Books::FilterPath.call(categories: [place], ranking_configuration: @ranking_configuration),
+                           class: "hover:underline"
+                       end %>
+                    <span class="badge badge-ghost h-auto py-1 max-w-full" data-testid="location-trail">
+                      <span class="whitespace-normal [overflow-wrap:anywhere]"><%= safe_join(place_links, ", ") %></span>
                     </span>
                   <% else %>
                     <%= link_to category.name,

@@ -26,6 +26,7 @@ module Books
 
       assert_response :success
       assert_select "[data-testid='location-trail']", 1
+      assert_select("[data-testid='location-trail']") { |el| refute_includes el.text.squish, " ," }
     end
 
     test "404s for an unknown slug" do
