@@ -31,7 +31,7 @@ module Services
               Naming rules:
               - The common English name, current if the place still exists ("Kolkata", not "Calcutta"; "Gdańsk", not "Danzig"). Historical states keep their historical name ("Soviet Union", "Roman Empire").
               - No containing place in the name: "Paris", not "Paris, France".
-              - Title Case, Chicago style (minor words lowercase unless first); "and" not "&"; straight apostrophes and hyphens; no trailing punctuation.
+              - Title Case, Chicago style (minor words lowercase unless first); "and" not "&"; straight apostrophes and hyphens; no trailing punctuation, but keep a place's established capitalization (Rio de Janeiro, Côte d'Ivoire).
               - Add a parenthetical qualifier only when the known list already contains a different place with the same bare name ("Georgia" the country vs "Georgia (U.S. state)"); never add a qualifier otherwise.
 
               Hierarchy rules:
@@ -41,6 +41,8 @@ module Services
               - Places spanning several countries go under their nearest shared region or continent (Alps: Europe).
               - Historical cities and sites go under the modern country they lie in (Troy: Turkey). Historical states and empires go under their continent.
               - Invented worlds and places in them go under Fictional Location (Middle-earth). An invented town inside the real world gets its real parent.
+
+              The known list includes the names under review. An entry's own current name in that list is the entry itself, not a different place.
 
               #{known_names_block}
             SYSTEM

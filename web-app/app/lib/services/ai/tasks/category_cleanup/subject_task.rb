@@ -21,13 +21,15 @@ module Services
               For each subject choose an action:
               - "keep": a good subject whose name already follows the rules.
               - "rename": a good subject whose name breaks the rules; give the new name in "name".
-              - "merge": the same subject as a DIFFERENT known subject below (never its own name), per the merge rule below; give its exact name in "merge_into".
+              - "merge": into a DIFFERENT known subject (never its own name) when the merge rule allows it; give its exact name in "merge_into".
               - "delete": junk or not a subject: a truncated fragment, a placeholder ("Book titles", "Packages"), a genre ("Science Fiction"), a format ("Anthology") or an audience ("Young Adult").
               - "is_location": a place, which belongs with locations.
               #{merge_scope_rule}
               A vague but real theme ("Identity", "Family") is a keep.
 
-              Naming rules: Title Case with minor words lowercase unless first, "and" not "&", straight apostrophes, no trailing punctuation, a noun or noun phrase. Don't rename only to change singular/plural.
+              Naming rules: Title Case with minor words lowercase unless first, "and" not "&", straight apostrophes and hyphens, no trailing punctuation, a noun or noun phrase. Don't rename only to change singular/plural.
+
+              The known list includes the names under review. An entry's own current name in that list is the entry itself, not a different subject.
 
               #{known_names_block}
             SYSTEM
