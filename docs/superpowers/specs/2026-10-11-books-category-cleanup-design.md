@@ -318,7 +318,9 @@ validations and scopes; all logic is in services under `app/lib/services/categor
      holds broader/narrower and reversed pairs (Sociology → Social sciences, Ancient Egypt → Egypt).
      Aliases are shown to the AI and used to resolve the names it returns.
    - `&` → `and` renames (merging if the `and` form exists).
-   - Zero-link categories → `delete`.
+   - Zero-link categories are NOT deleted: the weekly sync brings legacy categories over before their
+     books (books wait 24h), and a link to a deleted category is dropped for good. Empty categories
+     are hidden by the browse and filter-search thresholds (§6).
    - Names the rules can't settle are left without a decision for the AI passes.
 2. **AI location pass, head first** (`LocationTask`). Head = locations whose own direct link count
    is ≥ 20 (configurable); merged-in links never move a category between tiers, and a head category
@@ -391,9 +393,10 @@ dropped or reordered row is detected and that row retried alone.
 
 The sync's `CategoryMigrator` keeps inserting new legacy categories. A step appended to
 `data_migration:sync` runs the rules pass for categories created since the last cleanup run (case and
-punctuation twins of an existing category become auto-applied `merge`s; alternative names are not
-used, see §4.2). Everything else waits as an
-undecided category for the next owner-run `propose`. Auto-apply covers only rule decisions, never AI ones.
+punctuation twins of an existing category become `merge`s, broken names become renames or fragment
+deletes; empty categories are never deleted and alternative names are not used, see §4.2), and
+applies those rule decisions at once. Everything else waits as an undecided category for the next
+owner-run `propose`; a category whose sync decision failed or went stale is retried next week. Auto-apply covers only rule decisions, never AI ones.
 
 ## 5. Over-tagged books
 
