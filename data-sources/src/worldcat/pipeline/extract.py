@@ -148,6 +148,11 @@ def reduce(row: dict) -> dict | None:
         return out
     if kind not in ("title_json", "briefrecords_json"):
         return None
+    # keep() is a byte match, so a nested otherFormats[].generalFormat or an
+    # isbns array elsewhere in the line can satisfy it; check the top level here.
+    isbns = record.get("isbns")
+    if record.get("generalFormat") != "Book" or not isinstance(isbns, list) or not isbns:
+        return None
     out["kind"] = "record"
     out["title"] = _text(record.get("title")) or _text(record.get("titleInfo"))
     out["subtitle"] = _text(record.get("subtitle"))

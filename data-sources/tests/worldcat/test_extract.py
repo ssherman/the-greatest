@@ -163,6 +163,65 @@ def test_extract_all_counts_every_line_once_however_the_ranges_cut_it(tmp_path: 
         assert count == expected
 
 
+def _title_row(**record) -> dict:
+    return {
+        "metadata": {
+            "oclc_number": "0000000000001",
+            "type": "title_json",
+            "from_filenames": ["w2/v7/0001/1"],
+            "record": record,
+        }
+    }
+
+
+def test_reduce_rejects_a_non_book_that_only_lists_a_book_sibling():
+    row = _title_row(
+        generalFormat="AudioBook",
+        isbns=["9780735211292"],
+        otherFormats=[{"oclcNumber": "1", "generalFormat": "Book"}],
+    )
+
+    assert keep(json.dumps(row, separators=(",", ":")).encode())
+    assert reduce(row) is None
+
+
+def test_reduce_rejects_a_book_without_isbns():
+    assert reduce(_title_row(generalFormat="Book", isbns=[])) is None
+    assert reduce(_title_row(generalFormat="Book")) is None
+
+
+def test_named_corpus_rows_reach_the_shards(tmp_path: Path):
+    lines = CORPUS.read_bytes().splitlines()
+    source = tmp_path / "s.zst"
+    n = write_seekable(lines, source, frame_bytes=4096)
+    paths = WorldcatPaths(root=tmp_path, dump_date="2025-09-04")
+    paths.ensure()
+
+    extract_range(source, paths, 0, 0, n)
+
+    con = duckdb.connect()
+    glob = f"read_parquet('{paths.staging_dir}/shard_*.parquet')"
+
+    def one(where: str, columns: str) -> tuple:
+        rows = con.execute(f"SELECT {columns} FROM {glob} WHERE {where}").fetchall()
+        assert len(rows) == 1, where
+        return rows[0]
+
+    assert one("oclc = 9000000001", "kind") == ("record",)
+    assert one("oclc = 9000000010", "kind, redirect_to") == ("redirect", 9000000011)
+    assert one("oclc = 9000000020", "kind, redirect_to") == ("redirect", 9000000021)
+    assert one(
+        "oclc = 1055766559 AND kind = 'holdings' AND pass_index = 99999999",
+        "pass_index, total_holding_count",
+    ) == (
+        99999999,
+        4000,
+    )
+    assert one("oclc = 9000000030", "subjects") == (["Science fiction", "Robots"],)
+    assert one("oclc = 1000415078 AND pass = '2023_04_v3'", "genre") == ("STALE GENRE",)
+    con.close()
+
+
 def test_a_line_ending_exactly_on_a_frame_boundary_is_not_dropped(tmp_path: Path):
     lines = CORPUS.read_bytes().splitlines()
     source = tmp_path / "s.zst"

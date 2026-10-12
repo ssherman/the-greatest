@@ -229,7 +229,9 @@ def main() -> None:
         if not found:
             raise SystemExit(f"OCLC {oclc} not found; the seed list is wrong")
         kept.extend(found)
-    kept.extend(json.dumps(row, ensure_ascii=False).encode() for row in SYNTHETIC)
+    kept.extend(
+        json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode() for row in SYNTHETIC
+    )
     OUT.write_bytes(b"\n".join(kept) + b"\n")
     print(f"{OUT.name}: {len(kept)} lines, {OUT.stat().st_size:,} bytes")
 
