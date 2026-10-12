@@ -40,7 +40,7 @@ module Services
         name = @result[:name]
         return [decision(:keep)] if name.blank? || name == @entry.name
 
-        clash = @subjects.lookup(name)
+        clash = @subjects.lookup(name, effective_only: true)
         return [decision(:merge, target_category_id: clash)] if clash && clash != @entry.id
 
         [decision(:rename, new_name: name)]

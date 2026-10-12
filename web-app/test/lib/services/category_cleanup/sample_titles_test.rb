@@ -12,6 +12,13 @@ module Services
         assert_equal [expected], SampleTitles.for(category)
       end
 
+      test "ignores inherited links" do
+        category = ::Books::Category.create!(name: "Russia", category_type: :location)
+        CategoryItem.create!(category: category, item: books_books(:war_and_peace), source: :inherited)
+
+        assert_empty SampleTitles.for(category)
+      end
+
       test "is capped by config" do
         Rails.configuration.x.categories_cleanup.stubs(:sample_titles).returns(1)
         category = ::Books::Category.create!(name: "Russia", category_type: :location)

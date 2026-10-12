@@ -32,6 +32,17 @@ module Services
         assert_equal "Spacecraft Missions", build(@missions, action: "rename", name: "Spacecraft Missions").sole[:new_name]
       end
 
+      test "a merge into the subject's own name keeps it" do
+        assert_equal :keep, build(@missions, action: "merge", merge_into: "spacecraft missions").sole[:action]
+      end
+
+      test "a name another subject is being renamed away from is free" do
+        CategoryCleanupDecision.create!(category: @space, run: "r1", stage: "subjects_head", action: :rename, decided_by: :ai, new_name: "Spaceflight")
+        @subjects = NameIndex.new(run: "r1", category_type: "subject")
+
+        assert_equal :rename, build(@missions, action: "rename", name: "Space Exploration").sole[:action]
+      end
+
       test "is_location merges into the location of that name, or retypes" do
         paris = ::Books::Category.create!(name: "Paris", category_type: :subject)
         assert_equal @paris_place.id, build(paris, action: "is_location").sole[:target_category_id]

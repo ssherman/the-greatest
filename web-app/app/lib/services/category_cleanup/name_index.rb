@@ -3,14 +3,16 @@
 module Services
   module CategoryCleanup
     # The vocabulary of one category type as a run currently sees it: live books
-    # categories, minus those a proposed or applied merge/retype/delete removes,
-    # with proposed renames applied and merged-in link counts added to their
-    # targets. The AI passes build prompts from it and resolve the model's
+    # categories, minus those a proposed merge/retype/delete removes, with
+    # proposed renames applied and merged-in link counts added to their targets.
+    # Applied decisions are already in the database, so only proposed ones are read. The AI passes build prompts from it and resolve the model's
     # names back to category ids with #lookup.
     class NameIndex
       Entry = Struct.new(:category, :name, :links, keyword_init: true) do
         def id = category.id
       end
+
+      CATEGORY_COLUMNS = (%w[id alternative_names] + ::CategoryCleanupDecision::SNAPSHOT_FIELDS).uniq.freeze
 
       def initialize(run:, category_type:)
         @run = run
@@ -25,11 +27,13 @@ module Services
         entries.select { |entry| entry.links >= min }.sort_by { |entry| [-entry.links, entry.name] }.map(&:name)
       end
 
-      def lookup(name)
+      # effective_only: match only the names categories will carry after the
+      # proposed renames; a name a category is being renamed away from is free.
+      def lookup(name, effective_only: false)
         return nil if name.blank?
 
         key = NameNormalizer.twin_key(name)
-        key && @by_key[key]
+        key && (effective_only ? @effective_by_key : @by_key)[key]
       end
 
       private
@@ -38,17 +42,20 @@ module Services
         categories = ::Books::Category.active
           .where(category_type: @category_type)
           .where.not(id: ::Books::Category.protected_ids)
+          .select(*CATEGORY_COLUMNS)
           .to_a
         counts = ::CategoryItem.direct.joins(:category)
           .where(categories: {type: "Books::Category", category_type: @category_type, deleted: false})
           .group(:category_id).count
-        decisions = ::CategoryCleanupDecision.for_run(@run).where(status: %i[proposed applied]).to_a
-        removed = decisions.select { |d| d.action_merge? || d.action_retype? || d.action_delete? }.map(&:category_id).to_set
-        renames = decisions.select(&:action_rename?).to_h { |d| [d.category_id, d.new_name] }
+        type_ids = ::Books::Category.where(category_type: @category_type).select(:id)
+        decisions = ::CategoryCleanupDecision.for_run(@run).where(status: :proposed, category_id: type_ids)
+          .order(:id).pluck(:category_id, :action, :new_name, :target_category_id)
+        removed = decisions.select { |row| %w[merge retype delete].include?(row[1]) }.map(&:first).to_set
+        renames = decisions.select { |row| row[1] == "rename" }.to_h { |row| [row[0], row[2]] }
 
         links = categories.to_h { |c| [c.id, counts[c.id].to_i] }
-        decisions.select(&:action_merge?).each do |d|
-          links[d.target_category_id] += links[d.category_id].to_i if links.key?(d.target_category_id)
+        decisions.select { |row| row[1] == "merge" }.each do |id, _, _, target_id|
+          links[target_id] += links[id].to_i if links.key?(target_id)
         end
 
         @entries = categories.reject { |c| removed.include?(c.id) }.map do |c|
@@ -62,8 +69,13 @@ module Services
       # with no alphanumerics has no key and is not indexed.
       def index_names
         @by_key = {}
+        @effective_by_key = {}
         ordered = entries.sort_by { |entry| [-entry.links, entry.id] }
-        ordered.each { |entry| add(entry.name, entry.id) }
+        ordered.each do |entry|
+          add(entry.name, entry.id)
+          key = NameNormalizer.twin_key(entry.name)
+          @effective_by_key[key] ||= entry.id if key
+        end
         ordered.each { |entry| add(entry.category.name, entry.id) }
         ordered.each do |entry|
           entry.category.alternative_names.each { |alt| add(alt, entry.id) }

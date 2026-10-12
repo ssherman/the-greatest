@@ -47,6 +47,28 @@ module Services
         assert_nil index.lookup("!!!")
       end
 
+      test "effective_only lookup ignores a name its category is being renamed away from" do
+        georgia = location("Georgia", links: 1)
+        decide(georgia, :rename, new_name: "Georgia (U.S. state)")
+        index = NameIndex.new(run: "r1", category_type: "location")
+
+        assert_equal georgia.id, index.lookup("Georgia")
+        assert_nil index.lookup("Georgia", effective_only: true)
+        assert_equal georgia.id, index.lookup("Georgia (U.S. state)", effective_only: true)
+      end
+
+      test "applied decisions are not re-applied and the latest proposed rename wins" do
+        applied = location("Applied", links: 1)
+        decide(applied, :delete, status: :applied)
+        renamed = location("Old", links: 1)
+        decide(renamed, :rename, new_name: "First")
+        decide(renamed, :rename, new_name: "Second")
+        by_id = NameIndex.new(run: "r1", category_type: "location").entries.index_by(&:id)
+
+        assert by_id.key?(applied.id)
+        assert_equal "Second", by_id[renamed.id].name
+      end
+
       test "head_names lists the most-linked names at or above the head threshold" do
         Rails.configuration.x.categories_cleanup.stubs(:head_min_links).returns(2)
         location("Big Place", links: 2)

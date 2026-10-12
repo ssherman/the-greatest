@@ -9,7 +9,7 @@ module Services
       def self.for(category)
         limit = Rails.configuration.x.categories_cleanup.sample_titles
         ::Books::Book
-          .joins(:category_items).where(category_items: {category_id: category.id})
+          .joins(:category_items).where(category_items: {category_id: category.id}).merge(::CategoryItem.direct)
           .includes(:authors).order(:id).limit(limit)
           .map do |book|
             names = book.authors.map(&:name)

@@ -49,14 +49,14 @@ module Services
         name = @result[:canonical_name].presence || @entry.name
         decisions = []
         if name != @entry.name
-          clash = @locations.lookup(name)
+          clash = @locations.lookup(name, effective_only: true)
           return [decision(:merge, target_category_id: clash)] if clash && clash != @entry.id
 
           decisions << decision(:rename, new_name: name)
         end
 
         chain = @result[:parent_chain]
-        chain = [FICTIONAL_ROOT] if chain.empty? && @result[:verdict] == "fictional_place" && name != FICTIONAL_ROOT
+        chain = [FICTIONAL_ROOT] if chain.empty? && @result[:verdict] == "fictional_place" && !same_name?(name, FICTIONAL_ROOT)
         if chain.any?
           error = chain_error(chain, name)
           decisions << (error ? failed(:set_parent, error, parent_chain: chain) : decision(:set_parent, parent_chain: chain))
@@ -77,6 +77,11 @@ module Services
         return "parent chain starts at the place itself" if @locations.lookup(chain.first) == @entry.id
 
         nil
+      end
+
+      def same_name?(a, b)
+        key = NameNormalizer.twin_key(a)
+        !key.nil? && key == NameNormalizer.twin_key(b)
       end
 
       def decision(action, **attrs)

@@ -94,6 +94,39 @@ module Services
         assert_match "unusable", own.last[:error]
       end
 
+      test "a name another category is being renamed away from is free" do
+        georgia = ::Books::Category.create!(name: "Georgia", category_type: :location)
+        CategoryItem.create!(category: georgia, item: books_books(:war_and_peace))
+        CategoryCleanupDecision.create!(category: georgia, run: "r1", stage: "locations_head", action: :rename, decided_by: :ai, new_name: "Georgia (U.S. state)")
+        @locations = NameIndex.new(run: "r1", category_type: "location")
+
+        decisions = build(@chicago, canonical_name: "Georgia", parent_chain: [])
+
+        assert_equal [:rename], decisions.map { |d| d[:action] }
+      end
+
+      test "merge_into the place's own name does not merge it into itself" do
+        decisions = build(@chicago, merge_into: "Chicago")
+
+        assert_equal [:set_parent], decisions.map { |d| d[:action] }
+        assert_equal :keep, build(@chicago, merge_into: "chicago", parent_chain: []).sole[:action]
+      end
+
+      test "a case-only rename stays a rename" do
+        lower = ::Books::Category.create!(name: "boston", category_type: :location)
+        CategoryItem.create!(category: lower, item: books_books(:war_and_peace))
+        @locations = NameIndex.new(run: "r1", category_type: "location")
+
+        assert_equal :rename, build(lower, canonical_name: "Boston", parent_chain: []).sole[:action]
+      end
+
+      test "an entry named like the fictional root is treated as the root" do
+        root = ::Books::Category.create!(name: "Fictional location", category_type: :location)
+        decisions = build(root, verdict: "fictional_place", canonical_name: "Fictional location", parent_chain: [])
+
+        assert_equal [:keep], decisions.map { |d| d[:action] }
+      end
+
       test "every decision carries the reason and the ambiguous flag" do
         decision = build(@chicago, ambiguous: true, reason: "Two Chicagos.").sole
         assert decision[:ambiguous]
