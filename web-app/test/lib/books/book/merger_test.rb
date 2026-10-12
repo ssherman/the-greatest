@@ -924,6 +924,18 @@ module Books
         assert_equal [@target.id, "Books::Book"], [decision.reload.record_id, decision.record_type]
       end
 
+      test "category links keep their source and inherited links are rebuilt on the survivor" do
+        us = ::Books::Category.create!(name: "United States", category_type: :location)
+        chicago = ::Books::Category.create!(name: "Chicago", category_type: :location, parent: us)
+        CategoryItem.create!(category: chicago, item: @source, source: :admin)
+        CategoryItem.create!(category: us, item: @source, source: :inherited)
+
+        ::Books::Book::Merger.new(source: @source, target: @target).call
+
+        assert CategoryItem.exists?(category: chicago, item: @target, source: :admin)
+        assert CategoryItem.exists?(category: us, item: @target, source: :inherited)
+      end
+
       private
 
       def create_reading_goal(completed_on:, **attributes)

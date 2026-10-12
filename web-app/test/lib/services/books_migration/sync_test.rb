@@ -226,4 +226,13 @@ class Services::BooksMigration::SyncTest < ActiveSupport::TestCase
     assert_includes result.errors.first, "reviews failed: boom"
     assert_equal({"books" => 1_000, "authors" => 500, "book_identifiers" => 5_000}, watermarks)
   end
+
+  test "reconciles inherited location links right after the category steps" do
+    result = Services::BooksMigration::Sync.call(legacy: legacy)
+
+    assert result.success?, result.errors.inspect
+    labels = result.data[:steps].map(&:first)
+    assert_operator labels.index("location_ancestors"), :>, labels.index("book_type_categories")
+    assert_operator labels.index("location_ancestors"), :<, labels.index("countries")
+  end
 end
