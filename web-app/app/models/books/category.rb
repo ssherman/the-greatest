@@ -39,7 +39,7 @@ module Books
     # the validation (raw SQL) can't loop forever.
     MAX_DEPTH = 8
 
-    validate :location_parent_is_valid, if: -> { location? && parent_id.present? && will_save_change_to_parent_id? }
+    validate :location_parent_is_valid, if: -> { location? && parent_id.present? && (will_save_change_to_parent_id? || will_save_change_to_category_type?) }
 
     scope :by_book_ids, ->(book_ids) { joins(:category_items).where(category_items: {item_type: "Books::Book", item_id: book_ids}) }
     scope :by_author_ids, ->(author_ids) { joins(:category_items).where(category_items: {item_type: "Books::Author", item_id: author_ids}) }

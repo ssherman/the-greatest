@@ -147,5 +147,13 @@ module Books
     ensure
       ::Books::BookType.reset_category_ids!
     end
+
+    test "a subject with a subject parent can't be retyped to location" do
+      parent = ::Books::Category.create!(name: "History", category_type: :subject)
+      child = ::Books::Category.create!(name: "Wars", category_type: :subject, parent: parent)
+
+      refute child.update(category_type: :location)
+      assert_includes child.errors[:parent_id], "must be a books location"
+    end
   end
 end
