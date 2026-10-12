@@ -18,12 +18,13 @@ new_sandbox
 export REPO_REF=main TUNNELS_ENABLED=0 OL_TUNNEL_TOKEN=ol-token FETCHER_TUNNEL_TOKEN=fetcher-token
 export HC_OL_HEARTBEAT=https://hc.test/ol-beat HC_OL_DEPLOY=https://hc.test/ol-deploy HC_OL_REFRESH=https://hc.test/ol-refresh
 export HC_FETCHER_HEARTBEAT=https://hc.test/f-beat HC_FETCHER_DEPLOY=https://hc.test/f-deploy
+export WORLDCAT_TUNNEL_TOKEN=wc-token HC_WORLDCAT_HEARTBEAT=https://hc.test/wc-beat HC_WORLDCAT_DEPLOY=https://hc.test/wc-deploy
 export HC_RECOMMENDER=https://hc.test/ol-train RECOMMENDATIONS_R2_ENDPOINT=https://acct.r2.test
 export RECOMMENDATIONS_R2_ACCESS_KEY=rec-access RECOMMENDATIONS_R2_SECRET_KEY=rec-secret RECOMMENDATIONS_R2_BUCKET=rec-bucket
 echo "ssh-ed25519 AAAATEST test@example.com" >"$SANDBOX/key.pub"
 export SSH_PUBKEY_FILE="$SANDBOX/key.pub"
 
-for role in ol fetcher; do
+for role in ol fetcher worldcat; do
   render_vm_env "$role" "$SANDBOX/$role.env"
   render_user_data "$role" "$SANDBOX/$role.env" "$SANDBOX/$role.yaml"
 done
@@ -31,7 +32,7 @@ env_from_yaml() { # decode the env file a rendered user-data carries
   ruby -ryaml -rbase64 -e 'y = YAML.load_file(ARGV[0]); f = y["write_files"].find { |w| w["path"] == "/etc/the-greatest/home-server.env" }; print Base64.decode64(f["content"])' "$1"
 }
 
-t_yaml() { for r in ol fetcher; do ruby -ryaml -e 'YAML.load_file(ARGV[0])' "$SANDBOX/$r.yaml" || return 1; done; }
+t_yaml() { for r in ol fetcher worldcat; do ruby -ryaml -e 'YAML.load_file(ARGV[0])' "$SANDBOX/$r.yaml" || return 1; done; }
 t_first_line() { [ "$(head -1 "$SANDBOX/ol.yaml")" = "#cloud-config" ]; }
 # ${distro_codename} is apt's own variable, meant to survive rendering.
 t_no_leftovers() { ! cat "$SANDBOX/ol.yaml" "$SANDBOX/fetcher.yaml" | grep -v 'distro_codename' | grep -q '\${'; }
@@ -56,6 +57,8 @@ t_env_keys() {
   keys="$(env_from_yaml "$SANDBOX/ol.yaml" | cut -d= -f1 | tr '\n' ' ')"
   [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH HC_RECOMMENDER RECOMMENDATIONS_R2_ENDPOINT RECOMMENDATIONS_R2_ACCESS_KEY RECOMMENDATIONS_R2_SECRET_KEY RECOMMENDATIONS_R2_BUCKET " ] || return 1
   keys="$(env_from_yaml "$SANDBOX/fetcher.yaml" | cut -d= -f1 | tr '\n' ' ')"
+  [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH " ] || return 1
+  keys="$(env_from_yaml "$SANDBOX/worldcat.yaml" | cut -d= -f1 | tr '\n' ' ')"
   [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH " ]
 }
 t_codename_literal() {
@@ -120,7 +123,25 @@ t_reboot_reason() {
 }
 t_vm_spec_sizes() {
   vm_spec ol && [ "$CORES $MEM $DATADISK" = "12 24576 300" ] || return 1
-  vm_spec fetcher && [ "$CORES $MEM" = "4 4096" ]
+  vm_spec fetcher && [ "$CORES $MEM" = "4 4096" ] || return 1
+  vm_spec worldcat && [ "$VMID $CORES $MEM $OSDISK $DATADISK $STARTUP" = "130 2 4096 32 40 order=3" ]
+}
+t_worldcat_env() {
+  local env; env="$(env_from_yaml "$SANDBOX/worldcat.yaml")"
+  grep -qx 'ROLE=worldcat' <<<"$env" && grep -qx 'TUNNEL_TOKEN=wc-token' <<<"$env" &&
+    grep -qx 'HC_HEARTBEAT=https://hc.test/wc-beat' <<<"$env" && grep -qx 'HC_DEPLOY=https://hc.test/wc-deploy' <<<"$env" &&
+    grep -qx 'HC_REFRESH=' <<<"$env"
+}
+t_worldcat_isolation() {
+  local env; env="$(env_from_yaml "$SANDBOX/worldcat.yaml")"
+  ! grep -q 'ol-token\|fetcher-token\|ol-beat\|f-beat\|RECOMMEND\|rec-' <<<"$env"
+}
+t_worldcat_firewall() {
+  local fw="$HS_DIR/host/firewall/130.fw"
+  [ -f "$fw" ] && grep -qx 'policy_in: DROP' "$fw" && grep -qx 'IN ACCEPT -source +lan -p tcp -dport 22 -log nolog' "$fw"
+}
+t_worldcat_in_firewall_pairs() {
+  grep -qF '"130.fw:/etc/pve/firewall/130.fw"' "$HS_DIR/lib/host.sh"
 }
 t_storage_defaults() {
   [ "$(unset VM_STORAGE DATA_STORAGE IMAGE_STORAGE; echo "$(vm_storage) $(data_storage) $(image_storage)")" = "local-lvm local-lvm local" ] &&
@@ -202,7 +223,11 @@ check "cluster.fw renders IPv4-only sets with no blank or unrendered line" t_clu
 check "120.fw renders the house's public IPv4 into house_public and drops it" t_fetcher_fw
 check "120.fw refuses an empty or non-IPv4 house address" t_fetcher_fw_refuses_bad_ip
 check "120.fw is committed only as a template" t_fetcher_fw_not_committed_rendered
-check "vm_spec sizes: ol 12 vCPU / 24 GB, fetcher unchanged" t_vm_spec_sizes
+check "vm_spec sizes: ol 12 vCPU / 24 GB, fetcher unchanged, worldcat 2 vCPU / 4 GB / 40 GB data" t_vm_spec_sizes
+check "worldcat gets its role, token and check URLs, and no refresh check" t_worldcat_env
+check "worldcat holds nothing of ol's or the fetcher's" t_worldcat_isolation
+check "130.fw drops inbound except SSH from the LAN" t_worldcat_firewall
+check "converge_host_firewall installs 130.fw" t_worldcat_in_firewall_pairs
 check "storage names default to local-lvm / local and come from the secrets when set" t_storage_defaults
 check "pick_trace_ip returns only a dotted IPv4 ip= line" t_trace_ip
 check "a ZFS module/userland or kernel mismatch yields a reboot message naming both versions" t_reboot_reason
