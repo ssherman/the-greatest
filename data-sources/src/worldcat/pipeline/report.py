@@ -8,6 +8,7 @@ import duckdb
 
 from common.gates import GateResult
 from worldcat.pipeline.extract import ExtractStats
+from worldcat.pipeline.gates import gates_passed
 from worldcat.pipeline.paths import TABLES, WorldcatPaths
 
 PIPELINE_VERSION = 1
@@ -87,7 +88,7 @@ def write_manifest(
         "built_at": _now(),
         "pipeline_version": PIPELINE_VERSION,
         "source_fingerprint": source_fingerprint,
-        "gates_passed": all(g.status != "fail" for g in gate_results),
+        "gates_passed": gates_passed(gate_results),
         "tables": {name: stats.get("rows", 0) for name, stats in tables.items()},
         "stages": list(timings.as_dict()),
     }

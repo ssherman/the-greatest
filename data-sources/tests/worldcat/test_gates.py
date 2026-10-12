@@ -104,3 +104,96 @@ def test_a_missing_canary_fails(built):
     )
     assert results["canaries"].status == "fail"
     assert "9780735211292" in results["canaries"].detail
+
+
+def _run(con, paths, stats, thresholds=LOOSE, catalogue_isbns=None):
+    return _by_name(
+        run_gates(
+            con,
+            paths,
+            extract_stats=stats,
+            thresholds=thresholds,
+            catalogue_isbns=catalogue_isbns,
+        )
+    )
+
+
+def test_an_empty_catalogue_export_fails_instead_of_raising(built, tmp_path: Path):
+    con, paths, stats = built
+    empty = tmp_path / "empty.txt"
+    empty.write_text("")
+    result = _run(con, paths, stats, catalogue_isbns=empty)["catalogue_coverage"]
+    assert result.status == "fail"
+    assert "no valid ISBN-13s" in result.detail
+
+
+def test_a_missing_catalogue_export_fails_naming_the_path(built, tmp_path: Path):
+    con, paths, stats = built
+    missing = tmp_path / "nope.txt"
+    result = _run(con, paths, stats, catalogue_isbns=missing)["catalogue_coverage"]
+    assert result.status == "fail"
+    assert str(missing) in result.detail
+
+
+def test_a_missing_table_fails_the_gates_that_read_it_without_raising(built):
+    con, paths, stats = built
+    paths.table("records").unlink()
+    results = _run(con, paths, stats)
+    assert results["row_counts"].status == "fail"
+    assert results["field_coverage"].status == "fail"
+    assert results["canaries"].status == "fail"
+    assert not gates_passed(list(results.values()))
+
+
+def test_a_missing_shard_set_fails_the_gates_that_scan_it_without_raising(built):
+    con, paths, stats = built
+    for shard in paths.staging_dir.glob("shard_*.parquet"):
+        shard.unlink()
+    results = _run(con, paths, stats)
+    assert results["isbn_checksums"].status == "fail"
+    assert results["pass_prefixes"].status == "fail"
+    assert not gates_passed(list(results.values()))
+
+
+def test_field_coverage_fails_below_its_floor(built):
+    con, paths, stats = built
+    thresholds = Thresholds(min_records=1, max_records=10**9, min_redirects=1, min_genre_share=1.01)
+    result = _run(con, paths, stats, thresholds=thresholds)["field_coverage"]
+    assert result.status == "fail"
+    assert "genre" in result.detail
+
+
+def test_pass_prefixes_fails_on_an_unknown_prefix(built):
+    con, paths, stats = built
+    con.execute(
+        f"COPY (SELECT * REPLACE ('mystery_pass' AS pass) "
+        f"FROM read_parquet('{paths.staging_dir}/shard_*.parquet') WHERE kind = 'record' LIMIT 1) "
+        f"TO '{paths.shard(9, 0)}' (FORMAT parquet)"
+    )
+    result = _run(con, paths, stats)["pass_prefixes"]
+    assert result.status == "fail"
+    assert "mystery_pass" in result.observed["unknown"]
+
+
+def test_a_wrong_canary_genre_fails(built):
+    con, paths, stats = built
+    records = paths.table("records")
+    con.execute(
+        f"COPY (SELECT * REPLACE (CASE WHEN oclc = 1055766559 THEN 'Fiction' ELSE genre END "
+        f"AS genre) FROM '{records}') TO '{records}' (FORMAT parquet)"
+    )
+    result = _run(con, paths, stats)["canaries"]
+    assert result.status == "fail"
+    assert "1055766559" in result.detail
+
+
+def test_a_broken_canary_redirect_fails(built):
+    con, paths, stats = built
+    redirects = paths.table("redirects")
+    con.execute(
+        f"COPY (SELECT * FROM '{redirects}' WHERE from_oclc <> 1003236695) "
+        f"TO '{redirects}' (FORMAT parquet)"
+    )
+    result = _run(con, paths, stats)["canaries"]
+    assert result.status == "fail"
+    assert "1003236695" in result.detail

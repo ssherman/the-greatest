@@ -155,9 +155,13 @@ def _canaries(con, paths) -> GateResult:
 
 
 def _catalogue_coverage(con, paths, t: Thresholds, catalogue_isbns: Path | None) -> GateResult:
-    if catalogue_isbns is None or not catalogue_isbns.exists():
+    if catalogue_isbns is None:
         return GateResult(
             "catalogue_coverage", "skipped", "no catalogue ISBN export given (--catalogue-isbns)"
+        )
+    if not catalogue_isbns.exists():
+        return GateResult(
+            "catalogue_coverage", "fail", f"catalogue ISBN export not found: {catalogue_isbns}"
         )
     wanted = sorted(
         {
@@ -166,15 +170,19 @@ def _catalogue_coverage(con, paths, t: Thresholds, catalogue_isbns: Path | None)
             if (n := normalize_isbn(line)) is not None and n.isbn13
         }
     )
+    if not wanted:
+        return GateResult(
+            "catalogue_coverage", "fail", f"no valid ISBN-13s in {catalogue_isbns}", {"isbns": 0}
+        )
     con.execute("CREATE OR REPLACE TEMP TABLE ours (isbn13 VARCHAR)")
-    con.executemany("INSERT INTO ours VALUES (?)", [(i,) for i in wanted])
+    con.execute("INSERT INTO ours SELECT unnest(?::VARCHAR[])", [wanted])
     (resolved,) = _one(
         con,
         f"SELECT count(DISTINCT o.isbn13) FROM ours o "
         f"JOIN '{paths.table('isbns')}' i USING (isbn13)",
     )
     con.execute("DROP TABLE ours")
-    share = resolved / len(wanted) if wanted else 0.0
+    share = resolved / len(wanted)
     status = "pass" if share >= t.min_catalogue_coverage else "fail"
     return GateResult(
         "catalogue_coverage",
@@ -194,6 +202,14 @@ def _bad_frames(extract_stats: list[ExtractStats]) -> GateResult:
     )
 
 
+def _guarded(name: str, gate, *args) -> GateResult:
+    """A gate that raises is a failed gate, so the build still writes its report."""
+    try:
+        return gate(*args)
+    except Exception as exc:
+        return GateResult(name, "fail", f"gate raised: {exc!r}", {"error": repr(exc)})
+
+
 def run_gates(
     con: duckdb.DuckDBPyConnection,
     paths: WorldcatPaths,
@@ -203,13 +219,15 @@ def run_gates(
     catalogue_isbns: Path | None,
 ) -> list[GateResult]:
     return [
-        _row_counts(con, paths, thresholds),
-        _field_coverage(con, paths, thresholds),
-        _isbn_checksums(con, paths, thresholds),
-        _pass_prefixes(con, paths),
-        _canaries(con, paths),
-        _catalogue_coverage(con, paths, thresholds, catalogue_isbns),
-        _bad_frames(extract_stats),
+        _guarded("row_counts", _row_counts, con, paths, thresholds),
+        _guarded("field_coverage", _field_coverage, con, paths, thresholds),
+        _guarded("isbn_checksums", _isbn_checksums, con, paths, thresholds),
+        _guarded("pass_prefixes", _pass_prefixes, con, paths),
+        _guarded("canaries", _canaries, con, paths),
+        _guarded(
+            "catalogue_coverage", _catalogue_coverage, con, paths, thresholds, catalogue_isbns
+        ),
+        _guarded("bad_frames", _bad_frames, extract_stats),
     ]
 
 
