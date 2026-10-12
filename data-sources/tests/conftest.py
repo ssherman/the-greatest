@@ -139,7 +139,6 @@ def worldcat_artifact(tmp_path_factory, worldcat_source):
     """A real build of the corpus, once per session. Read-only for its consumers."""
     from worldcat.pipeline.build import build
     from worldcat.pipeline.gates import Thresholds
-
     from worldcat.pipeline.paths import WorldcatPaths
 
     root = tmp_path_factory.mktemp("wc-artifact")
