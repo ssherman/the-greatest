@@ -68,6 +68,7 @@ def write_build_report(
             "lines": sum(s.lines for s in extract),
             "kept": sum(s.kept for s in extract),
             "bad_frames": [list(b) for s in extract for b in s.bad_frames],
+            "bad_lines": sum(s.bad_lines for s in extract),
         },
         "gates": [
             {"name": g.name, "status": g.status, "detail": g.detail, "observed": g.observed}

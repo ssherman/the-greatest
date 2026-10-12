@@ -50,7 +50,12 @@ def test_report_and_manifest_describe_the_build(tmp_path: Path, worldcat_source:
 
     assert set(report["tables"]) == set(TABLES)
     assert report["tables"]["records"]["rows"] > 0 and report["tables"]["records"]["bytes"] > 0
-    assert report["extract"] == {"lines": stats.lines, "kept": stats.kept, "bad_frames": []}
+    assert report["extract"] == {
+        "lines": stats.lines,
+        "kept": stats.kept,
+        "bad_frames": [],
+        "bad_lines": 0,
+    }
     assert report["pipeline_version"] == PIPELINE_VERSION
     on_disk = json.loads(paths.manifest_path.read_text())
     assert on_disk == manifest

@@ -9,6 +9,7 @@ A worker keeps no state that grows with the file: a per-worker set of OCLC
 numbers exhausted a 45 GB machine on the spike.
 """
 
+import codecs
 import errno
 import json
 import multiprocessing as mp
@@ -59,6 +60,16 @@ _REDIRECT = b'"type":"redirect_title_json"'
 _HOLDINGS = b'"type":"search_holdings_summary_all_editions"'
 _BOOK = b'"generalFormat":"Book"'
 _HAS_ISBN = b'"isbns":["'
+
+
+def _to_replacement_char(exc: UnicodeError) -> tuple[bytes, int]:
+    # Python's built-in "replace" handler writes "?" when encoding; U+FFFD is the honest mark.
+    # The UTF-8 encoder accepts only ASCII str from a handler, so hand back the bytes.
+    return "\ufffd".encode(), exc.end  # type: ignore[attr-defined]
+
+
+codecs.register_error("worldcat_fffd", _to_replacement_char)
+
 _YEAR = re.compile(r"\d{4}")
 _INT = re.compile(r"\d+")
 
@@ -186,6 +197,7 @@ class ExtractStats:
     kept: int = 0
     shards: int = 0
     bad_frames: list[tuple[int, str]] = field(default_factory=list)
+    bad_lines: int = 0
 
 
 class ShardWriter:
@@ -207,7 +219,9 @@ class ShardWriter:
         if not self.rows:
             return
         tmp = self.paths.tmp_dir / f"shard_{self.worker:03d}_{self.index:05d}.jsonl"
-        with tmp.open("w", encoding="utf-8") as fh:
+        # errors="worldcat_fffd": a lone surrogate from a \udXXX escape cannot be encoded as UTF-8
+        # and would otherwise abort the whole shard; it becomes U+FFFD instead.
+        with tmp.open("w", encoding="utf-8", errors="worldcat_fffd") as fh:
             for row in self.rows:
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
         columns = ", ".join(f"'{name}': '{sql_type}'" for name, sql_type in SHARD_COLUMNS.items())
@@ -272,7 +286,8 @@ def _consume(line: bytes, writer: ShardWriter, stats: ExtractStats) -> None:
         return
     try:
         row = reduce(json.loads(line))
-    except ValueError:
+    except Exception:  # one malformed kept line must not kill a multi-hour build
+        stats.bad_lines += 1
         return
     if row is not None:
         writer.add(row)

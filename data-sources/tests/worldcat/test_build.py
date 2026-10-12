@@ -75,3 +75,28 @@ def test_source_fingerprint_changes_with_the_file(tmp_path: Path, worldcat_sourc
     other.write_bytes(bytes(data))
     assert a != source_fingerprint(other)
     assert len(a) == 64
+
+
+def test_a_stray_shard_from_an_earlier_run_is_cleared_before_extracting(
+    tmp_path: Path, worldcat_source: Path
+):
+    import duckdb
+
+    paths = WorldcatPaths(root=tmp_path, dump_date="2025-09-04")
+    paths.ensure()
+    stray = paths.staging_dir / "shard_099_00000.parquet"
+    duckdb.connect().execute(f"COPY (SELECT 1 AS x) TO '{stray}' (FORMAT parquet)")
+    (paths.staging_dir / "progress_099.txt").write_text("100.0% stale\n")
+
+    build(
+        source=worldcat_source,
+        root=tmp_path,
+        dump_date="2025-09-04",
+        workers=1,
+        memory_limit="1GB",
+        thresholds=LOOSE,
+        keep_staging=True,
+    )
+
+    assert not stray.exists()
+    assert not (paths.staging_dir / "progress_099.txt").exists()

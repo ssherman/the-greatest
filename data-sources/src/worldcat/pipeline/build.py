@@ -71,6 +71,12 @@ def build(
     thresholds = thresholds or Thresholds()
     paths = WorldcatPaths(root=root, dump_date=dump_date)
     paths.ensure()
+    # A crashed or differently-sharded earlier run must not leak shards into this one.
+    for stale in (
+        *paths.staging_dir.glob("shard_*.parquet"),
+        *paths.staging_dir.glob("progress_*.txt"),
+    ):
+        stale.unlink()
     timings = StageTimings()
     con = _connect(paths, memory_limit, threads)
 
@@ -139,7 +145,9 @@ def main(
     memory_limit: str = typer.Option("16GB", "--memory-limit"),
     threads: int | None = typer.Option(None, "--threads"),
     keep_staging: bool = typer.Option(False, "--keep-staging"),
-    catalogue_isbns: Path | None = typer.Option(None, "--catalogue-isbns"),  # noqa: B008
+    catalogue_isbns: Path | None = typer.Option(  # noqa: B008
+        None, "--catalogue-isbns", exists=True, dir_okay=False
+    ),
 ) -> None:
     build(
         source=source,

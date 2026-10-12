@@ -232,3 +232,42 @@ def test_a_line_ending_exactly_on_a_frame_boundary_is_not_dropped(tmp_path: Path
     stats = extract_all(source, paths, workers=3)
 
     assert sum(s.lines for s in stats) == len(lines)
+
+
+def _extract_lines(tmp_path: Path, lines: list[bytes]):
+    source = tmp_path / "s.zst"
+    n = write_seekable(lines, source, frame_bytes=4096)
+    paths = WorldcatPaths(root=tmp_path, dump_date="2025-09-04")
+    paths.ensure()
+    return paths, extract_range(source, paths, 0, 0, n)
+
+
+def _compact(row: dict) -> bytes:
+    return json.dumps(row, separators=(",", ":")).encode()
+
+
+def test_a_lone_surrogate_escape_is_written_as_a_replacement_character(tmp_path: Path):
+    row = _title_row(generalFormat="Book", isbns=["9780735211292"], title="bad\ud800title")
+    line = _compact(row)
+    assert b"\\ud800" in line
+
+    paths, stats = _extract_lines(tmp_path, [line])
+
+    assert (stats.kept, stats.bad_lines) == (1, 0)
+    con = duckdb.connect()
+    rows = con.execute(f"SELECT title FROM read_parquet('{paths.staging_dir}/shard_*.parquet')")
+    (titles,) = [rows.fetchall()]
+    con.close()
+    assert len(titles) == 1
+    assert "�" in titles[0][0]
+
+
+def test_a_kept_line_that_cannot_be_reduced_is_counted_and_skipped(tmp_path: Path):
+    bad = _compact(
+        _title_row(generalFormat="Book", isbns=["9780735211292"], contributors=["a string"])
+    )
+    good = _compact(_title_row(generalFormat="Book", isbns=["9780735211292"], title="ok"))
+
+    paths, stats = _extract_lines(tmp_path, [bad, good])
+
+    assert (stats.kept, stats.bad_lines) == (1, 1)

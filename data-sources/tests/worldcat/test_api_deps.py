@@ -102,6 +102,6 @@ def test_api_imports_without_the_build_only_zstandard_extra():
     import subprocess
     import sys
 
-    code = "import sys; sys.modules[\"zstandard\"] = None; import worldcat.api.main"
+    code = 'import sys; sys.modules["zstandard"] = None; import worldcat.api.main'
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
