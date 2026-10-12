@@ -130,5 +130,24 @@ module Books
 
       assert_response :not_found
     end
+
+    test "a merged category slug redirects to the target's filter page" do
+      target = categories(:books_france_location)
+      ::Books::Category.create!(name: "France (country)", slug: "france-country", category_type: :location, deleted: true, merged_into: target)
+
+      get "/genres/france-country"
+
+      assert_redirected_to "/the-greatest/france/books"
+    end
+
+    test "a legacy id of a merged category redirects to the target" do
+      target = categories(:books_france_location)
+      merged = ::Books::Category.create!(name: "France (country)", category_type: :location, deleted: true, merged_into: target)
+      LegacyIdMap.record(model: "Books::Category", legacy_id: 777_001, new_id: merged.id)
+
+      get "/genres/777001"
+
+      assert_redirected_to "/the-greatest/france/books"
+    end
   end
 end

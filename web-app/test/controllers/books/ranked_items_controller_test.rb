@@ -556,5 +556,25 @@ module Books
         end
       )
     end
+
+    test "a merged category slug 301s to the target's filter page" do
+      target = categories(:books_france_location)
+      ::Books::Category.create!(name: "France (country)", slug: "france-country", category_type: :location, deleted: true, merged_into: target)
+
+      get "/the-greatest/france-country/books"
+
+      assert_response :moved_permanently
+      assert_redirected_to "/the-greatest/france/books"
+    end
+
+    test "a merged slug keeps the other path segments when redirecting" do
+      target = categories(:books_france_location)
+      ::Books::Category.create!(name: "France (country)", slug: "france-country", category_type: :location, deleted: true, merged_into: target)
+
+      get "/the-greatest/france-country/books/of/1900"
+
+      assert_response :moved_permanently
+      assert_redirected_to "/the-greatest/france/books/of/1900"
+    end
   end
 end
