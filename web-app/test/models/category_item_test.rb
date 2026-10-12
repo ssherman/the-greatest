@@ -263,4 +263,15 @@ class CategoryItemTest < ActiveSupport::TestCase
       assert request.index_item?
     end
   end
+
+  test "source defaults to legacy and the direct scope excludes inherited rows" do
+    book = books_books(:war_and_peace)
+    category = categories(:books_france_location)
+    item = CategoryItem.create!(category: category, item: book)
+
+    assert item.source_legacy?
+    item.update!(source: :inherited)
+    refute_includes CategoryItem.direct, item
+    assert_includes CategoryItem.source_inherited, item
+  end
 end

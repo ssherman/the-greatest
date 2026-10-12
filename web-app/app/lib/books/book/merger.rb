@@ -247,17 +247,23 @@ module Books
         @stats[:series_books] = count
       end
 
-      # Copy-or-skip rather than move: a CategoryItem carries no state worth
-      # preserving beyond the link itself, so the source's own row simply dies
-      # with it. This is the music pattern. Counted like the other stats: only
+      # Copy-or-skip rather than move: the source's own rows die with it. Direct
+      # links carry their source across (an inherited row on the target is
+      # upgraded); inherited links are not copied, the reconciler rebuilds them
+      # from the survivor's direct locations. Counted like the other stats: only
       # when the target didn't already have this category (see @stats above).
       def merge_category_items
         count = 0
-        source_book.category_items.find_each do |category_item|
-          already_present = target_book.category_items.exists?(category_id: category_item.category_id)
-          target_book.category_items.find_or_create_by!(category_id: category_item.category_id)
-          count += 1 unless already_present
+        source_book.category_items.direct.find_each do |category_item|
+          existing = target_book.category_items.find_by(category_id: category_item.category_id)
+          if existing.nil?
+            target_book.category_items.create!(category_id: category_item.category_id, source: category_item.source)
+            count += 1
+          elsif existing.source_inherited?
+            existing.update!(source: category_item.source)
+          end
         end
+        ::Categories::AncestorReconciler.call(item_ids: [target_book.id])
         @stats[:category_items] = count
       end
 

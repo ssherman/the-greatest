@@ -35,6 +35,19 @@ module Books
     has_many :books, through: :category_items, source: :item, source_type: "Books::Book"
     has_many :authors, through: :category_items, source: :item, source_type: "Books::Author"
 
+    # Location trees are shallow; this caps any walk so a cycle written around
+    # the validation (raw SQL) can't loop forever.
+    MAX_DEPTH = 8
+
+    validate :location_parent_is_valid, if: -> { location? && parent_id.present? && (will_save_change_to_parent_id? || will_save_change_to_category_type?) }
+
+    validate :location_has_no_places_under_it, if: -> { will_save_change_to_category_type? && category_type_was == "location" && !location? }
+
+    # A retyped leaf location can no longer have a location parent.
+    # before_save, not before_validation: a failed save must leave the form's parent
+    # alone, and a parent the admin picks in the same request must survive.
+    before_save :clear_parent_when_leaving_location, if: -> { persisted? && will_save_change_to_category_type? && category_type_was == "location" && !location? }
+
     scope :by_book_ids, ->(book_ids) { joins(:category_items).where(category_items: {item_type: "Books::Book", item_id: book_ids}) }
     scope :by_author_ids, ->(author_ids) { joins(:category_items).where(category_items: {item_type: "Books::Author", item_id: author_ids}) }
 
@@ -52,7 +65,43 @@ module Books
       super || saved_change_to_category_type? || book_type_membership_changed?
     end
 
+    # The four book-type categories (Fiction, Nonfiction, Religion & Spirituality,
+    # Poetry). BookTypeCategoryMigrator raises if one is soft-deleted and saved
+    # searches filter on them, so nothing may merge, delete or rename them.
+    def self.protected_ids
+      ::Books::BookType::LABELS.keys.filter_map { |value| ::Books::BookType.category_id(value) }
+    end
+
+    # Nearest first: Chicago -> [Illinois, United States, North America].
+    def ancestors
+      chain = []
+      node = parent
+      while node && chain.size < MAX_DEPTH
+        chain << node
+        node = node.parent
+      end
+      chain
+    end
+
     private
+
+    def location_parent_is_valid
+      unless parent.is_a?(::Books::Category) && parent.location?
+        errors.add(:parent_id, "must be a books location")
+        return
+      end
+      errors.add(:parent_id, "would create a cycle") if parent == self || parent.ancestors.include?(self)
+    end
+
+    def location_has_no_places_under_it
+      return unless child_categories.where(deleted: false).exists?
+
+      errors.add(:category_type, "can't change while places are listed under it")
+    end
+
+    def clear_parent_when_leaving_location
+      self.parent_id = nil if parent.is_a?(::Books::Category) && parent.location?
+    end
 
     def book_type_membership_changed?
       return false unless saved_change_to_name?

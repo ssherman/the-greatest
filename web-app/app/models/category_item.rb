@@ -23,6 +23,14 @@ class CategoryItem < ApplicationRecord
   belongs_to :category, counter_cache: :item_count, inverse_of: :category_items
   belongs_to :item, polymorphic: true
 
+  # Why the link exists directly. `inherited` rows exist only because a more
+  # specific location is linked to the same item; Categories::AncestorReconciler
+  # owns them. prefix: true is required -- an unprefixed `inherited` scope would
+  # override Ruby's Class#inherited hook.
+  enum :source, {legacy: 0, admin: 1, inherited: 2}, prefix: true
+
+  scope :direct, -> { where.not(source: :inherited) }
+
   # Search indexing callbacks - reindex the associated item when categories change
   after_save :queue_item_for_reindexing
   after_destroy :queue_item_for_reindexing

@@ -5,7 +5,11 @@ module Books
     MAX_CATEGORIES = 6
     MAX_COUNTRIES = 10
 
-    Result = Struct.new(:categories, :countries, :year_start, :year_end, keyword_init: true)
+    Result = Struct.new(:categories, :countries, :year_start, :year_end, :redirect, keyword_init: true) do
+      # True when a category slug resolved through a merge or a pre-rename slug;
+      # the page should 301 to the canonical URL built from `categories`.
+      def redirect? = redirect == true
+    end
 
     def self.call(params)
       new(params).call
@@ -17,21 +21,41 @@ module Books
 
     def call
       year = validated_year(@params[:year])
+      categories, redirect = resolve_categories(@params[:category_id])
 
       Result.new(
-        categories: resolve(Books::Category.active, @params[:category_id], MAX_CATEGORIES),
+        categories: categories,
         countries: resolve(Books::Country.all, @params[:country_id], MAX_COUNTRIES),
         year_start: year || validated_year(@params[:published_start]),
-        year_end: year || validated_year(@params[:published_end])
+        year_end: year || validated_year(@params[:published_end]),
+        redirect: redirect
       )
     end
 
     private
 
-    def resolve(scope, raw, max)
+    def resolve_categories(raw)
+      slugs = parse_slugs(raw, MAX_CATEGORIES)
+      return [[], false] if slugs.empty?
+
+      active = Books::Category.active.where(slug: slugs).index_by(&:slug)
+      missing = slugs - active.keys
+      return [active.values.sort_by(&:slug), false] if missing.empty?
+
+      replacements = missing.map { |slug| Books::CategorySlugResolver.call(slug) || raise(ActiveRecord::RecordNotFound) }
+      [(active.values + replacements).uniq.sort_by(&:slug), true]
+    end
+
+    def parse_slugs(raw, max)
       slugs = raw.to_s.split(",").map(&:strip).reject(&:blank?).uniq
-      return [] if slugs.empty?
       raise ActiveRecord::RecordNotFound if slugs.size > max
+
+      slugs
+    end
+
+    def resolve(scope, raw, max)
+      slugs = parse_slugs(raw, max)
+      return [] if slugs.empty?
 
       records = scope.where(slug: slugs).sort_by(&:slug)
       raise ActiveRecord::RecordNotFound if records.size != slugs.size

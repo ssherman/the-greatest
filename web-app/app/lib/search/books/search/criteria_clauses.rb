@@ -53,8 +53,10 @@ module Search
 
         # `all` means a book must carry every category, which one terms clause
         # cannot express -- terms is an OR. One term filter per id is the AND.
+        # A merged category's id is swapped for its target: the merged row has
+        # no links any more, so the stored id would otherwise match nothing.
         def category_clauses(criteria)
-          ids = criteria.included_category_ids
+          ids = ::Category.replace_merged_ids(criteria.included_category_ids)
           return [] if ids.empty?
           return [{terms: {category_ids: ids}}] if criteria.genre_match_mode == :any
 
@@ -88,7 +90,7 @@ module Search
         def must_not_clauses(criteria, excluded_book_ids)
           clauses = []
 
-          categories = criteria.excluded_category_ids
+          categories = ::Category.replace_merged_ids(criteria.excluded_category_ids)
           clauses << {terms: {category_ids: categories}} if categories.any?
 
           languages = criteria.excluded_language_ids

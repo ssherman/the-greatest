@@ -388,5 +388,38 @@ module Admin
       end
       assert_response :unprocessable_entity
     end
+
+    test "adding a category the book already has as inherited upgrades it to admin" do
+      us = ::Books::Category.create!(name: "United States", category_type: :location)
+      CategoryItem.create!(category: us, item: @book, source: :inherited)
+
+      assert_no_difference "CategoryItem.count" do
+        post admin_books_book_category_items_path(@book), params: {category_item: {category_id: us.id}}, as: :turbo_stream
+      end
+
+      assert_response :success
+      assert CategoryItem.exists?(category: us, item: @book, source: :admin)
+    end
+
+    test "adding a location adds its ancestors as inherited" do
+      us = ::Books::Category.create!(name: "United States", category_type: :location)
+      chicago = ::Books::Category.create!(name: "Chicago", category_type: :location, parent: us)
+
+      post admin_books_book_category_items_path(@book), params: {category_item: {category_id: chicago.id}}, as: :turbo_stream
+
+      assert CategoryItem.exists?(category: chicago, item: @book, source: :admin)
+      assert CategoryItem.exists?(category: us, item: @book, source: :inherited)
+    end
+
+    test "removing a location removes the ancestors it justified" do
+      us = ::Books::Category.create!(name: "United States", category_type: :location)
+      chicago = ::Books::Category.create!(name: "Chicago", category_type: :location, parent: us)
+      link = CategoryItem.create!(category: chicago, item: @book, source: :admin)
+      ::Categories::AncestorReconciler.call(item_ids: [@book.id])
+
+      delete admin_category_item_path(link), as: :turbo_stream
+
+      refute CategoryItem.exists?(category: us, item: @book)
+    end
   end
 end

@@ -324,4 +324,43 @@ class CategoryTest < ActiveSupport::TestCase
 
     assert category.valid?
   end
+
+  test "canonical is self for an active category" do
+    category = categories(:books_france_location)
+    assert_equal category, category.canonical
+  end
+
+  test "canonical follows merged_into to an active target" do
+    target = categories(:books_france_location)
+    source = ::Books::Category.create!(name: "France (country)", category_type: :location, deleted: true, merged_into: target)
+    assert_equal target, source.canonical
+  end
+
+  test "canonical is nil for a deleted category with no merge" do
+    assert_nil categories(:books_deleted_genre).canonical
+  end
+
+  test "canonical is nil when the merge target was itself deleted without a merge" do
+    target = ::Books::Category.create!(name: "Junk Target", category_type: :location, deleted: true)
+    source = ::Books::Category.create!(name: "Junk Source", category_type: :location, deleted: true, merged_into: target)
+    assert_nil source.canonical
+  end
+
+  test "replace_merged_ids swaps merged ids for their targets and keeps every other id" do
+    target = categories(:books_france_location)
+    source = ::Books::Category.create!(name: "Paris, France", category_type: :location, deleted: true, merged_into: target)
+    deleted = categories(:books_deleted_genre)
+
+    assert_equal [target.id, deleted.id], ::Category.replace_merged_ids([source.id, deleted.id, target.id])
+    assert_equal [], ::Category.replace_merged_ids([])
+  end
+
+  test "a renamed category keeps its old slug in history" do
+    category = ::Books::Category.create!(name: "Washington DC", category_type: :location)
+    old_slug = category.slug
+    category.update!(name: "Washington, D.C.")
+
+    refute_equal old_slug, category.slug
+    assert_equal category, ::Books::Category.friendly.find(old_slug)
+  end
 end

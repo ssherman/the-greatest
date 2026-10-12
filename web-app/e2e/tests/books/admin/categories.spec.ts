@@ -93,4 +93,25 @@ test.describe("Books admin — categories", () => {
     await expect(page.getByRole("heading", { name: child, level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: parent })).toBeVisible();
   });
+
+  test("merges a category into another and its old URL redirects", async ({ page }) => {
+    const name = `E2E Merge Source ${Date.now()}`;
+    await page.goto("/admin/categories");
+    await page.getByRole("link", { name: "New Category" }).click();
+    await page.locator('input[name="books_category[name]"]').fill(name);
+    await page.getByRole("button", { name: "Create Category" }).click();
+    await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+    const sourceSlug = new URL(page.url()).pathname.split("/").pop();
+
+    const mergeCard = page.getByTestId("merge-category");
+    await mergeCard.getByPlaceholder("Search for the category to keep...").fill("E2E Merge Target");
+    await mergeCard.locator("li.cursor-pointer").first().click();
+    await mergeCard.getByRole("checkbox").check();
+    await mergeCard.getByRole("button", { name: "Merge" }).click();
+
+    await expect(page.getByRole("heading", { name: "E2E Merge Target", level: 1 })).toBeVisible();
+
+    await page.goto(`/the-greatest/${sourceSlug}/books`);
+    await expect(page).toHaveURL(/\/the-greatest\/e2e-merge-target\/books/);
+  });
 });

@@ -35,9 +35,14 @@ class Books::BooksController < ApplicationController
     # A provisional book is reachable by URL but stays out of search engines until
     # an admin approves its import (Goodreads import spec §9).
     @indexable = @ranked_item.present? && !@book.provisional?
+    # Locations show only the places the book is linked to directly; their
+    # inherited ancestors appear inside each trail instead of as badges.
+    direct_ids = @book.category_items.direct.pluck(:category_id).to_set
+    shown = @book.categories.active.reject { |category| category.location? && !direct_ids.include?(category.id) }
+    @location_trails = Books::LocationTrails.call(shown.select(&:location?))
     # An array of [category_type, categories] pairs rather than a Hash -- the view
     # only iterates it, and an array is the only way to pin the order.
-    @categories_by_type = @book.categories.active
+    @categories_by_type = shown
       .sort_by { |category| category.name.to_s.downcase }
       .group_by(&:category_type)
       .sort_by { |type, _| [CATEGORY_TYPE_ORDER.index(type) || CATEGORY_TYPE_ORDER.size, type.to_s] }

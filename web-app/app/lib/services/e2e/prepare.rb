@@ -47,6 +47,10 @@ module Services
       # cleared, so a real subtitle is never touched. Keep in sync with
       # SUBTITLE_MARKER in e2e/tests/books/admin/corrections.spec.ts.
       SCRATCH_SUBTITLE_MARKER = "A Gothic Satire [e2e-corrections-spec]"
+      # Scratch rows for the book-page trail and admin merge specs. Nearest
+      # first; the last is a root, so the book page shows only the first two.
+      LOCATION_TRAIL = ["E2E Scratch Town", "E2E Scratch Region", "E2E Scratch Country"].freeze
+      MERGE_TARGET_NAME = "E2E Merge Target"
       ROLES = {admin: :admin, user: :user, member: :user}.freeze
 
       def self.call(**) = new(**).call
@@ -74,6 +78,7 @@ module Services
         reset_reviews(accounts[:user])
         lists = reset_lists(accounts[:user])
         clear_scratch_books(accounts)
+        seed_category_scratch
         sync_stripe(errors)
         return failure(errors) if errors.any?
 
@@ -257,6 +262,25 @@ module Services
           ::Review.where(reviewable: book, user: accounts.values).each(&:destroy!)
           book.update!(subtitle: nil) if book.subtitle == SCRATCH_SUBTITLE_MARKER
         end
+      end
+
+      # Idempotent. Touches only the scratch book and categories it names.
+      def seed_category_scratch
+        book = scratch_books.first
+        return if book.nil?
+
+        parent = nil
+        LOCATION_TRAIL.reverse_each do |name|
+          category = ::Books::Category.find_or_create_by!(name: name, category_type: :location, deleted: false)
+          category.update!(parent_id: parent&.id) if category.parent_id != parent&.id
+          parent = category
+        end
+        link = ::CategoryItem.find_or_initialize_by(category: parent, item: book)
+        link.update!(source: :admin)
+        ::Categories::AncestorReconciler.call(item_ids: [book.id])
+        target = ::Books::Category.find_or_create_by!(name: MERGE_TARGET_NAME, category_type: :location, deleted: false)
+        # The merge spec appends its source name to this every run.
+        target.update!(alternative_names: []) if target.alternative_names.present?
       end
 
       # Anyone else's review on a scratch book is reported, never deleted:

@@ -90,4 +90,13 @@ test.describe('Book detail page', () => {
 
     await expect(page).toHaveURL(/thegreatestbooks\.org\/$/);
   });
+
+  test('a location shows as a trail of links up to, not including, the root', async ({ page }) => {
+    await page.goto('/book/headlong-hall');
+
+    const trail = page.getByTestId('location-trail').filter({ hasText: 'E2E Scratch Town' });
+    await expect(trail).toBeVisible();
+    await expect(trail.getByRole('link', { name: 'E2E Scratch Region' })).toHaveAttribute('href', /e2e-scratch-region/);
+    await expect(trail.getByRole('link', { name: 'E2E Scratch Country' })).toHaveCount(0);
+  });
 });

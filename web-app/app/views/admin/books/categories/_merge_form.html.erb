@@ -1,0 +1,23 @@
+<%# Merging moves every book to the chosen category, adds this name to its
+    alternative names, and deletes this one. Old URLs redirect to the target. %>
+<div class="card bg-base-100 shadow-xl mt-6" data-testid="merge-category">
+  <div class="card-body">
+    <h2 class="card-title">Merge into another category</h2>
+    <%= form_with url: merge_admin_books_category_path(category), method: :post, class: "space-y-4" do %>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Merge "<%= category.name %>" into</legend>
+        <%= render AutocompleteComponent.new(
+              name: "target_category_id",
+              url: search_admin_books_categories_path,
+              placeholder: "Search for the category to keep...",
+              required: true
+            ) %>
+      </fieldset>
+      <label class="label">
+        <%= check_box_tag :confirm_merge, "1", false, class: "checkbox" %>
+        This deletes "<%= category.name %>" and moves its <%= category.item_count %> links.
+      </label>
+      <%= submit_tag "Merge", class: "btn btn-warning" %>
+    <% end %>
+  </div>
+</div>

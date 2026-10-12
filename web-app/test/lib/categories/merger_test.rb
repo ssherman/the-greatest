@@ -91,7 +91,7 @@ module Categories
       @rock_category.reload
 
       assert_includes @rock_category.alternative_names, "Alternative Rock"
-      assert_equal initial_alternatives + ["Alternative Rock"], @rock_category.alternative_names
+      assert_equal initial_alternatives + ["Alternative Rock", "Alt Rock"], @rock_category.alternative_names
     end
 
     test "should not create duplicate alternative names" do
@@ -112,7 +112,7 @@ module Categories
       assert_equal 1, alt_rock_count, "Should not create duplicate alternative names"
     end
 
-    test "should preserve existing alternative names from source" do
+    test "should carry the source alternative names to the target" do
       merger = Categories::Merger.new(
         category: @source_category,
         category_to_merge_with: @rock_category
@@ -123,9 +123,8 @@ module Categories
       @rock_category.reload
 
       # Source category had alternative_names: ["Alt Rock"]
-      # After merge, target should have the source's name but not its alternative names
       assert_includes @rock_category.alternative_names, "Alternative Rock"
-      assert_not_includes @rock_category.alternative_names, "Alt Rock"
+      assert_includes @rock_category.alternative_names, "Alt Rock"
     end
 
     test "should soft delete source category after merge" do
@@ -187,26 +186,16 @@ module Categories
       assert_not @source_category.deleted?, "Source should not be deleted due to rollback"
     end
 
-    test "should handle merging categories of different types" do
-      # Create a movies category to merge with music category
+    test "should refuse merging categories of different types" do
       movies_category = Movies::Category.create!(
         name: "Action Movies",
         category_type: "genre"
       )
 
-      merger = Categories::Merger.new(
-        category: @source_category,
-        category_to_merge_with: movies_category
-      )
-
-      # Should work even across STI types
-      assert_nothing_raised do
-        result = merger.merge
-        assert_equal movies_category, result
+      assert_raises(Categories::Refused) do
+        Categories::Merger.new(category: @source_category, category_to_merge_with: movies_category).merge
       end
-
-      movies_category.reload
-      assert_includes movies_category.alternative_names, "Alternative Rock"
+      assert_not @source_category.reload.deleted?
     end
 
     test "should handle empty source category" do
@@ -235,34 +224,16 @@ module Categories
       assert empty_category.deleted?
     end
 
-    test "should handle merging with self gracefully" do
-      # This shouldn't happen in normal usage, but let's test it
-      # Create a separate category to avoid affecting other tests
-      self_merge_category = Music::Category.create!(
-        name: "Self Merge Test",
-        category_type: "genre"
-      )
+    test "should refuse merging with self" do
+      self_merge_category = Music::Category.create!(name: "Self Merge Test", category_type: "genre")
       CategoryItem.create!(category: self_merge_category, item: music_albums(:animals))
-      self_merge_category.reload
 
-      self_merge_category.category_items.count
+      assert_raises(Categories::Refused) do
+        Categories::Merger.new(category: self_merge_category, category_to_merge_with: self_merge_category).merge
+      end
 
-      merger = Categories::Merger.new(
-        category: self_merge_category,
-        category_to_merge_with: self_merge_category
-      )
-
-      result = merger.merge
-
-      self_merge_category.reload
-
-      assert_equal self_merge_category, result
-      # Name should be added to alternatives
-      assert_includes self_merge_category.alternative_names, "Self Merge Test"
-      # Category should be soft deleted (which is weird but consistent)
-      assert self_merge_category.deleted?
-      # Items should be 0 due to soft delete cleanup
-      assert_equal 0, self_merge_category.category_items.count
+      assert_not self_merge_category.reload.deleted?
+      assert_equal 1, self_merge_category.category_items.count
     end
 
     test "should initialize with correct attributes" do
@@ -288,11 +259,167 @@ module Categories
       @uk_location.reload
       @rock_category.reload
 
-      # Progressive rock should still exist and point to the now-deleted rock category
+      # Progressive rock survives and is moved to the merge target
       assert_not @progressive_category.deleted?
-      assert_equal @rock_category, @progressive_category.parent
+      assert_equal @uk_location, @progressive_category.parent
       assert @rock_category.deleted?
       assert_includes @uk_location.alternative_names, "Rock"
+    end
+
+    def books_location(name, parent: nil)
+      ::Books::Category.create!(name: name, category_type: :location, parent: parent)
+    end
+
+    test "sets merged_into on the source and soft-deletes it" do
+      target = books_location("Washington, D.C.")
+      source = books_location("Washington DC")
+
+      Categories::Merger.new(category: source, category_to_merge_with: target).merge
+
+      source.reload
+      assert source.deleted?
+      assert_equal target, source.merged_into
+    end
+
+    test "flattens earlier merges into the source onto the new target" do
+      a = books_location("Kolkata (Calcutta)")
+      b = books_location("Calcutta")
+      c = books_location("Kolkata")
+      Categories::Merger.new(category: a, category_to_merge_with: b).merge
+
+      Categories::Merger.new(category: b, category_to_merge_with: c).merge
+
+      assert_equal c, a.reload.merged_into
+    end
+
+    test "moves links in bulk, keeps the strongest source, and recounts both sides" do
+      target = books_location("Paris")
+      source = books_location("Paris, France")
+      book = books_books(:war_and_peace)
+      other = books_books(:crime_and_punishment)
+      CategoryItem.create!(category: source, item: book, source: :admin)
+      CategoryItem.create!(category: source, item: other)
+      CategoryItem.create!(category: target, item: book, source: :inherited)
+
+      Categories::Merger.new(category: source, category_to_merge_with: target).merge
+
+      assert_equal "admin", CategoryItem.find_by(category: target, item: book).source
+      assert CategoryItem.exists?(category: target, item: other, source: :legacy)
+      assert_equal 0, CategoryItem.where(category: source).count
+      assert_equal 2, target.reload.item_count
+      assert_equal 0, source.reload.item_count
+    end
+
+    test "moves child categories to the target" do
+      target = books_location("United States")
+      source = books_location("USA")
+      child = books_location("Ohio", parent: source)
+
+      Categories::Merger.new(category: source, category_to_merge_with: target).merge
+
+      assert_equal target, child.reload.parent
+    end
+
+    test "merges a location into a subject of the same name" do
+      target = ::Books::Category.create!(name: "Hope", category_type: :subject)
+      source = books_location("Hope")
+      book = books_books(:war_and_peace)
+      CategoryItem.create!(category: source, item: book)
+
+      Categories::Merger.new(category: source, category_to_merge_with: target).merge
+
+      assert CategoryItem.exists?(category: target, item: book)
+    end
+
+    test "adds the source name and its alternative names to the target" do
+      target = books_location("Gdańsk")
+      source = ::Books::Category.create!(name: "Danzig", category_type: :location, alternative_names: ["Dantzig"])
+
+      Categories::Merger.new(category: source, category_to_merge_with: target).merge
+
+      assert_equal %w[Danzig Dantzig], target.reload.alternative_names
+    end
+
+    test "refuses self, cross-domain, deleted, descendant and protected merges" do
+      us = books_location("United States")
+      ohio = books_location("Ohio", parent: us)
+      music = categories(:music_rock_genre)
+      deleted = categories(:books_deleted_genre)
+      fiction = categories(:books_fiction_genre)
+      lone = books_location("Lone Place")
+      ::Books::Category.stubs(:protected_ids).returns([fiction.id])
+
+      [[us, us], [us, music], [deleted, us], [us, deleted], [us, ohio], [fiction, us], [lone, fiction]].each do |source, target|
+        assert_raises(Categories::Refused, "#{source.name} -> #{target.name}") do
+          Categories::Merger.new(category: source, category_to_merge_with: target).merge
+        end
+      end
+    end
+
+    test "refuses to merge a music category into its own child" do
+      parent = Music::Category.create!(name: "Parent Genre", category_type: "genre")
+      child = Music::Category.create!(name: "Child Genre", category_type: "genre", parent: parent)
+
+      assert_raises(Categories::Refused) do
+        Categories::Merger.new(category: parent, category_to_merge_with: child).merge
+      end
+      assert_equal parent, child.reload.parent
+    end
+
+    test "refuses a target that was itself merged away" do
+      a = books_location("Mumbai")
+      b = books_location("Bombay")
+      c = books_location("Mumbai City")
+      Categories::Merger.new(category: a, category_to_merge_with: b).merge
+      a.update_columns(deleted: false)
+
+      assert_raises(Categories::Refused) do
+        Categories::Merger.new(category: c, category_to_merge_with: a.reload).merge
+      end
+    end
+
+    test "never downgrades a direct target link to an inherited source link" do
+      target = books_location("Rome")
+      source = books_location("Roma")
+      book = books_books(:war_and_peace)
+      CategoryItem.create!(category: target, item: book, source: :admin)
+      CategoryItem.create!(category: source, item: book, source: :inherited)
+
+      Categories::Merger.new(category: source, category_to_merge_with: target).merge
+
+      assert_equal "admin", CategoryItem.find_by(category: target, item: book).source
+    end
+
+    test "ignores soft-deleted children when checking the non-location target rule" do
+      source = books_location("Old Place")
+      books_location("Gone Child", parent: source).update_columns(deleted: true)
+      target = ::Books::Category.create!(name: "Old Place Topic", category_type: :subject)
+
+      assert_nothing_raised do
+        Categories::Merger.new(category: source, category_to_merge_with: target).merge
+      end
+    end
+
+    test "refuses to move location children under a non-location" do
+      source = books_location("Hope")
+      books_location("Hope Street", parent: source)
+      target = ::Books::Category.create!(name: "Hope", category_type: :subject)
+
+      assert_raises(Categories::Refused) do
+        Categories::Merger.new(category: source, category_to_merge_with: target).merge
+      end
+    end
+
+    test "reconciles inherited links for books it moved onto a location" do
+      us = books_location("United States")
+      target = books_location("Chicago", parent: us)
+      source = books_location("Chicago, Illinois")
+      book = books_books(:war_and_peace)
+      CategoryItem.create!(category: source, item: book)
+
+      Categories::Merger.new(category: source, category_to_merge_with: target).merge
+
+      assert CategoryItem.exists?(category: us, item: book, source: :inherited)
     end
   end
 end
