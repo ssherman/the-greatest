@@ -1,7 +1,7 @@
 # WorldCat Data Service — Design
 
 **Date:** 2026-10-11
-**Status:** approved in conversation, spec under review
+**Status:** approved; corrections from implementation noted
 **Sibling:** `docs/superpowers/specs/2026-09-01-open-library-data-service-design.md` (the pattern this copies)
 
 A read-only, exact-lookup book-data source built once from the Anna's Archive WorldCat dump,
@@ -171,15 +171,17 @@ Rails  Books::WorldCat::Client  →  Services::Books::WorldCat::ApplyCategories 
 data-sources/src/worldcat/
   __init__.py
   pipeline/   seektable.py  extract.py  distill.py  gates.py  build.py  paths.py  report.py
-  api/        main.py  deps.py  retrieval.py  meta.py
+  api/        main.py  deps.py  retrieval.py  meta.py  schemas.py
 data-sources/tests/worldcat/
 data-sources/tests/fixtures/worldcat/   (see "Testing")
-deployment/home-server/compose.wc.yml
+data-sources/worldcat.Dockerfile
+deployment/home-server/compose.worldcat.yml   (production overlay; the service itself is in data-sources/docker-compose.yml)
 ```
 
 `common/` (gates helpers, ISBN normalisation in `normalize.py`, schemas) is reused where it fits.
-The build's only extra dependency is `zstandard`, declared as a `worldcat-build` extra so the API
-image never carries it (the same rule that keeps Camoufox out of the Open Library image).
+The build's only extra dependency is `zstandard`, declared as a `worldcat` extra so the API
+image never carries it (the same rule that keeps Camoufox out of the Open Library image). The
+image installs no extras at all.
 
 ## The artifact
 
@@ -187,10 +189,11 @@ image never carries it (the same rule that keeps Camoufox out of the Open Librar
 
 ```
 cd data-sources
-uv sync --locked --extra worldcat-build
+uv sync --locked --extra worldcat
 uv run python -m worldcat.pipeline.build \
     --source "/mnt/e/annas archive worldcat/annas_archive_meta__aacid__worldcat__20250804T000000Z--20250804T000000Z.jsonl.seekable.zst" \
-    --root /home/shane/wc-data --dump-date 2025-09-04 --workers 8 --memory-limit 16GB
+    --root /home/shane/wc-data --dump-date 2025-09-04 --workers 8 --memory-limit 16GB \
+    --catalogue-isbns /home/shane/wc-data/our_isbns.txt
 ```
 
 **Stage 1, extract (Python, frame-parallel).** Workers take contiguous frame ranges from the seek
@@ -198,10 +201,12 @@ table, decompress one frame at a time, carry the partial last line into the next
 only lines that pass a byte-level pre-filter (`"type":"title_json"` or `briefrecords_json`,
 `"generalFormat":"Book"`, a non-empty `"isbns":[`) plus every `redirect_title_json` and
 `search_holdings_summary_all_editions` line. Kept lines are parsed and written as per-worker Parquet
-shards under `<root>/staging/<dump-date>/` with the columns below plus `pass` (the first path
+shards under `<root>/versions/<dump-date>/_staging/` with the columns below plus `pass` (the first path
 segment of `from_filenames[0]`), `pass_index` (the numeric suffix in that path, when present) and
 `type`. Progress is a per-worker file; a worker keeps no state that scales with the file. Bad frames
-are counted and reported, never fatal.
+are counted and reported, never fatal. Workers use the multiprocessing `spawn` context, and a line
+cut at a worker-range boundary is completed from the following frames (see "Corrections from
+implementation").
 
 **Stage 2, distill (DuckDB).** One row per OCLC number:
 
@@ -212,23 +217,28 @@ are counted and reported, never fatal.
   `briefrecords_json`. **A pass prefix not in the list fails the build** rather than being ranked by
   guess; the first real build is where the list is finalised.
 - ISBNs: every `isbns[]` value normalised to ISBN-13 (ISBN-10 converted; `incorrectIsbns` dropped),
-  check digit verified and recorded, de-duplicated per record.
+  check digit verified, de-duplicated per record. `isbn13s` on a record is the union across every
+  pass of that number; the scalar fields come from the newest pass.
 - redirects resolved transitively, cycles flagged, as in the Open Library build.
-- holdings: the summary with the highest `pass_index` wins (Anna's Archive's own guidance).
+- holdings: the summary with the largest trailing numeric path segment in `from_filenames` wins
+  (real paths look like `search_holdings_summary_all_editions/<oclc>/index/<n>`; Anna's Archive's
+  own guidance).
 
 ### Tables
 
 | Table | Grain | Columns |
 |---|---|---|
 | `records` | one per OCLC number | `oclc` (BIGINT), `title`, `subtitle`, `creator`, `contributors` (list of display names), `year` (from `machineReadableDate`), `publication_date_raw`, `publisher`, `publication_place`, `cataloging_language`, `specific_format`, `edition_statement`, `physical_description`, `series`, `genre`, `subjects` (VARCHAR[]), `isbn13s` (VARCHAR[]), `merged_oclc` (BIGINT[]), `other_format_oclc` (BIGINT[]), `total_editions`, `summary`, `source_type`, `source_pass` |
-| `isbns` | one per (isbn13, oclc) | `isbn13`, `oclc`, `checksum_ok` |
+| `isbns` | one per (isbn13, oclc) | `isbn13`, `oclc` |
 | `redirects` | one per redirected number | `from_oclc`, `to_oclc`, `is_cycle` |
 | `holdings` | one per OCLC number with a summary | `oclc`, `total_holding_count`, `total_editions` |
 
-`records` is sorted and row-grouped by `oclc`; `isbns` by `isbn13`. Exact lookups then touch one
-row group. `manifest.json` records `dump_date`, `source_file_sha256` of the first and last frame
-(not the whole 281 GB), row counts, `gates_passed` and the code fingerprint; the API refuses to
-boot without `gates_passed: true`, as the Open Library API does.
+`isbns` indexes only check-digit-valid ISBN-13s; the invalid share is the `isbn_checksums` gate's
+observation, not a column. `records` is sorted and row-grouped by `oclc`; `isbns` by `isbn13`.
+Exact lookups then touch one row group. `manifest.json` records `dump_date`, `source_fingerprint`
+(sha256 over the file size and the first and last frame, not the whole 281 GB), row counts,
+`gates_passed` and the pipeline version; the API refuses to boot without `gates_passed: true`, as
+the Open Library API does.
 
 ### Gates
 
@@ -236,11 +246,14 @@ boot without `gates_passed: true`, as the Open Library API does.
 |---|---|
 | `row_counts` | `records` ≥ 20,000,000 and ≤ 120,000,000; `isbns` ≥ `records`; `redirects` ≥ 10,000,000. Bounds are deliberately loose for a first build and are tightened to the measured values afterwards, recorded in `build_report.json`. |
 | `field_coverage` | `genre` set on ≥ 25% of records, `subjects` non-empty on ≥ 50%, `year` on ≥ 80%. |
-| `isbn_checksums` | ≥ 98% of `isbns` rows `checksum_ok`. |
+| `isbn_checksums` | ≥ 98% of the raw ISBNs on kept records pass their check digit (the `isbns` table holds only the valid ones). |
 | `pass_prefixes` | every observed `from_filenames` prefix is in the ranking list. |
 | `canaries` | ISBN 9780735211292 → OCLC 1055766559, genre "Nonfiction"; 9780395476901 → 1000415078 ("The Hobbit"); 9780553103540 → 1002380292; OCLC 1003236695 redirects to 37975719. |
-| `catalogue_coverage` | optional, development only: given an exported list of our ISBN-13s (`Books::WorldCat::IsbnExport`, the Open Library `EvalExport` pattern), ≥ 80% of books with an ISBN resolve to a record. Measured 86.7% on the spike. Skips when no export is present. |
+| `catalogue_coverage` | optional, development only: given an exported list of our ISBN-13s (`Books::WorldCat::IsbnExport`, the Open Library `EvalExport` pattern), ≥ 80% of books with an ISBN resolve to a record. Measured 86.7% on the spike. `skipped` only when `--catalogue-isbns` is absent; a given file that is missing or empty is a `fail`. |
 | `bad_frames` | zero frames failed to decompress (the spike measured zero; any other number is investigated, not tolerated). |
+
+Gates never raise: an exception inside a gate is recorded as that gate's `fail`, so the build still
+writes `build_report.json` and a `manifest.json` with `gates_passed: false`.
 
 ### Size and time
 
@@ -267,8 +280,10 @@ All responses JSON. Every record is the same shape:
 | `GET /isbns/{isbn}` | ISBN-10 or -13, normalised to 13. Returns `{"isbn13": ..., "records": [...]}`; an unknown ISBN is `200` with an empty list, not `404` (absence is an answer, and the client caches it). Invalid check digit → `422`. |
 | `GET /oclc/{number}` | Follows redirects; the record carries `redirected_from`. Unknown → `404`. |
 | `POST /lookup` | `{"isbn13s": [...]}`, at most 500. Returns `{"results": {"<isbn13>": [records...]}}` with every requested key present. More than 500 → `422`. |
-| `GET /version` | `dump_date`, row counts, `gates_passed`, code fingerprint. |
-| `GET /healthz` | `200` once the artifact is open. |
+| `GET /version` | `dump_date`, `built_at`, per-table row counts, `gates_passed`, `source_fingerprint`, `pipeline_version` and the build's gate results. There is no health route: the container does not start without an open artifact, so the home-server heartbeat curls `/version`. |
+
+`/lookup` is all-or-nothing on validity: one invalid ISBN in the batch makes the whole request a
+`422`, so every Rails caller drops ISBNs that fail `Books::Isbn.normalize` before calling.
 
 Limits: one DuckDB connection, `memory_limit` 2 GB, `threads` 2, a 5-second per-request deadline
 (`504`). No concurrency cap: a point lookup is milliseconds and cannot pile up the way `/resolve`
@@ -279,16 +294,18 @@ pair it already sends to the Open Library and fetcher services (one name per sha
 
 - `deployment/home-server`: a new role `worldcat` in `vm_spec` (VM 130, 2 cores, 4 GB, no
   ballooning, 32 GB OS disk on `local-zfs`, 40 GB data disk on `rpool2` mounted at `/srv/wc-data`),
-  `compose.wc.yml` with `mem_limit: 3g`, a `home-worldcat` tunnel to
+  `compose.worldcat.yml` with `mem_limit: 3g` (over the `worldcat` service, which sits behind the
+  `worldcat` compose profile in `data-sources/docker-compose.yml`), a `home-worldcat` tunnel to
   `worldcat-api.thegreatestbooks.org`, an Access application reusing the `prod-rails` service token,
-  a healthchecks.io heartbeat. No refresh unit, no timer.
+  a healthchecks.io heartbeat that curls `/version`. No refresh unit, no timer.
 - Loading the artifact is a documented manual step: `rsync` the version directory onto the data
-  disk, then `WC_DATA_VERSION=2025-09-04 docker compose up -d api`. The service pins the version and
+  disk, make it world-readable (the container runs as uid 10001), and write the version to
+  `/srv/wc-data/current-version` (`docs/features/home-server.md`). The service pins the version and
   refuses an unfinished build.
 - Cloudflare tunnel, DNS and Access changes are applied by the owner with the existing
   `cfzerotrust` tooling, as for the previous two services; they are listed in the plan as owner steps,
   not scheduled by an agent.
-- `WORLDCAT_API_URL` (prod SOPS) is the only new Rails setting.
+- `WORLDCAT_SERVICE_URL` (prod SOPS) is the only new Rails setting.
 
 ## Rails
 
@@ -309,7 +326,8 @@ Open Library one; a tripped breaker makes the backfill stop and reschedule, neve
 2. `worldcat:map` — `Services::Ai::Tasks::Books::WorldCatGenreMappingTask`, an `OpenAI::BaseModel`
    structured-output task (schema class method `to_json_schema`, as the rule requires), one call per
    100 terms. Input: the term, its counts, the current list of genre category names (about 175).
-   Output per term: `verdict` ∈ `genre | subject | drop`; `genre` (one of the given names) or
+   Output per term: an `index` (the term's 1-based position in the batch; verdicts are matched to
+   terms by it, not by the echoed term string), `verdict` ∈ `genre | subject | drop`; `genre` (one of the given names) or
    `subject` (a canonical English phrase) or `reason` (`format`, `language_of_material`,
    `not_a_genre`, `too_specific`). Writes `config/worldcat/genre_map.yml`. Runs once; the file is
    checked in and edited by hand afterwards. Cost: a few thousand short strings, well under a dollar.
@@ -322,15 +340,17 @@ Open Library one; a tripped breaker makes the backfill stop and reschedule, neve
 
 ### Backfill
 
-`Books::WorldCat::BackfillCategoriesJob` (Sidekiq, `bin/rails generate sidekiq:job`) walks
-`Books::Book` ids in ranges of 500, collects their ISBN-13 identifiers, calls `lookup`, and hands
+`Books::WorldCatBackfillJob` (Sidekiq, `bin/rails generate sidekiq:job`) runs
+`Services::Books::WorldCat::Backfill`, which walks books in id order, collects their ISBN-13
+identifiers (dropping any that fail `Books::Isbn.normalize`), calls `lookup` in batches of 100, and hands
 each book's records to `Services::Books::WorldCat::ApplyCategories` (Result pattern), which:
 
 - maps every record's `genre` through `genre_map.yml`;
 - **applies a genre when at least two matched records carry a term mapping to it, or when the book
   has only one matched record** (a single stray term from a box set or a translation must not
   relabel a book; the p90 book has 31 records);
-- maps `subjects` the same way for terms with a `subject` verdict and resolves the phrase against
+- maps terms with a `subject` verdict (subject verdicts are honoured on terms from either the
+  `genre` or the `subjects` field) and resolves the phrase against
   existing subject categories with `by_name` then `by_alternative_name`; unresolved phrases are
   counted, not created;
 - links categories through `category_items`, additive only, never unlinks, idempotent;
@@ -361,6 +381,30 @@ single-record exception, subject resolution by alternative name, the "unresolved
 created" rule, idempotent reruns and the Nonfiction rule. The mapping task test stubs the AI call
 and asserts the schema class method is used. Rake tasks are tested through their service objects.
 Controller tests are not involved; there is no UI in increment 1, so no E2E spec is required.
+
+## Corrections from implementation
+
+Where the text above did not say it already, the implementation found:
+
+- **Holdings recency (6).** Real holdings paths look like
+  `search_holdings_summary_all_editions/<oclc>/index/<n>`; the summary with the largest trailing
+  numeric segment wins.
+- **Extractor filter (7).** A record is kept only if the top-level `generalFormat` is `Book` and the
+  top-level `isbns` list is non-empty. `reduce` re-checks after the byte pre-filter, because
+  `otherFormats[]` entries carry their own `generalFormat`.
+- **Extraction mechanics (8).** `spawn` multiprocessing context, per-frame decoding, and a line cut
+  at a worker-range boundary is completed from the following frames.
+- **Gates (9).** Gates never raise (an exception is a `fail`); a given-but-missing or empty
+  `--catalogue-isbns` file is a `fail`, only an absent option is `skipped`.
+- **Rails callers (10).** Every caller drops ISBNs failing `Books::Isbn.normalize` before calling
+  the service, because `/lookup` returns `422` for a batch containing any invalid ISBN.
+- **Mapping task (11).** Verdicts are matched to terms by a 1-based `index` field, not by the
+  echoed term string.
+- **Image (12).** The API image installs no extras (`zstandard` is build-only); the container runs as
+  uid 10001, so the artifact directory on the VM must be world-readable.
+- **Names.** The extra is `worldcat`, the compose overlay `compose.worldcat.yml`, the job
+  `Books::WorldCatBackfillJob`, staging lives in `<root>/versions/<dump-date>/_staging/`, and the
+  manifest field is `source_fingerprint`.
 
 ## Increments
 
