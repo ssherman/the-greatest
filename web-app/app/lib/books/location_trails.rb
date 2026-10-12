@@ -5,14 +5,16 @@ module Books
   # direct location with its live ancestors, nearest first. The root (a
   # continent, or Fictional Location) is dropped when there is anything below
   # it -- every American book would otherwise end in "North America".
+  # keep_root: true keeps the full chain (the AI trim wants the whole parent chain).
   # One query per tree level; trees are shallow.
   class LocationTrails
-    def self.call(categories)
-      new(categories).call
+    def self.call(categories, keep_root: false)
+      new(categories, keep_root: keep_root).call
     end
 
-    def initialize(categories)
+    def initialize(categories, keep_root: false)
       @categories = categories
+      @keep_root = keep_root
     end
 
     def call
@@ -24,7 +26,7 @@ module Books
           trail << parent
           node = parent
         end
-        trail.pop if trail.size > 1 && trail.last.parent_id.nil?
+        trail.pop if !@keep_root && trail.size > 1 && trail.last.parent_id.nil?
         [category.id, trail]
       end
     end

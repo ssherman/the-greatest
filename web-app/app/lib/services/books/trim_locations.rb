@@ -16,10 +16,13 @@ module Services
         new(book: book, dry_run: dry_run, force: force).call
       end
 
-      def self.candidate_ids(limit: nil)
-        trimmed = ::Enrichment.for_kind(KIND).where(enrichable_type: "Books::Book").select(:enrichable_id)
+      def self.candidate_ids(limit: nil, force: false)
         scope = direct_location_links
-          .where.not(item_id: trimmed)
+        unless force
+          trimmed = ::Enrichment.for_kind(KIND).where(enrichable_type: "Books::Book").select(:enrichable_id)
+          scope = scope.where.not(item_id: trimmed)
+        end
+        scope = scope
           .group(:item_id)
           .having("COUNT(*) > ?", Rails.configuration.x.categories_cleanup.max_direct_locations)
           .order(Arel.sql("COUNT(*) DESC"))
@@ -41,14 +44,19 @@ module Services
       end
 
       def call
-        links = self.class.direct_location_links.where(item_id: @book.id).includes(:category).to_a
         return skipped("already trimmed") if !@force && @book.enrichments.for_kind(KIND).exists?
+
+        links = self.class.direct_location_links.where(item_id: @book.id).includes(:category).to_a
         return skipped("not over the limit") if links.size <= Rails.configuration.x.categories_cleanup.max_direct_locations
 
         result = ::Services::Ai::Tasks::Books::LocationTrimTask.new(book: @book, locations: offered(links)).call
         return Result.new(success?: false, data: {}, errors: [result.error]) unless result.success?
 
         keep = result.data[:keep_ids]
+        if result.data[:raw_count].to_i.positive? && keep.empty?
+          return Result.new(success?: false, data: {}, errors: ["model returned no offered ids"])
+        end
+        return skipped("needs review: empty keep on a book not marked nonfiction") if keep.empty? && !nonfiction?
         removable = links.select { |link| link.source_legacy? && !keep.include?(link.category_id) }
         data = {kept: keep, removed: removable.map(&:category_id), reason: result.data[:reason]}
         return Result.new(success?: true, data: data.merge(dry_run: true), errors: []) if @dry_run
@@ -67,11 +75,16 @@ module Services
 
       private
 
+      def nonfiction?
+        id = ::Books::BookType.category_id(1)
+        id.present? && ::CategoryItem.exists?(item: @book, category_id: id)
+      end
+
       def offered(links)
-        trails = ::Books::LocationTrails.call(links.map(&:category))
+        trails = ::Books::LocationTrails.call(links.map(&:category), keep_root: true)
         links.map do |link|
           trail = trails.fetch(link.category_id, [link.category]).map(&:name).join(", ")
-          ::Services::Ai::Tasks::Books::LocationTrimTask::Location.new(id: link.category_id, trail: trail)
+          ::Services::Ai::Tasks::Books::LocationTrimTask::Location.new(id: link.category_id, trail: trail, fixed: !link.source_legacy?)
         end
       end
 

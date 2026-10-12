@@ -28,5 +28,13 @@ module Books
 
       assert_equal [chicago, il], LocationTrails.call([chicago])[chicago.id]
     end
+
+    test "keep_root keeps the full chain including the root" do
+      na = location("North America")
+      us = location("United States", parent: na)
+      chicago = location("Chicago", parent: us)
+
+      assert_equal [chicago, us, na], LocationTrails.call([chicago], keep_root: true)[chicago.id]
+    end
   end
 end

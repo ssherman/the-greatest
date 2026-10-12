@@ -11,10 +11,18 @@ namespace :categories do
     abort "Usage: bin/rails 'categories:trim_locations[LIMIT]' -- a limit is required" unless limit.positive?
 
     dry_run = ENV["DRY_RUN"] == "1"
-    ::Services::Books::TrimLocations.candidate_ids(limit: limit).each do |book_id|
+    force = ENV["FORCE"] == "1"
+    describe = lambda do |data|
+      next data.inspect if data[:skipped]
+
+      names = ::Category.where(id: data[:kept] + data[:removed]).pluck(:id, :name).to_h
+      label = ->(ids) { ids.map { |id| names[id] || id }.join(", ") }
+      "kept [#{label.call(data[:kept])}] removed [#{label.call(data[:removed])}] -- #{data[:reason]}#{" (dry run)" if data[:dry_run]}"
+    end
+    ::Services::Books::TrimLocations.candidate_ids(limit: limit, force: force).each do |book_id|
       book = ::Books::Book.find(book_id)
-      result = ::Services::Books::TrimLocations.call(book: book, dry_run: dry_run, force: ENV["FORCE"] == "1")
-      status = result.success? ? result.data.inspect : "FAILED #{result.errors.join("; ")}"
+      result = ::Services::Books::TrimLocations.call(book: book, dry_run: dry_run, force: force)
+      status = result.success? ? describe.call(result.data) : "FAILED #{result.errors.join("; ")}"
       puts "#{book.title} (##{book.id}): #{status}"
     end
   end
