@@ -143,8 +143,9 @@ one, and `nil` for a deleted-without-merge one. One class method,
 
 ### 1.3 `Categories::Merger` rework
 
-- One transaction. `INSERT INTO category_items (...) SELECT ... ON CONFLICT DO NOTHING` copies the
-  source's links onto the target, preserving `source` (§3.2); then the source's links are deleted
+- One transaction. `INSERT INTO category_items (...) SELECT ... ON CONFLICT DO UPDATE` copies the
+  source's links onto the target, preserving `source` (§3.2) — on a conflict a direct link upgrades the
+  target's inherited row, never the reverse; then the source's links are deleted
   with `delete_all`; `item_count` is recomputed for both once; `Categories::ItemReindexer` queues
   the affected items once.
 - The source name and its `alternative_names` are appended to the target's `alternative_names`.
