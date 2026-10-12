@@ -385,6 +385,21 @@ breaker never looks like completion. The job logs the totals and any stop reason
 Rerun the backfill after any edit to the mapping file. Because the legacy sync keeps production
 edits after `sync_init`, links made in production persist across the weekly sync.
 
+### Dev rehearsal (2026-10-12)
+
+`worldcat:backfill[2000]` against the development database (snapshot `pre-worldcat` taken first),
+the local API and the reviewed map, 2,000 books in id order, 1,969 matched, about 140 s a run:
+
+| Rule | Genre links | Subject links | Type conflicts | Edition leakage |
+|---|---:|---:|---:|---|
+| two records | 1,173 | 443 | 25 | Animal Farm "Textbooks", Little Women "Children's books", Jane Eyre "Young adult", Dune and 1984 "Comics & Graphic Novels", The Old Man and the Sea "Short Story Collection" |
+| two records and a quarter share | 512 | 360 | 11 | "Children's books" on Harry Potter, Diary of a Wimpy Kid, A Little Princess; "Short Story Collection" on Labyrinths and Carver; one comic adaptation (City of Glass) and one "Textbooks" (Plato's Apology) left |
+
+No book in either run ended up with both Fiction and Nonfiction. The second run's links are
+what the development database holds now; the first was restored away. The snapshot script runs
+`docker compose exec` against the project of the current directory, so from a worktree it needs
+`COMPOSE_PROJECT_NAME=the-greatest`, and its confirmation prompt needs a TTY or `yes y |`.
+
 ## What this does not do
 
 - **No matching.** Lookups are exact, by ISBN or OCLC number: no title/author matching, no
