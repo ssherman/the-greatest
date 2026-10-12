@@ -259,7 +259,10 @@ module Services
         town = ::Books::Category.find_by!(name: Prepare::LOCATION_TRAIL.first, deleted: false)
         assert CategoryItem.exists?(category: town, item: book, source: :admin)
         assert_equal Prepare::LOCATION_TRAIL.drop(1), town.ancestors.map(&:name)
-        assert ::Books::Category.exists?(name: Prepare::MERGE_TARGET_NAME, deleted: false)
+        target = ::Books::Category.find_by!(name: Prepare::MERGE_TARGET_NAME, deleted: false)
+        target.update!(alternative_names: ["E2E Merge Source 1"])
+        assert prepare.success?
+        assert_equal [], target.reload.alternative_names
 
         assert_no_difference -> { ::Books::Category.count } do
           assert prepare.success?

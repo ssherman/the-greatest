@@ -278,7 +278,9 @@ module Services
         link = ::CategoryItem.find_or_initialize_by(category: parent, item: book)
         link.update!(source: :admin)
         ::Categories::AncestorReconciler.call(item_ids: [book.id])
-        ::Books::Category.find_or_create_by!(name: MERGE_TARGET_NAME, category_type: :location, deleted: false)
+        target = ::Books::Category.find_or_create_by!(name: MERGE_TARGET_NAME, category_type: :location, deleted: false)
+        # The merge spec appends its source name to this every run.
+        target.update!(alternative_names: []) if target.alternative_names.present?
       end
 
       # Anyone else's review on a scratch book is reported, never deleted:

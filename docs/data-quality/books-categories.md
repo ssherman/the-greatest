@@ -17,7 +17,7 @@ About 92% of links sit on categories with 20 or more books, and half of each voc
 book. Junk seen in the live data: truncated names (`Japan (`, `61)`; 721 locations contain a
 bracket), 193 location and 457 subject twin clusters, qualified names (`Paris, France`), subjects
 stored as locations (`Hope`, `Media`), `Fictional Location` on 39,267 books, 441 lowercase-initial
-subjects, and 1,653 books with more than 25 locations (maximum 361).
+subjects, and 1,653 books with more than 25 locations (maximum 361). The 1,653 is the 2026-10-11 count; the over-tagging query below counts differently and gave 1,788 over 25, 5,124 over 15 and a maximum of 361 in dev later.
 
 ## Usage distribution per type (live categories, real link counts)
 

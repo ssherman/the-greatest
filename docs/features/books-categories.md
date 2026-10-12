@@ -60,14 +60,14 @@ merger, the weekly sync (`location_ancestors` step), cleanup apply, the location
 re-parent. `bin/rails categories:reconcile_ancestors` runs it for every book.
 
 The book page shows only direct (non-inherited) location links, each as a trail of links running up
-to but not including the root (`Chicago, Illinois`). `Books::LocationTrails` builds them with one
-query. Subjects render as before.
+to but not including the root (`Chicago, Illinois, United States`; only the root, the continent, is dropped). `Books::LocationTrails` builds them with one
+query per tree level. Subjects render as before.
 
 ## Merging and renaming
 
 - `categories.merged_into_id` points at the merge target. A merged category is also `deleted: true`. The merger flattens on write, so lookups never follow a chain.
 - `Category#canonical` returns the category itself if active, the target if merged, `nil` if deleted without a merge. `Category.replace_merged_ids(ids)` swaps merged ids for their targets.
-- `Categories::Merger` runs in one transaction: bulk-copies links with `ON CONFLICT DO NOTHING` (keeping `source`), appends the source name and its alternative names to the target's `alternative_names`, moves child categories, recomputes counts once and queues one reindex. It allows different `category_type` within the same STI type, and refuses a different STI type, a merge into itself or a descendant, and the four book-type categories (Fiction, Nonfiction, Poetry, Religion and Spirituality). `Deleter` and the admin destroy action refuse those four too.
+- `Categories::Merger` runs in one transaction: bulk-moves links with `ON CONFLICT DO UPDATE`, which keeps `source` and upgrades the target's inherited row to the incoming direct source (never downgrades), appends the source name and its alternative names to the target's `alternative_names`, moves child categories, recomputes counts once and queues one reindex. It allows different `category_type` within the same STI type, and refuses a different STI type, a merge into itself or a descendant, and the four book-type categories (Fiction, Nonfiction, Poetry, Religion and Spirituality). `Deleter` and the admin destroy action refuse those four too.
 - Category slugs use friendly_id history, backfilled by migration so every existing category has a history row.
 - `Books::CategorySlugResolver` turns an old slug (merged or renamed) into the live category. `Books::FilterParams` and the legacy `/genres/:id` route use it: an old filter URL answers 301 to the canonical path with other segments kept, and a slug that resolves to nothing still 404s.
 - Saved searches and recommendation settings store category ids. They resolve merged ids through `replace_merged_ids` at query time and in their labels; stored ids are not rewritten.
@@ -76,8 +76,9 @@ query. Subjects render as before.
 
 ## Browse threshold and alias search
 
-`config.x.books.browse_min_category_books` (5): subject and location categories with fewer ranked
-books are left out of browse listings and the public filter modal's category search. Their pages
+`config.x.books.browse_min_category_books` (5): subject and location categories are left out of
+browse listings when they have fewer ranked books, and out of the public filter modal's category
+search when `categories.item_count` (all catalog links, ranked or not) is below it. Their pages
 still render, since book-page links point at them. Genres are exempt. Category search also matches
 `alternative_names`, so `Calcutta` finds `Kolkata`.
 
@@ -85,22 +86,22 @@ The saved-search category picker has no threshold. That is deliberate.
 
 ## The cleanup runbook
 
-Every `propose` stage is resumable: it only processes categories with no decision in that run. Run
+Every `propose` stage is resumable. The rules stage rebuilds its own proposed decisions each time. An AI stage skips categories already decided in that type's head or tail stages of the run (a category with only a rules decision is still sent). Run
 these from `web-app/`, with `RUN` a label such as `2026-10-15-prod`.
 
 1. Snapshot: `bin/snapshot-dev-db.sh --label pre-category-cleanup` in dev, a fresh backup in production.
-2. `bin/rails 'categories:cleanup:propose[RUN,rules]'`. No AI. Case and punctuation twins merge into the most-linked member (one that already holds the clean name wins a tie). Broken names are repaired, and letterless bracket fragments (`61)`) are deleted. Empty categories are never deleted, because the weekly sync brings categories before their books and a link to a deleted category is lost for good. Legacy alternative names never drive a merge. `C`, `C++` and `C#` stay apart.
+2. `bin/rails 'categories:cleanup:propose[RUN,rules]'`. No AI. Case and punctuation twins merge into the most-linked member, except that when that member would need a rename, the member already holding the clean name wins outright. Broken names are repaired, and letterless bracket fragments (`61)`) are deleted. Empty categories are never deleted, because the weekly sync brings categories before their books and a link to a deleted category is lost for good. Legacy alternative names never drive a merge. `C`, `C++` and `C#` stay apart.
 3. `bin/rails 'categories:cleanup:propose[RUN,locations_head]'`, then `subjects_head`. Head means a category's own direct link count is at least `head_min_links` (20), one category per AI call. A head category whose call failed is retried by running the head stage again.
 4. `bin/rails 'categories:cleanup:calibrate[RUN,location]'` and `[RUN,subject]`. It writes no decisions. It compares batch sizes against one-at-a-time answers on 200 random tail categories. Set `tail_batch_size` to the largest size with at least 97% agreement, or leave it at 1.
 5. `bin/rails 'categories:cleanup:propose[RUN,locations_tail]'`, then `subjects_tail`. Tail runs print how many head-tier categories are still undecided.
 6. `bin/rails 'categories:cleanup:report[RUN]'`. It prints counts by stage, action and status; undecided head-tier categories; the largest merges; merges into a category with its own pending terminal decision; locations apply would create (with their slugs); proposed roots; ambiguous names; failures; and samples per action. The full list goes to a CSV in `tmp/`.
-7. `bin/rails 'categories:cleanup:reject[RUN,"12 15 19"]'` for decisions you do not want. Rejected decisions are kept and skipped.
+7. `bin/rails 'categories:cleanup:reject[RUN,12 15 19]'` for decisions you do not want. Rejected decisions are kept and skipped.
 8. `bin/rails 'categories:cleanup:apply[RUN]'`. Details below.
 9. `DRY_RUN=1 bin/rails 'categories:trim_locations[100]'` and read the output, then the same without `DRY_RUN`. Details below.
-10. Propose again for categories the first pass retyped: `propose[RUN2,locations_head]` and `locations_tail` pick up subjects retyped into locations, and the subject stages pick up locations retyped into subjects. A new run label is fine.
+10. Propose again with the SAME run label: `propose[RUN,locations_head]`, `locations_tail`, `subjects_head` and `subjects_tail`, then `apply[RUN]` again. Only categories with no decision in those stages yet are sent: ones retyped by the first apply (subjects now locations and the reverse), created parents, and categories the sync added. A new label would re-send the whole vocabulary and apply a second full wave, so do not use one.
 11. After this the weekly sync keeps new legacy categories in line (last paragraph below).
 
-Switches, as environment variables on `propose`: `LIMIT=n` caps the calls in a stage. `REDO=1` deletes
+Switches, as environment variables on `propose`: `LIMIT=n` caps the number of categories sent in a stage (the same as calls only at batch size 1). `REDO=1` deletes
 that stage's `proposed` and `failed` decisions before running, inside the same transaction as the
 cost guard, so an over-limit refusal rolls the delete back. `FORCE=1` lets a stage exceed the cost
 limit (about $50 estimated). `propose` prints the estimate before it starts and a progress line every
@@ -108,9 +109,9 @@ limit (about $50 estimated). `propose` prints the estimate before it starts and 
 
 What apply does:
 
-- Before anything it checks each decision's category against its snapshot. A changed category is marked `stale` and skipped. A conflict pre-pass also marks a rename, set-parent or keep stale ("superseded by ...") when a terminal merge, retype or delete exists for the same category.
+- Before anything it checks each decision's category against its snapshot. A changed category is marked `stale` and skipped. A conflict pre-pass also marks a rename, set-parent or keep stale ("superseded by ...") when a terminal merge, retype or delete exists for the same category. If a category has several terminal decisions, the first by phase (merge, retype, delete) wins and the others go stale too.
 - Parents named in a chain that match no category are created in one transaction. If a created parent's slug collides, it gets a UUID suffix and the report flags it.
-- A rename keeps the old name in `alternative_names` and the old slug in history.
+- A rename keeps the old slug in history. It keeps the old name in `alternative_names` only when it differs from the new name by more than case or punctuation and is not already listed.
 - Reconcile (`AncestorReconciler`) runs whenever the run applied any decision, followed by one reindex pass. Each decision is its own transaction, so one failure marks that decision `failed` and the rest continue. Re-running is a no-op for applied decisions.
 
 What the trim does: a book with more than `max_direct_locations` (15) direct locations gets one AI

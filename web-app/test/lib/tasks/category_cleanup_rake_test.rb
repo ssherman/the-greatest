@@ -107,4 +107,12 @@ class CategoryCleanupRakeTest < ActiveSupport::TestCase
 
     assert decision.reload.rejected?
   end
+
+  test "reject accepts a quoted, space-separated id list" do
+    ids = %w[a b].map { |s| CategoryCleanupDecision.create!(category: categories(:books_france_location), run: "t1", stage: "rules", action: :keep, decided_by: :rule) }.map(&:id)
+
+    capture_io { Rake::Task["categories:cleanup:reject"].invoke("t1", "\"#{ids.join(" ")}\"") }
+
+    assert_equal [true, true], CategoryCleanupDecision.where(id: ids).order(:id).map(&:rejected?)
+  end
 end

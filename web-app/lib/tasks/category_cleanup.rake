@@ -52,7 +52,7 @@ namespace :categories do
 
     desc "Reject decisions by id (space-separated): bin/rails 'categories:cleanup:reject[RUN,12 15 19]'"
     task :reject, [:run, :ids] => :environment do |_task, args|
-      ids = args[:ids].to_s.split.map(&:to_i).select(&:positive?)
+      ids = args[:ids].to_s.delete('"').split.map(&:to_i).select(&:positive?)
       abort "Usage: bin/rails 'categories:cleanup:reject[RUN,ID ID ...]'" if args[:run].blank? || ids.empty?
       count = ::CategoryCleanupDecision.for_run(args[:run]).proposed.where(id: ids).update_all(status: ::CategoryCleanupDecision.statuses.fetch("rejected"), updated_at: Time.current)
       puts "Rejected #{count} decision(s)"
