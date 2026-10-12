@@ -240,6 +240,47 @@ class ShardWriter:
         return self.index
 
 
+_PROGRESS_DONE = re.compile(r"^100\.0% lines=(\d+) kept=(\d+) bad=(\d+) done$")
+
+
+class ExtractIncomplete(RuntimeError):
+    """--resume found no finished extraction to build from."""
+
+
+def load_progress(paths: WorldcatPaths) -> list[ExtractStats]:
+    """The stats of a finished extraction, read back from its progress files, so a
+    build can resume at the distill stage instead of repeating the hour-long
+    extract (the first real build died in distill with the shards intact).
+
+    Refuses an unfinished worker (a partial shard set would build a partial
+    artifact) and a worker that saw a bad frame (the file holds only the count,
+    and the bad_frames gate needs the list): both mean rebuild without --resume.
+    The per-line reject count is not in the file either, so a resumed report says
+    bad_lines=0.
+    """
+    files = sorted(paths.staging_dir.glob("progress_*.txt"))
+    if not files:
+        raise ExtractIncomplete(f"no progress files in {paths.staging_dir}; build without --resume")
+    stats = []
+    for path in files:
+        worker = int(path.stem.split("_")[1])
+        text = path.read_text().strip()
+        match = _PROGRESS_DONE.match(text)
+        if match is None:
+            raise ExtractIncomplete(
+                f"worker {worker} did not finish ({text!r}); build without --resume"
+            )
+        if int(match.group(3)):
+            raise ExtractIncomplete(f"worker {worker} had bad frames; build without --resume")
+        shards = len(list(paths.staging_dir.glob(f"shard_{worker:03d}_*.parquet")))
+        stats.append(
+            ExtractStats(
+                worker=worker, lines=int(match.group(1)), kept=int(match.group(2)), shards=shards
+            )
+        )
+    return stats
+
+
 def _read_frame(fh, frame: Frame, dctx: zstandard.ZstdDecompressor) -> bytes:
     for attempt in range(30):
         try:

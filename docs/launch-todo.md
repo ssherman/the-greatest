@@ -233,7 +233,8 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    `bin/rails "worldcat:export_isbns[/home/shane/wc-data/our_isbns.txt]"`, then
    `uv run python -m worldcat.pipeline.build ... --catalogue-isbns /home/shane/wc-data/our_isbns.txt`
    from `data-sources/`. The result will be `/home/shane/wc-data/versions/2025-09-04/`, and the build
-   fails unless every gate passes.
+   fails unless every gate passes. If it dies after extract (an hour), rerun with `--resume` to
+   distill the shards it left rather than extracting again.
 2. **Cloudflare, before anything touches the home server. Shane runs with `!`.** Create the
    `home-worldcat` tunnel and copy its token. Add the `worldcat-api.thegreatestbooks.org` hostname with
    ingress `http://worldcat:8082`. Add the Access application on that hostname reusing the `prod-rails`

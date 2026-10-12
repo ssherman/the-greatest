@@ -77,7 +77,7 @@ image):
 
     uv run python -m worldcat.pipeline.build \
         --source "/mnt/e/annas archive worldcat/<aacid file>.jsonl.seekable.zst" \
-        --root /home/shane/wc-data --dump-date 2025-09-04 --workers 8 --memory-limit 16GB \
+        --root /home/shane/wc-data --dump-date 2025-09-04 --workers 8 --memory-limit 30GB --threads 16 \
         --catalogue-isbns /home/shane/wc-data/our_isbns.txt
 
 The API (`worldcat.Dockerfile`) refuses to boot unless the version directory's
@@ -88,6 +88,8 @@ The API (`worldcat.Dockerfile`) refuses to boot unless the version directory's
     curl -s localhost:8082/version
 
 There is no refresh: the dump is frozen, so a new version means a new build.
+A build that dies after extract keeps its shards: add `--resume` to distill them
+instead of extracting again.
 
 ## Running the page fetcher
 

@@ -9,6 +9,10 @@ Stages: extract (frame-parallel) -> records -> isbns -> redirects -> holdings ->
 gates -> report + manifest. A failed gate raises BuildFailed, leaves _staging in
 place for inspection, and writes gates_passed=false so the API refuses the
 version. There is no download, refresh or promotion: the dump is frozen.
+
+A build that dies after extract leaves its finished shards in _staging; `--resume`
+builds from them instead of extracting again (an hour on the full dump). Without
+it a build starts by deleting whatever an earlier run left there.
 """
 
 import hashlib
@@ -19,7 +23,7 @@ from pathlib import Path
 import typer
 
 from worldcat.pipeline import distill
-from worldcat.pipeline.extract import extract_all
+from worldcat.pipeline.extract import extract_all, load_progress
 from worldcat.pipeline.gates import Thresholds, gates_passed, run_gates
 from worldcat.pipeline.paths import WorldcatPaths
 from worldcat.pipeline.report import StageTimings, write_build_report, write_manifest
@@ -65,18 +69,22 @@ def build(
     memory_limit: str = "16GB",
     threads: int | None = None,
     keep_staging: bool = False,
+    resume: bool = False,
     catalogue_isbns: Path | None = None,
     thresholds: Thresholds | None = None,
 ) -> dict:
     thresholds = thresholds or Thresholds()
     paths = WorldcatPaths(root=root, dump_date=dump_date)
     paths.ensure()
-    # A crashed or differently-sharded earlier run must not leak shards into this one.
-    for stale in (
-        *paths.staging_dir.glob("shard_*.parquet"),
-        *paths.staging_dir.glob("progress_*.txt"),
-    ):
-        stale.unlink()
+    if resume:
+        resumed = load_progress(paths)  # raises ExtractIncomplete before anything is touched
+    else:
+        # A crashed or differently-sharded earlier run must not leak shards into this one.
+        for stale in (
+            *paths.staging_dir.glob("shard_*.parquet"),
+            *paths.staging_dir.glob("progress_*.txt"),
+        ):
+            stale.unlink()
     timings = StageTimings()
     con = _connect(paths, memory_limit, threads)
 
@@ -90,10 +98,17 @@ def build(
 
     typer.echo(f"building {dump_date} in {paths.version_dir} from {source}")
     fingerprint = source_fingerprint(source)
-    extract = stage("extract", lambda: extract_all(source, paths, workers=workers))
-    timings.record(
-        "extract", timings.stages["extract"]["seconds"], rows=sum(s.kept for s in extract)
-    )
+    if resume:
+        extract = resumed
+        typer.echo(
+            f"  extract: resumed from {len(extract)} finished workers,"
+            f" {sum(s.kept for s in extract):,} rows"
+        )
+    else:
+        extract = stage("extract", lambda: extract_all(source, paths, workers=workers))
+        timings.record(
+            "extract", timings.stages["extract"]["seconds"], rows=sum(s.kept for s in extract)
+        )
     stage("records", lambda: distill.build_records(con, paths))
     stage("isbns", lambda: distill.build_isbns(con, paths))
     stage("redirects", lambda: distill.build_redirects(con, paths))
@@ -145,6 +160,9 @@ def main(
     memory_limit: str = typer.Option("16GB", "--memory-limit"),
     threads: int | None = typer.Option(None, "--threads"),
     keep_staging: bool = typer.Option(False, "--keep-staging"),
+    resume: bool = typer.Option(
+        False, "--resume", help="distill the shards an earlier run left in _staging"
+    ),
     catalogue_isbns: Path | None = typer.Option(  # noqa: B008
         None, "--catalogue-isbns", exists=True, dir_okay=False
     ),
@@ -157,6 +175,7 @@ def main(
         memory_limit=memory_limit,
         threads=threads,
         keep_staging=keep_staging,
+        resume=resume,
         catalogue_isbns=catalogue_isbns,
     )
 

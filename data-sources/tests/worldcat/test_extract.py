@@ -2,9 +2,18 @@ import json
 from pathlib import Path
 
 import duckdb
+import pytest
 
 from tests.fixtures.worldcat.seekable import write_seekable
-from worldcat.pipeline.extract import SHARD_COLUMNS, extract_all, extract_range, keep, reduce
+from worldcat.pipeline.extract import (
+    SHARD_COLUMNS,
+    ExtractIncomplete,
+    extract_all,
+    extract_range,
+    keep,
+    load_progress,
+    reduce,
+)
 from worldcat.pipeline.paths import WorldcatPaths
 from worldcat.pipeline.seektable import read_seek_table
 
@@ -271,3 +280,29 @@ def test_a_kept_line_that_cannot_be_reduced_is_counted_and_skipped(tmp_path: Pat
     paths, stats = _extract_lines(tmp_path, [bad, good])
 
     assert (stats.kept, stats.bad_lines) == (1, 1)
+
+
+def test_load_progress_reads_a_finished_extraction_back(tmp_path: Path, worldcat_source: Path):
+    paths = WorldcatPaths(root=tmp_path, dump_date="2025-09-04")
+    paths.ensure()
+    n = len(read_seek_table(worldcat_source))
+    stats = extract_range(worldcat_source, paths, 3, 0, n, batch_size=20)
+
+    (loaded,) = load_progress(paths)
+
+    assert (loaded.worker, loaded.lines, loaded.kept) == (3, stats.lines, stats.kept)
+    assert loaded.shards == stats.shards > 1
+    assert loaded.bad_frames == []
+
+
+def test_load_progress_refuses_an_unfinished_or_damaged_extraction(tmp_path: Path):
+    paths = WorldcatPaths(root=tmp_path, dump_date="2025-09-04")
+    paths.ensure()
+    with pytest.raises(ExtractIncomplete, match="no progress files"):
+        load_progress(paths)
+    (paths.staging_dir / "progress_000.txt").write_text("40.0% lines=10 kept=5 bad=0 elapsed=3s\n")
+    with pytest.raises(ExtractIncomplete, match="worker 0 did not finish"):
+        load_progress(paths)
+    (paths.staging_dir / "progress_000.txt").write_text("100.0% lines=10 kept=5 bad=1 done\n")
+    with pytest.raises(ExtractIncomplete, match="bad frames"):
+        load_progress(paths)

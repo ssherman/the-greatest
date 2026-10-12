@@ -31,7 +31,7 @@ class Thresholds:
     the measured values afterwards and record the measurement in the feature doc."""
 
     min_records: int = 20_000_000
-    max_records: int = 120_000_000
+    max_records: int = 200_000_000  # the 2025-09-04 build has 165,272,991
     min_redirects: int = 10_000_000
     min_genre_share: float = 0.25
     min_subject_share: float = 0.50

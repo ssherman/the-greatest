@@ -72,14 +72,21 @@ cd data-sources
 uv sync --locked --extra worldcat
 uv run python -m worldcat.pipeline.build \
     --source "/mnt/e/annas archive worldcat/annas_archive_meta__aacid__worldcat__20250804T000000Z--20250804T000000Z.jsonl.seekable.zst" \
-    --root /home/shane/wc-data --dump-date 2025-09-04 --workers 8 --memory-limit 16GB \
+    --root /home/shane/wc-data --dump-date 2025-09-04 --workers 8 --memory-limit 30GB --threads 16 \
     --catalogue-isbns /home/shane/wc-data/our_isbns.txt
 ```
 
 The `worldcat` extra is `zstandard`, needed only to read the dump. The API image installs no extras.
 The catalogue file comes from `bin/rails "worldcat:export_isbns[/home/shane/wc-data/our_isbns.txt]"`
 (run from `web-app/`); without `--catalogue-isbns` the `catalogue_coverage` gate is skipped.
-Other options: `--threads`, `--keep-staging`.
+Other options: `--keep-staging` and `--resume`. A build that dies after extract leaves its finished
+shards in `_staging`; `--resume` distills them instead of extracting again (an hour on the full
+dump), reading each worker's row counts back from its `progress_*.txt`. It refuses an unfinished
+worker or one that saw a bad frame. Without `--resume` a build starts by deleting whatever an
+earlier run left in `_staging`. The memory numbers are measured, not guessed: the first real build
+ran out of memory at 16 GB and again at 30 GB when `records` was one `row_number()` window over
+every wide row; `build_records` now picks each OCLC number's winner over the key columns only and
+joins the wide columns back by shard and row, which is what fits (see "Stage 2").
 
 Where things live (`worldcat.pipeline.paths.WorldcatPaths` owns the layout):
 
@@ -119,8 +126,17 @@ ranked by `(pass_rank, type_rank, pass_index DESC)`. `pass_rank` comes from `PAS
 `distill.py`, newest first: `w2`, `2023_05_v4_type123`, `2023_04_v3`, `t123`,
 `search_editions_response`, `range_query`, `worldcat_2022_09_titles_1_backup_2022_10_12`.
 `type_rank` prefers `title_json` over `briefrecords_json`. **A pass prefix not in the list fails the
-build** (`UnknownPass`) instead of being ranked by guess; the first real build is where that list is
-confirmed.
+build** (`UnknownPass`) instead of being ranked by guess; the first real build confirmed the list
+above (every prefix in the dump is ranked).
+
+`build_records` does that ranking in three narrow passes, because one `row_number()` window over
+every wide row (299 million record rows; `summary` and `subjects` on each) ran out of memory at
+16 GB and again at 30 GB on the first real build. Pass one numbers the shard files and keeps, per OCLC
+number, the `arg_min` of `(shard, row)` by the rank tuple: three integers per OCLC number, 165
+million rows, which spills. Pass two unions each OCLC number's ISBN-13s across every pass (distinct,
+sorted). Pass three scans the shards once more, joins the winner by `(shard, row)` and the ISBN list
+by OCLC number, and writes the sorted table. Ties on the rank tuple are broken arbitrarily, as the
+window's were.
 
 ### Gates
 
@@ -134,7 +150,7 @@ run, so that failure writes no `build_report.json` or `manifest.json`. Add the p
 
 | Gate | Rule |
 |---|---|
-| `row_counts` | `records` between 20,000,000 and 120,000,000; `isbns` at least `records`; `redirects` at least 10,000,000; all four tables present. Loose on purpose for a first build; tighten to the measured values afterwards. |
+| `row_counts` | `records` between 20,000,000 and 200,000,000 (the ceiling was 120,000,000 until the first build measured 165,272,991); `isbns` at least `records`; `redirects` at least 10,000,000; all four tables present. Loose on purpose for a first build; tighten to the measured values afterwards. |
 | `field_coverage` | `genre` on at least 25% of records, non-empty `subjects` on at least 50%, `year` on at least 80%. |
 | `isbn_checksums` | At least 98% of the raw ISBNs on kept records pass their check digit. |
 | `pass_prefixes` | Every observed record pass prefix is in `PASS_ORDER`. |
@@ -142,7 +158,7 @@ run, so that failure writes no `build_report.json` or `manifest.json`. Add the p
 | `catalogue_coverage` | At least 80% of the ISBN-13s in `--catalogue-isbns` resolve to a record. `skipped` only when the option is absent; a given file that is missing or has no valid ISBN-13 is a `fail`. |
 | `bad_frames` | No frame failed to decompress. |
 
-A kept line that cannot be reduced (valid JSON of an unexpected shape, say a string where `contributors` expects objects) is skipped and counted in `extract.bad_lines`; it never fails the build and is not a gate. A lone surrogate escape (`\ud800`) in a kept line is written as U+FFFD rather than aborting the shard. `build` also deletes any `shard_*.parquet` and `progress_*.txt` left in `_staging/` by an earlier run before it extracts.
+A kept line that cannot be reduced (valid JSON of an unexpected shape, say a string where `contributors` expects objects) is skipped and counted in `extract.bad_lines`; it never fails the build and is not a gate. A lone surrogate escape (`\ud800`) in a kept line is written as U+FFFD rather than aborting the shard. `build` also deletes any `shard_*.parquet` and `progress_*.txt` left in `_staging/` by an earlier run before it extracts, unless `--resume` asked it to build from them.
 
 ### Measured build
 
