@@ -12,6 +12,9 @@ module Services
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
       COMPARED = %w[name category_type parent_id deleted].freeze
+      STAT_KEYS = %w[rename merge retype set_parent delete keep created stale failed].freeze
+      # Which terminal decision wins when one category has several: phase order.
+      TERMINAL_RANK = {"merge" => 0, "retype" => 1, "delete" => 2}.freeze
 
       def self.call(run:, only_rules: false)
         new(run: run, only_rules: only_rules).call
@@ -20,7 +23,7 @@ module Services
       def initialize(run:, only_rules: false)
         @run = run
         @only_rules = only_rules
-        @stats = Hash.new(0)
+        @stats = Hash.new(0).merge(STAT_KEYS.index_with(0))
       end
 
       def call
@@ -33,8 +36,9 @@ module Services
         kept = pending.where(action: :keep).update_all(status: ::CategoryCleanupDecision.statuses.fetch("applied"), updated_at: Time.current)
         @stats["keep"] += kept if kept.positive?
 
-        changed = @stats.except("keep", "stale", "failed").values.sum
-        ::Categories::AncestorReconciler.call if changed.positive?
+        # Idempotent, and run whenever the run has applied anything: a crash or
+        # failure inside it on an earlier invocation must not be skipped on re-run.
+        ::Categories::AncestorReconciler.call if ::CategoryCleanupDecision.for_run(@run).applied.exists?
         Result.new(success?: true, data: @stats.to_h, errors: [])
       end
 
@@ -53,6 +57,24 @@ module Services
           decision.update_columns(status: ::CategoryCleanupDecision.statuses.fetch("stale"),
             error: "Category changed after this decision was proposed", updated_at: Time.current)
           @stats["stale"] += 1
+        end
+        supersede_conflicting
+      end
+
+      # A category with a proposed merge, retype or delete cannot also be
+      # renamed, re-parented or kept: the terminal decision wins and the rest go
+      # stale. With several terminal decisions the first by phase order (merge,
+      # retype, delete; ties by id) is kept.
+      def supersede_conflicting
+        pending.order(:id).to_a.group_by(&:category_id).each_value do |decisions|
+          winner = decisions.select { |d| TERMINAL_RANK.key?(d.action) }.min_by { |d| [TERMINAL_RANK[d.action], d.id] }
+          next if winner.nil?
+
+          (decisions - [winner]).each do |loser|
+            loser.update_columns(status: ::CategoryCleanupDecision.statuses.fetch("stale"),
+              error: "superseded by #{winner.action} decision ##{winner.id}", updated_at: Time.current)
+            @stats["stale"] += 1
+          end
         end
       end
 
@@ -81,12 +103,20 @@ module Services
         end
         @stats[decision.action] += 1
       rescue => e
-        decision.update_columns(status: ::CategoryCleanupDecision.statuses.fetch("failed"), error: e.message.truncate(500), updated_at: Time.current)
+        decision.update_columns(status: ::CategoryCleanupDecision.statuses.fetch("failed"), error: "#{e.class}: #{e.message}".truncate(500), updated_at: Time.current)
         @stats["failed"] += 1
       end
 
       def apply_rename(decision)
-        live_category!(decision).update!(name: decision.new_name)
+        category = live_category!(decision)
+        old_name = category.name
+        old_key = NameNormalizer.twin_key(old_name)
+        alternatives = Array(category.alternative_names)
+        remember_old = old_key && old_key != NameNormalizer.twin_key(decision.new_name) &&
+          alternatives.none? { |alt| NameNormalizer.twin_key(alt) == old_key }
+        # Keep the old name as an alternative so a set_parent chain proposed
+        # against it still resolves once the rename has landed.
+        category.update!({name: decision.new_name}.merge(remember_old ? {alternative_names: alternatives + [old_name]} : {}))
       end
 
       def apply_merge(decision)
@@ -105,6 +135,8 @@ module Services
 
       def apply_set_parent(decision)
         category = live_category!(decision)
+        raise "#{category.name} is not a location" unless category.location?
+
         parent_id = @lookup.find(decision.parent_chain.first)
         raise "parent #{decision.parent_chain.first.inspect} not found" if parent_id.nil?
         raise "a place can't be its own parent" if parent_id == category.id
@@ -120,8 +152,10 @@ module Services
       end
 
       def live_category!(decision)
-        category = ::Books::Category.find_by(id: decision.category_id)
-        raise "category is gone" if category.nil? || category.deleted?
+        category = ::Category.find_by(id: decision.category_id)
+        raise "category is gone" if category.nil?
+        raise "category is not a books category" unless category.is_a?(::Books::Category)
+        raise "category is gone" if category.deleted?
         raise "#{category.name} is a protected book-type category" if ::Books::Category.protected_ids.include?(category.id)
 
         category
@@ -133,7 +167,11 @@ module Services
       # decided.
       def create_missing_parents
         wanted = {}
-        pending.action_set_parent.order(:id).each do |decision|
+        protected_ids = ::Books::Category.protected_ids
+        pending.action_set_parent.includes(:category).order(:id).each do |decision|
+          category = decision.category
+          next unless category.is_a?(::Books::Category) && category.location? && !category.deleted? && !protected_ids.include?(category.id)
+
           decision.parent_chain.each_with_index do |name, index|
             key = NameNormalizer.twin_key(name)
             next if key.nil? || @lookup.find(name) || wanted.key?(key)
@@ -142,19 +180,23 @@ module Services
           end
         end
 
-        created = wanted.values.map do |name, parent_name|
-          category = ::Books::Category.create!(name: name, category_type: :location)
-          @lookup.register(category)
-          record_created(category)
-          @stats["created"] += 1
-          [category, parent_name]
-        end
+        # One transaction: a crash between creating the places and parenting
+        # them must not leave permanent roots.
+        ::Category.transaction do
+          created = wanted.values.map do |name, parent_name|
+            category = ::Books::Category.create!(name: name, category_type: :location)
+            @lookup.register(category)
+            record_created(category)
+            @stats["created"] += 1
+            [category, parent_name]
+          end
 
-        created.each do |category, parent_name|
-          parent_id = @lookup.find(parent_name)
-          category.update!(parent_id: parent_id) if parent_id && parent_id != category.id
-        rescue ActiveRecord::RecordInvalid => e
-          Rails.logger.warn("[category cleanup] #{category.name}: parent #{parent_name.inspect} refused (#{e.message}); left as a root")
+          created.each do |category, parent_name|
+            parent_id = @lookup.find(parent_name)
+            category.update!(parent_id: parent_id) if parent_id && parent_id != category.id
+          rescue ActiveRecord::RecordInvalid => e
+            Rails.logger.warn("[category cleanup] #{category.name}: parent #{parent_name.inspect} refused (#{e.message}); left as a root")
+          end
         end
       end
 

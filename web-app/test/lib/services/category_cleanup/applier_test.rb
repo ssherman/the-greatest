@@ -146,34 +146,224 @@ module Services
         refute parent.reload.deleted?
       end
 
-      test "a rules delete and an ai merge for one category: one applies, the other fails cleanly" do
-        target = location("Chicago")
-        place = location("Chicgo")
-        other = location("paris")
-        delete = decide(place, :delete)
-        merge = decide(place, :merge, target_category: target, decided_by: :ai, stage: "locations_head")
-        rename = decide(other, :rename, new_name: "Paris")
-
-        result = nil
-        assert_nothing_raised { result = Applier.call(run: "r1") }
-
-        assert merge.reload.applied?
-        assert delete.reload.failed?
-        assert_match "gone", delete.error
-        assert rename.reload.applied?
-        assert_equal 1, result.data["failed"]
-      end
-
-      test "a rules delete and an ai rename for one category complete the run" do
+      test "a rules delete beats an ai rename: delete applies, rename goes stale" do
         place = location("Chicgo")
         delete = decide(place, :delete)
         rename = decide(place, :rename, new_name: "Chicago", decided_by: :ai, stage: "locations_head")
 
         assert_nothing_raised { Applier.call(run: "r1") }
 
-        assert_equal %w[applied], [rename.reload.status]
-        assert_includes %w[applied failed], delete.reload.status
+        assert delete.reload.applied?
+        assert rename.reload.stale?
+        assert_equal "superseded by delete decision ##{delete.id}", rename.error
         assert place.reload.deleted?
+        assert_equal "Chicgo", place.name
+      end
+
+      test "a retype beats a delete: retype applies, delete goes stale" do
+        place = location("Hope")
+        delete = decide(place, :delete)
+        retype = decide(place, :retype, new_category_type: ::Category.category_types["subject"], decided_by: :ai, stage: "locations_head")
+
+        Applier.call(run: "r1")
+
+        assert retype.reload.applied?
+        assert delete.reload.stale?
+        assert place.reload.subject?
+        refute place.deleted?
+      end
+
+      test "a merge beats a delete and supersedes a rename and a keep" do
+        target = location("Chicago")
+        place = location("Chicgo")
+        other = location("paris")
+        delete = decide(place, :delete)
+        merge = decide(place, :merge, target_category: target, decided_by: :ai, stage: "locations_head")
+        rename = decide(place, :rename, new_name: "Chicagoo")
+        keep = decide(place, :keep)
+        unrelated = decide(other, :rename, new_name: "Paris")
+
+        result = Applier.call(run: "r1")
+
+        assert merge.reload.applied?
+        assert_equal %w[stale stale stale], [delete, rename, keep].map { |d| d.reload.status }
+        assert_equal target, place.reload.merged_into
+        assert unrelated.reload.applied?
+        assert_equal 3, result.data["stale"]
+        assert_equal 0, result.data["failed"]
+      end
+
+      test "a terminal decision on a category already gone fails cleanly" do
+        place = location("Chicgo")
+        decision = decide(place, :delete)
+        place.update_columns(deleted: true)
+        decision.update_columns(category_snapshot: decision.category_snapshot.merge("deleted" => true))
+
+        result = nil
+        assert_nothing_raised { result = Applier.call(run: "r1") }
+
+        assert decision.reload.failed?
+        assert_match "category is gone", decision.error
+        assert_equal 1, result.data["failed"]
+      end
+
+      test "a decision on a non-books category fails as not a books category" do
+        rock = categories(:music_rock_genre)
+        rock_name = rock.name
+        decision = CategoryCleanupDecision.create!(
+          category: rock, run: "r1", stage: "rules", action: :rename, decided_by: :rule, new_name: "Rock Music",
+          category_snapshot: CategoryCleanupDecision.snapshot_of(rock)
+        )
+
+        Applier.call(run: "r1")
+
+        assert decision.reload.failed?
+        assert_match "not a books category", decision.error
+        assert_equal rock_name, rock.reload.name
+      end
+
+      test "result data carries every key, zero when unused" do
+        result = Applier.call(run: "nothing-here")
+
+        assert_equal %w[rename merge retype set_parent delete keep created stale failed].sort, result.data.keys.sort
+        assert_equal 0, result.data.values.sum
+      end
+
+      test "a rename keeps the old name as an alternative, so a chain naming it creates nothing" do
+        calcutta = location("Calcutta")
+        india = location("India", links: 0)
+        howrah = location("Howrah")
+        rename = decide(calcutta, :rename, new_name: "Kolkata")
+        parent = decide(howrah, :set_parent, parent_chain: ["Calcutta"])
+
+        result = Applier.call(run: "r1")
+
+        assert rename.reload.applied?
+        assert parent.reload.applied?
+        assert_equal 0, result.data["created"]
+        assert_nil ::Books::Category.find_by(name: "Calcutta")
+        assert_equal calcutta, howrah.reload.parent
+        assert_equal ["Calcutta"], calcutta.reload.alternative_names
+        assert_equal "Kolkata", calcutta.name
+        assert india.reload.present?
+      end
+
+      test "a rename that only changes case or punctuation adds no alternative name" do
+        place = location("paris")
+        decide(place, :rename, new_name: "Paris")
+
+        Applier.call(run: "r1")
+
+        assert_equal [], place.reload.alternative_names
+      end
+
+      test "a re-run with nothing pending still reconciles inherited links" do
+        us = location("United States", links: 0)
+        place = location("Chicago")
+        place.update!(parent: us)
+        decide(place, :keep)
+        Applier.call(run: "r1")
+        inherited = CategoryItem.find_by!(category: us, item: @book, source: :inherited)
+        inherited.delete
+
+        Applier.call(run: "r1")
+
+        assert CategoryItem.exists?(category: us, item: @book, source: :inherited)
+      end
+
+      test "created parents roll back together when the parenting step fails" do
+        chicago = location("Chicago")
+        decide(chicago, :set_parent, parent_chain: ["Illinois", "United States"])
+        ::Books::Category.any_instance.stubs(:update!).raises(ActiveRecord::StatementInvalid, "boom")
+
+        assert_raises(ActiveRecord::StatementInvalid) { Applier.call(run: "r1") }
+
+        assert_nil ::Books::Category.find_by(name: "Illinois")
+        assert_nil ::Books::Category.find_by(name: "United States")
+      end
+
+      test "chain creation ignores set_parent decisions on non-locations and deleted categories" do
+        subject = location("Topic", type: :subject)
+        gone = location("Gone Place")
+        decide(subject, :set_parent, parent_chain: ["Atlantis"])
+        decide(gone, :set_parent, parent_chain: ["Lemuria"])
+        gone.update_columns(deleted: true)
+
+        result = Applier.call(run: "r1")
+
+        assert_equal 0, result.data["created"]
+        assert_nil ::Books::Category.find_by(name: "Atlantis")
+        assert_nil ::Books::Category.find_by(name: "Lemuria")
+      end
+
+      test "a retype supersedes a set_parent on the same category" do
+        place = location("Hope")
+        retype = decide(place, :retype, new_category_type: ::Category.category_types["subject"])
+        parent = decide(place, :set_parent, parent_chain: ["Anywhere"])
+        location("Anywhere")
+
+        Applier.call(run: "r1")
+
+        assert retype.reload.applied?
+        assert parent.reload.stale?
+      end
+
+      test "failure messages carry the exception class" do
+        gone = location("Gone Target")
+        source = location("Source")
+        failing = decide(source, :merge, target_category: gone)
+        gone.update_columns(deleted: true)
+
+        Applier.call(run: "r1")
+
+        assert_match(/\ARuntimeError: /, failing.reload.error)
+      end
+
+      test "mutual merges: the first applies, the second fails" do
+        a = location("Alpha")
+        b = location("Beta")
+        first = decide(a, :merge, target_category: b)
+        second = decide(b, :merge, target_category: a)
+
+        Applier.call(run: "r1")
+
+        assert first.reload.applied?
+        assert second.reload.failed?
+        assert_equal b, a.reload.merged_into
+        refute b.reload.deleted?
+      end
+
+      test "chained merges resolve through the canonical target" do
+        a = location("Alpha")
+        b = location("Beta")
+        c = location("Gamma")
+        decide(a, :merge, target_category: b)
+        second = decide(c, :merge, target_category: a)
+
+        Applier.call(run: "r1")
+
+        assert second.reload.applied?
+        assert_equal b, c.reload.merged_into
+        assert CategoryItem.exists?(category: b, item: @book)
+      end
+
+      test "a merge that raises after moving links rolls back and the rest still apply" do
+        target = location("Chicago", links: 0)
+        source = location("Chicgo")
+        other = location("paris")
+        failing = decide(source, :merge, target_category: target)
+        rename = decide(other, :rename, new_name: "Paris")
+        ::Categories::AncestorReconciler.stubs(:call).raises(RuntimeError, "boom").then.returns(nil)
+
+        Applier.call(run: "r1")
+
+        assert failing.reload.failed?
+        assert_match "boom", failing.error
+        refute source.reload.deleted?
+        assert_nil source.merged_into_id
+        assert CategoryItem.exists?(category: source, item: @book)
+        refute CategoryItem.exists?(category: target, item: @book)
+        assert rename.reload.applied?
       end
 
       test "two renames of one category: the later applied rename is the expected name on a re-run" do
