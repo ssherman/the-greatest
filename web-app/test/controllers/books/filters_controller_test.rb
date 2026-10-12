@@ -144,6 +144,17 @@ module Books
 
     teardown { @restore_minimum&.call }
 
+    test "a category search hides a location whose links are authors, not books" do
+      place = ::Books::Category.create!(name: "Authorland", category_type: :location)
+      5.times { |n| CategoryItem.create!(category: place, item: ::Books::Author.create!(name: "Writer #{n}")) }
+      assert place.reload.item_count >= 5
+
+      get "/filters/categories", params: {q: "authorland"}
+
+      assert_response :success
+      assert_select "input[name='category_slugs[]'][value=?]", place.slug, false
+    end
+
     test "search reaches subjects and locations, not only genres" do
       link_a_book(:books_politics_subject)
       get "/filters/categories", params: {q: "politics"}

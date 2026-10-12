@@ -44,7 +44,9 @@ module Books
     validate :location_has_no_places_under_it, if: -> { will_save_change_to_category_type? && category_type_was == "location" && !location? }
 
     # A retyped leaf location can no longer have a location parent.
-    before_validation :clear_parent_when_leaving_location, if: -> { persisted? && will_save_change_to_category_type? && category_type_was == "location" && !location? }
+    # before_save, not before_validation: a failed save must leave the form's parent
+    # alone, and a parent the admin picks in the same request must survive.
+    before_save :clear_parent_when_leaving_location, if: -> { persisted? && will_save_change_to_category_type? && category_type_was == "location" && !location? }
 
     scope :by_book_ids, ->(book_ids) { joins(:category_items).where(category_items: {item_type: "Books::Book", item_id: book_ids}) }
     scope :by_author_ids, ->(author_ids) { joins(:category_items).where(category_items: {item_type: "Books::Author", item_id: author_ids}) }
@@ -98,7 +100,7 @@ module Books
     end
 
     def clear_parent_when_leaving_location
-      self.parent_id = nil
+      self.parent_id = nil if parent.is_a?(::Books::Category) && parent.location?
     end
 
     def book_type_membership_changed?

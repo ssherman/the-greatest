@@ -56,10 +56,12 @@ class CategorySearchQuery
     # item_count counts every polymorphic link (authors included); a caller that
     # cares about one kind of item names it and gets a correlated count instead.
     count_sql = if @min_items_item_type
-      "(SELECT COUNT(*) FROM category_items ci WHERE ci.category_id = categories.id AND ci.item_type = :item_type)"
+      # item_count is a cheap necessary condition; the capped count then checks
+      # only that many book links exist, without counting a whole category.
+      "categories.item_count >= :min AND (SELECT COUNT(*) FROM (SELECT 1 FROM category_items ci WHERE ci.category_id = categories.id AND ci.item_type = :item_type LIMIT :min) capped) >= :min"
     else
-      "categories.item_count"
+      "categories.item_count >= :min"
     end
-    relation.where("categories.category_type NOT IN (:types) OR #{count_sql} >= :min", types: type_values, min: @min_items, item_type: @min_items_item_type)
+    relation.where("categories.category_type NOT IN (:types) OR (#{count_sql})", types: type_values, min: @min_items, item_type: @min_items_item_type)
   end
 end

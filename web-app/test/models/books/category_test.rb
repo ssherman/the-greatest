@@ -180,6 +180,29 @@ module Books
       assert_nil il.reload.parent_id
     end
 
+    test "a failed retype leaves parent_id unchanged in memory" do
+      us = location("United States")
+      il = location("Illinois", parent: us)
+
+      refute il.update(category_type: :subject, name: "")
+      assert_equal us.id, il.parent_id
+
+      parent_place = location("Parent Place")
+      child_place = location("Child Place", parent: parent_place)
+      location("Grandchild", parent: child_place)
+      refute child_place.update(category_type: :subject)
+      assert_equal parent_place.id, child_place.parent_id
+    end
+
+    test "retyping a location keeps a new non-location parent chosen in the same request" do
+      us = location("United States")
+      chicago = location("Chicago", parent: us)
+      history = ::Books::Category.create!(name: "American History", category_type: :subject)
+
+      assert chicago.update(category_type: :subject, parent_id: history.id)
+      assert_equal history.id, chicago.reload.parent_id
+    end
+
     test "a subject keeps its parent when its type is unchanged" do
       parent = ::Books::Category.create!(name: "History", category_type: :subject)
       child = ::Books::Category.create!(name: "Wars", category_type: :subject, parent: parent)
