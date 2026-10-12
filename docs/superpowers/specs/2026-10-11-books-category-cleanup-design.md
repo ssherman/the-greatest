@@ -314,6 +314,9 @@ validations and scopes; all logic is in services under `app/lib/services/categor
    - Twins: group by `lower(regexp_replace(name, '[^[:alnum:]]', '', 'g'))` within a type; every
      member `merge`s into the one with the most links.
    - Lowercase-initial names with no twin → `rename` to Title Case.
+   - Alternative names are NOT used to merge here: they come from legacy's merge history, which
+     holds broader/narrower and reversed pairs (Sociology → Social sciences, Ancient Egypt → Egypt).
+     Aliases are shown to the AI and used to resolve the names it returns.
    - `&` → `and` renames (merging if the `and` form exists).
    - Zero-link categories → `delete`.
    - Names the rules can't settle are left without a decision for the AI passes.
@@ -385,11 +388,10 @@ dropped or reordered row is detected and that row retried alone.
 ### 4.5 After each sync, until cutover
 
 The sync's `CategoryMigrator` keeps inserting new legacy categories. A step appended to
-`data_migration:sync` runs the rules pass for categories created since the last cleanup run, plus an
-exact match on name or `alternative_names` against active categories (case-insensitive, after the
-rules' normalization): a match becomes an auto-applied `merge`. Everything else waits as an
-undecided category for the next owner-run `propose`. Auto-apply covers only rule decisions and
-alias matches, never AI ones.
+`data_migration:sync` runs the rules pass for categories created since the last cleanup run (case and
+punctuation twins of an existing category become auto-applied `merge`s; alternative names are not
+used, see §4.2). Everything else waits as an
+undecided category for the next owner-run `propose`. Auto-apply covers only rule decisions, never AI ones.
 
 ## 5. Over-tagged books
 
