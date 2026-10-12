@@ -44,6 +44,33 @@ module Services
         assert_equal 1, result.data["merge"]
       end
 
+      test "a chain parent merged into the place itself is skipped for the next name" do
+        germany = location("Germany")
+        berlin = location("Berlin")
+        state = location("Berlin (state)")
+        merge = decide(state, :merge, target_category: berlin)
+        parent = decide(berlin, :set_parent, parent_chain: ["Berlin (state)", "Germany", "Europe"])
+
+        Applier.call(run: "r1")
+
+        assert_equal berlin, state.reload.merged_into
+        assert_equal germany.id, berlin.reload.parent_id
+        assert_equal %w[applied applied], [merge, parent].map { |d| d.reload.status }
+      end
+
+      test "a chain that names only the place itself fails" do
+        berlin = location("Berlin")
+        state = location("Berlin (state)")
+        decide(state, :merge, target_category: berlin)
+        parent = decide(berlin, :set_parent, parent_chain: ["Berlin (state)"])
+
+        Applier.call(run: "r1")
+
+        assert_nil berlin.reload.parent_id
+        assert parent.reload.failed?
+        assert_match "its own parent", parent.error
+      end
+
       test "creates missing chain parents with their own parents and records them as kept" do
         chicago = location("Chicago")
         decide(chicago, :set_parent, parent_chain: ["Illinois", "United States", "North America"])

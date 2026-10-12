@@ -141,9 +141,19 @@ module Services
         category = live_category!(decision)
         raise "#{category.name} is not a location" unless category.location?
 
-        parent_id = @lookup.find(decision.parent_chain.first)
-        raise "parent #{decision.parent_chain.first.inspect} not found" if parent_id.nil?
-        raise "a place can't be its own parent" if parent_id == category.id
+        # A chain name can resolve to the place itself: the AI names a city's
+        # administrative twin as its parent ("Berlin (state)") and, in its own
+        # decision, merges that twin into the city. Skip it for the next name.
+        parent_id = nil
+        decision.parent_chain.each do |name|
+          id = @lookup.find(name)
+          raise "parent #{name.inspect} not found" if id.nil?
+          next if id == category.id
+
+          parent_id = id
+          break
+        end
+        raise "a place can't be its own parent" if parent_id.nil?
 
         category.update!(parent_id: parent_id)
       end

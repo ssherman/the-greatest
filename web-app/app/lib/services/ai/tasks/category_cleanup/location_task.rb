@@ -40,6 +40,7 @@ module Services
               - A transcontinental country goes under the continent holding most of its population (Russia: Europe; Turkey: Asia).
               - Places spanning several countries go under their nearest shared region or continent (Alps: Europe).
               - Historical cities and sites go under the modern country they lie in (Troy: Turkey). Historical states and empires go under their continent.
+              - A city and an administrative unit covering the same place are one place (Berlin and "Berlin (state)", Tokyo and "Tokyo Metropolis", Washington, D.C. and "District of Columbia", London and "Greater London", Saint Petersburg and "Saint Petersburg (federal city)"). The unit merges into the city and never appears in the city's parent_chain.
               - Invented worlds and places in them go under Fictional Location (Middle-earth). An invented town inside the real world gets its real parent.
 
               The known list includes the names under review. An entry's own current name in that list is the entry itself, not a different place.
