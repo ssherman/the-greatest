@@ -165,6 +165,7 @@ module Admin
 
         assert_redirected_to admin_books_category_path(target)
         assert_equal target, source.reload.merged_into
+        assert CategoryItem.exists?(category: target, item: books_books(:war_and_peace))
       end
 
       test "merge without confirmation changes nothing" do
@@ -196,13 +197,49 @@ module Admin
         refute source.reload.deleted?
       end
 
+      test "merge is refused for an editor who cannot delete" do
+        editor = users(:regular_user)
+        editor.domain_roles.create!(domain: :books, permission_level: :editor)
+        sign_in_as(editor, stub_auth: true)
+        source = ::Books::Category.create!(name: "France (country)", category_type: :location)
+
+        post merge_admin_books_category_path(source), params: {target_category_id: categories(:books_france_location).id, confirm_merge: "1"}
+
+        refute source.reload.deleted?
+        assert_nil source.merged_into
+      end
+
       # Alternative names and delete
 
-      test "update saves comma-separated alternative names" do
+      test "an alternative name containing a comma survives an update unchanged" do
+        sign_in_as(@admin_user, stub_auth: true)
+        category = categories(:books_france_location)
+        category.update!(alternative_names: ["Fiction, science fiction, general", "Other"])
+
+        patch admin_books_category_path(category), params: {books_category: {alternative_names: category.alternative_names.join("\n")}}
+
+        assert_equal ["Fiction, science fiction, general", "Other"], category.reload.alternative_names
+      end
+
+      test "retyping a location away from location removes its inherited ancestor links" do
+        sign_in_as(@admin_user, stub_auth: true)
+        us = ::Books::Category.create!(name: "United States", category_type: :location)
+        chicago = ::Books::Category.create!(name: "Chicago", category_type: :location, parent: us)
+        book = books_books(:war_and_peace)
+        CategoryItem.create!(category: chicago, item: book)
+        ::Categories::AncestorReconciler.call(item_ids: [book.id])
+        assert CategoryItem.exists?(category: us, item: book)
+
+        patch admin_books_category_path(chicago), params: {books_category: {category_type: "subject"}}
+
+        refute CategoryItem.exists?(category: us, item: book)
+      end
+
+      test "update saves alternative names one per line" do
         sign_in_as(@admin_user, stub_auth: true)
         category = categories(:books_france_location)
 
-        patch admin_books_category_path(category), params: {books_category: {alternative_names: "La France, République française"}}
+        patch admin_books_category_path(category), params: {books_category: {alternative_names: "La France\r\nRépublique française\n\n"}}
 
         assert_equal ["La France", "République française"], category.reload.alternative_names
       end

@@ -21,9 +21,8 @@ class Admin::Books::CategoriesController < Admin::CategoriesBaseController
   # book under it; the whole-catalog reconcile takes seconds in production,
   # so it runs in the background.
   def update
-    parent_before = @category.parent_id
     if @category.update(category_params)
-      ::Categories::ReconcileAncestorsJob.perform_async if @category.location? && @category.parent_id != parent_before
+      ::Categories::ReconcileAncestorsJob.perform_async if reparented_or_retyped_location?
       redirect_to admin_books_category_path(@category), notice: "Category updated successfully."
     else
       render :edit, status: :unprocessable_entity
@@ -67,6 +66,11 @@ class Admin::Books::CategoriesController < Admin::CategoriesBaseController
   end
 
   private
+
+  def reparented_or_retyped_location?
+    (@category.saved_change_to_parent_id? || @category.saved_change_to_category_type?) &&
+      (@category.location? || @category.category_type_before_last_save == "location")
+  end
 
   def load_and_authorize_merge_category
     set_category

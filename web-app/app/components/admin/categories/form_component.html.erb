@@ -41,12 +41,13 @@
         <!-- Alternative names -->
         <div class="md:col-span-2">
           <%= f.label :alternative_names, class: "label" do %>
-            <span class="font-semibold">Alternative names</span>
+            <span class="font-semibold">Alternative names</span> <span class="text-base-content/60">(one per line)</span>
           <% end %>
-          <%= f.text_field :alternative_names,
-              value: category.alternative_names.join(", "),
-              class: "input w-full",
-              placeholder: "Old names and spellings, separated by commas" %>
+          <%= f.text_area :alternative_names,
+              value: category.alternative_names.join("\n"),
+              rows: 3,
+              class: "textarea w-full",
+              placeholder: "Old names and spellings, one per line" %>
         </div>
 
         <!-- Category Type -->

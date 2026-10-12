@@ -76,11 +76,11 @@ class Admin::CategoriesBaseController < Admin::BaseController
     authorize @category
   end
 
-  # alternative_names arrives as one comma-separated text field.
+  # alternative_names arrives as one newline-separated textarea (one name per line; names may contain commas).
   def category_params
     permitted = params.require(param_key).permit(:name, :description, :category_type, :parent_id, :alternative_names)
     if permitted.key?(:alternative_names)
-      permitted[:alternative_names] = permitted[:alternative_names].to_s.split(",").map(&:strip).reject(&:blank?)
+      permitted[:alternative_names] = permitted[:alternative_names].to_s.split(/\r?\n/).map(&:strip).reject(&:blank?)
     end
     permitted
   end
