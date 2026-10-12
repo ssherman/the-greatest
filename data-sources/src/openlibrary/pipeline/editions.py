@@ -28,6 +28,7 @@ from common.normalize import (
 )
 
 from .paths import ArtifactPaths
+from .sort_order import order_by
 from .works import read_dump_sql
 
 # The printing press. A 4-digit run below this in a publish_date is a catalogue
@@ -198,6 +199,7 @@ def build_editions(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dict
                   WHERE goodreads_raw IS NOT NULL AND len(goodreads_raw) > 0)
             WHERE {goodreads_sql("raw")} IS NOT NULL
           )
+          ORDER BY {order_by("identifiers")}
         ) TO '{paths.table("identifiers")}' (FORMAT parquet, COMPRESSION zstd);
         """
     )

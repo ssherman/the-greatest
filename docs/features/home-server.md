@@ -200,6 +200,35 @@ Things that look fine but are not:
   than the newest installed one, so the reboot guard would stop every converge for good. Unpin, or
   change the guard, before pinning.
 
+## Re-sorting a served version
+
+A version built before `pipeline/sort_order.py` has unsorted `identifiers`, `works` and
+`redirects`. It serves correct answers, just slowly (`docs/features/open-library-data-service.md`,
+"Sort order"). Re-sort it in place instead of rebuilding. On the `ol` VM, with the merged code
+deployed:
+
+```bash
+cd /opt/the-greatest/deployment/home-server/guest
+v=$(cat /srv/ol-data/current-version)
+# 1. Sorted copies into $v/_resorted/, checked. The API keeps serving.
+sudo ./compose.sh run --rm --no-deps -T build \
+  python -m openlibrary.pipeline.resort stage --root /data --dump-date "$v" --memory-limit 6GB --threads 4
+# 2. Swap. Each table is briefly absent, so the API is stopped for it.
+sudo ./compose.sh stop api
+sudo ./compose.sh run --rm --no-deps -T build \
+  python -m openlibrary.pipeline.resort install --root /data --dump-date "$v"
+sudo ./compose.sh up -d api
+```
+
+`install` checks every staged file (row count against the served file, row-group order) before
+moving any, and moves the served files to `$v/_presort/`. To roll back, stop the API and move them
+back. Delete `_presort/` once the API is confirmed good. A second `install` refuses while it exists.
+
+Stopping the API fails Rails' Open Library calls, and a failed source is never retried: the finder
+decides without it. Stop whatever is calling it first (for the Goodreads replay, delete the
+`Books::GoodreadsReplay::ResolveEditionJob` jobs and re-run `books:goodreads_replay:resolve`
+afterwards; it queues only what is unfinished).
+
 ## Done once by hand
 
 - BIOS: "Restore on AC Power Loss" set to Power On. Remove any installer USB.
