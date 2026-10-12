@@ -9,6 +9,14 @@ module Services
       class ApplyCategories
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         MIN_SUPPORT = 2
+        # A term also has to be on this share of the records that carry any mapped term
+        # of its kind. Two records are enough support for a book with a handful of
+        # editions, but a classic has dozens, and the rehearsal (2026-10-12) showed its
+        # study editions handing Animal Farm "Textbooks", its children's imprints handing
+        # Little Women "Children's books" and a comic adaptation handing Dune "Comics &
+        # Graphic Novels", each on two or three of thirty records. A quarter keeps a real
+        # secondary genre (six of twenty records) and drops an edition's.
+        MIN_SHARE = 0.25
 
         def self.call(book:, records:, map:)
           new(book:, records:, map:).call
@@ -23,10 +31,16 @@ module Services
         def call
           genre_support = Hash.new(0)
           subject_support = Hash.new(0)
+          genre_bearing = 0
+          subject_bearing = 0
           @records.each do |record|
             genre = record.genre.present? && @map.genre_for(record.genre)
-            genre_support[genre] += 1 if genre
+            if genre
+              genre_support[genre] += 1
+              genre_bearing += 1
+            end
             phrases = ([record.genre] + record.subjects).compact.filter_map { |term| @map.subject_for(term) }.uniq
+            subject_bearing += 1 if phrases.any?
             phrases.each { |phrase| subject_support[phrase] += 1 }
           end
 
@@ -36,7 +50,7 @@ module Services
           already = 0
           type_conflicts = 0
 
-          supported(genre_support).sort_by { |name| [-genre_support[name], name] }.each do |name|
+          supported(genre_support, genre_bearing).sort_by { |name| [-genre_support[name], name] }.each do |name|
             category = ::Books::Category.active.genre.by_name(name).first
             next unless category
 
@@ -50,7 +64,7 @@ module Services
             created = link(category)
             created ? genres_linked << category.name : already += 1
           end
-          supported(subject_support).each do |phrase|
+          supported(subject_support, subject_bearing).each do |phrase|
             category = ::Books::Category.active.subject.by_name(phrase).first ||
               ::Books::Category.active.subject.by_alternative_name(phrase).first
             if category.nil?
@@ -83,8 +97,9 @@ module Services
           @book.categories.active.genre.exists?(name: other)
         end
 
-        def supported(support)
-          threshold = (@records.size == 1) ? 1 : MIN_SUPPORT
+        # @param bearing [Integer] records carrying any mapped term of this kind
+        def supported(support, bearing)
+          threshold = (@records.size == 1) ? 1 : [MIN_SUPPORT, (bearing * MIN_SHARE).ceil].max
           support.select { |_name, n| n >= threshold }.keys
         end
 

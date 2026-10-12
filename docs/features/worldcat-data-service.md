@@ -360,11 +360,15 @@ breaker never looks like completion. The job logs the totals and any stop reason
 `ApplyCategories`:
 
 - Genre: a term in a record's `genre` field with a `genre` verdict counts as support for that genre.
-  A genre is linked when **at least two distinct matched records support it, or when the book has
-  exactly one matched record.** A single stray term from a box set or a translation must not relabel
-  a book.
+  A genre is linked when **at least two distinct matched records support it and they are at least a
+  quarter of the records that carry any mapped genre, or when the book has exactly one matched
+  record.** A single stray term from a box set or a translation must not relabel a book, and neither
+  may an edition: the dev rehearsal of 2,000 books (2026-10-12) under the two-record rule alone gave
+  Animal Farm "Textbooks" from its study editions, Little Women and Jane Eyre "Children's books" and
+  "Young adult" from their imprints, and Dune and 1984 "Comics & Graphic Novels" from adaptations,
+  each on two or three of dozens of records. The share is `ApplyCategories::MIN_SHARE`.
 - Subject: terms with a `subject` verdict, from either the `genre` or the `subjects` field, count
-  toward the same rule. The phrase resolves against **existing** subject categories, by name and
+  toward the same rule (the share is of records carrying any mapped subject phrase). The phrase resolves against **existing** subject categories, by name and
   then by alternative name. Unresolved phrases are counted and returned, never created.
 - Links go through `category_items` with `find_or_create_by!`: additive only, never unlinks,
   idempotent. A genre the map names that no longer exists is skipped. Nonfiction is never inferred
