@@ -423,8 +423,11 @@ prints the decisions without writing.
 ## 7. Rollout
 
 1. Merge the code (migrations are additive: `merged_into_id`, `category_items.source` with a
-   default, `category_cleanup_decisions`; friendly_id history needs no backfill because current slugs
-   are still read from the `slug` column).
+   default, `category_cleanup_decisions`, plus a backfill of one `friendly_id_slugs` row per existing
+   category). The backfill is required, not optional: friendly_id 5.7 writes only the *new* slug on a
+   rename, and with `:history` its conflict check joins `friendly_id_slugs`, so without a row per
+   existing category a rename would lose the old URL and a new category could reuse an existing slug —
+   on music and games too.
 2. In dev: run the rules pass and the head passes, then iterate on the prompts against the report.
    Run calibration and set the tail batch size.
 3. In production, from a fresh snapshot: propose all stages, report, owner reviews and rejects,
