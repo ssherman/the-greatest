@@ -936,6 +936,18 @@ module Books
         assert CategoryItem.exists?(category: us, item: @target, source: :inherited)
       end
 
+      test "an admin link on the source upgrades the target's inherited link to the same category" do
+        us = ::Books::Category.create!(name: "United States", category_type: :location)
+        chicago = ::Books::Category.create!(name: "Chicago", category_type: :location, parent: us)
+        CategoryItem.create!(category: chicago, item: @target, source: :admin)
+        CategoryItem.create!(category: us, item: @target, source: :inherited)
+        CategoryItem.create!(category: us, item: @source, source: :admin)
+
+        ::Books::Book::Merger.new(source: @source, target: @target).call
+
+        assert_equal ["admin"], CategoryItem.where(category: us, item: @target).map(&:source)
+      end
+
       private
 
       def create_reading_goal(completed_on:, **attributes)

@@ -63,15 +63,19 @@ module Services
         assert_equal "Secrets", failed.reload.name
       end
 
-      test "ignores categories with a proposed, applied or rejected decision" do
-        mark_decided(place("Georgia"))
-        pending = place("Pending Place")
-        CategoryCleanupDecision.create!(category: pending, run: "old", stage: "rules", action: :keep,
-          decided_by: :ai, status: :proposed, category_snapshot: CategoryCleanupDecision.snapshot_of(pending))
+      %i[proposed applied rejected].each do |status|
+        test "ignores a category the rules would change when it has a #{status} decision" do
+          mark_decided(place("Georgia"))
+          decided = ::Books::Category.create!(name: "secrets", category_type: :subject)
+          CategoryItem.create!(category: decided, item: ::Books::Book.order(:id).first)
+          CategoryCleanupDecision.create!(category: decided, run: "old", stage: "rules", action: :keep,
+            decided_by: :ai, status: status, category_snapshot: CategoryCleanupDecision.snapshot_of(decided))
 
-        SyncStep.call
+          SyncStep.call
 
-        assert_equal ["old"], CategoryCleanupDecision.where(category: pending).pluck(:run)
+          assert_equal ["old"], CategoryCleanupDecision.where(category: decided).pluck(:run)
+          assert_equal "secrets", decided.reload.name
+        end
       end
 
       test "applies a rename and reports the result shape" do

@@ -449,7 +449,7 @@ the tests assert a music category is untouched by apply.
 
 Cost, at 2026-09 research prices (re-check before running): head ≈ 5,300 calls one at a time on
 `standard` (flex, cached system prompt) ≈ tens of dollars; tail at batch size 1 ≈ 55,000 calls,
-$100–200, less if calibration allows batching; trim ≈ 1,650 calls, a few dollars. `propose` prints
+$100–200, less if calibration allows batching; trim ≈ 5,100 calls (measured in dev: ~5,100 books with more than 15 direct locations), tens of dollars at most. `propose` prints
 an estimate from the category counts and refuses to start a stage over $50 without `FORCE=1`.
 
 ## 8. Testing and docs

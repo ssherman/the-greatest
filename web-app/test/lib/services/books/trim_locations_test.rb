@@ -99,7 +99,7 @@ module Services
         assert_equal 2, @book.enrichments.for_kind(TrimLocations::KIND).count
       end
 
-      test "an answer with no offered ids fails and writes nothing" do
+      test "an answer with no offered ids fails and leaves the links with a skipped row" do
         TrimTask.any_instance.stubs(:call).returns(::Services::Ai::Result.new(success: true, data: {keep_ids: [], raw_count: 2, reason: "x"}))
 
         result = TrimLocations.call(book: @book)
@@ -110,7 +110,7 @@ module Services
         assert_skipped_row("model returned no offered ids")
       end
 
-      test "an empty keep on a book not marked nonfiction needs review and writes nothing" do
+      test "an empty keep on a book not marked nonfiction needs review and leaves the links with a skipped row" do
         stub_keep([])
 
         result = TrimLocations.call(book: @book)
