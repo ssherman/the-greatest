@@ -45,6 +45,7 @@ module Services
           result = run_backfill(FakeClient.new(@responses))
           assert result.success?
           assert_equal [2, 2, 2, false], result.data.values_at(:processed, :matched, :genres_linked, :stopped)
+          assert_equal 0, result.data[:type_conflicts]
           assert_includes @war.reload.categories.pluck(:name), "Fiction"
           assert_includes @crime.reload.categories.pluck(:name), "Fiction"
         end
@@ -66,13 +67,37 @@ module Services
 
         test "test_an_open_circuit_stops_the_run_without_skipping_books" do
           client = FakeClient.new(@responses, fail_times: 99, error: ::Books::WorldCat::Exceptions::CircuitOpenError.new("open"))
-          result = run_backfill(client)
+          result = run_backfill(client, batch_size: 1)
           assert_not result.success?
           assert_equal [15, 30, 60, 120, 240, 300], @sleeps
           assert result.data[:stopped]
           assert_match(/open/, result.data[:error])
           assert_equal 0, result.data[:processed]
           assert_not_includes @war.reload.categories.pluck(:name), "Fiction"
+          assert_not_includes @crime.reload.categories.pluck(:name), "Fiction"
+        end
+
+        test "a later batch that trips leaves earlier batches' links in place" do
+          client = FakeClient.new(@responses, error: ::Books::WorldCat::Exceptions::CircuitOpenError.new("open"))
+          client.define_singleton_method(:lookup) do |isbns|
+            raise @error if @calls >= 1
+
+            super(isbns)
+          end
+          result = run_backfill(client, batch_size: 1)
+          assert_not result.success?
+          assert result.data[:stopped]
+          assert_equal 1, result.data[:processed]
+          assert_includes @war.reload.categories.pluck(:name), "Fiction"
+          assert_not_includes @crime.reload.categories.pluck(:name), "Fiction"
+        end
+
+        test "an empty genre map refuses to run and takes no lock" do
+          client = FakeClient.new(@responses)
+          result = Backfill.call(limit: nil, run_id: "r", client: client, map: ::Books::WorldCat::GenreMap.new({}), sleeper: ->(_) {})
+          assert_not result.success?
+          assert_match(/no terms/, result.errors.first)
+          assert_equal 0, client.calls
         end
 
         test "unresolved subjects are tallied across the run" do

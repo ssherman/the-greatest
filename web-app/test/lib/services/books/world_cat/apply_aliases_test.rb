@@ -33,6 +33,13 @@ module Services
           assert_includes categories(:books_fiction_genre).reload.alternative_names, "Romans"
           assert_equal [], categories(:books_deleted_genre).reload.alternative_names
         end
+
+        test "refuses an empty map and touches nothing" do
+          result = ApplyAliases.call(map: ::Books::WorldCat::GenreMap.new({}))
+          assert_not result.success?
+          assert_match(/no terms/, result.errors.first)
+          assert_equal [], categories(:books_fiction_genre).reload.alternative_names
+        end
       end
     end
   end

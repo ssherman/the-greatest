@@ -18,6 +18,8 @@ module Services
         end
 
         def call
+          return Result.new(success?: false, data: nil, errors: [Backfill::EMPTY_MAP]) if @map.size.zero?
+
           updated = 0
           added = 0
           missing = []

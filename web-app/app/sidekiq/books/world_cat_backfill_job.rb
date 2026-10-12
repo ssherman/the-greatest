@@ -10,12 +10,14 @@ class Books::WorldCatBackfillJob
   sidekiq_options queue: :low, retry: false
 
   def perform(limit, run_id)
-    data = ::Services::Books::WorldCat::Backfill.call(limit: limit, run_id: run_id).data
-    return Rails.logger.warn("WorldCat backfill #{run_id}: did not start (another run holds the lock)") if data.nil?
+    result = ::Services::Books::WorldCat::Backfill.call(limit: limit, run_id: run_id)
+    data = result.data
+    return Rails.logger.warn("WorldCat backfill #{run_id}: did not start (#{result.errors.join("; ")})") if data.nil?
 
     Rails.logger.info(
       "WorldCat backfill #{run_id}: #{data[:processed]} books, #{data[:matched]} matched, " \
       "#{data[:genres_linked]} genre links, #{data[:subjects_linked]} subject links, " \
+      "#{data[:type_conflicts]} type conflicts, " \
       "#{data[:subjects_unresolved].size} unresolved subject phrases" \
       "#{" -- stopped: #{data[:error]}" if data[:stopped]}"
     )

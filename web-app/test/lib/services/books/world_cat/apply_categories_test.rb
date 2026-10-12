@@ -67,13 +67,38 @@ module Services
         end
 
         test "is additive and idempotent" do
-          @book.category_items.create!(category: categories(:books_nonfiction_genre))
+          assert_includes names(:genre), "Novels" # the fixture's existing link must survive
           records = [record(1, genre: "Fiction"), record(2, genre: "Fiction")]
           ApplyCategories.call(book: @book, records: records, map: @map)
           result = ApplyCategories.call(book: @book, records: records, map: @map)
-          assert_equal ["Fiction", "Nonfiction"], names(:genre).sort & ["Fiction", "Nonfiction"]
+          assert_equal ["Fiction", "Novels"], names(:genre).sort & ["Fiction", "Novels"]
           assert_equal 1, result.data[:already_linked]
           assert_equal 1, @book.category_items.where(category: categories(:books_fiction_genre)).count
+        end
+
+        test "a book already holding Nonfiction does not also get Fiction, and the conflict is counted" do
+          @book.category_items.create!(category: categories(:books_nonfiction_genre))
+          records = [record(1, genre: "Fiction"), record(2, genre: "Romans")]
+          result = ApplyCategories.call(book: @book, records: records, map: @map)
+          assert_equal [], result.data[:genres_linked]
+          assert_equal 1, result.data[:type_conflicts]
+          assert_not_includes names(:genre), "Fiction"
+          assert_includes names(:genre), "Nonfiction"
+        end
+
+        test "a book with no type gets Fiction and no conflict" do
+          records = [record(1, genre: "Fiction"), record(2, genre: "Romans")]
+          result = ApplyCategories.call(book: @book, records: records, map: @map)
+          assert_equal ["Fiction"], result.data[:genres_linked]
+          assert_equal 0, result.data[:type_conflicts]
+        end
+
+        test "a record whose number a later pass merged away counts once" do
+          old = ::Books::WorldCat::Record.from_hash("oclc" => 1, "genre" => "Romans")
+          newer = ::Books::WorldCat::Record.from_hash("oclc" => 2, "genre" => "Romans", "merged_oclc" => [1])
+          result = ApplyCategories.call(book: @book, records: [old, newer], map: @map)
+          assert_equal 1, result.data[:records]
+          assert_equal ["Fiction"], result.data[:genres_linked]
         end
 
         test "never infers Nonfiction and never links a deleted category" do
