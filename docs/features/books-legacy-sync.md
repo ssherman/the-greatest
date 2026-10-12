@@ -24,6 +24,14 @@ After `sync_init`, `data_migration:all`, every catalog task and the user-data ta
    `sync_init` also removes redirect rows for books and authors that exist again (the weekly
    `:all` ignores redirects, so it restores what was deleted or merged before the switch).
 
+### Categories during the sync
+
+- A link to a category that was merged in this app lands on the merge target. A link to a category deleted without a merge is still dropped.
+- The `category_cleanup` step runs only after a category cleanup has been applied. It runs the rules pass on new legacy categories and applies those rule decisions; AI decisions wait for the owner. Categories whose only decisions failed or went stale are retried each week.
+- The `location_ancestors` step reconciles inherited location links for the synced books.
+
+Details: `docs/features/books-categories.md`.
+
 ## How it decides what is new
 
 - `legacy_sync_watermarks` holds the last legacy id processed for `books`, `authors`, `book_identifiers`.

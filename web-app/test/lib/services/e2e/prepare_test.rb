@@ -251,6 +251,20 @@ module Services
         assert Review.where(reviewable: scratch, user: @bystander).exists?, "a human's review is reported, never deleted"
         assert_not File.exist?(@manifest_path)
       end
+
+      test "links the scratch book to a three-level scratch location trail and makes the merge target" do
+        assert prepare.success?
+
+        book = books_books(:of_mice_and_men)
+        town = ::Books::Category.find_by!(name: Prepare::LOCATION_TRAIL.first, deleted: false)
+        assert CategoryItem.exists?(category: town, item: book, source: :admin)
+        assert_equal Prepare::LOCATION_TRAIL.drop(1), town.ancestors.map(&:name)
+        assert ::Books::Category.exists?(name: Prepare::MERGE_TARGET_NAME, deleted: false)
+
+        assert_no_difference -> { ::Books::Category.count } do
+          assert prepare.success?
+        end
+      end
     end
   end
 end

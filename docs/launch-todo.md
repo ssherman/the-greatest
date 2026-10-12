@@ -141,7 +141,12 @@ the sync never undoes them.
      `repair_ratings` repeats every pass for the same reason: each sync puts
      legacy's truncated integer rating (3 for a 3.75) back.
    - Details: `docs/features/goodreads-import.md`, "Legacy seed" and "Legacy replay".
-5. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
+5. **Books categories cleanup.** Run the runbook in `docs/features/books-categories.md` in production
+   from a fresh backup: propose every stage, report, owner review and reject, apply, then trim
+   (dry run first). It can run before or after cutover, because the post-sync step keeps new legacy
+   categories in line once a cleanup has been applied. Re-run `propose` occasionally for what that
+   step leaves undecided.
+6. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
    resolving at once left `/resolve` timing out at 60 s for 25 minutes, until the API container was
    restarted. Queries the Rails client had abandoned kept running and piled up in one 6 GB DuckDB pool.
    #358 runs one `/resolve` at a time, answers the rest with an instant 503 busy, and stops a query at
