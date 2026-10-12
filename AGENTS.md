@@ -52,7 +52,7 @@ docs/                     # project root, NOT web-app/
 Python lives in `data-sources/` at the project root, a **sibling of `web-app/`, never inside
 it**. Run Python commands from `data-sources/` and Rails commands from `web-app/`. Dependencies
 are `uv` with a committed lockfile — development and CI installs use `uv sync --locked --extra
-fetcher --extra recommender` (the Open Library image deliberately does not: its own Dockerfile installs with `--no-dev`
+fetcher --extra recommender --extra worldcat` (the Open Library image deliberately does not: its own Dockerfile installs with `--no-dev`
 and no `--extra`, so it never carries Camoufox). Every install form fails on drift instead of
 silently resolving something new. The built artifact lives outside the
 repo at `/home/shane/ol-data/versions/<dump-date>/` and is mounted into the service read-only. Four
@@ -60,11 +60,13 @@ boundaries, enforced structurally: it never writes to Rails; it holds nothing th
 rebuildable from a dump; it is never on a public request path; no covers, no public search, no
 serving. See `docs/features/open-library-data-service.md`.
 
-`data-sources/` now holds two services with separate images: the Open Library API
-and the **page fetcher** (`docs/features/page-fetcher-service.md`), which returns
-rendered HTML through one Camoufox browser per fetch. Its dependencies are the
-`fetcher` extra: `uv sync --locked --extra fetcher --extra recommender`, which CI also runs
-(`recommender` is the collaborative-filtering trainer: its own image, never in the OL or fetcher images).
+`data-sources/` now holds three services with separate images: the Open Library API, the
+**page fetcher** (`docs/features/page-fetcher-service.md`), which returns rendered HTML through one
+Camoufox browser per fetch, and the **WorldCat lookup API** (`docs/features/worldcat-data-service.md`).
+The page fetcher's dependencies are the `fetcher` extra. Development and CI install every extra with
+`uv sync --locked --extra fetcher --extra recommender --extra worldcat`. `recommender` is the
+collaborative-filtering trainer: its own image, never in the OL or fetcher images. `worldcat` is the
+build-only zstd reader for the artifact build; no image installs it.
 
 ## The development database is not disposable
 

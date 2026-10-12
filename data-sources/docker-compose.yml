@@ -105,5 +105,28 @@ services:
     volumes:
       - recommender-work:/work
 
+  # WorldCat exact-lookup API (docs/features/worldcat-data-service.md). Behind a
+  # profile so `docker compose up` on the Open Library VM never starts it; the
+  # worldcat VM's deploy names it explicitly. Every variable is forwarded with a
+  # default because Compose does not pass through an unlisted host variable.
+  worldcat:
+    build:
+      context: .
+      dockerfile: worldcat.Dockerfile
+    image: the-greatest/worldcat:latest
+    profiles: ["worldcat"]
+    restart: unless-stopped
+    ports:
+      - "${WC_API_BIND:-127.0.0.1}:8082:8082"
+    volumes:
+      - ${WC_DATA_HOST:-/home/shane/wc-data}:/data:ro
+    environment:
+      WC_DATA_ROOT: /data
+      WC_DATA_VERSION: "${WC_DATA_VERSION:-2025-09-04}"
+      WC_API_MEMORY_LIMIT: "${WC_API_MEMORY_LIMIT:-2GB}"
+      WC_API_TEMP_DIR: "${WC_API_TEMP_DIR:-/tmp}"
+      WC_API_THREADS: "${WC_API_THREADS:-2}"
+      WC_API_DEADLINE_S: "${WC_API_DEADLINE_S:-5}"
+
 volumes:
   recommender-work:

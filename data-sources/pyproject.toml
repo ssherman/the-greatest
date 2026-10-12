@@ -23,6 +23,9 @@ fetcher = ["camoufox>=0.5.6,<0.6"]
 # The collaborative-filtering trainer (spec 2026-10-09-book-recommendations-collaborative).
 # Dense linear algebra and R2 access; never installed into the Open Library or fetcher images.
 recommender = ["numpy>=2.1,<3", "scipy>=1.14,<2", "boto3>=1.35,<2"]
+# The WorldCat build reads the Anna's Archive seekable-zstd dump. Build only:
+# the API image never decompresses anything, so this stays out of the core set.
+worldcat = ["zstandard>=0.23,<0.24"]
 
 [dependency-groups]
 dev = [
@@ -36,7 +39,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/common", "src/openlibrary", "src/fetcher", "src/recommender"]
+packages = ["src/common", "src/openlibrary", "src/fetcher", "src/recommender", "src/worldcat"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

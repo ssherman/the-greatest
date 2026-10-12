@@ -10,6 +10,7 @@ load_env
 
 case "$ROLE" in
   ol) url=http://127.0.0.1:8080/version ;;
+  worldcat) url=http://127.0.0.1:8082/version ;;
   fetcher) url=http://127.0.0.1:8081/health ;;
   *) echo "heartbeat: unknown ROLE '$ROLE'" >&2; exit 1 ;;
 esac

@@ -23,3 +23,21 @@ def test_fetcher_is_a_sibling_source_not_part_of_openlibrary():
 def test_recommender_is_a_sibling_source():
     assert recommender.__version__
     assert "openlibrary" not in recommender.__file__
+
+
+def test_worldcat_is_a_sibling_source_not_part_of_openlibrary():
+    import worldcat
+
+    assert worldcat.__version__ == "0.1.0"
+    assert "openlibrary" not in worldcat.__file__
+
+
+def test_zstandard_is_an_extra_not_a_core_dependency():
+    import tomllib
+    from pathlib import Path
+
+    project = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())[
+        "project"
+    ]
+    assert not any(dep.startswith("zstandard") for dep in project["dependencies"])
+    assert any(dep.startswith("zstandard") for dep in project["optional-dependencies"]["worldcat"])

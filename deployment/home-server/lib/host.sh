@@ -289,11 +289,11 @@ converge_host_firewall() {
   house_ip="$(house_public_ipv4)" ||
     die "could not read the house's public IPv4 on the host (curl -4 https://1.1.1.1/cdn-cgi/trace); refusing to write 120.fw without it"
   render_fetcher_fw "$FW_RENDERED/120.fw" "$house_ip" || die "could not render 120.fw"
-  cp "$HS_DIR/host/firewall/host.fw" "$HS_DIR/host/firewall/110.fw" "$FW_RENDERED/"
+  cp "$HS_DIR/host/firewall/host.fw" "$HS_DIR/host/firewall/110.fw" "$HS_DIR/host/firewall/130.fw" "$FW_RENDERED/"
 
   # cluster.fw is last: it is the file that turns the firewall on.
   local pairs=("host.fw:/etc/pve/local/host.fw" "110.fw:/etc/pve/firewall/110.fw"
-    "120.fw:/etc/pve/firewall/120.fw" "cluster.fw:/etc/pve/firewall/cluster.fw")
+    "120.fw:/etc/pve/firewall/120.fw" "130.fw:/etc/pve/firewall/130.fw" "cluster.fw:/etc/pve/firewall/cluster.fw")
   local pair stale=()
   for pair in "${pairs[@]}"; do
     host_file_matches "$FW_RENDERED/${pair%%:*}" "${pair#*:}" || stale+=("$pair")

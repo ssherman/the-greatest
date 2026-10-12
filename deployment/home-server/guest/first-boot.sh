@@ -9,32 +9,38 @@ here="$(cd "$(dirname "$0")" && pwd)"
 load_env
 mkdir -p "$STATE_DIR"
 
-case "$ROLE" in
-  ol)
-    disk=/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
-    # Format only a blank disk: a rebuilt VM keeps the data it had (spec §5).
-    # An absent disk is skipped (blkid -p on a missing device also exits 2, and
-    # mkfs would fail and abort first-boot before the units install). blkid -p
-    # exits 2 only for "nothing found"; any other failure (I/O error) leaves
-    # the disk untouched.
-    if [ ! -b "$disk" ]; then
-      log "data disk $disk is absent; not formatting or mounting it"
-    else
-      rc=0
-      blkid -p "$disk" >/dev/null || rc=$?
-      if [ "$rc" = 2 ]; then
-        mkfs.ext4 -q -L ol-data "$disk"
-      elif [ "$rc" != 0 ]; then
-        log "blkid exited $rc on $disk; not formatting it"
-      fi
+# mount_data_disk <label> <mountpoint>: format the role's data disk if it is
+# blank, then mount it by label. The disk is always the VM's second SCSI drive.
+mount_data_disk() {
+  local label="$1" mountpoint="$2"
+  local disk=/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1 rc
+  # Format only a blank disk: a rebuilt VM keeps the data it had (spec §5).
+  # An absent disk is skipped (blkid -p on a missing device also exits 2, and
+  # mkfs would fail and abort first-boot before the units install). blkid -p
+  # exits 2 only for "nothing found"; any other failure (I/O error) leaves
+  # the disk untouched.
+  if [ ! -b "$disk" ]; then
+    log "data disk $disk is absent; not formatting or mounting it"
+  else
+    rc=0
+    blkid -p "$disk" >/dev/null || rc=$?
+    if [ "$rc" = 2 ]; then
+      mkfs.ext4 -q -L "$label" "$disk"
+    elif [ "$rc" != 0 ]; then
+      log "blkid exited $rc on $disk; not formatting it"
     fi
-    mkdir -p "$OL_DATA"
-    # nofail: a missing disk must not hang boot; ol-refresh.sh refuses to build instead.
-    grep -q '^LABEL=ol-data ' /etc/fstab ||
-      echo "LABEL=ol-data $OL_DATA ext4 defaults,discard,nofail 0 2" >>/etc/fstab
-    # A failed mount must not stop the units installing: ol-refresh.sh refuses to build unmounted.
-    mountpoint -q "$OL_DATA" || mount "$OL_DATA" || log "could not mount $OL_DATA"
-    ;;
+  fi
+  mkdir -p "$mountpoint"
+  # nofail: a missing disk must not hang boot; the role's scripts refuse to build or serve instead.
+  grep -q "^LABEL=$label " /etc/fstab ||
+    echo "LABEL=$label $mountpoint ext4 defaults,discard,nofail 0 2" >>/etc/fstab
+  # A failed mount must not stop the units installing: ol-refresh.sh refuses to build unmounted.
+  mountpoint -q "$mountpoint" || mount "$mountpoint" || log "could not mount $mountpoint"
+}
+
+case "$ROLE" in
+  ol) mount_data_disk ol-data "$OL_DATA" ;;
+  worldcat) mount_data_disk wc-data "$WC_DATA" ;;
   fetcher)
     # No IPv6 at all: every device in the house has a public IPv6 address (spec §4).
     # The sysctl alone held only until the first reboot: networkd brings eth0 up

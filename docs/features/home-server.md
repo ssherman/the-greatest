@@ -2,11 +2,13 @@
 
 ## What it is
 
-A Proxmox box in Shane's house that runs the two Python services in `data-sources/`: the Open
-Library API (`docs/features/open-library-data-service.md`) and the page fetcher
-(`docs/features/page-fetcher-service.md`). Production Rails reaches them at
-`ol-api.thegreatestbooks.org` and `page-fetcher.thegreatestbooks.org`, through Cloudflare Tunnels,
-behind Cloudflare Access with a service token. The design is in
+A Proxmox box in Shane's house that runs the three Python services in `data-sources/`: the Open
+Library API (`docs/features/open-library-data-service.md`), the page fetcher
+(`docs/features/page-fetcher-service.md`) and the WorldCat exact-lookup API
+(`docs/features/worldcat-data-service.md`). Production Rails reaches them at
+`ol-api.thegreatestbooks.org`, `page-fetcher.thegreatestbooks.org` and
+`worldcat-api.thegreatestbooks.org`, through Cloudflare Tunnels, behind Cloudflare Access with a
+service token. The design is in
 `docs/superpowers/specs/2026-10-03-home-server-design.md`; its §12 overrides the earlier sections
 where they disagree.
 
@@ -26,6 +28,7 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
                   │                                  │
            tunnel home-ol                    tunnel home-fetcher
                   │                                  │
+           (and tunnel home-worldcat, to VM 130)
 ┌──────────────── Proxmox host (pve-mini) ──────────────────────────────┐
 │  vmbr0  LAN, static IPv4              vmbr1  private 10.20.0.0/24, NAT │
 │   │                                    │     no IPv6, private egress   │
@@ -34,6 +37,9 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 │   cloudflared ─► openlibrary:8080     cloudflared ─► page-fetcher:8081 │
 │   build, train (timers)                                               │
 │   /srv/ol-data (own disk)           VM 101 "musicbrainz" (by hand)    │
+│  VM 130 "worldcat"                                                    │
+│   cloudflared ─► worldcat:8082                                        │
+│   /srv/wc-data (own disk)                                             │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -41,11 +47,12 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 |---|---|---|---|---|---|
 | 110 `ol` | Open Library API, dump builds, recommendations trainer | 12 | 24 GB, no ballooning | 32 GB OS disk on `local-zfs`; 300 GB data disk on `rpool2`, ext4, mounted at `/srv/ol-data` | `vmbr0`, LAN |
 | 120 `fetcher` | Camoufox page fetcher | 4 | 4 GB, no ballooning | 40 GB OS disk on `local-zfs` | `vmbr1`, static `10.20.0.10`, gateway `10.20.0.1` |
+| 130 `worldcat` | WorldCat exact-lookup API | 2 | 4 GB, no ballooning | 32 GB OS disk on `local-zfs`; 40 GB data disk on `rpool2`, ext4, mounted at `/srv/wc-data` | `vmbr0`, LAN |
 | 101 `musicbrainz` | MusicBrainz, built by hand | 8 | 16 GB | 1 TB on `rpool2` | LAN |
 
 All guests with `onboot` come back by themselves after a host reboot. VM 101 is not managed by
 `provision`, which never touches it. After a converge, and in `--verify`, provision asserts that every
-guest running beforehand other than 110 and 120 (VM 101 included) is still running. Its
+guest running beforehand other than 110, 120 and 130 (VM 101 included) is still running. Its
 Cloudflare tunnel runs inside the VM. VM 101's NIC has `firewall=1`, so once the host firewall is
 on its traffic passes through pve-firewall's bridge conntrack chains and the `vmbr1` CT-zone rule,
 even though no rule names it. Provision asserts only that it keeps running, not that its traffic is
@@ -60,7 +67,11 @@ ipset; the address is never committed. Provision reads it on the host from Cloud
 `/cdn-cgi/trace` on every run, and dies rather than write an empty set if it can't. If Google Fiber
 changes the address, re-run `provision`; until then `--verify`'s egress probe fails, which is how
 the drift shows up. The Open Library data lives on its own disk, so
-`provision --rebuild ol` replaces the OS disk and keeps the data.
+`provision --rebuild ol` replaces the OS disk and keeps the data. The WorldCat data disk is kept
+the same way.
+
+The `worldcat` VM sits on the LAN bridge like `ol`. Its firewall (`130.fw`) accepts only SSH from
+the LAN; the API publishes on loopback and leaves through `cloudflared`.
 
 ## Running provision
 
@@ -75,9 +86,9 @@ deployment/home-server/provision [mode]
 | Mode | What it does |
 |---|---|
 | (none) | Converges the host (DNS, packages, network, firewall, the ZFS ARC cap), creates any missing VM, installs each VM's env and units. A second run reports no changes. It does not create ZFS pools or Proxmox storage entries. |
-| `--rebuild ol\|fetcher` | Replaces that VM's OS disk with a fresh cloud image. The data disk is kept. |
-| `--enable-tunnels` | Starts `cloudflared` on both VMs. It dies unless both tunnel tokens are set. Run it only after Cloudflare Access is in place. The flag is stored on the host, so a later `--rebuild` keeps it. |
-| `--disable-tunnels` | Removes the flag, pushes `TUNNELS_ENABLED=0` to both VMs and forces a deploy, which stops and removes `cloudflared`. |
+| `--rebuild ol\|fetcher\|worldcat` | Replaces that VM's OS disk with a fresh cloud image. The data disk is kept (`ol`'s and `worldcat`'s). |
+| `--enable-tunnels` | Starts `cloudflared` on all three VMs. It dies unless all three tunnel tokens are set. Run it only after Cloudflare Access is in place. The flag is stored on the host, so a later `--rebuild` keeps it. |
+| `--disable-tunnels` | Removes the flag, pushes `TUNNELS_ENABLED=0` to all three VMs and forces a deploy, which stops and removes `cloudflared`. |
 | `--verify` | Not read-only: it re-runs convergence (DNS, packages without the upgrade, network, firewall, VM creation), so it can change things, and then fails its idempotence check if anything changed. Check classes: host, VMs, egress (with positive controls, from the VM and the container, including the house's public IPv4 on 80 and 443), idempotence, and pre-existing guests. |
 | `--verify --external-from user@host` | Adds the exposure check: ports 22, 8006, 111 and 3128 on the host's public address, probed from that machine. |
 | `--verify --recovery` | Adds a recovery check: SIGKILLs each service's main process and expects Docker to restart it, then **reboots the host** (`systemctl reboot`), waits up to about 10 minutes, and re-runs the host, VM, egress and pre-existing guest checks. Ask before running it. |
@@ -89,12 +100,14 @@ The keys in `secrets/home-server.env` (SOPS-encrypted). Each VM receives only it
 |---|---|---|
 | `PVE_HOST` | every run | What provision SSHes to (the `pve-mini` alias) |
 | `PVE_LAN_IPV4`, `PVE_LAN_GATEWAY4` | every run | The host's static LAN address and the router |
-| `OL_TUNNEL_TOKEN`, `FETCHER_TUNNEL_TOKEN` | `--enable-tunnels` | The two Cloudflare tunnel tokens |
+| `OL_TUNNEL_TOKEN`, `FETCHER_TUNNEL_TOKEN` | `--enable-tunnels` | The Cloudflare tunnel tokens for `ol` and `fetcher` |
+| `WORLDCAT_TUNNEL_TOKEN` | `--enable-tunnels`; the worldcat VM | The Cloudflare tunnel token for `worldcat`. Optional until tunnels are on, then required: `--enable-tunnels` dies without all three |
 | `HC_OL_HEARTBEAT`, `HC_OL_DEPLOY`, `HC_OL_REFRESH`, `HC_FETCHER_HEARTBEAT`, `HC_FETCHER_DEPLOY` | optional | healthchecks.io ping URLs; blank means no ping |
+| `HC_WORLDCAT_HEARTBEAT`, `HC_WORLDCAT_DEPLOY` | optional; the worldcat VM | healthchecks.io ping URLs; blank means no ping |
 | `HC_RECOMMENDER` | optional | healthchecks.io ping URL for `recommender-train`, `ol` only |
 | `RECOMMENDATIONS_R2_ENDPOINT`, `RECOMMENDATIONS_R2_ACCESS_KEY`, `RECOMMENDATIONS_R2_SECRET_KEY`, `RECOMMENDATIONS_R2_BUCKET` | the trainer | The recommendations bucket (`docs/features/recommendations.md`, "Collaborative signal"): its S3 endpoint and a token scoped to it. All four or none; `ol` only. With none set, `recommender-train` logs a skip and does not ping. |
 | `VM_STORAGE` | optional | OS disks and cloud-init drive. Default `local-lvm`; `local-zfs` here |
-| `DATA_STORAGE` | optional | The `ol` data disk. Default `VM_STORAGE`; `rpool2` here |
+| `DATA_STORAGE` | optional | The `ol` and `worldcat` data disks. Default `VM_STORAGE`; `rpool2` here |
 | `IMAGE_STORAGE` | optional | Imported cloud images. Default `local` |
 | `PVE_LAN_DNS` | optional | The host's resolver. Default `PVE_LAN_GATEWAY4` |
 | `ARC_MAX_BYTES` | optional | ZFS ARC cap. Default 8 GiB |
@@ -123,14 +136,14 @@ The firewall revert does not restore the old rules: it sets `enable: 0` in `clus
 
 | Event | What recovers it |
 |---|---|
-| Power cut | BIOS "Restore on AC Power Loss" boots the host. VMs with `onboot` start in order (`ol`, then `fetcher`). Docker starts at boot and every container is `restart: unless-stopped`. A build cut short runs again at the next 03:00 or 10 minutes after boot (`ol-refresh.timer`). |
+| Power cut | BIOS "Restore on AC Power Loss" boots the host. VMs with `onboot` start in order (`ol`, `fetcher`, then `worldcat`). Docker starts at boot and every container is `restart: unless-stopped`. A build cut short runs again at the next 03:00 or 10 minutes after boot (`ol-refresh.timer`). |
 | A container exits | `restart: unless-stopped` restarts it. |
 | Bad deploy | `the-greatest-deploy.timer` (boot plus 2 minutes, then every 15 minutes) runs `deploy.sh` every 15 minutes. A failed build leaves the running container alone and the deployed SHA where it was, so the next run tries again; each failure pings `fail`. On `ol` the deploy builds the trainer image first and the API's second, each in its own command: the API and the dump build share one image tag, so a trainer build that fails stops the deploy before the API image changes, and a half-built pair can never reach the next dump promotion's `up -d api`. A trainer image that fails to build therefore holds back an API change until it is fixed; the `fail` ping names the image. |
 | Bad dump | `ol-refresh.sh` promotes a version only when every gate passes. A failed build keeps the previous version serving and pings `fail`. If the new API does not report the new date in time, it writes the previous date back. |
 | Stale model | `recommender-train.timer` (04:00, and 20 min after boot) runs `recommender-train.sh`. The trainer refuses an export older than three days or a model that fails its gate and exits non-zero, which pings `fail` with its last line; `model/latest` in the bucket and the model Rails serves stay as they were. A day under the build lock defers and logs `deferred: lock held` to the check without counting as a run, so about three days without a completed run (period 1 day, grace 2 days) alerts. |
-| Box offline | Nothing recovers it. `ol-heartbeat` and `fetcher-heartbeat` stop pinging and healthchecks.io emails Shane. |
+| Box offline | Nothing recovers it. `ol-heartbeat`, `fetcher-heartbeat` and `worldcat-heartbeat` stop pinging and healthchecks.io emails Shane. |
 
-Security updates install on both VMs through `unattended-upgrades`, and `reboot-if-required.timer`
+Security updates install on all three VMs through `unattended-upgrades`, and `reboot-if-required.timer`
 reboots a VM at 05:30 only if a reboot is pending and no build lock is held. On the host,
 `unattended-upgrades` installs Debian security updates only; Proxmox packages are upgraded only by
 `provision`, and the host never reboots itself. The one-shot `build` service has no restart policy
@@ -147,12 +160,15 @@ deferral to the check's `/log` endpoint instead, so a run that keeps deferring s
 |---|---|---|
 | `ol-heartbeat` | timer every 5 min, only if `127.0.0.1:8080/version` answers | 5 min / 15 min |
 | `fetcher-heartbeat` | timer every 5 min, only if `127.0.0.1:8081/health` answers | 5 min / 15 min |
-| `ol-deploy`, `fetcher-deploy` | `deploy.sh`: `success` on a deploy or a no-op, `fail` on error | 15 min / 1 h |
+| `worldcat-heartbeat` | timer every 5 min, only if `127.0.0.1:8082/version` answers | 5 min / 15 min |
+| `ol-deploy`, `fetcher-deploy`, `worldcat-deploy` | `deploy.sh`: `success` on a deploy or a no-op, `fail` on error | 15 min / 1 h |
 | `ol-refresh` | `ol-refresh.sh`: `start`, then `success`, no-op or `fail` | 1 day / 6 h |
 | `recommender-train` | `recommender-train.sh`: `start`, then `success` with the trainer's last line or `fail` with it; a deferral goes to `/log` and does not reset the period | 1 day / 2 days |
 
 `ol-heartbeat` is down until the first build finishes, because the API does not start without a
-built version.
+built version. `worldcat-heartbeat` is down until the artifact is loaded and `current-version` is
+written ("Loading the WorldCat artifact (once)", below), for the same reason: the WorldCat API
+refuses to boot without a version whose gates passed.
 
 ## Rebuild runbook
 
@@ -171,19 +187,24 @@ Whole machine:
    mismatch. *(manual)*
 4. Run `deployment/home-server/provision`. If it stops and says to reboot, reboot the host (guests
    with `onboot` come back by themselves) and run it again. If the reinstall re-imported an old
-   `rpool2`, it may still hold `vm-110-*` zvols from the previous `ol` VM, which nothing references
-   any more; `zfs list -r rpool2` shows them, and deleting them is a decision for Shane.
+   `rpool2`, it may still hold `vm-110-*` and `vm-130-*` zvols from the previous `ol` and `worldcat` VMs,
+   which nothing references any more; `zfs list -r rpool2` shows them, and deleting them is a decision for Shane.
 5. Put the tunnel tokens and ping URLs into the secrets, then run `provision --enable-tunnels` once
-   Access is in place (below). The Open Library build does not wait for this: its timer starts about
+   Access is in place (below). `--enable-tunnels` needs all three tokens, `WORLDCAT_TUNNEL_TOKEN`
+   included. The Open Library build does not wait for this: its timer starts about
    10 minutes after the `ol` VM boots. On a fresh box it must download the dumps first, so allow
    longer than the 2.5 hours measured with the dumps already present.
 6. Run `provision --verify`.
+7. Load the WorldCat artifact again if the `wc-data` disk is gone (a reinstalled host loses it).
+   The artifact is built on the dev machine and lives there as well; see "Loading the WorldCat
+   artifact (once)".
 
-One VM: `provision --rebuild ol|fetcher`. The data disk is kept.
+One VM: `provision --rebuild ol|fetcher|worldcat`. The data disk is kept, so a rebuilt `ol` keeps
+its Open Library version and a rebuilt `worldcat` keeps its artifact and `current-version`.
 
 Switch the tunnels off: run `provision --disable-tunnels`. It removes
-`/etc/the-greatest-home-server/tunnels-enabled` on the host, pushes `TUNNELS_ENABLED=0` to both
-VMs and forces a deploy, which stops and removes `cloudflared` (compose leaves a running container
+`/etc/the-greatest-home-server/tunnels-enabled` on the host, pushes `TUNNELS_ENABLED=0` to all
+three VMs and forces a deploy, which stops and removes `cloudflared` (compose leaves a running container
 of a disabled profile alone, so `deploy.sh` removes it by name). Removing the flag by hand and
 re-running plain `provision` does the same. `--enable-tunnels` turns them back on.
 
@@ -200,6 +221,40 @@ Things that look fine but are not:
   than the newest installed one, so the reboot guard would stop every converge for good. Unpin, or
   change the guard, before pinning.
 
+### Loading the WorldCat artifact (once)
+
+The WorldCat API serves a frozen dump (Anna's Archive, 2025-09-04), so its artifact is built once on
+the dev machine (`data-sources/README.md`, "Running the WorldCat API") and copied to the VM. The VM
+never builds it. Do this after `provision` has created VM 130. Until then the API container does not
+start and `worldcat-heartbeat` stays silent.
+
+The VM takes its address from DHCP on the LAN. Get it from the host:
+`ssh pve-mini qm guest cmd 130 network-get-interfaces`. The only SSH user on the VM is `debian`, and
+`/srv/wc-data` is a root-owned ext4 root with no `versions/` directory, so rsync runs `sudo rsync` on
+the far side, and `--mkpath` makes it create the missing parent directory (`--mkpath` needs
+rsync >= 3.2.3 on both ends; otherwise run `ssh debian@<vm-address> sudo mkdir -p /srv/wc-data/versions`
+first).
+
+```bash
+rsync -a --info=progress2 --mkpath --rsync-path="sudo rsync" /home/shane/wc-data/versions/2025-09-04/ \
+    debian@<vm-address>:/srv/wc-data/versions/2025-09-04/
+ssh debian@<vm-address> 'sudo chmod -R a+rX /srv/wc-data/versions/2025-09-04 && echo 2025-09-04 | sudo tee /srv/wc-data/current-version && sudo touch /var/lib/the-greatest/force-deploy && sudo systemctl start the-greatest-deploy.service'
+curl -fsS https://worldcat-api.thegreatestbooks.org/version -H "CF-Access-Client-Id: ..." -H "CF-Access-Client-Secret: ..."
+```
+
+- **The `chmod` is required.** The container runs as uid 10001, not as the user that owns the rsynced
+  files, so without `a+rX` it cannot read the artifact and the API fails to boot.
+- **`current-version` pins the served version.** It holds `2025-09-04` and nothing else.
+- **The marker is `/var/lib/the-greatest/force-deploy`.** Until `current-version` exists, a deploy
+  logs that there is no WorldCat version yet, starts only `cloudflared`, then finishes anyway: it
+  records the deployed SHA and removes the marker. It does not wait. Without the marker, the next
+  deploy that starts the API happens only after a commit touches `data-sources/` or
+  `deployment/home-server/`. The marker plus `systemctl start` make a deploy run now, with the
+  version in place, and bring the API up.
+- **The API serves `GET /version` and has no health route.** That is why the heartbeat and the
+  `curl` above use `/version`. The `curl` carries the `prod-rails` service token.
+- **There is no refresh timer and never will be.** The dump is frozen. A different version would mean
+  a new build, a new directory under `versions/` and a new `current-version`.
 ## Re-sorting a served version
 
 A version built before `pipeline/sort_order.py` has unsorted `identifiers`, `works` and
@@ -243,17 +298,19 @@ afterwards; it queues only what is unfinished).
 
 - BIOS: "Restore on AC Power Loss" set to Power On. Remove any installer USB.
 - Cloudflare (Shane's own tool, not scheduled work):
-  1. Two dashboard-managed tunnels: `home-ol`, with `ol-api.thegreatestbooks.org` to
-     `http://openlibrary:8080` (an alias on the `api` service), and `home-fetcher`, with `page-fetcher.thegreatestbooks.org` to
-     `http://page-fetcher:8081` (an alias on the `fetcher` service; both aliases live in
-     `compose.tunnel.yml`). Their tokens go in `secrets/home-server.env`.
-  2. Two Access self-hosted applications on those hostnames, each with one Service Auth policy
+  1. Three dashboard-managed tunnels: `home-ol`, with `ol-api.thegreatestbooks.org` to
+     `http://openlibrary:8080` (an alias on the `api` service), `home-fetcher`, with `page-fetcher.thegreatestbooks.org` to
+     `http://page-fetcher:8081` (an alias on the `fetcher` service), and `home-worldcat`, with
+     `worldcat-api.thegreatestbooks.org` to `http://worldcat:8082` (an alias on the `worldcat`
+     service; all three aliases live in `compose.tunnel.yml`). Their tokens go in
+     `secrets/home-server.env`.
+  2. Three Access self-hosted applications on those hostnames, each with one Service Auth policy
      allowing the service token `prod-rails`. Make the token non-expiring or calendar its renewal:
-     when it expires, both services fail together.
-  3. Exempt both hostnames from Bot Fight Mode and any bot or WAF rule that would challenge a
+     when it expires, all three services fail together.
+  3. Exempt all three hostnames from Bot Fight Mode and any bot or WAF rule that would challenge a
      non-browser client from the production server's IP. A challenge reaches the client as a 403.
   4. Access goes on before a hostname is routed. Run `provision --enable-tunnels` only after that.
-- healthchecks.io: the account and the six checks above, with their ping URLs in
+- healthchecks.io: the account and the eight checks above, with their ping URLs in
   `secrets/home-server.env`.
 
 ## If the LAN changes
