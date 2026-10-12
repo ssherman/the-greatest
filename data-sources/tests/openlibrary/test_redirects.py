@@ -10,6 +10,7 @@ from openlibrary.pipeline.editions import build_editions, stage_editions
 from openlibrary.pipeline.gates import run_gates
 from openlibrary.pipeline.paths import ArtifactPaths
 from openlibrary.pipeline.redirects import MAX_REDIRECT_DEPTH, build_redirects
+from openlibrary.pipeline.sort_order import order_by
 from openlibrary.pipeline.works import build_works, stage_works
 
 
@@ -27,6 +28,18 @@ def built(tmp_path, fixture_dumps):
     counts = build_redirects(con, paths)
     yield con, paths, counts
     con.close()
+
+
+def test_redirects_is_written_in_lookup_order(built):
+    """Lookups by source key prune row groups by min/max only on a sorted file."""
+    con, paths, _ = built
+    rows = con.execute(
+        f"SELECT {order_by('redirects')} "
+        f"FROM read_parquet('{paths.table('redirects')}', file_row_number = true) "
+        "ORDER BY file_row_number"
+    ).fetchall()
+    assert len(rows) > 1
+    assert rows == sorted(rows)
 
 
 def test_every_source_key_appears_exactly_once(built):

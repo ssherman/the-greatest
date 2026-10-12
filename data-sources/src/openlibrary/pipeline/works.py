@@ -21,6 +21,7 @@ import duckdb
 from common.normalize import fingerprint_sql, title_noart_sql, title_nosub_sql
 
 from .paths import ArtifactPaths
+from .sort_order import order_by
 
 _DUMP_COLUMNS = (
     "{'column0':'VARCHAR','column1':'VARCHAR','column2':'VARCHAR',"
@@ -148,6 +149,7 @@ def build_works(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dict[st
             CAST(count(*) OVER (PARTITION BY title_fp_noart) AS INTEGER) AS title_fp_noart_freq,
             author_count, revision, last_modified
           FROM fingerprinted
+          ORDER BY {order_by("works")}
         ) TO '{paths.table("works")}' (FORMAT parquet, COMPRESSION zstd);
         """
     )
