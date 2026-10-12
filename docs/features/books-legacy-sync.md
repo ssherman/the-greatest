@@ -28,6 +28,7 @@ After `sync_init`, `data_migration:all`, every catalog task and the user-data ta
 
 - A link to a category that was merged in this app lands on the merge target. A link to a category deleted without a merge is still dropped.
 - The `category_cleanup` step runs only after a category cleanup has been applied. It runs the rules pass on new legacy categories and applies those rule decisions; AI decisions wait for the owner. Categories whose only decisions failed or went stale are retried each week.
+- A new legacy category normally keeps its legacy slug. If that slug is already held (by another books category, or by a rename's friendly_id history), the sync does not pin it and the category gets a fresh suffixed slug instead; pinning would raise a unique violation and fail the step every week. The rules pass then merges the twin.
 - The `location_ancestors` step reconciles inherited location links for the synced books.
 
 Details: `docs/features/books-categories.md`.

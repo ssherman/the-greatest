@@ -33,11 +33,25 @@ module Services
           new_id = LegacyIdMap.lookup(model: model_key, legacy_id: attrs["id"])
           category = new_id ? ::Books::Category.find(new_id) : ::Books::Category.new
           category.assign_attributes(CategoryTransformer.call(attrs))
-          def category.should_generate_new_friendly_id? = false
+          if category.new_record? && legacy_slug_taken?(category.slug)
+            # A renamed category keeps its old and new slugs in friendly_id_slugs
+            # (unique per scope), so pinning a colliding legacy slug would raise
+            # RecordNotUnique and fail every weekly sync at this row. Let
+            # friendly_id mint a suffixed slug; the rules step merges the twin.
+            category.slug = nil
+          else
+            def category.should_generate_new_friendly_id? = false
+          end
           category.save!
           LegacyIdMap.record(model: model_key, legacy_id: attrs["id"], new_id: category.id)
         end
         stash_parent_link(attrs)
+      end
+
+      def legacy_slug_taken?(slug)
+        return false if slug.blank?
+        ::FriendlyId::Slug.exists?(slug: slug, sluggable_type: "Category", scope: "type:Books::Category") ||
+          ::Books::Category.exists?(slug: slug)
       end
 
       # Watermarks' updated_at is stamped by every successful sync (Sync#advance_watermarks).
