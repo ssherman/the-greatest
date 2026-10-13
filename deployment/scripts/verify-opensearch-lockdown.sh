@@ -8,9 +8,12 @@
 #                 SEARCH_IPV4=... OPENSEARCH_APP_PASSWORD=... OPENSEARCH_LEGACY_PASSWORD=... \
 #                   deployment/scripts/verify-opensearch-lockdown.sh --inside
 #
-# Outside, a pass is curl exit 7 (refused) or 28 (timed out: the DOCKER-USER drop). Any HTTP answer
-# at all, even 401, is a failure: it means the firewall let the connection through. Passwords go to
-# curl through a netrc file, never its command line.
+# Outside, the server is expected to DROP 9200 and 9300 (DOCKER-USER, ufw), so a pass is curl exit 28
+# with time_connect 0: no TCP connection was ever made. Exit 7 (refused), any HTTP answer, or a timeout
+# after connecting all fail. A drop looks the same as an unreachable network, so each address first gets
+# a positive control: a TCP connection to port 22 (ufw allows OpenSSH on IPv4 and IPv6). If the control
+# cannot connect, the 9200/9300 probes for that address prove nothing and are skipped, with a FAIL.
+# Passwords go to curl through a netrc file, never its command line.
 set -uo pipefail
 mode="${1:-}"
 failures=0
@@ -19,13 +22,27 @@ fail() { echo "FAIL  $1 -- $2"; failures=$((failures + 1)); }
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+bad_input() { echo "$1" >&2; echo "usage: verify-opensearch-lockdown.sh --outside|--inside (see the header)" >&2; exit 2; }
+valid_ipv4() { [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; }
+valid_ipv6() { [[ "$1" =~ ^[0-9A-Fa-f:]+$ && "$1" == *:* ]]; }
+connected() { [[ "${1##* }" =~ [1-9] ]]; }   # a non-zero time_connect: a TCP connection was made
+
+control() {   # control NAME HOST   (HOST: 1.2.3.4 or [v6]) -> 0 if port 22 accepts a connection
+  local tc
+  tc="$(curl -s -o /dev/null --connect-timeout 5 --max-time 3 -w '%{time_connect}' "telnet://$2:22")"
+  if connected "$tc"; then return 0; fi
+  fail "$1 control: port 22 unreachable" "cannot reach the server on $1 from this machine -- the 9200 probe would prove nothing; run --outside from a host that can reach it"
+  return 1
+}
+
 no_connection() {   # no_connection NAME URL
-  local code rc
-  code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 "$2")"; rc=$?
-  case "$rc" in
-    7|28) pass "$1 (curl exit $rc: no connection)" ;;
-    *) fail "$1" "curl exit $rc, http $code -- the search server answered" ;;
-  esac
+  local out rc code tc
+  out="$(curl -sk -o /dev/null -w '%{http_code} %{time_connect}' --connect-timeout 10 --max-time 15 "$2")"; rc=$?
+  code="${out%% *}"; tc="${out##* }"
+  if [ "$rc" = 28 ] && ! connected "$tc"; then pass "$1 (dropped: curl exit 28, no TCP connection)"
+  elif [ "$rc" = 7 ]; then fail "$1" "curl exit 7 (refused) -- a correct firewall drops, it does not refuse"
+  elif connected "$tc"; then fail "$1" "a TCP connection was made (curl exit $rc, http $code) -- the search server answered"
+  else fail "$1" "curl exit $rc, http $code, expected a drop (exit 28)"; fi
 }
 
 status() {   # status NAME WANT_REGEX LOGIN(app|legacy|none) PATH
@@ -43,12 +60,19 @@ case "$mode" in
   --outside)
     : "${SEARCH_IPV4:?set SEARCH_IPV4}" "${SEARCH_IPV6:?set SEARCH_IPV6 -- the server has one, and it must be probed}"
     SEARCH_IPV6="${SEARCH_IPV6%%/*}"   # Terraform reports it with a /128 suffix
-    no_connection "IPv4 :9200" "https://$SEARCH_IPV4:9200/"
-    no_connection "IPv6 :9200" "https://[$SEARCH_IPV6]:9200/"
-    no_connection "IPv4 :9300 (transport, never published)" "https://$SEARCH_IPV4:9300/"
+    valid_ipv4 "$SEARCH_IPV4" || bad_input "SEARCH_IPV4 must be a bare IPv4 address, got: $SEARCH_IPV4"
+    valid_ipv6 "$SEARCH_IPV6" || bad_input "SEARCH_IPV6 must be a bare IPv6 address, got: $SEARCH_IPV6"
+    if control "IPv4" "$SEARCH_IPV4"; then
+      no_connection "IPv4 :9200" "https://$SEARCH_IPV4:9200/"
+      no_connection "IPv4 :9300 (transport, never published)" "https://$SEARCH_IPV4:9300/"
+    fi
+    if control "IPv6" "[$SEARCH_IPV6]"; then
+      no_connection "IPv6 :9200" "https://[$SEARCH_IPV6]:9200/"
+    fi
     ;;
   --inside)
     : "${SEARCH_IPV4:?}" "${OPENSEARCH_APP_PASSWORD:?}" "${OPENSEARCH_LEGACY_PASSWORD:?}"
+    valid_ipv4 "$SEARCH_IPV4" || bad_input "SEARCH_IPV4 must be a bare IPv4 address, got: $SEARCH_IPV4"
     (umask 077
       printf 'machine %s login the_greatest_app password %s\n' "$SEARCH_IPV4" "$OPENSEARCH_APP_PASSWORD" >"$work/netrc-app"
       printf 'machine %s login tgb_legacy password %s\n' "$SEARCH_IPV4" "$OPENSEARCH_LEGACY_PASSWORD" >"$work/netrc-legacy")
