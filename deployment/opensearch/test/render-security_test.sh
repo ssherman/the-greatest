@@ -32,6 +32,10 @@ if ! grep -rqF -e "$admin_pw" -e "$app_pw" -e "$legacy_pw" "$out"; then
   pass "no plain password reaches the directory"; else fail "no plain password reaches the directory" "found one"; fi
 if [ "$(grep -E '^[a-z_]+:$' "$users" | grep -v '^_meta:$' | tr '\n' ' ')" = "admin: the_greatest_app: tgb_legacy: " ]; then
   pass "exactly admin, the_greatest_app, tgb_legacy (no demo users)"; else fail "exactly three users" "$(grep -E '^[a-z_]+:$' "$users")"; fi
+for u in admin the_greatest_app tgb_legacy; do
+  if grep -A3 -x "$u:" "$users" | grep -qx '  reserved: true'; then pass "$u is reserved (cannot change its own password)"
+  else fail "$u is reserved" "$(cat "$users")"; fi
+done
 if ! grep -q '@[A-Z_]*_HASH@' "$users"; then pass "no placeholder left"; else fail "no placeholder left" "$(cat "$users")"; fi
 for f in config roles roles_mapping action_groups tenants nodes_dn allowlist audit; do
   if [ -f "$out/$f.yml" ]; then pass "$f.yml is copied"; else fail "$f.yml is copied" "missing"; fi
