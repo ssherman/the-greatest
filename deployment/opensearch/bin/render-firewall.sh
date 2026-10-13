@@ -49,11 +49,11 @@ with open(path) as f:
         try:
             ip = ipaddress.ip_address(line)
         except ValueError:
-            sys.exit(f"render-firewall: line {n}: {line!r} is not a single IP address")
+            sys.exit(f"render-firewall: line {n} is not a single IP address")
         if ip.is_unspecified:
-            sys.exit(f"render-firewall: line {n}: {line} would allow everyone")
+            sys.exit(f"render-firewall: line {n} would allow everyone")
         if ip.version == 6 and ip.ipv4_mapped:
-            sys.exit(f"render-firewall: line {n}: {line} is an IPv4-mapped IPv6 address; write the plain IPv4 form {ip.ipv4_mapped}")
+            sys.exit(f"render-firewall: line {n} is an IPv4-mapped IPv6 address; write the plain IPv4 form")
         found += 1
         if (ip.version == 4) == (family == "v4"):
             wanted.append(str(ip))
