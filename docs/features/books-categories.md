@@ -44,6 +44,7 @@ location, and not the category itself or one of its descendants.
 - A country's parent is always its continent. Named regions inside one continent (`Caribbean`) sit under that continent, but countries do not nest under them. A transcontinental country goes under the continent with most of its population.
 - Historical cities and sites go under the modern country (`Troy` under Turkey). Historical states and empires go under their continent and are not merged into modern countries.
 - Invented worlds and their places go under `Fictional Location`. An invented place in the real world gets its real parent.
+- A city and an administrative unit covering the same place are one place: `Berlin (state)`, `Tokyo Metropolis`, `District of Columbia` and `Greater London` merge into their cities and never sit above them. Apply also skips a chain name that resolves to the place itself and takes the next.
 
 ## Link sources
 
@@ -109,6 +110,7 @@ limit (about $50 estimated). `propose` prints the estimate before it starts and 
 What apply does:
 
 - Before anything it checks each decision's category against its snapshot. A changed category is marked `stale` and skipped. A conflict pre-pass also marks a rename, set-parent or keep stale ("superseded by ...") when a terminal merge, retype or delete exists for the same category (a rename that accompanies a retype is kept: renames run first). If a category has several terminal decisions, the first by phase (merge, retype, delete) wins and the others go stale too.
+- Head categories are decided one per call, so the AI can propose A into B and B into A (`Gods` and `Deities`). Before anything applies, every merge cycle is broken at its most-linked member (`item_count`, ties to the older category): its merge goes stale ("merge cycle"), so it stays, keeping any rename, and the rest of the cycle merges into it.
 - Parents named in a chain that match no category are created in one transaction. If a created parent's slug collides, it gets a UUID suffix and the report flags it.
 - A rename keeps the old slug in history. It keeps the old name in `alternative_names` only when it differs from the new name by more than case or punctuation and is not already listed.
 - Reconcile (`AncestorReconciler`) runs whenever the run applied any decision. The reconciler and the Merger queue their own reindexes. Each decision is its own transaction, so one failure marks that decision `failed` and the rest continue. Re-running is a no-op for applied decisions. A decision that went stale (its category changed before apply) is not re-sent under the same RUN; such a category needs an admin fix or a `REDO=1` of that stage.

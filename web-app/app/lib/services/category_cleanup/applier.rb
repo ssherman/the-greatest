@@ -58,7 +58,41 @@ module Services
             error: "Category changed after this decision was proposed", updated_at: Time.current)
           @stats["stale"] += 1
         end
+        break_merge_cycles
         supersede_conflicting
+      end
+
+      # Head categories are decided one per call, so the AI can merge A into B
+      # in one answer and B into A in another. In id order the first merge
+      # lands into whichever name came first and the reverse fails as a merge
+      # into itself. Instead, each cycle is broken at its most-linked member
+      # (item_count, as in the rules pass): that member's merge goes stale, so
+      # it stays, with any rename, and the rest of the cycle merges into it.
+      def break_merge_cycles
+        merges = pending.where(action: :merge).order(:id).to_a.uniq(&:category_id).index_by(&:category_id)
+        return if merges.empty?
+
+        targets = merges.values.map(&:target_category_id)
+        forwarded = ::Category.where(id: targets).where.not(merged_into_id: nil).pluck(:id, :merged_into_id).to_h
+        target_of = merges.transform_values { |merge| forwarded.fetch(merge.target_category_id, merge.target_category_id) }
+        visited = Set.new
+        merges.each_key do |start|
+          path = []
+          node = start
+          while node && !visited.include?(node) && !path.include?(node)
+            path << node
+            node = target_of[node]
+          end
+          visited.merge(path)
+          next unless node && path.include?(node)
+
+          cycle = path[path.index(node)..]
+          counts = ::Category.where(id: cycle).pluck(:id, :item_count).to_h
+          root = cycle.max_by { |id| [counts.fetch(id, 0), -id] }
+          merges[root].update_columns(status: ::CategoryCleanupDecision.statuses.fetch("stale"),
+            error: "merge cycle: this category has the most links of #{cycle.size}, so the others merge into it", updated_at: Time.current)
+          @stats["stale"] += 1
+        end
       end
 
       # A category with a proposed merge, retype or delete cannot also be
