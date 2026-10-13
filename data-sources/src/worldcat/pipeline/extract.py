@@ -241,6 +241,46 @@ class ShardWriter:
 
 
 _PROGRESS_DONE = re.compile(r"^100\.0% lines=(\d+) kept=(\d+) bad=(\d+) done$")
+# Written beside the shards before extraction starts, so --resume can tell whose
+# shards they are: a changed --source with the same dump-date directory would
+# otherwise distill the old file's shards under the new file's fingerprint.
+SOURCE_FINGERPRINT_FILE = "source_fingerprint"
+
+
+def write_source_fingerprint(paths: WorldcatPaths, fingerprint: str) -> None:
+    (paths.staging_dir / SOURCE_FINGERPRINT_FILE).write_text(fingerprint + "\n")
+
+
+def require_source_fingerprint(paths: WorldcatPaths, fingerprint: str) -> None:
+    """--resume: the shards in _staging must come from this source file."""
+    path = paths.staging_dir / SOURCE_FINGERPRINT_FILE
+    recorded = path.read_text().strip() if path.exists() else None
+    if recorded != fingerprint:
+        raise ExtractIncomplete(
+            f"the shards in {paths.staging_dir} were extracted from a different file "
+            f"(recorded fingerprint {recorded}, --source is {fingerprint}); build without --resume"
+        )
+
+
+def verify_shards(
+    con: duckdb.DuckDBPyConnection, paths: WorldcatPaths, stats: list["ExtractStats"]
+) -> None:
+    """--resume: every worker's shards must hold exactly the rows its progress file
+    counted. A deleted or truncated shard would otherwise pass the row-count gates
+    (they bound the total loosely) and publish an artifact missing records."""
+    for s in stats:
+        glob = paths.staging_dir / f"shard_{s.worker:03d}_*.parquet"
+        try:
+            (rows,) = con.execute(f"SELECT count(*) FROM read_parquet('{glob}')").fetchone()
+        except duckdb.Error as exc:
+            raise ExtractIncomplete(
+                f"worker {s.worker}: its shards cannot be read ({exc}); build without --resume"
+            ) from None
+        if rows != s.kept:
+            raise ExtractIncomplete(
+                f"worker {s.worker}: {rows:,} rows in its shards, its progress file says "
+                f"{s.kept:,}; build without --resume"
+            )
 
 
 class ExtractIncomplete(RuntimeError):

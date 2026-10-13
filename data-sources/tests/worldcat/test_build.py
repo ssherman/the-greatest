@@ -136,6 +136,68 @@ def test_resume_distills_the_shards_an_earlier_run_left(tmp_path: Path, worldcat
     assert not paths.staging_dir.exists(), shards
 
 
+def _built_with_staging(tmp_path: Path, worldcat_source: Path) -> WorldcatPaths:
+    build(
+        source=worldcat_source,
+        root=tmp_path,
+        dump_date="2025-09-04",
+        workers=2,
+        memory_limit="1GB",
+        thresholds=LOOSE,
+        keep_staging=True,
+    )
+    return WorldcatPaths(root=tmp_path, dump_date="2025-09-04")
+
+
+def _resume(tmp_path: Path, source: Path) -> dict:
+    return build(
+        source=source,
+        root=tmp_path,
+        dump_date="2025-09-04",
+        memory_limit="1GB",
+        thresholds=LOOSE,
+        resume=True,
+    )
+
+
+def test_resume_refuses_shards_extracted_from_another_file(tmp_path: Path, worldcat_source: Path):
+    paths = _built_with_staging(tmp_path, worldcat_source)
+    assert (paths.staging_dir / "source_fingerprint").read_text().strip() == source_fingerprint(
+        worldcat_source
+    )
+    other = tmp_path / "other.zst"
+    data = bytearray(worldcat_source.read_bytes())
+    data[8] ^= 0xFF
+    other.write_bytes(bytes(data))
+
+    with pytest.raises(ExtractIncomplete, match="different file"):
+        _resume(tmp_path, other)
+    assert paths.staging_dir.exists()
+
+
+def test_resume_refuses_a_truncated_or_missing_shard(tmp_path: Path, worldcat_source: Path):
+    import duckdb
+
+    paths = _built_with_staging(tmp_path, worldcat_source)
+    (shard,) = sorted(paths.staging_dir.glob("shard_000_*.parquet"))
+    con = duckdb.connect()
+    con.execute(f"CREATE TEMP TABLE rows AS SELECT * FROM '{shard}'")
+    con.execute(
+        f"COPY (SELECT * FROM rows LIMIT (SELECT count(*) - 1 FROM rows)) "
+        f"TO '{shard}' (FORMAT parquet)"
+    )
+    con.close()
+
+    with pytest.raises(ExtractIncomplete, match=r"worker 0: .* rows in its shards"):
+        _resume(tmp_path, worldcat_source)
+
+    for missing in paths.staging_dir.glob("shard_001_*.parquet"):
+        missing.unlink()
+    with pytest.raises(ExtractIncomplete, match="worker 0|worker 1"):
+        _resume(tmp_path, worldcat_source)
+    assert paths.staging_dir.exists()
+
+
 def test_resume_without_a_finished_extraction_touches_nothing(
     tmp_path: Path, worldcat_source: Path
 ):

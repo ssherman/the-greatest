@@ -92,8 +92,11 @@ The catalogue file comes from `bin/rails "worldcat:export_isbns[/home/shane/wc-d
 Other options: `--keep-staging` and `--resume`. A build that dies after extract leaves its finished
 shards in `_staging`; `--resume` distills them instead of extracting again (an hour on the full
 dump), reading each worker's row counts back from its `progress_*.txt`. It refuses an unfinished
-worker or one that saw a bad frame. Without `--resume` a build starts by deleting whatever an
-earlier run left in `_staging`. The memory numbers are measured, not guessed: the first real build
+worker, one that saw a bad frame, shards whose recorded source fingerprint (`_staging/source_fingerprint`,
+written before extraction) is not the given `--source`'s, and a worker whose shards do not hold
+exactly the rows its progress file counted (a deleted shard would otherwise slip past the loose
+row-count gates). Without `--resume` a build starts by deleting whatever an earlier run left in
+`_staging`. The memory numbers are measured, not guessed: the first real build
 ran out of memory at 16 GB and again at 30 GB when `records` was one `row_number()` window over
 every wide row; `build_records` now picks each OCLC number's winner over the key columns only and
 joins the wide columns back by shard and row, which is what fits (see "Stage 2").

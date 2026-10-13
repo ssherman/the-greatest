@@ -11,7 +11,9 @@ place for inspection, and writes gates_passed=false so the API refuses the
 version. There is no download, refresh or promotion: the dump is frozen.
 
 A build that dies after extract leaves its finished shards in _staging; `--resume`
-builds from them instead of extracting again (an hour on the full dump). Without
+builds from them instead of extracting again (an hour on the full dump), after
+checking that they came from this --source (the fingerprint written beside them)
+and that every worker's shards hold the rows its progress file counted. Without
 it a build starts by deleting whatever an earlier run left there.
 """
 
@@ -23,7 +25,13 @@ from pathlib import Path
 import typer
 
 from worldcat.pipeline import distill
-from worldcat.pipeline.extract import extract_all, load_progress
+from worldcat.pipeline.extract import (
+    extract_all,
+    load_progress,
+    require_source_fingerprint,
+    verify_shards,
+    write_source_fingerprint,
+)
 from worldcat.pipeline.gates import Thresholds, gates_passed, run_gates
 from worldcat.pipeline.paths import WorldcatPaths
 from worldcat.pipeline.report import StageTimings, write_build_report, write_manifest
@@ -99,12 +107,15 @@ def build(
     typer.echo(f"building {dump_date} in {paths.version_dir} from {source}")
     fingerprint = source_fingerprint(source)
     if resume:
+        require_source_fingerprint(paths, fingerprint)
+        verify_shards(con, paths, resumed)
         extract = resumed
         typer.echo(
             f"  extract: resumed from {len(extract)} finished workers,"
             f" {sum(s.kept for s in extract):,} rows"
         )
     else:
+        write_source_fingerprint(paths, fingerprint)
         extract = stage("extract", lambda: extract_all(source, paths, workers=workers))
         timings.record(
             "extract", timings.stages["extract"]["seconds"], rows=sum(s.kept for s in extract)
