@@ -65,7 +65,8 @@ class Books::SavedSearchFilterLabelsTest < ActiveSupport::TestCase
     assert_equal ["Unknown (#999999)"], group(groups, "Including genres").values
   end
 
-  test "the three taxonomies cost exactly one query each, include and exclude together" do
+  # Categories take a second query to find merged ids; languages and countries one each.
+  test "each taxonomy costs one query, include and exclude together, plus one to resolve merged categories" do
     raw = {
       "included_category_ids" => [categories(:books_fiction_genre).id],
       "excluded_category_ids" => [categories(:books_classics_genre).id],
@@ -74,7 +75,7 @@ class Books::SavedSearchFilterLabelsTest < ActiveSupport::TestCase
       "included_country_ids" => [books_countries(:french).id],
       "excluded_country_ids" => [books_countries(:japanese).id]
     }
-    assert_queries_count(3) { labels(raw) }
+    assert_queries_count(4) { labels(raw) }
   end
 
   test "criteria with no ids cost no queries at all" do
@@ -153,5 +154,14 @@ class Books::SavedSearchFilterLabelsTest < ActiveSupport::TestCase
 
   test "book_length values outside the enum are dropped by the criteria reader" do
     assert_nil group(labels({"book_length" => [99]}), "Book length")
+  end
+
+  test "a merged category is labelled with its target's name" do
+    target = categories(:books_france_location)
+    merged = ::Books::Category.create!(name: "France (country)", category_type: :location, deleted: true, merged_into: target)
+
+    g = group(labels({"included_category_ids" => [merged.id]}), "Including genres")
+
+    assert_equal [target.name], g.values
   end
 end

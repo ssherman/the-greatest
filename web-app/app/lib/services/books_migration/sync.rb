@@ -59,6 +59,8 @@ module Services
           ["category_items", -> { CategoryItemMigrator.call(sync: scope) }],
           ["book_attributes", -> { BookAttributesMigrator.call(sync: scope) }],
           ["book_type_categories", -> { BookTypeCategoryMigrator.call(sync: scope) }],
+          ["category_cleanup", -> { ::Services::CategoryCleanup::SyncStep.call }],
+          ["location_ancestors", -> { ::Categories::AncestorReconciler.call(item_ids: scope.book_ids.to_a) }],
           ["countries", -> { CountryMigrator.call(sync: scope) }],
           ["author_countries", -> { AuthorCountryMigrator.call(sync: scope) }],
           ["book_countries", -> { BookCountryMigrator.call(sync: scope) }],

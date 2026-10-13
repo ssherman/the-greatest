@@ -21,6 +21,21 @@ module Categories
       BATCH_SIZE
     end
 
+    # Queue specific items, for bulk writers that know exactly which items they
+    # changed (Merger, AncestorReconciler). Same suppression rule as #call.
+    def self.queue_items(pairs)
+      return 0 if ::Services::BooksMigration.search_indexing_suppressed?
+
+      now = Time.current
+      rows = pairs.uniq
+        .select { |pair| ::Search::IndexerJob::INDEXED_MODEL_TYPES.include?(pair.first) }
+        .map do |item_type, item_id|
+          {parent_type: item_type, parent_id: item_id, action: ::SearchIndexRequest.actions[:index_item], created_at: now, updated_at: now}
+        end
+      rows.each_slice(batch_size) { |slice| ::SearchIndexRequest.insert_all(slice) }
+      rows.size
+    end
+
     def self.call(category:)
       new(category: category).call
     end

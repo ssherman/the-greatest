@@ -73,8 +73,13 @@ module Categories
       # Reset attributes on original category
       @category.restore_attributes
 
-      # Restore existing category if it was soft deleted
-      existing.update!(deleted: false) if existing.deleted?
+      # A name that was merged away resolves to the category it was merged into;
+      # only a category deleted without a merge is restored.
+      if existing.merged_into_id.present?
+        existing = existing.canonical || existing
+      elsif existing.deleted?
+        existing.update!(deleted: false)
+      end
 
       # Merge the categories
       Merger.new(category: @category, category_to_merge_with: existing).merge

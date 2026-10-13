@@ -8,6 +8,14 @@ module Books
       @book = books_books(:war_and_peace)
       RankedItem.create!(item: @book, ranking_configuration: @rc, rank: 1, score: 100)
       CategoryItem.create!(category: categories(:books_politics_subject), item: @book)
+      # These tests build one-book subjects and locations; the card minimum has
+      # its own coverage in BrowseQueryTest.
+      @original_browse_minimum = Rails.configuration.x.books.browse_min_category_books
+      Rails.configuration.x.books.browse_min_category_books = 1
+    end
+
+    teardown do
+      Rails.configuration.x.books.browse_min_category_books = @original_browse_minimum
     end
 
     test "genres renders and links to single-facet filter URLs" do

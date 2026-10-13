@@ -11,21 +11,20 @@ class Books::LegacyCategoriesController < ApplicationController
 
   # Slug before id, matching legacy's Category.active.friendly.find AND because
   # 206 books categories have a purely numeric slug that must beat a
-  # coincidentally equal legacy id. Scoped to .active so the 21,191 soft-deleted
-  # categories 404 the way legacy does.
+  # coincidentally equal legacy id. A merged category resolves to its target;
+  # a category deleted without a merge still 404s, as on legacy.
   def find_category!
-    Books::Category.active.find_by(slug: params[:id]) || find_by_legacy_id!
+    category = Books::CategorySlugResolver.call(params[:id]) || find_by_legacy_id
+    category&.canonical || raise(ActiveRecord::RecordNotFound)
   end
 
   # Category ids were not preserved by the migration, so a numeric id resolves
-  # through LegacyIdMap. find_by!(id:), never .find: Category uses friendly_id
+  # through LegacyIdMap. find_by(id:), never .find: Category uses friendly_id
   # with :finders, which resolves slugs before primary keys.
-  def find_by_legacy_id!
-    raise ActiveRecord::RecordNotFound unless /\A\d+\z/.match?(params[:id])
+  def find_by_legacy_id
+    return nil unless /\A\d+\z/.match?(params[:id])
 
     new_id = LegacyIdMap.lookup(model: "Books::Category", legacy_id: params[:id])
-    raise ActiveRecord::RecordNotFound if new_id.nil?
-
-    Books::Category.active.find_by!(id: new_id)
+    new_id && Books::Category.find_by(id: new_id)
   end
 end

@@ -198,5 +198,51 @@ module Books
         Books::FilterParams.call(ActionController::Parameters.new(category_id: repeated))
       end
     end
+
+    test "an active slug needs no redirect" do
+      refute resolve(category_id: "france").redirect?
+    end
+
+    test "a merged slug resolves to its target and asks for a redirect" do
+      target = categories(:books_france_location)
+      ::Books::Category.create!(name: "France (country)", slug: "france-country", category_type: :location, deleted: true, merged_into: target)
+
+      result = resolve(category_id: "france-country")
+
+      assert result.redirect?
+      assert_equal [target], result.categories
+    end
+
+    test "an old slug from before a rename resolves through history" do
+      category = ::Books::Category.create!(name: "Washington DC", category_type: :location)
+      old_slug = category.slug
+      category.update!(name: "Washington, D.C.")
+
+      result = resolve(category_id: old_slug)
+
+      assert result.redirect?
+      assert_equal [category], result.categories
+    end
+
+    test "two slugs that resolve to the same category collapse to one" do
+      target = categories(:books_france_location)
+      ::Books::Category.create!(name: "France (country)", slug: "france-country", category_type: :location, deleted: true, merged_into: target)
+
+      result = resolve(category_id: "france,france-country")
+
+      assert result.redirect?
+      assert_equal [target], result.categories
+    end
+
+    test "a slug deleted without a merge still raises" do
+      assert_raises(ActiveRecord::RecordNotFound) { resolve(category_id: "retired-genre") }
+    end
+
+    test "a merged slug whose target was deleted as junk raises" do
+      junk = ::Books::Category.create!(name: "Junk", category_type: :location, deleted: true)
+      ::Books::Category.create!(name: "Junk Twin", slug: "junk-twin", category_type: :location, deleted: true, merged_into: junk)
+
+      assert_raises(ActiveRecord::RecordNotFound) { resolve(category_id: "junk-twin") }
+    end
   end
 end

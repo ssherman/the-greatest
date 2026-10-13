@@ -130,4 +130,34 @@ class Services::BooksMigration::CategoryMigratorTest < ActiveSupport::TestCase
 
     assert_nil child.reload.parent_id
   end
+
+  test "a legacy slug held in friendly_id history is not pinned and the insert does not raise" do
+    renamed = ::Books::Category.create!(name: "Was Renamed")
+    FriendlyId::Slug.create!(slug: "old-renamed-slug", sluggable: renamed, scope: "type:Books::Category")
+
+    result = run_migrator([legacy(9201, "name" => "Brand New Cat", "slug" => "old-renamed-slug")])
+
+    assert result[:success], result[:error]
+    category = ::Books::Category.find(LegacyIdMap.lookup(model: "Books::Category", legacy_id: 9201))
+    assert_not_equal "old-renamed-slug", category.slug
+    assert category.slug.present?
+  end
+
+  test "a legacy slug held by a live category is not pinned" do
+    holder = ::Books::Category.create!(name: "Slug Holder")
+    holder.update_columns(slug: "held-slug")
+
+    result = run_migrator([legacy(9202, "name" => "Another New Cat", "slug" => "held-slug")])
+
+    assert result[:success], result[:error]
+    category = ::Books::Category.find(LegacyIdMap.lookup(model: "Books::Category", legacy_id: 9202))
+    assert_not_equal "held-slug", category.slug
+    assert_equal "held-slug", holder.reload.slug
+  end
+
+  test "a free legacy slug is still pinned" do
+    run_migrator([legacy(9203, "name" => "Pinned Name", "slug" => "free-legacy-slug")])
+    category = ::Books::Category.find(LegacyIdMap.lookup(model: "Books::Category", legacy_id: 9203))
+    assert_equal "free-legacy-slug", category.slug
+  end
 end

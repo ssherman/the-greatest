@@ -173,6 +173,20 @@ module Categories
       assert_not result.deleted?, "Existing category should be restored"
     end
 
+    test "renaming onto a merged-away name merges into the canonical target" do
+      canonical = Music::Category.create!(name: "Canonical Genre", category_type: "genre")
+      merged = Music::Category.create!(name: "Merged Genre", category_type: "genre")
+      Categories::Merger.new(category: merged, category_to_merge_with: canonical).merge
+
+      result = Categories::Updater.new(category: @test_category, attributes: {name: "Merged Genre"}).update
+
+      assert_equal canonical, result
+      merged.reload
+      assert merged.deleted?
+      assert_equal canonical, merged.merged_into
+      assert CategoryItem.exists?(category: canonical, item: music_albums(:animals))
+    end
+
     test "should handle case insensitive name matching" do
       existing_category = Music::Category.create!(
         name: "Existing Genre",

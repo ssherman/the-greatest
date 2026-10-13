@@ -18,6 +18,20 @@ class Books::RankedItemsController < RankedItemsController
   def index
     filters = Books::FilterParams.call(params)
 
+    # A merged or renamed category slug: send the visitor (and search engines)
+    # to the canonical URL, keeping every other segment.
+    if filters.redirect?
+      return redirect_to(Books::FilterPath.call(
+        categories: filters.categories,
+        countries: @collection ? [] : filters.countries,
+        year_start: filters.year_start,
+        year_end: filters.year_end,
+        page: params[:page],
+        ranking_configuration: @ranking_configuration,
+        collection: @collection
+      ), status: :moved_permanently)
+    end
+
     @categories = filters.categories
     # Country filtering has no place in the collection URL grammar (see
     # collection_bases in routes.rb -- there is no "written-by" base under a

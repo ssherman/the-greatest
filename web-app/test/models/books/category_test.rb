@@ -100,5 +100,115 @@ module Books
       CategoryItem.create!(category: russia, item: books_authors(:tolstoy))
       assert_includes Books::Category.by_author_ids([books_authors(:tolstoy).id]), russia
     end
+
+    def location(name, parent: nil)
+      ::Books::Category.create!(name: name, category_type: :location, parent: parent)
+    end
+
+    test "ancestors walks up the parent chain, nearest first" do
+      na = location("North America")
+      us = location("United States", parent: na)
+      il = location("Illinois", parent: us)
+      chicago = location("Chicago", parent: il)
+
+      assert_equal [il, us, na], chicago.ancestors
+      assert_equal [], na.ancestors
+    end
+
+    test "a location's parent must be a books location" do
+      subject = ::Books::Category.create!(name: "War", category_type: :subject)
+      place = ::Books::Category.new(name: "Somewhere", category_type: :location, parent: subject)
+
+      refute place.valid?
+      assert_includes place.errors[:parent_id], "must be a books location"
+    end
+
+    test "a location can't be re-parented under its own descendant" do
+      us = location("United States")
+      il = location("Illinois", parent: us)
+      us.parent = il
+
+      refute us.valid?
+      assert_includes us.errors[:parent_id], "would create a cycle"
+    end
+
+    test "genres keep their existing freedom to have any parent" do
+      parent = ::Books::Category.create!(name: "Speculative", category_type: :genre)
+      child = ::Books::Category.new(name: "Space Opera", category_type: :genre, parent: parent)
+      assert child.valid?
+    end
+
+    test "protected_ids are the four book-type categories resolved through LegacyIdMap" do
+      fiction = categories(:books_fiction_genre)
+      LegacyIdMap.record(model: "Books::Category", legacy_id: ::Books::BookType::LEGACY_CATEGORY_IDS[0], new_id: fiction.id)
+      ::Books::BookType.reset_category_ids!
+
+      assert_includes ::Books::Category.protected_ids, fiction.id
+    ensure
+      ::Books::BookType.reset_category_ids!
+    end
+
+    test "a subject with a subject parent can't be retyped to location" do
+      parent = ::Books::Category.create!(name: "History", category_type: :subject)
+      child = ::Books::Category.create!(name: "Wars", category_type: :subject, parent: parent)
+
+      refute child.update(category_type: :location)
+      assert_includes child.errors[:parent_id], "must be a books location"
+    end
+
+    test "a location with active child places can't be retyped" do
+      us = location("United States")
+      location("Illinois", parent: us)
+
+      refute us.update(category_type: :subject)
+      assert_includes us.errors[:category_type], "can't change while places are listed under it"
+    end
+
+    test "a location with only a soft-deleted child can be retyped" do
+      us = location("United States")
+      child = location("Illinois", parent: us)
+      child.update!(deleted: true)
+
+      assert us.update(category_type: :subject)
+    end
+
+    test "retyping a leaf location clears its parent" do
+      us = location("United States")
+      il = location("Illinois", parent: us)
+
+      assert il.update(category_type: :subject)
+      assert_nil il.reload.parent_id
+    end
+
+    test "a failed retype leaves parent_id unchanged in memory" do
+      us = location("United States")
+      il = location("Illinois", parent: us)
+
+      refute il.update(category_type: :subject, name: "")
+      assert_equal us.id, il.parent_id
+
+      parent_place = location("Parent Place")
+      child_place = location("Child Place", parent: parent_place)
+      location("Grandchild", parent: child_place)
+      refute child_place.update(category_type: :subject)
+      assert_equal parent_place.id, child_place.parent_id
+    end
+
+    test "retyping a location keeps a new non-location parent chosen in the same request" do
+      us = location("United States")
+      chicago = location("Chicago", parent: us)
+      history = ::Books::Category.create!(name: "American History", category_type: :subject)
+
+      assert chicago.update(category_type: :subject, parent_id: history.id)
+      assert_equal history.id, chicago.reload.parent_id
+    end
+
+    test "a subject keeps its parent when its type is unchanged" do
+      parent = ::Books::Category.create!(name: "History", category_type: :subject)
+      child = ::Books::Category.create!(name: "Wars", category_type: :subject, parent: parent)
+
+      assert child.update(name: "Wars and Battles")
+      assert_equal parent.id, child.reload.parent_id
+    end
   end
 end

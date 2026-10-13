@@ -152,6 +152,146 @@ module Admin
 
         assert_equal [], response.parsed_body
       end
+
+      # Merge
+
+      test "merge moves links and redirects to the target" do
+        sign_in_as(@admin_user, stub_auth: true)
+        target = categories(:books_france_location)
+        source = ::Books::Category.create!(name: "France (country)", category_type: :location)
+        CategoryItem.create!(category: source, item: books_books(:war_and_peace))
+
+        post merge_admin_books_category_path(source), params: {target_category_id: target.id, confirm_merge: "1"}
+
+        assert_redirected_to admin_books_category_path(target)
+        assert_equal target, source.reload.merged_into
+        assert CategoryItem.exists?(category: target, item: books_books(:war_and_peace))
+      end
+
+      test "merge without confirmation changes nothing" do
+        sign_in_as(@admin_user, stub_auth: true)
+        source = ::Books::Category.create!(name: "France (country)", category_type: :location)
+
+        post merge_admin_books_category_path(source), params: {target_category_id: categories(:books_france_location).id}
+
+        assert_redirected_to admin_books_category_path(source)
+        refute source.reload.deleted?
+      end
+
+      test "a refused merge redirects back with the reason" do
+        sign_in_as(@admin_user, stub_auth: true)
+        source = ::Books::Category.create!(name: "Lonely", category_type: :location)
+
+        post merge_admin_books_category_path(source), params: {target_category_id: source.id, confirm_merge: "1"}
+
+        assert_redirected_to admin_books_category_path(source)
+        assert_match "itself", flash[:alert]
+      end
+
+      test "merge is forbidden to a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        source = ::Books::Category.create!(name: "France (country)", category_type: :location)
+
+        post merge_admin_books_category_path(source), params: {target_category_id: categories(:books_france_location).id, confirm_merge: "1"}
+
+        refute source.reload.deleted?
+      end
+
+      test "merge is refused for an editor who cannot delete" do
+        editor = users(:regular_user)
+        editor.domain_roles.create!(domain: :books, permission_level: :editor)
+        sign_in_as(editor, stub_auth: true)
+        source = ::Books::Category.create!(name: "France (country)", category_type: :location)
+
+        post merge_admin_books_category_path(source), params: {target_category_id: categories(:books_france_location).id, confirm_merge: "1"}
+
+        refute source.reload.deleted?
+        assert_nil source.merged_into
+      end
+
+      # Alternative names and delete
+
+      test "an alternative name containing a comma survives an update unchanged" do
+        sign_in_as(@admin_user, stub_auth: true)
+        category = categories(:books_france_location)
+        category.update!(alternative_names: ["Fiction, science fiction, general", "Other"])
+
+        patch admin_books_category_path(category), params: {books_category: {alternative_names: category.alternative_names.join("\n")}}
+
+        assert_equal ["Fiction, science fiction, general", "Other"], category.reload.alternative_names
+      end
+
+      test "retyping a location away from location removes its inherited ancestor links" do
+        sign_in_as(@admin_user, stub_auth: true)
+        us = ::Books::Category.create!(name: "United States", category_type: :location)
+        chicago = ::Books::Category.create!(name: "Chicago", category_type: :location, parent: us)
+        book = books_books(:war_and_peace)
+        CategoryItem.create!(category: chicago, item: book)
+        ::Categories::AncestorReconciler.call(item_ids: [book.id])
+        assert CategoryItem.exists?(category: us, item: book)
+
+        patch admin_books_category_path(chicago), params: {books_category: {category_type: "subject"}}
+
+        refute CategoryItem.exists?(category: us, item: book)
+      end
+
+      test "retyping a location that has places under it is rejected and keeps inherited links" do
+        sign_in_as(@admin_user, stub_auth: true)
+        us = ::Books::Category.create!(name: "United States", category_type: :location)
+        chicago = ::Books::Category.create!(name: "Chicago", category_type: :location, parent: us)
+        book = books_books(:war_and_peace)
+        CategoryItem.create!(category: chicago, item: book)
+        ::Categories::AncestorReconciler.call(item_ids: [book.id])
+
+        patch admin_books_category_path(us), params: {books_category: {category_type: "subject"}}
+
+        assert_response :unprocessable_entity
+        assert us.reload.location?
+        assert_equal us.id, chicago.reload.parent_id
+        assert CategoryItem.exists?(category: us, item: book)
+      end
+
+      test "update saves alternative names one per line" do
+        sign_in_as(@admin_user, stub_auth: true)
+        category = categories(:books_france_location)
+
+        patch admin_books_category_path(category), params: {books_category: {alternative_names: "La France\r\nRépublique française\n\n"}}
+
+        assert_equal ["La France", "République française"], category.reload.alternative_names
+      end
+
+      test "destroy removes the category's links" do
+        sign_in_as(@admin_user, stub_auth: true)
+        category = ::Books::Category.create!(name: "Doomed", category_type: :subject)
+        CategoryItem.create!(category: category, item: books_books(:war_and_peace))
+
+        delete admin_books_category_path(category)
+
+        assert category.reload.deleted?
+        assert_equal 0, CategoryItem.where(category: category).count
+      end
+
+      test "destroy refuses a protected category" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Books::Category.stubs(:protected_ids).returns([@category.id])
+
+        delete admin_books_category_path(@category)
+
+        refute @category.reload.deleted?
+        assert_redirected_to admin_books_category_path(@category)
+      end
+
+      test "re-parenting a location rebuilds inherited links" do
+        sign_in_as(@admin_user, stub_auth: true)
+        us = ::Books::Category.create!(name: "United States", category_type: :location)
+        chicago = ::Books::Category.create!(name: "Chicago", category_type: :location)
+        book = books_books(:war_and_peace)
+        CategoryItem.create!(category: chicago, item: book)
+
+        patch admin_books_category_path(chicago), params: {books_category: {parent_id: us.id}}
+
+        assert CategoryItem.exists?(category: us, item: book, source: :inherited)
+      end
     end
   end
 end

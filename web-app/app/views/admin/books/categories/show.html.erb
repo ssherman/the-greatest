@@ -1,2 +1,3 @@
 <% content_for :title, @category.name %>
 <%= render Admin::Categories::ShowComponent.new(category: @category, domain_config: domain_config, stats: @stats) %>
+<%= render "admin/books/categories/merge_form", category: @category %>

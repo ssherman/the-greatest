@@ -21,6 +21,14 @@ module Books
         SQL
         .select("categories.*, ranked_counts.ranked_count")
 
+      # Subject and location cards need a minimum of ranked books (spec §6);
+      # one-book categories exist for similarity, not as landing pages.
+      scope = scope.where(
+        "categories.category_type = :genre OR ranked_counts.ranked_count >= :min",
+        genre: ::Category.category_types.fetch("genre"),
+        min: Rails.configuration.x.books.browse_min_category_books
+      )
+
       order_by(scope, sort, "categories.name")
     end
 

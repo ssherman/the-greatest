@@ -35,8 +35,8 @@ module Books
         ranked_group,
         max_position_group,
         year_group,
-        category_group("Including genres", criteria.included_category_ids, genre_note),
-        category_group("Excluding genres", criteria.excluded_category_ids, nil),
+        category_group("Including genres", included_category_ids, genre_note),
+        category_group("Excluding genres", excluded_category_ids, nil),
         language_group("Including languages", criteria.included_language_ids),
         language_group("Excluding languages", criteria.excluded_language_ids),
         country_group("Including origins", criteria.included_country_ids),
@@ -157,8 +157,29 @@ module Books
     # memo against a legitimately empty result re-querying.
     def category_names
       @category_names ||= name_map(
-        ::Category, criteria.included_category_ids | criteria.excluded_category_ids
+        ::Category, included_category_ids | excluded_category_ids
       )
+    end
+
+    # Merged ids resolve to their target so a stale saved search is labelled
+    # with the surviving name. One lookup covers both lists (a merged category
+    # costs one extra query per call, not one per group).
+    def included_category_ids
+      resolved_category_ids.first
+    end
+
+    def excluded_category_ids
+      resolved_category_ids.last
+    end
+
+    def resolved_category_ids
+      @resolved_category_ids ||= begin
+        included = criteria.included_category_ids
+        excluded = criteria.excluded_category_ids
+        ids = included | excluded
+        targets = ids.empty? ? {} : ::Category.where(id: ids).merged.pluck(:id, :merged_into_id).to_h
+        [included, excluded].map { |list| list.map { |id| targets.fetch(id, id) }.uniq }
+      end
     end
 
     def language_names

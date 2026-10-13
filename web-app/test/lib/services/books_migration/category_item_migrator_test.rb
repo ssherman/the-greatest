@@ -105,4 +105,64 @@ class Services::BooksMigration::CategoryItemMigratorTest < ActiveSupport::TestCa
     assert result[:success], result[:error]
     assert_empty CategoryItem.where(item_id: book.id, item_type: "Books::Book")
   end
+
+  test "a link to a category merged here lands on the merge target" do
+    target = ::Books::Category.create!(name: "Target Cat")
+    merged = make_category(8101, deleted: true)
+    merged.update_columns(merged_into_id: target.id)
+    book = ::Books::Book.create!(title: "Merged Link Book")
+
+    result = run_migrator([{"id" => 11, "category_id" => 8101, "book_id" => book.id}])
+
+    assert result[:success], result[:error]
+    assert CategoryItem.exists?(category_id: target.id, item_id: book.id, item_type: "Books::Book")
+  end
+
+  test "two legacy categories merged into one target on the same book do not collide" do
+    target = ::Books::Category.create!(name: "Shared Target")
+    [8102, 8103].each { |legacy_id| make_category(legacy_id, deleted: true).update_columns(merged_into_id: target.id) }
+    book = ::Books::Book.create!(title: "Double Merge Book")
+
+    result = run_migrator([
+      {"id" => 12, "category_id" => 8102, "book_id" => book.id},
+      {"id" => 13, "category_id" => 8103, "book_id" => book.id}
+    ])
+
+    assert result[:success], result[:error]
+    assert_equal 1, CategoryItem.where(category_id: target.id, item_id: book.id).count
+  end
+
+  test "a link to a category merged into a target later deleted as junk is dropped" do
+    junk = ::Books::Category.create!(name: "Junk Target", deleted: true)
+    make_category(8104, deleted: true).update_columns(merged_into_id: junk.id)
+    book = ::Books::Book.create!(title: "Junk Merge Book")
+
+    assert_no_difference -> { CategoryItem.count } do
+      result = run_migrator([{"id" => 14, "category_id" => 8104, "book_id" => book.id}])
+      assert result[:success], result[:error]
+    end
+  end
+
+  test "a new row is written as legacy" do
+    category = make_category(8201)
+    book = ::Books::Book.create!(title: "New Row Book")
+    run_migrator([{"id" => 1, "category_id" => 8201, "book_id" => book.id}])
+    assert CategoryItem.find_by!(category: category, item: book).source_legacy?
+  end
+
+  test "an existing inherited row is promoted to legacy when legacy supplies it" do
+    category = make_category(8202)
+    book = ::Books::Book.create!(title: "Inherited Book")
+    CategoryItem.create!(category: category, item: book, source: :inherited)
+    run_migrator([{"id" => 1, "category_id" => 8202, "book_id" => book.id}])
+    assert CategoryItem.find_by!(category: category, item: book).source_legacy?
+  end
+
+  test "an existing admin row stays admin" do
+    category = make_category(8203)
+    book = ::Books::Book.create!(title: "Admin Book")
+    CategoryItem.create!(category: category, item: book, source: :admin)
+    run_migrator([{"id" => 1, "category_id" => 8203, "book_id" => book.id}])
+    assert CategoryItem.find_by!(category: category, item: book).source_admin?
+  end
 end

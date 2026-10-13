@@ -79,4 +79,20 @@ class Categories::ItemReindexerTest < ActiveSupport::TestCase
     assert result.success?
     assert_equal 0, result.data[:queued]
   end
+
+  test "queue_items inserts one request per distinct indexed item" do
+    book = books_books(:war_and_peace)
+
+    assert_difference -> { SearchIndexRequest.count }, 1 do
+      Categories::ItemReindexer.queue_items([["Books::Book", book.id], ["Books::Book", book.id], ["Unindexed::Thing", 1]])
+    end
+  end
+
+  test "queue_items is a no-op while search indexing is suppressed" do
+    Services::BooksMigration.stubs(:search_indexing_suppressed?).returns(true)
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      Categories::ItemReindexer.queue_items([["Books::Book", books_books(:war_and_peace).id]])
+    end
+  end
 end

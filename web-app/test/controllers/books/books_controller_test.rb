@@ -13,6 +13,22 @@ module Books
       assert_response :success
     end
 
+    test "the location group shows each direct location once, as a trail" do
+      book = books_books(:war_and_peace)
+      book.category_items.destroy_all
+      na = ::Books::Category.create!(name: "North America", category_type: :location)
+      us = ::Books::Category.create!(name: "United States", category_type: :location, parent: na)
+      chicago = ::Books::Category.create!(name: "Chicago", category_type: :location, parent: us)
+      CategoryItem.create!(category: chicago, item: book)
+      Categories::AncestorReconciler.call(item_ids: [book.id])
+
+      get "/book/#{book.slug}"
+
+      assert_response :success
+      assert_select "[data-testid='location-trail']", 1
+      assert_select("[data-testid='location-trail']") { |el| refute_includes el.text.squish, " ," }
+    end
+
     test "404s for an unknown slug" do
       get "/book/no-such-book"
       assert_response :not_found

@@ -40,6 +40,24 @@ module Search
           assert_includes clauses, {ids: {values: [11, 12]}}
           assert_includes clauses, ::Search::Books::BookIndex::EXCLUDE_PROVISIONAL
         end
+
+        test "an included merged category id is replaced by its target" do
+          target = categories(:books_france_location)
+          merged = ::Books::Category.create!(name: "France (country)", category_type: :location, deleted: true, merged_into: target)
+
+          clauses = CriteriaClauses.filter_clauses(criteria("included_category_ids" => [merged.id], "genre_match_mode" => "any"))
+
+          assert_includes clauses, {terms: {category_ids: [target.id]}}
+        end
+
+        test "an excluded merged category id is replaced by its target" do
+          target = categories(:books_france_location)
+          merged = ::Books::Category.create!(name: "France (country)", category_type: :location, deleted: true, merged_into: target)
+
+          clauses = CriteriaClauses.must_not_clauses(criteria("excluded_category_ids" => [merged.id]), [])
+
+          assert_includes clauses, {terms: {category_ids: [target.id]}}
+        end
       end
     end
   end
