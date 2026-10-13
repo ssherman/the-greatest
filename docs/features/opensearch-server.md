@@ -37,7 +37,10 @@ secrets/.env.opensearch             # SOPS: allowlist and the three passwords
 
 ## Build
 
-1. Copy `deployment/terraform/opensearch/terraform.tfvars.example` to `terraform.tfvars` and fill it in.
+1. Copy `deployment/terraform/opensearch/terraform.tfvars.example` to `terraform.tfvars` and fill it in. The first entry of `authorized_keys` must be the public key that
+matches the `DEPLOY_SSH_KEY` GitHub secret (the same first key the web server's tfvars uses). cloud-init
+gives only the first key to the `deploy` user, and the workflow logs in as `deploy` with that secret; any
+other first key fails with an auth error, and the fix is a rebuild.
 2. Create the Linode and read its addresses:
 
 ```bash
@@ -157,9 +160,17 @@ entry fails the deploy and leaves the allowlist the server is already using alon
 
 ## Rotate a password
 
-Generate a new one with `openssl rand -hex 32` and put it in SOPS. Run the workflow. Then update
-`OPENSEARCH_URL` for that app and deploy the app. The app users are `reserved: true`, so they cannot
-change their own passwords; the only way is SOPS plus the workflow, where `securityadmin.sh` reloads them.
+Generate a new one with `openssl rand -hex 32` and put it in `secrets/.env.opensearch` with
+`sops secrets/.env.opensearch`. Commit and merge that change first: the workflow runs `git pull --ff-only`
+from `main`, so run before the merge it re-applies the old password and changes nothing. Then run the
+workflow. The app users are `reserved: true`, so they cannot change their own passwords; the only way is
+SOPS plus the workflow, where `securityadmin.sh` reloads them.
+
+The app's copy of the password lives in its `OPENSEARCH_URL` (for the new app, `secrets/.env.production`),
+and merging deploys the app. So the two sides change at different moments, and searches on that app fail
+with 401 from whichever happens first until the other lands. Minimise the gap: put both SOPS changes in
+the same merge, and run the workflow as soon as that merge's app deploy finishes. The gap is a search
+outage of that length. Rotating `tgb_legacy` has the same shape with the old site's environment.
 
 ## Upgrade OpenSearch
 
