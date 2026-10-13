@@ -52,11 +52,15 @@ with open(path) as f:
             sys.exit(f"render-firewall: line {n}: {line!r} is not a single IP address")
         if ip.is_unspecified:
             sys.exit(f"render-firewall: line {n}: {line} would allow everyone")
+        if ip.version == 6 and ip.ipv4_mapped:
+            sys.exit(f"render-firewall: line {n}: {line} is an IPv4-mapped IPv6 address; write the plain IPv4 form {ip.ipv4_mapped}")
         found += 1
         if (ip.version == 4) == (family == "v4"):
             wanted.append(str(ip))
 if found == 0:
     sys.exit("render-firewall: the allowlist is empty")
+if family == "v4" and not wanted:
+    sys.exit("render-firewall: the allowlist has no IPv4 address; port 9200 is IPv4-only, so every app would be locked out")
 print("\n".join(wanted))
 PY
 )" || exit 2

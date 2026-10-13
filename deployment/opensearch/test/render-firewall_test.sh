@@ -52,4 +52,12 @@ rejects "one bad line refuses the whole list" '203.0.113.10\nnope\n' --family v4
 rejects "a missing --family is refused" '203.0.113.10\n' --allowlist "$list"
 rejects "an unknown family is refused" '203.0.113.10\n' --family v5 --allowlist "$list"
 rejects "a missing file is refused" '' --family v4 --allowlist "$SANDBOX/nope"
+rejects "an IPv6-only list is refused for v4 (it would lock the apps out)" '2001:db8::10\n' --family v4 --allowlist "$list"
+rejects "an IPv4-mapped address is refused for v4" '::ffff:203.0.113.10\n' --family v4 --allowlist "$list"
+rejects "an IPv4-mapped address is refused for v6" '::ffff:203.0.113.10\n' --family v6 --allowlist "$list"
+
+printf '203.0.113.10\n' >"$list"
+v6only="$("$render" --family v6 --allowlist "$list")"; rc=$?
+if [ "$rc" = 0 ] && has "$v6only" "$drop" && ! grep -q -- ' -s ' <<<"$v6only"; then
+  pass "a v4-only list renders drop-only for v6"; else fail "a v4-only list renders drop-only for v6" "exit $rc: $v6only"; fi
 finish
