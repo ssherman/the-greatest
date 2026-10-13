@@ -5,8 +5,10 @@
 One Linode (Ubuntu 26.04, Linode 8 GB `g6-standard-4`, region `us-central`) that runs OpenSearch
 3.9.0 from `deployment/opensearch/compose.yml`. Two callers use it: the new app (login
 `the_greatest_app`, indexes `books_*_production`, `music_*_production`, `games_*_production`) and the
-old books site (login `tgb_legacy`, indexes `books` and `authors`). A third login, `admin`, exists only
-for `securityadmin.sh` on the server.
+old books site (login `tgb_legacy`, indexes `books` and `authors`). A third login, `admin`, is the
+break-glass login (`deployment/opensearch/security/internal_users.yml.tmpl`). `securityadmin.sh` does not
+use it: it authenticates with the admin client certificate (`admin.pem`, matched by
+`plugins.security.authcz.admin_dn` in `deployment/opensearch/config/opensearch.yml`).
 
 There are no backups. The search indexes can be rebuilt from the database, so the recovery for a lost
 server is to rebuild it and reindex (see "Rebuild").
@@ -37,6 +39,9 @@ secrets/.env.opensearch             # SOPS: allowlist and the three passwords
 
 ## Build
 
+0. **Merge this branch to main first.** cloud-init clones `main` and runs
+   `deployment/opensearch/bin/install-firewall.sh` from it (`deployment/terraform/opensearch/cloud-init.yaml`),
+   and the deploy workflow pulls `main`. Building from an unmerged branch silently skips the boot firewall unit.
 1. Copy `deployment/terraform/opensearch/terraform.tfvars.example` to `terraform.tfvars` and fill it in. The first entry of `authorized_keys` must be the public key that
 matches the `DEPLOY_SSH_KEY` GitHub secret (the same first key the web server's tfvars uses). cloud-init
 gives only the first key to the `deploy` user, and the workflow logs in as `deploy` with that secret; any
@@ -46,8 +51,8 @@ other first key fails with an auth error, and the fix is a rebuild.
 ```bash
 terraform -chdir=deployment/terraform/opensearch init
 terraform -chdir=deployment/terraform/opensearch apply
-terraform -chdir=deployment/terraform/opensearch output ipv4
-terraform -chdir=deployment/terraform/opensearch output ipv6
+terraform -chdir=deployment/terraform/opensearch output -raw ipv4
+terraform -chdir=deployment/terraform/opensearch output -raw ipv6
 ```
 
 `ipv6` is printed with a `/128` suffix. `verify-opensearch-lockdown.sh` strips it; strip it yourself for
@@ -67,8 +72,10 @@ gh secret set OPENSEARCH_SSH_HOST --body <ipv4>
 gh secret set OPENSEARCH_SSH_HOST_FINGERPRINT --body '<SHA256:...>'
 ```
 
-5. Create `secrets/.env.opensearch`. It is SOPS binary format, the same as `secrets/.env.production`.
-   Write a plain file with these four lines (passwords from `openssl rand -hex 32`), then encrypt it:
+5. Create `secrets/.env.opensearch`. It is SOPS binary format, the same as `secrets/.env.production`
+   (sops/age key setup: `deployment/SECRETS.md`). Write a plain file named `secrets/.env.opensearch.plain`
+   (gitignored by `secrets/*.plain` in `.gitignore`) with these four lines (passwords from
+   `openssl rand -hex 32`), then encrypt it:
 
 ```
 OPENSEARCH_ALLOWED_IPS=203.0.113.10,203.0.113.11
@@ -78,10 +85,11 @@ OPENSEARCH_LEGACY_PASSWORD=<hex>
 ```
 
 ```bash
-sops --encrypt --filename-override secrets/.env.opensearch PLAIN_FILE > secrets/.env.opensearch
+sops --encrypt --filename-override secrets/.env.opensearch secrets/.env.opensearch.plain > secrets/.env.opensearch
 ```
 
-Delete the plain file. Edit with `sops secrets/.env.opensearch`; read with `sops -d secrets/.env.opensearch`.
+Delete `secrets/.env.opensearch.plain`, then commit and merge the encrypted file BEFORE the first workflow
+run (the workflow pulls `main`). Edit with `sops secrets/.env.opensearch`; read with `sops -d secrets/.env.opensearch`.
 Never pass `--input-type` or `--output-type dotenv`. `OPENSEARCH_ALLOWED_IPS` is comma-separated with no
 spaces, because `deploy.sh` sources the file.
 
@@ -158,6 +166,11 @@ sops secrets/.env.opensearch
 Edit `OPENSEARCH_ALLOWED_IPS` (comma-separated, no spaces), commit, merge, and run the workflow. A bad
 entry fails the deploy and leaves the allowlist the server is already using alone.
 
+Removing an IP stops NEW connections only. The firewall's `ESTABLISHED,RELATED` rule
+(`deployment/opensearch/bin/render-firewall.sh`) lets a removed server's open keep-alive connections
+continue until they close. To cut them immediately, run `sudo conntrack -D -s <ip>` on the search server
+(`conntrack` may need `sudo apt install conntrack`).
+
 ## Rotate a password
 
 Generate a new one with `openssl rand -hex 32` and put it in `secrets/.env.opensearch` with
@@ -186,11 +199,23 @@ outage of that length. Rotating `tgb_legacy` has the same shape with the old sit
 terraform -chdir=deployment/terraform/opensearch apply -replace=linode_instance.search
 ```
 
-Then update both GitHub secrets (the host if the IP changed, the fingerprint always), update
+`-replace` destroys the old instance first, so search is down until the rebuild, the deploy and the
+reindex all finish. Wait for cloud-init before running the workflow:
+
+```bash
+ssh deploy@<ipv4> cloud-init status --wait
+```
+
+If the IP is reused, ssh warns about a changed host key; remove the old entry with
+`ssh-keygen -R <ipv4>`. Then update both GitHub secrets (the host if the IP changed, the fingerprint always), update
 `OPENSEARCH_URL` in both apps if the IP changed, run the workflow, run both verify modes, and reindex both
 sites.
 
 ## Switchover from the old server (once)
+
+0. **Prove the build first.** Follow Build, then Verify, then destroy and rebuild once (Rebuild), then
+   Verify again, with no SSH fixes in between (spec section 9, steps 1-2: the success test). Only then
+   switch over.
 
 Merge the branch before starting: the workflow pulls `main`. Merging changes nothing for the web app
 except the client switch, which stays inert until `OPENSEARCH_SSL_VERIFY=false` is set.
@@ -225,7 +250,7 @@ except the client switch, which stays inert until `OPENSEARCH_SSL_VERIFY=false` 
   test sets it to 19200 and does not use `deploy.sh`.)
 - Changes to `opensearch.yml` or the certificates need a container recreate. `deploy.sh` detects them by
   fingerprint and does it.
-- `terraform output ipv6` ends in `/128`. Strip it before using the address by hand.
+- `terraform output -raw ipv6` ends in `/128`. Strip it before using the address by hand.
 
 ## Known gaps
 

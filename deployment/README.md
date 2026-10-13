@@ -15,7 +15,7 @@ The production deployment consists of:
 
 - Linode instance provisioned via Terraform (see `deployment/terraform/`)
 - External PostgreSQL database
-- External OpenSearch instance
+- OpenSearch server, built from `deployment/terraform/opensearch/` (runbook: `docs/features/opensearch-server.md`)
 - Cloudflare API token with DNS edit permissions
 - GitHub Container Registry access
 - Domain DNS configured to point to server IP

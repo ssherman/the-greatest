@@ -1960,7 +1960,7 @@ In `.sops.yaml`, after the `secrets/home-server\.env$` rule, add (same age recip
 
 Stop and ask Shane (controller session, not a subagent) for:
 1. The IPv4 addresses of every server that must reach search: the new app server, and the old site's web/worker server
-   (`104.200.17.36` appears in the old Postgres `pg_hba.conf` as an app host; confirm it). Do not guess.
+   (the app host listed in the old Postgres `pg_hba.conf` is a likely candidate; confirm it). Do not guess.
 2. The old server's full index list (spec §11), from its own shell: `curl -s 'localhost:9200/_cat/indices?h=index'`.
    If it shows site indexes other than `books` and `authors`, add them to `tgb_legacy`'s `index_patterns` in
    `deployment/opensearch/security/roles.yml` and to the matching assertion in `render-security_test.sh`, re-run
@@ -2250,7 +2250,7 @@ git -C /home/shane/dev/the-greatest-books commit -m "Search: OPENSEARCH_SSL_VERI
 
 ## Operational (Shane runs these; the controller session assists — never a subagent)
 
-Prerequisite: Tasks 1-12 merged or at least on a pushed branch the server can pull. **The server's checkout tracks
+Prerequisite: Tasks 1-12 MERGED to `main` before O1, because cloud-init clones `main` and runs the firewall installer from it (an unmerged branch silently skips the boot firewall unit). **The server's checkout tracks
 `main`** (`git pull --ff-only` in the workflow), so merge the branch before O2 — merging changes nothing for the web app
 except the client switch, which is inert until `OPENSEARCH_SSL_VERIFY=false` is set.
 
