@@ -31,11 +31,15 @@ else fail "securityadmin.sh applied the config" "$(tail -20 "$work/securityadmin
 base="https://localhost:19200"
 req() {   # req USER PASSWORD METHOD PATH [BODY] -> prints the HTTP status
   local body=() cfg=''
-  # The credentials go to curl on stdin (-K -), so they are never in a process listing. A
-  # process substitution in an array does not work here: bash closes it before curl reads it.
+  # Credentials go to curl on stdin (-K -) and every request body from a 0600 file, so neither
+  # is ever in a process listing. A process substitution in an array does not work here: bash
+  # closes it before curl reads it. The response body is kept in $work/response.
   if [ -n "$1" ]; then cfg="$(printf 'user = "%s:%s"\n' "$1" "$2")"; fi
-  if [ -n "${5:-}" ]; then body=(-H 'Content-Type: application/json' -d "$5"); fi
-  printf '%s\n' "$cfg" | curl -sk -K - -o /dev/null -w '%{http_code}' --max-time 20 -X "$3" "${body[@]}" "$base$4"
+  if [ -n "${5:-}" ]; then
+    (umask 077; printf '%s' "$5" >"$work/request")
+    body=(-H 'Content-Type: application/json' --data-binary "@$work/request")
+  fi
+  printf '%s\n' "$cfg" | curl -sk -K - -o "$work/response" -w '%{http_code}' --max-time 20 -X "$3" "${body[@]}" "$base$4"
 }
 expect() {   # expect NAME WANT USER PASSWORD METHOD PATH [BODY]
   local name="$1" want="$2" got
@@ -49,10 +53,14 @@ expect "app: cluster health" 200 the_greatest_app "$app_pw" GET /_cluster/health
 expect "app: creates its own index" 200 the_greatest_app "$app_pw" PUT /books_books_production
 expect "app: writes to it" 201 the_greatest_app "$app_pw" POST '/books_books_production/_doc?refresh=true' '{"title":"x"}'
 expect "app: searches it" 200 the_greatest_app "$app_pw" GET /books_books_production/_search
-expect "app: bulk to its own index" 200 the_greatest_app "$app_pw" POST /_bulk $'{"index":{"_index":"music_albums_production"}}\n{"t":1}\n'
+expect "app: bulk to its own index" 200 the_greatest_app "$app_pw" POST '/_bulk?refresh=true' $'{"index":{"_index":"music_albums_production"}}\n{"t":1}\n'
+# _bulk answers 200 even when every item inside was refused, so read the body.
+if grep -q '"errors":false' "$work/response"; then pass "app: bulk items all succeeded"; else fail "app: bulk items all succeeded" "$(head -c 300 "$work/response")"; fi
+expect "app: the bulk write landed" 200 the_greatest_app "$app_pw" GET /music_albums_production/_count
 expect "app: refused on the old site's index" 403 the_greatest_app "$app_pw" PUT /books
 expect "app: refused on the security API" 403 the_greatest_app "$app_pw" GET /_plugins/_security/api/internalusers
 expect "app: cannot change its own password" 403 the_greatest_app "$app_pw" PUT /_plugins/_security/api/account "{\"current_password\":\"$app_pw\",\"password\":\"$(openssl rand -hex 32)\"}"
+expect "app: old password still works" 200 the_greatest_app "$app_pw" GET /_cluster/health
 expect "app: refused on cluster settings" 403 the_greatest_app "$app_pw" PUT /_cluster/settings '{"persistent":{"cluster.routing.allocation.enable":"all"}}'
 expect "legacy: creates its own index" 200 tgb_legacy "$legacy_pw" PUT /books
 expect "legacy: refused on the new app's index" 403 tgb_legacy "$legacy_pw" GET /books_books_production/_search
