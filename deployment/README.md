@@ -9,7 +9,7 @@ The production deployment consists of:
 - **worker**: Sidekiq background job processor
 - **nginx**: Reverse proxy with SSL termination
 - **redis**: In-memory data store for Sidekiq and caching
-- **External Services**: PostgreSQL and OpenSearch (hosted separately)
+- **External Services**: PostgreSQL (hosted separately) and OpenSearch (its own server: docs/features/opensearch-server.md)
 
 ## Prerequisites
 
