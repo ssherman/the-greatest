@@ -36,7 +36,7 @@ module Services
         @run = run
         @category_type = category_type.to_s
         @tier = tier.to_sym
-        computed = (@tier == :head) ? 1 : (batch_size || Rails.configuration.x.categories_cleanup.tail_batch_size)
+        computed = (@tier == :head) ? 1 : (batch_size || Rails.configuration.x.categories_cleanup.tail_batch_size.fetch(@category_type.to_sym))
         @batch_size = [computed.to_i, 1].max
         @progress = progress
         @calls = 0
