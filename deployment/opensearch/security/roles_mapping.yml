@@ -1,0 +1,10 @@
+_meta:
+  type: "rolesmapping"
+  config_version: 2
+all_access:
+  reserved: true
+  users: ["admin"]
+the_greatest_app:
+  users: ["the_greatest_app"]
+tgb_legacy:
+  users: ["tgb_legacy"]
