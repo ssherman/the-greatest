@@ -68,6 +68,11 @@ module Services
       # into itself. Instead, each cycle is broken at its most-linked member
       # (item_count, as in the rules pass): that member's merge goes stale, so
       # it stays, with any rename, and the rest of the cycle merges into it.
+      # A member that also has a proposed retype or delete is never the root:
+      # with its merge gone that decision would win the supersede pass, and a
+      # delete would then remove every link the cycle merged into it. If every
+      # member has one, the cycle is left alone: one merge lands, the reverse
+      # fails, and nothing is lost.
       def break_merge_cycles
         merges = pending.where(action: :merge).order(:id).to_a.uniq(&:category_id).index_by(&:category_id)
         return if merges.empty?
@@ -87,8 +92,12 @@ module Services
           next unless node && path.include?(node)
 
           cycle = path[path.index(node)..]
-          counts = ::Category.where(id: cycle).pluck(:id, :item_count).to_h
-          root = cycle.max_by { |id| [counts.fetch(id, 0), -id] }
+          blocked = pending.where(action: [:retype, :delete], category_id: cycle).distinct.pluck(:category_id)
+          candidates = cycle - blocked
+          next if candidates.empty?
+
+          counts = ::Category.where(id: candidates).pluck(:id, :item_count).to_h
+          root = candidates.max_by { |id| [counts.fetch(id, 0), -id] }
           merges[root].update_columns(status: ::CategoryCleanupDecision.statuses.fetch("stale"),
             error: "merge cycle: this category has the most links of #{cycle.size}, so the others merge into it", updated_at: Time.current)
           @stats["stale"] += 1

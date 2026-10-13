@@ -79,6 +79,38 @@ module Services
         assert_equal 0, result.data["failed"]
       end
 
+      test "a cycle is not broken at a member that also has a delete, so no merged links are deleted" do
+        gods = location("Gods", type: :subject)
+        deities = location("Deities", type: :subject)
+        gods.update_column(:item_count, 384)
+        deities.update_column(:item_count, 190)
+        gods_merge = decide(gods, :merge, target_category: deities)
+        deities_merge = decide(deities, :merge, target_category: gods)
+        gods_delete = decide(gods, :delete)
+
+        Applier.call(run: "r1")
+
+        assert_equal deities, gods.reload.merged_into
+        assert_not deities.reload.deleted?
+        assert CategoryItem.exists?(category: deities, item: @book)
+        assert_equal %w[applied stale stale], [gods_merge, deities_merge, gods_delete].map { |d| d.reload.status }
+      end
+
+      test "a cycle whose members all have another terminal decision is left unbroken" do
+        a = location("Alpha", type: :subject)
+        b = location("Beta", type: :subject)
+        a_merge = decide(a, :merge, target_category: b)
+        b_merge = decide(b, :merge, target_category: a)
+        decide(a, :delete)
+        decide(b, :delete)
+
+        Applier.call(run: "r1")
+
+        assert_equal b, a.reload.merged_into
+        assert_not b.reload.deleted?
+        assert_equal %w[applied failed], [a_merge, b_merge].map { |d| d.reload.status }
+      end
+
       test "a longer merge cycle and a chain into it all end in the most-linked member" do
         a = location("Aliens", type: :subject)
         b = location("Extraterrestrials", type: :subject)
