@@ -41,6 +41,7 @@ module Services
             assert_includes system, "a DIFFERENT known location (never its own name)"
             assert_includes system, "unless merge_into is set"
             assert_includes system, "Empty only for a root"
+            assert_includes system, "The unit merges into the city and never appears in the city's parent_chain"
             assert_includes system, "is the entry itself, not a different place"
           end
 

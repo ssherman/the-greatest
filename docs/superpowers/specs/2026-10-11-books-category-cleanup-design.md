@@ -387,6 +387,13 @@ categories whose decision agrees with the size-1 decision (same action, and same
 after normalization), and lists the disagreements. The owner sets the tail batch size to the
 largest size at or above 97% agreement, or leaves it at 1.
 
+Amended 2026-10-12, after the dev rehearsal. The 97% bar is unreachable: two one-at-a-time passes
+agreed on only 86.5% of locations and 88.5% of subjects, mostly over optional middle levels and
+which broader subject to fold into. Calibration now also runs a second size-1 pass as a baseline
+and reports action/verdict agreement alongside full agreement. The owner judges each size against
+that baseline. `tail_batch_size` is per type: locations 10 (verdict agreement 98.5% against a 99.0%
+baseline), subjects 1 (action agreement 89% against 95.5%).
+
 Batched calls use the same schema wrapped in an array keyed by an id the prompt assigns, so a
 dropped or reordered row is detected and that row retried alone.
 
