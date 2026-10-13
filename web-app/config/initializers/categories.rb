@@ -13,9 +13,12 @@ Rails.application.configure do
   # Categories with at least this many direct links are the "head": they go to
   # the AI one per call and form the known vocabulary in every prompt.
   config.x.categories_cleanup.head_min_links = 20
-  # Tail batch size. Stays 1 until categories:cleanup:calibrate shows a larger
-  # size agrees with one-at-a-time answers at least 97% of the time.
-  config.x.categories_cleanup.tail_batch_size = 1
+  # Tail categories per AI call, by category type, set from
+  # categories:cleanup:calibrate. The 2026-10-12 dev calibration: two
+  # one-at-a-time passes agreed on 86.5% of locations and 88.5% of subjects.
+  # Locations at 10 agreed 79.5-84% (verdict 98.5% vs 99.0%), so batching costs
+  # nothing there; subjects at 10 agreed 72-78.5% (action 89% vs 95.5%).
+  config.x.categories_cleanup.tail_batch_size = {location: 10, subject: 1}
   # Books with more direct locations than this get the trim pass (spec §5).
   config.x.categories_cleanup.max_direct_locations = 15
   # Sample books shown to the model per category.

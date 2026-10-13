@@ -39,6 +39,21 @@ module Services
         assert CategoryCleanupDecision.none?
       end
 
+      test "a second one-at-a-time pass is reported as the baseline" do
+        first = [{"1" => answer("1", ["Tanzania"])}, {"1" => answer("1", ["Botswana"])}]
+        batched = [{"1" => answer("1", ["Tanzania"]), "2" => answer("2", ["Botswana"])}]
+        second = [{"1" => answer("1", ["Tanzania"])}, {"1" => answer("1", ["Africa"])}]
+        LocationTask.any_instance.stubs(:call).returns(*(first + batched + second).map { |r| ai_result(r) })
+
+        result = Calibrator.call(run: "r1", category_type: "location", sample_size: 2, seed: 1, sizes: [1, 2])
+
+        assert_in_delta 1.0, result.data[:sizes].sole[:agreement]
+        baseline = result.data[:baseline]
+        assert_equal [1, 2], [baseline[:size], baseline[:compared]]
+        assert_in_delta 0.5, baseline[:agreement]
+        assert_in_delta 1.0, baseline[:action_agreement]
+      end
+
       test "the tail is sampled by own links, not the merged-in total" do
         # Kilwa has one own link but absorbs a proposed merge carrying 6 more,
         # which pushes its effective links past head_min.

@@ -58,7 +58,50 @@ module Services
             error: "Category changed after this decision was proposed", updated_at: Time.current)
           @stats["stale"] += 1
         end
+        break_merge_cycles
         supersede_conflicting
+      end
+
+      # Head categories are decided one per call, so the AI can merge A into B
+      # in one answer and B into A in another. In id order the first merge
+      # lands into whichever name came first and the reverse fails as a merge
+      # into itself. Instead, each cycle is broken at its most-linked member
+      # (item_count, as in the rules pass): that member's merge goes stale, so
+      # it stays, with any rename, and the rest of the cycle merges into it.
+      # A member that also has a proposed retype or delete is never the root:
+      # with its merge gone that decision would win the supersede pass, and a
+      # delete would then remove every link the cycle merged into it. If every
+      # member has one, the cycle is left alone: one merge lands, the reverse
+      # fails, and nothing is lost.
+      def break_merge_cycles
+        merges = pending.where(action: :merge).order(:id).to_a.uniq(&:category_id).index_by(&:category_id)
+        return if merges.empty?
+
+        targets = merges.values.map(&:target_category_id)
+        forwarded = ::Category.where(id: targets).where.not(merged_into_id: nil).pluck(:id, :merged_into_id).to_h
+        target_of = merges.transform_values { |merge| forwarded.fetch(merge.target_category_id, merge.target_category_id) }
+        visited = Set.new
+        merges.each_key do |start|
+          path = []
+          node = start
+          while node && !visited.include?(node) && !path.include?(node)
+            path << node
+            node = target_of[node]
+          end
+          visited.merge(path)
+          next unless node && path.include?(node)
+
+          cycle = path[path.index(node)..]
+          blocked = pending.where(action: [:retype, :delete], category_id: cycle).distinct.pluck(:category_id)
+          candidates = cycle - blocked
+          next if candidates.empty?
+
+          counts = ::Category.where(id: candidates).pluck(:id, :item_count).to_h
+          root = candidates.max_by { |id| [counts.fetch(id, 0), -id] }
+          merges[root].update_columns(status: ::CategoryCleanupDecision.statuses.fetch("stale"),
+            error: "merge cycle: this category has the most links of #{cycle.size}, so the others merge into it", updated_at: Time.current)
+          @stats["stale"] += 1
+        end
       end
 
       # A category with a proposed merge, retype or delete cannot also be
@@ -141,9 +184,19 @@ module Services
         category = live_category!(decision)
         raise "#{category.name} is not a location" unless category.location?
 
-        parent_id = @lookup.find(decision.parent_chain.first)
-        raise "parent #{decision.parent_chain.first.inspect} not found" if parent_id.nil?
-        raise "a place can't be its own parent" if parent_id == category.id
+        # A chain name can resolve to the place itself: the AI names a city's
+        # administrative twin as its parent ("Berlin (state)") and, in its own
+        # decision, merges that twin into the city. Skip it for the next name.
+        parent_id = nil
+        decision.parent_chain.each do |name|
+          id = @lookup.find(name)
+          raise "parent #{name.inspect} not found" if id.nil?
+          next if id == category.id
+
+          parent_id = id
+          break
+        end
+        raise "a place can't be its own parent" if parent_id.nil?
 
         category.update!(parent_id: parent_id)
       end
