@@ -20,6 +20,10 @@ set +a
 for v in OPENSEARCH_ALLOWED_IPS OPENSEARCH_ADMIN_PASSWORD OPENSEARCH_APP_PASSWORD OPENSEARCH_LEGACY_PASSWORD; do
   if [ -z "${!v:-}" ]; then echo "deploy: $v is missing from $env_file" >&2; exit 2; fi
 done
+if [ -n "${OPENSEARCH_PORT+x}" ]; then
+  echo "deploy: OPENSEARCH_PORT is set; the firewall covers port 9200 only, so the search port cannot change here" >&2
+  exit 2
+fi
 export OPENSEARCH_CERTS_DIR="$STATE_DIR/certs" OPENSEARCH_SECURITY_DIR="$STATE_DIR/security"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT

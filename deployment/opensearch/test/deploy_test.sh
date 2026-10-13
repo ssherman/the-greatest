@@ -61,5 +61,16 @@ write_env "203.0.113.10" ""
 "$BIN/deploy.sh" "$env_file" >"$SANDBOX/log/out" 2>&1; rc=$?
 if [ "$rc" = 2 ] && ! called '.'; then pass "a missing password stops the deploy before anything runs"; else fail "missing password" "rc=$rc $(cat "$CALLS")"; fi
 
+# --- a port override would open a port the firewall does not cover ------------------------------
+: >"$CALLS"
+write_env "203.0.113.10"
+echo 'OPENSEARCH_PORT=9201' >>"$env_file"
+"$BIN/deploy.sh" "$env_file" >"$SANDBOX/log/out" 2>&1; rc=$?
+if [ "$rc" = 2 ] && ! called '.'; then pass "OPENSEARCH_PORT in the env file is refused"; else fail "port in env file" "rc=$rc $(cat "$CALLS")"; fi
+: >"$CALLS"
+write_env "203.0.113.10"
+OPENSEARCH_PORT=9201 "$BIN/deploy.sh" "$env_file" >"$SANDBOX/log/out" 2>&1; rc=$?
+if [ "$rc" = 2 ] && ! called '.'; then pass "OPENSEARCH_PORT in the caller's environment is refused"; else fail "port in caller env" "rc=$rc $(cat "$CALLS")"; fi
+
 if ! "$BIN/deploy.sh" >/dev/null 2>&1; then pass "no ENV_FILE argument is refused"; else fail "no ENV_FILE argument is refused" "exit 0"; fi
 finish
