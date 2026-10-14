@@ -211,8 +211,9 @@ back.
    `secrets/.env.production` (merging deploys), then run `search:books:recreate_and_reindex_all`,
    `search:music:recreate_and_reindex_all` and `search:games:recreate_and_reindex_all`. Search on the new sites is
    empty while that runs; acceptable with books unlaunched and music and games nearly idle.
-5. Soak a day or two. Then Shane deletes the old Linode, deletes `the-greatest-books/opensearch/`, and
-   **deactivates the AWS access key** hardcoded in its Dockerfile.
+5. Soak a day or two. Then Shane deletes the old Linode and deletes `the-greatest-books/opensearch/`. The AWS
+   access key hardcoded in its Dockerfile stays active: the Postgres nightly backup still uses it (Shane, 2026-10-13).
+   It is retired with the Postgres server rebuild.
 
 These steps live in the runbook (§10), not `docs/launch-todo.md`: the switchover does not depend on the launch.
 

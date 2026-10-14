@@ -2271,4 +2271,5 @@ except the client switch, which is inert until `OPENSEARCH_SSL_VERIFY=false` is 
   then `search:music:recreate_and_reindex_all`, then `search:games:recreate_and_reindex_all`. Check a search on each site.
 - [ ] **O6. Soak** a day or two. Rollback until O7 is setting `OPENSEARCH_URL` back to the old server.
 - [ ] **O7. Retire the old server.** Delete the old Linode (the 2023 "opensearch" one) in the Linode dashboard; delete
-  `the-greatest-books/opensearch/`; **deactivate the AWS access key hardcoded in its Dockerfile** in AWS IAM.
+  `the-greatest-books/opensearch/`. **Do not deactivate the AWS access key hardcoded in its Dockerfile**: the
+  Postgres nightly backup still uses it (Shane, 2026-10-13); it is retired with the Postgres server rebuild.

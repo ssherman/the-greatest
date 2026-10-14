@@ -237,8 +237,9 @@ except the client switch, which stays inert until `OPENSEARCH_SSL_VERIFY=false` 
    Check a search on each site.
 3. **Soak** for a day or two. Until step 4, rollback is setting `OPENSEARCH_URL` back to the old server.
 4. **Retire the old server.** Delete the old Linode (the 2023 "opensearch" one) in the Linode dashboard,
-   delete `the-greatest-books/opensearch/`, and deactivate the AWS access key hardcoded in its Dockerfile
-   in AWS IAM.
+   and delete `the-greatest-books/opensearch/`. Do **not** deactivate the AWS access key hardcoded in that
+   directory's Dockerfile: the same key is still used by the Postgres nightly backup (Shane, 2026-10-13).
+   Retire it with the Postgres server rebuild, once nothing uses it.
 
 ## Gotchas
 
