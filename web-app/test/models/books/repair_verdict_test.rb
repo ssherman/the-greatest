@@ -74,8 +74,8 @@ module Books
       assert_empty verdict(subject_key: "user:2:book:3:goodreads:4").author_ids
     end
 
-    test "the replay never applies by default" do
-      refute Rails.configuration.x.goodreads_replay.auto_apply
+    test "the replay applies approved verdicts once its auto verdicts are hand-checked" do
+      assert Rails.configuration.x.goodreads_replay.auto_apply
       assert_equal 80, Rails.configuration.x.goodreads_replay.max_author_group
     end
   end

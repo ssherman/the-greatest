@@ -136,9 +136,9 @@ the sync never undoes them.
 
    - `seed_legacy_pages` only needs to run once. It never overwrites a cached page, so running it
      again is harmless.
-   - Nothing changes the catalog until `config.x.goodreads_replay.auto_apply` is on. Until then the
-     replay only records proposed fixes, under Books → Repair Verdicts. Turn it on only after the
-     50-per-kind hand check (spec §12.9).
+   - `apply` changes the catalog only through approved verdicts, under Books → Repair Verdicts.
+     `config.x.goodreads_replay.auto_apply` gates it and has been on since 2026-10-14, after the
+     first production replay's 50-per-kind hand check (spec §12.9).
    - Its merges and provisional marks are catalog changes and stick. Its relinks of legacy users'
      list items and reviews are undone by each sync and re-applied by `apply` (section 4).
      `repair_ratings` repeats every pass for the same reason: each sync puts
