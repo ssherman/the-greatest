@@ -239,7 +239,8 @@ task can run again after each migration pass.
 Spec §12. The legacy app's 803 imports are replayed against the new resolver to measure it and to find the bad data
 legacy left behind. Every finding is a `Books::RepairVerdict` (`books_repair_verdicts`, no foreign keys, keyed by
 preserved ids): **never truncate that table**, the launch sequence relies on it. Nothing changes the catalog except
-`books:goodreads_replay:apply`, which refuses to run while `config.x.goodreads_replay.auto_apply` is false (the default).
+`books:goodreads_replay:apply`, which refuses to run while `config.x.goodreads_replay.auto_apply` is false. It has been
+on since 2026-10-14, after the first production replay's hand check; `apply` acts on approved verdicts only.
 
 A pass, after every books migration pass and in the launch sequence:
 
@@ -284,8 +285,8 @@ bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.m
   is added beside it, and the legacy book keeps the item and the review. Junk detection treats such a book as supported.
 - **Apply batches the follow-ups.** Merges run with `defer_rankings: true`, and one run queues each ranking
   recalculation, the favorites rebuild and the author rankings once, not once per merge.
-- **Before auto-apply:** hand-check 50 auto verdicts per kind with `books:goodreads_replay:sample[kind]`, then set
-  `auto_apply: true` in `config/initializers/goodreads_replay.rb`.
+- **Auto-apply** was switched on (`config/initializers/goodreads_replay.rb`) on 2026-10-14, after 50 auto verdicts per
+  kind were hand-checked with `books:goodreads_replay:sample[kind]`. Setting it back to false stops every later `apply`.
 
 ### Legacy truncation repair
 
