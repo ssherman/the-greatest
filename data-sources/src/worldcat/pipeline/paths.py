@@ -14,7 +14,7 @@ never a symlink and never "the latest".
 from dataclasses import dataclass
 from pathlib import Path
 
-TABLES = ("records", "isbns", "redirects", "holdings")
+TABLES = ("records", "isbns", "redirects", "holdings", "lookup")
 
 
 @dataclass(frozen=True)

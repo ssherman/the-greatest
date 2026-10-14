@@ -7,7 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from common.normalize import normalize_isbn
 from openlibrary.api.limits import Deadline
 from worldcat.api.deps import ArtifactState, cursor, get_state
-from worldcat.api.schemas import Holdings, IsbnResponse, LookupRequest, LookupResponse, Record
+from worldcat.api.schemas import (
+    Holdings,
+    IsbnResponse,
+    LookupRecord,
+    LookupRequest,
+    LookupResponse,
+    Record,
+)
+from worldcat.pipeline.distill import LOOKUP_COLUMNS
 from worldcat.pipeline.paths import WorldcatPaths
 
 router = APIRouter()
@@ -109,11 +117,37 @@ def _records_for_isbn13s(
     return out
 
 
+def _lookup_records(
+    cur: duckdb.DuckDBPyConnection, paths: WorldcatPaths, isbn13s: list[str]
+) -> dict[str, list[LookupRecord]]:
+    """The batch route's query: one ISBN-sorted narrow table, so a batch touches one
+    small row group per ISBN instead of one wide row group per record."""
+    if not isbn13s:
+        return {}
+    placeholders = ", ".join("?" for _ in isbn13s)
+    columns = ", ".join(LOOKUP_COLUMNS)
+    rows = cur.execute(
+        f"SELECT isbn13, {columns} FROM '{paths.table('lookup')}' "
+        f"WHERE isbn13 IN ({placeholders}) ORDER BY isbn13, oclc",
+        isbn13s,
+    ).fetchall()
+    out: dict[str, list[LookupRecord]] = {isbn: [] for isbn in isbn13s}
+    for row in rows:
+        data = dict(zip(LOOKUP_COLUMNS, row[1:], strict=True))
+        for key in ("subjects", "isbn13s", "merged_oclc", "other_format_oclc"):
+            data[key] = data[key] or []
+        out[row[0]].append(LookupRecord(**data))
+    return out
+
+
 def _with_deadline(state: ArtifactState, fn):
     with cursor(state) as cur, Deadline(cur, state.deadline_s) as deadline:
         try:
             return fn(cur)
-        except duckdb.InterruptException:
+        except duckdb.Error:
+            # An interrupt that lands mid-fetch surfaces as InvalidInputException
+            # ("closed pending query result"), not InterruptException; after the
+            # deadline every DuckDB failure is the deadline.
             if not deadline.expired:
                 raise
             raise HTTPException(
@@ -155,7 +189,7 @@ def post_lookup(request: LookupRequest, state: ArtifactState = Depends(get_state
     if bad:
         raise HTTPException(status_code=422, detail=f"invalid ISBN(s): {bad}")
     found = _with_deadline(
-        state, lambda cur: _records_for_isbn13s(cur, state.paths, sorted(set(normalized.values())))
+        state, lambda cur: _lookup_records(cur, state.paths, sorted(set(normalized.values())))
     )
     return LookupResponse(
         results={value: found.get(isbn13, []) for value, isbn13 in normalized.items()}

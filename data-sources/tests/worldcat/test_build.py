@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from worldcat.pipeline.build import BuildFailed, build, source_fingerprint
+from worldcat.pipeline.extract import ExtractIncomplete
 from worldcat.pipeline.gates import Thresholds
 from worldcat.pipeline.paths import TABLES, WorldcatPaths
 
@@ -100,3 +101,122 @@ def test_a_stray_shard_from_an_earlier_run_is_cleared_before_extracting(
 
     assert not stray.exists()
     assert not (paths.staging_dir / "progress_099.txt").exists()
+
+
+def test_resume_distills_the_shards_an_earlier_run_left(tmp_path: Path, worldcat_source: Path):
+    paths = WorldcatPaths(root=tmp_path, dump_date="2025-09-04")
+    first = build(
+        source=worldcat_source,
+        root=tmp_path,
+        dump_date="2025-09-04",
+        workers=2,
+        memory_limit="1GB",
+        thresholds=LOOSE,
+        keep_staging=True,
+    )
+    shards = sorted(p.name for p in paths.staging_dir.glob("shard_*.parquet"))
+    for table in TABLES:
+        paths.table(table).unlink()
+    paths.manifest_path.unlink()
+
+    second = build(
+        source=worldcat_source,
+        root=tmp_path,
+        dump_date="2025-09-04",
+        workers=2,
+        memory_limit="1GB",
+        thresholds=LOOSE,
+        resume=True,
+    )
+
+    assert second["tables"] == first["tables"]
+    assert second["extract"]["kept"] == first["extract"]["kept"] > 0
+    assert "extract" not in second["timings"] and "records" in second["timings"]
+    assert json.loads(paths.manifest_path.read_text())["gates_passed"] is True
+    assert not paths.staging_dir.exists(), shards
+
+
+def _built_with_staging(tmp_path: Path, worldcat_source: Path) -> WorldcatPaths:
+    build(
+        source=worldcat_source,
+        root=tmp_path,
+        dump_date="2025-09-04",
+        workers=2,
+        memory_limit="1GB",
+        thresholds=LOOSE,
+        keep_staging=True,
+    )
+    return WorldcatPaths(root=tmp_path, dump_date="2025-09-04")
+
+
+def _resume(tmp_path: Path, source: Path) -> dict:
+    return build(
+        source=source,
+        root=tmp_path,
+        dump_date="2025-09-04",
+        memory_limit="1GB",
+        thresholds=LOOSE,
+        resume=True,
+    )
+
+
+def test_resume_refuses_shards_extracted_from_another_file(tmp_path: Path, worldcat_source: Path):
+    paths = _built_with_staging(tmp_path, worldcat_source)
+    assert (paths.staging_dir / "source_fingerprint").read_text().strip() == source_fingerprint(
+        worldcat_source
+    )
+    other = tmp_path / "other.zst"
+    data = bytearray(worldcat_source.read_bytes())
+    data[8] ^= 0xFF
+    other.write_bytes(bytes(data))
+
+    with pytest.raises(ExtractIncomplete, match="different file"):
+        _resume(tmp_path, other)
+    assert paths.staging_dir.exists()
+
+
+def test_resume_refuses_a_truncated_or_missing_shard(tmp_path: Path, worldcat_source: Path):
+    import duckdb
+
+    paths = _built_with_staging(tmp_path, worldcat_source)
+    (shard,) = sorted(paths.staging_dir.glob("shard_000_*.parquet"))
+    con = duckdb.connect()
+    con.execute(f"CREATE TEMP TABLE rows AS SELECT * FROM '{shard}'")
+    con.execute(
+        f"COPY (SELECT * FROM rows LIMIT (SELECT count(*) - 1 FROM rows)) "
+        f"TO '{shard}' (FORMAT parquet)"
+    )
+    con.close()
+
+    with pytest.raises(ExtractIncomplete, match=r"worker 0: .* rows in its shards"):
+        _resume(tmp_path, worldcat_source)
+
+    for missing in paths.staging_dir.glob("shard_001_*.parquet"):
+        missing.unlink()
+    with pytest.raises(ExtractIncomplete, match="worker 0|worker 1"):
+        _resume(tmp_path, worldcat_source)
+    assert paths.staging_dir.exists()
+
+
+def test_resume_without_a_finished_extraction_touches_nothing(
+    tmp_path: Path, worldcat_source: Path
+):
+    import duckdb
+
+    paths = WorldcatPaths(root=tmp_path, dump_date="2025-09-04")
+    paths.ensure()
+    partial = paths.staging_dir / "shard_000_00000.parquet"
+    duckdb.connect().execute(f"COPY (SELECT 1 AS x) TO '{partial}' (FORMAT parquet)")
+    (paths.staging_dir / "progress_000.txt").write_text("40.0% lines=10 kept=5 bad=0 elapsed=3s\n")
+
+    with pytest.raises(ExtractIncomplete, match="did not finish"):
+        build(
+            source=worldcat_source,
+            root=tmp_path,
+            dump_date="2025-09-04",
+            memory_limit="1GB",
+            thresholds=LOOSE,
+            resume=True,
+        )
+
+    assert partial.exists() and not paths.manifest_path.exists()

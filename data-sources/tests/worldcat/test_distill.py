@@ -8,6 +8,7 @@ from worldcat.pipeline.distill import (
     UnknownPass,
     build_holdings,
     build_isbns,
+    build_lookup,
     build_records,
     build_redirects,
     unknown_passes,
@@ -31,6 +32,7 @@ def built(tmp_path: Path, worldcat_source: Path):
         "isbns": build_isbns(con, paths),
         "redirects": build_redirects(con, paths),
         "holdings": build_holdings(con, paths),
+        "lookup": build_lookup(con, paths),
     }
     yield con, paths, counts
     con.close()
@@ -123,7 +125,13 @@ def test_builders_return_row_counts_and_sort_by_key(built):
     con, paths, counts = built
     for name, n in counts.items():
         assert _one(con, f"SELECT count(*) FROM '{paths.table(name)}'") == (n,)
-    key = {"records": "oclc", "isbns": "isbn13", "redirects": "from_oclc", "holdings": "oclc"}
+    key = {
+        "records": "oclc",
+        "isbns": "isbn13",
+        "redirects": "from_oclc",
+        "holdings": "oclc",
+        "lookup": "isbn13",
+    }
     for name, column in key.items():
         (unsorted,) = _one(
             con,
@@ -147,3 +155,19 @@ def test_an_unknown_pass_prefix_is_refused(tmp_path: Path, worldcat_source: Path
     assert unknown_passes(con, paths) == ["mystery_pass"]
     with pytest.raises(UnknownPass, match="mystery_pass"):
         build_records(con, paths)
+
+
+def test_lookup_is_isbns_joined_to_the_category_fields(built):
+    con, paths, counts = built
+    assert counts["lookup"] == counts["isbns"]
+    rows = con.execute(
+        f"SELECT oclc, genre, subjects, isbn13s FROM '{paths.table('lookup')}' "
+        "WHERE isbn13 = '9781847941831'"
+    ).fetchall()
+    # the UK ISBN of Atomic Habits reaches the same record as the US one, with its genre
+    assert len(rows) == 1 and rows[0][0] == 1055766559 and rows[0][1] == "Nonfiction"
+    assert "9780735211292" in rows[0][3]
+    columns = [
+        r[0] for r in con.execute(f"DESCRIBE SELECT * FROM '{paths.table('lookup')}'").fetchall()
+    ]
+    assert "title" not in columns and "summary" not in columns and columns[0] == "isbn13"

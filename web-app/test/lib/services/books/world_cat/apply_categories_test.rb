@@ -7,11 +7,12 @@ module Services
         setup do
           @book = books_books(:war_and_peace)
           @map = ::Books::WorldCat::GenreMap.new(
-            "genres" => ["Fiction", "Novels"],
+            "genres" => ["Fiction", "Novels", "Americana"],
             "terms" => {
               "Fiction" => {"verdict" => "genre", "genre" => "Fiction"},
               "Romans" => {"verdict" => "genre", "genre" => "Fiction"},
               "novels" => {"verdict" => "genre", "genre" => "Novels"},
+              "Americana" => {"verdict" => "genre", "genre" => "Americana"},
               "Politics and government" => {"verdict" => "subject", "subject" => "Politics"},
               "Napoleonic Wars" => {"verdict" => "subject", "subject" => "Napoleonic Wars"},
               "Large type books" => {"verdict" => "drop", "reason" => "format"}
@@ -47,6 +48,22 @@ module Services
           result = ApplyCategories.call(book: @book, records: records, map: @map)
           assert_equal ["Fiction"], result.data[:genres_linked]
           assert_not_includes result.data[:genres_linked], "Novels"
+        end
+
+        test "an edition's genre on two of many genre-bearing records is ignored" do
+          # thirty editions of a classic: twenty-eight say Fiction, a study edition says Americana twice
+          records = Array.new(28) { |i| record(100 + i, genre: "Romans") } + [record(1, genre: "Americana"), record(2, genre: "Americana")]
+          result = ApplyCategories.call(book: @book, records: records, map: @map)
+          assert_equal ["Fiction"], result.data[:genres_linked]
+          assert_not_includes names(:genre), "Americana"
+        end
+
+        test "a secondary genre on a quarter of the genre-bearing records is kept" do
+          # eight records carry a genre (six Fiction, two Americana); records with no genre do not count against it
+          records = Array.new(6) { |i| record(100 + i, genre: "Fiction") } + [record(1, genre: "Americana"), record(2, genre: "Americana")] +
+            Array.new(20) { |i| record(200 + i, genre: nil, subjects: ["Napoleonic Wars"]) }
+          result = ApplyCategories.call(book: @book, records: records, map: @map)
+          assert_equal ["Americana", "Fiction"], result.data[:genres_linked]
         end
 
         test "subjects resolve by name or alternative name and unresolved phrases are reported, not created" do

@@ -20,6 +20,28 @@ PASS_ORDER: tuple[str, ...] = (
 )
 MAX_REDIRECT_HOPS = 10
 ROW_GROUP = 100_000
+# A lookup pays for every row group it touches, whole: 14 MB of wide text per
+# 100,000-row group of `records` cost 80 ms a hit at two threads, and one ISBN
+# fans out to ten records in ten groups. So `records` keeps smaller groups for the
+# single-item routes, and the batch route reads `lookup`: one narrow row per
+# (isbn13, oclc), sorted by ISBN so an ISBN's records share a 10,000-row group.
+# Measured on the 2025-09-04 build at two threads: 100 ISBNs in 1.2 s, 500 in 3.3 s.
+RECORDS_ROW_GROUP = 20_000
+LOOKUP_ROW_GROUP = 10_000
+# What a batch lookup returns: the fields the category backfill reads, none of the text.
+LOOKUP_COLUMNS: tuple[str, ...] = (
+    "oclc",
+    "year",
+    "cataloging_language",
+    "specific_format",
+    "genre",
+    "subjects",
+    "isbn13s",
+    "merged_oclc",
+    "other_format_oclc",
+    "total_editions",
+    "source_type",
+)
 
 
 class UnknownPass(RuntimeError):
@@ -58,43 +80,81 @@ def _count(con: duckdb.DuckDBPyConnection, target) -> int:
 
 
 def build_records(con: duckdb.DuckDBPyConnection, paths: WorldcatPaths) -> int:
+    """Three narrow passes instead of one window over every wide row.
+
+    The first real build (299M record rows, 165M OCLC numbers) ran out of memory
+    at 16 GB and again at 30 GB with a single row_number() window over the full
+    row width. Picking the winner over the key columns only, then joining the
+    wide columns back by (shard, row), keeps the big intermediates small enough
+    to spill: `winners` is three integers per OCLC number and `isbn_union` is a
+    short list per OCLC number.
+    """
     _require_known_passes(con, paths)
     target = paths.table("records")
+    glob = shards_glob(paths)
+    con.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE shards AS
+        SELECT filename, row_number() OVER (ORDER BY filename) AS shard_id
+        FROM (SELECT DISTINCT filename FROM read_parquet('{glob}', filename = true))
+        """
+    )
+    # Newest pass, then title_json over briefrecords_json, then the highest pass_index
+    # (NULL last): the same order the former row_number() window used.
+    con.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE winners AS
+        WITH {_pass_rank_cte()}
+        SELECT oclc, pick.shard_id AS shard_id, pick.row AS row
+        FROM (
+          SELECT s.oclc,
+                 arg_min(
+                   {{'shard_id': sh.shard_id, 'row': s.file_row_number}},
+                   {{'pass_rank': pr.pass_rank,
+                     'type_rank': CASE s.type WHEN 'title_json' THEN 0 ELSE 1 END,
+                     'pass_desc': coalesce(-s.pass_index, 9223372036854775807)}}
+                 ) AS pick
+          FROM read_parquet('{glob}', filename = true, file_row_number = true) s
+          JOIN pr USING (pass)
+          JOIN shards sh USING (filename)
+          WHERE s.kind = 'record'
+          GROUP BY s.oclc
+        )
+        """
+    )
+    con.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE isbn_union AS
+        SELECT oclc, list(isbn13 ORDER BY isbn13) AS isbn13s
+        FROM (
+          SELECT DISTINCT oclc, {isbn13_sql("raw")} AS isbn13
+          FROM (SELECT oclc, unnest(isbns_raw) AS raw
+                FROM read_parquet('{glob}') WHERE kind = 'record')
+        )
+        WHERE isbn13 IS NOT NULL
+        GROUP BY oclc
+        """
+    )
     con.execute(
         f"""
         COPY (
-          WITH {_pass_rank_cte()},
-          src AS (
-            SELECT s.*, pr.pass_rank,
-                   CASE s.type WHEN 'title_json' THEN 0 ELSE 1 END AS type_rank
-            FROM read_parquet('{shards_glob(paths)}') s JOIN pr USING (pass)
-            WHERE s.kind = 'record'
-          ),
-          ranked AS (
-            SELECT *, row_number() OVER (
-              PARTITION BY oclc ORDER BY pass_rank, type_rank, pass_index DESC NULLS LAST
-            ) AS rn
-            FROM src
-          ),
-          isbn_union AS (
-            SELECT oclc,
-                   list_distinct(list_filter(
-                     list_transform(flatten(list(isbns_raw)), x -> {isbn13_sql("x")}),
-                     x -> x IS NOT NULL)) AS isbn13s
-            FROM src GROUP BY oclc
-          )
-          SELECT r.oclc, r.title, r.subtitle, r.creator, r.contributors, r.year,
-                 r.publication_date_raw, r.publisher, r.publication_place,
-                 r.cataloging_language, r.specific_format, r.edition_statement,
-                 r.physical_description, r.series, r.genre, r.subjects,
-                 u.isbn13s, r.merged_oclc, r.other_format_oclc, r.total_editions, r.summary,
-                 r.type AS source_type, r.pass AS source_pass
-          FROM ranked r JOIN isbn_union u USING (oclc)
-          WHERE r.rn = 1
-          ORDER BY r.oclc
-        ) TO '{target}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {ROW_GROUP})
+          SELECT s.oclc, s.title, s.subtitle, s.creator, s.contributors, s.year,
+                 s.publication_date_raw, s.publisher, s.publication_place,
+                 s.cataloging_language, s.specific_format, s.edition_statement,
+                 s.physical_description, s.series, s.genre, s.subjects,
+                 u.isbn13s, s.merged_oclc, s.other_format_oclc, s.total_editions, s.summary,
+                 s.type AS source_type, s.pass AS source_pass
+          FROM read_parquet('{glob}', filename = true, file_row_number = true) s
+          JOIN shards sh USING (filename)
+          JOIN winners w ON w.shard_id = sh.shard_id AND w.row = s.file_row_number
+          JOIN isbn_union u ON u.oclc = s.oclc
+          WHERE s.kind = 'record'
+          ORDER BY s.oclc
+        ) TO '{target}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {RECORDS_ROW_GROUP})
         """
     )
+    for temp in ("shards", "winners", "isbn_union"):
+        con.execute(f"DROP TABLE IF EXISTS {temp}")
     return _count(con, target)
 
 
@@ -169,6 +229,23 @@ def build_holdings(con: duckdb.DuckDBPyConnection, paths: WorldcatPaths) -> int:
           WHERE kind = 'holdings'
           GROUP BY oclc ORDER BY oclc
         ) TO '{target}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {ROW_GROUP})
+        """
+    )
+    return _count(con, target)
+
+
+def build_lookup(con: duckdb.DuckDBPyConnection, paths: WorldcatPaths) -> int:
+    """`isbns` joined to the category fields of `records`, sorted by ISBN: the table
+    the batch route reads. Built last, from the two finished tables."""
+    target = paths.table("lookup")
+    columns = ", ".join(f"r.{c}" for c in LOOKUP_COLUMNS)
+    con.execute(
+        f"""
+        COPY (
+          SELECT i.isbn13, {columns}
+          FROM '{paths.table("isbns")}' i JOIN '{paths.table("records")}' r USING (oclc)
+          ORDER BY i.isbn13, r.oclc
+        ) TO '{target}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {LOOKUP_ROW_GROUP})
         """
     )
     return _count(con, target)
