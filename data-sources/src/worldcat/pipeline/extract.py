@@ -240,6 +240,87 @@ class ShardWriter:
         return self.index
 
 
+_PROGRESS_DONE = re.compile(r"^100\.0% lines=(\d+) kept=(\d+) bad=(\d+) done$")
+# Written beside the shards before extraction starts, so --resume can tell whose
+# shards they are: a changed --source with the same dump-date directory would
+# otherwise distill the old file's shards under the new file's fingerprint.
+SOURCE_FINGERPRINT_FILE = "source_fingerprint"
+
+
+def write_source_fingerprint(paths: WorldcatPaths, fingerprint: str) -> None:
+    (paths.staging_dir / SOURCE_FINGERPRINT_FILE).write_text(fingerprint + "\n")
+
+
+def require_source_fingerprint(paths: WorldcatPaths, fingerprint: str) -> None:
+    """--resume: the shards in _staging must come from this source file."""
+    path = paths.staging_dir / SOURCE_FINGERPRINT_FILE
+    recorded = path.read_text().strip() if path.exists() else None
+    if recorded != fingerprint:
+        raise ExtractIncomplete(
+            f"the shards in {paths.staging_dir} were extracted from a different file "
+            f"(recorded fingerprint {recorded}, --source is {fingerprint}); build without --resume"
+        )
+
+
+def verify_shards(
+    con: duckdb.DuckDBPyConnection, paths: WorldcatPaths, stats: list["ExtractStats"]
+) -> None:
+    """--resume: every worker's shards must hold exactly the rows its progress file
+    counted. A deleted or truncated shard would otherwise pass the row-count gates
+    (they bound the total loosely) and publish an artifact missing records."""
+    for s in stats:
+        glob = paths.staging_dir / f"shard_{s.worker:03d}_*.parquet"
+        try:
+            (rows,) = con.execute(f"SELECT count(*) FROM read_parquet('{glob}')").fetchone()
+        except duckdb.Error as exc:
+            raise ExtractIncomplete(
+                f"worker {s.worker}: its shards cannot be read ({exc}); build without --resume"
+            ) from None
+        if rows != s.kept:
+            raise ExtractIncomplete(
+                f"worker {s.worker}: {rows:,} rows in its shards, its progress file says "
+                f"{s.kept:,}; build without --resume"
+            )
+
+
+class ExtractIncomplete(RuntimeError):
+    """--resume found no finished extraction to build from."""
+
+
+def load_progress(paths: WorldcatPaths) -> list[ExtractStats]:
+    """The stats of a finished extraction, read back from its progress files, so a
+    build can resume at the distill stage instead of repeating the hour-long
+    extract (the first real build died in distill with the shards intact).
+
+    Refuses an unfinished worker (a partial shard set would build a partial
+    artifact) and a worker that saw a bad frame (the file holds only the count,
+    and the bad_frames gate needs the list): both mean rebuild without --resume.
+    The per-line reject count is not in the file either, so a resumed report says
+    bad_lines=0.
+    """
+    files = sorted(paths.staging_dir.glob("progress_*.txt"))
+    if not files:
+        raise ExtractIncomplete(f"no progress files in {paths.staging_dir}; build without --resume")
+    stats = []
+    for path in files:
+        worker = int(path.stem.split("_")[1])
+        text = path.read_text().strip()
+        match = _PROGRESS_DONE.match(text)
+        if match is None:
+            raise ExtractIncomplete(
+                f"worker {worker} did not finish ({text!r}); build without --resume"
+            )
+        if int(match.group(3)):
+            raise ExtractIncomplete(f"worker {worker} had bad frames; build without --resume")
+        shards = len(list(paths.staging_dir.glob(f"shard_{worker:03d}_*.parquet")))
+        stats.append(
+            ExtractStats(
+                worker=worker, lines=int(match.group(1)), kept=int(match.group(2)), shards=shards
+            )
+        )
+    return stats
+
+
 def _read_frame(fh, frame: Frame, dctx: zstandard.ZstdDecompressor) -> bytes:
     for attempt in range(30):
         try:

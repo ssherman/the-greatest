@@ -100,6 +100,18 @@ class CategoryCleanupRakeTest < ActiveSupport::TestCase
     assert_raises(SystemExit) { capture_io { Rake::Task["categories:cleanup:calibrate"].invoke("t1", "location") } }
   end
 
+  test "calibrate prints the one-at-a-time baseline before the batch sizes" do
+    row = ->(size, agreement) { {size: size, compared: 200, agreement: agreement, action_agreement: 0.99, disagreements: []} }
+    Services::CategoryCleanup::CostGuard.stubs(:check!).returns(1.0)
+    Services::CategoryCleanup::Calibrator.stubs(:call).returns(Services::CategoryCleanup::Calibrator::Result.new(
+      success?: true, data: {sample: 200, baseline: row.call(1, 0.865), sizes: [row.call(10, 0.84)]}, errors: []
+    ))
+
+    out, _err = capture_io { Rake::Task["categories:cleanup:calibrate"].invoke("t1", "location") }
+
+    assert_match(/Baseline, one-at-a-time vs itself: 86\.5% agreement, 99\.0% same action\/verdict.*\nBatch size 10: 84\.0% agreement/m, out)
+  end
+
   test "reject marks the given decisions rejected" do
     decision = CategoryCleanupDecision.create!(category: categories(:books_france_location), run: "t1", stage: "rules", action: :keep, decided_by: :rule)
 

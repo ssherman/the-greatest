@@ -44,6 +44,104 @@ module Services
         assert_equal 1, result.data["merge"]
       end
 
+      test "a chain parent merged into the place itself is skipped for the next name" do
+        germany = location("Germany")
+        berlin = location("Berlin")
+        state = location("Berlin (state)")
+        merge = decide(state, :merge, target_category: berlin)
+        parent = decide(berlin, :set_parent, parent_chain: ["Berlin (state)", "Germany", "Europe"])
+
+        Applier.call(run: "r1")
+
+        assert_equal berlin, state.reload.merged_into
+        assert_equal germany.id, berlin.reload.parent_id
+        assert_equal %w[applied applied], [merge, parent].map { |d| d.reload.status }
+      end
+
+      test "a two-way merge keeps the more-linked category and its rename" do
+        gods = location("Gods", type: :subject)
+        deities = location("deities", type: :subject)
+        gods.update_column(:item_count, 384)
+        deities.update_column(:item_count, 190)
+        # Decided in that order (the head goes most-linked first), so id order
+        # alone would merge Gods into the smaller deities.
+        gods_merge = decide(gods, :merge, target_category: deities)
+        deities_merge = decide(deities, :merge, target_category: gods)
+        gods_rename = decide(gods, :rename, new_name: "Gods and Goddesses")
+
+        result = Applier.call(run: "r1")
+
+        assert_equal gods, deities.reload.merged_into
+        assert_not gods.reload.deleted?
+        assert_equal "Gods and Goddesses", gods.name
+        assert_equal %w[stale applied applied], [gods_merge, deities_merge, gods_rename].map { |d| d.reload.status }
+        assert_match "merge cycle", gods_merge.error
+        assert_equal 0, result.data["failed"]
+      end
+
+      test "a cycle is not broken at a member that also has a delete, so no merged links are deleted" do
+        gods = location("Gods", type: :subject)
+        deities = location("Deities", type: :subject)
+        gods.update_column(:item_count, 384)
+        deities.update_column(:item_count, 190)
+        gods_merge = decide(gods, :merge, target_category: deities)
+        deities_merge = decide(deities, :merge, target_category: gods)
+        gods_delete = decide(gods, :delete)
+
+        Applier.call(run: "r1")
+
+        assert_equal deities, gods.reload.merged_into
+        assert_not deities.reload.deleted?
+        assert CategoryItem.exists?(category: deities, item: @book)
+        assert_equal %w[applied stale stale], [gods_merge, deities_merge, gods_delete].map { |d| d.reload.status }
+      end
+
+      test "a cycle whose members all have another terminal decision is left unbroken" do
+        a = location("Alpha", type: :subject)
+        b = location("Beta", type: :subject)
+        a_merge = decide(a, :merge, target_category: b)
+        b_merge = decide(b, :merge, target_category: a)
+        decide(a, :delete)
+        decide(b, :delete)
+
+        Applier.call(run: "r1")
+
+        assert_equal b, a.reload.merged_into
+        assert_not b.reload.deleted?
+        assert_equal %w[applied failed], [a_merge, b_merge].map { |d| d.reload.status }
+      end
+
+      test "a longer merge cycle and a chain into it all end in the most-linked member" do
+        a = location("Aliens", type: :subject)
+        b = location("Extraterrestrials", type: :subject)
+        c = location("Alien Life", type: :subject)
+        d = location("Extraterrestrial Life", type: :subject)
+        {a => 304, b => 90, c => 171, d => 50}.each { |category, count| category.update_column(:item_count, count) }
+        decide(a, :merge, target_category: b)
+        decide(b, :merge, target_category: c)
+        decide(c, :merge, target_category: a)
+        decide(d, :merge, target_category: c)
+
+        result = Applier.call(run: "r1")
+
+        assert_not a.reload.deleted?
+        assert_equal [a, a, a], [b, c, d].map { |category| category.reload.merged_into }
+        assert_equal [3, 1, 0], [result.data["merge"], result.data["stale"], result.data["failed"]]
+      end
+
+      test "a chain that names only the place itself fails" do
+        berlin = location("Berlin")
+        state = location("Berlin (state)")
+        decide(state, :merge, target_category: berlin)
+        parent = decide(berlin, :set_parent, parent_chain: ["Berlin (state)"])
+
+        Applier.call(run: "r1")
+
+        assert_nil berlin.reload.parent_id
+        assert parent.reload.failed?
+        assert_match "its own parent", parent.error
+      end
+
       test "creates missing chain parents with their own parents and records them as kept" do
         chicago = location("Chicago")
         decide(chicago, :set_parent, parent_chain: ["Illinois", "United States", "North America"])
@@ -332,18 +430,19 @@ module Services
         assert_match(/\ARuntimeError: /, failing.reload.error)
       end
 
-      test "mutual merges: the first applies, the second fails" do
+      test "mutual merges with equal links keep the older category" do
         a = location("Alpha")
         b = location("Beta")
+        [a, b].each { |category| category.update_column(:item_count, 7) }
         first = decide(a, :merge, target_category: b)
         second = decide(b, :merge, target_category: a)
 
         Applier.call(run: "r1")
 
-        assert first.reload.applied?
-        assert second.reload.failed?
-        assert_equal b, a.reload.merged_into
-        refute b.reload.deleted?
+        assert first.reload.stale?
+        assert second.reload.applied?
+        assert_equal a, b.reload.merged_into
+        refute a.reload.deleted?
       end
 
       test "chained merges resolve through the canonical target" do

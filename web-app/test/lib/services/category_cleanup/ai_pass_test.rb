@@ -146,6 +146,14 @@ module Services
         assert_equal 1, AiPass.new(run: "r1", category_type: "location", tier: :tail, batch_size: 1, limit: 1).call_count
         assert_equal 2, AiPass.new(run: "r1", category_type: "location", tier: :tail, batch_size: 0).call_count
       end
+
+      test "the tail batch size defaults to the configured size for the category type" do
+        Rails.configuration.x.categories_cleanup.stubs(:tail_batch_size).returns({location: 2, subject: 1})
+        assert_equal 1, AiPass.new(run: "r1", category_type: "location", tier: :tail).call_count
+
+        Rails.configuration.x.categories_cleanup.stubs(:tail_batch_size).returns({location: 1, subject: 2})
+        assert_equal 2, AiPass.new(run: "r1", category_type: "location", tier: :tail).call_count
+      end
     end
   end
 end

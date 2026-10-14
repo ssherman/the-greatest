@@ -4,7 +4,13 @@ import duckdb
 import pytest
 
 from common.gates import GateResult
-from worldcat.pipeline.distill import build_holdings, build_isbns, build_records, build_redirects
+from worldcat.pipeline.distill import (
+    build_holdings,
+    build_isbns,
+    build_lookup,
+    build_records,
+    build_redirects,
+)
 from worldcat.pipeline.extract import ExtractStats, extract_range
 from worldcat.pipeline.gates import Thresholds, gates_passed, run_gates
 from worldcat.pipeline.paths import WorldcatPaths
@@ -19,7 +25,7 @@ def built(tmp_path: Path, worldcat_source: Path):
     paths.ensure()
     stats = extract_range(worldcat_source, paths, 0, 0, len(read_seek_table(worldcat_source)))
     con = duckdb.connect()
-    for builder in (build_records, build_isbns, build_redirects, build_holdings):
+    for builder in (build_records, build_isbns, build_redirects, build_holdings, build_lookup):
         builder(con, paths)
     yield con, paths, [stats]
     con.close()

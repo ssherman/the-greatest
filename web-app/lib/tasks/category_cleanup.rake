@@ -69,7 +69,8 @@ namespace :categories do
     task :calibrate, [:run, :type] => :environment do |_task, args|
       abort "Usage: bin/rails 'categories:cleanup:calibrate[RUN,location|subject]'" unless args[:run].present? && %w[location subject].include?(args[:type])
       sizes = ::Services::CategoryCleanup::Calibrator::SIZES
-      calls = sizes.sum { |size| (::Services::CategoryCleanup::Calibrator::SAMPLE_SIZE / size.to_f).ceil }
+      # The extra SAMPLE_SIZE is the second one-at-a-time pass (the baseline).
+      calls = sizes.sum { |size| (::Services::CategoryCleanup::Calibrator::SAMPLE_SIZE / size.to_f).ceil } + ::Services::CategoryCleanup::Calibrator::SAMPLE_SIZE
       begin
         ::Services::CategoryCleanup::CostGuard.check!(calls: calls, force: ENV["FORCE"] == "1")
       rescue ::Services::CategoryCleanup::CostGuard::TooExpensive => e
@@ -77,8 +78,12 @@ namespace :categories do
       end
       result = ::Services::CategoryCleanup::Calibrator.call(run: args[:run], category_type: args[:type])
       puts "Sample: #{result.data[:sample]} tail #{args[:type]}s"
+      baseline = result.data[:baseline]
+      puts format("Baseline, one-at-a-time vs itself: %.1f%% agreement, %.1f%% same action/verdict, over %d categories",
+        baseline[:agreement] * 100, baseline[:action_agreement] * 100, baseline[:compared])
       result.data[:sizes].each do |row|
-        puts format("Batch size %d: %.1f%% agreement over %d categories", row[:size], row[:agreement] * 100, row[:compared])
+        puts format("Batch size %d: %.1f%% agreement, %.1f%% same action/verdict, over %d categories",
+          row[:size], row[:agreement] * 100, row[:action_agreement] * 100, row[:compared])
         row[:disagreements].each { |d| puts "  #{d[:name]}: one-at-a-time #{d[:one_at_a_time].inspect} vs batched #{d[:batched].inspect}" }
       end
     end

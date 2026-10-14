@@ -24,7 +24,7 @@ Same four boundaries, enforced structurally:
 4. **No covers, no public search, no serving.** Nothing from WorldCat is displayed verbatim. What
    reaches the site is a link from a book to one of our own curated categories.
 
-### The four tables
+### The five tables
 
 | Table | Grain | Columns |
 |---|---|---|
@@ -32,9 +32,19 @@ Same four boundaries, enforced structurally:
 | `isbns` | one per (isbn13, oclc) | `isbn13`, `oclc` |
 | `redirects` | one per redirected number | `from_oclc`, `to_oclc`, `is_cycle` |
 | `holdings` | one per OCLC number with a summary | `oclc`, `total_holding_count`, `total_editions` |
+| `lookup` | one per (isbn13, oclc), sorted by `isbn13` | `isbn13` plus the category-bearing fields of `records`: `oclc`, `year`, `cataloging_language`, `specific_format`, `genre`, `subjects`, `isbn13s`, `merged_oclc`, `other_format_oclc`, `total_editions`, `source_type` (`LOOKUP_COLUMNS` in `distill.py`) |
 
 - `records` holds only ISBN-bearing records whose top-level `generalFormat` is `Book`. It is sorted
-  and row-grouped by `oclc`; `isbns` is sorted by `isbn13`. A single lookup prunes to one row group; a batch of hundreds of OCLC numbers becomes a hash join that scans the key columns (a synthetic 30M-row benchmark during review measured it in the hundreds of milliseconds; the real figure comes from the launch-todo timing step on the VM), which is why the launch todo times a 500-ISBN batch on the VM.
+  by `oclc` in 20,000-row groups; `isbns` is sorted by `isbn13`.
+- `lookup` exists because a Parquet lookup pays for every row group it touches, whole. On the
+  first build `records` had 100,000-row groups of 14 MB (the text columns: `summary` 6 GB,
+  `subjects` 4.6 GB, `title` 4.2 GB), each hit cost 80 ms at two threads, and one ISBN fans out to
+  about ten records in ten different groups, so a 100-ISBN batch (975 records, 642 groups) could
+  not finish inside the 5 s deadline and a single popular ISBN took 5 s. No query shape fixes
+  that; the layout has to. `lookup` is the `isbns` table joined to the narrow fields, sorted by
+  ISBN in 10,000-row groups of about 300 KB, so an ISBN's records share one small group. Measured
+  at two threads on the development machine: 100 ISBNs in 1.2 s, 500 in 3.3 s, against a timeout
+  before. The batch route reads only this table; the single-item routes still read `records`.
 - `isbns` indexes only check-digit-valid ISBN-13s (ISBN-10s are converted). The invalid share is
   observed by the `isbn_checksums` gate, not stored. `records.isbn13s`, by contrast, is the union of
   what the record's passes said and can include ISBN-13s with a bad check digit; anything that
@@ -72,19 +82,29 @@ cd data-sources
 uv sync --locked --extra worldcat
 uv run python -m worldcat.pipeline.build \
     --source "/mnt/e/annas archive worldcat/annas_archive_meta__aacid__worldcat__20250804T000000Z--20250804T000000Z.jsonl.seekable.zst" \
-    --root /home/shane/wc-data --dump-date 2025-09-04 --workers 8 --memory-limit 16GB \
+    --root /home/shane/wc-data --dump-date 2025-09-04 --workers 8 --memory-limit 30GB --threads 16 \
     --catalogue-isbns /home/shane/wc-data/our_isbns.txt
 ```
 
 The `worldcat` extra is `zstandard`, needed only to read the dump. The API image installs no extras.
 The catalogue file comes from `bin/rails "worldcat:export_isbns[/home/shane/wc-data/our_isbns.txt]"`
 (run from `web-app/`); without `--catalogue-isbns` the `catalogue_coverage` gate is skipped.
-Other options: `--threads`, `--keep-staging`.
+Other options: `--keep-staging` and `--resume`. A build that dies after extract leaves its finished
+shards in `_staging`; `--resume` distills them instead of extracting again (an hour on the full
+dump), reading each worker's row counts back from its `progress_*.txt`. It refuses an unfinished
+worker, one that saw a bad frame, shards whose recorded source fingerprint (`_staging/source_fingerprint`,
+written before extraction) is not the given `--source`'s, and a worker whose shards do not hold
+exactly the rows its progress file counted (a deleted shard would otherwise slip past the loose
+row-count gates). Without `--resume` a build starts by deleting whatever an earlier run left in
+`_staging`. The memory numbers are measured, not guessed: the first real build
+ran out of memory at 16 GB and again at 30 GB when `records` was one `row_number()` window over
+every wide row; `build_records` now picks each OCLC number's winner over the key columns only and
+joins the wide columns back by shard and row, which is what fits (see "Stage 2").
 
 Where things live (`worldcat.pipeline.paths.WorldcatPaths` owns the layout):
 
 ```
-<root>/versions/<dump-date>/records.parquet  isbns.parquet  redirects.parquet  holdings.parquet
+<root>/versions/<dump-date>/records.parquet  isbns.parquet  redirects.parquet  holdings.parquet  lookup.parquet
 <root>/versions/<dump-date>/manifest.json    build_report.json
 <root>/versions/<dump-date>/_staging/        shards; deleted on success
 <root>/tmp/                                  DuckDB spill
@@ -119,8 +139,17 @@ ranked by `(pass_rank, type_rank, pass_index DESC)`. `pass_rank` comes from `PAS
 `distill.py`, newest first: `w2`, `2023_05_v4_type123`, `2023_04_v3`, `t123`,
 `search_editions_response`, `range_query`, `worldcat_2022_09_titles_1_backup_2022_10_12`.
 `type_rank` prefers `title_json` over `briefrecords_json`. **A pass prefix not in the list fails the
-build** (`UnknownPass`) instead of being ranked by guess; the first real build is where that list is
-confirmed.
+build** (`UnknownPass`) instead of being ranked by guess; the first real build confirmed the list
+above (every prefix in the dump is ranked).
+
+`build_records` does that ranking in three narrow passes, because one `row_number()` window over
+every wide row (299 million record rows; `summary` and `subjects` on each) ran out of memory at
+16 GB and again at 30 GB on the first real build. Pass one numbers the shard files and keeps, per OCLC
+number, the `arg_min` of `(shard, row)` by the rank tuple: three integers per OCLC number, 165
+million rows, which spills. Pass two unions each OCLC number's ISBN-13s across every pass (distinct,
+sorted). Pass three scans the shards once more, joins the winner by `(shard, row)` and the ISBN list
+by OCLC number, and writes the sorted table. Ties on the rank tuple are broken arbitrarily, as the
+window's were.
 
 ### Gates
 
@@ -134,29 +163,69 @@ run, so that failure writes no `build_report.json` or `manifest.json`. Add the p
 
 | Gate | Rule |
 |---|---|
-| `row_counts` | `records` between 20,000,000 and 120,000,000; `isbns` at least `records`; `redirects` at least 10,000,000; all four tables present. Loose on purpose for a first build; tighten to the measured values afterwards. |
-| `field_coverage` | `genre` on at least 25% of records, non-empty `subjects` on at least 50%, `year` on at least 80%. |
-| `isbn_checksums` | At least 98% of the raw ISBNs on kept records pass their check digit. |
+| `row_counts` | `records` between 160,000,000 and 170,000,000; `isbns` at least `records`; `redirects` at least 70,000,000; all four tables present. The first build ran with loose bounds (20M to 120M records, and the ceiling had to rise to 200M mid-build); these are the measured values, so a rebuild of the frozen dump that drifts is a pipeline regression. |
+| `field_coverage` | `genre` on at least 27% of records, non-empty `subjects` on at least 65%, `year` on at least 98%. |
+| `isbn_checksums` | At least 99% of the raw ISBNs on kept records pass their check digit. |
 | `pass_prefixes` | Every observed record pass prefix is in `PASS_ORDER`. |
 | `canaries` | ISBN 9780735211292 maps to OCLC 1055766559 with genre "Nonfiction"; 9780395476901 to 1000415078; 9780553103540 to 1002380292; OCLC 1003236695 redirects to 37975719. |
 | `catalogue_coverage` | At least 80% of the ISBN-13s in `--catalogue-isbns` resolve to a record. `skipped` only when the option is absent; a given file that is missing or has no valid ISBN-13 is a `fail`. |
 | `bad_frames` | No frame failed to decompress. |
 
-A kept line that cannot be reduced (valid JSON of an unexpected shape, say a string where `contributors` expects objects) is skipped and counted in `extract.bad_lines`; it never fails the build and is not a gate. A lone surrogate escape (`\ud800`) in a kept line is written as U+FFFD rather than aborting the shard. `build` also deletes any `shard_*.parquet` and `progress_*.txt` left in `_staging/` by an earlier run before it extracts.
+A kept line that cannot be reduced (valid JSON of an unexpected shape, say a string where `contributors` expects objects) is skipped and counted in `extract.bad_lines`; it never fails the build and is not a gate. A lone surrogate escape (`\ud800`) in a kept line is written as U+FFFD rather than aborting the shard. `build` also deletes any `shard_*.parquet` and `progress_*.txt` left in `_staging/` by an earlier run before it extracts, unless `--resume` asked it to build from them.
 
 ### Measured build
 
-**Not yet built.** There are no row counts, sizes, times or gate results to report, and this
-document does not carry estimates. After the first build, copy these from
-`/home/shane/wc-data/versions/2025-09-04/build_report.json` into this section:
+Built 2026-10-12 on the development machine from the 281,575,216,478-byte dump (fingerprint
+`a36a4883ce0a…`). Extract ran once, 3,646 s with 8 workers; the distill stages ran from its shards
+with `--resume --memory-limit 30GB --threads 16` (twice: the second run added `lookup` and the
+20,000-row groups on `records`).
 
-- `tables.<name>.rows` and `.bytes` for each of the four tables, and `total_bytes`;
-- `extract.lines`, `extract.kept`, `extract.bad_frames` and `extract.bad_lines`;
-- `timings`: seconds per stage (`extract`, `records`, `isbns`, `redirects`, `holdings`);
-- `gates`: name, status and detail for each of the seven gates, including the observed catalogue
-  coverage.
+| Table | Rows | Bytes |
+|---|---|---|
+| `records` | 165,272,991 | 23,627,650,537 |
+| `isbns` | 185,854,875 | 904,575,246 |
+| `redirects` | 73,370,411 | 363,664,911 |
+| `holdings` | 71,808,132 | 171,244,081 |
+| `lookup` | 185,854,875 | 5,471,537,660 |
+| total | | 30,538,672,435 |
 
-Then tighten the `Thresholds` defaults in `gates.py` to the measured values.
+Extract: 2,223,520,143 lines read, 444,209,700 kept (299,028,904 record rows, 73,372,664 redirect
+rows, 71,808,132 holdings rows), 0 bad frames, 0 bad lines. Every record pass prefix was already in
+`PASS_ORDER`.
+
+| Stage | Seconds |
+|---|---|
+| extract | 3,646 |
+| records | 815 |
+| isbns | 693 |
+| redirects | 29 |
+| holdings | 3 |
+| lookup | 122 |
+
+| Gate | Result |
+|---|---|
+| `row_counts` | pass |
+| `field_coverage` | pass: genre 0.277, subjects 0.679, year 0.984 |
+| `isbn_checksums` | pass: 1.0000 of 680,764,346 raw ISBNs |
+| `pass_prefixes` | pass |
+| `canaries` | pass |
+| `catalogue_coverage` | pass: 145,377 of 168,931 catalogue ISBN-13s resolve (0.861) |
+| `bad_frames` | pass |
+
+The `Thresholds` defaults in `gates.py` are tightened to these values.
+
+Through the container on the development machine (2 threads, 2 GB), against the first build's
+layout:
+
+| Request | First layout | Now |
+|---|---|---|
+| `POST /lookup`, 100 catalogue ISBNs | `504` | 1.0 to 1.2 s |
+| `POST /lookup`, 500 catalogue ISBNs | `500` (the interrupt bug) | 2.7 to 3.0 s |
+| `GET /isbns/9780316067928` (a popular novel, many records) | 4.9 to 5.2 s | 3.0 to 3.5 s |
+
+The single-ISBN route still pays one `records` row group per record found, so a popular ISBN stays
+in the seconds; the backfill never calls it. If that route ever matters, read the OCLC numbers from
+`lookup` and fetch `records` one `oclc = ?` at a time (30 ms each), or move it to `lookup` too.
 
 ## HTTP contract
 
@@ -178,14 +247,19 @@ All responses are JSON. `worldcat.api.schemas.Record` is the one record shape:
 |---|---|
 | `GET /isbns/{isbn}` | ISBN-10 or -13, normalised to 13. Returns `{"isbn13": ..., "records": [...]}`. An unknown ISBN is `200` with an empty list (absence is an answer). An invalid ISBN or check digit is `422`. |
 | `GET /oclc/{number}` | Follows a redirect; the record carries `redirected_from`. A cycle is not followed. Unknown is `404`. |
-| `POST /lookup` | `{"isbn13s": [...]}`, at most 500 (more is `422`). Returns `{"results": {"<isbn as sent>": [records...]}}` with every requested key present. **One invalid ISBN makes the whole batch a `422`.** |
+| `POST /lookup` | `{"isbn13s": [...]}`, at most 500 (more is `422`). Returns `{"results": {"<isbn as sent>": [records...]}}` with every requested key present. Each record is the **category-bearing subset** (`worldcat.api.schemas.LookupRecord`: `oclc`, `year`, `cataloging_language`, `specific_format`, `genre`, `subjects`, `isbn13s`, `merged_oclc`, `other_format_oclc`, `total_editions`, `source_type`), never the text fields or holdings; `GET /oclc/{number}` has the full record. **One invalid ISBN makes the whole batch a `422`.** |
 | `GET /version` | `source`, `dump_date`, `pipeline_version`, `built_at`, `gates_passed`, `source_fingerprint`, per-table row counts, and the build's gate results. |
 
 There is no health route. The container does not start without an open artifact, so the heartbeat
 and any manual check use `/version`.
 
 Limits: one DuckDB connection with a cursor per request, `memory_limit` 2 GB, 2 threads, a 5-second
-per-request deadline (`504`). No concurrency cap: a single lookup is milliseconds, and a full 500-ISBN batch is a hash join over the key columns (see the notes under the tables above), so it is timed on the VM before the backfill. Settings come from
+per-request deadline (`504`; a DuckDB error of any class after the deadline is reported as the
+deadline, because an interrupt that lands between a query and its fetch surfaces as
+`InvalidInputException`, not `InterruptException`). No concurrency cap: a single-item route
+touches one 20,000-row group of `records` per record found, and a 500-ISBN batch read the
+`lookup` table in 3.3 s at two threads on the development machine (see the notes under the
+tables above), so the launch todo still times one on the VM before the backfill. Settings come from
 `WC_DATA_ROOT` (default `/data`), `WC_DATA_VERSION` (required), `WC_API_MEMORY_LIMIT`,
 `WC_API_TEMP_DIR`, `WC_API_THREADS` and `WC_API_DEADLINE_S`.
 
@@ -224,7 +298,9 @@ tables is missing, `manifest.json` is missing, its `gates_passed` is not `true`,
 
 `Books::WorldCat::Client` (`web-app/app/lib/books/world_cat/`): `record_by_isbn`, `record_by_oclc`
 (`nil` for a 404), `lookup(isbn13s)` (chunks at 500) and `version`. Results are
-`Books::WorldCat::Record` value objects. It has its own `BaseClient`, `Configuration` and
+`Books::WorldCat::Record` value objects; the ones `lookup` returns carry only the category-bearing
+fields (`title`, `summary` and the other text fields are `nil`, holdings absent), which is all
+`VocabularySnapshot`, `Backfill` and `ApplyCategories` read. It has its own `BaseClient`, `Configuration` and
 `Exceptions`, so callers rescue by source, but it reuses `Books::OpenLibrary::CircuitBreaker` (key
 `books:world_cat`, 5 failures, 60 s cooldown). Timeouts: 5 s, 3 s to open, 20 s for a batch.
 `WORLDCAT_SERVICE_URL` defaults to `http://127.0.0.1:8082` in development.
@@ -287,11 +363,15 @@ breaker never looks like completion. The job logs the totals and any stop reason
 `ApplyCategories`:
 
 - Genre: a term in a record's `genre` field with a `genre` verdict counts as support for that genre.
-  A genre is linked when **at least two distinct matched records support it, or when the book has
-  exactly one matched record.** A single stray term from a box set or a translation must not relabel
-  a book.
+  A genre is linked when **at least two distinct matched records support it and they are at least a
+  quarter of the records that carry any mapped genre, or when the book has exactly one matched
+  record.** A single stray term from a box set or a translation must not relabel a book, and neither
+  may an edition: the dev rehearsal of 2,000 books (2026-10-12) under the two-record rule alone gave
+  Animal Farm "Textbooks" from its study editions, Little Women and Jane Eyre "Children's books" and
+  "Young adult" from their imprints, and Dune and 1984 "Comics & Graphic Novels" from adaptations,
+  each on two or three of dozens of records. The share is `ApplyCategories::MIN_SHARE`.
 - Subject: terms with a `subject` verdict, from either the `genre` or the `subjects` field, count
-  toward the same rule. The phrase resolves against **existing** subject categories, by name and
+  toward the same rule (the share is of records carrying any mapped subject phrase). The phrase resolves against **existing** subject categories, by name and
   then by alternative name. Unresolved phrases are counted and returned, never created.
 - Links go through `category_items` with `find_or_create_by!`: additive only, never unlinks,
   idempotent. A genre the map names that no longer exists is skipped. Nonfiction is never inferred
@@ -307,6 +387,21 @@ breaker never looks like completion. The job logs the totals and any stop reason
 
 Rerun the backfill after any edit to the mapping file. Because the legacy sync keeps production
 edits after `sync_init`, links made in production persist across the weekly sync.
+
+### Dev rehearsal (2026-10-12)
+
+`worldcat:backfill[2000]` against the development database (snapshot `pre-worldcat` taken first),
+the local API and the reviewed map, 2,000 books in id order, 1,969 matched, about 140 s a run:
+
+| Rule | Genre links | Subject links | Type conflicts | Edition leakage |
+|---|---:|---:|---:|---|
+| two records | 1,173 | 443 | 25 | Animal Farm "Textbooks", Little Women "Children's books", Jane Eyre "Young adult", Dune and 1984 "Comics & Graphic Novels", The Old Man and the Sea "Short Story Collection" |
+| two records and a quarter share | 512 | 360 | 11 | "Children's books" on Harry Potter, Diary of a Wimpy Kid, A Little Princess; "Short Story Collection" on Labyrinths and Carver; one comic adaptation (City of Glass) and one "Textbooks" (Plato's Apology) left |
+
+No book in either run ended up with both Fiction and Nonfiction. The second run's links are
+what the development database holds now; the first was restored away. The snapshot script runs
+`docker compose exec` against the project of the current directory, so from a worktree it needs
+`COMPOSE_PROJECT_NAME=the-greatest`, and its confirmation prompt needs a TTY or `yes y |`.
 
 ## What this does not do
 

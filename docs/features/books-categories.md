@@ -44,6 +44,7 @@ location, and not the category itself or one of its descendants.
 - A country's parent is always its continent. Named regions inside one continent (`Caribbean`) sit under that continent, but countries do not nest under them. A transcontinental country goes under the continent with most of its population.
 - Historical cities and sites go under the modern country (`Troy` under Turkey). Historical states and empires go under their continent and are not merged into modern countries.
 - Invented worlds and their places go under `Fictional Location`. An invented place in the real world gets its real parent.
+- A city and an administrative unit covering the same place are one place: `Berlin (state)`, `Tokyo Metropolis`, `District of Columbia` and `Greater London` merge into their cities and never sit above them. Apply also skips a chain name that resolves to the place itself and takes the next.
 
 ## Link sources
 
@@ -91,8 +92,8 @@ these from `web-app/`, with `RUN` a label such as `2026-10-15-prod`.
 1. Snapshot: `bin/snapshot-dev-db.sh --label pre-category-cleanup` in dev, a fresh backup in production.
 2. `bin/rails 'categories:cleanup:propose[RUN,rules]'`. No AI. Case and punctuation twins merge into the most-linked member, except that when that member would need a rename, the member already holding the clean name wins outright. Broken names are repaired, and letterless bracket fragments (`61)`) are deleted. Empty categories are never deleted, because the weekly sync brings categories before their books and a link to a deleted category is lost for good. Legacy alternative names never drive a merge. `C`, `C++` and `C#` stay apart.
 3. `bin/rails 'categories:cleanup:propose[RUN,locations_head]'`, then `subjects_head`. Head means a category's own direct link count is at least `head_min_links` (20), one category per AI call. A head category whose call failed is retried by running the head stage again.
-4. `bin/rails 'categories:cleanup:calibrate[RUN,location]'` and `[RUN,subject]`. It writes no decisions. It compares batch sizes against one-at-a-time answers on 200 random tail categories. Set `tail_batch_size` to the largest size with at least 97% agreement, or leave it at 1. Changing it means editing `config/initializers/categories.rb` and deploying (merge = deploy).
-5. `bin/rails 'categories:cleanup:propose[RUN,locations_tail]'`, then `subjects_tail`. Tail runs print how many head-tier categories are still undecided. At batch size 1 these stages exceed the $50 guard (about $63 for locations and $165 for subjects at current estimates) and need `FORCE=1`.
+4. `bin/rails 'categories:cleanup:calibrate[RUN,location]'` and `[RUN,subject]`. It writes no decisions. It compares batch sizes against one-at-a-time answers on 200 random tail categories, and prints a baseline first: a second one-at-a-time pass against the first. One-at-a-time answers are not stable (86.5% of locations and 88.5% of subjects agreed in the 2026-10-12 dev run), so judge each batch size against that baseline, on both the full agreement and the action/verdict agreement, not against 100%. A size that agrees about as well as the baseline loses nothing to batching. `tail_batch_size` is set per type (`{location: 10, subject: 1}` from that run); changing it means editing `config/initializers/categories.rb` and deploying (merge = deploy).
+5. `bin/rails 'categories:cleanup:propose[RUN,locations_tail]'`, then `subjects_tail`. Tail runs print how many head-tier categories are still undecided. At batch size 1 `subjects_tail` exceeds the $50 guard (about $165 at current estimates) and needs `FORCE=1`; `locations_tail` at 10 is about 1,540 calls.
 6. `bin/rails 'categories:cleanup:report[RUN]'`. It prints counts by stage, action and status; undecided head-tier categories; the largest merges; the largest deletes (a junk verdict on a big category shows here); merges into a category with its own pending terminal decision; locations apply would create (with their slugs); proposed roots; ambiguous names; failures; and samples per action. The full list goes to a CSV in `tmp/`.
 7. `bin/rails 'categories:cleanup:reject[RUN,12 15 19]'` for decisions you do not want. Rejected decisions are kept and skipped.
 8. `bin/rails 'categories:cleanup:apply[RUN]'`. Details below.
@@ -109,6 +110,7 @@ limit (about $50 estimated). `propose` prints the estimate before it starts and 
 What apply does:
 
 - Before anything it checks each decision's category against its snapshot. A changed category is marked `stale` and skipped. A conflict pre-pass also marks a rename, set-parent or keep stale ("superseded by ...") when a terminal merge, retype or delete exists for the same category (a rename that accompanies a retype is kept: renames run first). If a category has several terminal decisions, the first by phase (merge, retype, delete) wins and the others go stale too.
+- Head categories are decided one per call, so the AI can propose A into B and B into A (`Gods` and `Deities`). Before anything applies, every merge cycle is broken at its most-linked member (`item_count`, ties to the older category): its merge goes stale ("merge cycle"), so it stays, keeping any rename, and the rest of the cycle merges into it. A member that also has a proposed retype or delete is never chosen, since its delete would then remove the links merged into it; if every member has one, the cycle is left alone (one merge lands, the reverse fails).
 - Parents named in a chain that match no category are created in one transaction. If a created parent's slug collides, it gets a UUID suffix and the report flags it.
 - A rename keeps the old slug in history. It keeps the old name in `alternative_names` only when it differs from the new name by more than case or punctuation and is not already listed.
 - Reconcile (`AncestorReconciler`) runs whenever the run applied any decision. The reconciler and the Merger queue their own reindexes. Each decision is its own transaction, so one failure marks that decision `failed` and the rest continue. Re-running is a no-op for applied decisions. A decision that went stale (its category changed before apply) is not re-sent under the same RUN; such a category needs an admin fix or a `REDO=1` of that stage.
@@ -133,7 +135,7 @@ Anything else waits for your next `propose`.
 
 - `config.x.books.browse_min_category_books` (5): the browse and filter-search threshold.
 - `config.x.categories_cleanup.head_min_links` (20): direct links needed to be head tier.
-- `tail_batch_size` (1): tail categories per AI call; set from calibration.
+- `tail_batch_size` (`{location: 10, subject: 1}`): tail categories per AI call, by type; set from calibration.
 - `max_direct_locations` (15): books above this get the trim.
 - `sample_titles` (5): sample books shown to the model per category.
 - `estimated_cost_per_call` and `max_unforced_cost` ($50): the estimate and the limit above which `propose` needs `FORCE=1`. Re-check the price before a production run.
