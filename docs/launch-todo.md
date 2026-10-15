@@ -240,20 +240,24 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    from `data-sources/`. The result will be `/home/shane/wc-data/versions/2025-09-04/`, and the build
    fails unless every gate passes. If it dies after extract (an hour), rerun with `--resume` to
    distill the shards it left rather than extracting again.
-2. **Cloudflare, before anything touches the home server. Shane runs with `!`.** Create the
-   `home-worldcat` tunnel and copy its token. Add the `worldcat-api.thegreatestbooks.org` hostname with
-   ingress `http://worldcat:8082`. Add the Access application on that hostname reusing the `prod-rails`
-   service token, with `bin/cfzerotrust apply` in the cloudflare repo. Exempt the hostname from Bot Fight
-   Mode and any bot or WAF rule, as for the other two.
-3. **healthchecks.io.** Create `worldcat-heartbeat` (period 5 min, grace 15 min) and `worldcat-deploy`
+2. **Cloudflare, before anything touches the home server. Shane runs with `!`. DONE 2026-10-14.**
+   Nothing here is done in the dashboard: `bin/cfzerotrust apply --secrets-root <this checkout>` in
+   `the-greatest-cloudflare` reads `zerotrust/home-server.yml`, which now names the `worldcat-api`
+   Access app (the `prod-rails` service token), the `home-worldcat` tunnel with ingress
+   `http://worldcat:8082`, and its CNAME. The same apply writes `WORLDCAT_TUNNEL_TOKEN` into
+   `secrets/home-server.env` and `WORLDCAT_SERVICE_URL` into `secrets/.env.production`, so there is
+   no token to copy. The bot skip is the `skip_edge_for_home_server` rule in
+   `zones/thegreatestbooks.org.yml`, applied with `bin/cfrules apply thegreatestbooks.org`.
+3. **healthchecks.io. DONE 2026-10-14.** Create `worldcat-heartbeat` (period 5 min, grace 15 min) and `worldcat-deploy`
    (period 15 min, grace 1 h), and copy their ping URLs.
-4. **Secrets, before the first `provision`. Shane runs with `!`.** Add `WORLDCAT_TUNNEL_TOKEN`,
-   `HC_WORLDCAT_HEARTBEAT` and `HC_WORLDCAT_DEPLOY` to `secrets/home-server.env`
-   (`sops secrets/home-server.env`). The host already has tunnels enabled, so the VM that `provision`
-   creates starts `cloudflared` at once. With the token missing it starts with an empty one and nothing
-   alerts.
-5. **Confirm VMID 130 is unused.** `ssh pve-mini qm list` must not list 130. `provision` adopts a VM it
-   finds at that id instead of creating one.
+4. **Secrets, before the first `provision`. Shane runs with `!`. DONE 2026-10-14.** Step 2's apply
+   already wrote `WORLDCAT_TUNNEL_TOKEN`; add only `HC_WORLDCAT_HEARTBEAT` and `HC_WORLDCAT_DEPLOY` to
+   `secrets/home-server.env` (`sops secrets/home-server.env`). The host already has tunnels enabled,
+   so the VM that `provision` creates starts `cloudflared` at once. With the token missing it starts
+   with an empty one and nothing alerts.
+5. **Confirm VMID 130 is unused, immediately before step 6.** It was free on 2026-10-14, but that
+   does not carry over to a later day. `ssh pve-mini qm list` must not list 130. `provision` adopts
+   a VM it finds at that id instead of creating one.
 6. **Create the VM. Shane runs with `!`.** `deployment/home-server/provision` (`SOPS_AGE_KEY_FILE`
    set) creates VM 130 `worldcat` and installs its env and units. Tunnels are already enabled on the
    host, so `provision --enable-tunnels` is not needed again; it dies unless all three tunnel tokens
@@ -277,9 +281,9 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    one 1.2 s, so expect the VM to be slower than that. Both times must be under 5 s before the
    backfill; a `504` or a time near the deadline means stop and lower the backfill's batch size
    or raise `WC_API_DEADLINE_S`.
-9. **Production setting. Shane runs with `!`.** Add
-   `WORLDCAT_SERVICE_URL=https://worldcat-api.thegreatestbooks.org` to the production SOPS secrets and
-   deploy.
+9. **Production setting. Shane runs with `!`.** Step 2's apply added
+   `WORLDCAT_SERVICE_URL=https://worldcat-api.thegreatestbooks.org` to the production SOPS secrets
+   (2026-10-14); what remains is getting it onto the app server and deploying.
 10. **The genre map, in development.** `worldcat:vocabulary` and `worldcat:map` need the local WorldCat
    API running: `docker compose --profile worldcat up -d worldcat` in `data-sources/`. Run
    `bin/rails worldcat:vocabulary`, `worldcat:map` and `worldcat:report`. Review and edit
