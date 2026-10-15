@@ -73,6 +73,35 @@ pre-apply state.
   reviews as legacy has them, so whatever is built must re-apply after every sync. That is why the
   replay records verdicts keyed by preserved ids.
 
+**Refinement, same day: the Goodreads ids are right; where legacy attached them is the question.**
+Shane pointed out that the export carries Goodreads' own Book Id. How legacy used it
+(`goodreads_library_parser.rb#find_or_create_book`, lines 51–92):
+1. It looks for an existing book holding the row's Goodreads id, then its ISBN-10, then its ISBN-13.
+2. Only if none is found, it searches with the stripped title, asks the AI to confirm, and
+   otherwise falls back to `find_or_create` (root cause 1: the top hit even after an AI "no").
+3. **Always** it stamps the row's Goodreads id, ISBN-10 and ISBN-13 onto whatever book step 1 or 2
+   chose. A wrong choice then becomes permanent and shared: every later import of that Goodreads id
+   or ISBN goes straight to the wrong book in step 1.
+
+The enrichment Shane remembered, `Book#populate_data_from_goodreads_search` (book.rb:1743, queued
+30 minutes after create), returns at once unless the book is on a curated list (line 1745). So it
+never ran for the ~132k import-created books on no curated list. Where it did run, it copies data
+from the book's most-rated attached Goodreads book, or from a title-and-author Goodreads search
+when none is attached.
+
+So the export row is the truth, and legacy's attachment is often right. The work is finding the
+attachments that are wrong. What was measured:
+- 146,045 legacy books hold replay rows. 18,273 of them hold 2 or more distinct Goodreads ids, and
+  for 7,778 of those the export titles differ.
+- Most of those differences are legitimate, because a catalog book is a work and holds every
+  edition and translation: "Tenth of December" / "Dez de Dezembro". Some are lumps of distinct
+  books: "The Just Bento Cookbook" holds "The Just Bento Cookbook 2"; "X Men" holds several volumes.
+- The replay's "agrees" (428,151 rows) overstates accuracy for lumps. Verify mode checks the row's
+  title against the stored title, and legacy stored the stripped one, so an "X-Men" volume row
+  agrees with the "X Men" lump.
+- Telling an edition or translation apart from a different book needs more than the row:
+  the Goodreads page's work and series data, or an AI check given the full export titles.
+
 **The first open question:** can a book legacy's imports created be thrown away and replaced? That
 means building the correct book from the export rows, moving users onto it and deleting legacy's
 record. The alternative is to correct each legacy record in place: fix the title and authors, strip
