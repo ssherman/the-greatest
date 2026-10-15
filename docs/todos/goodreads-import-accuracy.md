@@ -102,6 +102,34 @@ attachments that are wrong. What was measured:
 - Telling an edition or translation apart from a different book needs more than the row:
   the Goodreads page's work and series data, or an AI check given the full export titles.
 
+**Two eras of legacy imports.** Shane added the AI check late: legacy commit `90079bc8`, "improved
+goodreads import to use ai", 2025-11-16 21:14 UTC. He expects the imports before it to be far less
+accurate. Before that commit, a row with no identifier hit went to:
+1. `Book.exact_title_match(clean_title).exact_authors_match(authors)`;
+2. else `BookFinder.find`, which took the **first OpenSearch hit with no score threshold at all**;
+3. else it created the book through `DataImporters::Books::Importer`.
+
+The stripped `clean_title` was there from 2024-09-01 (`24edcf43`) onward. Replay imports carry the
+legacy upload time as `started_at`: **464 imports (265,542 rows, 382 users) are before the AI
+check and 339 (233,028 rows) after.**
+
+**The replay cannot see the difference.** Split by era, and by whether legacy's book existed before
+the import or was created by it (legacy `books.created_at`; the new app's `created_at` is the
+migration time), the new matcher agrees almost the same everywhere:
+
+| Era | Legacy book | Rows | Agrees | Disagrees | Unmatched |
+|---|---|---|---|---|---|
+| before AI | existed already | 141,663 | 96.0% | 1,858 | 3,386 |
+| before AI | created by the import | 82,303 | 96.5% | 71 | 2,550 |
+| after AI | existed already | 139,859 | 96.0% | 1,161 | 3,930 |
+| after AI | created by the import | 79,629 | 97.4% | 9 | 1,929 |
+
+Either the pre-AI importer was less bad than feared, or, more likely, the replay's yardstick
+shares legacy's blind spot. Verify mode corroborates against stored titles that legacy stripped,
+and an identifier hit counts as agreement. **Whatever the new design uses to judge a book must
+read the full export titles, not the stored ones.** Pre-AI imports are the place to test that
+yardstick first.
+
 **The first open question:** can a book legacy's imports created be thrown away and replaced? That
 means building the correct book from the export rows, moving users onto it and deleting legacy's
 record. The alternative is to correct each legacy record in place: fix the title and authors, strip
