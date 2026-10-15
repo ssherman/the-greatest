@@ -255,8 +255,9 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    `secrets/home-server.env` (`sops secrets/home-server.env`). The host already has tunnels enabled,
    so the VM that `provision` creates starts `cloudflared` at once. With the token missing it starts
    with an empty one and nothing alerts.
-5. **Confirm VMID 130 is unused. Checked free 2026-10-14.** `ssh pve-mini qm list` must not list 130. `provision` adopts a VM it
-   finds at that id instead of creating one.
+5. **Confirm VMID 130 is unused, immediately before step 6.** It was free on 2026-10-14, but that
+   does not carry over to a later day. `ssh pve-mini qm list` must not list 130. `provision` adopts
+   a VM it finds at that id instead of creating one.
 6. **Create the VM. Shane runs with `!`.** `deployment/home-server/provision` (`SOPS_AGE_KEY_FILE`
    set) creates VM 130 `worldcat` and installs its env and units. Tunnels are already enabled on the
    host, so `provision --enable-tunnels` is not needed again; it dies unless all three tunnel tokens
