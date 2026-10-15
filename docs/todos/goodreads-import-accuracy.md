@@ -11,6 +11,76 @@ database, synced from production on the same day. Re-measure them before designi
 - Prevent the import from adding bad data in the future.
 - Omnibus titles should never "split" into their individual books.
 
+## Update later on 2026-10-14: the replay approach is in question
+
+After the first `apply`, ten of the 58 rule-approved book merges turned out to be wrong. These are
+verdicts 9744, 9758, 9760 and 9778–9781: distinct comic volumes ("X Men", "New X Men", "War Of
+Kings") merged because they shared only an Open Library work id or an ASIN. Shane's conclusion:
+
+> We can NOT trust any data from the Goodreads imports. Names and special characters were stripped,
+> so books were matched or created with wrong names or wrong authors. Goodreads search then matched
+> against wrong books and added the wrong identifiers to them; the Amazon product API matched the
+> wrong books and added wrong ISBNs. We have the source of all the bad data. Why can't we go
+> Goodreads import by Goodreads import and make sure every book is legit and 100% correct?
+
+He asked for a **fresh brainstorming session** (`superpowers:brainstorming`) on this. It is
+architectural. The replay repairs legacy's output pair by pair. The new idea rebuilds from the
+source, the export rows.
+
+**Paused until that session decides:** approving relinks or the AI's `strip_identifier` verdicts,
+the books-only duplicate re-check, and any further `apply`. All of them were decided against the
+tainted records.
+
+**Already applied in production (2026-10-14), and staying:**
+- 4,418 author merges, AI-checked and spot-checked;
+- 46 book merges, 10 of them wrong (above). They are the X-Men-style lumps that the rebuild has to
+  split back into volumes;
+- 518 slug-form Goodreads id fixes;
+- 24 authorless books flagged provisional.
+
+Shane took a production backup just before that `apply`. A development restore of it is the
+pre-apply state.
+
+**Where the bad data came from**, in the legacy app at `~/dev/the-greatest-books/admin`:
+- `app/lib/goodreads_library_parser.rb:96-98`: the search title drops everything in parentheses
+  and everything after the first colon. So "X-Men: The Age of Apocalypse, Vol. 2" is searched as
+  "X-Men", and series volumes collapse onto one bare title.
+- `app/lib/book_finder.rb`, `app/lib/author_finder.rb`: the finders. Spec root cause 1: after the
+  AI rejected every candidate, the finder re-ran the search and took the top hit anyway.
+- `app/lib/openai/chats/goodreads_*_confirmation.rb`: the AI confirmations that were overridden.
+- `app/lib/goodreads_cli.rb`, `app/lib/data_importers/books/goodreads_importer_from_url.rb`: the
+  Goodreads lookups that stamped identifiers.
+- `app/lib/data_importers/editions/sources/amazon.rb`, `app/lib/openai/chats/amazon_match_confirmation.rb`:
+  Amazon matching, the source of the wrong ISBNs.
+- Spec §1, "Legacy root causes, ranked", already lists more of them.
+
+**The working understanding** at the end of the session, not yet confirmed by Shane:
+- The trustworthy source is the export itself. Each row holds Goodreads' own Book Id, exact title,
+  author and ISBNs; legacy stripped them only afterwards. The Goodreads page adds the original
+  title, series and author roles.
+- Everything downstream of legacy's choice is suspect: which book it picked, the titles and authors
+  on books it created, every identifier it stamped, and whatever Goodreads search and Amazon
+  enrichment added later.
+- "Correct" means three things: every user's list item and review points at the book they had on
+  Goodreads; every import-touched book has the right title and authors; every identifier on a book
+  belongs to it.
+- The scale is 803 imports, 498,570 rows and 208,441 distinct Goodreads books. About 135k of 160k
+  books were created by imports. It has to be automated per Goodreads book, with human review of
+  the exceptions only.
+- Only 39,358 Goodreads pages are cached (legacy scrapes, no HTML). Fetching the rest is a long
+  page-fetcher job, so lean on the export rows and fetch only when they do not settle it.
+- The weekly legacy sync is a constraint. Until the switch-over it restores legacy users' items and
+  reviews as legacy has them, so whatever is built must re-apply after every sync. That is why the
+  replay records verdicts keyed by preserved ids.
+
+**The first open question:** can a book legacy's imports created be thrown away and replaced? That
+means building the correct book from the export rows, moving users onto it and deleting legacy's
+record. The alternative is to correct each legacy record in place: fix the title and authors, strip
+identifiers, and split lumps. Replacing is simpler and more reliable, but legacy book ids, and any
+URLs already indexed for them, go away.
+
+## The original plan, before the update
+
 **Not now.** Correcting the issues the replay already found and clearing duplicates comes
 first: approve the verdicts, then `apply`, then the books-only duplicate re-check. This file is
 the next project after that.
