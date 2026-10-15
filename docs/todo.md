@@ -74,6 +74,14 @@ increment 6 and 7 PRs (#355, #359), that a member or an admin would hit after la
   Open Library `/resolve` slot (#358), at about 13 s each. A lookup that can't get the slot within
   its 60 s budget is decided without Open Library.
 
+## Goodreads import: accuracy
+
+**make every Goodreads import 100% accurate** — after the replay's verdicts are applied and
+duplicates are cleared, not before. 11,811 replay rows the new matcher cannot match get no verdict,
+so users keep legacy's book; for 3,581 of them that book has a completely different title. Omnibus
+collapses, wrong identifiers, translation duplicates and the silent `duplicates` task are part of
+it too. Summary for brainstorming: `docs/todos/goodreads-import-accuracy.md`.
+
 ## Data importers
 - google books integration
 - **port the legacy add-book modal** (Goodreads URL, Amazon URL, or title and author). A non-goal of
