@@ -1559,7 +1559,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces:
   - `Cohort::FIRST_POST_IMPORT_ID = 16_572`; `Cohort.for(book_id) -> :pre_import | :post_import`; `Cohort.post_import_range -> Range`.
   - `ApplyBook.call(book:, client:, run_id:, cohort: :pre_import)`: also writes `cohort` and `stage` (`identifiers` when the outcome is in `SETTLED_FOR_EDITIONS`, else `worldcat`) in its transaction.
-  - `VerifyBook.call(book:, ol_client:, wc_client:, run_id:, wc_dump_date:) -> Result` (`data`: the row, `via_resolve`).
+  - `VerifyBook.call(book:, ol_client:, wc_client:, run_id:, wc_dump_date:) -> Result` (`data`: `VerifyBook::Outcome` with `row` and `via_resolve`).
   - `Run.call(limit:, run_id:, flags: [], client: nil, wc_client: nil, sleeper: nil, scope: nil)`; `Run::FLAGS = %w[post_import unranked retry_unsure recheck]`.
   - `Books::VerificationJob#perform(limit, run_id, flags = [])`.
   - Rake `books:verify[<count>|all,<flag>,...]`.
@@ -1736,7 +1736,7 @@ module Services
       # later run resumes there. Service errors propagate to Run.
       class VerifyBook
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
-        Data = ::Data.define(:row, :via_resolve)
+        Outcome = ::Data.define(:row, :via_resolve)
 
         def self.call(book:, ol_client:, wc_client:, run_id:, wc_dump_date:)
           new(book, ol_client, wc_client, run_id, wc_dump_date).call
@@ -1766,7 +1766,7 @@ module Services
           ConfirmWithWorldCat.call(verification: row, client: @wc, dump_date: @wc_dump_date) if row.reload.stage_worldcat?
           Signals.call(verification: row, client: @ol) if row.reload.stage_signals?
 
-          Result.new(success?: true, data: Data.new(row: row.reload, via_resolve: via_resolve), errors: [])
+          Result.new(success?: true, data: Outcome.new(row: row.reload, via_resolve: via_resolve), errors: [])
         end
       end
     end
@@ -1778,7 +1778,7 @@ Run → PASS.
 
 - [ ] **Step 4: Run, test first**
 
-Rework `test/lib/services/books/verification/run_test.rb`: its `record_applies` helper stubs `ApplyBook.call`; change it to stub `VerifyBook.call` the same way (create a `::Books::Verification` row with `stage: :done`, return `VerifyBook::Result` with `data: VerifyBook::Data.new(row:, via_resolve: false)`), and `run_backfill` to `Run.call(limit: nil, run_id: "run-1", client: @client, wc_client: FakeWcClient.new, sleeper: no_sleep, scope: @scope, **options)`. Keep every existing ordering, limit, lock, retry and failure test passing under the new names. Then add:
+Rework `test/lib/services/books/verification/run_test.rb`: its `record_applies` helper stubs `ApplyBook.call`; change it to stub `VerifyBook.call` the same way (create a `::Books::Verification` row with `stage: :done`, return `VerifyBook::Result` with `data: VerifyBook::Outcome.new(row:, via_resolve: false)`), and `run_backfill` to `Run.call(limit: nil, run_id: "run-1", client: @client, wc_client: FakeWcClient.new, sleeper: no_sleep, scope: @scope, **options)`. Keep every existing ordering, limit, lock, retry and failure test passing under the new names. Then add:
 
 ```ruby
         test "by default only ranked pre_import books are taken" do
@@ -1815,7 +1815,7 @@ Rework `test/lib/services/books/verification/run_test.rb`: its `record_applies` 
         end
 
         test "recheck takes done books that gained a legacy identifier since checked_at, from stage 2 or 3" do
-          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: true, data: VerifyBook::Data.new(row: nil, via_resolve: false), errors: []))
+          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: true, data: VerifyBook::Outcome.new(row: nil, via_resolve: false), errors: []))
           settled = ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "old", stage: :done, checked_at: 1.day.ago)
           unsure = ::Books::Verification.create!(book: @crime, work_outcome: :unsure, run_id: "old", stage: :done, checked_at: 1.day.ago)
           quiet = ::Books::Verification.create!(book: @got, work_outcome: :keyed, run_id: "old", stage: :done, checked_at: 1.minute.from_now)
