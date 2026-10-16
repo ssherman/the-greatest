@@ -37,7 +37,7 @@ module Services
               )
               changes["pairs"] << [author.id, other, key]
             else
-              author.identifiers.create!(identifier_type: AUTHOR_KEY, value: key)
+              author.identifiers.create!(identifier_type: AUTHOR_KEY, value: key, source: :open_library)
               changes["added"] << [author.id, key]
             end
           end

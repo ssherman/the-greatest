@@ -27,6 +27,24 @@ module Services
           assert_empty @tolstoy.identifiers.where(identifier_type: :books_author_openlibrary_id)
         end
 
+        test "provenance: restored old keys come back legacy" do
+          ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::WORK_KEY, value: "OL1W", source: :open_library)
+          ::Books::OpenLibraryBackfill.create!(book: @book, outcome: :replaced, run_id: "run-1", old_keys: ["OL5W"], new_key: "OL1W")
+
+          Revert.call(book: @book)
+
+          assert_equal [["OL5W", "legacy"]], @book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).pluck(:value, :source)
+        end
+
+        test "provenance: a confirmed book's key goes back to legacy" do
+          ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::WORK_KEY, value: "OL1W", source: :open_library)
+          ::Books::OpenLibraryBackfill.create!(book: @book, outcome: :confirmed, run_id: "run-1", old_keys: ["OL1W"], new_key: "OL1W")
+
+          Revert.call(book: @book)
+
+          assert_equal [["OL1W", "legacy"]], @book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).pluck(:value, :source)
+        end
+
         test "a replaced book that kept its old key as a duplicate key gets it back as the work key, with no duplicate left" do
           ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::WORK_KEY, value: "OL1W")
           ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::DUPLICATE_KEY, value: "OL5W")

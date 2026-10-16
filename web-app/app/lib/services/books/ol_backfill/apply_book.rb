@@ -77,8 +77,12 @@ module Services
           stored = stored_keys
           work = answer.work
           return unsure_or_removed(stored, answer.ol_pick) if work.nil?
-          # Open Library abstained, but its top answer is a key we hold: nothing to change.
-          return unchanged(:confirmed, stored, work.key) if answer.confirm_only
+          # Open Library abstained, but its top answer is a key we hold: nothing to change
+          # but the key's source, since it passed the same title-and-author check.
+          if answer.confirm_only
+            trust_work_key(work.key)
+            return unchanged(:confirmed, stored, work.key)
+          end
 
           key = work.key
           other = book_holding(key, work)
@@ -156,7 +160,17 @@ module Services
         def set_work_key(stored, key)
           @book.identifiers.where(identifier_type: WORK_KEY).where.not(value: key).destroy_all
           @book.identifiers.where(identifier_type: DUPLICATE_KEY, value: key).destroy_all
-          @book.identifiers.create!(identifier_type: WORK_KEY, value: key) unless stored.include?(key)
+          if stored.include?(key)
+            trust_work_key(key)
+          else
+            @book.identifiers.create!(identifier_type: WORK_KEY, value: key, source: :open_library)
+          end
+        end
+
+        # The key we already held is now one Open Library and our check agree on.
+        def trust_work_key(key)
+          @book.identifiers.where(identifier_type: WORK_KEY, value: key)
+            .update_all(source: ::Identifier.sources[:open_library], updated_at: Time.current)
         end
 
         # Spec section 1, "Open Library's duplicate works": only /resolve
@@ -169,7 +183,7 @@ module Services
             if (other = book_holding(duplicate, work))
               flag_books(other, duplicate)
             else
-              @book.identifiers.create!(identifier_type: DUPLICATE_KEY, value: duplicate)
+              @book.identifiers.create!(identifier_type: DUPLICATE_KEY, value: duplicate, source: :open_library)
               saved << duplicate
             end
           end
