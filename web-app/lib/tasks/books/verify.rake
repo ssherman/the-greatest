@@ -20,9 +20,9 @@ namespace :books do
       "Progress: bin/rails books:verify_report"
   end
 
-  desc "Verification pass: outcome counts, ranked coverage, the latest run, and the most recent replaced keys and pairs"
+  desc "Verification pass: stages, coverage, signals, the latest run, recent changes and random samples"
   task verify_report: :environment do
-    puts Services::Books::Verification::Report.call
+    puts Services::Books::Verification::Report.call(client: Books::OpenLibrary::Client.new)
   end
 
   desc "Verification pass: put one book's keys back the way they were: books:verify_revert[<book id>]"
@@ -33,6 +33,7 @@ namespace :books do
     result = Services::Books::Verification::Revert.call(book: book)
     abort result.errors.join("; ") unless result.success?
 
-    puts "reverted book #{book.id}: work keys back to #{result.data.old_keys.inspect}"
+    puts "reverted book #{book.id}: work keys back to #{result.data[:row].old_keys.inspect}; " \
+      "#{result.data[:skipped]} identifiers had moved and were skipped"
   end
 end

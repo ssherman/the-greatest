@@ -35,17 +35,17 @@ class BooksVerifyRakeTest < ActiveSupport::TestCase
   end
 
   test "the report prints the report's lines" do
-    Services::Books::Verification::Report.expects(:call).returns(["Open Library backfill", "line two"])
+    Services::Books::Verification::Report.expects(:call).returns(["Book verification pass", "line two"])
 
-    assert_output(/Open Library backfill\nline two/) { Rake::Task["books:verify_report"].invoke }
+    assert_output(/Book verification pass\nline two/) { Rake::Task["books:verify_report"].invoke }
   end
 
   test "revert reverts one book, and aborts on an unknown book or a refused revert" do
     book = books_books(:war_and_peace)
     row = Books::Verification.new(old_keys: ["OL5W"])
     Services::Books::Verification::Revert.expects(:call).with(book: book)
-      .returns(Services::Books::Verification::Revert::Result.new(success?: true, data: row, errors: []))
-    assert_output(/reverted book #{book.id}/) { Rake::Task["books:verify_revert"].invoke(book.id.to_s) }
+      .returns(Services::Books::Verification::Revert::Result.new(success?: true, data: {row: row, skipped: 2}, errors: []))
+    assert_output(/reverted book #{book.id}.*2 identifiers had moved/) { Rake::Task["books:verify_revert"].invoke(book.id.to_s) }
 
     Rake::Task["books:verify_revert"].reenable
     assert_output(nil, /no book/) { assert_raises(SystemExit) { Rake::Task["books:verify_revert"].invoke("0") } }

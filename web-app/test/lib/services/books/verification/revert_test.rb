@@ -101,13 +101,43 @@ module Services
           assert_equal [["OL5W", "OL6W"], "reverted"], [keys(ApplyBook::WORK_KEY), ::Books::Verification.find_by!(book: @book).work_outcome]
         end
 
-        test "only confirmed, updated, replaced, keyed and removed rows can be reverted" do
-          ::Books::Verification.create!(book: @book, work_outcome: :duplicate_pair, run_id: "run-1")
+        test "revert removes what the pass added, restores what it confirmed, and drops findings and candidates" do
+          row = ::Books::Verification.create!(book: @book, work_outcome: :unsure, run_id: "r", stage: :done)
+          added = ::Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "77", source: :worldcat)
+          confirmed = ::Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: "9780307266934", source: :worldcat)
+          ::Books::VerificationFinding.create!(verification: row, book: @book, kind: :added, identifier_type: :books_work_oclc_id, value: "77", identifier_id: added.id)
+          ::Books::VerificationFinding.create!(verification: row, book: @book, kind: :confirmed, identifier_type: :books_work_isbn13,
+            value: "9780307266934", identifier_id: confirmed.id, previous_source: :legacy)
+          ::Books::EditionCandidate.create!(book: @book, edition_key: "OL2M")
+
+          result = Revert.call(book: @book)
+
+          assert result.success?
+          assert_not ::Identifier.exists?(added.id)
+          assert confirmed.reload.source_legacy?
+          assert_empty row.reload.findings
+          assert_equal 0, ::Books::EditionCandidate.where(book: @book).count
+          assert row.reverted?
+          assert_equal 0, result.data[:skipped]
+        end
+
+        test "an identifier the pass added that has since moved or gone is skipped and counted" do
+          row = ::Books::Verification.create!(book: @book, work_outcome: :unsure, run_id: "r", stage: :done)
+          ::Books::VerificationFinding.create!(verification: row, book: @book, kind: :added, identifier_type: :books_work_oclc_id, value: "77", identifier_id: 999_999_999)
+
+          result = Revert.call(book: @book)
+
+          assert result.success?
+          assert_equal 1, result.data[:skipped]
+        end
+
+        test "a failed row cannot be reverted" do
+          ::Books::Verification.create!(book: @book, work_outcome: :failed, run_id: "run-1")
 
           result = Revert.call(book: @book)
 
           assert_not result.success?
-          assert_match(/duplicate_pair/, result.errors.first)
+          assert_match(/failed/, result.errors.first)
           assert_not Revert.call(book: books_books(:got)).success?, "no row at all"
         end
       end
