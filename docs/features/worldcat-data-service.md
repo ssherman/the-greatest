@@ -410,9 +410,10 @@ what the development database holds now; the first was restored away. The snapsh
   reach (22,268 of 160,303 on the spike).
 - **No editions.** Records carry no work id, so clustering would be heuristic.
 - **No subject creation.** Subject text never creates a category; unresolved phrases are only counted.
-- **No identifiers yet.** OCLC numbers and the ISBN-13s we do not hold are not written to books. That
-  is increment 2 of the design, and needs its own spec (box-set ISBNs would feed the duplicate finder
-  false evidence).
+- **Identifiers come from the verification pass, not this service.** `docs/features/book-verification.md`
+  stage 3 looks up a book's held ISBNs one at a time (`GET /isbns`) and confirms one only when a record
+  agrees on title, creator and year; it never writes the other ISBNs a record lists, so box sets cannot
+  spread.
 - **No import-time seeding** of genres on newly imported books (increment 3).
 - **No refresh, no newer data, no non-Book formats, no ISBN-less records, and no use of holdings**
   as a ranking signal.
