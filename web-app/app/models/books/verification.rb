@@ -41,9 +41,18 @@ module Books
 
     enum :work_outcome, {confirmed: 0, updated: 1, replaced: 2, keyed: 3, duplicate_pair: 4, unsure: 5, failed: 6, reverted: 7, removed: 8}
     enum :lookup, {identifiers: 0, resolve: 1}, prefix: :via
+    has_many :findings, class_name: "Books::VerificationFinding", dependent: :delete_all
+
+    # Spec section 4: pre_import books run by default; post_import ones only with the flag.
+    enum :cohort, {pre_import: 0, post_import: 1}, prefix: true
+    # The next stage to run (spec section 3). done: all four ran.
+    enum :stage, {work: 0, identifiers: 1, worldcat: 2, signals: 3, done: 4}, prefix: true
 
     # Outcomes that leave the book with a key the verification pass trusts.
     KEYED_OUTCOMES = %w[confirmed updated replaced keyed].freeze
+
+    # Work outcomes that settled a work whose editions stage 2 reads.
+    SETTLED_FOR_EDITIONS = KEYED_OUTCOMES
 
     validates :work_outcome, :run_id, presence: true
   end

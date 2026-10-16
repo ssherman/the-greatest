@@ -74,6 +74,14 @@ module Books
       assert_not Verification.exists?(row.id)
     end
 
+    test "cohort and stage default to pre_import and work" do
+      row = ::Books::Verification.create!(book: books_books(:war_and_peace), work_outcome: :keyed, run_id: "r")
+
+      assert row.cohort_pre_import?
+      assert row.stage_work?
+      assert_equal [0, 0, 0, 0, false], [row.added_count, row.confirmed_count, row.candidate_count, row.wrong_count, row.lump_suspect]
+    end
+
     test "the new identifier type and duplicate source exist" do
       assert_equal 9, ::Identifier.identifier_types["books_work_openlibrary_duplicate_id"]
       assert_equal 5, ::DuplicateCandidate.sources["ol_backfill"]

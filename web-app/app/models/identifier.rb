@@ -101,6 +101,7 @@ class Identifier < ApplicationRecord
   # A source an independent catalogue tied to the record by title, author
   # and year. What the Goodreads rebuild's matcher reads.
   scope :verified, -> { where(source: VERIFIED_SOURCES) }
+  scope :unverified, -> { where(source: nil).or(where.not(source: VERIFIED_SOURCES)) }
 
   # For keeping the better of two rows holding the same value (mergers):
   # verified 3, any other source 2, legacy 1, nil 0.

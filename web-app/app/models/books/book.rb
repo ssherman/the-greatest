@@ -102,6 +102,9 @@ class Books::Book < ApplicationRecord
   has_many :book_authors, -> { order(:position) }, class_name: "Books::BookAuthor", dependent: :destroy
   has_many :authors, through: :book_authors, class_name: "Books::Author"
   has_many :editions, class_name: "Books::Edition", dependent: :destroy
+  has_one :verification, class_name: "Books::Verification", dependent: :delete
+  has_many :verification_findings, class_name: "Books::VerificationFinding", dependent: :delete_all
+  has_many :edition_candidates, class_name: "Books::EditionCandidate", dependent: :delete_all
 
   has_many :credits, as: :creditable, class_name: "Books::Credit", dependent: :destroy
   has_many :identifiers, as: :identifiable, dependent: :destroy
