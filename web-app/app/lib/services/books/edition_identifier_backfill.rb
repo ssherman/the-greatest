@@ -34,7 +34,7 @@ module Services
           next if rows.empty?
 
           rows.uniq! { |row| [row[:identifiable_type], row[:identifier_type], row[:value], row[:identifiable_id]] }
-          Identifier.insert_all(rows, unique_by: LOOKUP_INDEX)
+          Identifier.insert_all(rows, unique_by: LOOKUP_INDEX) # rows carry source: legacy (see #row)
 
           written += rows.size
           Rails.logger.info "EditionIdentifierBackfill: #{written} rows attempted"

@@ -102,7 +102,10 @@ the sync never undoes them.
 1. **Stored-name normalization.** `ANALYZE` the tables that have `lower()` expression indexes. Then
    run `bin/rails books:normalize_names:report`, and after reading its output,
    `books:normalize_names:apply`.
-2. **Open Library key backfill.** Run `bin/rails "books:ol_backfill[100]"`, read
+2. **Identifier provenance, once.** After the deploy that adds `identifiers.source`, run
+   `bin/rails identifiers:mark_legacy`. It marks every books identifier with no source `legacy` and
+   prints how many; a second run prints 0. Details: `docs/features/identifier-provenance.md`.
+3. **Open Library key backfill.** Run `bin/rails "books:ol_backfill[100]"`, read
    `bin/rails books:ol_backfill_report`, then `bin/rails "books:ol_backfill[all]"`. It checks or adds an
    Open Library key on every book, ranked first. Top-ranked books ran at about 4 books a minute before
    the fast pass was sped up, so the full run is likely 2-4 weeks and the top few thousand ranked books
@@ -113,9 +116,9 @@ the sync never undoes them.
    without Open Library. A deploy puts a running backfill back on the queue and it carries on
    under the same run id; logged books are skipped. If the worker crashes instead, the run is lost:
    run the task again. Details: `docs/features/open-library-backfill.md`.
-3. **Duplicates.** Review the pairs the sweep found in the Duplicates queue and merge them. Every
+4. **Duplicates.** Review the pairs the sweep found in the Duplicates queue and merge them. Every
    merge is recorded as a redirect, so the sync never brings the merged book back.
-4. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
+5. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
    Deploy the quarter-star ratings branch before the first production `books:goodreads_replay:load`.
    `ParseRows` skips rows it already wrote, and pre-branch code drops fractional and `4.0` ratings
    as unreadable. After that, `repair_ratings` finds no candidates and `finish_legacy` writes
@@ -144,12 +147,12 @@ the sync never undoes them.
      `repair_ratings` repeats every pass for the same reason: each sync puts
      legacy's truncated integer rating (3 for a 3.75) back.
    - Details: `docs/features/goodreads-import.md`, "Legacy seed" and "Legacy replay".
-5. **Books categories cleanup.** Run the runbook in `docs/features/books-categories.md` in production
+6. **Books categories cleanup.** Run the runbook in `docs/features/books-categories.md` in production
    from a fresh backup: propose every stage, report, owner review and reject, apply, then trim
    (dry run first). It can run before or after cutover, because the post-sync step keeps new legacy
    categories in line once a cleanup has been applied. Re-run `propose` occasionally for what that
    step leaves undecided.
-6. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
+7. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
    resolving at once left `/resolve` timing out at 60 s for 25 minutes, until the API container was
    restarted. Queries the Rails client had abandoned kept running and piled up in one 6 GB DuckDB pool.
    #358 runs one `/resolve` at a time, answers the rest with an instant 503 busy, and stops a query at
@@ -181,7 +184,7 @@ the sync never undoes them.
      `bin/rails "books:goodreads_replay:finish_legacy[1]"`, one import at a time, and wait until it is
      no longer in progress before running the next. Running imports are skipped, not counted, so
      starting them back to back queues them all at once. Four at once overloaded the Open Library VM
-     on 2026-10-06 (section 5, item 6). Each import also fetches Goodreads pages on the line member
+     on 2026-10-06 (section 5, item 7). Each import also fetches Goodreads pages on the line member
      uploads use.
    - Approve or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`,
      "Finishing legacy imports".
