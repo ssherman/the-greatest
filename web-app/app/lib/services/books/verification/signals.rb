@@ -37,13 +37,20 @@ module Services
           works = foreign.empty? ? {} : @client.works_batch(foreign.map { |_t, _v, hit| hit.work_key }.uniq)
           foreign = foreign.select { |_t, _v, hit| (work = works[hit.work_key]) && !Check.titles_agree?(@book, work) }
 
+          # One finding per identifier, listing every foreign work it hits.
+          by_identifier = foreign.group_by { |type, value, _hit| [type, value] }.transform_values do |rows|
+            rows.map { |_t, _v, hit| hit.work_key }.uniq.sort.map { |key| {"key" => key, "title" => works[key].title} }
+          end
+
           ::ActiveRecord::Base.transaction do
-            foreign.each do |type, value, hit|
-              Stamp.finding(@row, :foreign_work, type, value, work_key: hit.work_key, evidence: {"title" => works[hit.work_key].title})
+            # Stage 4 recomputes its findings completely; a re-run must not keep stale ones.
+            @row.findings.foreign_work.delete_all
+            by_identifier.each do |(type, value), listed|
+              Stamp.finding(@row, :foreign_work, type, value, work_key: listed.first["key"], evidence: {"works" => listed})
             end
             Counts.call(@row)
             @row.update!(stage: :done, stage_error: nil, checked_at: Time.current,
-              lump_suspect: foreign.map { |_t, _v, hit| hit.work_key }.uniq.size >= 2)
+              lump_suspect: by_identifier.values.flatten.map { |w| w["key"] }.uniq.size >= 2)
           end
         end
 

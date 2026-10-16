@@ -29,7 +29,7 @@ module Services
 
           assert row.lump_suspect
           assert_equal %w[OL7W OL8W], row.findings.foreign_work.order(:work_key).pluck(:work_key)
-          assert_equal "Anna Karenina", row.findings.find_by!(work_key: "OL7W").evidence["title"]
+          assert_equal [{"key" => "OL7W", "title" => "Anna Karenina"}], row.findings.find_by!(work_key: "OL7W").evidence["works"]
           assert row.stage_done?
           assert_not_nil row.checked_at
         end
@@ -41,19 +41,50 @@ module Services
           refute row.lump_suspect
         end
 
-        test "the settled work, its duplicates and its redirects are not foreign; a same-title work is ignored" do
+        test "the settled work, its duplicates and its redirects are not foreign" do
           Identifier.create!(identifiable: @book, identifier_type: :books_work_openlibrary_duplicate_id, value: "OL2W", source: :open_library)
           hold(:books_work_goodreads_id, "1")
           hold(:books_work_goodreads_id, "2")
           redirected = ::Books::OpenLibrary::IdentifierHit.new(work_key: "OL3W", source: "openlibrary", redirected_from: ["OL1W"],
             edition_keys: [], id_type: "goodreads", value: "2")
-          row = run_signals(
+          client = FakeOlClient.new(
             hits: {["isbn13", "9780140447934"] => [ol_hit("OL1W")], ["goodreads", "1"] => [ol_hit("OL2W", id_type: "goodreads", value: "1")],
                    ["goodreads", "2"] => [redirected]},
-            works: {}
+            works: %w[OL1W OL2W OL3W].to_h { |key| [key, ol_work(key, title: "Anna Karenina")] }
           )
 
+          Signals.call(verification: @row, client: client)
+
+          assert_empty @row.reload.findings.foreign_work
+          assert_empty client.calls.select { |call| call.first == :works_batch }
+        end
+
+        test "a hit on another work whose title agrees with ours is ignored" do
+          row = run_signals(hits: {["isbn13", "9780140447934"] => [ol_hit("OL9W")]}, works: {"OL9W" => ol_work("OL9W", title: "War and Peace")})
+
           assert_empty row.findings.foreign_work
+        end
+
+        test "one identifier hitting two foreign works is one finding listing both, and a lump" do
+          row = run_signals(
+            hits: {["isbn13", "9780140447934"] => [ol_hit("OL8W"), ol_hit("OL7W")]},
+            works: {"OL7W" => ol_work("OL7W", title: "Anna Karenina"), "OL8W" => ol_work("OL8W", title: "Resurrection")}
+          )
+
+          finding = row.findings.foreign_work.sole
+          assert_equal "OL7W", finding.work_key
+          assert_equal [{"key" => "OL7W", "title" => "Anna Karenina"}, {"key" => "OL8W", "title" => "Resurrection"}], finding.evidence["works"]
+          assert row.lump_suspect
+        end
+
+        test "a re-run drops a stale foreign_work finding and recomputes the lump flag" do
+          @row.update!(lump_suspect: true)
+          Services::Books::Verification::Stamp.finding(@row, :foreign_work, "books_work_isbn13", "9780140447934", work_key: "OL7W", evidence: {"works" => []})
+
+          row = run_signals(hits: {}, works: {})
+
+          assert_empty row.findings.foreign_work
+          refute row.lump_suspect
         end
 
         test "an unsure book has no work to exclude: titles alone decide" do
