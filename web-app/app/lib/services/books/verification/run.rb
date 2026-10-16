@@ -171,7 +171,7 @@ module Services
         # up by recheck re-runs from the editions (settled work) or WorldCat
         # (no settled work). Same predicates as next_ids.
         def prepare(book)
-          row = ::Books::Verification.stage_done.find_by(book_id: book.id)
+          row = ::Books::Verification.stage_done.where.not(work_outcome: :reverted).find_by(book_id: book.id)
           return unless row
 
           if @retry_unsure && @version && retryable_unsure(@version).where(book_id: book.id).exists?
@@ -185,7 +185,9 @@ module Services
           namespace = error.class.module_parent
           return false unless [::Books::OpenLibrary::Exceptions, ::Books::WorldCat::Exceptions].include?(namespace)
 
-          error.is_a?(namespace::ParseError) ||
+          # A 404 is about this book: Open Library 404s a work's editions when a
+          # dump refresh removed the key. Retrying cannot help and would wedge every run.
+          error.is_a?(namespace::ParseError) || error.is_a?(namespace::NotFoundError) ||
             (error.is_a?(namespace::ClientError) && BOOK_SPECIFIC_STATUSES.include?(error.status_code))
         end
 
@@ -218,7 +220,7 @@ module Services
         end
 
         def recheckable
-          ::Books::Verification.stage_done.where(<<~SQL.squish).select(:id)
+          ::Books::Verification.stage_done.where.not(work_outcome: :reverted).where(<<~SQL.squish).select(:id)
             EXISTS (SELECT 1 FROM identifiers i WHERE i.identifiable_type = 'Books::Book'
               AND i.identifiable_id = books_verifications.book_id AND i.source = #{::Identifier.sources[:legacy]}
               AND i.created_at > books_verifications.checked_at)

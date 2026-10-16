@@ -418,6 +418,44 @@ module Services
         test "an unknown flag is refused" do
           assert_raises(ArgumentError) { run_backfill(flags: %w[everything]) }
         end
+
+        test "recheck never takes a reverted book, even one with a newer legacy identifier" do
+          reverted = ::Books::Verification.create!(book: @war, work_outcome: :reverted, run_id: "old", stage: :done, checked_at: 1.day.ago)
+          Identifier.create!(identifiable: @war, identifier_type: :books_work_isbn10, value: "0140447938", source: :legacy)
+          VerifyBook.expects(:call).never
+
+          run_backfill(flags: %w[recheck unranked], scope: ::Books::Book.where(id: @war.id))
+
+          assert reverted.reload.stage_done?
+        end
+
+        test "a 404 at a later stage stops that book at its stage with no wait, and the run goes on" do
+          row = ::Books::Verification.create!(book: @war, work_outcome: :keyed, new_key: "OL1W", run_id: "old", stage: :identifiers)
+          order = []
+          VerifyBook.stubs(:call).with do |book:, run_id:, **|
+            order << book.id
+            raise ::Books::OpenLibrary::Exceptions::NotFoundError.new("no such work", 404) if book.id == @war.id
+
+            ::Books::Verification.find_or_initialize_by(book: book).update!(work_outcome: :keyed, run_id: run_id, stage: :done)
+            true
+          end.returns(ok)
+
+          result = run_backfill
+
+          assert_not result.data[:stopped]
+          assert_equal [@war, @crime, @got, @clash].map(&:id).sort, order.sort
+          assert row.reload.stage_identifiers?
+          assert_match(/NotFoundError.*no such work/, row.stage_error)
+        end
+
+        test "a WorldCat 404 is book-specific too" do
+          ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "old", stage: :worldcat)
+          VerifyBook.stubs(:call).raises(::Books::WorldCat::Exceptions::NotFoundError.new("gone", 404))
+
+          result = run_backfill(scope: ::Books::Book.where(id: @war.id))
+
+          assert_not result.data[:stopped]
+        end
       end
     end
   end
