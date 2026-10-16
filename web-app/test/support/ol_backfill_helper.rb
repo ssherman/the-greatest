@@ -126,4 +126,33 @@ module OlBackfillHelper
       raise error if error
     end
   end
+
+  def wc_record(oclc:, title:, creator: nil, contributors: [], year: nil, isbn13s: [])
+    ::Books::WorldCat::Record.from_hash({"oclc" => oclc, "title" => title, "creator" => creator,
+      "contributors" => contributors, "year" => year, "isbn13s" => isbn13s})
+  end
+
+  class FakeWcClient
+    attr_reader :calls
+
+    def initialize(records: {}, version: {dump_date: "2025-09-04"}, errors: [])
+      @records = records
+      @version = version
+      @errors = errors.dup
+      @calls = []
+    end
+
+    def record_by_isbn(isbn)
+      @calls << [:record_by_isbn, isbn]
+      error = @errors.shift
+      raise error if error
+
+      @records.fetch(isbn, [])
+    end
+
+    def version
+      @calls << [:version]
+      @version
+    end
+  end
 end
