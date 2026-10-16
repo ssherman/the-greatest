@@ -42,7 +42,7 @@ module Services
           @decision = decision
           @country_lookup = country_lookup || ::Services::Books::CountryLookup.new(client: client)
           @redirected_ids = Array(redirected_ids)
-          @sheet = FactSheet.new(author)
+          @sheet = FactSheet.new(author, source: :wikidata)
         end
 
         # A held id Wikidata has merged into this item is the same person, so
