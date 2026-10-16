@@ -131,6 +131,39 @@ module Services
           assert_equal 1, result.data[:skipped]
         end
 
+        test "an added or confirmed identifier that now belongs to another book is left alone and counted" do
+          other = books_books(:got)
+          row = ::Books::Verification.create!(book: @book, work_outcome: :unsure, run_id: "r", stage: :done)
+          moved_added = ::Identifier.create!(identifiable: other, identifier_type: :books_work_oclc_id, value: "77", source: :worldcat)
+          moved_confirmed = ::Identifier.create!(identifiable: other, identifier_type: :books_work_isbn13, value: "9780307266934", source: :worldcat)
+          ::Books::VerificationFinding.create!(verification: row, book: @book, kind: :added, identifier_type: :books_work_oclc_id, value: "77", identifier_id: moved_added.id)
+          ::Books::VerificationFinding.create!(verification: row, book: @book, kind: :confirmed, identifier_type: :books_work_isbn13,
+            value: "9780307266934", identifier_id: moved_confirmed.id, previous_source: :legacy)
+
+          result = Revert.call(book: @book)
+
+          assert result.success?
+          assert ::Identifier.exists?(moved_added.id)
+          assert moved_confirmed.reload.source_worldcat?
+          assert_equal 2, result.data[:skipped]
+        end
+
+        test "a confirmed identifier that has been deleted is skipped and counted" do
+          row = ::Books::Verification.create!(book: @book, work_outcome: :unsure, run_id: "r", stage: :done)
+          ::Books::VerificationFinding.create!(verification: row, book: @book, kind: :confirmed, identifier_type: :books_work_isbn13,
+            value: "1", identifier_id: 999_999_999, previous_source: :legacy)
+
+          assert_equal 1, Revert.call(book: @book).data[:skipped]
+        end
+
+        test "a duplicate_pair row leaves the book's work keys alone" do
+          ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::WORK_KEY, value: "OL1W", source: :open_library)
+          ::Books::Verification.create!(book: @book, work_outcome: :duplicate_pair, run_id: "r", old_keys: ["OL1W"], new_key: "OL1W")
+
+          assert Revert.call(book: @book).success?
+          assert_equal [["OL1W", "open_library"]], @book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).pluck(:value, :source)
+        end
+
         test "a failed row cannot be reverted" do
           ::Books::Verification.create!(book: @book, work_outcome: :failed, run_id: "run-1")
 
