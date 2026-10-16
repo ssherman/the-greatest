@@ -67,6 +67,8 @@ Errors are handled by what they are about:
   That is a 404 from either service (Open Library 404s a work's editions when a dump refresh removed
   the key), a 400 or 422, or a response that cannot be parsed. In stage 1 the book is logged
   `failed`.
+- A WorldCat 504 (the service's 5 s deadline) on one ISBN counts as no answer for that ISBN; the
+  book completes stage 3.
 - Any other error (network, timeout, 5xx, busy, 401/403/429, breaker open) waits and retries after
   15, 30, 60, 120, 240 and 300 seconds. If it is still failing, the book stops at its stage and the
   run stops. Run the task again later.
@@ -154,16 +156,17 @@ Runs when stage 1 settled a work (`confirmed`, including on abstain, `updated`, 
 
 - **Title.** Its title, with its subtitle, agrees with one of our titles or the Open Library work's
   full title. Titles agree when equal after normalizing, or once a subtitle is dropped from one side,
-  never both. A subtitle dropped from the edition must not name a set: box set, boxed set,
+  never both. A subtitle dropped from the edition must not name a set: box set, boxed set (hyphenated and closed forms too: `box(ed)[ -]?set`),
   collection, omnibus, trilogy, volumes, books 1 (`EditionCheck::SET_WORDS`, whole words, case
-  folded). The list is narrow on purpose: "complete" or "series" would reject every "Complete and
+  folded). Stage 3 uses this same rule on the WorldCat record's title, with its " : subtitle" as the
+  subtitle. The list is narrow on purpose: "complete" or "series" would reject every "Complete and
   Unabridged" edition.
 - **Year.** Its publish year is absent, or at least the book's first published year minus one. A book
   with no first published year skips the rule.
 
 From agreeing editions, ISBN-13s, ISBN-10s, OCLC numbers and Goodreads ids are written at work level
 (`books_work_isbn13`, `books_work_isbn10`, `books_work_oclc_id`, `books_work_goodreads_id`), with
-invalid ISBNs dropped and counted. For each value:
+invalid ISBNs dropped. For each value:
 
 - This book holds it as `legacy`, unset or `goodreads_import`: its source becomes `open_library`
   (finding `confirmed`, with the previous source).
@@ -199,7 +202,10 @@ Outcomes for one ISBN:
 - **Records exist and every one disagrees on both title and creator.** Finding `wrong_identifier`,
   with the records' OCLC numbers, titles, creators and years in `evidence`. Nothing is removed.
 - **Anything else** (no record, or records agreeing on only one of title and creator): nothing.
-  Garbled records fail the check and never confirm.
+  Garbled records fail the check and never confirm. A garbled record (mojibake in its title or
+  creator) is never `wrong_identifier` either: it may be the right book, so it counts as unknown.
+- **A WorldCat 504** (the service's 5 s deadline) on one ISBN counts as no answer for that ISBN; the
+  book completes stage 3.
 
 ### Stage 4: signals
 
@@ -254,7 +260,8 @@ the Goodreads rebuild has repaired their titles and authors; the `post_import` f
 - the latest run, its failure and the last stage error;
 - recent risky changes: the latest `replaced`, `removed` and `duplicate_pair` books;
 - random samples: 10 books per work outcome (with Open Library's title when it can be reached), 10
-  WorldCat confirmations and 10 `wrong_identifier` findings.
+  Open Library trusted writes (stage 2's `added` and `confirmed` findings, with the edition they
+  came from), 10 WorldCat confirmations and 10 `wrong_identifier` findings.
 
 Check the `replaced`, `duplicate_pair` and `removed` lines: every replacement or removal is a key
 the old code assigned and Open Library contradicted. The samples are how the quiet outcomes get

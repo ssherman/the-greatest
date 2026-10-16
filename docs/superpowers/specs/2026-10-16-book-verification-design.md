@@ -166,7 +166,7 @@ Runs when stage 1 settled a work: `confirmed` (including `confirmed_on_abstain`)
   `first_published_year` skips the year rule.
 
 From agreeing editions, every value is normalized (`Books::Isbn.normalize` for ISBNs; invalid ones
-dropped and counted) and written at work level:
+dropped) and written at work level:
 
 | Edition field | Identifier type |
 |---|---|
@@ -198,7 +198,9 @@ verified after stage 2, normalize to ISBN-13, drop invalid ones, deduplicate, an
 `MAX_WORLDCAT_ISBNS = 50` with `Client#record_by_isbn`. A record **agrees** when all three hold:
 
 - **Title:** its title agrees with ours by the title rule, after lowercasing and dropping WorldCat's
-  " : " subtitle form.
+  " : " subtitle form. *Amended 2026-10-17 (final review)*: the rule is stage 2's edition rule (a
+  subtitle dropped from one side only, never both; a subtitle dropped from the record must not name
+  a set), so "War and peace : boxed set" does not agree.
 - **Creator:** its `creator` or one of its `contributors` agrees with one of our authors by the
   letters-only author rule, also accepting "Last, First" order.
 - **Year:** its `year` is absent or at least our `first_published_year` minus one.
@@ -366,6 +368,8 @@ The OL key backfill's rules, extended to WorldCat:
   stops.
 - After a book that went through `/resolve`, the run waits 4 s (`RESOLVE_PAUSE`) so other callers
   get the single slot. Stages 2-4 never call `/resolve`.
+- A WorldCat 504 (the service's 5 s deadline) on one ISBN counts as no answer for that ISBN; the
+  book completes stage 3.
 - WorldCat gets no pause: nothing else uses its single-ISBN route. The genre backfill uses the batch
   route.
 

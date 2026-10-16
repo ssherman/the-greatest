@@ -96,6 +96,14 @@ module Services
           assert_match(/War and Peace.*Tolstoy.*9780307266934.*Gloriana.*Moorcock/, Report.call.join("\n"))
         end
 
+        test "samples show stage 2's trusted Open Library writes with their edition evidence" do
+          row = ::Books::Verification.create!(book: books_books(:war_and_peace), work_outcome: :unsure, run_id: "r", stage: :done)
+          ::Books::VerificationFinding.create!(verification: row, book: row.book, kind: :added, source: :open_library, identifier_type: :books_work_isbn13,
+            value: "9780307266934", evidence: {"edition_key" => "OL1M", "title" => "War and Peace"})
+
+          assert_match(/9780307266934.*OL1M/, Report.call.join("\n"))
+        end
+
         test "samples survive a book with no authors and evidence with missing keys" do
           book = ::Books::Book.create!(title: "Orphan")
           row = ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: "r", new_key: "OL1W", stage: :done)

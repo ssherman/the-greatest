@@ -10,7 +10,7 @@ module Services
       module EditionCheck
         module_function
 
-        SET_WORDS = /\b(box(ed)? set|collection|omnibus|trilogy|volumes|books 1)\b/i
+        SET_WORDS = /\b(box(ed)?[\s-]?set|collection|omnibus|trilogy|volumes|books 1)\b/i
         YEAR_SLACK = 1
 
         def agrees?(book, work, edition)

@@ -23,6 +23,19 @@ module Services
           assert WorldCatCheck.agrees?(@book, record(title: "War and peace : a novel"))
         end
 
+        test "a subtitle dropped from the record must not name a set" do
+          refute WorldCatCheck.agrees?(@book, record(title: "War and peace : boxed set"))
+          refute WorldCatCheck.agrees?(@book, record(title: "War and peace : collection, volumes 1-4"))
+        end
+
+        test "a garbled record of the right book is unknown, not clearly different" do
+          book = ::Books::Book.create!(title: "Cré na Cille", first_published_year: 1949)
+          book.book_authors.create!(author: ::Books::Author.create!(name: "Máirtín Ó Cadhain"))
+          garbled = record(title: "Cr©Øe na cille", creator: "M©Øairt©Øin ©ØO Cadhain")
+
+          refute WorldCatCheck.clearly_different?(book.reload, garbled)
+        end
+
         test "an inverted creator with dates still matches" do
           assert WorldCatCheck.agrees?(@book, record(creator: "Tolstoy, Leo, 1828-1910."))
           assert WorldCatCheck.agrees?(@book, record(creator: nil, contributors: ["Tolstoy, Leo (Lev Nikolaevich)"]))

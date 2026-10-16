@@ -13,12 +13,14 @@ module Services
         WorkLike = Data.define(:title, :subtitle, :author_names, :author_keys)
         DATES = /,?\s*\d{4}\s*-\s*(\d{4})?\s*\.?\s*\z/
         PARENTHESES = /\s*\([^)]*\)/
+        # MARC-8 or double-encoded text: the record may be the right book, garbled.
+        MOJIBAKE = /[©ÃÂ\uFFFD]/
 
         def agrees?(book, record)
           work = work_like(record)
           return false if work.title.blank? || work.author_names.empty?
 
-          Check.titles_agree?(book, work) && Check.authors_agree?(book, work) && EditionCheck.year_ok?(book, record.year)
+          EditionCheck.title_agrees?(book, nil, work) && Check.authors_agree?(book, work) && EditionCheck.year_ok?(book, record.year)
         end
 
         # Both title and creator disagree. A missing title or creator, or a
@@ -26,6 +28,7 @@ module Services
         def clearly_different?(book, record)
           work = work_like(record)
           return false if work.title.blank? || work.author_names.empty? || book.authors.empty?
+          return false if [work.title, *work.author_names].any? { |text| text.match?(MOJIBAKE) }
 
           !Check.titles_agree?(book, work) && !Check.authors_agree?(book, work)
         end

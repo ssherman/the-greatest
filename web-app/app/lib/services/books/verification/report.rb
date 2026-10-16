@@ -80,6 +80,7 @@ module Services
             ol = open_library_records(sampled.filter_map { |row| row.new_key.presence })
             sampled.each { |row| lines << "    #{book_label(row.book)}#{outcome_tail(row, ol)}" }
           end
+          lines.concat(finding_samples("Open Library trusted writes", ::Books::VerificationFinding.where(source: :open_library, kind: %i[added confirmed])))
           lines.concat(finding_samples("WorldCat confirmations", ::Books::VerificationFinding.confirmed.where(source: :worldcat)))
           lines.concat(finding_samples("Wrong identifiers", ::Books::VerificationFinding.wrong_identifier))
           lines
@@ -98,7 +99,15 @@ module Services
         end
 
         def evidence_text(finding)
-          records = Array(finding.evidence.is_a?(Hash) ? finding.evidence["records"] : nil)
+          evidence = finding.evidence.is_a?(Hash) ? finding.evidence : {}
+          if evidence["edition_key"].present? || evidence["title"].present?
+            return ["edition #{evidence["edition_key"]}".strip, evidence["title"].presence&.then { |title| "\"#{title}\"" }].compact.join(" ")
+          end
+
+          works = Array(evidence["works"])
+          return works.first(3).map { |work| [work["key"], work["title"]].compact.join(" ") }.join("; ") if works.any?
+
+          records = Array(evidence["records"])
           return "no evidence" if records.empty?
 
           records.first(3).map { |record| [record["title"], record["creator"], record["year"]].compact.join(" / ") }.join("; ")

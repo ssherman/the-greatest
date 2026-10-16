@@ -31,6 +31,8 @@ module Services
           refute agrees?("War and Peace: The Boxed Set")
           refute agrees?("War and Peace", subtitle: "Volumes 1-4")
           refute agrees?("War and Peace: An Omnibus")
+          refute agrees?("War and Peace: Box-Set")
+          refute agrees?("War and Peace: Boxset")
         end
 
         test "a translation or another title does not agree" do

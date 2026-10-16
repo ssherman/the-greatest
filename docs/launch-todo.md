@@ -94,7 +94,9 @@ second export on the same day reuses the day's file name and the trainer reports
    without WorldCat-derived categories; the backfill is additive and idempotent, so a full run only
    adds links for books that have none yet. It is a repeating step, not a one-off.
 8. **`bin/rails "books:verify[all,recheck]"`** after the sync, once the pass has run. The sync keeps
-   adding legacy identifiers; this re-verifies the books that got new ones.
+   adding legacy identifiers; this re-verifies the books that got new ones. Once the `post_import`
+   books have been verified, the recheck needs `post_import` too
+   (`books:verify[all,recheck,post_import]`).
 
 ## 5. Cleanup, after the switch-over
 

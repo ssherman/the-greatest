@@ -78,6 +78,33 @@ module Services
           assert_equal 1, client.calls.size
         end
 
+        test "a WorldCat 504 on one ISBN counts as no answer and the book completes the stage" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: ISBN13, source: :legacy)
+          client = FakeWcClient.new(records: {ISBN13 => [agreeing]}, errors: [::Books::WorldCat::Exceptions::ServerError.new("deadline", 504)])
+
+          ConfirmWithWorldCat.call(verification: @row, client: client, dump_date: "2025-09-04")
+
+          assert_equal 2, client.calls.size
+          assert Identifier.find_by!(identifier_type: :books_work_isbn13, value: ISBN13).source_worldcat?
+          assert @row.reload.stage_signals?
+        end
+
+        test "a WorldCat 503 still raises" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: ISBN13, source: :legacy)
+          client = FakeWcClient.new(errors: [::Books::WorldCat::Exceptions::ServerError.new("down", 503)])
+
+          assert_raises(::Books::WorldCat::Exceptions::ServerError) { ConfirmWithWorldCat.call(verification: @row, client: client, dump_date: "x") }
+          assert @row.reload.stage_worldcat?
+        end
+
+        test "a held ISBN-10 stored with a lowercase x is confirmed by normalized value" do
+          isbn10 = Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn10, value: "014043075x", source: :legacy)
+
+          confirm(::Books::Isbn.normalize("014043075x").isbn13 => [agreeing])
+
+          assert isbn10.reload.source_worldcat?
+        end
+
         test "a WorldCat error writes nothing and leaves the stage" do
           Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: ISBN13, source: :legacy)
           client = FakeWcClient.new(errors: [::Books::WorldCat::Exceptions::TimeoutError.new("slow")])
