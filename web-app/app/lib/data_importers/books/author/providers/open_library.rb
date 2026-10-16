@@ -109,7 +109,8 @@ module DataImporters
               populated << "alternate_names"
             end
 
-            author.identifiers.find_or_initialize_by(identifier_type: :books_author_openlibrary_id, value: record.key)
+            identifier = author.identifiers.find_or_initialize_by(identifier_type: :books_author_openlibrary_id, value: record.key)
+            identifier.source = :open_library if identifier.new_record?
             populated
           end
 

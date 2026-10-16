@@ -170,6 +170,50 @@ module DataImporters
             assert_equal "OL262758W", identifiers.first.value
           end
 
+          test "an accepted work key is written as open_library and query identifiers as goodreads_import" do
+            stub_resolve(resolve_response(verdict: "accept", key: "OL262758W"))
+            book = ::Books::Book.new(title: "War and Peace")
+            query = DataImporters::Books::Book::ImportQuery.new(title: "War and Peace", isbn13: ["9780140449136"], goodreads_id: ["656"])
+
+            assert @provider.populate(book, query: query).success?
+
+            assert book.identifiers.find { |i| i.identifier_type == "books_work_openlibrary_id" }.source_open_library?
+            assert book.identifiers.find { |i| i.identifier_type == "books_work_isbn13" }.source_goodreads_import?
+            assert book.identifiers.find { |i| i.identifier_type == "books_work_goodreads_id" }.source_goodreads_import?
+          end
+
+          test "a provider built with another query_identifier_source gives it to the query identifiers" do
+            stub_resolve(resolve_response(verdict: "accept", key: "OL262758W"))
+            provider = Providers::OpenLibrary.new(client: @client, query_identifier_source: :amazon)
+            book = ::Books::Book.new(title: "War and Peace")
+            query = DataImporters::Books::Book::ImportQuery.new(title: "War and Peace", isbn13: ["9780140449136"])
+
+            assert provider.populate(book, query: query).success?
+
+            assert book.identifiers.find { |i| i.identifier_type == "books_work_isbn13" }.source_amazon?
+          end
+
+          test "an accepted work key the book already holds keeps its source" do
+            book = books_books(:war_and_peace)
+            Identifier.create!(identifiable: book, identifier_type: :books_work_openlibrary_id, value: "OL262758W", source: :legacy)
+            stub_resolve(resolve_response(verdict: "accept", key: "OL262758W"))
+
+            assert @provider.populate(book, query: nil).success?
+            book.save!
+
+            assert Identifier.find_by!(identifiable: book, identifier_type: :books_work_openlibrary_id, value: "OL262758W").source_legacy?
+          end
+
+          test "a trusted work key is written as open_library" do
+            provider = Providers::OpenLibrary.new(client: @client, trust_work_key: true)
+            stub_resolve(resolve_response(verdict: "abstain"))
+            book = ::Books::Book.new(title: "The Chosen")
+
+            provider.populate(book, query: DataImporters::Books::Book::ImportQuery.new(title: "The Chosen", open_library_work_key: "OL7W"))
+
+            assert book.identifiers.find { |i| i.identifier_type == "books_work_openlibrary_id" }.source_open_library?
+          end
+
           # ------------------------------------------------------------ description
 
           test "a description fill is written via assign_description, never a second row on a re-run" do
