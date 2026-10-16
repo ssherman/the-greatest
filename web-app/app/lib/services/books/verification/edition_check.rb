@@ -35,7 +35,9 @@ module Services
 
         def our_titles(book, work)
           titles = ([book.title] + Array(book.alternate_titles)).filter_map { |title| Check.normalize(title) }
-          titles.concat(Check.their_titles(work).compact) if work
+          # Only the work's full title: its short form would drop a subtitle from both sides.
+          work_full = Check.their_titles(work).first if work
+          titles << work_full if work_full
           titles.uniq
         end
       end

@@ -49,6 +49,28 @@ module Services
           assert agrees?("War and Peace", year: 1868)
         end
 
+        test "with a subtitled work, an edition equal to the work without its subtitle agrees" do
+          work = ol_work("OL1W", title: "War and Peace", subtitle: "A Novel")
+
+          assert EditionCheck.agrees?(@book, work, ol_edition("OL1M", title: "War and Peace"))
+          assert EditionCheck.agrees?(@book, work, ol_edition("OL1M", title: "War and Peace", subtitle: "Penguin Classics"))
+        end
+
+        test "a subtitle is never dropped from both sides" do
+          work = ol_work("OL1W", title: "War and Peace", subtitle: "A Novel")
+          @book.update_columns(title: "War and Peace: A Novel")
+
+          refute EditionCheck.agrees?(@book, work, ol_edition("OL1M", title: "War and Peace", subtitle: "Graphic Edition"))
+        end
+
+        test "a different subtitle on an edition of a subtitled work does not agree" do
+          @book.update_columns(title: "Sapiens: A Brief History of Humankind")
+          work = ol_work("OL1W", title: "Sapiens", subtitle: "A Brief History of Humankind")
+
+          refute EditionCheck.agrees?(@book, work, ol_edition("OL1M", title: "Sapiens", subtitle: "A Graphic History"))
+          refute EditionCheck.agrees?(@book, work, ol_edition("OL1M", title: "Sapiens", subtitle: "Une breve histoire de l humanite"))
+        end
+
         test "a book with no first-published year skips the year rule" do
           @book.update_columns(first_published_year: nil)
 
