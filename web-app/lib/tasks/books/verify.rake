@@ -1,23 +1,21 @@
 # frozen_string_literal: true
 
 namespace :books do
-  desc "Verification pass: queue one run over <count> books (ranked first) or all; add ,retry_unsure to retry unsure books from an older Open Library version"
-  task :verify, [:limit, :mode] => :environment do |_task, args|
-    usage = "usage: books:verify[<count>|all] or books:verify[<count>|all,retry_unsure]"
+  desc "Book verification pass: queue one run over <count> books or all; flags: post_import, unranked, retry_unsure, recheck"
+  task :verify, [:limit] => :environment do |_task, args|
+    flags = args.extras
+    usage = "usage: books:verify[<count>|all(,#{Services::Books::Verification::Run::FLAGS.join("|")})...]"
     limit = case args[:limit]
     when "all" then nil
     when /\A[1-9]\d*\z/ then args[:limit].to_i
     else abort usage
     end
-    retry_unsure = case args[:mode]
-    when nil then false
-    when "retry_unsure" then true
-    else abort usage
-    end
+    abort usage unless (flags - Services::Books::Verification::Run::FLAGS).empty?
 
     run_id = SecureRandom.uuid
-    Books::VerificationJob.perform_async(limit, run_id, retry_unsure)
-    puts "queued verification run #{run_id}: #{limit || "all"} books#{" (retrying unsure books)" if retry_unsure}. " \
+    Books::VerificationJob.perform_async(limit, run_id, flags)
+    scope = flags.empty? ? "ranked, pre-import" : flags.join(", ")
+    puts "queued verification run #{run_id}: #{limit || "all"} books (#{scope}). " \
       "Only one run works at a time: one started while another is in progress exits at once, so queue it again later. " \
       "Progress: bin/rails books:verify_report"
   end

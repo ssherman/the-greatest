@@ -532,6 +532,26 @@ module Services
           failed.reload
           assert_equal ["failed", "old-run", 1], [failed.work_outcome, failed.run_id, failed.attempts]
         end
+
+        test "the row carries the cohort and moves to identifiers when a work settled" do
+          row = ApplyBook.call(book: @book, client: fast_client, run_id: "run-1", cohort: :post_import).data
+
+          assert row.cohort_post_import?
+          assert row.stage_identifiers?
+        end
+
+        test "an unsure book moves straight to worldcat" do
+          row = ApplyBook.call(book: @book, client: resolve_client(ol_resolution(verdict: "abstain")), run_id: "run-1").data
+
+          assert row.stage_worldcat?
+          assert row.cohort_pre_import?
+        end
+
+        test "a failed lookup leaves the row at work" do
+          row = ApplyBook.record_failure(book: @book, run_id: "run-1", error: "boom")
+
+          assert row.stage_work?
+        end
       end
     end
   end

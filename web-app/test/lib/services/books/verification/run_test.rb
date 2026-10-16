@@ -15,20 +15,27 @@ module Services
           @clash = books_books(:clash)
           @scope = ::Books::Book.where(id: [@war, @crime, @got, @clash].map(&:id))
           @client = FakeOlClient.new
+          # Fixture ids are hashed, normally far above the reserved ceiling.
+          Cohort.stubs(:post_import_range).returns(1...1) unless [@war, @crime, @got, @clash].all? { |book| Cohort.for(book.id) == :pre_import }
+        end
+
+        test "the fixture books are pre_import" do
+          assert_equal [:pre_import] * 4, [@war, @crime, @got, @clash].map { |book| Cohort.for(book.id) }
         end
 
         def no_sleep = ->(_seconds) { flunk "no wait expected" }
 
-        def ok = ApplyBook::Result.new(success?: true, data: nil, errors: [])
+        def ok = VerifyBook::Result.new(success?: true, data: nil, errors: [])
 
-        # ApplyBook stand-in: records the order and writes the row a real one would.
+        # VerifyBook stand-in: records the order and writes the row a real one would.
         def record_applies(success: true)
           order = []
-          ApplyBook.stubs(:call).with do |book:, run_id:, **|
+          VerifyBook.stubs(:call).with do |book:, run_id:, **|
             order << book.id
-            ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: success ? run_id : "other-run")
+            row = ::Books::Verification.find_or_initialize_by(book: book)
+            row.update!(work_outcome: :keyed, run_id: success ? run_id : "other-run", stage: :done)
             true
-          end.returns(ApplyBook::Result.new(success?: success, data: nil, errors: []))
+          end.returns(VerifyBook::Result.new(success?: success, data: nil, errors: []))
           order
         end
 
@@ -37,7 +44,8 @@ module Services
         end
 
         def run_backfill(**options)
-          Run.call(limit: nil, run_id: "run-1", client: @client, sleeper: no_sleep, scope: @scope, **options)
+          # Unranked by default so the order tests see every fixture book; the ranked-only default is tested on its own.
+          Run.call(limit: nil, run_id: "run-1", client: @client, wc_client: FakeWcClient.new, sleeper: no_sleep, scope: @scope, flags: %w[unranked], **options)
         end
 
         # A real second session: the test connection is shared by every
@@ -66,7 +74,7 @@ module Services
         end
 
         test "a run started while another holds the lock does nothing and says so" do
-          ApplyBook.expects(:call).never
+          VerifyBook.expects(:call).never
           result = nil
           with_lock_held_elsewhere { result = run_backfill }
 
@@ -102,7 +110,7 @@ module Services
         end
 
         test "the lock is released when the run raises" do
-          ApplyBook.stubs(:call).raises(ActiveRecord::RecordNotUnique, "boom")
+          VerifyBook.stubs(:call).raises(ActiveRecord::RecordNotUnique, "boom")
           assert_raises(ActiveRecord::RecordNotUnique) { run_backfill }
 
           assert_lock_free
@@ -154,16 +162,16 @@ module Services
         end
 
         test "books already logged are skipped, except failed ones" do
-          ::Books::Verification.create!(book: @war, work_outcome: :confirmed, run_id: "old")
+          ::Books::Verification.create!(book: @war, work_outcome: :confirmed, run_id: "old", stage: :done)
           ::Books::Verification.create!(book: @got, work_outcome: :reverted, run_id: "old")
-          ::Books::Verification.create!(book: @clash, work_outcome: :unsure, run_id: "old")
+          ::Books::Verification.create!(book: @clash, work_outcome: :unsure, run_id: "old", stage: :done)
           failed = ::Books::Verification.create!(book: @crime, work_outcome: :failed, run_id: "old")
           order = []
-          ApplyBook.stubs(:call).with do |book:, run_id:, **|
+          VerifyBook.stubs(:call).with do |book:, run_id:, **|
             order << book.id
-            failed.update!(work_outcome: :keyed, run_id: run_id)
+            failed.update!(work_outcome: :keyed, run_id: run_id, stage: :done)
             true
-          end.returns(ApplyBook::Result.new(success?: true, data: nil, errors: []))
+          end.returns(VerifyBook::Result.new(success?: true, data: nil, errors: []))
 
           run_backfill
 
@@ -171,7 +179,7 @@ module Services
         end
 
         test "the same run started again counts the books it already did toward its limit" do
-          ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "run-1")
+          ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "run-1", stage: :done)
           order = record_applies
 
           result = run_backfill(limit: 2)
@@ -183,7 +191,7 @@ module Services
         test "an Open Library failure waits and tries the same book again" do
           error = ::Books::OpenLibrary::Exceptions::ServerError.new("busy", 500)
           tried = []
-          ApplyBook.stubs(:call).with do |book:, **|
+          VerifyBook.stubs(:call).with do |book:, **|
             tried << book.id
             true
           end.raises(error).then.returns(ok)
@@ -200,11 +208,11 @@ module Services
         test "a book-specific error (ClientError) logs that book failed with no wait and the run moves on" do
           bad = ::Books::OpenLibrary::Exceptions::ClientError.new("bad isbn", 422)
           order = []
-          ApplyBook.stubs(:call).with do |book:, run_id:, **|
+          VerifyBook.stubs(:call).with do |book:, run_id:, **|
             order << book.id
             raise bad if book.id == @war.id
 
-            ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: run_id)
+            ::Books::Verification.find_or_initialize_by(book: book).update!(work_outcome: :keyed, run_id: run_id, stage: :done)
             true
           end.returns(ok)
 
@@ -217,7 +225,7 @@ module Services
         end
 
         test "a 403 is an outage: the run waits, retries and stops" do
-          ApplyBook.stubs(:call).raises(::Books::OpenLibrary::Exceptions::ClientError.new("forbidden", 403))
+          VerifyBook.stubs(:call).raises(::Books::OpenLibrary::Exceptions::ClientError.new("forbidden", 403))
           waits = []
 
           result = run_backfill(sleeper: ->(seconds) { waits << seconds })
@@ -240,10 +248,10 @@ module Services
 
         test "one call never takes the same book twice" do
           calls = []
-          ApplyBook.stubs(:call).with do |book:, **|
+          VerifyBook.stubs(:call).with do |book:, **|
             calls << book.id
             true
-          end.returns(ApplyBook::Result.new(success?: false, data: nil, errors: []))
+          end.returns(VerifyBook::Result.new(success?: false, data: nil, errors: []))
 
           run_backfill
 
@@ -251,7 +259,7 @@ module Services
         end
 
         test "a book that keeps failing is logged failed after the last wait, and the run stops" do
-          ApplyBook.stubs(:call).raises(::Books::OpenLibrary::Exceptions::ServerError.new("down", 500))
+          VerifyBook.stubs(:call).raises(::Books::OpenLibrary::Exceptions::ServerError.new("down", 500))
           waits = []
 
           result = run_backfill(sleeper: ->(seconds) { waits << seconds })
@@ -264,50 +272,50 @@ module Services
 
         test "retry_unsure takes unsure books from an older Open Library version only" do
           @client = FakeOlClient.new(version: {dump_date: "2026-09-30", matcher_version: 3})
-          [@crime, @got, @clash].each { |book| ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: "old") }
-          stale = ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", dump_date: "2026-07-31", matcher_version: 3)
+          [@crime, @got, @clash].each { |book| ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: "old", stage: :done) }
+          stale = ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", stage: :done, dump_date: "2026-07-31", matcher_version: 3)
           order = []
-          ApplyBook.stubs(:call).with do |book:, run_id:, **|
+          VerifyBook.stubs(:call).with do |book:, run_id:, **|
             order << book.id
-            stale.update!(dump_date: "2026-09-30", run_id: run_id)
+            stale.reload.update!(dump_date: "2026-09-30", run_id: run_id, stage: :done)
             true
-          end.returns(ApplyBook::Result.new(success?: true, data: nil, errors: []))
+          end.returns(VerifyBook::Result.new(success?: true, data: nil, errors: []))
 
-          run_backfill(retry_unsure: true)
+          run_backfill(flags: %w[retry_unsure unranked])
           assert_equal [@war.id], order
 
           order.clear
-          stale.update!(dump_date: "2026-09-30")
-          run_backfill(retry_unsure: true)
+          stale.reload.update!(dump_date: "2026-09-30")
+          run_backfill(flags: %w[retry_unsure unranked])
           assert_empty order
         end
 
         test "retry_unsure also takes an unsure book from an older matcher on the same dump" do
           @client = FakeOlClient.new(version: {dump_date: "2026-09-30", matcher_version: 3})
-          [@crime, @got, @clash].each { |book| ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: "old") }
-          stale = ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", dump_date: "2026-09-30", matcher_version: 2)
+          [@crime, @got, @clash].each { |book| ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: "old", stage: :done) }
+          stale = ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", stage: :done, dump_date: "2026-09-30", matcher_version: 2)
           order = []
-          ApplyBook.stubs(:call).with do |book:, run_id:, **|
+          VerifyBook.stubs(:call).with do |book:, run_id:, **|
             order << book.id
-            stale.update!(matcher_version: 3, run_id: run_id)
+            stale.reload.update!(matcher_version: 3, run_id: run_id, stage: :done)
             true
           end.returns(ok)
 
-          run_backfill(retry_unsure: true)
+          run_backfill(flags: %w[retry_unsure unranked])
 
           assert_equal [@war.id], order
         end
 
         test "a book settled through /resolve is followed by one RESOLVE_PAUSE wait; one settled by identifiers is not" do
-          resolve_row = ::Books::Verification.new(lookup: :resolve)
-          identifiers_row = ::Books::Verification.new(lookup: :identifiers)
+          resolve_row = VerifyBook::Outcome.new(row: nil, via_resolve: true)
+          identifiers_row = VerifyBook::Outcome.new(row: nil, via_resolve: false)
           rank(@war, 1)
           rank(@crime, 2)
-          ApplyBook.stubs(:call).with do |book:, run_id:, **|
-            ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: run_id)
+          VerifyBook.stubs(:call).with do |book:, run_id:, **|
+            ::Books::Verification.find_or_initialize_by(book: book).update!(work_outcome: :keyed, run_id: run_id, stage: :done)
             true
-          end.returns(ApplyBook::Result.new(success?: true, data: resolve_row, errors: []))
-            .then.returns(ApplyBook::Result.new(success?: true, data: identifiers_row, errors: []))
+          end.returns(VerifyBook::Result.new(success?: true, data: resolve_row, errors: []))
+            .then.returns(VerifyBook::Result.new(success?: true, data: identifiers_row, errors: []))
             .then.returns(ok)
           waits = []
 
@@ -318,7 +326,7 @@ module Services
         end
 
         test "a skipped book is not followed by a pause" do
-          ApplyBook.stubs(:call).returns(ApplyBook::Result.new(success?: false, data: nil, errors: []))
+          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: false, data: nil, errors: []))
 
           result = run_backfill(sleeper: ->(seconds) { flunk "waited #{seconds}" })
 
@@ -326,7 +334,7 @@ module Services
         end
 
         test "without retry_unsure an unsure book is never taken again" do
-          ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", dump_date: "2000-01-01", matcher_version: 1)
+          ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", stage: :done, dump_date: "2000-01-01", matcher_version: 1)
           order = record_applies
 
           run_backfill
@@ -341,6 +349,74 @@ module Services
 
           assert_equal 4, order.size
           assert_equal 0, result.data[:processed]
+        end
+
+        test "by default only ranked pre_import books are taken" do
+          order = record_applies
+          rank(@war, 1)
+          rank(@crime, 2)
+          Cohort.stubs(:post_import_range).returns(@crime.id..@crime.id)
+
+          run_backfill(scope: nil, flags: [])
+
+          assert_includes order, @war.id
+          refute_includes order, @crime.id
+          refute_includes order, @got.id
+        end
+
+        test "unranked continues past the ranking; post_import includes that cohort" do
+          order = record_applies
+          rank(@war, 1)
+          Cohort.stubs(:post_import_range).returns(@crime.id..@crime.id)
+
+          run_backfill(scope: nil, flags: %w[unranked post_import])
+
+          assert_includes order, @crime.id
+          assert_includes order, @got.id
+        end
+
+        test "a row stopped at a later stage is taken again; a done row is not" do
+          order = record_applies
+          ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "old", stage: :worldcat)
+          ::Books::Verification.create!(book: @crime, work_outcome: :keyed, run_id: "old", stage: :done)
+
+          run_backfill
+
+          assert_includes order, @war.id
+          refute_includes order, @crime.id
+        end
+
+        test "recheck takes done books that gained a legacy identifier since checked_at, from stage 2 or 3" do
+          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: true, data: VerifyBook::Outcome.new(row: nil, via_resolve: false), errors: []))
+          settled = ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "old", stage: :done, checked_at: 1.day.ago)
+          unsure = ::Books::Verification.create!(book: @crime, work_outcome: :unsure, run_id: "old", stage: :done, checked_at: 1.day.ago)
+          quiet = ::Books::Verification.create!(book: @got, work_outcome: :keyed, run_id: "old", stage: :done, checked_at: 1.minute.from_now)
+          [@war, @crime, @got].each { |book| Identifier.create!(identifiable: book, identifier_type: :books_work_isbn10, value: "0140447938", source: :legacy) }
+
+          run_backfill(flags: %w[recheck unranked])
+
+          assert settled.reload.stage_identifiers?
+          assert unsure.reload.stage_worldcat?
+          assert quiet.reload.stage_done?
+        end
+
+        test "a WorldCat outage after the retries stops the run and leaves the book at its stage" do
+          ::Books::Verification.create!(book: @war, work_outcome: :keyed, new_key: "OL1W", run_id: "old", stage: :worldcat)
+          VerifyBook.stubs(:call).raises(::Books::WorldCat::Exceptions::ServerError.new("down", 503))
+          sleeps = []
+
+          result = Run.call(limit: nil, run_id: "run-1", client: @client, wc_client: FakeWcClient.new, sleeper: ->(s) { sleeps << s },
+            scope: ::Books::Book.where(id: @war.id), flags: %w[unranked])
+
+          assert result.data[:stopped]
+          assert_equal Run::RETRY_DELAYS, sleeps
+          row = ::Books::Verification.find_by!(book: @war)
+          assert row.stage_worldcat?
+          assert_match(/ServerError/, row.stage_error)
+        end
+
+        test "an unknown flag is refused" do
+          assert_raises(ArgumentError) { run_backfill(flags: %w[everything]) }
         end
       end
     end

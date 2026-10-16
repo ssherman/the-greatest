@@ -5,13 +5,19 @@ module Services
     module Verification
       # Spec section 4, "The job": books one at a time, ranked first, then by
       # how many lists they are on, then id, stopping after `limit` (nil: all).
-      # A book whose Open Library lookup raised waits and is tried again;
-      # after the last wait it is logged failed and the run stops, so an
-      # outage does not use up the batch.
+      # By default only ranked pre_import books are taken; flags widen that
+      # (post_import, unranked) or pick books to redo (retry_unsure, recheck).
+      # Each book goes through VerifyBook, which resumes at its stored stage.
+      # A book whose Open Library or WorldCat call raised waits and is tried
+      # again; after the last wait the run stops (the book keeps its stage), so
+      # an outage does not use up the batch.
       class Run
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         RETRY_DELAYS = [15, 30, 60, 120, 240, 300].freeze
         BATCH = 100
+        FLAGS = %w[post_import unranked retry_unsure recheck].freeze
+        # A popular ISBN takes 3-5 s on WorldCat; the client's default is 5.
+        WORLDCAT_TIMEOUT = 15
         # Seconds to wait after a book that used /resolve. The service runs one at a
         # time and turns the others away busy, so this leaves the slot to the wizard,
         # the Goodreads replay and the legacy imports.
@@ -24,15 +30,23 @@ module Services
         LOCK_KEY = 7_262_024_100_801
         LOCK_BUSY = "another verification run is in progress"
 
-        def self.call(limit:, run_id:, retry_unsure: false, client: nil, sleeper: nil, scope: nil)
-          new(limit: limit, run_id: run_id, retry_unsure: retry_unsure, client: client, sleeper: sleeper, scope: scope).call
+        def self.call(limit:, run_id:, flags: [], client: nil, wc_client: nil, sleeper: nil, scope: nil)
+          new(limit: limit, run_id: run_id, flags: flags, client: client, wc_client: wc_client, sleeper: sleeper, scope: scope).call
         end
 
-        def initialize(limit:, run_id:, retry_unsure:, client:, sleeper:, scope:)
+        def initialize(limit:, run_id:, flags:, client:, wc_client:, sleeper:, scope:)
+          flags = Array(flags).map(&:to_s)
+          unknown = flags - FLAGS
+          raise ArgumentError, "unknown flags: #{unknown.join(", ")}" if unknown.any?
+
           @limit = limit
           @run_id = run_id
-          @retry_unsure = retry_unsure
+          @post_import = flags.include?("post_import")
+          @unranked = flags.include?("unranked")
+          @retry_unsure = flags.include?("retry_unsure")
+          @recheck = flags.include?("recheck")
           @client = client || ::Books::OpenLibrary::Client.new
+          @wc_client = wc_client || ::Books::WorldCat::Client.new(config: ::Books::WorldCat::Configuration.new(timeout: WORLDCAT_TIMEOUT))
           @sleeper = sleeper || ->(seconds) { sleep(seconds) }
           @scope = scope || ::Books::Book.all
           @attempted = Set.new
@@ -58,11 +72,12 @@ module Services
           # A re-queued run (same run id) counts what it already logged
           # (failures aside) toward its limit.
           done = ::Books::Verification.where(run_id: @run_id).where.not(work_outcome: :failed).count
-          version = @retry_unsure ? @client.version : nil
+          @version = @retry_unsure ? @client.version : nil
+          @wc_dump_date = @wc_client.version[:dump_date]
           loop do
             break if full?(done)
 
-            ids = next_ids(version, done)
+            ids = next_ids(@version, done)
             break if ids.empty?
 
             ids.each do |id|
@@ -72,8 +87,9 @@ module Services
               next unless book
 
               outcome = process(book)
-              # A :done always wrote a settled row, which next_ids already excludes.
-              @attempted << id unless outcome == :done
+              # A book is tried once per call, whatever came of it, so a row that
+              # does not reach `done` can never keep the loop on one book.
+              @attempted << id
               case outcome
               when :done then done += 1
               when :failed then return finish(done, stopped: true)
@@ -81,7 +97,7 @@ module Services
             end
           end
           finish(done, stopped: false)
-        rescue ::Books::OpenLibrary::Exceptions::Error => e
+        rescue ::Books::OpenLibrary::Exceptions::Error, ::Books::WorldCat::Exceptions::Error => e
           @error = "#{e.class}: #{e.message}"
           finish(done || 0, stopped: true)
         end
@@ -115,15 +131,16 @@ module Services
         def process(book)
           attempt = 0
           begin
-            result = ApplyBook.call(book: book, client: @client, run_id: @run_id)
+            prepare(book)
+            result = VerifyBook.call(book: book, ol_client: @client, wc_client: @wc_client, run_id: @run_id, wc_dump_date: @wc_dump_date)
             return :skipped unless result.success?
 
-            @sleeper.call(RESOLVE_PAUSE) if result.data&.via_resolve?
+            @sleeper.call(RESOLVE_PAUSE) if result.data&.via_resolve
             :done
-          rescue ::Books::OpenLibrary::Exceptions::Error => e
+          rescue ::Books::OpenLibrary::Exceptions::Error, ::Books::WorldCat::Exceptions::Error => e
             if book_specific?(e)
               # This book fails the same way every time: log it, move on.
-              ApplyBook.record_failure(book: book, run_id: @run_id, error: "#{e.class}: #{e.message}")
+              record_stop(book, "#{e.class}: #{e.message}")
               return :skipped
             end
 
@@ -134,29 +151,60 @@ module Services
               retry
             end
             @error = "#{e.class}: #{e.message}"
-            ApplyBook.record_failure(book: book, run_id: @run_id, error: @error)
+            record_stop(book, @error)
             :failed
           end
         end
 
+        # Stage 1 failing logs the book failed, as before; a later stage keeps
+        # the row's stage and records why it stopped.
+        def record_stop(book, message)
+          row = ::Books::Verification.find_by(book_id: book.id)
+          if row.nil? || row.stage_work?
+            ApplyBook.record_failure(book: book, run_id: @run_id, error: message)
+          else
+            row.update!(stage_error: message.truncate(1000), run_id: @run_id)
+          end
+        end
+
+        # A done row picked up by retry_unsure starts over at stage 1; one picked
+        # up by recheck re-runs from the editions (settled work) or WorldCat
+        # (no settled work). Same predicates as next_ids.
+        def prepare(book)
+          row = ::Books::Verification.stage_done.find_by(book_id: book.id)
+          return unless row
+
+          if @retry_unsure && @version && retryable_unsure(@version).where(book_id: book.id).exists?
+            row.update!(stage: :work)
+          elsif @recheck && recheckable.where(book_id: book.id).exists?
+            row.update!(stage: ::Books::Verification::SETTLED_FOR_EDITIONS.include?(row.work_outcome) ? :identifiers : :worldcat)
+          end
+        end
+
         def book_specific?(error)
-          error.is_a?(::Books::OpenLibrary::Exceptions::ParseError) ||
-            (error.is_a?(::Books::OpenLibrary::Exceptions::ClientError) && BOOK_SPECIFIC_STATUSES.include?(error.status_code))
+          namespace = error.class.module_parent
+          return false unless [::Books::OpenLibrary::Exceptions, ::Books::WorldCat::Exceptions].include?(namespace)
+
+          error.is_a?(namespace::ParseError) ||
+            (error.is_a?(namespace::ClientError) && BOOK_SPECIFIC_STATUSES.include?(error.status_code))
         end
 
         def next_ids(version, done)
           size = @limit.nil? ? BATCH : [BATCH, @limit - done].min
           failed = ::Books::Verification.work_outcomes["failed"]
-          settled = ::Books::Verification.where.not(work_outcome: :failed)
-          settled = settled.where.not(id: retryable_unsure(version)) if version
+          finished = ::Books::Verification.stage_done.or(::Books::Verification.where(work_outcome: :reverted))
+          finished = finished.where.not(id: retryable_unsure(version)) if version
+          finished = finished.where.not(id: recheckable) if @recheck
           config_id = ::Books::RankingConfiguration.default_primary&.id
 
-          scope = @scope.where.not(id: settled.select(:book_id))
+          scope = @scope.where.not(id: finished.select(:book_id))
           scope = scope.where.not(id: @attempted.to_a) if @attempted.any?
+          scope = scope.where.not(id: Cohort.post_import_range) unless @post_import
+          ranked_join = @unranked ? "LEFT JOIN" : "INNER JOIN"
           scope
             .joins("LEFT JOIN books_verifications prior ON prior.book_id = books_books.id")
             .joins(::Books::Book.sanitize_sql_array([
-              "LEFT JOIN ranked_items ranked ON ranked.item_type = 'Books::Book' AND ranked.item_id = books_books.id " \
+              "#{ranked_join} ranked_items ranked ON ranked.item_type = 'Books::Book' AND ranked.item_id = books_books.id " \
               "AND ranked.ranking_configuration_id = ? AND ranked.rank IS NOT NULL", config_id
             ]))
             .joins("LEFT JOIN (SELECT listable_id, COUNT(*) AS list_count FROM list_items " \
@@ -167,6 +215,14 @@ module Services
             ])))
             .limit(size)
             .pluck("books_books.id")
+        end
+
+        def recheckable
+          ::Books::Verification.stage_done.where(<<~SQL.squish).select(:id)
+            EXISTS (SELECT 1 FROM identifiers i WHERE i.identifiable_type = 'Books::Book'
+              AND i.identifiable_id = books_verifications.book_id AND i.source = #{::Identifier.sources[:legacy]}
+              AND i.created_at > books_verifications.checked_at)
+          SQL
         end
 
         def retryable_unsure(version)

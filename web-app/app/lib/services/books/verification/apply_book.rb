@@ -12,8 +12,8 @@ module Services
         WORK_KEY = "books_work_openlibrary_id"
         DUPLICATE_KEY = "books_work_openlibrary_duplicate_id"
 
-        def self.call(book:, client:, run_id:)
-          new(book, client, run_id).call
+        def self.call(book:, client:, run_id:, cohort: :pre_import)
+          new(book, client, run_id, cohort).call
         end
 
         # A row that holds a result (anything but failed or unsure) is never
@@ -35,7 +35,8 @@ module Services
 
         def self.settled?(row) = row&.persisted? && REPROCESSABLE.exclude?(row.work_outcome)
 
-        def initialize(book, client, run_id)
+        def initialize(book, client, run_id, cohort = :pre_import)
+          @cohort = cohort
           @book = book
           @client = client
           @run_id = run_id
@@ -54,7 +55,10 @@ module Services
 
             attempts = row.new_record? ? 1 : row.attempts + 1
             @inserting = row.new_record?
-            row.assign_attributes(decide(answer).merge(
+            decided = decide(answer)
+            stage = ::Books::Verification::SETTLED_FOR_EDITIONS.include?(decided[:work_outcome].to_s) ? :identifiers : :worldcat
+            row.assign_attributes(decided.merge(
+              cohort: @cohort, stage: stage, stage_error: nil,
               lookup: answer.lookup, run_id: @run_id, attempts: attempts, error: nil, confirmed_on_abstain: answer.confirm_only,
               dump_date: answer.source_version&.dig(:dump_date), matcher_version: answer.source_version&.dig(:matcher_version)
             ))

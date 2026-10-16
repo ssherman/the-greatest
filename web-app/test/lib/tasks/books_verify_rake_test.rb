@@ -14,24 +14,24 @@ class BooksVerifyRakeTest < ActiveSupport::TestCase
     %w[books:verify books:verify_report books:verify_revert].each { |name| Rake::Task[name].reenable }
   end
 
-  test "a count queues one run of that many books" do
-    Books::VerificationJob.expects(:perform_async).with(100, instance_of(String), false)
+  test "a count and flags queue one run" do
+    Books::VerificationJob.expects(:perform_async).with(100, instance_of(String), %w[post_import unranked])
 
-    assert_output(/queued verification run .*: 100 books/) { Rake::Task["books:verify"].invoke("100") }
+    assert_output(/queued verification run .*: 100 books \(post_import, unranked\)/) { Rake::Task["books:verify"].invoke("100", "post_import", "unranked") }
   end
 
-  test "all queues a run with no limit; retry_unsure is passed on" do
-    Books::VerificationJob.expects(:perform_async).with(nil, instance_of(String), true)
+  test "all with no flags queues a ranked, pre-import run" do
+    Books::VerificationJob.expects(:perform_async).with(nil, instance_of(String), [])
 
-    assert_output(/all books \(retrying unsure books\)/) { Rake::Task["books:verify"].invoke("all", "retry_unsure") }
+    assert_output(/all books \(ranked, pre-import\)/) { Rake::Task["books:verify"].invoke("all") }
   end
 
-  test "anything else aborts with usage and queues nothing" do
+  test "an unknown flag or count aborts with usage" do
     Books::VerificationJob.expects(:perform_async).never
 
-    assert_output(nil, /usage: books:verify/) { assert_raises(SystemExit) { Rake::Task["books:verify"].invoke("soon") } }
-    Rake::Task["books:verify"].reenable
     assert_output(nil, /usage: books:verify/) { assert_raises(SystemExit) { Rake::Task["books:verify"].invoke("5", "everything") } }
+    Rake::Task["books:verify"].reenable
+    assert_output(nil, /usage: books:verify/) { assert_raises(SystemExit) { Rake::Task["books:verify"].invoke("soon") } }
   end
 
   test "the report prints the report's lines" do
