@@ -186,6 +186,32 @@ module Books
         ).count
       end
 
+      test "a duplicate identifier keeps the more trusted source" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_work_isbn10, value: "0140449132", source: :open_library)
+        Identifier.create!(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132", source: :legacy)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal ["open_library"], Identifier.where(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132").pluck(:source)
+      end
+
+      test "a less trusted duplicate never downgrades the target's row" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_work_isbn10, value: "0140449132", source: :legacy)
+        Identifier.create!(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132", source: :worldcat)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal ["worldcat"], Identifier.where(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132").pluck(:source)
+      end
+
+      test "a moved identifier keeps its source" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_work_oclc_id, value: "424242", source: :worldcat)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert Identifier.find_by!(identifiable: @target, identifier_type: :books_work_oclc_id, value: "424242").source_worldcat?
+      end
+
       test "moves a country the target does not already have" do
         link = ::Books::BookCountry.create!(book: @source, country: books_countries(:japanese))
 
