@@ -85,6 +85,7 @@ module Services
           identifiable_id: edition.id,
           identifier_type: Identifier.identifier_types[identifier_type],
           value: value,
+          source: Identifier.sources[:legacy],
           created_at: now,
           updated_at: now
         }

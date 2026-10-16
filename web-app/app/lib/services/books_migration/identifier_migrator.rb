@@ -31,10 +31,12 @@ module Services
       # with no migrated target fails Identifier's belongs_to presence validation
       # and hard-aborts the run (the per-row error names the offending legacy id;
       # the run is idempotent, so it resumes after the data is corrected).
+      # New rows are legacy; an existing row keeps its source, so a re-run
+      # never downgrades one a verified source confirmed.
       def upsert_identifier(identifiable_type:, identifiable_id:, identifier_type:, value:)
         value = value.to_s.strip
         return if value.blank? || identifiable_id.nil?
-        Identifier.find_or_create_by!(
+        Identifier.create_with(source: :legacy).find_or_create_by!(
           identifiable_type: identifiable_type,
           identifiable_id: identifiable_id,
           identifier_type: identifier_type,
