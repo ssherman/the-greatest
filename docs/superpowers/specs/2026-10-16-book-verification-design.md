@@ -219,7 +219,9 @@ side are not evidence of a wrong identifier.
 
 Recorded, never acted on. The book's held identifiers that are still not verified, ISBNs and
 Goodreads ids only, are looked up with `Client#identifier` (at most `MAX_SIGNAL_LOOKUPS = 20`, five
-at a time; values the fast pass already looked up reuse its answers). For each hit on a work that
+at a time). *Amended 2026-10-16 (planning):* the fast pass's answers are not reused, because a
+resumed book runs stage 4 in a later run with no fast pass; a few repeated 0.2-0.6 s lookups cost
+less than carrying them across runs. For each hit on a work that
 is not the stage 1 work, not one of its duplicate keys and not a redirect of it, the work is fetched
 in one `works_batch`:
 
@@ -316,15 +318,20 @@ their source.
 
 ### Cohorts
 
-A book's cohort comes from the legacy database (`LegacyBooks::Record`):
+A book's cohort comes from its id:
 
 - `post_import`: legacy `books.created_at` on or after `2024-09-09 03:22:31 UTC`.
 - `pre_import`: everything else, including books not in legacy at all (created in the new app).
 
+*Amended 2026-10-16 (planning).* Legacy book ids are strictly monotonic with `created_at`: the first
+book created at or after the cutoff is id 16,572, no book below it was created after the cutoff, and
+none above it before. Book ids are preserved by the migration, and new-app books start at the reserved
+ceiling (`Services::BooksMigration::RESERVED_CEILINGS["books_books"]`, 250,000). So
+`post_import` is exactly `16_572 <= id < 250_000`, a constant, and the run needs no legacy query.
+
 The default run takes `pre_import` books only. The 9,245 `post_import` ranked books run only with
 the `post_import` flag, after the Goodreads rebuild has repaired their titles and authors (or
-earlier, if Shane decides spot checks look fine). Cohorts are read once per run in one legacy
-query, not per book.
+earlier, if Shane decides spot checks look fine).
 
 ### Rake tasks
 
