@@ -275,4 +275,51 @@ class IdentifierTest < ActiveSupport::TestCase
     assert_equal 7, Identifier.identifier_types["books_work_asin"]
     assert_equal 8, Identifier.identifier_types["books_work_ean13"]
   end
+
+  test "source is nullable and defaults to nil" do
+    identifier = Identifier.create!(identifiable: books_books(:war_and_peace), identifier_type: :books_work_isbn10, value: "0140447938")
+
+    assert_nil identifier.source
+  end
+
+  test "source takes the provenance values" do
+    assert_equal(
+      {"legacy" => 0, "open_library" => 1, "worldcat" => 2, "goodreads_import" => 3, "amazon" => 4, "wikidata" => 5, "viaf" => 6},
+      Identifier.sources
+    )
+    identifier = Identifier.create!(identifiable: books_books(:war_and_peace), identifier_type: :books_work_isbn10,
+      value: "0140447938", source: :open_library)
+
+    assert identifier.source_open_library?
+  end
+
+  test "verified is open_library and worldcat only" do
+    book = books_books(:war_and_peace)
+    open_library = Identifier.create!(identifiable: book, identifier_type: :books_work_isbn10, value: "0140447938", source: :open_library)
+    worldcat = Identifier.create!(identifiable: book, identifier_type: :books_work_oclc_id, value: "12345", source: :worldcat)
+    legacy = Identifier.create!(identifiable: book, identifier_type: :books_work_goodreads_id, value: "656", source: :legacy)
+    imported = Identifier.create!(identifiable: book, identifier_type: :books_work_asin, value: "B0TEST0001", source: :goodreads_import)
+    unmarked = identifiers(:war_and_peace_isbn13)
+
+    verified = Identifier.verified.where(identifiable: book)
+
+    assert_includes verified, open_library
+    assert_includes verified, worldcat
+    refute_includes verified, legacy
+    refute_includes verified, imported
+    refute_includes verified, unmarked
+  end
+
+  test "trust_rank orders verified over other sources over legacy over nil" do
+    assert_equal 3, Identifier.trust_rank(:open_library)
+    assert_equal 3, Identifier.trust_rank("worldcat")
+    assert_equal 2, Identifier.trust_rank(:goodreads_import)
+    assert_equal 2, Identifier.trust_rank(:wikidata)
+    assert_equal 1, Identifier.trust_rank(:legacy)
+    assert_equal 0, Identifier.trust_rank(nil)
+  end
+
+  test "BOOKS_TYPES lists every books identifiable" do
+    assert_equal %w[Books::Book Books::Edition Books::Author Books::Series], Identifier::BOOKS_TYPES
+  end
 end

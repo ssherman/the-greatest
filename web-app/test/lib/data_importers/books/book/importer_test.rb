@@ -371,6 +371,24 @@ module DataImporters
             book.identifiers.map { |identifier| [identifier.identifier_type, identifier.value] }.sort
         end
 
+        test "stamped query identifiers are goodreads_import by default" do
+          stub_resolve_down
+
+          book = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], isbn13: ["9780441013593"],
+            goodreads_id: ["234225"], stamp_identifiers: true).item.reload
+
+          assert book.identifiers.all?(&:source_goodreads_import?)
+        end
+
+        test "query_identifier_source names the source of stamped query identifiers" do
+          stub_resolve_down
+
+          book = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], isbn13: ["9780441013593"],
+            stamp_identifiers: true, query_identifier_source: :amazon).item.reload
+
+          assert book.identifiers.sole.source_amazon?
+        end
+
         test "without stamp_identifiers, an Open Library outage stamps nothing" do
           stub_resolve_down
 

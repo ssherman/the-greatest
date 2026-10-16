@@ -31,7 +31,7 @@ module Services
         # @other becomes a book that really looks like @work: same title.
         def make_other_a_real_holder = @other.update_columns(title: "War and Peace")
 
-        def add_key(value, book: @book, type: ApplyBook::WORK_KEY) = ::Identifier.create!(identifiable: book, identifier_type: type, value: value)
+        def add_key(value, book: @book, type: ApplyBook::WORK_KEY, source: nil) = ::Identifier.create!(identifiable: book, identifier_type: type, value: value, source: source)
 
         test "keyed: a book with no key gets one, its author gets one, and the row says how" do
           row = ApplyBook.call(book: @book, client: fast_client, run_id: "run-1").data
@@ -235,6 +235,49 @@ module Services
           assert_equal [["OL1W", "OL9W"], [], "confirmed", ["OL1W", "OL9W"], "OL1W", true, {}],
             [work_keys, duplicate_keys, row.outcome, row.old_keys, row.new_key, row.confirmed_on_abstain, row.author_changes]
           assert_empty books_authors(:tolstoy).identifiers
+        end
+
+        def key_source(value, book: @book, type: ApplyBook::WORK_KEY)
+          book.identifiers.find_by!(identifier_type: type, value: value).source
+        end
+
+        test "provenance: a keyed book's new key is open_library" do
+          ApplyBook.call(book: @book, client: fast_client, run_id: "run-1")
+
+          assert_equal "open_library", key_source("OL1W")
+        end
+
+        test "provenance: a confirmed book's legacy key becomes open_library" do
+          add_key("OL1W", source: :legacy)
+
+          ApplyBook.call(book: @book, client: fast_client, run_id: "run-1")
+
+          assert_equal "open_library", key_source("OL1W")
+        end
+
+        test "provenance: a confirm_only book's key becomes open_library and nothing else changes" do
+          add_key("OL1W", source: :legacy)
+          add_key("OL9W", source: :legacy)
+          resolution = ol_resolution(verdict: "abstain", work: @work, duplicates: ["OL2W"])
+
+          ApplyBook.call(book: @book, client: resolve_client(resolution), run_id: "run-1")
+
+          assert_equal [["OL1W", "OL9W"], [], "open_library", "legacy"], [work_keys, duplicate_keys, key_source("OL1W"), key_source("OL9W")]
+        end
+
+        test "provenance: saved duplicate keys and added author keys are open_library" do
+          ApplyBook.call(book: @book, client: resolve_client(ol_resolution(verdict: "accept", work: @work, duplicates: ["OL2W"])), run_id: "run-1")
+
+          assert_equal "open_library", key_source("OL2W", type: ApplyBook::DUPLICATE_KEY)
+          assert_equal "open_library", key_source("OL26783A", book: books_authors(:tolstoy), type: AuthorKeys::AUTHOR_KEY)
+        end
+
+        test "provenance: an unsure book's key keeps its source" do
+          add_key("OL5W", source: :legacy)
+
+          ApplyBook.call(book: @book, client: resolve_client(ol_resolution(verdict: "abstain")), run_id: "run-1")
+
+          assert_equal "legacy", key_source("OL5W")
         end
 
         test "an ordinary confirmed row does not carry the abstain flag" do

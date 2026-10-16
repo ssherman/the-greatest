@@ -40,12 +40,15 @@ module Services
         private
 
         # Removes only the key the backfill gave; a work key that arrived later
-        # (a merge, an admin) is not the backfill's to take away.
+        # (a merge, an admin) is not the backfill's to take away. Old keys were
+        # legacy (the backfill only ever checked stored keys), so they come
+        # back legacy, including one it confirmed and upgraded in place.
         def restore_work_keys(row)
           held = @book.identifiers.where(identifier_type: ApplyBook::WORK_KEY)
           held.where(value: row.new_key).destroy_all if row.new_key.present? && !row.old_keys.include?(row.new_key)
+          held.where(value: row.old_keys).update_all(source: ::Identifier.sources[:legacy], updated_at: Time.current)
           (row.old_keys - held.reload.pluck(:value)).each do |key|
-            @book.identifiers.create!(identifier_type: ApplyBook::WORK_KEY, value: key)
+            @book.identifiers.create!(identifier_type: ApplyBook::WORK_KEY, value: key, source: :legacy)
           end
         end
 

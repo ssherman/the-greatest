@@ -208,7 +208,12 @@ module Books
             value: identifier.value
           )
 
+          # Two rows for one value: the survivor takes the more trusted source
+          # (identifier provenance spec, section 1).
           if existing
+            if ::Identifier.trust_rank(identifier.source) > ::Identifier.trust_rank(existing.source)
+              existing.update!(source: identifier.source)
+            end
             identifier.destroy!
           else
             identifier.update!(identifiable_id: target_book.id)
