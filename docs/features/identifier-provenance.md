@@ -20,7 +20,9 @@ included. The existing finders still read every identifier; only new code reads 
 leaves its source alone, so a re-run never downgrades a verified row. The book importer's
 `query_identifier_source:` (default `goodreads_import`) names the source of the identifiers its
 caller passed in; only the Goodreads import passes any today. A new books writer must set a
-source: `test/lint/identifier_source_test.rb` scans the books code and fails otherwise.
+source: `test/lint/identifier_source_test.rb` scans every Ruby file under `app/` and `lib/` (music,
+games and movies code excepted), reads chained calls as one statement, and fails on a write that
+says neither `source:` nor `.source =`.
 
 **The OL key backfill** marks the key it settles on `open_library`, including a stored key it
 confirms (also on abstain), and the duplicate and author keys it adds. Its revert puts the old keys
@@ -31,5 +33,6 @@ then any other source, then `legacy`, then `null`).
 
 **The one-time marking.** `bin/rails identifiers:mark_legacy` marks every books-domain row with no
 source `legacy` (batches of 10,000), then relabels `open_library` the keys the OL key backfill
-wrote or confirmed (rows whose outcome is `confirmed`, `updated`, `replaced` or `keyed`). Safe to
-re-run. Until it runs, a books-domain `null` means `legacy`.
+wrote or confirmed (rows whose outcome is `confirmed`, `updated`, `replaced` or `keyed`). It prints
+how many it marked per identifiable type, then the totals. Safe to re-run. Until it runs, a
+books-domain `null` means `legacy`.

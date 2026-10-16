@@ -27,6 +27,16 @@ module Services
         assert edition_row.reload.source_legacy?
       end
 
+      test "counts what it marked per identifiable type" do
+        Identifier.create!(identifiable: books_authors(:tolstoy), identifier_type: :books_author_viaf, value: "1")
+        expected = Identifier.where(identifiable_type: Identifier::BOOKS_TYPES, source: nil).group(:identifiable_type).count
+
+        result = MarkLegacy.call
+
+        assert_equal expected, result.data[:legacy_by_type]
+        assert_equal expected.values.sum, result.data[:legacy]
+      end
+
       test "never touches a row that already has a source" do
         row = Identifier.create!(identifiable: books_books(:war_and_peace), identifier_type: :books_work_oclc_id,
           value: "99", source: :worldcat)

@@ -26,6 +26,14 @@ class IdentifierServiceTest < ActiveSupport::TestCase
     assert result.data.music_allmusic_artist_id?
   end
 
+  test "add_identifier records the source it is given, and none by default" do
+    sourced = IdentifierService.add_identifier(books_books(:war_and_peace), :books_work_oclc_id, "4242", source: :worldcat)
+    unsourced = IdentifierService.add_identifier(@david_bowie, :music_allmusic_artist_id, "mn0000362836")
+
+    assert sourced.data.source_worldcat?
+    assert_nil unsourced.data.source
+  end
+
   test "add_identifier strips whitespace from value" do
     result = IdentifierService.add_identifier(@david_bowie, :music_allmusic_artist_id, "  mn0000362836  ")
 

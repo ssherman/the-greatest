@@ -14,11 +14,14 @@ class IdentifiersRakeTest < ActiveSupport::TestCase
     Rake::Task["identifiers:mark_legacy"].reenable
   end
 
-  test "mark_legacy prints the counts" do
+  test "mark_legacy prints the counts, per type" do
     Services::Identifiers::MarkLegacy.expects(:call).returns(
-      Services::Identifiers::MarkLegacy::Result.new(success?: true, data: {legacy: 12, open_library: 3}, errors: [])
+      Services::Identifiers::MarkLegacy::Result.new(success?: true, errors: [],
+        data: {legacy: 12, legacy_by_type: {"Books::Book" => 10, "Books::Author" => 2}, open_library: 3})
     )
 
-    assert_output(/12 identifiers marked legacy, 3 relabelled open_library/) { Rake::Task["identifiers:mark_legacy"].invoke }
+    assert_output(/Books::Book: 10 marked legacy\nBooks::Author: 2 marked legacy\n12 identifiers marked legacy, 3 relabelled open_library/) do
+      Rake::Task["identifiers:mark_legacy"].invoke
+    end
   end
 end

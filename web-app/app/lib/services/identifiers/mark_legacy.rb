@@ -20,16 +20,17 @@ module Services
       end
 
       def call
-        legacy = mark_legacy
+        legacy_by_type = ::Identifier::BOOKS_TYPES.to_h { |type| [type, mark_legacy(type)] }.select { |_type, count| count.positive? }
         open_library = relabel_backfill_keys
-        Result.new(success?: true, data: {legacy: legacy, open_library: open_library}, errors: [])
+        Result.new(success?: true, errors: [],
+          data: {legacy: legacy_by_type.values.sum, legacy_by_type: legacy_by_type, open_library: open_library})
       end
 
       private
 
-      def mark_legacy
+      def mark_legacy(type)
         marked = 0
-        ::Identifier.where(identifiable_type: ::Identifier::BOOKS_TYPES, source: nil).in_batches(of: @batch_size) do |batch|
+        ::Identifier.where(identifiable_type: type, source: nil).in_batches(of: @batch_size) do |batch|
           marked += batch.update_all(source: ::Identifier.sources[:legacy], updated_at: Time.current)
         end
         marked
