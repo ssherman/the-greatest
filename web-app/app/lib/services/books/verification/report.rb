@@ -2,8 +2,8 @@
 
 module Services
   module Books
-    module OlBackfill
-      # Spec section 4, books:ol_backfill_report: lines of text the rake task prints.
+    module Verification
+      # Spec section 4, books:verify_report: lines of text the rake task prints.
       class Report
         RECENT = 20
 
@@ -13,8 +13,8 @@ module Services
 
         def call
           lines = ["Open Library backfill", "", "Outcomes:"]
-          counts = rows.group(:outcome).count
-          ::Books::OpenLibraryBackfill.outcomes.each_key { |outcome| lines << format("  %-15s %d", outcome, counts.fetch(outcome, 0)) }
+          counts = rows.group(:work_outcome).count
+          ::Books::Verification.work_outcomes.each_key { |outcome| lines << format("  %-15s %d", outcome, counts.fetch(outcome, 0)) }
           lines << ""
           lines << abstain_line
           lines << ranked_line
@@ -29,12 +29,12 @@ module Services
 
         private
 
-        def rows = ::Books::OpenLibraryBackfill.all
+        def rows = ::Books::Verification.all
 
         def ranked_line
           config = ::Books::RankingConfiguration.default_primary
           ranked = ::RankedItem.where(ranking_configuration_id: config&.id, item_type: "Books::Book").where.not(rank: nil)
-          checked = rows.where(book_id: ranked.select(:item_id)).where.not(outcome: :failed).count
+          checked = rows.where(book_id: ranked.select(:item_id)).where.not(work_outcome: :failed).count
           "Ranked books checked: #{checked} of #{ranked.count}"
         end
 
@@ -64,14 +64,14 @@ module Services
         end
 
         def recent_lines
-          pairs = rows.where(outcome: :confirmed).where.not(pair_book_id: nil)
-          recent = rows.where(outcome: %i[replaced duplicate_pair removed]).or(pairs).includes(:book).order(updated_at: :desc, id: :desc).limit(RECENT)
+          pairs = rows.where(work_outcome: :confirmed).where.not(pair_book_id: nil)
+          recent = rows.where(work_outcome: %i[replaced duplicate_pair removed]).or(pairs).includes(:book).order(updated_at: :desc, id: :desc).limit(RECENT)
           return ["  none"] if recent.empty?
 
           recent.map do |row|
-            keys = (row.outcome == "removed") ? row.old_keys - row.book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).pluck(:value) : row.old_keys
+            keys = (row.work_outcome == "removed") ? row.old_keys - row.book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).pluck(:value) : row.old_keys
             pair = row.pair_book_id ? " (pair with book #{row.pair_book_id})" : ""
-            "  #{row.outcome} book #{row.book_id} \"#{row.book.title}\": #{keys.join(", ").presence || "no key"} -> #{row.new_key.presence || "no key"}#{pair}"
+            "  #{row.work_outcome} book #{row.book_id} \"#{row.book.title}\": #{keys.join(", ").presence || "no key"} -> #{row.new_key.presence || "no key"}#{pair}"
           end
         end
       end

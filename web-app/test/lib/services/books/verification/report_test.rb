@@ -4,15 +4,15 @@ require "test_helper"
 
 module Services
   module Books
-    module OlBackfill
+    module Verification
       class ReportTest < ActiveSupport::TestCase
         test "counts every outcome, ranked coverage, the latest run, author totals and recent replacements" do
           war = books_books(:war_and_peace)
           crime = books_books(:crime_and_punishment)
           ::RankedItem.create!(item: war, ranking_configuration: ranking_configurations(:books_global), rank: 1, score: 99)
-          ::Books::OpenLibraryBackfill.create!(book: war, outcome: :replaced, run_id: "run-1", old_keys: ["OL5W"], new_key: "OL1W",
+          ::Books::Verification.create!(book: war, work_outcome: :replaced, run_id: "run-1", old_keys: ["OL5W"], new_key: "OL1W",
             author_changes: {"added" => [[1, "OL1A"], [2, "OL2A"]], "pairs" => [[3, 4, "OL3A"]], "conflicts" => []})
-          ::Books::OpenLibraryBackfill.create!(book: crime, outcome: :duplicate_pair, run_id: "run-2", new_key: "OL262758W", pair_book: war)
+          ::Books::Verification.create!(book: crime, work_outcome: :duplicate_pair, run_id: "run-2", new_key: "OL262758W", pair_book: war)
 
           text = Report.call.join("\n")
 
@@ -31,8 +31,8 @@ module Services
 
           war = books_books(:war_and_peace)
           crime = books_books(:crime_and_punishment)
-          ::Books::OpenLibraryBackfill.create!(book: war, outcome: :failed, run_id: "run-1", error: "old error", updated_at: 2.days.ago)
-          latest = ::Books::OpenLibraryBackfill.create!(book: crime, outcome: :failed, run_id: "run-1", error: "ServerError: down")
+          ::Books::Verification.create!(book: war, work_outcome: :failed, run_id: "run-1", error: "old error", updated_at: 2.days.ago)
+          latest = ::Books::Verification.create!(book: crime, work_outcome: :failed, run_id: "run-1", error: "ServerError: down")
 
           text = Report.call.join("\n")
 
@@ -43,8 +43,8 @@ module Services
           war = books_books(:war_and_peace)
           crime = books_books(:crime_and_punishment)
           got = books_books(:got)
-          ::Books::OpenLibraryBackfill.create!(book: crime, outcome: :confirmed, run_id: "run-1", old_keys: ["OL262758W"], new_key: "OL262758W", pair_book: war)
-          ::Books::OpenLibraryBackfill.create!(book: got, outcome: :confirmed, run_id: "run-1", old_keys: ["OL7W"], new_key: "OL7W")
+          ::Books::Verification.create!(book: crime, work_outcome: :confirmed, run_id: "run-1", old_keys: ["OL262758W"], new_key: "OL262758W", pair_book: war)
+          ::Books::Verification.create!(book: got, work_outcome: :confirmed, run_id: "run-1", old_keys: ["OL7W"], new_key: "OL7W")
 
           text = Report.call.join("\n")
 
@@ -55,14 +55,14 @@ module Services
         test "a removed row is listed among the recent changes" do
           war = books_books(:war_and_peace)
           ::Identifier.create!(identifiable: war, identifier_type: :books_work_openlibrary_id, value: "OL6W")
-          ::Books::OpenLibraryBackfill.create!(book: war, outcome: :removed, run_id: "run-1", old_keys: ["OL5W", "OL6W"])
+          ::Books::Verification.create!(book: war, work_outcome: :removed, run_id: "run-1", old_keys: ["OL5W", "OL6W"])
 
           assert_match(/removed book #{war.id} "War and Peace": OL5W -> no key/, Report.call.join("\n"))
         end
 
         test "counts the books confirmed on Open Library's top answer after an abstain" do
-          ::Books::OpenLibraryBackfill.create!(book: books_books(:got), outcome: :confirmed, run_id: "run-1", confirmed_on_abstain: true)
-          ::Books::OpenLibraryBackfill.create!(book: books_books(:clash), outcome: :confirmed, run_id: "run-1")
+          ::Books::Verification.create!(book: books_books(:got), work_outcome: :confirmed, run_id: "run-1", confirmed_on_abstain: true)
+          ::Books::Verification.create!(book: books_books(:clash), work_outcome: :confirmed, run_id: "run-1")
 
           assert_match(/Confirmed on Open Library's top answer \(abstained\): 1/, Report.call.join("\n"))
         end

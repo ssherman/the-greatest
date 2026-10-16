@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_16_204824) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_16_222906) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -362,28 +362,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_204824) do
     t.index ["goodreads_book_id"], name: "index_books_goodreads_pages_on_goodreads_book_id", unique: true
   end
 
-  create_table "books_open_library_backfills", force: :cascade do |t|
-    t.bigint "book_id", null: false
-    t.integer "outcome", null: false
-    t.integer "lookup"
-    t.string "old_keys", default: [], null: false, array: true
-    t.string "new_key"
-    t.string "duplicate_keys", default: [], null: false, array: true
-    t.bigint "pair_book_id"
-    t.jsonb "author_changes", default: {}, null: false
-    t.string "dump_date"
-    t.integer "matcher_version"
-    t.string "run_id", null: false
-    t.integer "attempts", default: 1, null: false
-    t.text "error"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.boolean "confirmed_on_abstain", default: false, null: false
-    t.index ["book_id"], name: "index_books_open_library_backfills_on_book_id", unique: true
-    t.index ["outcome"], name: "index_books_open_library_backfills_on_outcome"
-    t.index ["run_id"], name: "index_books_open_library_backfills_on_run_id"
-  end
-
   create_table "books_reading_goals", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.string "name", null: false
@@ -442,6 +420,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_204824) do
     t.index ["book_id"], name: "index_books_series_books_on_book_id"
     t.index ["series_id", "book_id"], name: "index_books_series_books_on_series_id_and_book_id", unique: true
     t.index ["series_id"], name: "index_books_series_books_on_series_id"
+  end
+
+  create_table "books_verifications", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.integer "work_outcome", null: false
+    t.integer "lookup"
+    t.string "old_keys", default: [], null: false, array: true
+    t.string "new_key"
+    t.string "duplicate_keys", default: [], null: false, array: true
+    t.bigint "pair_book_id"
+    t.jsonb "author_changes", default: {}, null: false
+    t.string "dump_date"
+    t.integer "matcher_version"
+    t.string "run_id", null: false
+    t.integer "attempts", default: 1, null: false
+    t.text "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "confirmed_on_abstain", default: false, null: false
+    t.index ["book_id"], name: "index_books_verifications_on_book_id", unique: true
+    t.index ["run_id"], name: "index_books_verifications_on_run_id"
+    t.index ["work_outcome"], name: "index_books_verifications_on_work_outcome"
   end
 
   create_table "categories", force: :cascade do |t|
@@ -1501,12 +1501,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_204824) do
   add_foreign_key "books_goodreads_import_rows", "books_goodreads_imports", column: "import_id", on_delete: :cascade
   add_foreign_key "books_goodreads_imports", "users"
   add_foreign_key "books_goodreads_imports", "users", column: "reviewed_by_id"
-  add_foreign_key "books_open_library_backfills", "books_books", column: "book_id", on_delete: :cascade
-  add_foreign_key "books_open_library_backfills", "books_books", column: "pair_book_id", on_delete: :nullify
   add_foreign_key "books_reading_goals", "users"
   add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
   add_foreign_key "books_series_books", "books_books", column: "book_id"
   add_foreign_key "books_series_books", "books_series", column: "series_id"
+  add_foreign_key "books_verifications", "books_books", column: "book_id", on_delete: :cascade
+  add_foreign_key "books_verifications", "books_books", column: "pair_book_id", on_delete: :nullify
   add_foreign_key "categories", "categories", column: "merged_into_id"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_cleanup_decisions", "ai_chats"

@@ -2,7 +2,7 @@
 
 module Services
   module Books
-    module OlBackfill
+    module Verification
       # Spec section 1, "The title-and-author check": both passes act on an
       # Open Library work only when it agrees with our book on its title and
       # on at least one author.

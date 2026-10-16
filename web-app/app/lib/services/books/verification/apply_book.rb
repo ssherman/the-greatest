@@ -2,7 +2,7 @@
 
 module Services
   module Books
-    module OlBackfill
+    module Verification
       # Spec section 1: one book's outcome. Looks the book up, changes its
       # keys, flags pairs, gives its authors keys and writes its log row, all
       # in one transaction. Open Library errors propagate with nothing
@@ -22,18 +22,18 @@ module Services
 
         def self.record_failure(book:, run_id:, error:)
           ::ActiveRecord::Base.transaction do
-            row = ::Books::OpenLibraryBackfill.find_or_initialize_by(book: book)
+            row = ::Books::Verification.find_or_initialize_by(book: book)
             row.lock! unless row.new_record?
             next row if settled?(row)
 
-            row.assign_attributes(outcome: :failed, run_id: run_id, error: error.to_s.truncate(1000),
+            row.assign_attributes(work_outcome: :failed, run_id: run_id, error: error.to_s.truncate(1000),
               attempts: row.new_record? ? 1 : row.attempts + 1)
             row.save!
             row
           end
         end
 
-        def self.settled?(row) = row&.persisted? && REPROCESSABLE.exclude?(row.outcome)
+        def self.settled?(row) = row&.persisted? && REPROCESSABLE.exclude?(row.work_outcome)
 
         def initialize(book, client, run_id)
           @book = book
@@ -42,12 +42,12 @@ module Services
         end
 
         def call
-          return skipped("book #{@book.id} already has a settled row") if self.class.settled?(::Books::OpenLibraryBackfill.find_by(book: @book))
+          return skipped("book #{@book.id} already has a settled row") if self.class.settled?(::Books::Verification.find_by(book: @book))
 
           @inserting = false
           answer = Lookup.call(book: @book, client: @client)
           ::ActiveRecord::Base.transaction do
-            row = ::Books::OpenLibraryBackfill.find_or_initialize_by(book: @book)
+            row = ::Books::Verification.find_or_initialize_by(book: @book)
             row.lock! unless row.new_record?
             # Another run may have settled it during the lookup.
             next skipped("another run settled book #{@book.id} first") if self.class.settled?(row)
@@ -64,7 +64,7 @@ module Services
         rescue ::ActiveRecord::RecordNotUnique
           # Only a failed insert of a new backfill row (unique book_id) means another run won; any other
           # uniqueness failure is a real error and must not hide the book.
-          raise unless @inserting && ::Books::OpenLibraryBackfill.exists?(book_id: @book.id)
+          raise unless @inserting && ::Books::Verification.exists?(book_id: @book.id)
 
           skipped("another run wrote book #{@book.id} first")
         end
@@ -96,7 +96,7 @@ module Services
           kept = (outcome == :replaced) ? agreeing_old_keys(stored, records) : []
           set_work_key(stored, key)
           flag_duplicate_holder(key, work) unless outcome == :confirmed
-          {outcome: outcome, old_keys: stored, new_key: key, pair_book_id: other,
+          {work_outcome: outcome, old_keys: stored, new_key: key, pair_book_id: other,
            duplicate_keys: save_duplicates(answer.duplicates + kept, key, work),
            author_changes: AuthorKeys.call(book: @book, work: work)}
         end
@@ -138,7 +138,7 @@ module Services
         end
 
         def unchanged(outcome, stored, key)
-          {outcome: outcome, old_keys: stored, new_key: key, duplicate_keys: [], pair_book_id: nil, author_changes: {}}
+          {work_outcome: outcome, old_keys: stored, new_key: key, duplicate_keys: [], pair_book_id: nil, author_changes: {}}
         end
 
         def stored_keys

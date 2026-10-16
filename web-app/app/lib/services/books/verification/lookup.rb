@@ -2,7 +2,7 @@
 
 module Services
   module Books
-    module OlBackfill
+    module Verification
       # Spec section 1, passes 1 and 2: which Open Library work, if any, this
       # book is. Raises the client's errors (a 4xx on an identifier is no
       # hit); Run retries them.

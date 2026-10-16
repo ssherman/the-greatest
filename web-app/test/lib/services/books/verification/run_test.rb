@@ -4,7 +4,7 @@ require "test_helper"
 
 module Services
   module Books
-    module OlBackfill
+    module Verification
       class RunTest < ActiveSupport::TestCase
         include OlBackfillHelper
 
@@ -26,7 +26,7 @@ module Services
           order = []
           ApplyBook.stubs(:call).with do |book:, run_id:, **|
             order << book.id
-            ::Books::OpenLibraryBackfill.create!(book: book, outcome: :keyed, run_id: success ? run_id : "other-run")
+            ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: success ? run_id : "other-run")
             true
           end.returns(ApplyBook::Result.new(success?: success, data: nil, errors: []))
           order
@@ -71,7 +71,7 @@ module Services
           with_lock_held_elsewhere { result = run_backfill }
 
           assert_not result.success?
-          assert_equal({processed: 0, stopped: true, error: "another Open Library backfill run is in progress"}, result.data)
+          assert_equal({processed: 0, stopped: true, error: "another verification run is in progress"}, result.data)
         end
 
         test "the lock is released after a normal run" do
@@ -154,14 +154,14 @@ module Services
         end
 
         test "books already logged are skipped, except failed ones" do
-          ::Books::OpenLibraryBackfill.create!(book: @war, outcome: :confirmed, run_id: "old")
-          ::Books::OpenLibraryBackfill.create!(book: @got, outcome: :reverted, run_id: "old")
-          ::Books::OpenLibraryBackfill.create!(book: @clash, outcome: :unsure, run_id: "old")
-          failed = ::Books::OpenLibraryBackfill.create!(book: @crime, outcome: :failed, run_id: "old")
+          ::Books::Verification.create!(book: @war, work_outcome: :confirmed, run_id: "old")
+          ::Books::Verification.create!(book: @got, work_outcome: :reverted, run_id: "old")
+          ::Books::Verification.create!(book: @clash, work_outcome: :unsure, run_id: "old")
+          failed = ::Books::Verification.create!(book: @crime, work_outcome: :failed, run_id: "old")
           order = []
           ApplyBook.stubs(:call).with do |book:, run_id:, **|
             order << book.id
-            failed.update!(outcome: :keyed, run_id: run_id)
+            failed.update!(work_outcome: :keyed, run_id: run_id)
             true
           end.returns(ApplyBook::Result.new(success?: true, data: nil, errors: []))
 
@@ -171,7 +171,7 @@ module Services
         end
 
         test "the same run started again counts the books it already did toward its limit" do
-          ::Books::OpenLibraryBackfill.create!(book: @war, outcome: :keyed, run_id: "run-1")
+          ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "run-1")
           order = record_applies
 
           result = run_backfill(limit: 2)
@@ -204,14 +204,14 @@ module Services
             order << book.id
             raise bad if book.id == @war.id
 
-            ::Books::OpenLibraryBackfill.create!(book: book, outcome: :keyed, run_id: run_id)
+            ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: run_id)
             true
           end.returns(ok)
 
           result = run_backfill
 
           assert_equal [@war.id, @crime.id, @got.id, @clash.id].sort, order.sort
-          assert_equal "failed", ::Books::OpenLibraryBackfill.find_by!(book: @war).outcome
+          assert_equal "failed", ::Books::Verification.find_by!(book: @war).work_outcome
           assert_equal false, result.data[:stopped]
           assert_equal 3, result.data[:processed]
         end
@@ -224,12 +224,12 @@ module Services
 
           assert_equal Run::RETRY_DELAYS, waits
           assert_equal true, result.data[:stopped]
-          assert_equal 1, ::Books::OpenLibraryBackfill.failed.count
+          assert_equal 1, ::Books::Verification.failed.count
         end
 
         test "a book that failed before is taken after books never tried" do
           rank(@war, 1)
-          ::Books::OpenLibraryBackfill.create!(book: @war, outcome: :failed, run_id: "old")
+          ::Books::Verification.create!(book: @war, work_outcome: :failed, run_id: "old")
           order = record_applies
 
           run_backfill(limit: 1)
@@ -259,13 +259,13 @@ module Services
           assert_equal Run::RETRY_DELAYS, waits
           assert_equal true, result.data[:stopped]
           assert_match(/down/, result.data[:error])
-          assert_equal 1, ::Books::OpenLibraryBackfill.failed.count
+          assert_equal 1, ::Books::Verification.failed.count
         end
 
         test "retry_unsure takes unsure books from an older Open Library version only" do
           @client = FakeOlClient.new(version: {dump_date: "2026-09-30", matcher_version: 3})
-          [@crime, @got, @clash].each { |book| ::Books::OpenLibraryBackfill.create!(book: book, outcome: :keyed, run_id: "old") }
-          stale = ::Books::OpenLibraryBackfill.create!(book: @war, outcome: :unsure, run_id: "old", dump_date: "2026-07-31", matcher_version: 3)
+          [@crime, @got, @clash].each { |book| ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: "old") }
+          stale = ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", dump_date: "2026-07-31", matcher_version: 3)
           order = []
           ApplyBook.stubs(:call).with do |book:, run_id:, **|
             order << book.id
@@ -284,8 +284,8 @@ module Services
 
         test "retry_unsure also takes an unsure book from an older matcher on the same dump" do
           @client = FakeOlClient.new(version: {dump_date: "2026-09-30", matcher_version: 3})
-          [@crime, @got, @clash].each { |book| ::Books::OpenLibraryBackfill.create!(book: book, outcome: :keyed, run_id: "old") }
-          stale = ::Books::OpenLibraryBackfill.create!(book: @war, outcome: :unsure, run_id: "old", dump_date: "2026-09-30", matcher_version: 2)
+          [@crime, @got, @clash].each { |book| ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: "old") }
+          stale = ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", dump_date: "2026-09-30", matcher_version: 2)
           order = []
           ApplyBook.stubs(:call).with do |book:, run_id:, **|
             order << book.id
@@ -299,12 +299,12 @@ module Services
         end
 
         test "a book settled through /resolve is followed by one RESOLVE_PAUSE wait; one settled by identifiers is not" do
-          resolve_row = ::Books::OpenLibraryBackfill.new(lookup: :resolve)
-          identifiers_row = ::Books::OpenLibraryBackfill.new(lookup: :identifiers)
+          resolve_row = ::Books::Verification.new(lookup: :resolve)
+          identifiers_row = ::Books::Verification.new(lookup: :identifiers)
           rank(@war, 1)
           rank(@crime, 2)
           ApplyBook.stubs(:call).with do |book:, run_id:, **|
-            ::Books::OpenLibraryBackfill.create!(book: book, outcome: :keyed, run_id: run_id)
+            ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: run_id)
             true
           end.returns(ApplyBook::Result.new(success?: true, data: resolve_row, errors: []))
             .then.returns(ApplyBook::Result.new(success?: true, data: identifiers_row, errors: []))
@@ -326,7 +326,7 @@ module Services
         end
 
         test "without retry_unsure an unsure book is never taken again" do
-          ::Books::OpenLibraryBackfill.create!(book: @war, outcome: :unsure, run_id: "old", dump_date: "2000-01-01", matcher_version: 1)
+          ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", dump_date: "2000-01-01", matcher_version: 1)
           order = record_applies
 
           run_backfill

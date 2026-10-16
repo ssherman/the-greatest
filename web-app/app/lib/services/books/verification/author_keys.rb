@@ -2,7 +2,7 @@
 
 module Services
   module Books
-    module OlBackfill
+    module Verification
       # Spec section 2: our book's authors take the matched work's author
       # keys. Only an author with no key gets one; a different key is a
       # conflict left alone (Open Library has many duplicate authors), and a

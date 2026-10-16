@@ -1,6 +1,6 @@
 # == Schema Information
 #
-# Table name: books_open_library_backfills
+# Table name: books_verifications
 #
 #  id                   :bigint           not null, primary key
 #  attempts             :integer          default(1), not null
@@ -13,7 +13,7 @@
 #  matcher_version      :integer
 #  new_key              :string
 #  old_keys             :string           default([]), not null, is an Array
-#  outcome              :integer          not null
+#  work_outcome         :integer          not null
 #  created_at           :datetime         not null
 #  updated_at           :datetime         not null
 #  book_id              :bigint           not null
@@ -22,9 +22,9 @@
 #
 # Indexes
 #
-#  index_books_open_library_backfills_on_book_id  (book_id) UNIQUE
-#  index_books_open_library_backfills_on_outcome  (outcome)
-#  index_books_open_library_backfills_on_run_id   (run_id)
+#  index_books_verifications_on_book_id          (book_id) UNIQUE
+#  index_books_verifications_on_work_outcome  (work_outcome)
+#  index_books_verifications_on_run_id           (run_id)
 #
 # Foreign Keys
 #
@@ -32,19 +32,19 @@
 #  fk_rails_...  (pair_book_id => books_books.id) ON DELETE => nullify
 #
 module Books
-  # One row per book from the Open Library key backfill (spec
-  # docs/superpowers/specs/2026-10-07-ol-key-backfill-design.md, section 3).
+  # One row per book from the verification pass (spec docs/superpowers/specs/2026-10-16-book-verification-design.md,
+  # section 3). Stage 1 is the OL key backfill (2026-10-07 spec).
   # new_key is Open Library's answer; for a duplicate_pair it was not saved.
-  class OpenLibraryBackfill < ApplicationRecord
+  class Verification < ApplicationRecord
     belongs_to :book, class_name: "Books::Book"
     belongs_to :pair_book, class_name: "Books::Book", optional: true
 
-    enum :outcome, {confirmed: 0, updated: 1, replaced: 2, keyed: 3, duplicate_pair: 4, unsure: 5, failed: 6, reverted: 7, removed: 8}
+    enum :work_outcome, {confirmed: 0, updated: 1, replaced: 2, keyed: 3, duplicate_pair: 4, unsure: 5, failed: 6, reverted: 7, removed: 8}
     enum :lookup, {identifiers: 0, resolve: 1}, prefix: :via
 
-    # Outcomes that leave the book with a key the backfill trusts.
+    # Outcomes that leave the book with a key the verification pass trusts.
     KEYED_OUTCOMES = %w[confirmed updated replaced keyed].freeze
 
-    validates :outcome, :run_id, presence: true
+    validates :work_outcome, :run_id, presence: true
   end
 end

@@ -2,7 +2,7 @@
 
 module Services
   module Books
-    module OlBackfill
+    module Verification
       # Spec section 4, "The job": books one at a time, ranked first, then by
       # how many lists they are on, then id, stopping after `limit` (nil: all).
       # A book whose Open Library lookup raised waits and is tried again;
@@ -18,11 +18,11 @@ module Services
         RESOLVE_PAUSE = 4
         # A 4xx that is about this book's data, not about us or the service.
         BOOK_SPECIFIC_STATUSES = [400, 422].freeze
-        # Session advisory lock key: one backfill run at a time. A fixed 64-bit
+        # Session advisory lock key: one verification run at a time. A fixed 64-bit
         # constant, not a hash; the app's other advisory locks use hashtext of a
         # string, so this cannot collide with them by accident.
         LOCK_KEY = 7_262_024_100_801
-        LOCK_BUSY = "another Open Library backfill run is in progress"
+        LOCK_BUSY = "another verification run is in progress"
 
         def self.call(limit:, run_id:, retry_unsure: false, client: nil, sleeper: nil, scope: nil)
           new(limit: limit, run_id: run_id, retry_unsure: retry_unsure, client: client, sleeper: sleeper, scope: scope).call
@@ -57,7 +57,7 @@ module Services
         def run_locked
           # A re-queued run (same run id) counts what it already logged
           # (failures aside) toward its limit.
-          done = ::Books::OpenLibraryBackfill.where(run_id: @run_id).where.not(outcome: :failed).count
+          done = ::Books::Verification.where(run_id: @run_id).where.not(work_outcome: :failed).count
           version = @retry_unsure ? @client.version : nil
           loop do
             break if full?(done)
@@ -90,9 +90,9 @@ module Services
         def release_lock(connection)
           return if unlock(connection)
 
-          ::Rails.logger.warn("Open Library backfill run #{@run_id}: advisory lock was already lost at the end of the run")
+          ::Rails.logger.warn("Verification run #{@run_id}: advisory lock was already lost at the end of the run")
         rescue => e
-          ::Rails.logger.warn("Open Library backfill run #{@run_id}: releasing the advisory lock failed: #{e.class}: #{e.message}")
+          ::Rails.logger.warn("Verification run #{@run_id}: releasing the advisory lock failed: #{e.class}: #{e.message}")
         end
 
         def unlock(connection) = lock_query(connection, "pg_advisory_unlock")
@@ -146,15 +146,15 @@ module Services
 
         def next_ids(version, done)
           size = @limit.nil? ? BATCH : [BATCH, @limit - done].min
-          failed = ::Books::OpenLibraryBackfill.outcomes["failed"]
-          settled = ::Books::OpenLibraryBackfill.where.not(outcome: :failed)
+          failed = ::Books::Verification.work_outcomes["failed"]
+          settled = ::Books::Verification.where.not(work_outcome: :failed)
           settled = settled.where.not(id: retryable_unsure(version)) if version
           config_id = ::Books::RankingConfiguration.default_primary&.id
 
           scope = @scope.where.not(id: settled.select(:book_id))
           scope = scope.where.not(id: @attempted.to_a) if @attempted.any?
           scope
-            .joins("LEFT JOIN books_open_library_backfills prior ON prior.book_id = books_books.id")
+            .joins("LEFT JOIN books_verifications prior ON prior.book_id = books_books.id")
             .joins(::Books::Book.sanitize_sql_array([
               "LEFT JOIN ranked_items ranked ON ranked.item_type = 'Books::Book' AND ranked.item_id = books_books.id " \
               "AND ranked.ranking_configuration_id = ? AND ranked.rank IS NOT NULL", config_id
@@ -162,7 +162,7 @@ module Services
             .joins("LEFT JOIN (SELECT listable_id, COUNT(*) AS list_count FROM list_items " \
                    "WHERE listable_type = 'Books::Book' GROUP BY listable_id) list_counts ON list_counts.listable_id = books_books.id")
             .order(Arel.sql(::Books::Book.sanitize_sql_array([
-              "COALESCE(prior.outcome = ?, false) ASC, ranked.rank ASC NULLS LAST, " \
+              "COALESCE(prior.work_outcome = ?, false) ASC, ranked.rank ASC NULLS LAST, " \
               "list_counts.list_count DESC NULLS LAST, books_books.id ASC", failed
             ])))
             .limit(size)
@@ -170,7 +170,7 @@ module Services
         end
 
         def retryable_unsure(version)
-          ::Books::OpenLibraryBackfill.unsure
+          ::Books::Verification.unsure
             .where("dump_date < :dump OR matcher_version < :matcher", dump: version[:dump_date].to_s, matcher: version[:matcher_version].to_i)
             .select(:id)
         end

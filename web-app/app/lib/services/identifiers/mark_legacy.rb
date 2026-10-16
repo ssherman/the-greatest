@@ -38,7 +38,7 @@ module Services
 
       def relabel_backfill_keys
         relabelled = 0
-        ::Books::OpenLibraryBackfill.where(outcome: ::Books::OpenLibraryBackfill::KEYED_OUTCOMES).find_each do |row|
+        ::Books::Verification.where(work_outcome: ::Books::Verification::KEYED_OUTCOMES).find_each do |row|
           relabelled += relabel("Books::Book", row.book_id, "books_work_openlibrary_id", [row.new_key])
           relabelled += relabel("Books::Book", row.book_id, "books_work_openlibrary_duplicate_id", row.duplicate_keys)
           Array(row.author_changes["added"]).each do |author_id, key|

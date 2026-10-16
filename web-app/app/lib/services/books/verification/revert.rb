@@ -2,13 +2,13 @@
 
 module Services
   module Books
-    module OlBackfill
-      # Spec section 4, books:ol_backfill_revert: put a book's keys back the
+    module Verification
+      # Spec section 4, books:verify_revert: put a book's keys back the
       # way they were before the backfill. The row becomes `reverted`, which
       # no later run takes again.
       class Revert
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
-        REVERTIBLE = (::Books::OpenLibraryBackfill::KEYED_OUTCOMES + %w[removed]).freeze
+        REVERTIBLE = (::Books::Verification::KEYED_OUTCOMES + %w[removed]).freeze
 
         def self.call(book:)
           new(book).call
@@ -19,10 +19,10 @@ module Services
         end
 
         def call
-          row = ::Books::OpenLibraryBackfill.find_by(book: @book)
+          row = ::Books::Verification.find_by(book: @book)
           return failure("book #{@book.id} has no backfill row") unless row
-          unless REVERTIBLE.include?(row.outcome)
-            return failure("book #{@book.id} is #{row.outcome}; only #{REVERTIBLE.join(", ")} can be reverted")
+          unless REVERTIBLE.include?(row.work_outcome)
+            return failure("book #{@book.id} is #{row.work_outcome}; only #{REVERTIBLE.join(", ")} can be reverted")
           end
 
           ::ActiveRecord::Base.transaction do
@@ -32,7 +32,7 @@ module Services
               ::Identifier.where(identifiable_type: "Books::Author", identifiable_id: author_id,
                 identifier_type: :books_author_openlibrary_id, value: key).destroy_all
             end
-            row.update!(outcome: :reverted)
+            row.update!(work_outcome: :reverted)
           end
           Result.new(success?: true, data: row, errors: [])
         end

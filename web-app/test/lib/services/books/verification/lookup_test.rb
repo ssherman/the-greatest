@@ -4,7 +4,7 @@ require "test_helper"
 
 module Services
   module Books
-    module OlBackfill
+    module Verification
       class LookupTest < ActiveSupport::TestCase
         include OlBackfillHelper
 
