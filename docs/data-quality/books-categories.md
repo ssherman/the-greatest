@@ -72,3 +72,28 @@ FROM (
   GROUP BY 1
 ) x;
 ```
+
+## Production cleanup run, 2026-10-15
+
+Run label `2026-10-12-prod`. Decision counts as applied; the before-and-after vocabulary sizes need
+the queries above run against a fresh restore.
+
+| stage | applied |
+|---|---|
+| rules | 1,362 (759 merges, 560 renames, 43 fragment deletes) |
+| AI wave 1 | rename 2,948, merge 34,863, retype 336, set_parent 14,847, delete 744, keep 8,425; 127 parents created |
+| AI wave 2 | rename 6, merge 190, retype 7, set_parent 133, delete 52, keep 63 |
+
+- 69 merges went stale on purpose in wave 1: 68 broken merge cycles, plus one keep staled by a hand fix.
+- 2 decisions failed at propose time and 3 at apply time, all safety refusals (see the runbook).
+- 21 decisions were rejected at review: 4 in wave 1 (`Providence` and `Queens` retypes, which hold
+  Lovecraft and Spider-Man books; the `Aleister Crowley` and `Sigmund Freud` deletes) and 17 wave-2
+  subject-to-location retypes.
+- `New York` (11,986 books) merged into `New York City`. 3,910 of New York City's 4,210 books
+  already carried both tags. About 378 of the merged books also carry a place outside the city
+  (Long Island, Albany, Buffalo) and now say New York City too.
+- Calibration (dev, 200 tail categories): two one-at-a-time passes agreed on 86.5% of locations and
+  88.5% of subjects. Batch size 10 agreed 83-84% for locations (verdict agreement 98.5% against a
+  99.0% baseline) and 76-78.5% for subjects (action agreement 89% against 95.5%).
+- The location trim's 30 worst books (187-361 locations) were reviewed in a dry run: global surveys
+  kept nothing, focused books kept their real settings.
