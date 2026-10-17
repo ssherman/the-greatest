@@ -191,7 +191,8 @@ module Books
       with_browse_minimum(1) do
         assert_empty search_for("%%").to_a
         assert_empty search_for("a_e").to_a # as a wildcard, "a_e" matches "AMErican History"
-        assert_empty search_for("a\\").to_a # two characters, so it reaches the LIKE
+        # Unescaped, "\a" is a literal "a", so %ic\a% would match "AmerICAn History".
+        assert_empty search_for("ic\\a").to_a
       end
     end
 
