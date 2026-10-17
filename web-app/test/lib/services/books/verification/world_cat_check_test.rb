@@ -93,6 +93,15 @@ module Services
           assert WorldCatCheck.clearly_different?(book.reload, record(title: "Essays on love / Someone Else", creator: "Someone Else"))
         end
 
+        test "a record that drops our leading article is not clearly different" do
+          book = ::Books::Book.create!(title: "The Brothers Karamazov")
+          book.book_authors.create!(author: ::Books::Author.create!(name: "Fyodor Dostoevsky"))
+
+          refute WorldCatCheck.clearly_different?(book.reload,
+            record(title: "Brothers Karamazov / Dostoyevsky Fyodor Dostoyevsky", creator: "Dostoyevsky Fyodor Dostoyevsky"))
+          assert WorldCatCheck.clearly_different?(book.reload, record(title: "Brothers in arms / Someone Else", creator: "Someone Else"))
+        end
+
         test "a different book with some shared words is still clearly different" do
           power = ::Books::Book.create!(title: "The Power and the Glory")
           power.book_authors.create!(author: ::Books::Author.create!(name: "Graham Greene"))

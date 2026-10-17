@@ -7,6 +7,12 @@ module Services
       # give trusted work-level identifiers (Stamp); the rest are kept as
       # candidates for a later AI check. Network first, then one transaction
       # that ends by moving the row to worldcat.
+      #
+      # Open Library often keeps one book as several works, and the settled one
+      # can be a translation's ("Alguien voló sobre el nido del cuco" for One
+      # Flew Over the Cuckoo's Nest). So the book's duplicate work keys that
+      # Open Library gave us are harvested the same way, each only when the
+      # work itself passes the title-and-author check.
       class HarvestEditions
         FIELDS = {
           isbn13: "books_work_isbn13",
@@ -15,6 +21,7 @@ module Services
           goodreads: "books_work_goodreads_id"
         }.freeze
         DIGITS = /\A\d+\z/
+        MAX_DUPLICATE_WORKS = 5
 
         def self.call(verification:, client:)
           new(verification, client).call
@@ -28,15 +35,19 @@ module Services
 
         def call
           key = @row.new_key
-          work = @client.works_batch([key])[key]
-          editions = @client.editions(key)
+          duplicates = duplicate_keys - [key]
+          works = @client.works_batch([key] + duplicates)
+          same_book = duplicates.select { |duplicate| works[duplicate] && Check.verified?(@book, works[duplicate], @client) }
+          harvested = ([key] + same_book).map { |work_key| [work_key, works[work_key], @client.editions(work_key)] }
 
           ::ActiveRecord::Base.transaction do
-            editions.each do |edition|
-              if EditionCheck.agrees?(@book, work, edition)
-                stamp_values(edition)
-              else
-                keep_candidate(edition, key)
+            harvested.each do |work_key, work, editions|
+              editions.each do |edition|
+                if EditionCheck.agrees?(@book, work, edition)
+                  stamp_values(edition)
+                else
+                  keep_candidate(edition, work_key)
+                end
               end
             end
             Counts.call(@row)
@@ -45,6 +56,11 @@ module Services
         end
 
         private
+
+        def duplicate_keys
+          @book.identifiers.verified.where(identifier_type: :books_work_openlibrary_duplicate_id)
+            .order(:id).limit(MAX_DUPLICATE_WORKS).pluck(:value)
+        end
 
         def stamp_values(edition)
           evidence = {"edition_key" => edition.key, "title" => [edition.title, edition.subtitle].compact.join(": ")}

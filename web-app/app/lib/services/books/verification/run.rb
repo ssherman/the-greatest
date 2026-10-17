@@ -6,7 +6,8 @@ module Services
       # Spec section 4, "The job": books one at a time, ranked first, then by
       # how many lists they are on, then id, stopping after `limit` (nil: all).
       # By default only ranked pre_import books are taken; flags widen that
-      # (post_import, unranked) or pick books to redo (retry_unsure, recheck).
+      # (post_import, unranked) or pick books to redo (retry_unsure, recheck,
+      # reharvest).
       # Each book goes through VerifyBook, which resumes at its stored stage.
       # A book whose Open Library or WorldCat call raised waits and is tried
       # again; after the last wait the run stops (the book keeps its stage), so
@@ -15,7 +16,7 @@ module Services
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         RETRY_DELAYS = [15, 30, 60, 120, 240, 300].freeze
         BATCH = 100
-        FLAGS = %w[post_import unranked retry_unsure recheck].freeze
+        FLAGS = %w[post_import unranked retry_unsure recheck reharvest].freeze
         # Seconds to wait after a book that used /resolve. The service runs one at a
         # time and turns the others away busy, so this leaves the slot to the wizard,
         # the Goodreads replay and the legacy imports.
@@ -43,6 +44,7 @@ module Services
           @unranked = flags.include?("unranked")
           @retry_unsure = flags.include?("retry_unsure")
           @recheck = flags.include?("recheck")
+          @reharvest = flags.include?("reharvest")
           @client = client || ::Books::OpenLibrary::Client.new
           @wc_client = wc_client || ::Books::WorldCat::Client.new
           @sleeper = sleeper || ->(seconds) { sleep(seconds) }
@@ -168,7 +170,8 @@ module Services
 
         # A done row picked up by retry_unsure starts over at stage 1; one picked
         # up by recheck re-runs from the editions (settled work) or WorldCat
-        # (no settled work). Same predicates as next_ids.
+        # (no settled work); one picked up by reharvest re-runs from the
+        # editions. Same predicates as next_ids.
         def prepare(book)
           row = ::Books::Verification.stage_done.where.not(work_outcome: :reverted).find_by(book_id: book.id)
           return unless row
@@ -177,6 +180,8 @@ module Services
             row.update!(stage: :work)
           elsif @recheck && recheckable.where(book_id: book.id).exists?
             row.update!(stage: ::Books::Verification::SETTLED_FOR_EDITIONS.include?(row.work_outcome) ? :identifiers : :worldcat)
+          elsif @reharvest && reharvestable.where(book_id: book.id).exists?
+            row.update!(stage: :identifiers)
           end
         end
 
@@ -196,6 +201,7 @@ module Services
           finished = ::Books::Verification.stage_done.or(::Books::Verification.where(work_outcome: :reverted))
           finished = finished.where.not(id: retryable_unsure(version)) if version
           finished = finished.where.not(id: recheckable) if @recheck
+          finished = finished.where.not(id: reharvestable) if @reharvest
           config_id = ::Books::RankingConfiguration.default_primary&.id
 
           scope = @scope.where.not(id: finished.select(:book_id))
@@ -224,6 +230,19 @@ module Services
               AND i.identifiable_id = books_verifications.book_id AND i.source = #{::Identifier.sources[:legacy]}
               AND i.created_at > books_verifications.checked_at)
           SQL
+        end
+
+        # Done before stage 2 harvested a book's duplicate works: a settled work
+        # and a duplicate work key Open Library gave. A row this run already
+        # finished is not taken again, so a re-queued run does not redo it.
+        def reharvestable
+          ::Books::Verification.stage_done.where(work_outcome: ::Books::Verification::SETTLED_FOR_EDITIONS)
+            .where.not(run_id: @run_id).where(<<~SQL.squish).select(:id)
+              EXISTS (SELECT 1 FROM identifiers i WHERE i.identifiable_type = 'Books::Book'
+                AND i.identifiable_id = books_verifications.book_id
+                AND i.identifier_type = #{::Identifier.identifier_types[:books_work_openlibrary_duplicate_id]}
+                AND i.source = #{::Identifier.sources[:open_library]})
+            SQL
         end
 
         def retryable_unsure(version)

@@ -36,6 +36,7 @@ module Services
         EDITION_WORDS = %w[complete collected all volume volumes vol vols works edition unabridged annotated illustrated
           selected the a an and of in].to_set.freeze
         WORD = /[\p{L}\p{N}']+/
+        LEADING_ARTICLE = /\A(the|a|an) /
 
         # "Complete Essays" and "In Search of Lost Time (All 7 Volumes)" hold
         # our "Essays" and "In Search of Lost Time": for this recorded-only
@@ -48,6 +49,8 @@ module Services
           return false if full.nil?
 
           ours = ([book.title] + Array(book.alternate_titles)).filter_map { |title| Check.normalize(title) }
+          # "Brothers Karamazov" holds our "The Brothers Karamazov".
+          ours = ours.flat_map { |title| [title, title.sub(LEADING_ARTICLE, "")] }.reject(&:empty?).uniq
           ours.any? do |title|
             match = full.match(/(?<![\p{L}\p{N}])#{Regexp.escape(title)}(?![\p{L}\p{N}])/)
             match && (match.pre_match + " " + match.post_match).scan(WORD).all? { |word| EDITION_WORDS.include?(word) || word.match?(/\A\d+\z/) }

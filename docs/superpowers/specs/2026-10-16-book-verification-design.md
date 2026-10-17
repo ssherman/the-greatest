@@ -190,6 +190,12 @@ box sets, alternate and odd titles alike. The later AI spec sorts them.
 
 Held ASINs and EAN-13s are never confirmed by this pass; they stay `legacy`.
 
+*Amended 2026-10-17 (production 500)*: stage 2 also harvests up to 5 of the book's Open Library
+duplicate work keys, each only when that work passes the title-and-author check, through the same
+edition rule. The settled work can be a translation's (Cuckoo's Nest settled on the Spanish work),
+and harvesting only it missed the main work's editions. A `reharvest` flag re-runs stages 2-4 for
+done books that hold such a key.
+
 ### Stage 3: WorldCat
 
 Runs for every processed book whatever stage 1 decided, `unsure` included (our own title and
@@ -220,7 +226,8 @@ side are not evidence of a wrong identifier.
 *Amended 2026-10-17 (rehearsal)*: `wrong_identifier` is not recorded for an ISBN Open Library lists
 on any one of the book's non-set edition candidates, and a title does not count as disagreeing when
 the record's full title contains one of ours on word boundaries and every other word is an edition
-word or a number (complete and collected editions). Recorded signal only; trust is unchanged.
+word or a number (complete and collected editions). Our titles are also tried without a
+leading article (production 500: "Brothers Karamazov"). Recorded signal only; trust is unchanged.
 
 ### Stage 4: signals
 
