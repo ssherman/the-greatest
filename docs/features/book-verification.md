@@ -67,7 +67,7 @@ Errors are handled by what they are about:
   That is a 404 from either service (Open Library 404s a work's editions when a dump refresh removed
   the key), a 400 or 422, or a response that cannot be parsed. In stage 1 the book is logged
   `failed`.
-- A WorldCat 504 (the service's 5 s deadline) on one ISBN counts as no answer for that ISBN; the
+- A WorldCat 504 (the service's 25 s deadline) on one ISBN counts as no answer for that ISBN; the
   book completes stage 3.
 - Any other error (network, timeout, 5xx, busy, 401/403/429, breaker open) waits and retries after
   15, 30, 60, 120, 240 and 300 seconds. If it is still failing, the book stops at its stage and the
@@ -204,7 +204,7 @@ Outcomes for one ISBN:
 - **Anything else** (no record, or records agreeing on only one of title and creator): nothing.
   Garbled records fail the check and never confirm. A garbled record (mojibake in its title or
   creator) is never `wrong_identifier` either: it may be the right book, so it counts as unknown.
-- **A WorldCat 504** (the service's 5 s deadline) on one ISBN counts as no answer for that ISBN; the
+- **A WorldCat 504** (the service's 25 s deadline) on one ISBN counts as no answer for that ISBN; the
   book completes stage 3.
 
 ### Stage 4: signals

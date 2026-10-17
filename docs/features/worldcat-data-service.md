@@ -40,7 +40,7 @@ Same four boundaries, enforced structurally:
   first build `records` had 100,000-row groups of 14 MB (the text columns: `summary` 6 GB,
   `subjects` 4.6 GB, `title` 4.2 GB), each hit cost 80 ms at two threads, and one ISBN fans out to
   about ten records in ten different groups, so a 100-ISBN batch (975 records, 642 groups) could
-  not finish inside the 5 s deadline and a single popular ISBN took 5 s. No query shape fixes
+  not finish inside the original 5 s deadline and a single popular ISBN took 5 s. No query shape fixes
   that; the layout has to. `lookup` is the `isbns` table joined to the narrow fields, sorted by
   ISBN in 10,000-row groups of about 300 KB, so an ISBN's records share one small group. Measured
   at two threads on the development machine: 100 ISBNs in 1.2 s, 500 in 3.3 s, against a timeout
@@ -253,7 +253,7 @@ All responses are JSON. `worldcat.api.schemas.Record` is the one record shape:
 There is no health route. The container does not start without an open artifact, so the heartbeat
 and any manual check use `/version`.
 
-Limits: one DuckDB connection with a cursor per request, `memory_limit` 2 GB, 2 threads, a 5-second
+Limits: one DuckDB connection with a cursor per request, `memory_limit` 2 GB, 2 threads, a 25-second
 per-request deadline (`504`; a DuckDB error of any class after the deadline is reported as the
 deadline, because an interrupt that lands between a query and its fetch surfaces as
 `InvalidInputException`, not `InterruptException`). No concurrency cap: a single-item route
@@ -302,7 +302,7 @@ tables is missing, `manifest.json` is missing, its `gates_passed` is not `true`,
 fields (`title`, `summary` and the other text fields are `nil`, holdings absent), which is all
 `VocabularySnapshot`, `Backfill` and `ApplyCategories` read. It has its own `BaseClient`, `Configuration` and
 `Exceptions`, so callers rescue by source, but it reuses `Books::OpenLibrary::CircuitBreaker` (key
-`books:world_cat`, 5 failures, 60 s cooldown). Timeouts: 5 s, 3 s to open, 20 s for a batch.
+`books:world_cat`, 5 failures, 60 s cooldown). Timeouts: 30 s, 3 s to open, 30 s for a batch (just above the service's 25 s deadline, so the service answers 504 before the client gives up).
 `WORLDCAT_SERVICE_URL` defaults to `http://127.0.0.1:8082` in development.
 
 **Every caller must drop ISBNs that fail `Books::Isbn.normalize` before calling**, because `/lookup`

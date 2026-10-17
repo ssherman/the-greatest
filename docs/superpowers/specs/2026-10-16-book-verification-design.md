@@ -368,8 +368,9 @@ The OL key backfill's rules, extended to WorldCat:
   stops.
 - After a book that went through `/resolve`, the run waits 4 s (`RESOLVE_PAUSE`) so other callers
   get the single slot. Stages 2-4 never call `/resolve`.
-- A WorldCat 504 (the service's 5 s deadline) on one ISBN counts as no answer for that ISBN; the
-  book completes stage 3.
+- A WorldCat 504 (the service's 25 s deadline) on one ISBN counts as no answer for that ISBN; the
+  book completes stage 3. *Amended 2026-10-17:* deadline raised to 25 s (was 5 s), and the Rails
+  client timeouts to 30 s.
 - WorldCat gets no pause: nothing else uses its single-ISBN route. The genre backfill uses the batch
   route.
 

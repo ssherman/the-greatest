@@ -287,7 +287,7 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    (`/home/shane/wc-data/our_isbns.txt` is the export step 1 writes; the guard stops the step on a
    missing or short file, which would otherwise "pass" in milliseconds on an empty batch). On the
    development machine at the container's two threads the same batch took 3.3 s and a 100-ISBN
-   one 1.2 s, so expect the VM to be slower than that. Both times must be under 5 s before the
+   one 1.2 s, so expect the VM to be slower than that. Both times should be well under the 25 s deadline before the
    backfill; a `504` or a time near the deadline means stop and lower the backfill's batch size
    or raise `WC_API_DEADLINE_S`.
 9. **Production setting. Shane runs with `!`.** Step 2's apply added

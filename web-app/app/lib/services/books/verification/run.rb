@@ -16,8 +16,6 @@ module Services
         RETRY_DELAYS = [15, 30, 60, 120, 240, 300].freeze
         BATCH = 100
         FLAGS = %w[post_import unranked retry_unsure recheck].freeze
-        # A popular ISBN takes 3-5 s on WorldCat; the client's default is 5.
-        WORLDCAT_TIMEOUT = 15
         # Seconds to wait after a book that used /resolve. The service runs one at a
         # time and turns the others away busy, so this leaves the slot to the wizard,
         # the Goodreads replay and the legacy imports.
@@ -46,7 +44,7 @@ module Services
           @retry_unsure = flags.include?("retry_unsure")
           @recheck = flags.include?("recheck")
           @client = client || ::Books::OpenLibrary::Client.new
-          @wc_client = wc_client || ::Books::WorldCat::Client.new(config: ::Books::WorldCat::Configuration.new(timeout: WORLDCAT_TIMEOUT))
+          @wc_client = wc_client || ::Books::WorldCat::Client.new
           @sleeper = sleeper || ->(seconds) { sleep(seconds) }
           @scope = scope || ::Books::Book.all
           @attempted = Set.new
