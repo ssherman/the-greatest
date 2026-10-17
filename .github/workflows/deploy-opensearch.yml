@@ -1,0 +1,50 @@
+name: Deploy OpenSearch
+
+# Manual only. Merging to main deploys the web app; it must never restart search.
+# Runbook: docs/features/opensearch-server.md.
+on:
+  workflow_dispatch:
+
+# The job reaches the server over SSH only and never uses GITHUB_TOKEN.
+permissions: {}
+
+concurrency:
+  group: deploy-opensearch
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # An unset secret renders as "" and the SSH action would skip the host-key check silently.
+      - name: Require the host and its host-key fingerprint
+        env:
+          HOST: ${{ secrets.OPENSEARCH_SSH_HOST }}
+          FINGERPRINT: ${{ secrets.OPENSEARCH_SSH_HOST_FINGERPRINT }}
+        run: |
+          test -n "$HOST" || { echo "::error::OPENSEARCH_SSH_HOST is not set"; exit 1; }
+          test -n "$FINGERPRINT" || { echo "::error::OPENSEARCH_SSH_HOST_FINGERPRINT is not set"; exit 1; }
+
+      - name: Deploy OpenSearch
+        # Same pinned commit as deploy-production.yml.
+        uses: appleboy/ssh-action@c4f70287fc37c43b14b30b407224bbbc8e8c6327
+        env:
+          AGE_PRIVATE_KEY: ${{ secrets.AGE_PRIVATE_KEY }}
+        with:
+          host: ${{ secrets.OPENSEARCH_SSH_HOST }}
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # SHA256 fingerprint of the server's ECDSA host key. A rebuild changes it: update the
+          # secret (docs/features/opensearch-server.md, "Rebuild").
+          fingerprint: ${{ secrets.OPENSEARCH_SSH_HOST_FINGERPRINT }}
+          envs: AGE_PRIVATE_KEY
+          script: |
+            set -e
+            cd /home/deploy/apps/the-greatest
+            git pull --ff-only
+            env_file="$(mktemp)"
+            trap 'rm -f "$env_file"' EXIT
+            # sops reads the age key from the environment, so the key is never written to disk.
+            (umask 077; SOPS_AGE_KEY="$AGE_PRIVATE_KEY" sops -d secrets/.env.opensearch > "$env_file")
+            unset AGE_PRIVATE_KEY
+            deployment/opensearch/bin/deploy.sh "$env_file"
