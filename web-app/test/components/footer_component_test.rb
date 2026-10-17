@@ -87,7 +87,7 @@ class FooterComponentTest < ViewComponent::TestCase
     render_footer(:books)
 
     assert_selector "a[href='/authors']", text: "Authors"
-    assert_selector "a[href='/genres']", text: "Genres"
+    assert_selector "a[href='/categories']", text: "Categories"
     assert_selector "a[href='/countries']", text: "Origins"
     assert_selector "a[href='/lists']", text: "Lists"
   end

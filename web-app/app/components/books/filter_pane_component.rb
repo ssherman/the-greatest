@@ -19,11 +19,11 @@ module Books
     end
 
     def browse_path
-      (axis == "category") ? helpers.books_genres_path : helpers.books_countries_path
+      (axis == "category") ? helpers.books_categories_path : helpers.books_countries_path
     end
 
     def browse_label
-      (axis == "category") ? "Browse all genres" : "Browse all origins"
+      (axis == "category") ? "Browse all categories" : "Browse all origins"
     end
   end
 end
