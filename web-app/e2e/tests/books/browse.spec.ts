@@ -125,13 +125,19 @@ test.describe('Books browse pages', () => {
   test('pressing Enter in an empty or one-character box leaves the grid in place', async ({ page }) => {
     await page.goto('/categories');
     const original = await firstCardHref(page);
+    // Recording requests proves no search left the page; the DOM checks alone
+    // would pass on a slow server whose stray response hadn't landed yet.
+    const searches: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().includes('/categories/search')) searches.push(request.url());
+    });
 
     await searchBox(page).press('Enter');
     await searchBox(page).fill('f');
     await searchBox(page).press('Enter');
-    // Both submits must have been stopped; give a stray one time to land.
     await page.waitForTimeout(600);
 
+    expect(searches).toEqual([]);
     await expect(page).toHaveURL(/\/categories$/);
     await expect(inFrameStatus(page)).toHaveCount(0);
     await expect(page.locator(CARD_LINKS).first()).toHaveAttribute('href', original!);

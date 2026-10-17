@@ -5,7 +5,7 @@
     <% end %>
     <h2 class="card-title text-base [overflow-wrap:anywhere]"><%= record.name %></h2>
     <% if chain.any? %>
-      <p class="text-xs text-base-content/60 [overflow-wrap:anywhere]" data-testid="browse-card-chain"><%= chain_text %></p>
+      <p class="text-xs text-base-content/60 [overflow-wrap:anywhere]" data-testid="browse-card-chain"><%= chain_content %></p>
     <% end %>
     <p class="text-sm text-base-content/70"><%= pluralize(number_with_delimiter(count), "book") %></p>
   </div>

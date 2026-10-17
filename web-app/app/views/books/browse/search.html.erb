@@ -28,14 +28,7 @@
     </p>
 
     <% if @records.any? %>
-      <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        <% @records.each do |record| %>
-          <%= render Books::BrowseCardComponent.new(
-                record: record, count: record.ranked_count, path: Books::FilterPath.call(categories: [record]),
-                chain: @chains.fetch(record.id, []), label: record.type_label
-              ) %>
-        <% end %>
-      </div>
+      <%= render "books/browse/category_grid", records: @records, chains: @chains, show_type: true %>
     <% end %>
   <% end %>
 </div>

@@ -44,8 +44,9 @@ module Books
 
     test "a parent cycle written around the validation terminates" do
       @europe.update_columns(parent_id: @paris.id)
-      chain = Books::CategoryChains.call([@paris])[@paris.id]
-      assert_operator chain.size, :<=, Books::Category::MAX_DEPTH
+      # Europe now points back at Paris; the walk must stop before repeating the
+      # card's own name rather than merely stop eventually.
+      assert_equal ["Europe", "France", "Île-de-France"], Books::CategoryChains.call([@paris])[@paris.id]
     end
   end
 end

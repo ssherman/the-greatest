@@ -85,9 +85,10 @@ class BooksBrowseRoutingTest < ActionDispatch::IntegrationTest
   # BrowseQuery without widening the route constraint would otherwise silently
   # produce a filter the app offers but cannot serve.
   test "every BrowseQuery type and sort is actually routable" do
-    Books::BrowseQuery::TYPES.each do |type|
-      segment = Books::BrowsePath::TYPE_SEGMENTS[type]
-      next if segment.nil?
+    # The default type is the bare /categories and has no URL word; every other
+    # type must have one, so fetch raises if a new type forgets it.
+    Books::BrowseQuery::TYPES.drop(1).each do |type|
+      segment = Books::BrowsePath::TYPE_SEGMENTS.fetch(type)
 
       assert_recognizes(
         {controller: "books/browse", action: "categories", filter: type},

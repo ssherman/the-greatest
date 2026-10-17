@@ -48,7 +48,7 @@ module Books
 
       nodes = load_nodes(parent_ids)
       @categories.each_with_object({}) do |category, chains|
-        chain = names_above(category.parent_id, nodes)
+        chain = names_above(category, nodes)
         chains[category.id] = chain if chain.any?
       end
     end
@@ -60,10 +60,13 @@ module Books
       rows.to_h { |row| [row.id, [row.name, row.parent_id]] }
     end
 
-    # Nearest first while walking, reversed to root first for display.
-    def names_above(parent_id, nodes)
+    # Nearest first while walking, reversed to root first for display. The card
+    # itself starts as seen, so a cycle back to it never puts its own name in
+    # its chain.
+    def names_above(category, nodes)
       names = []
-      seen = Set.new
+      seen = Set[category.id]
+      parent_id = category.parent_id
       while parent_id && names.size < MAX_DEPTH && seen.add?(parent_id) && (node = nodes[parent_id])
         names << node[0]
         parent_id = node[1]

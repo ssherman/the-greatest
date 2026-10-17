@@ -140,7 +140,8 @@ module Books
 
       get "/categories/settings"
 
-      assert_select "[data-testid=browse-card-chain]", text: "Europe"
+      # DOM text includes the screen-reader-only "in" prefix.
+      assert_select "[data-testid=browse-card-chain]", text: "in Europe"
     end
 
     test "the chain costs the same queries for one child as for three" do
@@ -189,6 +190,12 @@ module Books
     test "search labels each result with its type" do
       get "/categories/search", params: {q: "polit"}
       assert_select "#categories_results .badge", text: "Subject"
+    end
+
+    test "the browse grid does not label cards with their type" do
+      get "/categories/subjects"
+      assert_select "#categories_results a[href='/the-greatest/politics/books']"
+      assert_select "#categories_results .badge", count: 0
     end
 
     test "search says how many categories match, escaping the query" do

@@ -8,7 +8,8 @@ module Books
       assert_selector "form[action='/categories/search'][method=get][data-turbo-frame=categories_results]"
       assert_selector "input[type=search][name=q][value=par][placeholder='Search categories…']"
       assert_selector "input[type=hidden][name=filter][value=location]", visible: :all
-      assert_selector "label", text: "Search categories", visible: :all
+      # The label must wrap the input, or the input has no accessible name.
+      assert_selector "label:has(input[name=q])", text: "Search categories", visible: :all
     end
 
     test "the search form is wired to the live-search controller" do
