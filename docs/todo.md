@@ -104,6 +104,24 @@ categories across genre, theme, game mode and player perspective.
 - Authors Duplicate fixer
 - Invalid Book Finder
 - old archived ranking configurations
+- **clean junk `alternative_names` off books categories.** Past merges copied the merged
+  category's whole name into the survivor's aliases. Some are real old names ("Calcutta" →
+  Kolkata), but many are not: Europe carries "World War I Europe", "1. Europe" and
+  "Europe  " (trailing spaces), and the Political genre carries "European Politics Books".
+  The `/categories` search ranks alias-only matches last so they no longer lead, but they
+  still pad the tail of results ("war" finds Europe) and pollute anything else that matches
+  on aliases (the filter modal's category search, `by_alternative_name`). Probably a
+  rules pass (exact duplicates, whitespace variants, numbering prefixes) plus an AI review
+  of the rest, like the category cleanup.
+
+## Site UI
+
+- **`<details>` menus don't close on an outside click or Escape.** The books nav "Lists"
+  dropdown and the `/categories` sort menu are both plain `<details class="dropdown">`, so
+  once opened they stay open until the summary is clicked again. Fix once, for every
+  `<details>` dropdown: a small shared Stimulus controller that closes on outside click,
+  Escape and `turbo:before-cache` (the sort menu's `books--dropdown-close` already does the
+  last one and could become it).
 
 ## Growth and infra
 
