@@ -34,6 +34,7 @@ class Books::BrowseController < ApplicationController
       Books::BrowseQuery.categories(ranking_configuration: @ranking_configuration, type: @type, sort: @sort),
       limit: 120
     )
+    @chains = Books::CategoryChains.call(@records)
   end
 
   def countries

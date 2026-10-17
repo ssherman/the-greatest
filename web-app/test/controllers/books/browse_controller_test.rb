@@ -126,9 +126,40 @@ module Books
     end
 
     test "categories renders no N+1" do
-      assert_queries_count 4 do
+      # Config, page count, page rows. CategoryChains loads the rows, so the
+      # view's @records.any? no longer costs its own EXISTS query.
+      assert_queries_count 3 do
         get "/categories"
       end
+    end
+
+    test "categories renders a child setting's chain" do
+      europe = Books::Category.create!(name: "Europe", category_type: :location)
+      categories(:books_france_location).update!(parent: europe)
+      CategoryItem.create!(category: categories(:books_france_location), item: @book)
+
+      get "/categories/settings"
+
+      assert_select "[data-testid=browse-card-chain]", text: "Europe"
+    end
+
+    test "the chain costs the same queries for one child as for three" do
+      europe = Books::Category.create!(name: "Europe", category_type: :location)
+      france = categories(:books_france_location)
+      france.update!(parent: europe)
+      germany = Books::Category.create!(name: "Germany", category_type: :location, parent: europe)
+      paris = Books::Category.create!(name: "Paris", category_type: :location, parent: france)
+      berlin = Books::Category.create!(name: "Berlin", category_type: :location, parent: germany)
+      CategoryItem.create!(category: france, item: @book)
+
+      get "/categories/settings" # warm-up: a per-process memo must not skew the baseline
+      one = count_queries_for { get "/categories/settings" }
+
+      [paris, berlin, germany].each { |c| CategoryItem.create!(category: c, item: @book) }
+      three = count_queries_for { get "/categories/settings" }
+
+      assert_equal 4, css_select("[data-testid=browse-card-chain]").size
+      assert_equal one, three
     end
 
     test "a category card reports its ranked count, not its catalog count" do
@@ -300,6 +331,15 @@ module Books
     end
 
     private
+
+    def count_queries_for(&block)
+      count = 0
+      counter = lambda do |_name, _start, _finish, _id, payload|
+        count += 1 unless %w[SCHEMA TRANSACTION].include?(payload[:name])
+      end
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+      count
+    end
 
     def ranked_book(name, rank)
       book = Books::Book.create!(title: name)
