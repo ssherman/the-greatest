@@ -95,11 +95,6 @@ it too. Summary for brainstorming: `docs/todos/goodreads-import-accuracy.md`.
 - Invalid Book Finder
 - old archived ranking configurations
 
-## Product
-
-- recommendations
-- add list wizard
-
 ## Growth and infra
 
 - google ads
@@ -112,6 +107,5 @@ it too. Summary for brainstorming: `docs/todos/goodreads-import-accuracy.md`.
 
 - new books added are not automatically enriched
 - category importer
-- category cleanup
 - import from storygraph
 - series import (use goodreads data)
