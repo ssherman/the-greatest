@@ -1038,40 +1038,40 @@ Rails.application.routes.draw do
         max_books_per_country: canon_country, excluded_genres: canon_genres
       }
 
-    # Legacy browse grammar, ported verbatim so no /genres or /countries URL needs
-    # a redirect: BrowseController already reads params[:filter] and params[:sort],
-    # and route segments populate params exactly as query parameters do. Only the
-    # bare forms are named -- Books::BrowsePath builds every parameterised path,
-    # mirroring Books::FilterPath.
+    # The category index lives at /categories[/settings|/subjects]. The old
+    # /genres/filtered-by/:filter grammar (and its query-string form) is a single
+    # route-level 301 to the final /categories URL -- one hop, never two, so a
+    # crawler following an old link does not pass through an intermediate
+    # redirect (spec 2026-10-17-books-categories-page-design, section 5).
+    # Books::BrowsePath builds every parameterised path, mirroring
+    # Books::FilterPath, so only the bare forms are named.
     #
-    # The sort and filter constraints are LOAD-BEARING, not cosmetic:
+    # The sort, filter and page constraints are LOAD-BEARING, not cosmetic:
     # BrowseQuery.normalized_* falls back to the default for any input, so an
-    # unconstrained segment would turn /genres/sorted-by/<anything> into an
+    # unconstrained segment would turn /categories/sorted-by/<anything> into an
     # unbounded space of indexable soft-duplicates. Anchors (\A, \z, ^, $) raise
     # ArgumentError in a segment constraint -- Rails anchors them itself.
     browse_sort = /(?:book_count|name)/
     browse_filter = /(?:genre|location|subject)/
 
-    get "genres", to: "books/browse#genres", as: :books_genres
-    get "genres/page/:page", to: "books/browse#genres", as: :books_genres_page,
-      constraints: {page: /\d+/}
-    get "genres/sorted-by/:sort", to: "books/browse#genres",
-      constraints: {sort: browse_sort}
-    get "genres/sorted-by/:sort/page/:page", to: "books/browse#genres",
-      constraints: {sort: browse_sort, page: /\d+/}
-    get "genres/filtered-by/:filter", to: "books/browse#genres",
-      constraints: {filter: browse_filter}
-    get "genres/filtered-by/:filter/page/:page", to: "books/browse#genres",
-      constraints: {filter: browse_filter, page: /\d+/}
-    get "genres/filtered-by/:filter/sorted-by/:sort", to: "books/browse#genres",
-      constraints: {filter: browse_filter, sort: browse_sort}
-    get "genres/filtered-by/:filter/sorted-by/:sort/page/:page", to: "books/browse#genres",
-      constraints: {filter: browse_filter, sort: browse_sort, page: /\d+/}
+    get "genres(/filtered-by/:filter)(/sorted-by/:sort)(/page/:page)",
+      constraints: {filter: browse_filter, sort: browse_sort, page: /\d+/},
+      to: redirect { |path_params, req|
+        Books::BrowsePath.from_legacy_genres(path_params: path_params, query_params: req.query_parameters)
+      }
 
-    # MUST stay last of the /genres routes: it matches any single segment, so every
-    # path above has to be declared first to win. /genres/page resolves the real
-    # location category named "Page"; /genres/page/2 stays pagination.
+    # MUST stay after the /genres redirect: it matches any single segment, so the
+    # redirect has to be declared first to win. /genres/page resolves the real
+    # location category named "Page"; /genres/page/2 is the redirect.
     get "genres/:id", to: "books/legacy_categories#show"
+
+    get "categories", to: "books/browse#categories", as: :books_categories
+    get "categories(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",
+      constraints: {sort: browse_sort, page: /\d+/}
+    get "categories/settings(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",
+      defaults: {filter: "location"}, constraints: {sort: browse_sort, page: /\d+/}
+    get "categories/subjects(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",
+      defaults: {filter: "subject"}, constraints: {sort: browse_sort, page: /\d+/}
 
     get "countries", to: "books/browse#countries", as: :books_countries
     get "countries/page/:page", to: "books/browse#countries", as: :books_countries_page,

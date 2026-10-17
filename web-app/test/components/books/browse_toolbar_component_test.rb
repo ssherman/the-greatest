@@ -4,27 +4,27 @@ module Books
   class BrowseToolbarComponentTest < ViewComponent::TestCase
     test "the default type and sort omit both segments from every active link" do
       render_inline(Books::BrowseToolbarComponent.new(
-        axis: :genres,
+        axis: :categories,
         type: Books::BrowseQuery::TYPES.first,
         sort: Books::BrowseQuery::SORTS.first,
         show_types: true
       ))
 
-      assert_selector "a[href='/genres']", count: 2
+      assert_selector "a[href='/categories']", count: 2
     end
 
     test "a non-active link composes both axes into path segments" do
       render_inline(Books::BrowseToolbarComponent.new(
-        axis: :genres, type: "subject", sort: "name", show_types: true
+        axis: :categories, type: "subject", sort: "name", show_types: true
       ))
 
-      assert_selector "a[href='/genres/filtered-by/location/sorted-by/name']"
-      assert_selector "a[href='/genres/filtered-by/subject']"
+      assert_selector "a[href='/categories/settings/sorted-by/name']"
+      assert_selector "a[href='/categories/subjects']"
     end
 
     test "no link carries a query string" do
       render_inline(Books::BrowseToolbarComponent.new(
-        axis: :genres, type: "location", sort: "name", show_types: true
+        axis: :categories, type: "location", sort: "name", show_types: true
       ))
 
       page.all("a").each do |link|
@@ -34,7 +34,7 @@ module Books
 
     test "show_types false omits the type group entirely" do
       render_inline(Books::BrowseToolbarComponent.new(
-        axis: :genres, type: "genre", sort: "book_count", show_types: false
+        axis: :categories, type: "genre", sort: "book_count", show_types: false
       ))
 
       assert_selector "[aria-label='Category type']", count: 0
