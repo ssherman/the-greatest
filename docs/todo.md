@@ -105,11 +105,6 @@ categories across genre, theme, game mode and player perspective.
 - Invalid Book Finder
 - old archived ranking configurations
 
-## Product
-
-- recommendations
-- add list wizard
-
 ## Growth and infra
 
 - google ads
@@ -122,6 +117,5 @@ categories across genre, theme, game mode and player perspective.
 
 - new books added are not automatically enriched
 - category importer
-- category cleanup
 - import from storygraph
 - series import (use goodreads data)
