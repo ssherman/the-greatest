@@ -166,9 +166,11 @@ option C.
 ### Top to bottom
 
 1. **Title**: "Book Genres" / "Book Settings" / "Book Subjects", as now.
-2. **Tabs**: Genres · Settings · Subjects, as page tabs (daisyUI `tabs`, links with `role="tab"`,
-   the active one `tab-active` plus `aria-current`). The active tab must differ by shape or
-   underline, not color alone. Switching tabs keeps the current sort
+2. **Tabs**: Genres · Settings · Subjects, as page tabs (daisyUI `tabs`) built as plain links
+   inside a labelled `nav` (`aria-label="Category type"`), the active one `tab-active` plus
+   `aria-current="page"`. No `role="tab"` or `tablist`: ARIA tabs promise panels and arrow-key
+   behaviour that page links do not have, so links in a nav is the correct pattern. The active tab
+   must differ by shape or underline, not color alone. Switching tabs keeps the current sort
    and drops the page.
 3. **Toolbar row**:
    - a search box labelled "Search categories…" on every tab, because search covers all three
@@ -194,7 +196,12 @@ option C.
 
 ### Search
 
-- **Scope: all three types**, not just the current tab. Matches in the current tab come first. Each
+- **Scope: all three types**, not just the current tab. Ordering is match quality first (name
+  equals the query, then name starts with it, then a word in the name starts with it, then name
+  contains it, then alias-only), with the current tab's type as the tiebreaker within a quality,
+  then ranked count. Ruling made during the build: "current type first" alone put Europe above War
+  for "war", because past merges left junk alternative names on Europe ("World War I Europe"). A
+  name match must beat an alias-only one. Each
   result card names its type ("Subject") in addition to its parent chain. The reason: genre and
   subject overlap in readers' minds (there is a "Political" genre and a "Politics" subject), and a
   reader looking for "War" shouldn't have to guess which tab it lives on. Results use the same
