@@ -67,9 +67,10 @@ module Services
         private
 
         def run_locked
-          # A re-queued run (same run id) counts what it already logged
-          # (failures aside) toward its limit.
-          done = ::Books::Verification.where(run_id: @run_id).where.not(work_outcome: :failed).count
+          # A re-queued run (same run id) counts the books it already finished
+          # toward its limit. A row it left mid-stage is not finished: it is
+          # resumed and counted when it gets to `done`, as in-run.
+          done = ::Books::Verification.stage_done.where(run_id: @run_id).where.not(work_outcome: :failed).count
           @version = @retry_unsure ? @client.version : nil
           @wc_dump_date = @wc_client.version[:dump_date]
           loop do

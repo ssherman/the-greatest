@@ -188,6 +188,18 @@ module Services
           assert_equal 2, result.data[:processed]
         end
 
+        test "a row the same run left mid-stage is resumed, and only finished rows count toward the limit" do
+          ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "run-1", stage: :done)
+          ::Books::Verification.create!(book: @crime, work_outcome: :keyed, run_id: "run-1", stage: :worldcat)
+          @scope = ::Books::Book.where(id: [@war.id, @crime.id])
+          order = record_applies
+
+          result = run_backfill(limit: 2)
+
+          assert_equal [@crime.id], order
+          assert_equal 2, result.data[:processed]
+        end
+
         test "an Open Library failure waits and tries the same book again" do
           error = ::Books::OpenLibrary::Exceptions::ServerError.new("busy", 500)
           tried = []

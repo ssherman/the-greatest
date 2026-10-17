@@ -86,5 +86,24 @@ module Books
       assert_equal 9, ::Identifier.identifier_types["books_work_openlibrary_duplicate_id"]
       assert_equal 5, ::DuplicateCandidate.sources["ol_backfill"]
     end
+
+    test "the stage migration puts rows that predate it where their outcome says" do
+      require Rails.root.join("db/migrate/20261016223421_add_stages_to_books_verifications.rb").to_s
+      expected = {
+        "confirmed" => "identifiers", "updated" => "identifiers", "replaced" => "identifiers", "keyed" => "identifiers",
+        "duplicate_pair" => "worldcat", "unsure" => "worldcat", "removed" => "worldcat",
+        "failed" => "work", "reverted" => "done"
+      }
+      books = ::Books::Book.limit(expected.size).to_a
+      books << ::Books::Book.create!(title: "Backfill extra #{books.size}") while books.size < expected.size
+      rows = expected.keys.zip(books).map do |outcome, book|
+        row = ::Books::Verification.create!(book: book, work_outcome: outcome, run_id: "old", stage: :work)
+        [row, outcome]
+      end
+
+      ::Books::Verification.connection.execute(AddStagesToBooksVerifications::BACKFILL_STAGE_SQL)
+
+      assert_equal expected, rows.to_h { |row, outcome| [outcome, row.reload.stage] }
+    end
   end
 end
