@@ -73,6 +73,26 @@ module Services
           refute WorldCatCheck.clearly_different?(proust.reload, record(title: "In Search of Lost Time (All 7 Volumes) / Proust Marcel", creator: "Proust Marcel"))
         end
 
+        test "a short title of ours inside a longer, different title is still clearly different" do
+          {
+            "It" => "Make it stick", "Night" => "Tender is the night", "War and Peace" => "War : what is it good for?",
+            "Life of Pi" => "Life : a user's manual", "Essays" => "Allessays", "It " => "Kitchen"
+          }.each do |ours, theirs|
+            book = ::Books::Book.create!(title: ours.strip)
+            book.book_authors.create!(author: ::Books::Author.create!(name: "Zed Writer #{ours.strip}"))
+
+            assert WorldCatCheck.clearly_different?(book.reload, record(title: "#{theirs} / Other Person", creator: "Other Person")), "#{ours} vs #{theirs}"
+          end
+        end
+
+        test "our title inside the record's title is not a disagreement only when the rest is edition words" do
+          book = ::Books::Book.create!(title: "Essays")
+          book.book_authors.create!(author: ::Books::Author.create!(name: "Michel de Montaigne"))
+
+          refute WorldCatCheck.clearly_different?(book.reload, record(title: "Collected essays, vol. 2 / Someone Else", creator: "Someone Else"))
+          assert WorldCatCheck.clearly_different?(book.reload, record(title: "Essays on love / Someone Else", creator: "Someone Else"))
+        end
+
         test "a different book with some shared words is still clearly different" do
           power = ::Books::Book.create!(title: "The Power and the Glory")
           power.book_authors.create!(author: ::Books::Author.create!(name: "Graham Greene"))

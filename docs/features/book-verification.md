@@ -202,11 +202,13 @@ Outcomes for one ISBN:
 - **Records exist and every one disagrees on both title and creator.** Finding `wrong_identifier`,
   with the records' OCLC numbers, titles, creators and years in `evidence`. Nothing is removed.
   Two rules keep this signal quiet (they change only what is recorded, never what is trusted):
-  an ISBN that Open Library lists on one of this book's own edition candidates (ISBN-13 or ISBN-10,
-  compared as ISBN-13) is not recorded, unless that candidate's title or subtitle names a set; and
-  a title counts as disagreeing only if neither normalized title contains the other, on word
-  boundaries ("Complete Essays" holds "Essays", "In Search of Lost Time (All 7 Volumes)" holds
-  "In Search of Lost Time"; "The 48 laws of power" does not hold "The Power and the Glory").
+  an ISBN that Open Library lists on any one non-set edition candidate of this book (ISBN-13 or
+  ISBN-10, compared as ISBN-13) is not recorded; a candidate whose title or subtitle names a set
+  does not count; and a record's title does not count as disagreeing when its full title (the
+  " / creator" part dropped) contains one of our titles on word boundaries and every other word is
+  an edition word or a number (complete, collected, all, volume(s), vol(s), works, edition,
+  unabridged, annotated, illustrated, selected, the, a, an, and, of, in). "Complete Essays" holds
+  "Essays"; "Make it stick" does not hold "It", and "Life : a user's manual" does not hold "Life of Pi".
 - **Anything else** (no record, or records agreeing on only one of title and creator): nothing.
   Garbled records fail the check and never confirm. A garbled record (mojibake in its title or
   creator) is never `wrong_identifier` either: it may be the right book, so it counts as unknown.
@@ -232,8 +234,8 @@ row's `foreign_work` findings and computes them again, so stale ones do not stay
 findings name **two or more distinct foreign works** is a **lump suspect** (`lump_suspect` on its
 row): the shape of "X Men" holding several volumes' identifiers, or an omnibus holding its novellas'
 ISBNs. Telling a lump from an omnibus is later work. Lump suspects are a candidate list for a later
-AI check, not a verdict: Open Library keeps some translations as separate works, which rule 2a only
-partly catches.
+AI check, not a verdict: Open Library keeps some translations as separate works, which the known-translation
+rule above only partly catches.
 
 ## Cohorts
 

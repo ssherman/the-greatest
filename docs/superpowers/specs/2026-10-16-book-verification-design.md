@@ -218,8 +218,9 @@ Garbled records (mojibake) fail the check and so never confirm. Records disagree
 side are not evidence of a wrong identifier.
 
 *Amended 2026-10-17 (rehearsal)*: `wrong_identifier` is not recorded for an ISBN Open Library lists
-on one of the book's non-set edition candidates, and a title disagrees only if neither normalized
-title contains the other (complete and collected editions). Recorded signal only; trust is unchanged.
+on any one of the book's non-set edition candidates, and a title does not count as disagreeing when
+the record's full title contains one of ours on word boundaries and every other word is an edition
+word or a number (complete and collected editions). Recorded signal only; trust is unchanged.
 
 ### Stage 4: signals
 

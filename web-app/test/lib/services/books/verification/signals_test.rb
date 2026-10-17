@@ -76,6 +76,22 @@ module Services
           assert_empty row.findings.foreign_work
         end
 
+        test "a foreign work matching none of the book's candidates is still recorded" do
+          ::Books::EditionCandidate.create!(book: @book, edition_key: "OL5M", title: "Krieg und Frieden")
+          row = run_signals(hits: {["isbn13", "9780140447934"] => [ol_hit("OL7W")]}, works: {"OL7W" => ol_work("OL7W", title: "Anna Karenina")})
+
+          assert_equal 1, row.findings.foreign_work.count
+        end
+
+        test "the article on the work's side is dropped too" do
+          book = ::Books::Book.create!(title: "Bible")
+          row = ::Books::Verification.create!(book: book, work_outcome: :keyed, new_key: "OL1W", run_id: "r", stage: :signals)
+          Identifier.create!(identifiable: book, identifier_type: :books_work_isbn13, value: "9780140447934", source: :legacy)
+          Signals.call(verification: row, client: FakeOlClient.new(hits: {["isbn13", "9780140447934"] => [ol_hit("OL7W")]}, works: {"OL7W" => ol_work("OL7W", title: "The Bible")}))
+
+          assert_empty row.reload.findings.foreign_work
+        end
+
         test "a leading article does not make a work foreign" do
           book = ::Books::Book.create!(title: "The Bible")
           row = ::Books::Verification.create!(book: book, work_outcome: :keyed, new_key: "OL1W", run_id: "r", stage: :signals)

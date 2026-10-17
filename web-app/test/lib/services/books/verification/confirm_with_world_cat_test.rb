@@ -69,6 +69,13 @@ module Services
           assert_equal 1, confirm(ISBN13 => [differing]).findings.wrong_identifier.count
         end
 
+        test "a set named only in the candidate's subtitle does not suppress the finding" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: ISBN13, source: :legacy)
+          ::Books::EditionCandidate.create!(book: @book, edition_key: "OL77M", title: "War and Peace", subtitle: "Box Set", identifiers: {"isbn13" => [ISBN13]})
+
+          assert_equal 1, confirm(ISBN13 => [differing]).findings.wrong_identifier.count
+        end
+
         test "an ISBN on no candidate is still a wrong_identifier" do
           Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: ISBN13, source: :legacy)
           candidate("Krig og fred", {"isbn13" => ["9780140447934"]})

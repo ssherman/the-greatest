@@ -33,19 +33,25 @@ module Services
           !Check.titles_agree?(book, work) && !title_contained?(book, work) && !Check.authors_agree?(book, work)
         end
 
+        EDITION_WORDS = %w[complete collected all volume volumes vol vols works edition unabridged annotated illustrated
+          selected the a an and of in].to_set.freeze
+        WORD = /[\p{L}\p{N}']+/
+
         # "Complete Essays" and "In Search of Lost Time (All 7 Volumes)" hold
         # our "Essays" and "In Search of Lost Time": for this recorded-only
-        # signal a title that contains the other, on word boundaries, is not
-        # a disagreement.
+        # signal the record's full title (its " / creator" dropped) must contain
+        # one of our titles on word boundaries and everything left over must be
+        # an edition word or a number. One direction only: "Make it stick" does
+        # not hold "It", and "Life : a user's manual" does not hold "Life of Pi".
         def title_contained?(book, work)
-          ours = ([book.title] + Array(book.alternate_titles)).filter_map { |title| Check.normalize(title) }
-          theirs_full, theirs_short = Check.their_titles(work)
-          theirs = [theirs_full, theirs_short, Check.normalize(work.title)].compact.uniq
-          ours.product(theirs).any? { |ours_title, their_title| word_contains?(ours_title, their_title) || word_contains?(their_title, ours_title) }
-        end
+          full = Check.normalize([work.title, work.subtitle].compact.map { |part| part.sub(%r{\s*/.*\z}, "") }.join(": "))
+          return false if full.nil?
 
-        def word_contains?(text, part)
-          text.match?(/(?<!\p{L}|\p{N})#{Regexp.escape(part)}(?!\p{L}|\p{N})/)
+          ours = ([book.title] + Array(book.alternate_titles)).filter_map { |title| Check.normalize(title) }
+          ours.any? do |title|
+            match = full.match(/(?<![\p{L}\p{N}])#{Regexp.escape(title)}(?![\p{L}\p{N}])/)
+            match && (match.pre_match + " " + match.post_match).scan(WORD).all? { |word| EDITION_WORDS.include?(word) || word.match?(/\A\d+\z/) }
+          end
         end
 
         def work_like(record)
