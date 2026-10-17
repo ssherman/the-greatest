@@ -1,19 +1,31 @@
-<div class="flex flex-wrap items-center gap-4">
+<div class="space-y-4">
   <% if show_types %>
-    <div class="join" role="group" aria-label="Category type">
-      <% type_links.each do |link| %>
-        <%= link_to link[:label], link[:path],
-              class: "btn btn-sm join-item #{"btn-active" if link[:active]}",
-              aria: {current: (link[:active] ? "true" : nil)} %>
-      <% end %>
-    </div>
+    <%# Page links, not ARIA tabs: there are no panels, so no role=tablist. The
+        active tab is told apart by the tabs-border underline and bold weight,
+        never by colour alone. %>
+    <nav aria-label="Category type">
+      <div class="tabs tabs-border justify-center">
+        <% type_links.each do |link| %>
+          <%= link_to link[:label], link[:path],
+                class: "tab #{"tab-active font-semibold" if link[:active]}",
+                aria: {current: (link[:active] ? "page" : nil)} %>
+        <% end %>
+      </div>
+    </nav>
   <% end %>
 
-  <div class="join" role="group" aria-label="Sort by">
-    <% sort_links.each do |link| %>
-      <%= link_to link[:label], link[:path],
-            class: "btn btn-sm join-item #{"btn-active" if link[:active]}",
-            aria: {current: (link[:active] ? "true" : nil)} %>
-    <% end %>
+  <div class="flex flex-wrap items-center justify-end gap-3">
+    <details class="dropdown dropdown-end">
+      <summary class="btn btn-sm">Sort: <%= SORT_LABELS.fetch(sort) %></summary>
+      <ul class="dropdown-content menu bg-base-100 rounded-box z-10 w-40 p-2 shadow-sm">
+        <% sort_links.each do |link| %>
+          <li>
+            <%= link_to link[:label], link[:path],
+                  class: ("font-semibold" if link[:active]),
+                  aria: {current: (link[:active] ? "page" : nil)} %>
+          </li>
+        <% end %>
+      </ul>
+    </details>
   </div>
 </div>

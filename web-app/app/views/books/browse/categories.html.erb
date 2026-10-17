@@ -7,11 +7,9 @@
 <div class="space-y-8">
   <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @page_title %></h1>
 
-  <div class="flex justify-center">
-    <%= render Books::BrowseToolbarComponent.new(
-          axis: :categories, type: @type, sort: @sort, show_types: true
-        ) %>
-  </div>
+  <%= render Books::BrowseToolbarComponent.new(
+        axis: :categories, type: @type, sort: @sort, show_types: true
+      ) %>
 
   <% if @records.any? %>
     <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">

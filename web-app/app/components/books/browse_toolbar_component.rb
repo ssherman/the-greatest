@@ -1,7 +1,7 @@
 module Books
   class BrowseToolbarComponent < ViewComponent::Base
     TYPE_LABELS = {"genre" => "Genres", "location" => "Settings", "subject" => "Subjects"}.freeze
-    SORT_LABELS = {"book_count" => "Most books", "name" => "Name"}.freeze
+    SORT_LABELS = {"book_count" => "Most books", "name" => "A–Z"}.freeze
 
     def initialize(axis:, sort:, type: nil, show_types: false)
       @axis = axis
