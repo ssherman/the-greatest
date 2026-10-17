@@ -157,12 +157,37 @@ module Books
       assert_equal %w[genre location subject], types
     end
 
-    test "search puts the current type first" do
+    test "search puts the current type first among equal name matches" do
+      # All three "americ" fixtures are prefix matches, so match quality ties.
       tag_americas
 
       first = with_browse_minimum(1) { search_for("americ", type: "subject").first }
 
       assert_equal categories(:books_american_history_subject), first
+    end
+
+    test "a name match outranks an alias-only match" do
+      alias_only = Books::Category.create!(name: "Zebra Studies", category_type: :genre, alternative_names: ["warfare notes"])
+      by_name = Books::Category.create!(name: "Warfare", category_type: :genre)
+      ranked_books.each { |book| tag(alias_only, book) }
+      tag(by_name, ranked_books.first)
+
+      names = with_browse_minimum(1) { search_for("warf").map(&:name) }
+
+      assert_equal ["Warfare", "Zebra Studies"], names
+    end
+
+    test "an exact name outranks a prefix, which outranks a word-start, which outranks a substring" do
+      # Ranked counts run the opposite way (Steward most), and every category is a
+      # genre, so neither count nor type can explain the order.
+      {"Steward" => 3, "Cold War" => 2, "Warsaw" => 1, "War" => 1}.each do |name, count|
+        category = Books::Category.create!(name: name, category_type: :genre)
+        ranked_books.first(count).each { |book| tag(category, book) }
+      end
+
+      names = with_browse_minimum(1) { search_for("war").map(&:name) }
+
+      assert_equal ["War", "Warsaw", "Cold War", "Steward"], names
     end
 
     test "search applies the ranked minimum to subjects and settings but not genres" do
@@ -226,6 +251,10 @@ module Books
 
     def tag(category, book = books_books(:war_and_peace))
       CategoryItem.create!(category: category, item: book)
+    end
+
+    def ranked_books
+      [books_books(:war_and_peace), books_books(:got), books_books(:of_mice_and_men)]
     end
 
     def tag_americas

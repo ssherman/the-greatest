@@ -19,22 +19,26 @@ module Books
     end
 
     # Searches all three category types through the same ranked gate and count
-    # as the grid, so a hit never disagrees with the page it links to. The
-    # current type sorts first rather than filtering the rest out.
+    # as the grid, so a hit never disagrees with the page it links to. Results
+    # sort by match quality first: past merges left junk alternative_names
+    # ("World War I Europe" on Europe), so a name match must beat an alias-only
+    # one. Then the current type sorts first rather than filtering the rest out.
     def self.search(ranking_configuration:, query:, type: nil, limit: SEARCH_LIMIT)
       q = query.to_s.strip.first(SEARCH_MAX_LENGTH)
       return Books::Category.none if q.length < SEARCH_MIN_LENGTH
 
       current_type = ::Category.category_types.fetch(normalized_type(type))
+      escaped = Books::Category.sanitize_sql_like(q)
 
       # The name match runs inside the counting subquery: this is an uncached
       # endpoint hit on every keystroke, and counting ranked books for every
       # category before matching names cost ~760 ms against ~90 ms.
       candidates = Books::Category.active
-        .where(::CategorySearchQuery::NAME_OR_ALIAS_SQL, pattern: "%#{Books::Category.sanitize_sql_like(q)}%")
+        .where(::CategorySearchQuery::NAME_OR_ALIAS_SQL, pattern: "%#{escaped}%")
         .select(:id)
 
       ranked_scope(ranking_configuration, candidate_ids_sql: candidates.to_sql)
+        .order(Arel.sql(name_match_quality_sql(escaped)))
         .order(Arel.sql("(categories.category_type = #{current_type.to_i}) DESC"))
         .order("ranked_counts.ranked_count DESC", "categories.name")
         .limit(limit)
@@ -77,6 +81,22 @@ module Books
 
     # candidate_ids_sql, when given, limits which categories the subquery counts.
     # It only narrows the rows; each surviving category's count is unchanged.
+    # 0 name equals, 1 name starts with, 2 a word in the name starts with,
+    # 3 name contains, 4 matched only through alternative_names. Takes the
+    # LIKE-escaped query and binds it, so no user text is interpolated.
+    def self.name_match_quality_sql(escaped)
+      Books::Category.sanitize_sql_array([<<~SQL.squish, {exact: escaped, prefix: "#{escaped}%", word: "% #{escaped}%", any: "%#{escaped}%"}])
+        CASE
+          WHEN categories.name ILIKE :exact THEN 0
+          WHEN categories.name ILIKE :prefix THEN 1
+          WHEN categories.name ILIKE :word THEN 2
+          WHEN categories.name ILIKE :any THEN 3
+          ELSE 4
+        END
+      SQL
+    end
+    private_class_method :name_match_quality_sql
+
     def self.ranked_scope(ranking_configuration, candidate_ids_sql: nil)
       candidate_filter = "AND category_id IN (#{candidate_ids_sql})" if candidate_ids_sql
 
