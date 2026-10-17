@@ -13,6 +13,10 @@ module Books
   # Only categories with a non-empty chain get a key. A soft-deleted ancestor
   # ends the chain, and MAX_DEPTH plus a revisit check stop a parent cycle
   # written around the validation (raw SQL) from looping.
+  #
+  # Subjects never get a chain: they are a flat vocabulary by design, and only
+  # the location validation stops a parent being set, so a stray subject parent
+  # would otherwise surface on every subject card.
   class CategoryChains
     MAX_DEPTH = ::Books::Category::MAX_DEPTH
 
@@ -35,7 +39,7 @@ module Books
     end
 
     def initialize(categories)
-      @categories = categories.to_a
+      @categories = categories.to_a.reject(&:subject?)
     end
 
     def call

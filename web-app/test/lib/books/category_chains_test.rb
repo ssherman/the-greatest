@@ -13,6 +13,14 @@ module Books
       @space_opera = ::Books::Category.create!(name: "Space Opera", category_type: :genre, parent: @speculative)
     end
 
+    test "a subject gets no chain even when it has a parent" do
+      subject = ::Books::Category.create!(name: "Siege Warfare", category_type: :subject, parent: categories(:books_politics_subject))
+
+      assert_queries_count(0) do
+        assert_empty Books::CategoryChains.call([subject])
+      end
+    end
+
     test "returns each category's ancestors root first" do
       chains = Books::CategoryChains.call([@paris, @france, @europe])
       assert_equal ["Europe", "France", "Île-de-France"], chains[@paris.id]

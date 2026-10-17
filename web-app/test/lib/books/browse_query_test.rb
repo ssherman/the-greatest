@@ -190,6 +190,27 @@ module Books
       assert_equal ["War", "Warsaw", "Cold War", "Steward"], names
     end
 
+    test "a word after punctuation counts as a word start" do
+      # The mid-word match has more ranked books, so only the word-start tier
+      # can put Post-Apocalyptic first.
+      {"Zzapoczz" => 3, "Post-Apocalyptic" => 1}.each do |name, count|
+        category = Books::Category.create!(name: name, category_type: :genre)
+        ranked_books.first(count).each { |book| tag(category, book) }
+      end
+
+      names = with_browse_minimum(1) { search_for("apoc").map(&:name) }
+
+      assert_equal ["Post-Apocalyptic", "Zzapoczz"], names
+    end
+
+    # The word-start tier is a regex; an unescaped "(" would be a Postgres
+    # syntax error on the uncached search endpoint, i.e. a 500 per keystroke.
+    test "regex metacharacters in the query do not raise" do
+      tag(Books::Category.create!(name: "Cold (War)", category_type: :genre))
+
+      assert_equal ["Cold (War)"], with_browse_minimum(1) { search_for("(war").map(&:name) }
+    end
+
     test "search applies the ranked minimum to subjects and settings but not genres" do
       tag_americas
 

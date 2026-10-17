@@ -38,7 +38,7 @@ module Books
         .select(:id)
 
       ranked_scope(ranking_configuration, candidate_ids_sql: candidates.to_sql)
-        .order(Arel.sql(name_match_quality_sql(escaped)))
+        .order(Arel.sql(name_match_quality_sql(q, escaped)))
         .order(Arel.sql("(categories.category_type = #{current_type.to_i}) DESC"))
         .order("ranked_counts.ranked_count DESC", "categories.name")
         .limit(limit)
@@ -80,14 +80,19 @@ module Books
     private_class_method :ranked_book_ids_sql
 
     # 0 name equals, 1 name starts with, 2 a word in the name starts with,
-    # 3 name contains, 4 matched only through alternative_names. Takes the
-    # LIKE-escaped query and binds it, so no user text is interpolated.
-    def self.name_match_quality_sql(escaped)
-      Books::Category.sanitize_sql_array([<<~SQL.squish, {exact: escaped, prefix: "#{escaped}%", word: "% #{escaped}%", any: "%#{escaped}%"}])
+    # 3 name contains, 4 matched only through alternative_names. Every value is
+    # bound, so no user text is interpolated.
+    #
+    # A word starts after any non-alphanumeric character, not just a space, so
+    # "apoc" is a word start in "Post-Apocalyptic". That tier is a regex, and the
+    # query is regex-escaped for it: an unescaped "(" would raise in Postgres.
+    def self.name_match_quality_sql(query, escaped)
+      word = "[^[:alnum:]]#{query.gsub(/[^[:alnum:][:space:]]/) { |char| "\\#{char}" }}"
+      Books::Category.sanitize_sql_array([<<~SQL.squish, {exact: escaped, prefix: "#{escaped}%", word: word, any: "%#{escaped}%"}])
         CASE
           WHEN categories.name ILIKE :exact THEN 0
           WHEN categories.name ILIKE :prefix THEN 1
-          WHEN categories.name ILIKE :word THEN 2
+          WHEN categories.name ~* :word THEN 2
           WHEN categories.name ILIKE :any THEN 3
           ELSE 4
         END
