@@ -30,7 +30,22 @@ module Services
           return false if work.title.blank? || work.author_names.empty? || book.authors.empty?
           return false if [work.title, *work.author_names].any? { |text| text.match?(MOJIBAKE) }
 
-          !Check.titles_agree?(book, work) && !Check.authors_agree?(book, work)
+          !Check.titles_agree?(book, work) && !title_contained?(book, work) && !Check.authors_agree?(book, work)
+        end
+
+        # "Complete Essays" and "In Search of Lost Time (All 7 Volumes)" hold
+        # our "Essays" and "In Search of Lost Time": for this recorded-only
+        # signal a title that contains the other, on word boundaries, is not
+        # a disagreement.
+        def title_contained?(book, work)
+          ours = ([book.title] + Array(book.alternate_titles)).filter_map { |title| Check.normalize(title) }
+          theirs_full, theirs_short = Check.their_titles(work)
+          theirs = [theirs_full, theirs_short, Check.normalize(work.title)].compact.uniq
+          ours.product(theirs).any? { |ours_title, their_title| word_contains?(ours_title, their_title) || word_contains?(their_title, ours_title) }
+        end
+
+        def word_contains?(text, part)
+          text.match?(/(?<!\p{L}|\p{N})#{Regexp.escape(part)}(?!\p{L}|\p{N})/)
         end
 
         def work_like(record)

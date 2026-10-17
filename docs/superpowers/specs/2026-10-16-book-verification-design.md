@@ -217,7 +217,15 @@ Outcomes for one ISBN:
 Garbled records (mojibake) fail the check and so never confirm. Records disagreeing on only one
 side are not evidence of a wrong identifier.
 
+*Amended 2026-10-17 (rehearsal)*: `wrong_identifier` is not recorded for an ISBN Open Library lists
+on one of the book's non-set edition candidates, and a title disagrees only if neither normalized
+title contains the other (complete and collected editions). Recorded signal only; trust is unchanged.
+
 ### Stage 4: signals
+
+*Amended 2026-10-17 (rehearsal)*: a foreign work titled like one of the book's edition candidates is
+a known translation and is ignored, and a leading "the/a/an" is dropped from both sides of the title
+comparison. Lump suspects are a candidate list for a later AI check, not a verdict.
 
 Recorded, never acted on. The book's held identifiers that are still not verified, ISBNs and
 Goodreads ids only, are looked up with `Client#identifier` (at most `MAX_SIGNAL_LOOKUPS = 20`, five

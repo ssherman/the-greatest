@@ -62,6 +62,23 @@ module Services
         test "a record with no creator is unknown, not clearly different" do
           refute WorldCatCheck.clearly_different?(@book, record(title: "Gloriana", creator: nil))
         end
+
+        test "a complete or collected edition of our title is not clearly different" do
+          essays = ::Books::Book.create!(title: "Essays")
+          essays.book_authors.create!(author: ::Books::Author.create!(name: "Michel de Montaigne"))
+          proust = ::Books::Book.create!(title: "In Search of Lost Time")
+          proust.book_authors.create!(author: ::Books::Author.create!(name: "Marcel Proust"))
+
+          refute WorldCatCheck.clearly_different?(essays.reload, record(title: "Complete Essays / Montaigne Michel de", creator: "Montaigne Michel de"))
+          refute WorldCatCheck.clearly_different?(proust.reload, record(title: "In Search of Lost Time (All 7 Volumes) / Proust Marcel", creator: "Proust Marcel"))
+        end
+
+        test "a different book with some shared words is still clearly different" do
+          power = ::Books::Book.create!(title: "The Power and the Glory")
+          power.book_authors.create!(author: ::Books::Author.create!(name: "Graham Greene"))
+
+          assert WorldCatCheck.clearly_different?(power.reload, record(title: "The 48 laws of power / Robert Greene", creator: "Robert Greene"))
+        end
       end
     end
   end

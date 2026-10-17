@@ -49,6 +49,33 @@ module Services
           assert_equal 1, row.wrong_count
         end
 
+        def differing = wc_record(oclc: 5, title: "Gloriana", creator: "Moorcock, Michael", year: 1978)
+
+        def candidate(title, identifiers)
+          ::Books::EditionCandidate.create!(book: @book, edition_key: "OL#{rand(10_000)}M", title: title, identifiers: identifiers)
+        end
+
+        test "an ISBN Open Library lists on a non-set edition of this work records no wrong_identifier" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: ISBN13, source: :legacy)
+          candidate("Krig og fred", {"isbn10" => [ISBN10]})
+
+          assert_empty confirm(ISBN13 => [differing]).findings
+        end
+
+        test "an ISBN listed only on a set edition is still a wrong_identifier" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: ISBN13, source: :legacy)
+          candidate("War and Peace Box Set", {"isbn13" => [ISBN13]})
+
+          assert_equal 1, confirm(ISBN13 => [differing]).findings.wrong_identifier.count
+        end
+
+        test "an ISBN on no candidate is still a wrong_identifier" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: ISBN13, source: :legacy)
+          candidate("Krig og fred", {"isbn13" => ["9780140447934"]})
+
+          assert_equal 1, confirm(ISBN13 => [differing]).findings.wrong_identifier.count
+        end
+
         test "a record disagreeing on one side only, or no record, changes nothing" do
           Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: ISBN13, source: :legacy)
 

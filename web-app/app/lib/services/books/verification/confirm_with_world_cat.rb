@@ -59,9 +59,21 @@ module Services
             agreeing.map(&:oclc).compact.uniq.each do |oclc|
               Stamp.call(verification: @row, type: "books_work_oclc_id", value: oclc.to_s, source: :worldcat, evidence: evidence)
             end
-          elsif found.any? && found.all? { |record| WorldCatCheck.clearly_different?(@book, record) }
+          elsif found.any? && !listed_by_open_library?(isbn) && found.all? { |record| WorldCatCheck.clearly_different?(@book, record) }
             Stamp.finding(@row, :wrong_identifier, "books_work_isbn13", isbn, evidence: {"records" => found.map { |record| summary(record) }})
           end
+        end
+
+        # Open Library lists this ISBN on an edition of this very work (a
+        # translation, a transliterated creator): WorldCat's different record
+        # is not evidence the ISBN is wrong. A set edition does not count.
+        def listed_by_open_library?(isbn)
+          @listed_isbns ||= ::Books::EditionCandidate.where(book_id: @book.id).reject { |candidate|
+            "#{candidate.title} #{candidate.subtitle}".match?(EditionCheck::SET_WORDS)
+          }.flat_map { |candidate|
+            Array(candidate.identifiers["isbn13"]) + Array(candidate.identifiers["isbn10"])
+          }.filter_map { |value| ::Books::Isbn.normalize(value)&.isbn13 }.to_set
+          @listed_isbns.include?(isbn)
         end
 
         def summary(record)

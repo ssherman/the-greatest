@@ -201,6 +201,12 @@ Outcomes for one ISBN:
   ISBNs a record lists, so a box set's ISBNs cannot spread.
 - **Records exist and every one disagrees on both title and creator.** Finding `wrong_identifier`,
   with the records' OCLC numbers, titles, creators and years in `evidence`. Nothing is removed.
+  Two rules keep this signal quiet (they change only what is recorded, never what is trusted):
+  an ISBN that Open Library lists on one of this book's own edition candidates (ISBN-13 or ISBN-10,
+  compared as ISBN-13) is not recorded, unless that candidate's title or subtitle names a set; and
+  a title counts as disagreeing only if neither normalized title contains the other, on word
+  boundaries ("Complete Essays" holds "Essays", "In Search of Lost Time (All 7 Volumes)" holds
+  "In Search of Lost Time"; "The 48 laws of power" does not hold "The Power and the Glory").
 - **Anything else** (no record, or records agreeing on only one of title and creator): nothing.
   Garbled records fail the check and never confirm. A garbled record (mojibake in its title or
   creator) is never `wrong_identifier` either: it may be the right book, so it counts as unknown.
@@ -213,7 +219,10 @@ Recorded, never acted on. The book's held ISBNs and Goodreads ids still not veri
 `MAX_SIGNAL_LOOKUPS`, five at a time) are looked up in Open Library. A hit on a work that is not the
 stage 1 work, not one of its duplicate keys and not a redirect of it is fetched, and if its title
 disagrees with ours the identifier gets a `foreign_work` finding. A work whose title agrees is an
-unmerged Open Library duplicate of the same book and is ignored. When stage 1 settled no work,
+unmerged Open Library duplicate of the same book and is ignored. Two more rules keep the signal
+quiet: a work whose title equals the title (or "title: subtitle") of one of the book's own edition
+candidates is a known translation and is ignored, and a leading "the ", "a " or "an " is dropped
+from both sides of the title comparison, so "Bible" agrees with "The Bible". When stage 1 settled no work,
 every hit is judged by the title rule alone. The fast pass's answers are not reused, because a
 resumed book runs stage 4 in a later run.
 
@@ -222,7 +231,9 @@ and `evidence["works"]` lists every foreign work it hits as `{key, title}`. A re
 row's `foreign_work` findings and computes them again, so stale ones do not stay. A book whose
 findings name **two or more distinct foreign works** is a **lump suspect** (`lump_suspect` on its
 row): the shape of "X Men" holding several volumes' identifiers, or an omnibus holding its novellas'
-ISBNs. Telling a lump from an omnibus is later work.
+ISBNs. Telling a lump from an omnibus is later work. Lump suspects are a candidate list for a later
+AI check, not a verdict: Open Library keeps some translations as separate works, which rule 2a only
+partly catches.
 
 ## Cohorts
 

@@ -65,6 +65,26 @@ module Services
           assert_empty row.findings.foreign_work
         end
 
+        test "a work titled like a known translation of this book is not foreign" do
+          ::Books::EditionCandidate.create!(book: @book, edition_key: "OL5M", title: "Wer die Nachtigall stört")
+          ::Books::EditionCandidate.create!(book: @book, edition_key: "OL6M", title: "Krieg", subtitle: "und Frieden")
+          row = run_signals(
+            hits: {["isbn13", "9780140447934"] => [ol_hit("OL7W"), ol_hit("OL8W")]},
+            works: {"OL7W" => ol_work("OL7W", title: "Wer die Nachtigall stört"), "OL8W" => ol_work("OL8W", title: "Krieg: und Frieden")}
+          )
+
+          assert_empty row.findings.foreign_work
+        end
+
+        test "a leading article does not make a work foreign" do
+          book = ::Books::Book.create!(title: "The Bible")
+          row = ::Books::Verification.create!(book: book, work_outcome: :keyed, new_key: "OL1W", run_id: "r", stage: :signals)
+          Identifier.create!(identifiable: book, identifier_type: :books_work_isbn13, value: "9780140447934", source: :legacy)
+          Signals.call(verification: row, client: FakeOlClient.new(hits: {["isbn13", "9780140447934"] => [ol_hit("OL7W")]}, works: {"OL7W" => ol_work("OL7W", title: "Bible")}))
+
+          assert_empty row.reload.findings.foreign_work
+        end
+
         test "one identifier hitting two foreign works is one finding listing both, and a lump" do
           row = run_signals(
             hits: {["isbn13", "9780140447934"] => [ol_hit("OL8W"), ol_hit("OL7W")]},

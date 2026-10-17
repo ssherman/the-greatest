@@ -35,7 +35,7 @@ module Services
           hits = lookups(held).flat_map { |(type, value), found| found.map { |hit| [type, value, hit] } }
           foreign = hits.reject { |_type, _value, hit| ours?(hit) }
           works = foreign.empty? ? {} : @client.works_batch(foreign.map { |_t, _v, hit| hit.work_key }.uniq)
-          foreign = foreign.select { |_t, _v, hit| (work = works[hit.work_key]) && !Check.titles_agree?(@book, work) }
+          foreign = foreign.select { |_t, _v, hit| (work = works[hit.work_key]) && !known_translation?(work) && !titles_agree?(work) }
 
           # One finding per identifier, listing every foreign work it hits.
           by_identifier = foreign.group_by { |type, value, _hit| [type, value] }.transform_values do |rows|
@@ -62,6 +62,33 @@ module Services
             keys << @row.new_key if @row.new_key.present? && ::Books::Verification::SETTLED_FOR_EDITIONS.include?(@row.work_outcome)
             keys
           end
+        end
+
+        # A title the book's own edition candidates already carry is a known
+        # translation, whatever its language: Open Library keeps some as works.
+        def known_translation?(work)
+          theirs = Check.their_titles(work).first
+          theirs.present? && candidate_titles.include?(theirs)
+        end
+
+        def candidate_titles
+          @candidate_titles ||= ::Books::EditionCandidate.where(book_id: @book.id).pluck(:title, :subtitle).flat_map { |title, subtitle|
+            [Check.normalize(title), Check.normalize([title, subtitle.presence].compact.join(": "))]
+          }.compact.to_set
+        end
+
+        TitleLike = Data.define(:title, :alternate_titles)
+        WorkTitle = Data.define(:title, :subtitle)
+        LEADING_ARTICLE = /\A(the|a|an) /
+
+        # Check.titles_agree? with a leading article dropped from both sides.
+        def titles_agree?(work)
+          ours = TitleLike.new(title: drop_article(@book.title), alternate_titles: Array(@book.alternate_titles).map { |title| drop_article(title) })
+          Check.titles_agree?(ours, WorkTitle.new(title: drop_article(work.title), subtitle: work.subtitle))
+        end
+
+        def drop_article(title)
+          Check.normalize(title)&.sub(LEADING_ARTICLE, "")
         end
 
         def ours?(hit) = excluded_keys.include?(hit.work_key) || Array(hit.redirected_from).intersect?(excluded_keys)
