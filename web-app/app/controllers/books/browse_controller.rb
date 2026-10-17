@@ -5,8 +5,9 @@ class Books::BrowseController < ApplicationController
 
   layout "books/application"
 
-  before_action :redirect_to_canonical_form
-  before_action :cache_for_index_page
+  before_action :redirect_to_canonical_form, :cache_for_index_page, except: :search
+  # Hit as the reader types and keyed by a free-text query: never edge-cached.
+  before_action :prevent_caching, only: :search
   before_action :find_ranking_configuration
 
   TITLES = {
@@ -34,6 +35,18 @@ class Books::BrowseController < ApplicationController
       Books::BrowseQuery.categories(ranking_configuration: @ranking_configuration, type: @type, sort: @sort),
       limit: 120
     )
+    @chains = Books::CategoryChains.call(@records)
+  end
+
+  def search
+    @type = Books::BrowseQuery.normalized_type(params[:filter])
+    # params[:q] can arrive as an array or hash (?q[]=x); only a string is a query.
+    @query = params[:q].is_a?(String) ? params[:q] : ""
+    @indexable = false
+    @page_title = "Search categories"
+    @records = Books::BrowseQuery.search(
+      ranking_configuration: @ranking_configuration, query: @query, type: @type
+    ).to_a
     @chains = Books::CategoryChains.call(@records)
   end
 

@@ -1066,6 +1066,9 @@ Rails.application.routes.draw do
     get "genres/:id", to: "books/legacy_categories#show"
 
     get "categories", to: "books/browse#categories", as: :books_categories
+    # Declared before the optional-segment routes below, which would not match
+    # it anyway (sort and page are constrained) but should never get the chance.
+    get "categories/search", to: "books/browse#search", as: :books_categories_search
     get "categories(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",
       constraints: {sort: browse_sort, page: /\d+/}
     get "categories/settings(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",

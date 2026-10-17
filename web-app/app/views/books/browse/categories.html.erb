@@ -8,23 +8,25 @@
   <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @page_title %></h1>
 
   <%= render Books::BrowseToolbarComponent.new(
-        axis: :categories, type: @type, sort: @sort, show_types: true
+        axis: :categories, type: @type, sort: @sort, show_types: true, search: true
       ) %>
 
-  <% if @records.any? %>
-    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-      <% @records.each do |record| %>
-        <%= render Books::BrowseCardComponent.new(
-              record: record, count: record.ranked_count, path: Books::FilterPath.call(categories: [record]),
-              chain: @chains.fetch(record.id, [])
-            ) %>
-      <% end %>
-    </div>
+  <%= turbo_frame_tag Books::BrowseToolbarComponent::RESULTS_FRAME, target: "_top", class: "block space-y-8" do %>
+    <% if @records.any? %>
+      <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <% @records.each do |record| %>
+          <%= render Books::BrowseCardComponent.new(
+                record: record, count: record.ranked_count, path: Books::FilterPath.call(categories: [record]),
+                chain: @chains.fetch(record.id, [])
+              ) %>
+        <% end %>
+      </div>
 
-    <div class="flex justify-center">
-      <%== @pagy.series_nav(slots: 5) %>
-    </div>
-  <% else %>
-    <p class="text-center text-base-content/70 py-16">Nothing to browse here yet.</p>
+      <div class="flex justify-center">
+        <%== @pagy.series_nav(slots: 5) %>
+      </div>
+    <% else %>
+      <p class="text-center text-base-content/70 py-16">Nothing to browse here yet.</p>
+    <% end %>
   <% end %>
 </div>

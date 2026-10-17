@@ -72,6 +72,17 @@ module Books
       ::Books::BookType::LABELS.keys.filter_map { |value| ::Books::BookType.category_id(value) }
     end
 
+    # Every category type is badged on a search result, so a row always says what
+    # it is -- the Category axis spans genres, subjects and settings, and an
+    # unbadged row is indistinguishable from the badged ones around it. Only the
+    # wording is overridden: "Setting" reads better than "Location" for a place a
+    # book is set in. Every other type is its own titleized name.
+    TYPE_LABELS = {"location" => "Setting"}.freeze
+
+    def type_label
+      TYPE_LABELS.fetch(category_type.to_s) { category_type.to_s.titleize }
+    end
+
     # Nearest first: Chicago -> [Illinois, United States, North America].
     def ancestors
       chain = []

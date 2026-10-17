@@ -14,8 +14,23 @@
     </nav>
   <% end %>
 
-  <div class="flex flex-wrap items-center justify-end gap-3">
-    <details class="dropdown dropdown-end">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <% if search %>
+      <%# No submit button: Enter submits. The type rides along so a result list
+          ranks the reader's current tab first. GET forms carry no token. %>
+      <%= form_with url: helpers.books_categories_search_path, method: :get,
+            class: "w-full sm:w-auto sm:min-w-72",
+            data: {turbo_frame: RESULTS_FRAME} do %>
+        <label class="input input-sm w-full">
+          <svg class="h-4 w-4 opacity-60" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          <span class="sr-only">Search categories</span>
+          <%= search_field_tag :q, query, id: "categories_search", placeholder: "Search categories…", autocomplete: "off", maxlength: Books::BrowseQuery::SEARCH_MAX_LENGTH %>
+        </label>
+        <%= hidden_field_tag :filter, type, id: nil %>
+      <% end %>
+    <% end %>
+
+    <details class="dropdown dropdown-end ml-auto">
       <summary class="btn btn-sm">
         <span data-testid="sort-label">Sort: <%= SORT_LABELS.fetch(sort) %></span>
         <span data-testid="sort-caret" aria-hidden="true">▾</span>

@@ -2,6 +2,20 @@ require "test_helper"
 
 module Books
   class BrowseToolbarComponentTest < ViewComponent::TestCase
+    test "search form targets the results frame and keeps the current type" do
+      render_inline(Books::BrowseToolbarComponent.new(axis: :categories, type: "location", sort: "name",
+        show_types: true, search: true, query: "par"))
+      assert_selector "form[action='/categories/search'][method=get][data-turbo-frame=categories_results]"
+      assert_selector "input[type=search][name=q][value=par][placeholder='Search categories…']"
+      assert_selector "input[type=hidden][name=filter][value=location]", visible: :all
+      assert_selector "label", text: "Search categories", visible: :all
+    end
+
+    test "no search form unless asked" do
+      render_inline(Books::BrowseToolbarComponent.new(axis: :categories, type: "genre", sort: "name"))
+      assert_no_selector "form"
+    end
+
     test "the default type and sort omit both segments from every active link" do
       render_inline(Books::BrowseToolbarComponent.new(
         axis: :categories,

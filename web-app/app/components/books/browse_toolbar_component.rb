@@ -2,17 +2,22 @@ module Books
   class BrowseToolbarComponent < ViewComponent::Base
     TYPE_LABELS = {"genre" => "Genres", "location" => "Settings", "subject" => "Subjects"}.freeze
     SORT_LABELS = {"book_count" => "Most books", "name" => "A–Z"}.freeze
+    # The turbo-frame the grid and the search results both render into, so a
+    # search response (a full page) can be unwrapped to just this frame.
+    RESULTS_FRAME = "categories_results".freeze
 
-    def initialize(axis:, sort:, type: nil, show_types: false)
+    def initialize(axis:, sort:, type: nil, show_types: false, search: false, query: nil)
       @axis = axis
       @sort = sort
       @type = type
       @show_types = show_types
+      @search = search
+      @query = query
     end
 
     private
 
-    attr_reader :axis, :sort, :type, :show_types
+    attr_reader :axis, :sort, :type, :show_types, :search, :query
 
     def type_links
       TYPE_LABELS.map do |value, label|

@@ -178,6 +178,54 @@ module Books
       assert_select "a[href='/the-greatest/fiction/books']", false
     end
 
+    test "search finds a category, uncached and noindex" do
+      get "/categories/search", params: {q: "polit"}
+      assert_response :success
+      assert_select "turbo-frame#categories_results[target=_top] a[href='/the-greatest/politics/books']"
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+      assert_select "meta[name=robots][content^=noindex]"
+    end
+
+    test "search labels each result with its type" do
+      get "/categories/search", params: {q: "polit"}
+      assert_select "#categories_results .badge", text: "Subject"
+    end
+
+    test "search says how many categories match, escaping the query" do
+      get "/categories/search", params: {q: "polit"}
+      assert_select "#categories_results [aria-live=polite]", text: /1 category matches/
+
+      get "/categories/search", params: {q: "<b>zz</b>"}
+      assert_select "#categories_results [aria-live=polite]", text: /No categories match/
+      assert_select "#categories_results b", count: 0
+    end
+
+    test "a too-short query asks for more characters" do
+      get "/categories/search", params: {q: "p"}
+      assert_select "#categories_results [aria-live=polite]", text: /at least 2 characters/
+    end
+
+    test "a missing, blank or oversized q renders without cards" do
+      ["", "   ", nil, "x" * 500].each do |q|
+        get "/categories/search", params: {q: q}.compact
+        assert_response :success
+        assert_select "#categories_results a[href^='/the-greatest/']", count: 0
+      end
+    end
+
+    test "the browse grid sits in the same _top frame" do
+      get "/categories"
+      assert_select "turbo-frame#categories_results[target=_top]"
+    end
+
+    test "no frame-trapped links on the grid" do
+      assert_no_frame_trapped_links "/categories"
+    end
+
+    test "no frame-trapped links on search results" do
+      assert_no_frame_trapped_links "/categories/search?q=polit"
+    end
+
     test "countries renders and links to single-facet filter URLs" do
       get "/countries"
 

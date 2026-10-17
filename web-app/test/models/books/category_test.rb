@@ -210,5 +210,11 @@ module Books
       assert child.update(name: "Wars and Battles")
       assert_equal parent.id, child.reload.parent_id
     end
+
+    test "type_label calls a location a Setting and titleizes the rest" do
+      assert_equal "Setting", categories(:books_france_location).type_label
+      assert_equal "Subject", categories(:books_politics_subject).type_label
+      assert_equal "Genre", categories(:books_fiction_genre).type_label
+    end
   end
 end
