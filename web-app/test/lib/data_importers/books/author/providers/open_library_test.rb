@@ -59,6 +59,14 @@ module DataImporters
             assert_not_requested(:get, %r{#{BASE_URL}/authors/}o)
           end
 
+          test "the author key is written as open_library" do
+            author = ::Books::Author.new(name: "Lev Tolstoy")
+
+            @provider.populate(author, query: ImportQuery.new(name: "Lev Tolstoy", open_library_author_key: "OL26783A"), match: match_with(ol_author))
+
+            assert author.identifiers.find { |i| i.identifier_type == "books_author_openlibrary_id" }.source_open_library?
+          end
+
           test "never overwrites a populated name or year, and skips alternate names it already holds" do
             author = books_authors(:tolstoy)
             author.update!(birth_year: 1827)

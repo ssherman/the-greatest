@@ -6,6 +6,7 @@
 #  identifiable_type :string           not null
 #  identifier_type   :integer          not null
 #  value             :string           not null
+#  source            :integer
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
 #  identifiable_id   :bigint           not null
@@ -80,6 +81,38 @@ class Identifier < ApplicationRecord
     games_rawg_id: 401,
     games_igdb_company_id: 410
   }
+
+  # Who attached the identifier (identifier provenance spec, section 1).
+  # Books rows only; music and games stay nil. Everything that existed
+  # before provenance is legacy (identifiers:mark_legacy).
+  enum :source, {
+    legacy: 0,
+    open_library: 1,
+    worldcat: 2,
+    goodreads_import: 3,
+    amazon: 4,
+    wikidata: 5,
+    viaf: 6
+  }, prefix: true
+
+  BOOKS_TYPES = %w[Books::Book Books::Edition Books::Author Books::Series].freeze
+  VERIFIED_SOURCES = %w[open_library worldcat].freeze
+
+  # A source an independent catalogue tied to the record by title, author
+  # and year. What the Goodreads rebuild's matcher reads.
+  scope :verified, -> { where(source: VERIFIED_SOURCES) }
+  scope :unverified, -> { where(source: nil).or(where.not(source: VERIFIED_SOURCES)) }
+
+  # For keeping the better of two rows holding the same value (mergers):
+  # verified 3, any other source 2, legacy 1, nil 0.
+  def self.trust_rank(source)
+    source = source&.to_s
+    return 0 if source.nil?
+    return 3 if VERIFIED_SOURCES.include?(source)
+    return 1 if source == "legacy"
+
+    2
+  end
 
   # Validations
   validates :identifiable, presence: true

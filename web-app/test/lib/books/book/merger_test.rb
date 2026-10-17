@@ -8,6 +8,23 @@ module Books
         @target = books_books(:war_and_peace)
       end
 
+      test "the merged-away book's verification, findings and candidates go; the target's stay" do
+        source_row = ::Books::Verification.create!(book: @source, work_outcome: :keyed, run_id: "r")
+        target_row = ::Books::Verification.create!(book: @target, work_outcome: :keyed, run_id: "r")
+        ::Books::VerificationFinding.create!(verification: source_row, book: @source, kind: :added, identifier_type: :books_work_isbn13, value: "1")
+        pointing = ::Books::VerificationFinding.create!(verification: target_row, book: @target, kind: :also_held,
+          identifier_type: :books_work_isbn13, value: "2", other_book_id: @source.id)
+        kept = ::Books::VerificationFinding.create!(verification: target_row, book: @target, kind: :added, identifier_type: :books_work_isbn13, value: "3")
+        ::Books::EditionCandidate.create!(book: @source, edition_key: "OL1M")
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not ::Books::Verification.exists?(source_row.id)
+        assert_not ::Books::VerificationFinding.exists?(pointing.id)
+        assert ::Books::VerificationFinding.exists?(kept.id)
+        assert_equal 0, ::Books::EditionCandidate.where(book_id: @source.id).count
+      end
+
       test "merges successfully and returns the target book" do
         result = ::Books::Book::Merger.call(source: @source, target: @target)
 
@@ -184,6 +201,32 @@ module Books
           identifiable_type: "Books::Book", identifiable_id: @target.id,
           identifier_type: "books_work_isbn10", value: "0140449132"
         ).count
+      end
+
+      test "a duplicate identifier keeps the more trusted source" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_work_isbn10, value: "0140449132", source: :open_library)
+        Identifier.create!(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132", source: :legacy)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal ["open_library"], Identifier.where(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132").pluck(:source)
+      end
+
+      test "a less trusted duplicate never downgrades the target's row" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_work_isbn10, value: "0140449132", source: :legacy)
+        Identifier.create!(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132", source: :worldcat)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal ["worldcat"], Identifier.where(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132").pluck(:source)
+      end
+
+      test "a moved identifier keeps its source" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_work_oclc_id, value: "424242", source: :worldcat)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert Identifier.find_by!(identifiable: @target, identifier_type: :books_work_oclc_id, value: "424242").source_worldcat?
       end
 
       test "moves a country the target does not already have" do

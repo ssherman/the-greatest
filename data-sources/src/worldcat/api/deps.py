@@ -57,7 +57,7 @@ class Settings:
     memory_limit: str = "2GB"
     temp_dir: Path = field(default_factory=lambda: Path(tempfile.gettempdir()))
     threads: int = 2
-    deadline_s: float = 5.0
+    deadline_s: float = 25.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -73,7 +73,7 @@ class Settings:
             memory_limit=os.environ.get("WC_API_MEMORY_LIMIT") or "2GB",
             temp_dir=Path(os.environ.get("WC_API_TEMP_DIR") or tempfile.gettempdir()),
             threads=_positive_env("WC_API_THREADS", int, 2),
-            deadline_s=_positive_env("WC_API_DEADLINE_S", float, 5.0),
+            deadline_s=_positive_env("WC_API_DEADLINE_S", float, 25.0),
         )
 
 
@@ -83,7 +83,7 @@ class ArtifactState:
     connection: duckdb.DuckDBPyConnection
     manifest: dict
     report: dict
-    deadline_s: float = 5.0
+    deadline_s: float = 25.0
 
 
 def _read_json(path: Path) -> dict:

@@ -8,9 +8,10 @@ module DataImporters
       class Importer < DataImporters::ImporterBase
         def self.call(title: nil, subtitle: nil, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [],
           open_library_work_key: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false,
-          match: nil, provisional: false, stamp_identifiers: false, enrich: true, trust_work_key: false)
+          match: nil, provisional: false, stamp_identifiers: false, enrich: true, trust_work_key: false,
+          query_identifier_source: :goodreads_import)
           importer = new(provisional: provisional, stamp_identifiers: stamp_identifiers, enrich: enrich,
-            trust_work_key: trust_work_key)
+            trust_work_key: trust_work_key, query_identifier_source: query_identifier_source)
           if item.present?
             importer.call(item: item, force_providers: force_providers, providers: providers)
           else
@@ -37,12 +38,17 @@ module DataImporters
         # enrich: false skips AiEnrichment and AuthorEnrichment; an import's
         # enrichment runs on admin approval instead. trust_work_key: the
         # query's Open Library work key wins over the service's decision (a
-        # person confirmed it; the list wizard).
-        def initialize(provisional: false, stamp_identifiers: false, enrich: true, trust_work_key: false)
+        # person confirmed it; the list wizard). query_identifier_source: the
+        # source given to the query's own identifiers (the caller's claim,
+        # not Open Library's). Only the Goodreads import passes identifiers
+        # today.
+        def initialize(provisional: false, stamp_identifiers: false, enrich: true, trust_work_key: false,
+          query_identifier_source: :goodreads_import)
           @provisional = provisional
           @stamp_identifiers = stamp_identifiers
           @enrich = enrich
           @trust_work_key = trust_work_key
+          @query_identifier_source = query_identifier_source
         end
 
         def call(**)
@@ -71,10 +77,11 @@ module DataImporters
         def providers
           @providers ||= begin
             list = [
-              Providers::OpenLibrary.new(new_author_ids: new_author_ids, provisional: @provisional, trust_work_key: @trust_work_key),
+              Providers::OpenLibrary.new(new_author_ids: new_author_ids, provisional: @provisional, trust_work_key: @trust_work_key,
+                query_identifier_source: @query_identifier_source),
               Providers::Authors.new(new_author_ids: new_author_ids, provisional: @provisional)
             ]
-            list << Providers::QueryIdentifiers.new if @stamp_identifiers
+            list << Providers::QueryIdentifiers.new(source: @query_identifier_source) if @stamp_identifiers
             if @enrich
               list << Providers::AiEnrichment.new(new_author_ids: new_author_ids)
               list << Providers::AuthorEnrichment.new(new_author_ids: new_author_ids)

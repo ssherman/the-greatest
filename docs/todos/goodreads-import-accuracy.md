@@ -209,6 +209,13 @@ check when designing this:
 - Can it still stamp a row's identifiers onto a book whose title and author do not match the row?
 - The open member-import items under "Goodreads import: before the cutover" in `docs/todo.md`.
 
+## Available now: the verification pass
+
+`docs/features/book-verification.md` gives a rebuild these to build on: `Identifier.verified`
+(`open_library` and `worldcat` sources), `books_verification_findings` (`wrong_identifier`,
+`foreign_work`, `also_held`, `conflict`), `books_verifications.lump_suspect`, and
+`books_edition_candidates` (editions that did not agree with the book, kept out of `identifiers`).
+
 ## Where things are
 
 - Spec: `docs/superpowers/specs/2026-10-03-goodreads-import-design.md` (§12 is the replay).

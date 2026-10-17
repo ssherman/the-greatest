@@ -129,9 +129,9 @@ module Services
       def upsert_identifier(edition, identifier_type, value)
         return if value.blank?
 
-        edition.identifiers
-          .find_or_initialize_by(identifier_type: identifier_type, value: value)
-          .save!
+        identifier = edition.identifiers.find_or_initialize_by(identifier_type: identifier_type, value: value)
+        identifier.source = :amazon if identifier.new_record?
+        identifier.save!
       end
 
       # ---- product reads --------------------------------------------------

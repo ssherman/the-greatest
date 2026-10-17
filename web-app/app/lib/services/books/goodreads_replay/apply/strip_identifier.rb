@@ -15,6 +15,9 @@ module Services
         # bare id): when nothing it names is left to remove, the identifier was
         # already replaced or moved elsewhere (a relink took it to the right
         # book), so nothing is added either.
+        #
+        # Added identifiers come from a Goodreads export row, attached by the
+        # replay's own matcher: goodreads_import.
         class StripIdentifier
           Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -41,7 +44,7 @@ module Services
               Array(add).each do |type, value|
                 next if book.identifiers.exists?(identifier_type: type, value: value)
 
-                ::Identifier.create!(identifiable: book, identifier_type: type, value: value)
+                ::Identifier.create!(identifiable: book, identifier_type: type, value: value, source: :goodreads_import)
                 changed += 1
               end
             end

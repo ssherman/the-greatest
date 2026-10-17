@@ -150,7 +150,7 @@ namespace :e2e do
     author.enrichments.each(&:destroy!)
     MatchDecision.where(subject: author).each(&:destroy!)
 
-    author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: REJECT_LINK_QID)
+    author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: REJECT_LINK_QID, source: :wikidata)
     author.external_links.create!(url: REJECT_LINK_URL, name: "Wikipedia", source: :wikipedia, link_category: :information)
     decision = MatchDecision.create!(
       finder: "Services::Books::Authors::ResolveWikidata", subject: author, record: nil, outcome: :matched,

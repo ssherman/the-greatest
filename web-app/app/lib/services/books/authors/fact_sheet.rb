@@ -14,8 +14,11 @@ module Services
 
         attr_reader :author, :facts, :applied
 
-        def initialize(author)
+        # source: who the stamped ids come from (:wikidata or :viaf). A sheet
+        # that never stamps an id (the AI facts step) has none.
+        def initialize(author, source: nil)
           @author = author
+          @source = source
           @facts = {}
           @applied = []
           @collisions = {}
@@ -43,7 +46,10 @@ module Services
             return "held_by_other"
           end
 
-          author.identifiers.find_or_initialize_by(identifier_type: type, value: value)
+          raise ArgumentError, "a FactSheet with no source cannot stamp #{type}" if @source.nil?
+
+          identifier = author.identifiers.find_or_initialize_by(identifier_type: type, value: value)
+          identifier.source = @source if identifier.new_record?
           "filled"
         end
 

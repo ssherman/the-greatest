@@ -21,6 +21,10 @@ module Services
           "Services::Books::Authors::ResolveWikidata" => "books_author_wikidata_qid",
           "Services::Books::Authors::ResolveViaf" => "books_author_viaf"
         }.freeze
+        SOURCES = {
+          "Services::Books::Authors::ResolveWikidata" => :wikidata,
+          "Services::Books::Authors::ResolveViaf" => :viaf
+        }.freeze
 
         def self.call(author:, finder:)
           new(author: author, finder: finder.to_s).call
@@ -42,7 +46,7 @@ module Services
           decision, value = candidate
           return nil if value.nil?
 
-          @author.identifiers.create!(identifier_type: @type, value: value)
+          @author.identifiers.create!(identifier_type: @type, value: value, source: SOURCES.fetch(@finder))
           {"value" => value, "applied" => true, "reason" => "earlier_decision", "decision_id" => decision.id}
         end
 

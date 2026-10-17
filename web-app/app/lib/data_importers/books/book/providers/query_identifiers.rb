@@ -9,7 +9,12 @@ module DataImporters
         # only on an accept, so a book created while the service is down or
         # abstaining could never be found again by the identifier it came in
         # with. Runs only when the importer is asked to (stamp_identifiers).
+        # A new row takes `source` (the caller's); a held row keeps its own.
         class QueryIdentifiers < DataImporters::ProviderBase
+          def initialize(source: :goodreads_import)
+            @source = source
+          end
+
           def populate(book, query:, match: nil)
             return success_result(data_populated: []) if query.nil?
 
@@ -17,7 +22,10 @@ module DataImporters
             Providers::OpenLibrary::IDENTIFIER_TYPE_BY_QUERY_FIELD.each do |field, identifier_type|
               Array(query.public_send(field)).each do |value|
                 identifier = book.identifiers.find_or_initialize_by(identifier_type: identifier_type, value: value)
-                stamped << identifier_type.to_s if identifier.new_record?
+                next unless identifier.new_record?
+
+                identifier.source = @source
+                stamped << identifier_type.to_s
               end
             end
             success_result(data_populated: stamped.uniq)
