@@ -42,6 +42,8 @@ class Books::BrowseController < ApplicationController
     @type = Books::BrowseQuery.normalized_type(params[:filter])
     # params[:q] can arrive as an array or hash (?q[]=x); only a string is a query.
     @query = params[:q].is_a?(String) ? params[:q] : ""
+    # What the status line quotes and what is searched: trimmed and capped.
+    @term = @query.strip.first(Books::BrowseQuery::SEARCH_MAX_LENGTH)
     @indexable = false
     @page_title = "Search categories"
     @records = Books::BrowseQuery.search(
@@ -68,8 +70,8 @@ class Books::BrowseController < ApplicationController
   # params folds into that URL with a single 301. Two shapes reach it:
   #
   # The query form: PR #204 published /genres?filter=location before the path
-  # grammar was routed, and /categories?filter=subject is the same mistake made
-  # again. Collapsing it leaves one canonical shape and stops a crawler minting
+  # grammar was routed, and /categories?filter=subject is the same query-string
+  # shape on the new base. Collapsing it leaves one canonical shape and stops a crawler minting
   # query-string variants of a page this branch makes more crawlable. (The
   # /genres family itself is redirected by routes.rb before it gets here.)
   #
@@ -85,7 +87,8 @@ class Books::BrowseController < ApplicationController
   # such as /categories/settings the same values arrive as PATH parameters, and
   # reading params for that test would redirect every routed request to itself
   # forever. The path half needs no such care: it compares the finished target
-  # with request.path, so a canonical request never matches.
+  # with request.path. A canonical request's target always equals its own path,
+  # so it is never redirected -- which is what keeps this from looping.
   #
   # Declared above cache_for_index_page so a 301 is not decorated with 6-hour
   # public edge-cache headers.

@@ -79,8 +79,6 @@ module Books
     end
     private_class_method :ranked_book_ids_sql
 
-    # candidate_ids_sql, when given, limits which categories the subquery counts.
-    # It only narrows the rows; each surviving category's count is unchanged.
     # 0 name equals, 1 name starts with, 2 a word in the name starts with,
     # 3 name contains, 4 matched only through alternative_names. Takes the
     # LIKE-escaped query and binds it, so no user text is interpolated.
@@ -97,6 +95,10 @@ module Books
     end
     private_class_method :name_match_quality_sql
 
+    # candidate_ids_sql, when given, limits which categories the subquery counts.
+    # It only narrows the rows; each surviving category's count is unchanged.
+    # It is interpolated raw, so it must come from a relation's `to_sql`, never
+    # from user text.
     def self.ranked_scope(ranking_configuration, candidate_ids_sql: nil)
       candidate_filter = "AND category_id IN (#{candidate_ids_sql})" if candidate_ids_sql
 

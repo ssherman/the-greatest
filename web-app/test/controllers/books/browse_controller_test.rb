@@ -214,6 +214,32 @@ module Books
       assert_select "#categories_results [aria-live]", count: 0
     end
 
+    test "a result list that hit the cap says it is showing the top matches" do
+      record = Books::BrowseQuery.search(
+        ranking_configuration: @rc, query: "polit"
+      ).to_a.first
+      Books::BrowseQuery.stubs(:search).returns([record] * Books::BrowseQuery::SEARCH_LIMIT)
+
+      get "/categories/search", params: {q: "polit"}
+
+      assert_select "#categories_results [data-search-status]", text: /\AShowing the top #{Books::BrowseQuery::SEARCH_LIMIT} matches for “polit”\z/
+    end
+
+    test "search marks no type tab as current but keeps the type for ordering" do
+      get "/categories/search", params: {q: "polit", filter: "subject"}
+
+      assert_select "nav[aria-label='Category type'] a.tab", count: 3
+      assert_select "a.tab[aria-current]", count: 0
+      assert_select ".tab-active", count: 0
+      assert_select "form input[type=hidden][name=filter][value=subject]", count: 1
+    end
+
+    test "the grid page still marks its type tab as current" do
+      get "/categories/subjects"
+
+      assert_select "a.tab[aria-current=page]", text: "Subjects"
+    end
+
     test "the search page links back to browsing and has no sort menu" do
       get "/categories/search", params: {q: "polit"}
       assert_select "nav[aria-label='Category type'] a.tab", count: 3
@@ -363,7 +389,7 @@ module Books
       assert_redirected_to "/countries/sorted-by/name"
     end
 
-    # Every /categories shape except /categories/:id is a route-level redirect straight
+    # Every /genres and /genres/:id shape is a route-level redirect straight
     # to the final /categories URL. BrowsePath never emits /page/1 and the
     # default sort and type never appear in a path, so a non-canonical request
     # to /categories itself folds in the same single hop.
