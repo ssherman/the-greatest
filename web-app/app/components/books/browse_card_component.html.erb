@@ -1,6 +1,12 @@
 <%= link_to path, class: "card bg-base-100 border border-base-300 hover:border-primary transition-colors" do %>
   <div class="card-body p-4">
-    <h2 class="card-title text-base"><%= record.name %></h2>
+    <% if label.present? %>
+      <span class="badge badge-ghost badge-sm"><%= label %></span>
+    <% end %>
+    <h2 class="card-title text-base [overflow-wrap:anywhere]"><%= record.name %></h2>
+    <% if chain.any? %>
+      <p class="text-xs text-base-content/60 [overflow-wrap:anywhere]" data-testid="browse-card-chain"><%= chain_content %></p>
+    <% end %>
     <p class="text-sm text-base-content/70"><%= pluralize(number_with_delimiter(count), "book") %></p>
   </div>
 <% end %>

@@ -5,8 +5,9 @@ class Books::BrowseController < ApplicationController
 
   layout "books/application"
 
-  before_action :redirect_to_canonical_form
-  before_action :cache_for_index_page
+  before_action :redirect_to_canonical_form, :cache_for_index_page, except: :search
+  # Hit as the reader types and keyed by a free-text query: never edge-cached.
+  before_action :prevent_caching, only: :search
   before_action :find_ranking_configuration
 
   TITLES = {
@@ -17,7 +18,7 @@ class Books::BrowseController < ApplicationController
 
   QUERY_FORM_KEYS = %w[filter sort page].freeze
 
-  def genres
+  def categories
     @type = Books::BrowseQuery.normalized_type(params[:filter])
     @sort = Books::BrowseQuery.normalized_sort(params[:sort])
     # A sorted variant is NOT the same result set reordered -- this list
@@ -28,12 +29,27 @@ class Books::BrowseController < ApplicationController
     @page_title = TITLES.fetch(@type)
     # The sort is deliberately dropped: a sort variant is the same result set
     # reordered, so it canonicalizes to the unsorted path.
-    @canonical_path = Books::BrowsePath.call(axis: :genres, type: @type, page: page_number)
+    @canonical_path = Books::BrowsePath.call(axis: :categories, type: @type, page: page_number)
 
     @pagy, @records = pagy_path(
       Books::BrowseQuery.categories(ranking_configuration: @ranking_configuration, type: @type, sort: @sort),
       limit: 120
     )
+    @chains = Books::CategoryChains.call(@records)
+  end
+
+  def search
+    @type = Books::BrowseQuery.normalized_type(params[:filter])
+    # params[:q] can arrive as an array or hash (?q[]=x); only a string is a query.
+    @query = params[:q].is_a?(String) ? params[:q] : ""
+    # What the status line quotes and what is searched: trimmed and capped.
+    @term = @query.strip.first(Books::BrowseQuery::SEARCH_MAX_LENGTH)
+    @indexable = false
+    @page_title = "Search categories"
+    @records = Books::BrowseQuery.search(
+      ranking_configuration: @ranking_configuration, query: @query, type: @type
+    ).to_a
+    @chains = Books::CategoryChains.call(@records)
   end
 
   def countries
@@ -50,37 +66,42 @@ class Books::BrowseController < ApplicationController
 
   private
 
-  # Two non-canonical shapes fold into the path form here.
+  # Any request whose URL is not the one BrowsePath would build for its own
+  # params folds into that URL with a single 301. Two shapes reach it:
   #
-  # The query form: PR #204 published /genres?filter=location before the legacy
-  # path grammar was routed. Collapsing it leaves one canonical shape and stops a
-  # crawler minting query-string variants of a page this branch makes more
-  # crawlable.
+  # The query form: PR #204 published /genres?filter=location before the path
+  # grammar was routed, and /categories?filter=subject is the same query-string
+  # shape on the new base. Collapsing it leaves one canonical shape and stops a crawler minting
+  # query-string variants of a page this branch makes more crawlable. (The
+  # /genres family itself is redirected by routes.rb before it gets here.)
   #
-  # Page one: BrowsePath never emits /page/1, so every .../page/1 URL is a
-  # crawler-constructed duplicate of its own base. Every other paginated family
-  # normalizes this with a literal `page/1` redirect route, but browse has EIGHT
-  # paginated shapes to their one, so one guard here beats eight route entries --
-  # and it cannot be forgotten when a shape is added.
+  # Non-canonical path forms: BrowsePath never emits /page/1, nor a path for the
+  # default sort or type, so /categories/page/1 and /categories/sorted-by/book_count
+  # are crawler-constructed duplicates of their own base. Every other paginated
+  # family normalizes this with a literal `page/1` redirect route, but browse has
+  # a dozen paginated shapes to their one, so comparing the request path with the
+  # canonical target here beats a route entry per shape -- and it cannot be
+  # forgotten when a shape is added.
   #
   # request.query_parameters, NOT params, for the query half: on a routed path
-  # such as /genres/filtered-by/location the same values arrive as PATH
-  # parameters, and reading params would redirect every routed request to itself
-  # forever. Page one is the deliberate exception -- it is read from params
-  # precisely because it arrives as a path segment, and BrowsePath drops it, so
-  # the target always differs from the request.
+  # such as /categories/settings the same values arrive as PATH parameters, and
+  # reading params for that test would redirect every routed request to itself
+  # forever. The path half needs no such care: it compares the finished target
+  # with request.path. A canonical request's target always equals its own path,
+  # so it is never redirected -- which is what keeps this from looping.
   #
   # Declared above cache_for_index_page so a 301 is not decorated with 6-hour
   # public edge-cache headers.
   def redirect_to_canonical_form
-    return if request.query_parameters.slice(*QUERY_FORM_KEYS).empty? && page_number != 1
-
-    redirect_to Books::BrowsePath.call(
+    target = Books::BrowsePath.call(
       axis: action_name.to_sym,
       type: params[:filter],
       sort: params[:sort],
       page: params[:page]
-    ), status: :moved_permanently
+    )
+    return if request.query_parameters.slice(*QUERY_FORM_KEYS).empty? && target == request.path
+
+    redirect_to target, status: :moved_permanently
   end
 
   def find_ranking_configuration

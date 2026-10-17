@@ -82,6 +82,16 @@ so users keep legacy's book; for 3,581 of them that book has a completely differ
 collapses, wrong identifiers, translation duplicates and the silent `duplicates` task are part of
 it too. Summary for brainstorming: `docs/todos/goodreads-import-accuracy.md`.
 
+## Music and games
+
+**categories index pages for music and games** — books gets its `/categories` page first.
+Build these from the same components once that ships. Neither site's ranked list can filter
+by category yet, so a card has to link to the existing `/categories/:slug` show page unless
+that filtering is built first. There is no hierarchy on either site, so the parent chain
+under each card has nothing to show. Dev, 2026-10-17: music has 763 genres (536 with ranked albums);
+its locations tag artists only, so an albums index has no Settings tab. Games has 58
+categories across genre, theme, game mode and player perspective.
+
 ## Data importers
 - google books integration
 - **port the legacy add-book modal** (Goodreads URL, Amazon URL, or title and author). A non-goal of
@@ -94,11 +104,24 @@ it too. Summary for brainstorming: `docs/todos/goodreads-import-accuracy.md`.
 - Authors Duplicate fixer
 - Invalid Book Finder
 - old archived ranking configurations
+- **clean junk `alternative_names` off books categories.** Past merges copied the merged
+  category's whole name into the survivor's aliases. Some are real old names ("Calcutta" →
+  Kolkata), but many are not: Europe carries "World War I Europe", "1. Europe" and
+  "Europe  " (trailing spaces), and the Political genre carries "European Politics Books".
+  The `/categories` search ranks alias-only matches last so they no longer lead, but they
+  still pad the tail of results ("war" finds Europe) and pollute anything else that matches
+  on aliases (the filter modal's category search, `by_alternative_name`). Probably a
+  rules pass (exact duplicates, whitespace variants, numbering prefixes) plus an AI review
+  of the rest, like the category cleanup.
 
-## Product
+## Site UI
 
-- recommendations
-- add list wizard
+- **`<details>` menus don't close on an outside click or Escape.** The books nav "Lists"
+  dropdown and the `/categories` sort menu are both plain `<details class="dropdown">`, so
+  once opened they stay open until the summary is clicked again. Fix once, for every
+  `<details>` dropdown: a small shared Stimulus controller that closes on outside click,
+  Escape and `turbo:before-cache` (the sort menu's `books--dropdown-close` already does the
+  last one and could become it).
 
 ## Growth and infra
 
@@ -112,6 +135,5 @@ it too. Summary for brainstorming: `docs/todos/goodreads-import-accuracy.md`.
 
 - new books added are not automatically enriched
 - category importer
-- category cleanup
 - import from storygraph
 - series import (use goodreads data)

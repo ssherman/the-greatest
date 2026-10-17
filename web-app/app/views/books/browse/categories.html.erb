@@ -1,0 +1,25 @@
+<%
+  content_for :page_title, "#{@page_title} | The Greatest Books"
+  content_for :meta_description, "Browse #{@page_title.downcase} and see how many books each covers."
+  content_for :canonical_url, request.base_url + @canonical_path if @canonical_path
+%>
+
+<div class="space-y-8">
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @page_title %></h1>
+
+  <%= render Books::BrowseToolbarComponent.new(
+        axis: :categories, type: @type, sort: @sort, show_types: true, search: true, browse_path: request.path
+      ) %>
+
+  <%= turbo_frame_tag Books::BrowseToolbarComponent::RESULTS_FRAME, target: "_top", class: "block space-y-8" do %>
+    <% if @records.any? %>
+      <%= render "books/browse/category_grid", records: @records, chains: @chains, show_type: false %>
+
+      <div class="flex justify-center">
+        <%== @pagy.series_nav(slots: 5) %>
+      </div>
+    <% else %>
+      <p class="text-center text-base-content/70 py-16">Nothing to browse here yet.</p>
+    <% end %>
+  <% end %>
+</div>

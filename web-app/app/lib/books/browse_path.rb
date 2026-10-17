@@ -1,13 +1,32 @@
 module Books
-  # Builds the legacy browse grammar (/genres/filtered-by/:filter/sorted-by/:sort).
-  # Mirrors Books::FilterPath: the routes are unnamed, so this PORO is the only
-  # place the grammar is spelled out. Values normalize through BrowseQuery, so an
-  # unknown filter or sort collapses to the default instead of reaching a path.
+  # Builds the browse paths: /categories[/settings|/subjects][/sorted-by/:sort]
+  # [/page/:n] and /countries[/sorted-by/:sort][/page/:n]. Mirrors
+  # Books::FilterPath: the parameterised routes are unnamed, so this PORO is the
+  # only place the grammar is spelled out. Values normalize through BrowseQuery,
+  # so an unknown filter or sort collapses to the default instead of reaching a
+  # path.
+  #
+  # The old /genres/filtered-by/:filter grammar is not built any more; it only
+  # survives as redirect input, which from_legacy_genres turns into the new path.
   class BrowsePath
-    BASES = {genres: "/genres", countries: "/countries"}.freeze
+    BASES = {categories: "/categories", countries: "/countries"}.freeze
+
+    # The genre type is the page's default view, so it has no segment.
+    TYPE_SEGMENTS = {"location" => "settings", "subject" => "subjects"}.freeze
 
     def self.call(**options)
       new(**options).call
+    end
+
+    # The /genres redirect route hands over its path params (symbol keys) and the
+    # request's query params (string keys). Path params win, because a request
+    # such as /genres/filtered-by/subject?filter=location is about the subject
+    # page.
+    def self.from_legacy_genres(path_params:, query_params:)
+      merged = query_params.to_h.slice("filter", "sort", "page")
+        .merge(path_params.to_h.stringify_keys.slice("filter", "sort", "page"))
+
+      call(axis: :categories, type: merged["filter"], sort: merged["sort"], page: merged["page"])
     end
 
     def initialize(axis:, type: nil, sort: nil, page: nil)
@@ -28,7 +47,7 @@ module Books
       return "" if @axis == :countries
       return "" if @type == Books::BrowseQuery::TYPES.first
 
-      "/filtered-by/#{@type}"
+      "/#{TYPE_SEGMENTS.fetch(@type)}"
     end
 
     def sort_segment

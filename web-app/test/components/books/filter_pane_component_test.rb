@@ -65,7 +65,7 @@ module Books
 
     test "links out to the matching browse page" do
       render_pane(axis: :category)
-      assert_selector "a[href='/genres']"
+      assert_selector "a[href='/categories']"
 
       render_pane(axis: :country, results_src: "/filters/countries")
       assert_selector "a[href='/countries']"

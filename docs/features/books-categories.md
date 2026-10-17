@@ -84,6 +84,53 @@ still render, since book-page links point at them. Genres are exempt. Category s
 
 The saved-search category picker has no threshold. That is deliberate.
 
+## Category index page
+
+`/categories` is the public index of browsable categories. Design:
+`docs/superpowers/specs/2026-10-17-books-categories-page-design.md`.
+
+URLs:
+
+- `/categories` is genres, `/categories/settings` and `/categories/subjects` the other two types. The enum stays `genre` / `location` / `subject`; `Books::BrowsePath` is the one place that maps the type to the URL word.
+- `…/sorted-by/name` is A to Z (most books is the default and has no segment). `…/page/N` paginates, 120 per page.
+- Sort and page segments are regex-constrained in the routes. That is load-bearing: the query object falls back to the default for any input, so an open segment would mint endless soft-duplicate URLs. A sorted variant is `noindex, follow` and canonicalizes to the unsorted path.
+- Old `/genres` index URLs (`/genres`, `/genres/filtered-by/<type>`, `/genres/sorted-by/…`, `…/page/N`, and the `?filter=&sort=&page=` forms) answer a single 301 to the matching `/categories` URL. A redirect that went through an intermediate URL would hand crawlers two hops. `/genres/:id` is unchanged and still 301s to `/the-greatest/<slug>/books`; it must stay declared after the redirect.
+- `/countries` shares the toolbar and card components and gets the sort dropdown, but no tabs, search or chains.
+
+The page: type tabs, a sort dropdown, a search box and a grid of cards. The tabs are page links in a
+labelled `nav` (`aria-label="Category type"`) with `aria-current` on the active one, not ARIA tabs:
+there are no panels to switch. The sort options are plain links so every order keeps a cacheable URL.
+The details menu is closed before Turbo snapshots the page, otherwise Back would restore it open.
+
+Ranked-count invariant: the grid and the search share `Books::BrowseQuery.ranked_scope`. Both gate
+on, and display, the count of ranked books in the primary ranking (not `categories.item_count`,
+which counts the whole catalog), with the per-type minimum above. A card therefore never links to an
+empty page, and a search hit never disagrees with the grid.
+
+Chains: a child location shows its ancestors, root first, as a muted line under the name
+(`Europe › France`). `Books::CategoryChains` loads the chains for a whole page with one recursive
+query; calling `Category#ancestors` per card would be hundreds of queries on a 120-card page.
+Top-level categories and all subjects show no chain.
+
+Search (`/categories/search?q=&filter=`):
+
+- Covers all three types, so a reader looking for "War" does not have to know which tab it lives on. Each result carries a type badge ("Genre", "Setting", "Subject"). Results are capped at 60, with no pagination, and require at least two characters.
+- A match is a case-insensitive substring of the name or an alternative name (the same condition as `CategorySearchQuery`).
+- Ordering is match quality first: name equals the query, then name starts with it, then a word in the name starts with it, then name contains it, then alias-only. The current tab's type is the tiebreaker within a quality, then ranked count, then name. Type-first was tried and rejected: past merges left junk alternative names (Europe carries "World War I Europe"), so an alias-only hit on the current tab outranked the category literally named "War".
+- Searching runs from the page's form, which targets the `categories_results` Turbo frame (frame `target: "_top"`, so result links leave the frame; the form carries its own `data-turbo-frame`). The `books--category-search` Stimulus controller submits 250 ms after typing stops, from two characters up. The URL does not change. One character leaves whatever is showing alone. Clearing the box after a search loads the grid page into the frame again, and the controller cancels an in-flight search or restore so a slow response cannot land late and put results back under an empty box.
+- Back restores Turbo's snapshot with the typed text and the results still showing; the controller reads the box on connect so clearing it afterwards still restores the grid.
+- Without JavaScript, Enter loads the same endpoint as a full page, which also shows the tabs but no sort menu.
+- Accessibility: the status line ("N categories match “war”") is plain text inside the frame, and the controller copies it into a `role="status"` region outside the frame. A live region inserted already holding its text is not reliably announced, and every swap inserts a new one.
+
+Caching: every grid view is `cache_for_index_page` (public, 6 hours at the edge) and renders identical
+HTML for every visitor. The search endpoint is the opposite: `prevent_caching`, `noindex`, and
+excluded from the canonical-redirect filter, because free-text queries are not worth caching and are
+hit on every pause in typing.
+
+Tests: `test/controllers/books/browse_controller_test.rb`, `test/lib/books/browse_query_test.rb`,
+the routing and component tests beside them, and the Playwright spec
+`web-app/e2e/tests/books/browse.spec.ts`.
+
 ## The cleanup runbook
 
 Every `propose` stage is resumable. The rules stage rebuilds its own proposed decisions each time. An AI stage skips categories already decided in that type's head or tail stages of the run (a category whose only decision is a rules rename is still sent; rules merges and deletes remove a category from the AI stages). Run
