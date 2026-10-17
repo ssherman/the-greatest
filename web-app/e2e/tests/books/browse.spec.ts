@@ -84,7 +84,10 @@ test.describe('Books browse pages', () => {
 
     await searchBox(page).fill('fiction');
 
-    await expect(page.locator("#categories_results a[href='/the-greatest/fiction/books']")).toBeVisible();
+    // The genres grid already has a Fiction card, so wait for the search itself:
+    // its status line, and a result card (only results carry a type badge).
+    await expect(inFrameStatus(page)).toContainText(/match/);
+    await expect(page.locator("#categories_results a:has(.badge)[href='/the-greatest/fiction/books']")).toBeVisible();
     // Searching in place: the address bar stays on the index.
     await expect(page).toHaveURL('/categories');
 
@@ -160,21 +163,27 @@ test.describe('Books browse pages', () => {
     const original = await firstCardHref(page);
 
     await searchBox(page).fill('fiction');
-    const result = page.locator("#categories_results a[href='/the-greatest/fiction/books']");
+    // Real search results, not the genres grid's own Fiction card (which would
+    // be clicked inside the debounce and leave no search behind).
+    await expect(inFrameStatus(page)).toContainText(/match/);
+    await expect(announcer(page)).toContainText(/match/);
+    const result = page.locator("#categories_results a:has(.badge)[href='/the-greatest/fiction/books']");
     await expect(result).toBeVisible();
     await result.click();
     await expect(page).toHaveURL('/the-greatest/fiction/books');
 
     await page.goBack();
     await expect(page).toHaveURL('/categories');
-    // The restored page still shows the search results under the typed text.
+    // The restored page still shows the search results under the typed text,
+    // with the announcer blanked so no stale count is read out.
     await expect(searchBox(page)).toHaveValue('fiction');
+    await expect(inFrameStatus(page)).toHaveCount(1);
+    await expect(announcer(page)).not.toContainText(/match/);
 
     await searchBox(page).fill('');
 
     await expect(inFrameStatus(page)).toHaveCount(0);
     await expect(page.locator(CARD_LINKS).first()).toHaveAttribute('href', original!);
-    await expect(announcer(page)).toHaveText('');
   });
 
   test('the search results page keeps the type tabs and has no sort menu', async ({ page }) => {
