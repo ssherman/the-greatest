@@ -222,7 +222,7 @@ module Books
 
       get "/categories/search", params: {q: "polit"}
 
-      assert_select "#categories_results [data-search-status]", text: /\AShowing the top #{Books::BrowseQuery::SEARCH_LIMIT} matches for “polit”\z/
+      assert_select "#categories_results [data-search-status]", text: "Showing the top #{Books::BrowseQuery::SEARCH_LIMIT} matches for “polit”"
     end
 
     test "search marks no type tab as current but keeps the type for ordering" do

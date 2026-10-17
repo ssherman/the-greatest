@@ -122,6 +122,21 @@ test.describe('Books browse pages', () => {
     await expect(page.locator(CARD_LINKS).first()).toHaveAttribute('href', original!);
   });
 
+  test('pressing Enter in an empty or one-character box leaves the grid in place', async ({ page }) => {
+    await page.goto('/categories');
+    const original = await firstCardHref(page);
+
+    await searchBox(page).press('Enter');
+    await searchBox(page).fill('f');
+    await searchBox(page).press('Enter');
+    // Both submits must have been stopped; give a stray one time to land.
+    await page.waitForTimeout(600);
+
+    await expect(page).toHaveURL(/\/categories$/);
+    await expect(inFrameStatus(page)).toHaveCount(0);
+    await expect(page.locator(CARD_LINKS).first()).toHaveAttribute('href', original!);
+  });
+
   test('clearing the box before results land ends on the grid', async ({ page }) => {
     // Hold the search response so the box can be cleared while it is in flight.
     await page.route('**/categories/search**', async (route) => {
@@ -195,6 +210,13 @@ test.describe('Books browse pages', () => {
     await expect(inFrameStatus(page)).toContainText(/match/);
     await expect(page.locator('details.dropdown')).toHaveCount(0);
     await expect(page.getByTestId('sort-label')).toHaveCount(0);
+  });
+
+  test('the search results page marks no type tab as current', async ({ page }) => {
+    await page.goto('/categories/search?q=war&filter=subject');
+
+    await expect(categoryTabs(page).getByRole('link', { name: 'Subjects' })).toBeVisible();
+    await expect(categoryTabs(page).locator('[aria-current="page"]')).toHaveCount(0);
   });
 
   test('old genre index URLs redirect to /categories', async ({ page }) => {

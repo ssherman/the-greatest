@@ -26,7 +26,9 @@ export default class extends Controller {
 
     this.onFrameLoad = this.announce.bind(this)
     this.onSubmitStart = (event) => { this.submission = event.detail.formSubmission }
-    this.onSubmitEnd = () => { this.submission = null }
+    this.onSubmitEnd = (event) => {
+      if (event.detail.formSubmission === this.submission) this.submission = null
+    }
     // Listen on the document rather than the frame: the frame can be swapped
     // out by a Turbo visit, and turbo:frame-load bubbles to here either way.
     document.addEventListener("turbo:frame-load", this.onFrameLoad)
@@ -54,8 +56,17 @@ export default class extends Controller {
   // Dropping the frame's src also cancels a grid restore still in flight (Turbo
   // aborts the frame's fetch when its sourceURL goes away). Without it, a slow
   // grid response could land after this search and replace its results.
-  submitted() {
+  submitted(event) {
     clearTimeout(this.timer)
+    // Enter on a box too short to search would swap the grid for "Type at least
+    // 2 characters". Stop Turbo's submit (it honours defaultPrevented); without
+    // JavaScript the form still submits as a plain page load. Emptying the box
+    // after a search is the restore path, so Enter there brings the grid back.
+    if (this.element.elements.q.value.trim().length < MIN_LENGTH) {
+      event.preventDefault()
+      this.run()
+      return
+    }
     this.frame?.removeAttribute("src")
     this.searched = true
   }
