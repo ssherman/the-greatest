@@ -25,7 +25,7 @@ bin/rails "books:verify[all,post_import]"          # also the post_import cohort
 bin/rails "books:verify[all,unranked]"             # continue past the ranking into the rest
 bin/rails "books:verify[200,retry_unsure]"         # also retry unsure books from an older OL version
 bin/rails "books:verify[all,recheck]"              # redo stages 2-4 for books with new legacy identifiers
-bin/rails "books:verify[all,reharvest]"            # redo stages 2-4 for books done before duplicate works were harvested
+bin/rails "books:verify[500,reharvest]"            # once: redo stages 2-4 for the books done before duplicate works were harvested
 bin/rails books:verify_report                      # counts, coverage, signals, latest run, samples
 bin/rails "books:verify_revert[123]"               # put book 123's keys and sources back
 ```
@@ -49,8 +49,10 @@ re-runs stages 2-4: from the editions if stage 1 settled a work, from WorldCat i
 never takes a reverted book. `reharvest` takes `done` books with a settled work that hold a
 `books_work_openlibrary_duplicate_id` from Open Library, and re-runs stages 2-4 from the editions. It
 exists for books verified before stage 2 harvested duplicate works (the first production 500, run
-2026-10-17); a book the same run already finished is not taken again, so a re-queued run does not
-redo it. Running it again later only repeats work: every stage is idempotent.
+2026-10-17): run `books:verify[500,reharvest]` once, then plain runs. Like `recheck`, it also takes
+never-verified books after the redone ones, up to the count. A book the same run already finished
+is not taken again, so a re-queued run does not redo it, but any later `reharvest` run redoes every
+such book again (every stage is idempotent, so that costs only time): do not add it to routine runs.
 
 A book resumes at the stage it stopped at and never repeats an earlier one. A deploy puts the run
 back on the queue (the worker's 30 s stop grace period outlasts Sidekiq's 25 s shutdown timeout).
@@ -184,10 +186,16 @@ invalid ISBNs dropped. For each value:
 
 **Duplicate works.** Open Library often keeps one book as several works, and the settled work can
 be a translation's (One Flew Over the Cuckoo's Nest settled on "Alguien voló sobre el nido del
-cuco"). So stage 2 also harvests the book's `books_work_openlibrary_duplicate_id` keys that came
-from Open Library (at most 5, `MAX_DUPLICATE_WORKS`, oldest first), each only when the duplicate
-work itself passes the title-and-author check. Their editions go through the same edition rule, and
-the ones that do not agree become candidates under the duplicate's work key.
+cuco"). So stage 2 also harvests the book's `books_work_openlibrary_duplicate_id` keys whose source is
+`open_library` (at most 5, `MAX_DUPLICATE_WORKS`, oldest first). A duplicate is harvested only when
+its full title, subtitle included, is the book's own title (a leading "the", "a" or "an" aside;
+alternate titles do not count) and an author agrees, and no other book holds it as its work key. The
+title-and-author check alone is too loose here: it drops a subtitle from one side, so "The Lord of the
+Rings: The Two Towers" would pass for "The Lord of the Rings", and the edition rule then trusts every
+edition titled like the work. Keys that redirect to one live work (or to the settled one) are
+harvested once, under the live key. A duplicate Open Library no longer has (404) is skipped. Their
+editions go through the same edition rule, and the ones that do not agree become candidates under
+the duplicate's work key.
 
 Every edition that does not agree (translations, box sets, odd titles) is kept as a row in
 `books_edition_candidates`, outside `identifiers`, for a later step to sort. Held ASINs and EAN-13s

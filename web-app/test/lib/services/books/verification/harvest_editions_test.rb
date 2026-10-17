@@ -109,6 +109,77 @@ module Services
           refute @book.identifiers.exists?(value: "9780199232765")
         end
 
+        test "a duplicate work that is a volume or part of our title is never harvested" do
+          duplicate("OL8W")
+          client = harvest_with(
+            works: {"OL8W" => ol_work("OL8W", title: "War and Peace", subtitle: "Volume 2", authors: [["OL1A", "Leo Tolstoy"]])},
+            editions: {"OL8W" => [ol_edition("OL81M", title: "War and Peace", subtitle: "Volume 2", isbn13: ["9780199232765"])]}
+          )
+
+          refute_includes client.calls, [:editions, "OL8W"]
+        end
+
+        test "a duplicate work with our title by another author is never harvested" do
+          duplicate("OL8W")
+          client = harvest_with(
+            works: {"OL8W" => ol_work("OL8W", title: "War and Peace", authors: [["OL2A", "Someone Else"]])},
+            editions: {"OL8W" => [ol_edition("OL81M", title: "War and Peace", isbn13: ["9780199232765"])]}
+          )
+
+          refute_includes client.calls, [:editions, "OL8W"]
+        end
+
+        test "a duplicate work our title only reaches by its alternate titles is never harvested" do
+          @book.update_columns(alternate_titles: ["Voina i mir"])
+          duplicate("OL8W")
+          client = harvest_with(
+            works: {"OL8W" => ol_work("OL8W", title: "Voina i mir", authors: [["OL1A", "Leo Tolstoy"]])},
+            editions: {"OL8W" => [ol_edition("OL81M", title: "Voina i mir", isbn13: ["9785170900541"])]}
+          )
+
+          refute_includes client.calls, [:editions, "OL8W"]
+        end
+
+        test "a duplicate work another book holds as its work key is never harvested" do
+          duplicate("OL8W")
+          Identifier.create!(identifiable: books_books(:crime_and_punishment), identifier_type: :books_work_openlibrary_id, value: "OL8W", source: :legacy)
+          client = harvest_with(
+            works: {"OL8W" => ol_work("OL8W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]])},
+            editions: {"OL8W" => [ol_edition("OL81M", title: "War and Peace", isbn13: ["9780199232765"])]}
+          )
+
+          refute_includes client.calls, [:editions, "OL8W"]
+        end
+
+        test "duplicate keys that redirect to one work, or to the settled work, are harvested once under the live key" do
+          duplicate("OL8W")
+          duplicate("OL9W")
+          duplicate("OL6W")
+          tolstoy = [["OL1A", "Leo Tolstoy"]]
+          client = harvest_with(
+            works: {"OL8W" => ol_work("OL9W", title: "War and Peace", authors: tolstoy),
+                    "OL9W" => ol_work("OL9W", title: "War and Peace", authors: tolstoy),
+                    "OL6W" => ol_work("OL1W", title: "War and Peace", authors: tolstoy)},
+            editions: {"OL9W" => [ol_edition("OL92M", title: "Voina i mir")]}
+          )
+
+          assert_equal ["OL1W", "OL9W"], client.calls.filter_map { |name, key| key if name == :editions }
+          assert_equal "OL9W", ::Books::EditionCandidate.find_by!(book: @book, edition_key: "OL92M").work_key
+        end
+
+        test "a duplicate work Open Library no longer has is skipped and the book moves on" do
+          duplicate("OL9W")
+          client = FakeOlClient.new(
+            works: {"OL1W" => @work, "OL9W" => ol_work("OL9W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]])},
+            editions: {"OL1W" => [ol_edition("OL1M", title: "War and Peace", oclc: ["9"])]},
+            errors: [nil, nil, ::Books::OpenLibrary::Exceptions::NotFoundError.new("gone", 404)]
+          )
+          HarvestEditions.call(verification: @row, client: client)
+
+          assert @row.reload.stage_worldcat?
+          assert_equal [["9", "open_library"]], held("books_work_oclc_id")
+        end
+
         test "a duplicate key Open Library did not give us is never harvested" do
           duplicate("OL7W", source: :legacy)
           client = harvest_with(

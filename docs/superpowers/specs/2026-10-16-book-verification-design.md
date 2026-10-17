@@ -191,10 +191,10 @@ box sets, alternate and odd titles alike. The later AI spec sorts them.
 Held ASINs and EAN-13s are never confirmed by this pass; they stay `legacy`.
 
 *Amended 2026-10-17 (production 500)*: stage 2 also harvests up to 5 of the book's Open Library
-duplicate work keys, each only when that work passes the title-and-author check, through the same
-edition rule. The settled work can be a translation's (Cuckoo's Nest settled on the Spanish work),
+duplicate work keys through the same edition rule, each only when its full title is the book's own
+title (a leading article aside), an author agrees, and no other book holds it as its work key. The settled work can be a translation's (Cuckoo's Nest settled on the Spanish work),
 and harvesting only it missed the main work's editions. A `reharvest` flag re-runs stages 2-4 for
-done books that hold such a key.
+done books that hold such a key; it is run once (`books:verify[500,reharvest]`), not routinely.
 
 ### Stage 3: WorldCat
 
