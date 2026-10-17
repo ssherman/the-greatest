@@ -6,18 +6,20 @@ module Books
     # search response (a full page) can be unwrapped to just this frame.
     RESULTS_FRAME = "categories_results".freeze
 
-    def initialize(axis:, sort:, type: nil, show_types: false, search: false, query: nil)
+    def initialize(axis:, sort:, type: nil, show_types: false, show_sort: true, search: false, query: nil, browse_path: nil)
       @axis = axis
       @sort = sort
       @type = type
       @show_types = show_types
+      @show_sort = show_sort
       @search = search
       @query = query
+      @browse_path = browse_path
     end
 
     private
 
-    attr_reader :axis, :sort, :type, :show_types, :search, :query
+    attr_reader :axis, :sort, :type, :show_types, :show_sort, :search, :query, :browse_path
 
     def type_links
       TYPE_LABELS.map do |value, label|

@@ -8,13 +8,14 @@
 
   <%= render Books::BrowseToolbarComponent.new(
         axis: :categories, type: @type, sort: Books::BrowseQuery.normalized_sort(nil),
-        show_types: false, search: true, query: @query
+        show_types: true, show_sort: false, search: true, query: @query,
+        browse_path: Books::BrowsePath.call(axis: :categories, type: @type)
       ) %>
 
   <%# Same frame id as the grid page, so Turbo can lift this frame out of a
       full-page search response and swap it in place. %>
   <%= turbo_frame_tag Books::BrowseToolbarComponent::RESULTS_FRAME, target: "_top", class: "block space-y-8" do %>
-    <p class="text-center text-base-content/70" aria-live="polite">
+    <p class="text-center text-base-content/70" data-search-status>
       <% if @query.strip.length < Books::BrowseQuery::SEARCH_MIN_LENGTH %>
         Type at least <%= Books::BrowseQuery::SEARCH_MIN_LENGTH %> characters to search.
       <% elsif @records.any? %>

@@ -11,6 +11,33 @@ module Books
       assert_selector "label", text: "Search categories", visible: :all
     end
 
+    test "the search form is wired to the live-search controller" do
+      render_inline(Books::BrowseToolbarComponent.new(axis: :categories, type: "subject", sort: "book_count",
+        show_types: true, search: true, browse_path: "/categories/subjects"))
+      assert_selector "form[data-controller='books--category-search'][data-books--category-search-frame-value=categories_results][data-books--category-search-browse-url-value='/categories/subjects']"
+      assert_selector "form[data-action~='submit->books--category-search#submitted']"
+      assert_selector "input[name=q][data-action~='input->books--category-search#search']"
+    end
+
+    test "one persistent status region sits in the search form, empty and polite" do
+      render_inline(Books::BrowseToolbarComponent.new(axis: :categories, type: "subject", sort: "book_count",
+        search: true, browse_path: "/categories/subjects"))
+      assert_selector "form [role=status][aria-live=polite][data-books--category-search-target=announcer]", count: 1, visible: :all
+      assert_selector "[role=status]", exact_text: "", visible: :all
+    end
+
+    test "show_sort false omits the sort dropdown" do
+      render_inline(Books::BrowseToolbarComponent.new(axis: :categories, type: "genre", sort: "book_count",
+        show_types: true, show_sort: false, search: true))
+      assert_no_selector "details.dropdown", visible: :all
+      assert_selector "nav[aria-label='Category type'] a.tab", count: 3
+    end
+
+    test "the sort dropdown closes itself before Turbo caches the page" do
+      render_inline(Books::BrowseToolbarComponent.new(axis: :categories, sort: "name"))
+      assert_selector "details.dropdown[data-controller='books--dropdown-close']", visible: :all
+    end
+
     test "no search form unless asked" do
       render_inline(Books::BrowseToolbarComponent.new(axis: :categories, type: "genre", sort: "name"))
       assert_no_selector "form"

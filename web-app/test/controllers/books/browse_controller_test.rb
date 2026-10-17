@@ -193,16 +193,49 @@ module Books
 
     test "search says how many categories match, escaping the query" do
       get "/categories/search", params: {q: "polit"}
-      assert_select "#categories_results [aria-live=polite]", text: /1 category matches/
+      assert_select "#categories_results [data-search-status]", text: /1 category matches/
 
       get "/categories/search", params: {q: "<b>zz</b>"}
-      assert_select "#categories_results [aria-live=polite]", text: /No categories match/
+      assert_select "#categories_results [data-search-status]", text: /No categories match/
       assert_select "#categories_results b", count: 0
+    end
+
+    test "the persistent status region sits outside the results frame on the grid and on search" do
+      ["/categories", "/categories/search?q=polit"].each do |path|
+        get path
+        assert_select "[role=status][aria-live=polite]", count: 1
+        assert_select "turbo-frame#categories_results [role=status]", count: 0
+      end
+    end
+
+    test "the in-frame search status is plain text, not a live region" do
+      get "/categories/search", params: {q: "polit"}
+      assert_select "#categories_results [data-search-status]", count: 1
+      assert_select "#categories_results [aria-live]", count: 0
+    end
+
+    test "the search page links back to browsing and has no sort menu" do
+      get "/categories/search", params: {q: "polit"}
+      assert_select "nav[aria-label='Category type'] a.tab", count: 3
+      assert_select "details.dropdown", count: 0
+    end
+
+    test "the grid page keeps its sort menu" do
+      get "/categories"
+      assert_select "details.dropdown", count: 1
+    end
+
+    test "the toolbar hands the live search the grid to restore" do
+      get "/categories/subjects/sorted-by/name"
+      assert_select "form[data-books--category-search-browse-url-value='/categories/subjects/sorted-by/name']"
+
+      get "/categories/search", params: {q: "polit", filter: "subject"}
+      assert_select "form[data-books--category-search-browse-url-value='/categories/subjects']"
     end
 
     test "a too-short query asks for more characters" do
       get "/categories/search", params: {q: "p"}
-      assert_select "#categories_results [aria-live=polite]", text: /at least 2 characters/
+      assert_select "#categories_results [data-search-status]", text: /at least 2 characters/
     end
 
     test "a missing, blank or oversized q renders without cards" do

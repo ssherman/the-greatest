@@ -8,7 +8,7 @@
   <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @page_title %></h1>
 
   <%= render Books::BrowseToolbarComponent.new(
-        axis: :categories, type: @type, sort: @sort, show_types: true, search: true
+        axis: :categories, type: @type, sort: @sort, show_types: true, search: true, browse_path: request.path
       ) %>
 
   <%= turbo_frame_tag Books::BrowseToolbarComponent::RESULTS_FRAME, target: "_top", class: "block space-y-8" do %>
