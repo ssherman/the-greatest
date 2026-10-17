@@ -16,7 +16,10 @@
 
   <div class="flex flex-wrap items-center justify-end gap-3">
     <details class="dropdown dropdown-end">
-      <summary class="btn btn-sm">Sort: <%= SORT_LABELS.fetch(sort) %></summary>
+      <summary class="btn btn-sm">
+        <span data-testid="sort-label">Sort: <%= SORT_LABELS.fetch(sort) %></span>
+        <span data-testid="sort-caret" aria-hidden="true">▾</span>
+      </summary>
       <ul class="dropdown-content menu bg-base-100 rounded-box z-10 w-40 p-2 shadow-sm">
         <% sort_links.each do |link| %>
           <li>

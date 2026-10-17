@@ -48,7 +48,8 @@ module Books
         axis: :categories, type: "location", sort: "book_count", show_types: true
       ))
 
-      assert_selector "details.dropdown summary", exact_text: "Sort: Most books"
+      assert_selector "details.dropdown summary [data-testid=sort-label]", exact_text: "Sort: Most books"
+      assert_selector "details.dropdown summary [data-testid=sort-caret][aria-hidden=true]", exact_text: "▾"
       assert_selector "details.dropdown a[href='/categories/settings'][aria-current=page]", exact_text: "Most books", visible: :all
       assert_selector "details.dropdown a[href='/categories/settings/sorted-by/name']", exact_text: "A–Z", visible: :all
       assert_selector "details.dropdown a[aria-current]", count: 1, visible: :all
@@ -86,7 +87,7 @@ module Books
       render_inline(Books::BrowseToolbarComponent.new(axis: :countries, sort: "name"))
 
       assert_no_selector "nav[aria-label='Category type']"
-      assert_selector "details.dropdown summary", exact_text: "Sort: A–Z"
+      assert_selector "details.dropdown summary [data-testid=sort-label]", exact_text: "Sort: A–Z"
       assert_selector "details.dropdown a[href='/countries']", visible: :all
       assert_selector "details.dropdown a[href='/countries/sorted-by/name']", visible: :all
     end
