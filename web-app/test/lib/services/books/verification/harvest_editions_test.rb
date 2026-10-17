@@ -188,6 +188,21 @@ module Services
           assert @row.reload.stage_identifiers?
         end
 
+        test "a live work is never harvested when another book holds any of our duplicate keys that redirect to it" do
+          duplicate("OL8W")
+          duplicate("OL9W")
+          Identifier.create!(identifiable: books_books(:crime_and_punishment), identifier_type: :books_work_openlibrary_id, value: "OL8W", source: :legacy)
+          tolstoy = [["OL1A", "Leo Tolstoy"]]
+          client = harvest_with(
+            works: {"OL8W" => ol_work("OL9W", title: "War and Peace", authors: tolstoy),
+                    "OL9W" => ol_work("OL9W", title: "War and Peace", authors: tolstoy)},
+            editions: {"OL9W" => [ol_edition("OL91M", title: "War and Peace", isbn13: ["9780199232765"])]}
+          )
+
+          refute_includes client.calls, [:editions, "OL9W"]
+          refute @book.identifiers.exists?(value: "9780199232765")
+        end
+
         test "a duplicate key redirecting to a work another book holds as its work key is never harvested" do
           duplicate("OL8W")
           Identifier.create!(identifiable: books_books(:crime_and_punishment), identifier_type: :books_work_openlibrary_id, value: "OL5W", source: :legacy)

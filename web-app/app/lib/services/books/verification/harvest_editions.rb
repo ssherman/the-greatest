@@ -69,15 +69,18 @@ module Services
         end
 
         # The live works behind the duplicate keys, once each (two keys can
-        # redirect to one work, or to the settled one), that pass the gate.
+        # redirect to one work, or to the settled one), that pass the gate. A
+        # live work is blocked when another book holds it or any of our keys
+        # that redirect to it.
         def same_book_works(duplicates, works, settled_key)
           held_elsewhere = ::Identifier.where(identifiable_type: "Books::Book", identifier_type: :books_work_openlibrary_id)
             .where.not(identifiable_id: @book.id).where(value: duplicates + duplicates.filter_map { |d| works[d]&.key })
             .pluck(:value).to_set
+          blocked = duplicates.filter_map { |d| works[d]&.key if held_elsewhere.include?(d) || held_elsewhere.include?(works[d]&.key) }.to_set
           seen = Set[settled_key]
           duplicates.filter_map do |duplicate|
             work = works[duplicate]
-            next if work.nil? || seen.include?(work.key) || held_elsewhere.include?(duplicate) || held_elsewhere.include?(work.key)
+            next if work.nil? || seen.include?(work.key) || blocked.include?(work.key)
 
             seen << work.key
             work if same_title?(work) && Check.verified?(@book, work, @client)
