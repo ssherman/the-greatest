@@ -7,6 +7,16 @@ module Services
       # give trusted work-level identifiers (Stamp); the rest are kept as
       # candidates for a later AI check. Network first, then one transaction
       # that ends by moving the row to worldcat.
+      #
+      # Open Library often keeps one book as several works, and the settled one
+      # can be a translation's ("Alguien voló sobre el nido del cuco" for One
+      # Flew Over the Cuckoo's Nest). So the book's duplicate work keys that
+      # Open Library gave us are harvested the same way, under a stricter gate
+      # than Check's: the duplicate's full title must be our own title (a
+      # leading article aside) and an author must agree. Check alone would let
+      # in "The Lord of the Rings: The Two Towers" for "The Lord of the Rings",
+      # and EditionCheck trusts every edition titled like the work it is given.
+      # A key another book holds as its work key is that book's, not ours.
       class HarvestEditions
         FIELDS = {
           isbn13: "books_work_isbn13",
@@ -15,6 +25,7 @@ module Services
           goodreads: "books_work_goodreads_id"
         }.freeze
         DIGITS = /\A\d+\z/
+        MAX_DUPLICATE_WORKS = 5
 
         def self.call(verification:, client:)
           new(verification, client).call
@@ -28,15 +39,21 @@ module Services
 
         def call
           key = @row.new_key
-          work = @client.works_batch([key])[key]
-          editions = @client.editions(key)
+          duplicates = duplicate_keys - [key]
+          works = @client.works_batch([key] + duplicates)
+          harvested = [[key, works[key], @client.editions(key)]]
+          same_book_works(duplicates, works, key).each do |work|
+            harvested << [work.key, work, duplicate_editions(work.key)]
+          end
 
           ::ActiveRecord::Base.transaction do
-            editions.each do |edition|
-              if EditionCheck.agrees?(@book, work, edition)
-                stamp_values(edition)
-              else
-                keep_candidate(edition, key)
+            harvested.each do |work_key, work, editions|
+              editions.each do |edition|
+                if EditionCheck.agrees?(@book, work, edition)
+                  stamp_values(edition)
+                else
+                  keep_candidate(edition, work_key)
+                end
               end
             end
             Counts.call(@row)
@@ -45,6 +62,49 @@ module Services
         end
 
         private
+
+        def duplicate_keys
+          @book.identifiers.where(identifier_type: :books_work_openlibrary_duplicate_id, source: :open_library)
+            .order(:id).limit(MAX_DUPLICATE_WORKS).pluck(:value)
+        end
+
+        # The live works behind the duplicate keys, once each (two keys can
+        # redirect to one work, or to the settled one), that pass the gate. A
+        # live work is blocked when another book holds it or any of our keys
+        # that redirect to it.
+        def same_book_works(duplicates, works, settled_key)
+          held_elsewhere = ::Identifier.where(identifiable_type: "Books::Book", identifier_type: :books_work_openlibrary_id)
+            .where.not(identifiable_id: @book.id).where(value: duplicates + duplicates.filter_map { |d| works[d]&.key })
+            .pluck(:value).to_set
+          blocked = duplicates.filter_map { |d| works[d]&.key if held_elsewhere.include?(d) || held_elsewhere.include?(works[d]&.key) }.to_set
+          seen = Set[settled_key]
+          duplicates.filter_map do |duplicate|
+            work = works[duplicate]
+            next if work.nil? || seen.include?(work.key) || blocked.include?(work.key)
+
+            seen << work.key
+            work if same_title?(work) && Check.verified?(@book, work, @client)
+          end
+        end
+
+        LEADING_ARTICLE = /\A(the|a|an) /
+
+        # The work's full title (subtitle included) is our own title, a leading
+        # article aside. Alternate titles do not count: legacy data gives some
+        # volumes their series' name.
+        def same_title?(work)
+          theirs = Check.their_titles(work).first
+          ours = Check.normalize(@book.title)
+          theirs.present? && ours.present? && theirs.sub(LEADING_ARTICLE, "") == ours.sub(LEADING_ARTICLE, "")
+        end
+
+        # A duplicate Open Library no longer has is skipped; the settled work's
+        # own 404 still stops the book (Run treats it as book-specific).
+        def duplicate_editions(work_key)
+          @client.editions(work_key)
+        rescue ::Books::OpenLibrary::Exceptions::NotFoundError
+          []
+        end
 
         def stamp_values(edition)
           evidence = {"edition_key" => edition.key, "title" => [edition.title, edition.subtitle].compact.join(": ")}

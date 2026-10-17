@@ -412,6 +412,29 @@ module Services
           assert quiet.reload.stage_done?
         end
 
+        test "reharvest takes done books with a settled work and an Open Library duplicate work, from stage 2" do
+          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: true, data: VerifyBook::Outcome.new(row: nil, via_resolve: false), errors: []))
+          settled = ::Books::Verification.create!(book: @war, work_outcome: :replaced, run_id: "old", stage: :done)
+          no_duplicate = ::Books::Verification.create!(book: @crime, work_outcome: :keyed, run_id: "old", stage: :done)
+          unsure = ::Books::Verification.create!(book: @got, work_outcome: :unsure, run_id: "old", stage: :done)
+          legacy_duplicate = ::Books::Verification.create!(book: @clash, work_outcome: :keyed, run_id: "old", stage: :done)
+          [@war, @got].each { |book| Identifier.create!(identifiable: book, identifier_type: :books_work_openlibrary_duplicate_id, value: "OL9W", source: :open_library) }
+          Identifier.create!(identifiable: @clash, identifier_type: :books_work_openlibrary_duplicate_id, value: "OL9W", source: :legacy)
+
+          run_backfill(flags: %w[reharvest unranked])
+
+          assert settled.reload.stage_identifiers?
+          assert [no_duplicate, unsure, legacy_duplicate].map(&:reload).all?(&:stage_done?)
+        end
+
+        test "reharvest does not take a book this run already finished, so a re-queued run does not redo it" do
+          ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "run-1", stage: :done)
+          Identifier.create!(identifiable: @war, identifier_type: :books_work_openlibrary_duplicate_id, value: "OL9W", source: :open_library)
+          VerifyBook.expects(:call).never
+
+          run_backfill(flags: %w[reharvest unranked], scope: ::Books::Book.where(id: @war.id))
+        end
+
         test "a WorldCat outage after the retries stops the run and leaves the book at its stage" do
           ::Books::Verification.create!(book: @war, work_outcome: :keyed, new_key: "OL1W", run_id: "old", stage: :worldcat)
           VerifyBook.stubs(:call).raises(::Books::WorldCat::Exceptions::ServerError.new("down", 503))

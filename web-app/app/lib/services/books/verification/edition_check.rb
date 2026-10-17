@@ -10,7 +10,10 @@ module Services
       module EditionCheck
         module_function
 
-        SET_WORDS = /\b(box(ed)?[\s-]?set|collection|omnibus|trilogy|volumes|books 1)\b/i
+        # A whole series ("the complete series"), a run of books ("books 2-4",
+        # "book 1 to 3") or a count of them ("7-book") names a set too; one
+        # numbered book ("book 1 of the series") does not.
+        SET_WORDS = /\b(box(ed)?[\s-]?set|collection|omnibus|trilogy|volumes|books 1|complete series|books? \d+\s*(-|–|to|through)\s*\d+|\d+[\s-]books?)\b/i
         YEAR_SLACK = 1
 
         def agrees?(book, work, edition)

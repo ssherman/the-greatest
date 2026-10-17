@@ -25,17 +25,19 @@ bin/rails "books:verify[all,post_import]"          # also the post_import cohort
 bin/rails "books:verify[all,unranked]"             # continue past the ranking into the rest
 bin/rails "books:verify[200,retry_unsure]"         # also retry unsure books from an older OL version
 bin/rails "books:verify[all,recheck]"              # redo stages 2-4 for books with new legacy identifiers
+bin/rails "books:verify[500,reharvest]"            # once: redo stages 2-4 for the books done before duplicate works were harvested
 bin/rails books:verify_report                      # counts, coverage, signals, latest run, samples
 bin/rails "books:verify_revert[123]"               # put book 123's keys and sources back
 ```
 
-Flags go after the count, in any order: `post_import`, `unranked`, `retry_unsure`, `recheck`. An
+Flags go after the count, in any order: `post_import`, `unranked`, `retry_unsure`, `recheck`,
+`reharvest`. An
 unknown flag or count aborts with a usage line.
 
 Each run is one `Books::VerificationJob` on the `low` queue. It holds one of Sidekiq's five threads
 for as long as it runs. It works through books one at a time: ranked books by rank, then (with
 `unranked`) the rest by how many lists a book is on, then by id. The default scope is ranked
-`pre_import` books, and it also applies to `retry_unsure` and `recheck`: add `unranked` or
+`pre_import` books, and it also applies to `retry_unsure`, `recheck` and `reharvest`: add `unranked` or
 `post_import` to widen them.
 
 A book is taken when it has no log row, when its row stopped at a stage (`stage` is not `done`), or
@@ -44,7 +46,13 @@ never takes the same book twice. `retry_unsure` also takes `unsure` rows from an
 dump or matcher version, and starts them over at stage 1. `recheck` takes `done` books that hold a
 `legacy` identifier created after the row's `checked_at` (the weekly sync keeps adding them) and
 re-runs stages 2-4: from the editions if stage 1 settled a work, from WorldCat if not. `recheck`
-never takes a reverted book.
+never takes a reverted book. `reharvest` takes `done` books with a settled work that hold a
+`books_work_openlibrary_duplicate_id` from Open Library, and re-runs stages 2-4 from the editions. It
+exists for books verified before stage 2 harvested duplicate works (the first production 500, run
+2026-10-17): run `books:verify[500,reharvest]` once, then plain runs. Like `recheck`, it also takes
+never-verified books after the redone ones, up to the count. A book the same run already finished
+is not taken again, so a re-queued run does not redo it, but any later `reharvest` run redoes every
+such book again (every stage is idempotent, so that costs only time): do not add it to routine runs.
 
 A book resumes at the stage it stopped at and never repeats an earlier one. A deploy puts the run
 back on the queue (the worker's 30 s stop grace period outlasts Sidekiq's 25 s shutdown timeout).
@@ -157,8 +165,9 @@ Runs when stage 1 settled a work (`confirmed`, including on abstain, `updated`, 
 - **Title.** Its title, with its subtitle, agrees with one of our titles or the Open Library work's
   full title. Titles agree when equal after normalizing, or once a subtitle is dropped from one side,
   never both. A subtitle dropped from the edition must not name a set: box set, boxed set (hyphenated and closed forms too: `box(ed)[ -]?set`),
-  collection, omnibus, trilogy, volumes, books 1 (`EditionCheck::SET_WORDS`, whole words, case
-  folded). Stage 3 uses this same rule on the WorldCat record's title, with its " : subtitle" as the
+  collection, omnibus, trilogy, volumes, books 1, complete series, a run of books ("books 2-4",
+  "book 1 to 3") or a count of them ("7-book") (`EditionCheck::SET_WORDS`, whole words, case
+  folded). One numbered book ("Book 1 of the Dark Tower") is not a set. Stage 3 uses this same rule on the WorldCat record's title, with its " : subtitle" as the
   subtitle. The list is narrow on purpose: "complete" or "series" would reject every "Complete and
   Unabridged" edition.
 - **Year.** Its publish year is absent, or at least the book's first published year minus one. A book
@@ -175,6 +184,19 @@ invalid ISBNs dropped. For each value:
 - Another book holds it, not verified: written here as `open_library` (finding `added`) plus an
   `also_held` finding naming the other book. The other book is not touched.
 - Nobody holds it: written as `open_library` (finding `added`).
+
+**Duplicate works.** Open Library often keeps one book as several works, and the settled work can
+be a translation's (One Flew Over the Cuckoo's Nest settled on "Alguien voló sobre el nido del
+cuco"). So stage 2 also harvests the book's `books_work_openlibrary_duplicate_id` keys whose source is
+`open_library` (at most 5, `MAX_DUPLICATE_WORKS`, oldest first). A duplicate is harvested only when
+its full title, subtitle included, is the book's own title (a leading "the", "a" or "an" aside;
+alternate titles do not count) and an author agrees, and no other book holds it as its work key. The
+title-and-author check alone is too loose here: it drops a subtitle from one side, so "The Lord of the
+Rings: The Two Towers" would pass for "The Lord of the Rings", and the edition rule then trusts every
+edition titled like the work. Keys that redirect to one live work (or to the settled one) are
+harvested once, under the live key. A duplicate Open Library no longer has (404) is skipped. Their
+editions go through the same edition rule, and the ones that do not agree become candidates under
+the duplicate's work key.
 
 Every edition that does not agree (translations, box sets, odd titles) is kept as a row in
 `books_edition_candidates`, outside `identifiers`, for a later step to sort. Held ASINs and EAN-13s
@@ -207,8 +229,9 @@ Outcomes for one ISBN:
   does not count; and a record's title does not count as disagreeing when its full title (the
   " / creator" part dropped) contains one of our titles on word boundaries and every other word is
   an edition word or a number (complete, collected, all, volume(s), vol(s), works, edition,
-  unabridged, annotated, illustrated, selected, the, a, an, and, of, in). "Complete Essays" holds
-  "Essays"; "Make it stick" does not hold "It", and "Life : a user's manual" does not hold "Life of Pi".
+  unabridged, annotated, illustrated, selected, the, a, an, and, of, in). Our titles are tried
+  with and without a leading "the", "a" or "an". "Complete Essays" holds "Essays" and "Brothers
+  Karamazov" holds "The Brothers Karamazov"; "Make it stick" does not hold "It", and "Life : a user's manual" does not hold "Life of Pi".
 - **Anything else** (no record, or records agreeing on only one of title and creator): nothing.
   Garbled records fail the check and never confirm. A garbled record (mojibake in its title or
   creator) is never `wrong_identifier` either: it may be the right book, so it counts as unknown.
