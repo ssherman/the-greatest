@@ -35,6 +35,15 @@ module Services
           refute agrees?("War and Peace: Boxset")
         end
 
+        test "a dropped subtitle naming a whole series or a run of books does not agree; one numbered book does" do
+          refute agrees?("War and Peace", subtitle: "The Complete Series")
+          refute agrees?("War and Peace", subtitle: "Books 2-4")
+          refute agrees?("War and Peace", subtitle: "Book 1 to 3")
+          refute agrees?("War and Peace", subtitle: "7-Book Paperback Edition")
+          assert agrees?("War and Peace", subtitle: "Book 1 of the Tolstoy Series")
+          assert agrees?("War and Peace", subtitle: "Complete and Unabridged")
+        end
+
         test "a translation or another title does not agree" do
           refute agrees?("Krieg und Frieden")
           refute agrees?("Anna Karenina")

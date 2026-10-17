@@ -165,8 +165,9 @@ Runs when stage 1 settled a work (`confirmed`, including on abstain, `updated`, 
 - **Title.** Its title, with its subtitle, agrees with one of our titles or the Open Library work's
   full title. Titles agree when equal after normalizing, or once a subtitle is dropped from one side,
   never both. A subtitle dropped from the edition must not name a set: box set, boxed set (hyphenated and closed forms too: `box(ed)[ -]?set`),
-  collection, omnibus, trilogy, volumes, books 1 (`EditionCheck::SET_WORDS`, whole words, case
-  folded). Stage 3 uses this same rule on the WorldCat record's title, with its " : subtitle" as the
+  collection, omnibus, trilogy, volumes, books 1, complete series, a run of books ("books 2-4",
+  "book 1 to 3") or a count of them ("7-book") (`EditionCheck::SET_WORDS`, whole words, case
+  folded). One numbered book ("Book 1 of the Dark Tower") is not a set. Stage 3 uses this same rule on the WorldCat record's title, with its " : subtitle" as the
   subtitle. The list is narrow on purpose: "complete" or "series" would reject every "Complete and
   Unabridged" edition.
 - **Year.** Its publish year is absent, or at least the book's first published year minus one. A book

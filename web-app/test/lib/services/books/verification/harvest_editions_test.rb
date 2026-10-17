@@ -176,8 +176,27 @@ module Services
           )
           HarvestEditions.call(verification: @row, client: client)
 
+          assert_includes client.calls, [:editions, "OL9W"]
           assert @row.reload.stage_worldcat?
           assert_equal [["9", "open_library"]], held("books_work_oclc_id")
+        end
+
+        test "the settled work's own 404 still stops the book at stage 2" do
+          client = FakeOlClient.new(works: {"OL1W" => @work}, errors: [nil, ::Books::OpenLibrary::Exceptions::NotFoundError.new("gone", 404)])
+
+          assert_raises(::Books::OpenLibrary::Exceptions::NotFoundError) { HarvestEditions.call(verification: @row, client: client) }
+          assert @row.reload.stage_identifiers?
+        end
+
+        test "a duplicate key redirecting to a work another book holds as its work key is never harvested" do
+          duplicate("OL8W")
+          Identifier.create!(identifiable: books_books(:crime_and_punishment), identifier_type: :books_work_openlibrary_id, value: "OL5W", source: :legacy)
+          client = harvest_with(
+            works: {"OL8W" => ol_work("OL5W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]])},
+            editions: {"OL5W" => [ol_edition("OL51M", title: "War and Peace", isbn13: ["9780199232765"])]}
+          )
+
+          refute_includes client.calls, [:editions, "OL5W"]
         end
 
         test "a duplicate key Open Library did not give us is never harvested" do
