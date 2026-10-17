@@ -149,7 +149,89 @@ module Books
       end
     end
 
+    test "search matches all three types" do
+      tag_americas
+
+      types = with_browse_minimum(1) { search_for("americ").map { |c| c.category_type.to_s }.sort }
+
+      assert_equal %w[genre location subject], types
+    end
+
+    test "search puts the current type first" do
+      tag_americas
+
+      first = with_browse_minimum(1) { search_for("americ", type: "subject").first }
+
+      assert_equal categories(:books_american_history_subject), first
+    end
+
+    test "search applies the ranked minimum to subjects and settings but not genres" do
+      tag_americas
+
+      assert_equal [categories(:books_americana_genre)], search_for("americ").to_a
+    end
+
+    test "search ignores a category none of whose books are ranked" do
+      tag(categories(:books_americana_genre), books_books(:crime_and_punishment))
+
+      assert_empty search_for("americana").to_a
+    end
+
+    test "search matches alternative_names" do
+      france = categories(:books_france_location)
+      france.update!(alternative_names: ["Gallia"])
+      tag(france)
+
+      assert_equal [france], with_browse_minimum(1) { search_for("gall").to_a }
+    end
+
+    test "search treats LIKE metacharacters literally" do
+      tag(categories(:books_american_history_subject))
+
+      with_browse_minimum(1) do
+        assert_empty search_for("%%").to_a
+        assert_empty search_for("a_e").to_a # as a wildcard, "a_e" matches "AMErican History"
+        assert_empty search_for("a\\").to_a # two characters, so it reaches the LIKE
+      end
+    end
+
+    test "a query shorter than two characters after stripping returns nothing" do
+      tag(categories(:books_americana_genre))
+
+      assert_empty search_for("a").to_a
+      assert_empty search_for("   ").to_a
+      assert_empty search_for(nil).to_a
+    end
+
+    test "search caps results at the limit" do
+      tag_americas
+
+      assert_equal 1, with_browse_minimum(1) { search_for("americ", limit: 1).to_a.size }
+    end
+
+    test "search reports the same ranked_count as the grid" do
+      politics = categories(:books_politics_subject)
+      grid = with_browse_minimum(1) { categories_for(type: "subject").find { |c| c.id == politics.id } }
+      hit = with_browse_minimum(1) { search_for("politic").find { |c| c.id == politics.id } }
+
+      assert_equal grid.ranked_count, hit.ranked_count
+    end
+
     private
+
+    def search_for(query, **options)
+      Books::BrowseQuery.search(ranking_configuration: @rc, query: query, **options)
+    end
+
+    def tag(category, book = books_books(:war_and_peace))
+      CategoryItem.create!(category: category, item: book)
+    end
+
+    def tag_americas
+      tag(categories(:books_americana_genre))
+      tag(categories(:books_american_location))
+      tag(categories(:books_american_history_subject))
+    end
 
     def with_browse_minimum(value)
       original = Rails.configuration.x.books.browse_min_category_books

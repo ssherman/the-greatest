@@ -7,29 +7,31 @@ module Books
     TYPES = %w[genre location subject].freeze
     SORTS = %w[book_count name].freeze
 
-    def self.categories(ranking_configuration:, type: nil, sort: nil)
-      scope = Books::Category.active
-        .where(category_type: normalized_type(type))
-        .joins(<<~SQL)
-          INNER JOIN (
-            SELECT category_id, COUNT(*) AS ranked_count
-            FROM category_items
-            WHERE item_type = 'Books::Book'
-              AND item_id IN (#{ranked_book_ids_sql(ranking_configuration)})
-            GROUP BY category_id
-          ) ranked_counts ON ranked_counts.category_id = categories.id
-        SQL
-        .select("categories.*, ranked_counts.ranked_count")
+    SEARCH_LIMIT = 60
+    SEARCH_MIN_LENGTH = 2
+    SEARCH_MAX_LENGTH = 100
 
-      # Subject and location cards need a minimum of ranked books (spec §6);
-      # one-book categories exist for similarity, not as landing pages.
-      scope = scope.where(
-        "categories.category_type = :genre OR ranked_counts.ranked_count >= :min",
-        genre: ::Category.category_types.fetch("genre"),
-        min: Rails.configuration.x.books.browse_min_category_books
-      )
+    def self.categories(ranking_configuration:, type: nil, sort: nil)
+      scope = ranked_scope(ranking_configuration)
+        .where(category_type: normalized_type(type))
 
       order_by(scope, sort, "categories.name")
+    end
+
+    # Searches all three category types through the same ranked gate and count
+    # as the grid, so a hit never disagrees with the page it links to. The
+    # current type sorts first rather than filtering the rest out.
+    def self.search(ranking_configuration:, query:, type: nil, limit: SEARCH_LIMIT)
+      q = query.to_s.strip.first(SEARCH_MAX_LENGTH)
+      return Books::Category.none if q.length < SEARCH_MIN_LENGTH
+
+      current_type = ::Category.category_types.fetch(normalized_type(type))
+
+      ranked_scope(ranking_configuration)
+        .where(::CategorySearchQuery::NAME_OR_ALIAS_SQL, pattern: "%#{Books::Category.sanitize_sql_like(q)}%")
+        .order(Arel.sql("(categories.category_type = #{current_type.to_i}) DESC"))
+        .order("ranked_counts.ranked_count DESC", "categories.name")
+        .limit(limit)
     end
 
     def self.countries(ranking_configuration:, sort: nil)
@@ -66,6 +68,29 @@ module Books
         .to_sql
     end
     private_class_method :ranked_book_ids_sql
+
+    def self.ranked_scope(ranking_configuration)
+      scope = Books::Category.active
+        .joins(<<~SQL)
+          INNER JOIN (
+            SELECT category_id, COUNT(*) AS ranked_count
+            FROM category_items
+            WHERE item_type = 'Books::Book'
+              AND item_id IN (#{ranked_book_ids_sql(ranking_configuration)})
+            GROUP BY category_id
+          ) ranked_counts ON ranked_counts.category_id = categories.id
+        SQL
+        .select("categories.*, ranked_counts.ranked_count")
+
+      # Subject and location cards need a minimum of ranked books (spec §6);
+      # one-book categories exist for similarity, not as landing pages.
+      scope.where(
+        "categories.category_type = :genre OR ranked_counts.ranked_count >= :min",
+        genre: ::Category.category_types.fetch("genre"),
+        min: Rails.configuration.x.books.browse_min_category_books
+      )
+    end
+    private_class_method :ranked_scope
 
     def self.order_by(scope, sort, name_column)
       return scope.order(name_column) if normalized_sort(sort) == "name"
