@@ -136,17 +136,43 @@ the routing and component tests beside them, and the Playwright spec
 Every `propose` stage is resumable. The rules stage rebuilds its own proposed decisions each time. An AI stage skips categories already decided in that type's head or tail stages of the run (a category whose only decision is a rules rename is still sent; rules merges and deletes remove a category from the AI stages). Run
 these from `web-app/`, with `RUN` a label such as `2026-10-15-prod`.
 
-1. Snapshot: `bin/snapshot-dev-db.sh --label pre-category-cleanup` in dev, a fresh backup in production.
+1. Snapshot: `bin/snapshot-dev-db.sh --label pre-category-cleanup` in dev. In production, dump just the four tables the pipeline writes, on the Postgres server, right before each `apply` (production commands below).
+   Then flatten subjects. Subjects have no hierarchy, but the old site gave some a parent (23 in production), and the Merger refuses to merge a category that has children into a non-location, or into its own child: `Indigenous` into `Indigenous People` failed both ways in the 2026-10-15 run. Clear them before the first `propose`, so that every decision's snapshot already shows no parent. Clearing them after proposing marks those subjects' decisions stale.
+   `bin/rails runner 'Books::Category.where(category_type: :subject).where.not(parent_id: nil).update_all(parent_id: nil)'`
+   The weekly sync copies the legacy parent of a new subject, so a later run may find a few again.
 2. `bin/rails 'categories:cleanup:propose[RUN,rules]'`. No AI. Case and punctuation twins merge into the most-linked member, except that when that member would need a rename, the member already holding the clean name wins outright. Broken names are repaired, and letterless bracket fragments (`61)`) are deleted. Empty categories are never deleted, because the weekly sync brings categories before their books and a link to a deleted category is lost for good. Legacy alternative names never drive a merge. `C`, `C++` and `C#` stay apart.
 3. `bin/rails 'categories:cleanup:propose[RUN,locations_head]'`, then `subjects_head`. Head means a category's own direct link count is at least `head_min_links` (20), one category per AI call. A head category whose call failed is retried by running the head stage again.
 4. `bin/rails 'categories:cleanup:calibrate[RUN,location]'` and `[RUN,subject]`. It writes no decisions. It compares batch sizes against one-at-a-time answers on 200 random tail categories, and prints a baseline first: a second one-at-a-time pass against the first. One-at-a-time answers are not stable (86.5% of locations and 88.5% of subjects agreed in the 2026-10-12 dev run), so judge each batch size against that baseline, on both the full agreement and the action/verdict agreement, not against 100%. A size that agrees about as well as the baseline loses nothing to batching. `tail_batch_size` is set per type (`{location: 10, subject: 1}` from that run); changing it means editing `config/initializers/categories.rb` and deploying (merge = deploy).
 5. `bin/rails 'categories:cleanup:propose[RUN,locations_tail]'`, then `subjects_tail`. Tail runs print how many head-tier categories are still undecided. At batch size 1 `subjects_tail` exceeds the $50 guard (about $165 at current estimates) and needs `FORCE=1`; `locations_tail` at 10 is about 1,540 calls.
-6. `bin/rails 'categories:cleanup:report[RUN]'`. It prints counts by stage, action and status; undecided head-tier categories; the largest merges; the largest deletes (a junk verdict on a big category shows here); merges into a category with its own pending terminal decision; locations apply would create (with their slugs); proposed roots; ambiguous names; failures; and samples per action. The full list goes to a CSV in `tmp/`.
+6. `bin/rails 'categories:cleanup:report[RUN]'`. It prints counts by stage, action and status; undecided head-tier categories; the largest merges; the largest deletes (a junk verdict on a big category shows here); merges into a category with its own pending terminal decision; locations apply would create (with their slugs); proposed roots; ambiguous names; failures; and samples per action. The full list goes to a CSV in `tmp/`. The CSV holds every decision in the run, not just the latest stage, so on the second wave filter it to status `proposed`.
 7. `bin/rails 'categories:cleanup:reject[RUN,12 15 19]'` for decisions you do not want. Rejected decisions are kept and skipped.
 8. `bin/rails 'categories:cleanup:apply[RUN]'`. Details below.
 9. Propose again with the SAME run label: `propose[RUN,locations_head]`, `locations_tail`, `subjects_head` and `subjects_tail`. Then review as in steps 6 and 7 (`report[RUN]`, `reject`), and only then `apply[RUN]` again. Only categories with no decision in those stages yet are sent: ones retyped by the first apply (subjects now locations and the reverse), created parents, and categories the sync added. A new label would re-send the whole vocabulary and apply a second full wave, so do not use one. This second wave runs before the trim because it can add direct location links (merges of `is_location` categories, retyped subjects), and the trim prompt should see the full hierarchy.
-10. `DRY_RUN=1 bin/rails 'categories:trim_locations[100]'` and read the output, then the same without `DRY_RUN`, and repeat the real run until it prints nothing (no candidates left) or only `FAILED` lines (AI failures write no ledger row and are retried on every run). The limit can be raised once the first batch looks right. The dry run's answers are a sample: the real run makes fresh AI calls. Details below.
+   Reject the second wave's subject-to-location retypes. They are locations the first wave retyped to subjects, and the subject pass now sends back. Their location decision was used up in the first wave, so applied they become locations with no parent. In the 2026-10-15 run that was 17 small categories (`West`, `Islands`, `Third World`). Location-to-subject retypes in the second wave are fine, since subjects need no parent.
+10. `DRY_RUN=1 bin/rails 'categories:trim_locations[100]'` and read the output, then the same without `DRY_RUN`, and repeat the real run until it prints nothing (no candidates left) or only `FAILED` lines (AI failures write no ledger row and are retried on every run). The limit can be raised once the first batch looks right. The dry run's answers are a sample: the real run makes fresh AI calls. The output prints every removed location, so send it to a file (`> tmp/trim_dry_run.txt 2>&1`). Details below.
 11. After this the weekly sync keeps new legacy categories in line (last paragraph below).
+
+Long stages (the subject tail is about 40,800 calls, a day at roughly 2 seconds each) should run detached with a log. A dropped SSH session ends a foreground `docker compose exec`, and a deploy (any merge to main) recreates the container. Either way, run the same command again; every stage resumes.
+
+```bash
+docker compose -f docker-compose.prod.yml exec -d web bash -c \
+  "FORCE=1 bin/rails 'categories:cleanup:propose[RUN,subjects_tail]' > log/subjects_tail.log 2>&1"
+```
+
+Production backup and restore, on the Postgres server. Only these four tables are written, and no other table has a foreign key into them, so they can be restored on their own. Music and games share `categories`, `category_items` and `friendly_id_slugs`, so take the dump right before `apply` to keep the window short:
+
+```bash
+COMPOSE=/home/ssherman/apps/the-greatest-books/docker-compose.prod.yml
+docker compose -f $COMPOSE exec -T db pg_dump -U postgres -Fc \
+  -t categories -t category_items -t friendly_id_slugs -t category_cleanup_decisions the_greatest \
+  > /mnt/data1/backups/pre-category-apply-$(date +%Y%m%d%H%M%S).dump
+# Restore, only if needed:
+docker compose -f $COMPOSE exec -T db psql -U postgres the_greatest \
+  -c 'TRUNCATE categories, category_items, category_cleanup_decisions, friendly_id_slugs'
+docker compose -f $COMPOSE exec -T db pg_restore -U postgres -d the_greatest --data-only --disable-triggers < FILE
+```
+
+A restore needs a reindex afterwards, because apply queues search updates.
 
 Switches, as environment variables on `propose`: `LIMIT=n` caps the number of categories sent in a stage (the same as calls only at batch size 1). `REDO=1` deletes
 that stage's `proposed` and `failed` decisions before running, inside the same transaction as the
@@ -160,7 +186,8 @@ What apply does:
 - Head categories are decided one per call, so the AI can propose A into B and B into A (`Gods` and `Deities`). Before anything applies, every merge cycle is broken at its most-linked member (`item_count`, ties to the older category): its merge goes stale ("merge cycle"), so it stays, keeping any rename, and the rest of the cycle merges into it. A member that also has a proposed retype or delete is never chosen, since its delete would then remove the links merged into it; if every member has one, the cycle is left alone (one merge lands, the reverse fails).
 - Parents named in a chain that match no category are created in one transaction. If a created parent's slug collides, it gets a UUID suffix and the report flags it.
 - A rename keeps the old slug in history. It keeps the old name in `alternative_names` only when it differs from the new name by more than case or punctuation and is not already listed.
-- Reconcile (`AncestorReconciler`) runs whenever the run applied any decision. The reconciler and the Merger queue their own reindexes. Each decision is its own transaction, so one failure marks that decision `failed` and the rest continue. Re-running is a no-op for applied decisions. A decision that went stale (its category changed before apply) is not re-sent under the same RUN; such a category needs an admin fix or a `REDO=1` of that stage.
+- Reconcile (`AncestorReconciler`) runs whenever the run applied any decision. The reconciler and the Merger queue their own reindexes. Each decision is its own transaction, so one failure marks that decision `failed` and the rest continue. Re-running is a no-op for applied decisions. A decision that went stale (its category changed before apply) is not re-sent under the same RUN, and `REDO=1` does not help, because it deletes only `proposed` and `failed` decisions. Either fix the category in the admin, or delete its decisions in that stage (a stage skips any category with a decision there, whatever its status) and propose that stage again.
+- Expected refusals, which are safe to leave: a set_parent whose chain names the place itself fails at propose time ("parent chain starts at the place itself"; `Folsom Prison` and `Abu Ghraib Prison` in production); a merge, retype or delete of a category that has places under it is refused at apply time rather than orphaning them (`Commonwealth`, `Alice`).
 
 What the trim does: a book with more than `max_direct_locations` (15) direct locations gets one AI
 call and keeps the subset the model returns. Only `legacy` links are removed. Admin links are never
