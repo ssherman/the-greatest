@@ -65,7 +65,7 @@ module Services
         author = books_authors(:tolstoy)
         Identifier.create!(identifiable: book, identifier_type: :books_work_openlibrary_duplicate_id, value: "OL9W")
         Identifier.create!(identifiable: author, identifier_type: :books_author_openlibrary_id, value: "OL1A")
-        ::Books::OpenLibraryBackfill.create!(book: book, outcome: :confirmed, new_key: "OL262758W", old_keys: ["OL262758W"],
+        ::Books::Verification.create!(book: book, work_outcome: :confirmed, new_key: "OL262758W", old_keys: ["OL262758W"],
           duplicate_keys: ["OL9W"], author_changes: {"added" => [[author.id, "OL1A"]]}, run_id: "test")
 
         result = MarkLegacy.call
@@ -77,7 +77,7 @@ module Services
       end
 
       test "a reverted backfill row relabels nothing" do
-        ::Books::OpenLibraryBackfill.create!(book: books_books(:crime_and_punishment), outcome: :reverted, new_key: "OL262758W",
+        ::Books::Verification.create!(book: books_books(:crime_and_punishment), work_outcome: :reverted, new_key: "OL262758W",
           old_keys: [], run_id: "test")
 
         MarkLegacy.call

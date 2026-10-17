@@ -319,6 +319,19 @@ class IdentifierTest < ActiveSupport::TestCase
     assert_equal 0, Identifier.trust_rank(nil)
   end
 
+  test "unverified is every source but open_library and worldcat, nil included" do
+    book = books_books(:war_and_peace)
+    legacy = Identifier.create!(identifiable: book, identifier_type: :books_work_goodreads_id, value: "656", source: :legacy)
+    verified = Identifier.create!(identifiable: book, identifier_type: :books_work_oclc_id, value: "1", source: :worldcat)
+    unmarked = identifiers(:war_and_peace_isbn13)
+
+    unverified = Identifier.unverified.where(identifiable: book)
+
+    assert_includes unverified, legacy
+    assert_includes unverified, unmarked
+    refute_includes unverified, verified
+  end
+
   test "BOOKS_TYPES lists every books identifiable" do
     assert_equal %w[Books::Book Books::Edition Books::Author Books::Series], Identifier::BOOKS_TYPES
   end

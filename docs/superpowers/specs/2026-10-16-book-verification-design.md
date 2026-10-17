@@ -166,7 +166,7 @@ Runs when stage 1 settled a work: `confirmed` (including `confirmed_on_abstain`)
   `first_published_year` skips the year rule.
 
 From agreeing editions, every value is normalized (`Books::Isbn.normalize` for ISBNs; invalid ones
-dropped and counted) and written at work level:
+dropped) and written at work level:
 
 | Edition field | Identifier type |
 |---|---|
@@ -198,7 +198,9 @@ verified after stage 2, normalize to ISBN-13, drop invalid ones, deduplicate, an
 `MAX_WORLDCAT_ISBNS = 50` with `Client#record_by_isbn`. A record **agrees** when all three hold:
 
 - **Title:** its title agrees with ours by the title rule, after lowercasing and dropping WorldCat's
-  " : " subtitle form.
+  " : " subtitle form. *Amended 2026-10-17 (final review)*: the rule is stage 2's edition rule (a
+  subtitle dropped from one side only, never both; a subtitle dropped from the record must not name
+  a set), so "War and peace : boxed set" does not agree.
 - **Creator:** its `creator` or one of its `contributors` agrees with one of our authors by the
   letters-only author rule, also accepting "Last, First" order.
 - **Year:** its `year` is absent or at least our `first_published_year` minus one.
@@ -215,11 +217,22 @@ Outcomes for one ISBN:
 Garbled records (mojibake) fail the check and so never confirm. Records disagreeing on only one
 side are not evidence of a wrong identifier.
 
+*Amended 2026-10-17 (rehearsal)*: `wrong_identifier` is not recorded for an ISBN Open Library lists
+on any one of the book's non-set edition candidates, and a title does not count as disagreeing when
+the record's full title contains one of ours on word boundaries and every other word is an edition
+word or a number (complete and collected editions). Recorded signal only; trust is unchanged.
+
 ### Stage 4: signals
+
+*Amended 2026-10-17 (rehearsal)*: a foreign work titled like one of the book's edition candidates is
+a known translation and is ignored, and a leading "the/a/an" is dropped from both sides of the title
+comparison. Lump suspects are a candidate list for a later AI check, not a verdict.
 
 Recorded, never acted on. The book's held identifiers that are still not verified, ISBNs and
 Goodreads ids only, are looked up with `Client#identifier` (at most `MAX_SIGNAL_LOOKUPS = 20`, five
-at a time; values the fast pass already looked up reuse its answers). For each hit on a work that
+at a time). *Amended 2026-10-16 (planning):* the fast pass's answers are not reused, because a
+resumed book runs stage 4 in a later run with no fast pass; a few repeated 0.2-0.6 s lookups cost
+less than carrying them across runs. For each hit on a work that
 is not the stage 1 work, not one of its duplicate keys and not a redirect of it, the work is fetched
 in one `works_batch`:
 
@@ -316,15 +329,20 @@ their source.
 
 ### Cohorts
 
-A book's cohort comes from the legacy database (`LegacyBooks::Record`):
+A book's cohort comes from its id:
 
 - `post_import`: legacy `books.created_at` on or after `2024-09-09 03:22:31 UTC`.
 - `pre_import`: everything else, including books not in legacy at all (created in the new app).
 
+*Amended 2026-10-16 (planning).* Legacy book ids are strictly monotonic with `created_at`: the first
+book created at or after the cutoff is id 16,572, no book below it was created after the cutoff, and
+none above it before. Book ids are preserved by the migration, and new-app books start at the reserved
+ceiling (`Services::BooksMigration::RESERVED_CEILINGS["books_books"]`, 250,000). So
+`post_import` is exactly `16_572 <= id < 250_000`, a constant, and the run needs no legacy query.
+
 The default run takes `pre_import` books only. The 9,245 `post_import` ranked books run only with
 the `post_import` flag, after the Goodreads rebuild has repaired their titles and authors (or
-earlier, if Shane decides spot checks look fine). Cohorts are read once per run in one legacy
-query, not per book.
+earlier, if Shane decides spot checks look fine).
 
 ### Rake tasks
 
@@ -359,6 +377,9 @@ The OL key backfill's rules, extended to WorldCat:
   stops.
 - After a book that went through `/resolve`, the run waits 4 s (`RESOLVE_PAUSE`) so other callers
   get the single slot. Stages 2-4 never call `/resolve`.
+- A WorldCat 504 (the service's 25 s deadline) on one ISBN counts as no answer for that ISBN; the
+  book completes stage 3. *Amended 2026-10-17:* deadline raised to 25 s (was 5 s), and the Rails
+  client timeouts to 30 s.
 - WorldCat gets no pause: nothing else uses its single-ISBN route. The genre backfill uses the batch
   route.
 

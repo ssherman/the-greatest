@@ -93,6 +93,10 @@ second export on the same day reuses the day's file name and the trainer reports
 7. **`bin/rails worldcat:backfill[all]`** (once section 9 is live). The sync brings over new books
    without WorldCat-derived categories; the backfill is additive and idempotent, so a full run only
    adds links for books that have none yet. It is a repeating step, not a one-off.
+8. **`bin/rails "books:verify[all,recheck]"`** after the sync, once the pass has run. The sync keeps
+   adding legacy identifiers; this re-verifies the books that got new ones. Once the `post_import`
+   books have been verified, the recheck needs `post_import` too
+   (`books:verify[all,recheck,post_import]`).
 
 ## 5. Cleanup, after the switch-over
 
@@ -105,17 +109,19 @@ the sync never undoes them.
 2. **Identifier provenance, once.** After the deploy that adds `identifiers.source`, run
    `bin/rails identifiers:mark_legacy`. It marks every books identifier with no source `legacy` and
    prints how many; a second run prints 0. Details: `docs/features/identifier-provenance.md`.
-3. **Open Library key backfill.** Run `bin/rails "books:ol_backfill[100]"`, read
-   `bin/rails books:ol_backfill_report`, then `bin/rails "books:ol_backfill[all]"`. It checks or adds an
-   Open Library key on every book, ranked first. Top-ranked books ran at about 4 books a minute before
-   the fast pass was sped up, so the full run is likely 2-4 weeks and the top few thousand ranked books
-   finish in the first days. It shares Open Library's one `/resolve` slot with the wizard and the
-   Goodreads replay, so all of them slow down while it runs. It pauses 4 seconds after each
-   `/resolve` so the others can get the slot, but do not run the Goodreads replay or the
-   legacy-import finishing steps while it runs: when they cannot get the slot they decide rows
-   without Open Library. A deploy puts a running backfill back on the queue and it carries on
-   under the same run id; logged books are skipped. If the worker crashes instead, the run is lost:
-   run the task again. Details: `docs/features/open-library-backfill.md`.
+3. **Book verification pass.** Run `bin/rails "books:verify[200]"`, read `bin/rails books:verify_report`
+   (hand-check the risky list and the samples), then `bin/rails "books:verify[all]"`. It settles each
+   ranked book's Open Library work, takes identifiers from the work's editions, confirms held ISBNs
+   against WorldCat and records signals. After the Goodreads rebuild, run
+   `bin/rails "books:verify[all,post_import]"`; `unranked` is optional and takes the rest of the
+   catalogue. The ranked `pre_import` books are estimated at 3-4 days. It shares Open Library's one
+   `/resolve` slot with the wizard and the Goodreads replay, so all of them slow down while it
+   runs. It pauses 4 seconds after each `/resolve` so the others can get the slot, but do not run
+   the Goodreads replay or the legacy-import finishing steps while it runs: when they cannot get
+   the slot they decide rows without Open Library. A deploy puts a running pass back on the queue
+   and it carries on under the same run id; logged books resume at their stage. If the worker
+   crashes instead, the run is lost: run the task again. Details:
+   `docs/features/book-verification.md`.
 4. **Duplicates.** Review the pairs the sweep found in the Duplicates queue and merge them. Every
    merge is recorded as a redirect, so the sync never brings the merged book back.
 5. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
@@ -281,7 +287,7 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    (`/home/shane/wc-data/our_isbns.txt` is the export step 1 writes; the guard stops the step on a
    missing or short file, which would otherwise "pass" in milliseconds on an empty batch). On the
    development machine at the container's two threads the same batch took 3.3 s and a 100-ISBN
-   one 1.2 s, so expect the VM to be slower than that. Both times must be under 5 s before the
+   one 1.2 s, so expect the VM to be slower than that. Both times should be well under the 25 s deadline before the
    backfill; a `504` or a time near the deadline means stop and lower the backfill's batch size
    or raise `WC_API_DEADLINE_S`.
 9. **Production setting. Shane runs with `!`.** Step 2's apply added

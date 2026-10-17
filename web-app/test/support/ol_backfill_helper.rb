@@ -21,6 +21,14 @@ module OlBackfillHelper
     }, source_version: SOURCE_VERSION)
   end
 
+  def ol_edition(key, title:, subtitle: nil, publish_year: nil, isbn13: [], isbn10: [], oclc: [], goodreads: [], language_code: "eng")
+    ::Books::OpenLibrary::Edition.from_record({
+      "key" => {"source" => "openlibrary", "key" => key}, "title" => title, "subtitle" => subtitle,
+      "publish_year" => publish_year, "language_code" => language_code,
+      "isbn13" => isbn13, "isbn10" => isbn10, "oclc" => oclc, "goodreads" => goodreads
+    })
+  end
+
   def ol_hit(work_key, id_type: "isbn13", value: "9780140447934")
     ::Books::OpenLibrary::IdentifierHit.new(work_key: work_key, source: "openlibrary", redirected_from: [],
       edition_keys: [], id_type: id_type, value: value)
@@ -56,10 +64,11 @@ module OlBackfillHelper
     # Called from threads (the fast pass looks identifiers up concurrently).
     def calls = @lock.synchronize { @calls.dup }
 
-    def initialize(hits: {}, works: {}, authors: {}, resolution: nil, version: nil, errors: [])
+    def initialize(hits: {}, works: {}, authors: {}, resolution: nil, version: nil, errors: [], editions: {})
       @hits = hits
       @works = works
       @authors = authors
+      @editions = editions
       @resolution = resolution
       @version = version
       @errors = errors.dup
@@ -88,6 +97,12 @@ module OlBackfillHelper
       keys.to_h { |key| [key, @authors[key]] }
     end
 
+    def editions(key)
+      record([:editions, key])
+      raise_next!
+      @editions.fetch(key, [])
+    end
+
     def resolve(**args)
       record([:resolve, args])
       raise_next!
@@ -109,6 +124,35 @@ module OlBackfillHelper
     def raise_next!
       error = @lock.synchronize { @errors.shift }
       raise error if error
+    end
+  end
+
+  def wc_record(oclc:, title:, creator: nil, contributors: [], year: nil, isbn13s: [])
+    ::Books::WorldCat::Record.from_hash({"oclc" => oclc, "title" => title, "creator" => creator,
+      "contributors" => contributors, "year" => year, "isbn13s" => isbn13s})
+  end
+
+  class FakeWcClient
+    attr_reader :calls
+
+    def initialize(records: {}, version: {dump_date: "2025-09-04"}, errors: [])
+      @records = records
+      @version = version
+      @errors = errors.dup
+      @calls = []
+    end
+
+    def record_by_isbn(isbn)
+      @calls << [:record_by_isbn, isbn]
+      error = @errors.shift
+      raise error if error
+
+      @records.fetch(isbn, [])
+    end
+
+    def version
+      @calls << [:version]
+      @version
     end
   end
 end

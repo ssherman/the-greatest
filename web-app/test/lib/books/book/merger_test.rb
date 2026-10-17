@@ -8,6 +8,23 @@ module Books
         @target = books_books(:war_and_peace)
       end
 
+      test "the merged-away book's verification, findings and candidates go; the target's stay" do
+        source_row = ::Books::Verification.create!(book: @source, work_outcome: :keyed, run_id: "r")
+        target_row = ::Books::Verification.create!(book: @target, work_outcome: :keyed, run_id: "r")
+        ::Books::VerificationFinding.create!(verification: source_row, book: @source, kind: :added, identifier_type: :books_work_isbn13, value: "1")
+        pointing = ::Books::VerificationFinding.create!(verification: target_row, book: @target, kind: :also_held,
+          identifier_type: :books_work_isbn13, value: "2", other_book_id: @source.id)
+        kept = ::Books::VerificationFinding.create!(verification: target_row, book: @target, kind: :added, identifier_type: :books_work_isbn13, value: "3")
+        ::Books::EditionCandidate.create!(book: @source, edition_key: "OL1M")
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not ::Books::Verification.exists?(source_row.id)
+        assert_not ::Books::VerificationFinding.exists?(pointing.id)
+        assert ::Books::VerificationFinding.exists?(kept.id)
+        assert_equal 0, ::Books::EditionCandidate.where(book_id: @source.id).count
+      end
+
       test "merges successfully and returns the target book" do
         result = ::Books::Book::Merger.call(source: @source, target: @target)
 

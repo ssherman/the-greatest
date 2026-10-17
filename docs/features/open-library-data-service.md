@@ -565,7 +565,7 @@ Rails (`OpenLibrarySource`) treats each kind of holder differently:
   accepted key) makes the finder flag it with the accepted key's holders as an
   `external_key_collision` pair. Rule 4 or the AI can still match it.
 - A book holding the accepted work, or one of its `duplicates`, as `books_work_openlibrary_duplicate_id`
-  (saved by the Open Library key backfill, `docs/features/open-library-backfill.md`) is treated the same
+  (saved by the verification pass, `docs/features/book-verification.md`) is treated the same
   way: a candidate with no verdict that blocks rule 5 and is flagged with the accepted key's holders.
   The list wizard's Import re-check also finds it.
 - Several books holding the accepted work (its key or a redirect source) still give rule 2's
