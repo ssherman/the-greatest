@@ -145,7 +145,10 @@ identifiers from the product, but only when the product **is this book**.
    numbered book: `Book 3`, `#3`, `Vol. 3`, `Volume 3`, a single number with no range after it. That
    exception is needed because Amazon writes series markers like "(Hunger Games Trilogy, Book 1)",
    where "Trilogy" names the series, not the edition. The product also fails when its binding display
-   value contains "box" (Boxed Set / Box Set). This is the same idea as
+   value contains "box" (Boxed Set / Box Set). *Planning refinement:* scan the whole raw Amazon title
+   (head, subtitle and brackets alike) with `SET_WORDS`, skipping bracketed single-book markers. A
+   set word only counts when the book's own title and alternate titles do not contain that same word,
+   so Calvino's *Collection of Sand* is not mistaken for a collection. This is the same idea as
    `ConfirmWithWorldCat#listed_by_open_library?`, which applies `SET_WORDS` to the whole title rather
    than only to a dropped subtitle.
 3. **Author** *(my call; `EditionCheck` itself has no author test)*. At least one of the product's
