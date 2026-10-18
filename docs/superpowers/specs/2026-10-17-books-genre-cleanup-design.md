@@ -41,9 +41,30 @@ The test this spec uses everywhere: **a genre is what the book is; a subject is 
 | subject | topics, time periods, LGBTQ+, real moods/tropes/reception labels worth keeping | receives retypes |
 | location | places | receives a few merges |
 
-Decided and out of scope: no `Adult` audience (no audience means general readership; nothing is
-assigned automatically); no time-period type (periods become subjects, revisit in Spec B); no
-mood, pace or trope types.
+### The audience values
+
+Exactly three, fixed by this spec rather than drafted by the AI:
+
+| audience | ages | from today's genres |
+|---|---|---|
+| Children's | about 0–8 | `Children's books` (5,276), retyped and renamed |
+| Middle Grade | about 8–12 | `Middle Grade` (2,022), retyped |
+| Young Adult | about 12–18 | `Young adult` (5,197), retyped and renamed; `teen` (187) merges in |
+
+These are the US trade's bands (BISAC splits Juvenile from Young Adult; ONIX calls the second
+"Teenage", 12–18; publishers market Middle Grade as 8–12). Board books, picture books, early readers
+and chapter books are forms or reading levels, not audiences: `picture books` stays a genre. New
+Adult is a romance marketing label none of our books carry. No audience means a general (adult)
+readership; nothing is ever tagged Adult.
+
+WorldCat has no usable audience value: its records' `audience` field is empty in every sample, and
+the MARC fixed field (preschool, primary, pre-adolescent, adolescent, adult, general, specialized,
+juvenile) is coded almost always as plain "juvenile", about 0–15. Audience there lives in subject
+wording ("Wizards Juvenile fiction", "Young adult fiction", "JUVENILE FICTION Fantasy & Magic"),
+which §7 handles.
+
+Decided and out of scope: no `Adult` audience; no time-period type (periods become subjects,
+revisit in Spec B); no mood, pace or trope types.
 
 ## 3. Rules for the genre list
 
@@ -54,7 +75,8 @@ These go into both AI prompts (§5) and are what the reviewer checks against.
    to stand alone. Aim for about 40–60 genres.
 3. Topics and time periods become subjects.
 4. Places merge into an existing location, otherwise are deleted. A genre never creates a place.
-5. Audience goes to the audience list. `Adult` is not an audience.
+5. Audience goes to one of the three audiences (§2). `Adult` is not an audience: the `Adult` genre
+   is deleted, or merged into `Erotica` if that is what its books mostly are.
 6. Moods, tropes and reception labels become subjects when they are real topics (`Banned books`),
    otherwise are deleted (`Summer Reads`, `Slow Burn`).
 7. Formats (`Ebooks`) are deleted.
@@ -82,9 +104,13 @@ run: genres-2026-10
 genres:                 # the list; Shane owns this part
   - name: Science Fiction
     definition: Stories built on speculative science or technology.
-audiences:
+audiences:              # fixed: the three in §2; draft writes them, the validator requires them
   - name: Children's
     definition: Written for readers up to about age 8.
+  - name: Middle Grade
+    definition: Written for readers about 8 to 12.
+  - name: Young Adult
+    definition: Written for readers about 12 to 18.
 decisions:              # exactly one per live genre, keyed by category id
   41231: {name: "Science fiction", action: rename, to: "Science Fiction", reason: "..."}
   41290: {name: "Space Opera", action: merge, into: "Science Fiction", reason: "..."}
@@ -120,6 +146,7 @@ written.
 
 - Every live genre has exactly one decision; every decision's `name` matches its live row; a live
   genre missing from the file is named in the error (it means the plan is out of date).
+- `audiences:` is exactly Children's, Middle Grade and Young Adult (§2).
 - Every `into:` names a list entry; every `as:` for `audience` names an audience entry.
 - Every list entry ends as exactly one live category of its type: one `keep`/`rename` for each
   genre entry, one `audience` decision (or `keep` of an existing audience) for each audience entry.
@@ -201,6 +228,16 @@ The map (`config/worldcat/genre_map.yml`, 4,261 terms) names genres by name, and
   `audiences:` header list.
 - `ApplyCategories` resolves audience verdicts against active audience categories with the same
   evidence rule as genres; `ApplyAliases` adds aliases to audiences too.
+- **Juvenile terms are weak evidence.** WorldCat's "Juvenile" covers about ages 0–15 and turns up on
+  children's editions of classics (*Little Women*, *Animal Farm*) and on *Harry Potter*. Terms built
+  on it ("Juvenile fiction", "Juvenile literature", "Juvenile works", "Juvenile materials", the
+  `JUVENILE FICTION`/`JUVENILE NONFICTION` headings, and any subject phrase ending in "Juvenile
+  fiction" or "Juvenile literature") carry `weak: true` on their Children's audience verdict. A weak
+  term counts toward Children's only when the book already has the Children's audience, or when at
+  least one matched record supports Children's through a non-weak term ("Children's stories",
+  "Picture books for children", "Children's literature"). The retarget step sets the flag;
+  `ApplyCategories` enforces it. Young Adult terms ("Young adult fiction", "Teen fiction") are not
+  weak. Nothing in WorldCat maps to Middle Grade.
 - `retarget_worldcat` rewrites each term from the plan: a `keep`/`rename` genre takes the list
   name; `merge` takes its target (an audience target becomes an audience verdict); `audience`
   becomes an audience verdict; `subject` becomes a subject verdict with the resulting subject's
@@ -242,8 +279,10 @@ apply. Soft-deleted genres there stay soft-deleted, so nothing comes back throug
 - `apply`: end to end on fixtures, idempotent on a second run; deleted ids removed from saved
   search and recommendation criteria, and only those.
 - AI tasks: stubbed responses; schema enums reject names off the lists; `map` resumes.
-- `retarget_worldcat`: every action and the `worldcat:` override; a second run is a no-op.
-- `ApplyCategories`/`ApplyAliases`: audience verdicts.
+- `retarget_worldcat`: every action, the `worldcat:` override and the `weak` flag on Juvenile
+  terms; a second run is a no-op.
+- `ApplyCategories`/`ApplyAliases`: audience verdicts; a weak Juvenile term alone adds nothing;
+  with a non-weak Children's term, or on a book already Children's, it counts.
 - Every row of §6 that changes gets a test; the existing tests that pin genre-only behaviour
   (`filter_facets_query_test.rb`, `filter_title_test.rb`, `global_canon_params_test.rb`,
   `browse_query_test.rb`, `book_test.rb` indexing, `book_similar_test.rb`, recommendations) are
