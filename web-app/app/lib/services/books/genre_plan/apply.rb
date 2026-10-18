@@ -23,8 +23,14 @@ module Services
         def call
           return failure(["no plan file at #{@plan.path}"]) unless @plan.exists?
 
+          return failure(["the plan has no run name"]) if @plan.run.blank?
+
+          other = ::CategoryCleanupDecision.for_run(@plan.run).where.not(stage: DecisionBuilder::STAGE).distinct.pluck(:stage)
+          return failure(["run #{@plan.run.inspect} already has decisions from stage #{other.join(", ")}; use a new run name"]) if other.any?
+
           unassigned = 0
-          unless decisions.exists?
+          rerun = decisions.exists?
+          unless rerun
             validation = Validator.call(plan: @plan, assignments: @assignments)
             return failure(validation.errors) unless validation.success?
 
@@ -34,7 +40,7 @@ module Services
           applier = ::Services::CategoryCleanup::Applier.call(run: @plan.run)
           deleted = decisions.applied.action_delete.pluck(:category_id)
           cleaned = CriteriaCleaner.call(deleted_ids: deleted).data
-          Result.new(success?: true, data: {applier: applier.data, cleaned: cleaned, unassigned_split_books: unassigned}, errors: [])
+          Result.new(success?: true, data: {applier: applier.data, cleaned: cleaned, unassigned_split_books: unassigned, rerun: rerun}, errors: [])
         end
 
         private

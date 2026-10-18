@@ -83,6 +83,84 @@ module Services
             assert second.success?, second.errors.inspect
           end
         end
+
+        test "a blank run name fails without raising" do
+          blank = PlanFile.new({"run" => "", "genres" => [], "audiences" => [], "decisions" => {}})
+          result = Apply.call(plan: blank, assignments: @assignments)
+          refute result.success?
+          assert_match(/no run name/, result.errors.first)
+        end
+
+        test "a run that already has decisions from another stage is refused" do
+          CategoryCleanupDecision.create!(category: @ebooks, run: "g1", stage: "rules", action: :delete,
+            decided_by: :rule, category_snapshot: {})
+          assert_no_difference -> { CategoryCleanupDecision.count } do
+            result = Apply.call(plan: plan, assignments: @assignments)
+            refute result.success?
+            assert_match(/stage rules/, result.errors.first)
+          end
+        end
+
+        test "the first apply is not a rerun and the second is" do
+          assert_equal false, Apply.call(plan: plan, assignments: @assignments).data[:rerun]
+          assert_equal true, Apply.call(plan: plan, assignments: @assignments).data[:rerun]
+        end
+
+        test "re-applying after a crash mid-apply completes without duplicates" do
+          book = books_books(:war_and_peace)
+          CategoryItem.create!(category: @sff, item: book)
+          Services::CategoryCleanup::Applier.stubs(:call).raises("boom")
+          assert_raises(RuntimeError) { Apply.call(plan: plan, assignments: @assignments) }
+          Services::CategoryCleanup::Applier.unstub(:call)
+          decisions = CategoryCleanupDecision.where(run: "g1").count
+          assert_operator decisions, :>, 0
+
+          result = Apply.call(plan: plan, assignments: @assignments)
+
+          assert result.success?, result.errors.inspect
+          assert_equal decisions, CategoryCleanupDecision.where(run: "g1").count
+          assert @ebooks.reload.deleted?
+          assert_equal 1, CategoryItem.where(category: @fantasy, item: book).count
+          assert_equal 1, CategoryItem.where(category: @sf, item: book).count
+        end
+
+        def history_plan(extra_decisions, extra_genres: [])
+          history = ::Books::Category.create!(name: "History and Politics", category_type: :genre)
+          world = ::Books::Category.create!(name: "World History", category_type: :genre)
+          politics = ::Books::Category.create!(name: "Politics", category_type: :subject)
+          hp_book = books_books(:war_and_peace)
+          wh_book = books_books(:crime_and_punishment)
+          CategoryItem.create!(category: history, item: hp_book)
+          CategoryItem.create!(category: world, item: wh_book)
+          decisions = {history.id => {"name" => "History and Politics", "action" => "split",
+                                      "into" => ["History", {"subject" => "Politics", "target_id" => politics.id}]}}
+          decisions.merge!(extra_decisions.call(world))
+          [history, world, politics, hp_book, wh_book, plan(decisions, genres: ["Fiction", "Nonfiction", "Science Fiction", "Fantasy", "History"] + extra_genres)]
+        end
+
+        test "a merge into a renaming split's primary does not tag the merged books with the other targets" do
+          history, _world, politics, hp_book, wh_book, the_plan = history_plan(
+            ->(world) { {world.id => {"name" => "World History", "action" => "merge", "into" => "History"}} }
+          )
+          result = Apply.call(plan: the_plan, assignments: Assignments.new([[hp_book.id, history.id, ["History"]]]))
+
+          assert result.success?, result.errors.inspect
+          refute CategoryItem.exists?(category: politics, item: hp_book)
+          refute CategoryItem.exists?(category: politics, item: wh_book)
+          assert CategoryItem.exists?(category: history, item: wh_book)
+        end
+
+        test "a rename with also into a renaming split's primary does not tag the renamed genre's books with the other targets" do
+          history, _world, politics, hp_book, wh_book, the_plan = history_plan(
+            ->(world) { {world.id => {"name" => "World History", "action" => "rename", "to" => "World Affairs", "also" => ["History"]}} },
+            extra_genres: ["World Affairs"]
+          )
+          result = Apply.call(plan: the_plan, assignments: Assignments.new([[hp_book.id, history.id, ["History"]]]))
+
+          assert result.success?, result.errors.inspect
+          refute CategoryItem.exists?(category: politics, item: wh_book)
+          assert CategoryItem.exists?(category: history, item: wh_book)
+        end
       end
     end
   end

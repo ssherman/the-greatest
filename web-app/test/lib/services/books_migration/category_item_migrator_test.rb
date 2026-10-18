@@ -268,4 +268,23 @@ class Services::BooksMigration::CategoryItemMigratorTest < ActiveSupport::TestCa
     assert_equal [k.id, fantasy.id, romance.id].sort,
       CategoryItem.where(item_id: book.id, item_type: "Books::Book").pluck(:category_id).sort
   end
+
+  test "a link merged into a renaming split's genre does not inherit the split's extras" do
+    hp = ::Books::Category.create!(name: "History and Politics")
+    politics = ::Books::Category.create!(name: "Politics", category_type: :subject)
+    CategoryCleanupDecision.create!(category: hp, run: "g1", stage: "genres", action: :split, decided_by: :ai,
+      status: :applied, new_name: "History", extra_target_ids: [politics.id], category_snapshot: {})
+    world = make_category(8201)
+    world.update!(deleted: true, merged_into: hp)
+    LegacyIdMap.record(model: "Books::Category", legacy_id: 8202, new_id: hp.id)
+    via_alias = ::Books::Book.create!(title: "World History Book")
+    own = ::Books::Book.create!(title: "H and P Book")
+
+    result = run_migrator([{"id" => 21, "category_id" => 8201, "book_id" => via_alias.id},
+      {"id" => 22, "category_id" => 8202, "book_id" => own.id}])
+
+    assert result[:success], result[:error]
+    assert_equal [hp.id], CategoryItem.where(item_id: via_alias.id, item_type: "Books::Book").pluck(:category_id)
+    assert_equal [hp.id, politics.id].sort, CategoryItem.where(item_id: own.id, item_type: "Books::Book").pluck(:category_id).sort
+  end
 end

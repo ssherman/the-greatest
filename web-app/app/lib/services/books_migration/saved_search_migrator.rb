@@ -74,9 +74,10 @@ module Services
         end
       end
 
-      # A mapped category deleted here since is removed from the criteria and
-      # counted (spec §6). A soft-deleted one stays, because the search already
-      # skips it. A legacy category with no map entry still raises: categories
+      # A mapped category gone here since, or soft-deleted and not merged, is
+      # removed from the criteria and counted (spec §6): a deleted id matches
+      # nothing, so in "all" mode it would empty the search. A merged id stays,
+      # because the query follows it to its target. A legacy category with no map entry still raises: categories
       # run first, so that is a missing prerequisite.
       def remap_category_ids(value)
         Array(value).filter_map do |legacy_id|
@@ -91,7 +92,7 @@ module Services
       end
 
       def category_ids_here
-        @category_ids_here ||= ::Books::Category.pluck(:id).to_set
+        @category_ids_here ||= ::Books::Category.where(deleted: false).or(::Books::Category.merged).pluck(:id).to_set
       end
 
       def category_map

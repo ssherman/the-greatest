@@ -3,7 +3,7 @@
 module Services
   module CategoryCleanup
     # Spec §4.3: executes a run's proposed decisions in dependency order --
-    # rename, merge, split, retype, create missing parents, set parent, delete,
+    # split (renaming mode, then merging), rename, merge, retype, create missing parents, set parent, delete,
     # keep (with extra targets) -- then
     # reconciles inherited links once. Staleness is checked for every decision
     # before anything is applied. Each decision is its own savepoint: a failure
@@ -29,7 +29,8 @@ module Services
 
       def call
         mark_stale
-        %w[rename merge split retype].each { |action| apply_each(action) }
+        apply_splits
+        %w[rename merge retype].each { |action| apply_each(action) }
         @lookup = LocationLookup.new
         create_missing_parents
         apply_each("set_parent")
@@ -141,6 +142,15 @@ module Services
         end
         current = {"name" => category.name, "category_type" => category.category_type, "parent_id" => category.parent_id, "deleted" => category.deleted}
         current == expected
+      end
+
+      # Splits run first: a merge or an `also:` link into a renaming split's
+      # primary would otherwise hand the split books it never assigned, and it
+      # would give those books every target. Renaming mode goes before merging
+      # mode, each by id. Producers keep their ids through rename and retype,
+      # and split targets are checked by id, so the order is safe.
+      def apply_splits
+        pending.where(action: :split).order(:id).partition { |d| d.target_category_id.nil? }.flatten.each { |d| apply_one(d) }
       end
 
       def apply_each(action)
