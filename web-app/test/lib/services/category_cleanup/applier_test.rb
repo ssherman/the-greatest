@@ -633,6 +633,100 @@ module Services
 
         assert_equal %w[applied stale], [split, keep].map { |d| d.reload.status }
       end
+
+      def assert_failed_and_unchanged(decision, *categories, matching: nil)
+        before = categories.map { |c| [c.reload.deleted, c.merged_into_id, CategoryItem.where(category: c).pluck(:item_id).sort] }
+        Applier.call(run: "r1")
+        assert_equal "failed", decision.reload.status
+        assert_match matching, decision.error if matching
+        assert_equal before, categories.map { |c| [c.reload.deleted, c.merged_into_id, CategoryItem.where(category: c).pluck(:item_id).sort] }
+      end
+
+      test "a split fails when its merging primary was merged away since the plan" do
+        sf = genre("Science Fiction")
+        elsewhere = genre("Sci-Fi")
+        fantasy = genre("Fantasy")
+        sf.update_columns(deleted: true, merged_into_id: elsewhere.id)
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        split = decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id],
+          split_assignments: {@book.id.to_s => [sf.id]})
+
+        assert_failed_and_unchanged(split, combined, elsewhere, fantasy, matching: /deleted or merged/)
+      end
+
+      test "a split fails when an extra target is deleted" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        fantasy.update_columns(deleted: true)
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        split = decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id])
+
+        assert_failed_and_unchanged(split, combined, sf, fantasy, matching: /deleted or merged/)
+      end
+
+      test "a split fails when an assignment names an id outside its targets" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        stray = genre("Horror")
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        split = decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id],
+          split_assignments: {@book.id.to_s => [stray.id]})
+
+        assert_failed_and_unchanged(split, combined, sf, fantasy, stray, matching: /not a target/)
+      end
+
+      test "a split fails when an assignment is null rather than a list" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        split = decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id],
+          split_assignments: {@book.id.to_s => nil})
+
+        assert_failed_and_unchanged(split, combined, sf, fantasy, matching: /not a list/)
+      end
+
+      test "a keep with a deleted extra target fails and links nothing" do
+        gone = genre("Gone")
+        gone.update_columns(deleted: true)
+        romantasy = genre("Romantasy", books: [@book])
+        keep = decide(romantasy, :keep, stage: "genres", extra_target_ids: [gone.id])
+
+        assert_failed_and_unchanged(keep, romantasy, gone, matching: /deleted or merged/)
+      end
+
+      test "a split and a keep with extra targets on a protected category fail and change nothing" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        fiction = genre("Fiction", books: [@book])
+        nonfiction = genre("Nonfiction", books: [@book])
+        ::Books::Category.stubs(:protected_ids).returns([fiction.id, nonfiction.id])
+        split = decide(fiction, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id])
+        keep = decide(nonfiction, :keep, stage: "genres", extra_target_ids: [fantasy.id])
+
+        Applier.call(run: "r1")
+
+        assert_equal %w[failed failed], [split, keep].map { |d| d.reload.status }
+        assert_match "protected", split.error
+        assert_match "protected", keep.error
+        assert_equal [[], [], [@book.id], [@book.id]], [sf, fantasy, fiction, nonfiction].map { |c| CategoryItem.where(category: c).pluck(:item_id) }
+        refute fiction.reload.deleted?
+      end
+
+      test "a keep with extra targets leaves an existing link to the extra target alone" do
+        fantasy = genre("Fantasy")
+        romance = genre("Romance")
+        romantasy = genre("Romantasy")
+        CategoryItem.create!(category: romantasy, item: @book, source: :legacy)
+        CategoryItem.create!(category: fantasy, item: @book, source: :admin)
+        keep = decide(romantasy, :keep, stage: "genres", extra_target_ids: [fantasy.id, romance.id])
+
+        Applier.call(run: "r1")
+
+        assert_equal "applied", keep.reload.status
+        assert_equal 1, CategoryItem.where(category: fantasy, item: @book).count
+        assert CategoryItem.exists?(category: fantasy, item: @book, source: :admin)
+        assert CategoryItem.exists?(category: romance, item: @book, source: :legacy)
+      end
     end
   end
 end

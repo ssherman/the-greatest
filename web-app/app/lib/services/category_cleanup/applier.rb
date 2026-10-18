@@ -188,11 +188,20 @@ module Services
         category = live_category!(decision)
         raise "#{category.name} has places under it" if category.child_categories.active.exists?
 
-        primary_id = decision.target_category_id ? decision.target_category.canonical.id : category.id
+        primary_id = decision.target_category_id || category.id
         targets = ([primary_id] + decision.extra_target_ids).uniq
+        # Every target must still be live under the id the plan named: a
+        # target merged or deleted since would silently strip or strand tags.
+        require_live_targets!(targets - [category.id])
         links = category.category_items.where(item_type: "Books::Book").pluck(:item_id, :source).to_h
         assigned = decision.split_assignments.transform_keys(&:to_i)
-        wanted = links.keys.index_with { |book_id| Array(assigned.fetch(book_id, targets)).map(&:to_i) & targets }
+        assigned.each do |book_id, ids|
+          raise "split assignment for book #{book_id} is not a list" unless ids.is_a?(Array)
+
+          stray = ids.map(&:to_i) - targets
+          raise "split assignment for book #{book_id} names #{stray.inspect}, which is not a target" if stray.any?
+        end
+        wanted = links.keys.index_with { |book_id| assigned.key?(book_id) ? assigned[book_id].map(&:to_i) : targets }
 
         insert_links(wanted.flat_map { |book_id, ids| (ids - [category.id]).map { |id| [id, book_id, links[book_id]] } })
         if decision.target_category_id
@@ -207,11 +216,22 @@ module Services
         ::Categories::ItemReindexer.queue_items(links.keys.map { |book_id| ["Books::Book", book_id] })
       end
 
+      def require_live_targets!(ids)
+        found = ::Category.where(id: ids).index_by(&:id)
+        ids.each do |id|
+          target = found[id]
+          raise "target category #{id} is gone" if target.nil?
+          raise "target category #{id} (#{target.name}) was deleted or merged since the plan" if target.deleted?
+          raise "target category #{id} is not a books category" unless target.is_a?(::Books::Category)
+        end
+      end
+
       # Links every book of `category` to each of `target_ids`, keeping each
       # link's origin; existing links are left alone.
       def link_books(category, target_ids)
         return if target_ids.blank?
 
+        require_live_targets!(target_ids)
         links = category.category_items.where(item_type: "Books::Book").pluck(:item_id, :source)
         insert_links(target_ids.flat_map { |id| links.map { |book_id, origin| [id, book_id, origin] } })
         ::Categories::ItemCounter.call(target_ids)
