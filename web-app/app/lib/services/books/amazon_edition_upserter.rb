@@ -105,7 +105,7 @@ module Services
       end
 
       def apply_descriptive(edition)
-        title, subtitle = split_title(product.dig("itemInfo", "title", "displayValue"))
+        title, subtitle = AmazonBookCheck.split_title(product.dig("itemInfo", "title", "displayValue"))
 
         edition.title = title if edition.title.blank? && title.present?
         edition.subtitle = subtitle if edition.subtitle.blank? && subtitle.present?
@@ -191,25 +191,6 @@ module Services
         entries = Array(product.dig("itemInfo", "contentInfo", "languages", "displayValues"))
         name = entries.find { |entry| entry["type"] == "Published" }&.dig("displayValue")
         @language = name.blank? ? nil : Language.find_by(name: name)
-      end
-
-      # Legacy's process_title: drop parenthesised and bracketed noise, then split
-      # the first colon into title and subtitle. Loops to convergence because
-      # nested brackets (e.g. "[Mass Market Paperback (2006)]") only expose their
-      # outer pair once the innermost one has already been stripped.
-      def split_title(raw)
-        return [nil, nil] if raw.blank?
-
-        cleaned = raw.dup
-        loop do
-          stripped = cleaned.gsub(/\s*[(\[][^()\[\]]*[)\]]\s*/, " ")
-          break if stripped == cleaned
-          cleaned = stripped
-        end
-        cleaned = cleaned.squeeze(" ").strip
-
-        head, tail = cleaned.split(":", 2)
-        [head&.strip.presence, tail&.strip.presence]
       end
     end
   end
