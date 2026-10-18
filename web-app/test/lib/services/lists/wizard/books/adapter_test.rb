@@ -229,6 +229,14 @@ module Services
             assert_equal "/admin/books/search", @adapter.search_path
             assert_equal ["/admin/lists", "/admin/lists/#{@list.id}"], [@adapter.lists_path, @adapter.list_path(@list)]
           end
+
+          test "creating a text row with the real importer queues AI enrichment and Amazon" do
+            row = wizard_row(@list, position: 1, title: "A Brand New Tolstoy Book", authors: ["Leo Tolstoy"], wizard: {bucket: "create"})
+            ::Books::EnrichBookJob.expects(:perform_async).once
+            ::Books::AmazonProductEnrichmentJob.expects(:perform_async).once
+            book = @adapter.create(row)
+            assert book.persisted?
+          end
         end
       end
     end

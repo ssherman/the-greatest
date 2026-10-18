@@ -112,6 +112,11 @@ module ActiveSupport
       ::Books::BookType.reset_category_ids!
       Rails.application.config.x.rate_limit_store.clear
       Services::JwtValidationService.reset_cert_cache!
+      # Sidekiq runs jobs inline in tests, and the importer queues this job for
+      # every new book. Without this stub, any test that imports a new book
+      # would run the real Amazon job against WebMock or missing credentials.
+      # A test that cares overrides it with `expects`.
+      ::Books::AmazonProductEnrichmentJob.stubs(:perform_async)
     end
 
     # Add more helper methods to be used by all tests here...
