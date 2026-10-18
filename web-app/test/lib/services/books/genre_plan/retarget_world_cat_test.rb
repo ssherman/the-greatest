@@ -138,8 +138,7 @@ module Services
           }.to_yaml)
           @plan.data["genres"] << {"name" => "Fantasy"}
           @plan.decisions[30] = {"name" => "Science Fiction", "action" => "split", "into" => ["Science Fiction", "Fantasy"],
-                                 "worldcat_terms" => {"Sci-fi" => ["Science Fiction", "Fantasy"], "Hard SF" => [],
-                                                      "Science fiction" => ["Science Fiction"], "Space operas" => ["Science Fiction"]}}
+                                 "worldcat_terms" => {"Sci-fi" => ["Science Fiction", "Fantasy"], "Hard SF" => []}}
         end
 
         test "a split genre named like its own first target still answers from worldcat_terms" do
@@ -150,6 +149,21 @@ module Services
           assert result.success?, result.errors.inspect
           assert_equal({"verdict" => "genre", "genre" => "Science Fiction", "also" => ["Fantasy"]}, terms["Sci-fi"])
           assert_equal({"verdict" => "drop", "reason" => "not_a_genre"}, terms["Hard SF"])
+        end
+
+        test "terms an earlier run left in final form for the split's own name stay put, and a stranger still errors" do
+          split_into_own_name
+
+          first = RetargetWorldCat.call(plan: @plan, path: @path)
+          again = RetargetWorldCat.call(plan: @plan, path: @path)
+
+          assert first.success?, first.errors.inspect
+          assert again.success?, again.errors.inspect
+          assert_equal 0, again.data[:retargeted]
+          assert_equal "Science Fiction", terms["Space operas"]["genre"]
+
+          @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["Stranger"] = {"verdict" => "audience", "audience" => "Science Fiction"} }.to_yaml)
+          refute RetargetWorldCat.call(plan: @plan, path: @path).success?
         end
 
         test "a split genre named like its own first target is stable on a second run" do

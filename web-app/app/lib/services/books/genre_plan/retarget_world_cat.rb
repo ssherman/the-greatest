@@ -119,13 +119,19 @@ module Services
           when "audience" then verdict(term, [decision["as"]])
           when "subject" then {"verdict" => "subject", "subject" => decision["as"] || decision["name"]}
           when "location", "delete" then dropped
-          when "split" then split_verdict(term, decision, errors)
+          when "split" then split_verdict(term, decision, errors, entry)
           end
         end
 
-        def split_verdict(term, decision, errors)
+        def split_verdict(term, decision, errors, entry)
           answers = decision["worldcat_terms"] || {}
           unless answers.key?(term)
+            # A split named like its first target: a term already in final form
+            # for that name is an earlier run's output (a merge or rename into
+            # it), not a term the split forgot.
+            if entry["verdict"] == "genre" && entry["genre"] == decision["name"] && Array(decision["into"]).first == decision["name"]
+              return with_also(entry.except(*KEPT_KEYS))
+            end
             errors << "#{term.inspect} targets the split genre #{decision["name"].inspect} but is not in its worldcat_terms"
             return nil
           end
