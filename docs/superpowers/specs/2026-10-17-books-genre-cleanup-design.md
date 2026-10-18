@@ -343,12 +343,17 @@ apply. Soft-deleted genres there stay soft-deleted, so nothing comes back throug
 
 ## 9. Rollout
 
-1. Dev: `draft`, edit, `map`, review, `retarget_worldcat`. Snapshot
-   (`bin/snapshot-dev-db.sh --label pre-genre-cleanup`), then `apply` in dev and spot-check the
-   filter modal, `/categories`, the global canon with `/excluding/childrens-books`, a saved search
-   that used a deleted genre, and Shane's recommendations page (user 1141).
-2. One PR: code, plan file, rewritten WorldCat map, docs. Merge deploys it. The code must work
-   with zero audience categories (empty Audience group and tab are hidden).
+1. **PR 1, the code**: the commands, the audience type everywhere in §6, the `split` action and
+   `extra_target_ids`, the WorldCat and legacy sync changes, docs. No plan file. It must work with
+   zero audience categories (empty Audience group and tab are hidden) and with no plan file
+   (`apply` says so and stops). Merge deploys it.
+2. Dev, after PR 1: `draft`, Shane edits the list, `map`, `split_check`, Shane reviews with
+   `report`, `retarget_worldcat`. Snapshot (`bin/snapshot-dev-db.sh --label pre-genre-cleanup`),
+   then `apply` in dev and spot-check the filter modal, `/categories`, the global canon with
+   `/excluding/childrens-books`, a saved search that used a deleted genre, a split book (*The Lord
+   of the Rings* is Fantasy only), and Shane's recommendations page (user 1141).
+   **PR 2, the files**: `genre_plan.yml`, `genre_split_assignments.csv` and the rewritten
+   `genre_map.yml`, nothing else. Shane's review happens here. Merge deploys it.
 3. Old site: the Goodreads change, deployed.
 4. Production (Shane): the four-table dump from the category cleanup runbook, then
    `bin/rails categories:genres:apply`. If it stops on a genre missing from the plan, run `map`
