@@ -37,12 +37,19 @@ module Services
         book = books_books(:war_and_peace)
         refute AmazonBookCheck.set?(book, product(title: "War and Peace (Tolstoy Trilogy, Book 1)"))
         refute AmazonBookCheck.set?(book, product(title: "War and Peace (Vintage Classics)"))
+        refute AmazonBookCheck.set?(book, product(title: "War and Peace (Tolstoy Trilogy #1)"))
+        assert AmazonBookCheck.set?(book, product(title: "War and Peace (Book 1-3)"))
       end
 
       test "set? ignores a set word the book's own title carries" do
         book = ::Books::Book.create!(title: "Collection of Sand")
         refute AmazonBookCheck.set?(book, product(title: "Collection of Sand: Essays (Penguin Modern Classics)"))
         assert AmazonBookCheck.set?(book, product(title: "Collection of Sand (Boxed Set)"))
+      end
+
+      test "set? ignores a set word an alternate title carries" do
+        book = ::Books::Book.create!(title: "Sand", alternate_titles: ["Collection of Sand"])
+        refute AmazonBookCheck.set?(book, product(title: "Collection of Sand: Essays"))
       end
 
       test "same_book? accepts an exact title, a dropped subtitle and an alternate title" do

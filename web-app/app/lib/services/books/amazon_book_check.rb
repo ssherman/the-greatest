@@ -17,7 +17,7 @@ module Services
 
       # One numbered book ("Book 1", "Vol. 2", "#3") names a single book; a
       # range ("Books 1-3") still names a set, so it is not a marker.
-      SINGLE_BOOK_MARKER = /\b(?:book|vol(?:ume)?\.?|#)\s*\d+\b(?!\s*(?:-|–|to|through|and|&)\s*\d)/i
+      SINGLE_BOOK_MARKER = /(?:\b(?:book|vol(?:ume)?\.?)|#)\s*\d+\b(?!\s*(?:-|–|to|through|and|&)\s*\d)/i
       BRACKETED = /[(\[][^()\[\]]*[)\]]/
 
       # Legacy's process_title: drop parenthesised and bracketed noise, then split
