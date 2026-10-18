@@ -30,15 +30,14 @@ module Services
           terms = data["terms"].to_h do |term, entry|
             next [term, entry] unless %w[genre audience].include?(entry["verdict"])
 
-            if final_form?(entry)
-              widened = with_also(entry)
-              retargeted += 1 unless widened == entry
-              next [term, widened]
-            end
-
             target = entry["genre"] || entry["audience"]
             decisions = @by_name[target]
             if decisions.nil?
+              if final_form?(entry)
+                widened = with_also(entry)
+                retargeted += 1 unless widened == entry
+                next [term, widened]
+              end
               errors << "#{term.inspect} targets #{target.inspect}, which the plan does not know" unless list_name?(target)
               next [term, entry]
             end
@@ -60,10 +59,13 @@ module Services
 
         private
 
-        # Already rewritten by an earlier run: its target is on the list of the
-        # kind its verdict names, and carries every `also` a kept or renamed
-        # genre of that name requires. Otherwise left alone, so its `also` and
-        # `weak` survive.
+        # Only asked of a target no decision names: the term is already in final
+        # form when its target is on the list of the kind its verdict names and
+        # it carries every `also` a kept or renamed genre of that name requires.
+        # A target some decision names always goes through that decision (a
+        # split or merge of a genre that shares a list name must not be
+        # bypassed); keep and rename rewrites union the entry's own list-name
+        # `also`, so a second run gives the same entry.
         def final_form?(entry)
           on_list = (entry["verdict"] == "genre" && @plan.genre_names.include?(entry["genre"])) ||
             (entry["verdict"] == "audience" && @plan.audience_names.include?(entry["audience"]))

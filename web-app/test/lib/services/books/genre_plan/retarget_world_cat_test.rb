@@ -131,6 +131,39 @@ module Services
           assert_equal 0, again.data[:retargeted]
         end
 
+        def split_into_own_name
+          @path.write(YAML.safe_load_file(@path).tap { |m|
+            m["terms"]["Sci-fi"] = {"verdict" => "genre", "genre" => "Science Fiction"}
+            m["terms"]["Hard SF"] = {"verdict" => "genre", "genre" => "Science Fiction"}
+          }.to_yaml)
+          @plan.data["genres"] << {"name" => "Fantasy"}
+          @plan.decisions[30] = {"name" => "Science Fiction", "action" => "split", "into" => ["Science Fiction", "Fantasy"],
+                                 "worldcat_terms" => {"Sci-fi" => ["Science Fiction", "Fantasy"], "Hard SF" => [],
+                                                      "Science fiction" => ["Science Fiction"], "Space operas" => ["Science Fiction"]}}
+        end
+
+        test "a split genre named like its own first target still answers from worldcat_terms" do
+          split_into_own_name
+
+          result = RetargetWorldCat.call(plan: @plan, path: @path)
+
+          assert result.success?, result.errors.inspect
+          assert_equal({"verdict" => "genre", "genre" => "Science Fiction", "also" => ["Fantasy"]}, terms["Sci-fi"])
+          assert_equal({"verdict" => "drop", "reason" => "not_a_genre"}, terms["Hard SF"])
+        end
+
+        test "a split genre named like its own first target is stable on a second run" do
+          split_into_own_name
+
+          RetargetWorldCat.call(plan: @plan, path: @path)
+          first = @path.read
+          again = RetargetWorldCat.call(plan: @plan, path: @path)
+
+          assert again.success?, again.errors.inspect
+          assert_equal first, @path.read
+          assert_equal 0, again.data[:retargeted]
+        end
+
         test "a renamed genre's also names reach its terms" do
           @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["Romantic fantasy"] = {"verdict" => "genre", "genre" => "Romance fantasy"} }.to_yaml)
           @plan.data["genres"].concat([{"name" => "Romantasy"}, {"name" => "Romance"}, {"name" => "Fantasy"}])
