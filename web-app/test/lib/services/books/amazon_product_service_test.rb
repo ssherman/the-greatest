@@ -288,6 +288,18 @@ module Services
         end
       end
 
+      test "a single-book series marker creates its edition and writes the book-level identifiers" do
+        marker = with_identifiers.deep_merge("itemInfo" => {"title" => {"displayValue" => "War and Peace (Tolstoy Trilogy, Book 1)"}})
+        ::Services::Amazon::Client.stubs(:search_items).returns([marker])
+        stub_ai_match
+        stub_image
+
+        assert_difference "::Books::Edition.count", 1 do
+          AmazonProductService.call(book: @book)
+        end
+        assert @book.identifiers.exists?(identifier_type: :books_work_isbn13, value: "9781400079988", source: :amazon)
+      end
+
       test "an exact match also writes its identifiers to the book" do
         ::Services::Amazon::Client.stubs(:search_items).returns([with_identifiers])
         stub_ai_match

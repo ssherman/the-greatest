@@ -74,6 +74,16 @@ module Services
           PromoteRecords.call(books: [@book, @plain], authors: [])
         end
 
+        test "a promoted book with no author queues no Amazon job" do
+          ::Books::EnrichBookJob.stubs(:perform_async)
+          authorless = ::Books::Book.create!(title: "Provisional Authorless Book", provisional: true)
+          ::Books::AmazonProductEnrichmentJob.unstub(:perform_async)
+          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).with(authorless.id).never
+          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).with(@plain.id).once
+
+          PromoteRecords.call(books: [authorless, @plain], authors: [])
+        end
+
         test "an already promoted record is left alone and queues nothing" do
           @plain.update!(provisional: false)
           ::Books::EnrichBookJob.expects(:perform_async).never

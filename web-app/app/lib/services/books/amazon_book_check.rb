@@ -17,7 +17,21 @@ module Services
 
       # One numbered book ("Book 1", "Vol. 2", "#3") names a single book; a
       # range ("Books 1-3") still names a set, so it is not a marker.
-      SINGLE_BOOK_MARKER = /(?:\b(?:book|vol(?:ume)?\.?)|#)\s*\d+\b(?!\s*(?:-|–|to|through|and|&)\s*\d)/i
+      # Amazon also writes "(Series Trilogy, 1)" and "(Series, Book One)": a bare
+      # trailing number, or a spelled-out one, each with no range after it.
+      NUMBER_WORDS = "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve"
+      SINGLE_BOOK_MARKER = /
+        (?:\b(?:book|vol(?:ume)?\.?)|\#)\s*\d+\b(?!\s*(?:-|–|to|through|and|&)\s*\d)
+        | ,\s*\d+\s*[)\]]
+        | \b(?:book|vol(?:ume)?\.?)\s+(?:#{NUMBER_WORDS})\b(?!\s*(?:-|–|to|through|and|&)\s*\w)
+      /xi
+      # A "#1-3" range anywhere is a set. Kept here, never in the shared SET_WORDS.
+      NUMBER_RANGE = /#\s*\d+\s*(?:-|–|to|through)\s*\d+/i
+      # Series-name words a single-book marker bracket forgives; any other set
+      # word in that bracket ("Box Set", "Omnibus", "4-Book") still counts.
+      SERIES_NAME_WORDS = ["trilogy", "collection", "volumes", "complete series"].freeze
+      # Adaptations and study aids are other books, not editions of this one.
+      DERIVATIVE_WORDS = /\b(?:graphic novels?|adaptation|adapted|young readers|young adult adaptation|abridged|retold|retelling|colou?ring book|study guide|summary|summaries|workbook|companion|manga|sparknotes|cliffsnotes)\b/i
       BRACKETED = /[(\[][^()\[\]]*[)\]]/
 
       # Legacy's process_title: drop parenthesised and bracketed noise, then split
@@ -40,22 +54,32 @@ module Services
       end
 
       # A set word the product carries and the book does not. "(Tolstoy Trilogy,
-      # Book 1)" is a series marker on one book, so brackets holding a
-      # single-book marker are ignored; a set word in the book's own title
-      # ("Collection of Sand") is not evidence of a set.
+      # Book 1)" is a series marker on one book, so a bracket holding a
+      # single-book marker forgives its series-name words only ("Box Set" there
+      # still counts); a set word in the book's own title ("Collection of Sand")
+      # is not evidence of a set.
       def set?(book, product)
         return true if product.dig("itemInfo", "classifications", "binding", "displayValue").to_s.match?(/\bbox/i)
 
         raw = product.dig("itemInfo", "title", "displayValue").to_s
-        text = raw.gsub(BRACKETED) { |part| part.match?(SINGLE_BOOK_MARKER) ? "" : part }
-        ours = ([book.title] + Array(book.alternate_titles)).flat_map { |title| set_words(title.to_s) }
-        (set_words(text) - ours).any?
+        return true if raw.match?(NUMBER_RANGE)
+
+        text = raw.gsub(BRACKETED) { |part| part.match?(SINGLE_BOOK_MARKER) ? " #{(set_words(part) - SERIES_NAME_WORDS).join(" ")} " : part }
+        (set_words(text) - own_words(book, :set_words)).any?
+      end
+
+      # An adaptation, abridgement, study aid or colouring book of the book. The
+      # whole raw title is scanned, brackets included, and a term the book's own
+      # title carries ("Maus: A Graphic Novel") does not count.
+      def derivative?(book, product)
+        raw = product.dig("itemInfo", "title", "displayValue").to_s
+        (derivative_words(raw) - own_words(book, :derivative_words)).any?
       end
 
       # Exactly this book: not a set, a title our records agree with, not
       # published before the book, and an author the book shares.
       def same_book?(book, product)
-        return false if set?(book, product)
+        return false if set?(book, product) || derivative?(book, product)
 
         raw = product.dig("itemInfo", "title", "displayValue")
         listing = Listing.new(*split_title(raw))
@@ -72,6 +96,14 @@ module Services
         Array(product.dig("itemInfo", "byLineInfo", "contributors"))
           .select { |contributor| contributor["role"] == "Author" }
           .filter_map { |contributor| contributor["name"].presence }
+      end
+
+      def own_words(book, scanner)
+        ([book.title] + Array(book.alternate_titles)).flat_map { |title| send(scanner, title.to_s) }
+      end
+
+      def derivative_words(text)
+        text.to_enum(:scan, DERIVATIVE_WORDS).map { Regexp.last_match(0).downcase }
       end
 
       def set_words(text)

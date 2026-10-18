@@ -479,6 +479,16 @@ module DataImporters
           assert_includes result.summary[:data_populated], :amazon_enrichment_queued
         end
 
+        test "providers: [:amazon] runs only the Amazon provider" do
+          book = books_books(:war_and_peace)
+          ::Books::AmazonProductEnrichmentJob.unstub(:perform_async)
+          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).with(book.id).once
+
+          result = Importer.call(item: book, providers: [:amazon])
+
+          assert_equal ["DataImporters::Books::Book::Providers::Amazon"], result.provider_results.map(&:provider_name)
+        end
+
         test "enrich: false does not queue Amazon" do
           stub_resolve_down
           ::Books::AmazonProductEnrichmentJob.expects(:perform_async).never

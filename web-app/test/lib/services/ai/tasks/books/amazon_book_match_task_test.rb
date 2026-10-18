@@ -70,6 +70,12 @@ module Services
             assert_match(/collections, anthologies or bundles that contain this book together with others/i, criteria)
           end
 
+          test "non_match_criteria exclude adaptations of the book" do
+            criteria = @task.send(:non_match_criteria)
+
+            assert_includes criteria, "- Adaptations of the book: graphic novel or manga adaptations, young readers' or young adult editions, retellings, coloring books"
+          end
+
           test "match_criteria allows different bindings of the same work" do
             criteria = @task.send(:match_criteria)
 

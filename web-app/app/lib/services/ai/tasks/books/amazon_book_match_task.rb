@@ -51,6 +51,7 @@ module Services
               - Abridged versions (unless the original is also abridged)
               - Box sets, omnibus editions, or multi-book bundles
               - Collections, anthologies or bundles that contain this book together with others
+              - Adaptations of the book: graphic novel or manga adaptations, young readers' or young adult editions, retellings, coloring books
             CRITERIA
           end
 
