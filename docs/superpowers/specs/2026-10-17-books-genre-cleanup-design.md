@@ -91,6 +91,11 @@ These go into both AI prompts (§5) and are what the reviewer checks against.
 12. Names are consistent title case (`Science Fiction`, `Historical Fiction`).
 13. A genre that saved searches or recommendation settings use prefers `subject` over `delete`
     (a retype keeps its id, so they keep working).
+14. A genre that combines two things readers would look for separately is split (§4), so its books
+    get both: `Science Fiction Fantasy` → Science Fiction and Fantasy, `Rom Com` → Romance and
+    Humor, `Hockey Romance` → Romance and the Hockey subject. A compound that names one convention
+    (`Thriller & Suspense`) is kept or renamed, and one whose second half adds nothing
+    (`Cozy Fantasy`) merges.
 
 ## 4. The plan file
 
@@ -134,6 +139,45 @@ Actions and what apply turns them into (`CategoryCleanupDecision` rows, new stag
 | `subject` | `target_id` set: merge into that live subject; otherwise retype (plus rename if `as:` differs) | merge, or retype (+ rename) |
 | `location` | `target_id` required: merge into that live location | merge |
 | `delete` | soft delete | delete |
+| `split` | every book gets every `into:` target (below) | split (merge into, or rename to, the primary; links added to the rest) |
+
+### Combined genres: `split`
+
+Some genres are two things at once: `Science Fiction Fantasy` (252), `History and Politics`
+(12,605), `Science Nature` (4,140), `Art and Photography` (355), `Romantasy` (225), `Rom Com` (108),
+`Lesbian Fantasy`, `Hockey Romance`, `Military Thriller`. A merge would put their books under one
+half only, and once merged the books can no longer be told apart, so splitting happens here.
+
+```yaml
+  41611: {name: "Science Fiction Fantasy", action: split, into: ["Science Fiction", "Fantasy"]}
+  40977: {name: "History and Politics", action: split,
+          into: ["History", {subject: "Politics", target_id: 20412}],
+          worldcat_terms: {"History": ["History"], "Oral history": ["History"], "Geschichte": ["History"]}}
+  41702: {name: "Hockey Romance", action: split, into: ["Romance", {subject: "Hockey", target_id: 31187}]}
+```
+
+- Every book on the genre gets every target. `into:` entries are list names (genre or audience)
+  or existing subjects (`target_id` resolved as for `as:`); never locations.
+- The first entry is the primary. If another decision already produces that list entry (a `keep`
+  or `rename`), the split genre merges into it, so saved searches and old URLs follow it there. If
+  nothing else produces it, the split genre is renamed to it, keeping its id (`History and
+  Politics` becomes `History`, and the searches that used it now mean History).
+- A name like `Thriller & Suspense`, `Comics & Graphic Novels`, `Folklore & Fairy Tales` or
+  `Religion & Spirituality` names one convention, not two, and is not split. A compound whose
+  second half is redundant (`Cozy Fantasy`, `Second Chance Romance`) merges.
+- `worldcat_terms` (written by `map`, §5) says, for each WorldCat term that targets this genre
+  today, which of the split's genre or audience targets it now supports (§7).
+
+The applier gains a `split` action (enum value 6) and the decision table an `extra_target_ids`
+`bigint[]` column (default `{}`), filled from the non-primary targets. A split runs in the merge
+phase: it adds the genre's book links to each extra target (skipping books already there, keeping
+each link's `source`), then merges into the primary or renames to it. It is terminal like a merge
+for `supersede_conflicting` and the staleness check. Reindexing comes from the merge or rename,
+which already requeues the genre's books.
+
+Legacy sync: a new legacy link to a split genre would otherwise reach only the primary (through the
+merge redirect) or the renamed genre. `CategoryItemMigrator` loads the applied split decisions once
+per run and also links the extra targets, skipping links that already exist.
 
 `target_id` is resolved when the file is written (§5) by exact name, then alternative name,
 against live subjects or locations, and kept alongside `as:` so the reviewer sees both. The
@@ -148,8 +192,12 @@ written.
   genre missing from the file is named in the error (it means the plan is out of date).
 - `audiences:` is exactly Children's, Middle Grade and Young Adult (§2).
 - Every `into:` names a list entry; every `as:` for `audience` names an audience entry.
-- Every list entry ends as exactly one live category of its type: one `keep`/`rename` for each
-  genre entry, one `audience` decision (or `keep` of an existing audience) for each audience entry.
+- Every list entry ends as exactly one live category of its type: one `keep`, `rename` or
+  renaming `split` for each genre entry, one `audience` decision (or `keep` of an existing
+  audience) for each audience entry.
+- A `split` has at least two `into:` targets, no duplicates, and no location; its subject targets
+  have live `target_id`s; every `worldcat_terms` target is one of its genre or audience targets.
+- No merge or split target is itself merged, split, retyped or deleted by the plan.
 - The four protected genres are `keep`. Nothing merges into `Fiction` or `Nonfiction`.
 - Every `target_id` is live, of the stated type, and still has the stated name.
 - `location` always has a `target_id`.
@@ -172,8 +220,9 @@ its limit.
    their definitions in the prompt and the same per-genre facts as `draft`. The response schema
    restricts `into:` and audience `as:` to list names (enums built per call). Resolves `as:` to
    `target_id` (§4); a `location` with no match is written as `delete` with the reason "no such
-   location: X" for the reviewer. Writes `decisions:`. Resumable: genres already in `decisions:`
-   are skipped, so it also covers genres added later.
+   location: X" for the reviewer. For a `split`, the batch also receives the WorldCat terms that
+   target that genre in `genre_map.yml` and returns `worldcat_terms`. Writes `decisions:`.
+   Resumable: genres already in `decisions:` are skipped, so it also covers genres added later.
 4. Shane reviews and edits the file in the PR. **`report`** prints the decisions grouped by
    action with book counts and, for every `delete`, the saved-search and recommendation-setting
    reference counts.
@@ -242,7 +291,11 @@ The map (`config/worldcat/genre_map.yml`, 4,261 terms) names genres by name, and
   name; `merge` takes its target (an audience target becomes an audience verdict); `audience`
   becomes an audience verdict; `subject` becomes a subject verdict with the resulting subject's
   name; `location` and `delete` become `drop` with reason `not_a_genre`, unless the decision has
-  `worldcat:`, which wins (`Drama` → `Plays`). It rewrites the `genres:` and `audiences:` header
+  `worldcat:`, which wins (`Drama` → `Plays`). A term targeting a `split` genre follows that
+  decision's `worldcat_terms`: the first name becomes its `genre:` (or `audience:`), any others go
+  in a new optional `also:` list, and `ApplyCategories` counts the term as support for each
+  (`Fantasy och science fiction` supports both Science Fiction and Fantasy; `History` supports only
+  History). A term missing from `worldcat_terms` stops the retarget. It rewrites the `genres:` and `audiences:` header
   lists and leaves subject and drop verdicts alone. Running it twice gives the same file.
 - `worldcat:apply_aliases` then runs against the cleaned list (step 12, unchanged).
 
@@ -275,7 +328,10 @@ apply. Soft-deleted genres there stay soft-deleted, so nothing comes back throug
 - Validator: one test per check, plus a test that the committed `genre_plan.yml` passes against
   fixtures shaped like it (structure only; ids differ).
 - Decision builder: each action produces the decisions in §4, including the audience and subject
-  rename-plus-retype pairs and merges into a renamed list entry.
+  rename-plus-retype pairs, merges into a renamed list entry, and both split modes.
+- Applier `split`: every book ends on every target, existing links are not duplicated, sources are
+  kept; merging and renaming modes; terminal for supersede and staleness.
+- Legacy sync: a new legacy link to a split genre lands on all its targets, once.
 - `apply`: end to end on fixtures, idempotent on a second run; deleted ids removed from saved
   search and recommendation criteria, and only those.
 - AI tasks: stubbed responses; schema enums reject names off the lists; `map` resumes.
