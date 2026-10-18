@@ -64,6 +64,7 @@ module Services
 
         edition = ::Services::Books::AmazonEditionUpserter.call(book: book, product: product).edition
         @persisted << {edition: edition, product: product}
+        write_book_identifiers(product)
 
         link = upsert_external_link(parent: edition, product: product)
         attach_primary_image(
@@ -71,6 +72,18 @@ module Services
           image_url: product.dig("images", "primary", "large", "url")
         )
         link
+      end
+
+      # Only an exact match may put identifiers on the book itself. A failure
+      # here must not fail the run: the edition is already persisted.
+      def write_book_identifiers(product)
+        return unless ::Services::Books::AmazonBookCheck.same_book?(book, product)
+
+        ::Services::Books::AmazonBookIdentifiers.call(book: book, product: product)
+      rescue => e
+        @errors << "Failed to write book identifiers for ASIN #{product["asin"]}: #{e.message}"
+        Rails.logger.error "Book identifier error for book #{book.id}: #{e.message}"
+        nil
       end
 
       def after_persist(_validated_results, _search_results)
