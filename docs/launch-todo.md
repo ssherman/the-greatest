@@ -306,10 +306,10 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
     genre should be one you would have chosen, and none should carry both Fiction and Nonfiction.
     Fix the map and rerun if not. Restore with `bin/snapshot-dev-db.sh --restore` if the links look
     wrong.
-12. **Old site: stop the Goodreads import creating genres. Shane makes this change.** In
-    `the-greatest-books/admin/app/models/book.rb`, the `Category.create!` in the Goodreads genre loop
-    becomes `next if category.nil?`. This branch did not make it (the old repo's checkout had
-    uncommitted work on another branch). Deploy it before the genre apply.
+12. **Old site: stop the Goodreads import creating genres. Shane merges and deploys.** The change is
+    `the-greatest-books` PR #10 (branch `stop-goodreads-genre-creation`): the Goodreads genre loop in
+    `admin/app/models/book.rb` skips a genre it cannot find instead of creating it. Merging there
+    deploys. Deploy it before the genre apply.
 13. **Genre cleanup, in production. Shane runs with `!`.** Needs the plan files merged and deployed
     (`config/books/genre_plan.yml`, `genre_split_assignments.csv`, the retargeted
     `config/worldcat/genre_map.yml`). Dump the four tables first (the command in the category cleanup
