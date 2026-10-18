@@ -321,7 +321,17 @@ whole job stays well under `CostGuard`'s limit.
    means fix the cause, reset the decision to proposed and run again; stale means the category
    changed after the plan was built, so handle it by hand and mark the decision rejected.
    `report` prints the combined count of saved searches and recommendation settings (the plan
-   file's key stays `saved_searches`). `retarget_worldcat` leaves a term already in final form
+   file's key stays `saved_searches`). It ends with a "slug conflicts" block listing each rename,
+   renaming split and audience rename whose clean slug is held by a live category the plan does not
+   delete or merge, naming the holder, so the owner can fix the plan first.
+
+   **Slug reclaim.** A rename regenerates the slug and friendly_id adds a UUID when the clean one is
+   taken: by a soft-deleted category (`Children's` holds `children-s`), by a twin the same run merges
+   in later, or by a history row. The last Applier step (after deletes and the keep/rename-with-extras
+   pass) gives every category the run renamed the clean slug of its current name when only dead
+   categories hold it: the dead holders move to `<slug>-<id>`, their history rows for the slug go, and
+   the renamed category's old slug stays in history. A live holder keeps the slug. It is idempotent
+   and requeues the categories it changed for search. `retarget_worldcat` leaves a term already in final form
    alone, so a second run gives the same file; once retargeted, split terms no longer point at the
    split genre, so changing a split's `worldcat_terms` means restoring `config/worldcat/genre_map.yml`
    from git first.
@@ -388,6 +398,8 @@ The map (`config/worldcat/genre_map.yml`, 4,261 terms) names genres by name, and
   `weak: true`) whenever a Juvenile term's names include it, because `GenreMap` honours `weak` only
   on an audience primary. It fails when two decisions sharing a name would rewrite a term
   differently, or when a rewritten target is not in the headers. Nothing in WorldCat maps to Middle Grade.
+  A term whose target is a `keep` or `rename` genre carrying `also:` gets those names in its own `also`
+  (a union with any it has; never repeating the primary), and is not final while it lacks them.
 - `retarget_worldcat` rewrites each term from the plan: a `keep`/`rename` genre takes the list
   name; `merge` takes its target (an audience target becomes an audience verdict); `audience`
   becomes an audience verdict; `subject` becomes a subject verdict with the resulting subject's
@@ -417,7 +429,7 @@ apply. Soft-deleted genres there stay soft-deleted, so nothing comes back throug
 2. Dev, after PR 1: `draft`, Shane edits the list, `map`, `split_check`, Shane reviews with
    `report`, `retarget_worldcat`. Snapshot (`bin/snapshot-dev-db.sh --label pre-genre-cleanup`),
    then `apply` in dev and spot-check the filter modal, `/categories`, the global canon with
-   `/excluding/childrens-books`, a saved search that used a deleted genre, a split book (*The Lord
+   `/excluding/children-s-books`, a saved search that used a deleted genre, a split book (*The Lord
    of the Rings* is Fantasy only), and Shane's recommendations page (user 1141).
    **PR 2, the files**: `genre_plan.yml`, `genre_split_assignments.csv` and the rewritten
    `genre_map.yml`, nothing else. Shane's review happens here. Merge deploys it.
@@ -431,8 +443,10 @@ apply. Soft-deleted genres there stay soft-deleted, so nothing comes back throug
 
 ## 10. Testing
 
-- Validator: one test per check, plus a test that the committed `genre_plan.yml` passes against
-  fixtures shaped like it (structure only; ids differ).
+- Validator: one test per check, plus `committed_plan_test.rb`, which runs the Validator's
+  database-free `structure_errors` against the committed `genre_plan.yml` and
+  `genre_split_assignments.csv` (skipped while they are absent) and proves with temp files that a
+  malformed plan fails. PR 2 is files only, so this test lands in PR 1.
 - Decision builder: each action produces the decisions in §4, including the audience and subject
   rename-plus-retype pairs, merges into a renamed list entry, and both split modes.
 - Applier `split`: every book ends on every target, existing links are not duplicated, sources are

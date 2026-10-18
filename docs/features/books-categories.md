@@ -172,6 +172,13 @@ docker compose -f $COMPOSE exec -T db psql -U postgres the_greatest \
 docker compose -f $COMPOSE exec -T db pg_restore -U postgres -d the_greatest --data-only --disable-triggers < FILE
 ```
 
+For the genre run (`categories:genres:apply`), dump and restore six tables, not four: it also rewrites `criteria` on `saved_searches` and `recommendation_configs`. Add `-t saved_searches -t recommendation_configs` to the `pg_dump`, and make the restore `TRUNCATE` cover them too:
+
+```bash
+docker compose -f $COMPOSE exec -T db psql -U postgres the_greatest \
+  -c 'TRUNCATE categories, category_items, category_cleanup_decisions, friendly_id_slugs, saved_searches, recommendation_configs'
+```
+
 A restore needs a reindex afterwards, because apply queues search updates.
 
 Switches, as environment variables on `propose`: `LIMIT=n` caps the number of categories sent in a stage (the same as calls only at batch size 1). `REDO=1` deletes
@@ -252,7 +259,10 @@ All are `categories:genres:<name>`, run from `web-app/`, in this order:
 3. `split_check` (development). One call per 10 books on a split genre, asking which targets fit.
    Resumable by book, `FORCE=1` past the cost guard.
 4. `report` (development). Decisions by action with book counts, delete reference counts (saved
-   searches plus recommendation settings), and the validator's verdict.
+   searches plus recommendation settings), and the validator's verdict. A final "slug conflicts"
+   block lists every rename, renaming split and audience rename whose clean slug a LIVE category
+   holds that the plan neither deletes nor merges, and names that holder (see "Slugs on renames").
+   Fix the plan before applying: that rename would end with a UUID-suffixed slug.
 5. `retarget_worldcat` (development). Rewrites `config/worldcat/genre_map.yml` from the plan (see
    `worldcat-data-service.md`). A second run changes nothing.
 6. `apply` (production, Shane runs it). Validates, writes the decisions, runs
@@ -296,6 +306,34 @@ or Nonfiction.
 
 `also:` on a `keep` or `rename` names genres every book of that genre necessarily belongs to
 (`Romantasy` also Romance and Fantasy); its books are linked to them. It is not transitive.
+`retarget_worldcat` honours it: a WorldCat term that ends on such a genre gets those names as its
+own `also:` (a union with any it already had), so a Romantasy book gets Romance and Fantasy support
+too. Names are de-duplicated everywhere they could inflate support: the map task, the retarget, and
+`GenreMap#targets_for`.
+
+### Slugs on renames
+
+`Category` regenerates its friendly_id slug when the name changes, and a taken slug gets a UUID
+suffix. A clean slug can be taken by a soft-deleted category (`Children's` holds `children-s`), by a
+live twin that the same run merges in later (renames run before merges), or by a friendly_id history
+row. Left alone, `/the-greatest/children-s` would resolve to the dead holder and 404, because it has
+no `canonical`. So the last step of the Applier, after the deletes and the keep/rename-with-extras
+pass, reclaims it: for every category the run renamed (including renaming splits), when only dead
+categories hold the clean slug of its current name, each dead holder moves to `<slug>-<id>`, their
+history rows for the slug go, and the renamed category takes the slug (its previous slug stays in
+history, so old URLs still resolve). A live holder keeps the slug and the renamed category keeps what
+friendly_id gave it. Categories whose slug changed are requeued for search. The step reads the
+run's applied decisions, so it is idempotent and resumes after a crash.
+
+### The committed plan's test
+
+`test/lib/services/books/genre_plan/committed_plan_test.rb` runs
+`Validator.structure_errors` against `config/books/genre_plan.yml` and
+`genre_split_assignments.csv`, skipping when the plan file is absent. It needs no database: known
+actions, exactly the three audiences, unique list names (case-insensitive), every `into`, `as`,
+`also` and `worldcat` naming a list entry, every genre-list entry produced by a decision, and every
+assignment inside its split's targets. Live genres, target ids and existing audiences are left to
+`apply`. Further tests point the same check at temp files to prove a malformed plan fails.
 
 ### Saved searches, recommendation settings and the sync
 

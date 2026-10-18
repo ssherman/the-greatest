@@ -13,16 +13,24 @@ module Services
           new(plan, assignments).call
         end
 
+        # The checks that need no database: what the committed plan file must
+        # satisfy on its own (live genres, target ids, protected ids and the
+        # existing audiences are skipped, so ids and counts may differ).
+        def self.structure_errors(plan:, assignments:)
+          new(plan, assignments, structure_only: true).call.errors
+        end
+
         def self.target_label(entry) = entry.is_a?(Hash) ? entry["subject"].to_s : entry.to_s
 
-        def initialize(plan, assignments)
+        def initialize(plan, assignments, structure_only: false)
           @plan = plan
           @assignments = assignments
+          @structure_only = structure_only
         end
 
         def call
           errors = []
-          live = ::Books::Category.active.genre.pluck(:id, :name).to_h
+          live = @structure_only ? {} : ::Books::Category.active.genre.pluck(:id, :name).to_h
           all_decisions = @plan.decisions
           decisions = all_decisions.select { |_id, d| d.is_a?(Hash) }
           (all_decisions.keys - decisions.keys).each { |id| errors << "#{id}: the decision must be a mapping with a name and an action" }
@@ -36,14 +44,16 @@ module Services
 
           decisions.each do |id, decision|
             label = "#{id} #{decision["name"].inspect}"
-            unless live.key?(id)
-              errors << "#{label}: not a live genre"
-              next
+            unless @structure_only
+              unless live.key?(id)
+                errors << "#{label}: not a live genre"
+                next
+              end
+              errors << "#{label}: the live name is #{live[id].inspect}" if live[id] != decision["name"]
             end
-            errors << "#{label}: the live name is #{live[id].inspect}" if live[id] != decision["name"]
             errors.concat(check(decision, label))
           end
-          errors.concat(check_protected(decisions))
+          errors.concat(check_protected(decisions)) unless @structure_only
           errors.concat(check_producers(decisions))
           errors.concat(check_assignments(decisions))
           Result.new(success?: errors.empty?, data: nil, errors: errors)
@@ -108,6 +118,8 @@ module Services
         end
 
         def check_live(id, type, name, label)
+          return [] if @structure_only
+
           category = ::Books::Category.active.where(category_type: type).find_by(id: id)
           return ["#{label}: target_id #{id} is not a live #{type}"] if category.nil?
           return ["#{label}: target_id #{id} is #{category.name.inspect}, not #{name.inspect}"] if name.present? && !category.name.casecmp?(name)
@@ -158,7 +170,7 @@ module Services
             when "audience" then producers[d["as"]] += 1
             end
           end
-          ::Books::Category.active.audience.where(name: @plan.audience_names).pluck(:name).each { |name| producers[name] += 1 }
+          ::Books::Category.active.audience.where(name: @plan.audience_names).pluck(:name).each { |name| producers[name] += 1 } unless @structure_only
           # A split renames its genre to its primary only when the primary is a
           # genre-list name. An audience-name primary needs an audience producer.
           decisions.sort.each do |_id, d|
@@ -171,6 +183,8 @@ module Services
           list_names.filter_map do |name|
             count = producers[name]
             next if count == 1
+            # An audience nothing in the plan produces may be a live audience row, which only a database can tell.
+            next if @structure_only && count.zero? && @plan.audience_names.include?(name)
 
             count.zero? ? "#{name} is produced by no decision" : "#{name} is produced by #{count} decisions"
           end

@@ -5,7 +5,7 @@ module Services
     # Spec §4.3: executes a run's proposed decisions in dependency order --
     # split (renaming mode, then merging), rename (without extra targets), merge,
     # retype, create missing parents, set parent, delete, then keep and rename
-    # with extra targets in one final pass -- then
+    # with extra targets in one final pass, then reclaim clean slugs for renamed categories -- then
     # reconciles inherited links once. Staleness is checked for every decision
     # before anything is applied. Each decision is its own savepoint: a failure
     # marks that decision `failed` and the run carries on. Re-running only
