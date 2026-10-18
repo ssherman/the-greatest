@@ -23,6 +23,7 @@ module Services
 
         def initialize(rows, path: DEFAULT_PATH)
           @rows = rows
+          @answered = rows.map { |book_id, category_id, _| [category_id, book_id] }.to_set
           @path = Pathname(path)
         end
 
@@ -30,7 +31,7 @@ module Services
           @rows.each_with_object({}) { |(book_id, cat, targets), out| out[book_id] = targets if cat == category_id }
         end
 
-        def answered?(category_id, book_id) = @rows.any? { |b, c, _| b == book_id && c == category_id }
+        def answered?(category_id, book_id) = @answered.include?([category_id, book_id])
 
         def category_ids = @rows.map { |_, c, _| c }.uniq
 
@@ -45,6 +46,7 @@ module Services
             rows.each { |book_id, category_id, targets| csv << [book_id, category_id, (targets == :unknown) ? UNKNOWN : targets.join("|")] }
           end
           @rows.concat(rows)
+          rows.each { |book_id, category_id, _| @answered << [category_id, book_id] }
         end
       end
     end

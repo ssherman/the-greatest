@@ -23,8 +23,11 @@ module Services
         def call
           errors = []
           live = ::Books::Category.active.genre.pluck(:id, :name).to_h
-          decisions = @plan.decisions
+          all_decisions = @plan.decisions
+          decisions = all_decisions.select { |_id, d| d.is_a?(Hash) }
+          (all_decisions.keys - decisions.keys).each { |id| errors << "#{id}: the decision must be a mapping with a name and an action" }
 
+          errors.concat(check_list_names)
           missing = live.keys - decisions.keys
           errors << "live genres missing from the plan: #{missing.map { |id| "#{id} #{live[id]}" }.join(", ")}" if missing.any?
           if @plan.audience_names != PlanFile::AUDIENCES.keys
@@ -47,6 +50,12 @@ module Services
         end
 
         private
+
+        def check_list_names
+          names = list_names.map { |n| n.to_s.downcase }
+          dupes = names.select { |n| names.count(n) > 1 }.uniq
+          dupes.any? ? ["duplicate names across the genre and audience lists: #{dupes.join(", ")}"] : []
+        end
 
         def list_names = @list_names ||= @plan.genre_names + @plan.audience_names
 
@@ -81,8 +90,8 @@ module Services
             own = (action == "rename") ? decision["to"] : decision["name"]
             if !%w[keep rename].include?(action)
               errors << "#{label}: also is only for keep and rename"
-            elsif also.any? { |name| !@plan.genre_names.include?(name) || name == own }
-              errors << "#{label}: also must name other genres on the list"
+            elsif also.any? { |name| !@plan.genre_names.include?(name) || name == own || BOOK_TYPE_NAMES.include?(name) }
+              errors << "#{label}: also must name other genres on the list, never Fiction or Nonfiction"
             end
           end
           if decision["worldcat"] && !list_names.include?(decision["worldcat"])
@@ -121,8 +130,12 @@ module Services
           end
           list_targets = into.grep(String)
           (decision["worldcat_terms"] || {}).each do |term, names|
+            if Array(names).empty?
+              errors << "#{label}: worldcat_terms #{term.inspect} names no genres"
+              next
+            end
             bad = Array(names) - list_targets
-            errors << "#{label}: worldcat_terms #{term.inspect} names #{bad.join(", ")}, not this split's genres" if bad.any? || Array(names).empty?
+            errors << "#{label}: worldcat_terms #{term.inspect} names #{bad.join(", ")}, not this split's genres" if bad.any?
           end
           errors
         end
@@ -148,13 +161,15 @@ module Services
             when "audience" then producers[d["as"]] += 1
             end
           end
+          ::Books::Category.active.audience.where(name: @plan.audience_names).pluck(:name).each { |name| producers[name] += 1 }
+          # A split renames its genre to its primary only when the primary is a
+          # genre-list name. An audience-name primary needs an audience producer.
           decisions.sort.each do |_id, d|
             next unless d["action"] == "split"
 
             primary = Array(d["into"]).first
-            producers[primary] += 1 if primary.is_a?(String) && producers[primary].zero?
+            producers[primary] += 1 if primary.is_a?(String) && @plan.genre_names.include?(primary) && producers[primary].zero?
           end
-          ::Books::Category.active.audience.where(name: @plan.audience_names).pluck(:name).each { |name| producers[name] += 1 }
 
           list_names.filter_map do |name|
             count = producers[name]

@@ -26,8 +26,8 @@ module Services
         end
 
         def initialize(data, path: DEFAULT_PATH, exists: true)
-          @data = data || {}
-          @data["decisions"] = (@data["decisions"] || {}).transform_keys(&:to_i)
+          data ||= {}
+          @data = data.merge("decisions" => (data["decisions"] || {}).transform_keys(&:to_i))
           @path = Pathname(path)
           @exists = exists
         end

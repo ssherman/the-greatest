@@ -60,7 +60,7 @@ module Services
         end
 
         test "a merge into Fiction is refused" do
-          assert_match(/Fiction/, errors_for(plan(@ebooks.id => {"name" => "Ebooks", "action" => "merge", "into" => "Fiction"})).join("\n"))
+          assert_match(/nothing merges into Fiction/, errors_for(plan(@ebooks.id => {"name" => "Ebooks", "action" => "merge", "into" => "Fiction"})).join("\n"))
         end
 
         test "a list genre nobody produces" do
@@ -90,7 +90,7 @@ module Services
           assert_match(/audiences must be/, errors_for(bad).join("\n"))
         end
 
-        test "a split needs two distinct targets and no location" do
+        test "a split needs at least two targets" do
           one = errors_for(plan(@sff.id => {"name" => "Science Fiction Fantasy", "action" => "split", "into" => ["Fantasy"]}))
           assert_match(/at least two/, one.join("\n"))
         end
@@ -122,6 +122,75 @@ module Services
         test "split answers for a genre that is not split" do
           @assignments = Assignments.new([[1, @fantasy.id, ["Fantasy"]]])
           assert_match(/not a split/, errors_for(plan).join("\n"))
+        end
+
+        test "a split cannot name a target twice" do
+          errors = errors_for(plan(@sff.id => {"name" => "Science Fiction Fantasy", "action" => "split", "into" => ["Fantasy", "Fantasy"]}))
+          assert_match(/names a target twice/, errors.join("\n"))
+        end
+
+        test "a split cannot target a location" do
+          ohio = ::Books::Category.create!(name: "Ohio", category_type: :location)
+          into = ["Fantasy", {"subject" => "Ohio", "target_id" => ohio.id}]
+          errors = errors_for(plan(@sff.id => {"name" => "Science Fiction Fantasy", "action" => "split", "into" => into}))
+          assert_match(/not a live subject/, errors.join("\n"))
+        end
+
+        test "worldcat_terms must name the split's genres" do
+          decision = {"name" => "Science Fiction Fantasy", "action" => "split", "into" => ["Science Fiction", "Fantasy"],
+                      "worldcat_terms" => {"space" => ["Horror"]}}
+          assert_match(/worldcat_terms "space" names Horror/, errors_for(plan(@sff.id => decision)).join("\n"))
+        end
+
+        test "an empty worldcat_terms list has its own message" do
+          decision = {"name" => "Science Fiction Fantasy", "action" => "split", "into" => ["Science Fiction", "Fantasy"],
+                      "worldcat_terms" => {"space" => []}}
+          assert_match(/worldcat_terms "space" names no genres/, errors_for(plan(@sff.id => decision)).join("\n"))
+        end
+
+        test "an unknown action" do
+          assert_match(/unknown action "burn"/, errors_for(plan(@ebooks.id => {"name" => "Ebooks", "action" => "burn"})).join("\n"))
+        end
+
+        test "a decision on an id that is not a live genre" do
+          assert_match(/999999.*not a live genre/, errors_for(plan(999_999 => {"name" => "Ghost", "action" => "delete"})).join("\n"))
+        end
+
+        test "a decision that is not a mapping is an error, not a crash" do
+          assert_match(/must be a mapping/, errors_for(plan(@ebooks.id => nil)).join("\n"))
+        end
+
+        test "unknown split answers are accepted" do
+          @assignments = Assignments.new([[1, @sff.id, :unknown]])
+          assert_empty errors_for(plan)
+        end
+
+        test "an audience-name primary with no audience producer fails naming it" do
+          teen = ::Books::Category.create!(name: "Teen Fantasy", category_type: :genre)
+          decisions = {@ya.id => {"name" => "Young adult", "action" => "delete"},
+                       teen.id => {"name" => "Teen Fantasy", "action" => "split", "into" => ["Young Adult", "Fantasy"]}}
+          assert_match(/Young Adult is produced by no decision/, errors_for(plan(decisions)).join("\n"))
+        end
+
+        test "an audience-name primary beside an existing audience row passes" do
+          ::Books::Category.create!(name: "Young Adult", category_type: :audience)
+          teen = ::Books::Category.create!(name: "Teen Fantasy", category_type: :genre)
+          decisions = {@ya.id => {"name" => "Young adult", "action" => "delete"},
+                       @mg.id => {"name" => "Middle Grade", "action" => "delete"},
+                       @childrens.id => {"name" => "Children's books", "action" => "delete"},
+                       teen.id => {"name" => "Teen Fantasy", "action" => "split", "into" => ["Young Adult", "Fantasy"]}}
+          errors = errors_for(plan(decisions))
+          refute_match(/Young Adult/, errors.join("\n"))
+        end
+
+        test "duplicate list names, across lists too, are an error" do
+          errors = errors_for(plan(genres: ["Fiction", "Nonfiction", "Science Fiction", "Fantasy", "young adult"]))
+          assert_match(/duplicate names/, errors.join("\n"))
+        end
+
+        test "also cannot name Fiction or Nonfiction" do
+          errors = errors_for(plan(@fantasy.id => {"name" => "Fantasy", "action" => "keep", "also" => ["Nonfiction"]}))
+          assert_match(/never Fiction or Nonfiction/, errors.join("\n"))
         end
       end
     end

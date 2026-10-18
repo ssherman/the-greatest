@@ -13,7 +13,7 @@ module Services
           [::Books::SavedSearch, ::Books::RecommendationConfig].each do |model|
             model.find_each do |record|
               criteria = record.criteria || {}
-              KEYS.flat_map { |key| Array(criteria[key]) }.filter_map { |v| Integer(v.to_s, exception: false) }.uniq
+              KEYS.flat_map { |key| Array(criteria[key]) }.filter_map { |v| Integer(v.to_s, 10, exception: false) }.uniq
                 .each { |id| counts[id] += 1 }
             end
           end

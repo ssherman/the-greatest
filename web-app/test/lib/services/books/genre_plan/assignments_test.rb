@@ -16,6 +16,16 @@ module Services
         ensure
           FileUtils.rm_f(path)
         end
+
+        test "an empty targets field reads back as none, distinct from unknown" do
+          path = Rails.root.join("tmp", "assignments_test_#{SecureRandom.hex(4)}.csv")
+          Assignments.load(path).append([[1, 40, []], [2, 40, :unknown]])
+
+          loaded = Assignments.load(path)
+          assert_equal({1 => [], 2 => :unknown}, loaded.for(40))
+        ensure
+          FileUtils.rm_f(path)
+        end
       end
     end
   end
