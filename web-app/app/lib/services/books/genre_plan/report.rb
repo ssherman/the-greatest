@@ -27,10 +27,62 @@ module Services
             end
           end
           @plan.decisions.sort.each { |id, d| lines.concat(split_block(id, d)) if d["action"] == "split" }
+          lines.concat(slug_block)
           Result.new(success?: true, data: {lines: lines}, errors: [])
         end
 
         private
+
+        # Decisions that leave the category dead (deleted, merged away), so its slug frees up.
+        def ends_dead?(decision)
+          return false unless decision.is_a?(Hash)
+
+          case decision["action"]
+          when "delete", "merge", "location" then true
+          when "subject" then decision["target_id"].present?
+          when "split" then !renaming_split?(decision)
+          else false
+          end
+        end
+
+        def renaming_split?(decision)
+          primary = Array(decision["into"]).first
+          return false unless primary.is_a?(String) && @plan.genre_names.include?(primary)
+
+          @plan.decisions.values.none? do |d|
+            (d["action"] == "keep" && d["name"] == primary) || (d["action"] == "rename" && d["to"] == primary) || (d["action"] == "audience" && d["as"] == primary)
+          end
+        end
+
+        # [category id, the name it ends with] for every rename, renaming split and audience rename.
+        def renamed_names
+          @plan.decisions.sort.filter_map do |id, d|
+            name = case d["action"]
+            when "rename" then d["to"]
+            when "audience" then d["as"] if d["as"].present? && d["as"] != d["name"]
+            when "split" then Array(d["into"]).first if renaming_split?(d)
+            end
+            [id, name] if name.is_a?(String) && name.present?
+          end
+        end
+
+        # A rename takes the clean slug of its new name only when dead categories
+        # hold it (the applier reclaims it then). A live category the plan keeps
+        # holds it for good, so the renamed category gets a UUID-suffixed slug.
+        def slug_block
+          lines = []
+          renamed_names.each do |id, name|
+            clean = name.parameterize
+            next if clean.blank?
+
+            history = FriendlyId::Slug.where(sluggable_type: "Category", scope: ::Books::CategorySlugResolver::HISTORY_SCOPE, slug: clean).pluck(:sluggable_id)
+            holders = ::Books::Category.active.where(slug: clean).or(::Books::Category.active.where(id: history)).where.not(id: id).order(:id)
+            holders.reject { |holder| ends_dead?(@plan.decisions[holder.id]) }.each do |holder|
+              lines << "#{id} #{@plan.decisions[id]["name"]} -> #{name}: slug #{clean.inspect} is held by live #{holder.id} #{holder.name} (#{holder.category_type})"
+            end
+          end
+          lines.any? ? ["", "== slug conflicts (#{lines.size})", *lines] : []
+        end
 
         def target(d)
           to = d["to"] || d["as"] || ((d["action"] == "split") ? Array(d["into"]).map { |e| Validator.target_label(e) }.join(" + ") : d["into"])

@@ -772,6 +772,72 @@ module Services
 
         refute_includes genre.reload.alternative_names, "New Name"
       end
+
+      test "a case-only rename never leaves the new name in alternative names" do
+        category = ::Books::Category.create!(name: "science fiction", category_type: :genre, alternative_names: ["Science Fiction", "SF"])
+        decide(category, :rename, new_name: "Science Fiction")
+
+        Applier.call(run: "r1")
+
+        assert_equal ["SF"], category.reload.alternative_names
+      end
+
+      test "a rename onto a slug a soft-deleted category holds reclaims the clean slug" do
+        dead = genre("Children's")
+        dead.update!(deleted: true)
+        assert_equal "children-s", dead.slug
+        renamed = genre("Children's books")
+        old_slug = renamed.slug
+        decide(renamed, :rename, new_name: "Children's")
+
+        Applier.call(run: "r1")
+
+        assert_equal "children-s", renamed.reload.slug
+        assert_equal "children-s-#{dead.id}", dead.reload.slug
+        assert_equal renamed, ::Books::CategorySlugResolver.call("children-s")
+        assert_equal renamed, ::Books::CategorySlugResolver.call(old_slug)
+      end
+
+      test "a rename onto the slug of a twin the same run merges in reclaims it, and the twin's URL follows" do
+        twin = genre("Science Fiction")
+        lower = genre("Science fiction")
+        assert_equal "science-fiction", twin.slug
+        assert_not_equal "science-fiction", lower.slug
+        decide(lower, :rename, new_name: "Science Fiction")
+        decide(twin, :merge, target_category: lower)
+
+        Applier.call(run: "r1")
+
+        assert_equal "science-fiction", lower.reload.slug
+        assert twin.reload.deleted?
+        assert_not_equal "science-fiction", twin.slug
+        assert_equal lower, ::Books::CategorySlugResolver.call("science-fiction")
+        assert_equal lower, ::Books::CategorySlugResolver.call(twin.slug)
+      end
+
+      test "a slug held by a live category stays with it" do
+        holder = genre("Children's")
+        renamed = genre("Children's books")
+        decide(renamed, :rename, new_name: "Children's")
+
+        Applier.call(run: "r1")
+
+        assert_equal "children-s", holder.reload.slug
+        assert_not_equal "children-s", renamed.reload.slug
+      end
+
+      test "reclaiming a slug is a no-op on a re-run" do
+        dead = genre("Children's")
+        dead.update!(deleted: true)
+        renamed = genre("Children's books")
+        decide(renamed, :rename, new_name: "Children's")
+        Applier.call(run: "r1")
+        before = [renamed.reload.slug, dead.reload.slug, FriendlyId::Slug.count]
+
+        Applier.call(run: "r1")
+
+        assert_equal before, [renamed.reload.slug, dead.reload.slug, FriendlyId::Slug.count]
+      end
     end
   end
 end

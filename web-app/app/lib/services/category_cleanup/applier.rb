@@ -46,6 +46,7 @@ module Services
         pending.where(action: %i[rename keep]).where.not(extra_target_ids: []).find_each { |decision| apply_one(decision) }
         kept = pending.where(action: :keep).update_all(status: ::CategoryCleanupDecision.statuses.fetch("applied"), updated_at: Time.current)
         @stats["keep"] += kept if kept.positive?
+        reclaim_slugs
 
         # Idempotent, and run whenever the run has applied anything: a crash or
         # failure inside it on an earlier invocation must not be skipped on re-run.
@@ -209,7 +210,52 @@ module Services
           alternatives.none? { |alt| NameNormalizer.twin_key(alt) == old_key }
         # Keep the old name as an alternative so a set_parent chain proposed
         # against it still resolves once the rename has landed.
-        category.update!({name: new_name}.merge(remember_old ? {alternative_names: alternatives + [old_name]} : {}))
+        # The new name never stays in the list, even when the old one is not remembered.
+        category.update!(name: new_name, alternative_names: alternatives + (remember_old ? [old_name] : []))
+      end
+
+      # A rename makes friendly_id pick a slug while the clean one may still be
+      # held by a soft-deleted category, a twin this run merged in later, or a
+      # history row of either; friendly_id then falls back to a UUID suffix and
+      # the clean URL would resolve to the dead holder, which has no canonical.
+      # Once the deletes and merges have landed, every category this run
+      # renamed takes the clean slug of its current name when only dead
+      # categories hold it. The dead holders move to "<slug>-<id>", their
+      # history rows for it go, and the renamed category keeps its old slugs in
+      # history. A live holder keeps the slug. Derived from the applied
+      # decisions, so a re-run (or a resume after a crash) finds nothing to do.
+      def reclaim_slugs
+        ids = ::CategoryCleanupDecision.for_run(@run).applied.where(action: %i[rename split]).where.not(new_name: [nil, ""]).distinct.pluck(:category_id)
+        ::Books::Category.active.where(id: ids).find_each do |category|
+          reclaim_slug(category)
+        rescue => e
+          Rails.logger.warn("[category cleanup] could not reclaim a slug for #{category.name}: #{e.class}: #{e.message}")
+        end
+      end
+
+      def reclaim_slug(category)
+        clean = category.name.to_s.parameterize
+        return if clean.blank? || category.slug == clean
+
+        holders = slug_holders(clean, category)
+        return if holders.any? { |holder| !holder.deleted? }
+
+        ::Category.transaction(requires_new: true) do
+          holders.each { |holder| holder.update_columns(slug: "#{clean}-#{holder.id}") if holder.slug == clean }
+          FriendlyId::Slug.where(sluggable_type: "Category", scope: ::Books::CategorySlugResolver::HISTORY_SCOPE, slug: clean)
+            .where.not(sluggable_id: category.id).delete_all
+          category.update!(slug: clean)
+        end
+        ::Categories::ItemReindexer.call(category: category)
+      end
+
+      # Every other category that answers to the slug: its current holder and
+      # whatever friendly_id history points at it.
+      def slug_holders(clean, category)
+        by_slug = ::Books::Category.where(slug: clean).where.not(id: category.id).to_a
+        history_ids = FriendlyId::Slug.where(sluggable_type: "Category", scope: ::Books::CategorySlugResolver::HISTORY_SCOPE, slug: clean)
+          .where.not(sluggable_id: category.id).pluck(:sluggable_id)
+        by_slug + ::Books::Category.where(id: history_ids - by_slug.map(&:id)).to_a
       end
 
       def apply_keep(decision)

@@ -53,6 +53,30 @@ module Services
 
           assert_includes text, "1 Ebooks (books 2, saved searches + recommendation settings 0)"
         end
+
+        test "warns when a rename's clean slug is held by a live category the plan keeps" do
+          holder = ::Books::Category.create!(name: "Children's", category_type: :genre)
+          dead = ::Books::Category.create!(name: "Young Adult", category_type: :genre, deleted: true)
+          merged_twin = ::Books::Category.create!(name: "Science Fiction", category_type: :genre)
+          renamed = ::Books::Category.create!(name: "Children's books", category_type: :genre)
+          ya = ::Books::Category.create!(name: "YA books", category_type: :genre)
+          sf = ::Books::Category.create!(name: "Science fiction", category_type: :genre)
+          plan = PlanFile.new({"run" => "g", "decisions" => {
+            holder.id => {"name" => holder.name, "action" => "keep"},
+            renamed.id => {"name" => renamed.name, "action" => "rename", "to" => "Children's"},
+            ya.id => {"name" => ya.name, "action" => "rename", "to" => "Young Adult"},
+            merged_twin.id => {"name" => merged_twin.name, "action" => "merge", "into" => "Science Fiction"},
+            sf.id => {"name" => sf.name, "action" => "rename", "to" => "Science Fiction"}
+          }})
+
+          text = Report.call(plan: plan, assignments: Assignments.new([])).data[:lines].join("\n")
+
+          assert_includes text, "== slug conflicts (1)"
+          assert_includes text, "#{renamed.id} Children's books -> Children's: slug \"children-s\" is held by live #{holder.id} Children's"
+          assert_not_includes text, "Young Adult: slug"
+          assert_not_includes text, "Science Fiction: slug"
+          assert dead.deleted?
+        end
       end
     end
   end
