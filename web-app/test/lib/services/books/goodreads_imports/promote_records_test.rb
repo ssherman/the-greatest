@@ -63,9 +63,21 @@ module Services
           PromoteRecords.call(books: [@book], authors: [])
         end
 
+        test "every promoted book queues Amazon, including one waiting on its author's chain" do
+          ::Books::Authors::WikidataJob.stubs(:perform_async)
+          ::Books::EnrichBookJob.stubs(:perform_async)
+          # The global stub would swallow a second or unexpected call.
+          ::Books::AmazonProductEnrichmentJob.unstub(:perform_async)
+          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).with(@book.id)
+          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).with(@plain.id)
+
+          PromoteRecords.call(books: [@book, @plain], authors: [])
+        end
+
         test "an already promoted record is left alone and queues nothing" do
           @plain.update!(provisional: false)
           ::Books::EnrichBookJob.expects(:perform_async).never
+          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).never
 
           assert_empty PromoteRecords.call(books: [@plain], authors: []).data[:book_ids]
         end

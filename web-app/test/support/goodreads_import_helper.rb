@@ -23,6 +23,7 @@ module GoodreadsImportHelper
     ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns(search_hits)
     ::Search::Books::Search::AuthorByName.stubs(:call).returns([])
     ::Books::EnrichBookJob.stubs(:perform_async)
+    ::Books::AmazonProductEnrichmentJob.stubs(:perform_async)
     ::Books::Authors::WikidataJob.stubs(:perform_async)
     # Sidekiq runs inline in tests; a test that cares asserts on this.
     ::Books::Goodreads::FetchPageJob.stubs(:perform_async)
