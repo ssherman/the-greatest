@@ -28,6 +28,10 @@ module Services
             assert_includes task(:head).send(:system_message), "is the entry itself, not a different subject"
           end
 
+          test "the prompt says audience is its own category type" do
+            assert_includes task(:head).send(:system_message), "an audience (\"Young Adult\"), which is its own category type"
+          end
+
           test "keeps a valid result and drops an unknown action" do
             outcome = task(:tail).send(:process_and_persist, {parsed: {results: [
               {key: "1", action: "merge", name: "Spacecraft Missions", merge_into: "Space Exploration", reason: "Covered."}
