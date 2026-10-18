@@ -2,6 +2,15 @@ require "test_helper"
 
 module Books
   class BrowseToolbarComponentTest < ViewComponent::TestCase
+    test "the Audiences tab appears only when an audience category exists" do
+      render_inline(Books::BrowseToolbarComponent.new(axis: :categories, sort: "book_count", type: "genre", show_types: true))
+      refute_text "Audiences"
+
+      Books::Category.create!(name: "Young Adult", category_type: :audience)
+      render_inline(Books::BrowseToolbarComponent.new(axis: :categories, sort: "book_count", type: "genre", show_types: true))
+      assert_text "Audiences"
+    end
+
     test "search form targets the results frame and keeps the current type" do
       render_inline(Books::BrowseToolbarComponent.new(axis: :categories, type: "location", sort: "name",
         show_types: true, search: true, query: "par"))

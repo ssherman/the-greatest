@@ -29,6 +29,15 @@ module Books
       assert_not_includes slugs, "france"
     end
 
+    test "genre facet includes audience categories" do
+      audience = Books::Category.create!(name: "Young Adult", category_type: :audience)
+      CategoryItem.create!(category: audience, item: books_books(:crime_and_punishment))
+
+      slugs = facets.genres.map { |row| row[:record].slug }
+
+      assert_includes slugs, audience.slug
+    end
+
     test "genre facet keeps the category filter applied and drills down" do
       counts = facets(categories: [categories(:books_novels_genre)])
         .genres.to_h { |row| [row[:record].slug, row[:count]] }

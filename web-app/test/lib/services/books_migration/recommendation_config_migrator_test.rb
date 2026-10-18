@@ -68,4 +68,18 @@ class Services::BooksMigration::RecommendationConfigMigratorTest < ActiveSupport
     assert_not result[:success]
     assert_match(/book_length enum/, result[:error])
   end
+
+  test "drops a deleted, unmerged category id and keeps a merged one" do
+    gone = ::Books::Category.create!(name: "Gone Genre", category_type: :genre, deleted: true)
+    merged = ::Books::Category.create!(name: "Merged Genre", category_type: :genre, deleted: true, merged_into: @category)
+    LegacyIdMap.record(model: "Books::Category", legacy_id: 66_666, new_id: gone.id)
+    LegacyIdMap.record(model: "Books::Category", legacy_id: 77_777, new_id: merged.id)
+
+    result = run_migrator([legacy_row("included_category_ids" => [55_555, 66_666, 77_777], "excluded_category_ids" => [])])
+
+    assert result[:success], result[:error]
+    config = ::Books::RecommendationConfig.find_by!(user: users(:editor_user))
+    assert_equal [@category.id, merged.id], config.criteria["included_category_ids"]
+    assert_includes result[:data][:dropped_category_ids], 66_666
+  end
 end

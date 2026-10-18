@@ -132,6 +132,10 @@ categories across genre, theme, game mode and player perspective.
 - Series populator: `Books::Series` is empty. Cached Goodreads pages keep each book's Goodreads
   series ids (`series` on the page rows), so they can seed it.
 - series UI
+- Book records that are really series or box sets: *A Song of Ice and Fire* (48163) and its
+  "5 Book Boxed Set" (120292); about 400 titles match trilogy, box set, omnibus or complete series
+  (dev, 2026-10-17). They sit on lists and in rankings, so decide per record whether it becomes a
+  `Books::Series`, merges into its first volume, or stays. Its own spec.
 
 - new books added are not automatically enriched
 - category importer

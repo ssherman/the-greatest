@@ -1075,6 +1075,8 @@ Rails.application.routes.draw do
       defaults: {filter: "location"}, constraints: {sort: browse_sort, page: /\d+/}
     get "categories/subjects(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",
       defaults: {filter: "subject"}, constraints: {sort: browse_sort, page: /\d+/}
+    get "categories/audiences(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",
+      defaults: {filter: "audience"}, constraints: {sort: browse_sort, page: /\d+/}
 
     get "countries", to: "books/browse#countries", as: :books_countries
     get "countries/page/:page", to: "books/browse#countries", as: :books_countries_page,

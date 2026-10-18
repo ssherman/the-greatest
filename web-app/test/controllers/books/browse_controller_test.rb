@@ -25,6 +25,14 @@ module Books
       assert_select "a[href='/the-greatest/novels/books']"
     end
 
+    test "the audiences list renders when there are no audience categories" do
+      Books::Category.where(category_type: :audience).update_all(deleted: true)
+
+      get "/categories/audiences"
+
+      assert_response :success
+    end
+
     test "categories is edge cacheable" do
       get "/categories"
 
@@ -126,9 +134,10 @@ module Books
     end
 
     test "categories renders no N+1" do
-      # Config, page count, page rows. CategoryChains loads the rows, so the
-      # view's @records.any? no longer costs its own EXISTS query.
-      assert_queries_count 3 do
+      # Config, page count, page rows, and the toolbar's audiences-exist check.
+      # CategoryChains loads the rows, so the view's @records.any? no longer
+      # costs its own EXISTS query.
+      assert_queries_count 4 do
         get "/categories"
       end
     end

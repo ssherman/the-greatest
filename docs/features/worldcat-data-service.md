@@ -333,10 +333,14 @@ until those tasks have run.
 ```yaml
 version: 1
 genres: [<site genre names the pass was given>]
+audiences: [Children's, Middle Grade, Young Adult]    # added by the genre cleanup
 terms:
   "Detective and mystery fiction":
-    verdict: genre          # genre | subject | drop
+    verdict: genre          # genre | audience | subject | drop
     genre: Mystery          # for genre: a name from `genres`
+    # audience: Young Adult                    for audience: a name from `audiences`
+    # also: [Fantasy]                          optional, genre or audience verdicts: more names this term supports
+    # weak: true                               audience verdicts only: weak evidence (see below)
     # subject: <canonical English phrase>      for subject
     # reason: format | language_of_material | not_a_genre | too_specific    for drop
     language: en            # ISO 639-1 of the term
@@ -349,6 +353,16 @@ terms:
 string. It rejects a batch with an unknown verdict, a genre not on the list, a subject verdict with
 no phrase or a drop with no valid reason. The service returns raw WorldCat terms and knows nothing
 about our categories; the mapping lives only here.
+
+The `audience` verdict, `also:`, `weak: true` and the `audiences:` header come from the books genre
+cleanup (`docs/superpowers/specs/2026-10-17-books-genre-cleanup-design.md` §7), and
+`categories:genres:retarget_worldcat` writes them from the reviewed genre plan. `GenreMap#targets_for`
+returns every genre or audience a term supports, primary first, then the `also:` names.
+`ApplyCategories` counts a term as support for each of them, and `ApplyAliases` adds aliases to
+audiences as well as genres. A `weak` audience verdict (WorldCat's "Juvenile" terms, which cover about
+ages 0 to 15 and turn up on children's editions of classics) adds a link only when the book already
+has that audience or at least one matched record supports it through a non-weak term; `GenreMap`
+honours `weak` only on an audience primary. The run's data reports `weak_skipped`.
 
 ### The backfill and its support rule
 

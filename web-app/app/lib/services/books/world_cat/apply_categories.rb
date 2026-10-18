@@ -30,14 +30,19 @@ module Services
 
         def call
           genre_support = Hash.new(0)
+          strong_support = Hash.new(0)
           subject_support = Hash.new(0)
           genre_bearing = 0
           subject_bearing = 0
           @records.each do |record|
-            genre = record.genre.present? && @map.genre_for(record.genre)
-            if genre
-              genre_support[genre] += 1
+            targets = record.genre.present? ? @map.targets_for(record.genre) : []
+            if targets.any?
               genre_bearing += 1
+              targets.each do |target|
+                key = [target.kind, target.name]
+                genre_support[key] += 1
+                strong_support[key] += 1 unless target.weak
+              end
             end
             phrases = ([record.genre] + record.subjects).compact.filter_map { |term| @map.subject_for(term) }.uniq
             subject_bearing += 1 if phrases.any?
@@ -45,14 +50,24 @@ module Services
           end
 
           genres_linked = []
+          audiences_linked = []
+          weak_skipped = 0
           subjects_linked = []
           unresolved = []
           already = 0
           type_conflicts = 0
 
-          supported(genre_support, genre_bearing).sort_by { |name| [-genre_support[name], name] }.each do |name|
-            category = ::Books::Category.active.genre.by_name(name).first
+          supported(genre_support, genre_bearing).sort_by { |kind, name| [-genre_support[[kind, name]], kind.to_s, name] }.each do |kind, name|
+            scope = (kind == :audience) ? ::Books::Category.active.audience : ::Books::Category.active.genre
+            category = scope.by_name(name).first
             next unless category
+
+            # WorldCat's "Juvenile" spans ages 0-15 and lands on children's editions
+            # of classics: on its own it is not enough for a new audience link.
+            if strong_support[[kind, name]].zero? && !@book.categories.active.exists?(id: category.id)
+              weak_skipped += 1
+              next
+            end
 
             # A book is Fiction or Nonfiction, never both: WorldCat disagreeing with a
             # type the book already holds is a conflict to count, not to resolve.
@@ -62,7 +77,13 @@ module Services
             end
 
             created = link(category)
-            created ? genres_linked << category.name : already += 1
+            if !created
+              already += 1
+            elsif kind == :audience
+              audiences_linked << category.name
+            else
+              genres_linked << category.name
+            end
           end
           supported(subject_support, subject_bearing).each do |phrase|
             category = ::Books::Category.active.subject.by_name(phrase).first ||
@@ -76,7 +97,7 @@ module Services
           end
 
           Result.new(success?: true, errors: [], data: {
-            records: @records.size, genres_linked: genres_linked.sort, subjects_linked: subjects_linked.sort,
+            records: @records.size, genres_linked: genres_linked.sort, audiences_linked: audiences_linked.sort, weak_skipped: weak_skipped, subjects_linked: subjects_linked.sort,
             subjects_unresolved: unresolved.sort, already_linked: already, type_conflicts: type_conflicts
           })
         end
@@ -100,7 +121,7 @@ module Services
         # @param bearing [Integer] records carrying any mapped term of this kind
         def supported(support, bearing)
           threshold = (@records.size == 1) ? 1 : [MIN_SUPPORT, (bearing * MIN_SHARE).ceil].max
-          support.select { |_name, n| n >= threshold }.keys
+          support.select { |_key, n| n >= threshold }.keys
         end
 
         # @return [Boolean] true when a new link was made

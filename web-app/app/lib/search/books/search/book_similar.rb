@@ -78,8 +78,10 @@ module Search
           # silently dropped from the actual query. Not worth a
           # type -> field -> boost map for a change that isn't coming; this
           # constant alone does not make the query type-agnostic.
+          # The buckets come from Books::Book.scoring_type, so an audience
+          # category lands in "genre" and no "audience" key exists.
           by_type = ::Books::Book::SIMILARITY_CATEGORY_TYPES.index_with do |type|
-            select_categories(active.select { |c| c.category_type == type }, opts)
+            select_categories(active.select { |c| ::Books::Book.scoring_type(c.category_type) == type }, opts)
           end
 
           restore_rarest_genre_if_ceiling_emptied_genres(active, by_type, opts)
@@ -118,7 +120,7 @@ module Search
           return by_type unless opts[:drop_common_categories]
           return by_type if by_type["genre"].any?
 
-          rarest_genre = active.select { |c| c.category_type == "genre" }.min_by { |c| [c.item_count.to_i, c.id] }
+          rarest_genre = active.select { |c| ::Books::Book.scoring_type(c.category_type) == "genre" }.min_by { |c| [c.item_count.to_i, c.id] }
           by_type["genre"] = [rarest_genre] if rarest_genre
           by_type
         end

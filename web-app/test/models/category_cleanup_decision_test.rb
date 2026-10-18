@@ -65,4 +65,21 @@ class CategoryCleanupDecisionTest < ActiveSupport::TestCase
     refute CategoryCleanupDecision.exists?(own.id)
     refute CategoryCleanupDecision.exists?(targeted.id)
   end
+
+  test "a split needs a target or a new name" do
+    category = categories(:books_novels_genre)
+    base = {category: category, run: "r1", stage: "genres", action: :split, decided_by: :ai,
+            category_snapshot: CategoryCleanupDecision.snapshot_of(category)}
+
+    refute CategoryCleanupDecision.new(base).valid?
+    assert CategoryCleanupDecision.new(base.merge(new_name: "History")).valid?
+    assert CategoryCleanupDecision.new(base.merge(target_category: categories(:books_classics_genre))).valid?
+  end
+
+  test "terminal covers split" do
+    category = categories(:books_novels_genre)
+    split = CategoryCleanupDecision.create!(category: category, run: "t", stage: "genres", action: :split, decided_by: :ai, new_name: "History")
+
+    assert_includes CategoryCleanupDecision.terminal, split
+  end
 end

@@ -16,8 +16,8 @@ module Books
   class SavedSearchFilterLabels
     Group = Struct.new(:label, :values, :note, keyword_init: true)
 
-    ANY_NOTE = "Books must have at least one of these genres"
-    ALL_NOTE = "Books must have all of these genres"
+    ANY_NOTE = "Books must have at least one of these categories"
+    ALL_NOTE = "Books must have all of these categories"
     UNREADABLE_NOTE = "This search matches no books until it is edited"
 
     def self.call(criteria)
@@ -35,8 +35,8 @@ module Books
         ranked_group,
         max_position_group,
         year_group,
-        category_group("Including genres", included_category_ids, genre_note),
-        category_group("Excluding genres", excluded_category_ids, nil),
+        category_group("Including categories", included_category_ids, genre_note),
+        category_group("Excluding categories", excluded_category_ids, nil),
         language_group("Including languages", criteria.included_language_ids),
         language_group("Excluding languages", criteria.excluded_language_ids),
         country_group("Including origins", criteria.included_country_ids),

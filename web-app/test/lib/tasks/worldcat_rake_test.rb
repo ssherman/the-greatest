@@ -33,9 +33,9 @@ class WorldcatRakeTest < ActiveSupport::TestCase
   end
 
   test "report writes the data-quality page" do
-    result = Services::Books::WorldCat::MappingReport::Result.new(success?: true, data: {top: [], unplaced: [1, 2], counts: {genre: 3, subject: 1, drop: 2}}, errors: [])
+    result = Services::Books::WorldCat::MappingReport::Result.new(success?: true, data: {top: [], unplaced: [1, 2], counts: {genre: 3, audience: 4, subject: 1, drop: 2}}, errors: [])
     Services::Books::WorldCat::MappingReport.expects(:call).with { |args| args[:out_path].to_s.end_with?("docs/data-quality/worldcat-genre-mapping.md") }.returns(result)
-    assert_output(/3 genre, 1 subject, 2 drop; 2 terms with no genre/) { Rake::Task["worldcat:report"].invoke }
+    assert_output(/3 genre, 4 audience, 1 subject, 2 drop; 2 terms with no genre/) { Rake::Task["worldcat:report"].invoke }
   end
 
   test "apply_aliases reports what it added" do

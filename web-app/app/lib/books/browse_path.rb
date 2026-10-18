@@ -12,7 +12,7 @@ module Books
     BASES = {categories: "/categories", countries: "/countries"}.freeze
 
     # The genre type is the page's default view, so it has no segment.
-    TYPE_SEGMENTS = {"location" => "settings", "subject" => "subjects"}.freeze
+    TYPE_SEGMENTS = {"audience" => "audiences", "location" => "settings", "subject" => "subjects"}.freeze
 
     def self.call(**options)
       new(**options).call

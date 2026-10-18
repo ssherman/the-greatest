@@ -62,10 +62,21 @@ class Books::Book < ApplicationRecord
   # per-edition source arrives, and should go away when one does.
   enum :book_length, {very_short: 0, short: 1, medium: 2, moderate: 3, long: 4, very_long: 5}
 
-  # The category types that participate in similarity scoring. Books carry no
-  # `theme` categories today; counting only the scoring types keeps
-  # similarity_category_count honest if that changes.
+  # The scoring buckets of similarity and recommendations. Audience scores in
+  # the genre bucket; SCORED_CATEGORY_TYPES is the list of scored types.
+  # Books carry no `theme` categories today; counting only the scored types
+  # keeps similarity_category_count honest if that changes.
   SIMILARITY_CATEGORY_TYPES = %w[genre subject location].freeze
+
+  # Category type -> the bucket it scores in. Audience scores exactly as a
+  # genre (docs/superpowers/specs/2026-10-17-books-genre-cleanup-design.md §6):
+  # Children's, Middle Grade and Young Adult were genres until the genre
+  # cleanup, and similar books and recommendations were tuned with them in.
+  SCORING_TYPE_OF = {"genre" => "genre", "audience" => "genre", "subject" => "subject", "location" => "location"}.freeze
+  SCORED_CATEGORY_TYPES = SCORING_TYPE_OF.keys.freeze
+  GENRE_SCORED_TYPES = SCORING_TYPE_OF.select { |_type, bucket| bucket == "genre" }.keys.freeze
+
+  def self.scoring_type(category_type) = SCORING_TYPE_OF[category_type.to_s]
 
   # Fiction and Nonfiction are a book-level TYPE, not a genre. They still index into
   # genre_category_ids -- Search::Books::Search::BookSimilar needs the ids there to
@@ -218,14 +229,14 @@ class Books::Book < ApplicationRecord
   def similarity_category_count
     categories.count do |c|
       c.deleted == false &&
-        SIMILARITY_CATEGORY_TYPES.include?(c.category_type) &&
+        self.class.scoring_type(c.category_type) &&
         !(c.category_type == "genre" && BOOK_TYPE_CATEGORY_NAMES.include?(c.name))
     end
   end
 
   def as_indexed_json
     active = categories.select { |c| c.deleted == false }
-    scored = active.select { |c| SIMILARITY_CATEGORY_TYPES.include?(c.category_type) }
+    scored = active.select { |c| self.class.scoring_type(c.category_type) }
 
     {
       title: title,
@@ -234,7 +245,7 @@ class Books::Book < ApplicationRecord
       author_names: authors.map(&:name),
       author_ids: authors.map(&:id),
       category_ids: active.map(&:id),
-      genre_category_ids: scored.select { |c| c.category_type == "genre" }.map(&:id),
+      genre_category_ids: scored.select { |c| self.class.scoring_type(c.category_type) == "genre" }.map(&:id),
       subject_category_ids: scored.select { |c| c.category_type == "subject" }.map(&:id),
       location_category_ids: scored.select { |c| c.category_type == "location" }.map(&:id),
       similarity_category_count: similarity_category_count,

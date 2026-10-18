@@ -19,6 +19,23 @@ module Recommendations
         @adapter.interactions(@user).find { |i| i.item_id == books_books(book).id }
       end
 
+      test "categories_for reports an audience as a genre" do
+        book = books_books(:crime_and_punishment)
+        audience = ::Books::Category.create!(name: "Young Adult", category_type: :audience)
+        CategoryItem.create!(category: audience, item: book)
+
+        fact = @adapter.categories_for([book.id]).fetch(book.id).find { |f| f.id == audience.id }
+
+        assert_equal "genre", fact.category_type
+      end
+
+      test "item_facts count an audience among the genre ids" do
+        audience = ::Books::Category.create!(name: "Young Adult", category_type: :audience)
+        CategoryItem.create!(category: audience, item: books_books(:got))
+
+        assert_includes @adapter.item_facts([books_books(:got).id])[books_books(:got).id].genre_ids, audience.id
+      end
+
       test "favorites take the favorite weight plus the rating weight" do
         assert_in_delta 2.0 + 0.75 * 2, interaction(:war_and_peace).weight, 0.001
         assert_equal :favorite, interaction(:war_and_peace).kind

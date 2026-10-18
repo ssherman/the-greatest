@@ -64,6 +64,17 @@ module Search
           ::Search::Books::Search::BookSimilar.call(book, {min_score: 0}.merge(options)).map { |hit| hit[:id] }
         end
 
+        test "an audience category on the source scores in the genre bucket" do
+          audience = ::Books::Category.create!(name: "Young Adult", category_type: :audience, item_count: 10)
+          CategoryItem.create!(category: audience, item: @book)
+          @book.reload
+
+          by_type = BookSimilar.categories_by_type(@book, {max_categories_per_type: 10, drop_common_categories: false})
+
+          assert_includes by_type["genre"].map(&:id), audience.id
+          refute by_type.key?("audience")
+        end
+
         test "returns nothing when the book has no scoring categories" do
           # of_mice_and_men carries no category items in the fixtures.
           index_book(9001, genre_category_ids: [@novels], similarity_category_count: 1)

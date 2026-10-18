@@ -1,6 +1,6 @@
 module Books
   class BrowseToolbarComponent < ViewComponent::Base
-    TYPE_LABELS = {"genre" => "Genres", "location" => "Settings", "subject" => "Subjects"}.freeze
+    TYPE_LABELS = {"genre" => "Genres", "audience" => "Audiences", "location" => "Settings", "subject" => "Subjects"}.freeze
     SORT_LABELS = {"book_count" => "Most books", "name" => "A–Z"}.freeze
     # The turbo-frame the grid and the search results both render into, so a
     # search response (a full page) can be unwrapped to just this frame.
@@ -26,9 +26,17 @@ module Books
     attr_reader :axis, :sort, :type, :active_type, :show_types, :show_sort, :search, :query, :browse_path
 
     def type_links
-      TYPE_LABELS.map do |value, label|
+      TYPE_LABELS.filter_map do |value, label|
+        next if value == "audience" && !audiences?
         {label: label, path: path_for(type: value, sort: sort), active: !active_type.nil? && value == active_type}
       end
+    end
+
+    # Audiences arrive with the genre cleanup; until then the tab would lead to
+    # an empty page.
+    def audiences?
+      return @audiences if defined?(@audiences)
+      @audiences = ::Books::Category.active.audience.exists?
     end
 
     def sort_links

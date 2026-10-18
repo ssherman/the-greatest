@@ -62,9 +62,15 @@ module Services
       def remap_category_ids(value)
         Array(value).compact.filter_map do |legacy_id|
           new_id = category_map[legacy_id.to_i]
+          # A deleted, unmerged category matches nothing; a merged one is followed at query time.
+          new_id = nil unless new_id.nil? || usable_category_ids.include?(new_id)
           @dropped_category_ids << legacy_id.to_i if new_id.nil?
           new_id
         end
+      end
+
+      def usable_category_ids
+        @usable_category_ids ||= ::Books::Category.where(deleted: false).or(::Books::Category.merged).pluck(:id).to_set
       end
 
       def category_map
