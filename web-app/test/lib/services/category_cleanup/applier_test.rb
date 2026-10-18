@@ -727,6 +727,51 @@ module Services
         assert CategoryItem.exists?(category: fantasy, item: @book, source: :admin)
         assert CategoryItem.exists?(category: romance, item: @book, source: :legacy)
       end
+
+      test "a resumed split leaves links that arrived from an earlier split untouched" do
+        other = genre("Other")
+        a_book = @book
+        b_book = books_books(:crime_and_punishment)
+        a = genre("History and Politics", books: [a_book])
+        b = genre("Politics and Society", books: [b_book])
+        a_split = decide(a, :split, stage: "genres", new_name: "A2", extra_target_ids: [b.id],
+          split_assignments: {a_book.id.to_s => [b.id]})
+        b_split = decide(b, :split, stage: "genres", new_name: "B2", extra_target_ids: [other.id])
+        other.update_columns(deleted: true) # B fails after A landed
+        Applier.call(run: "r1")
+        assert a_split.reload.applied?
+        assert b_split.reload.failed?
+        other.update_columns(deleted: false)
+        b_split.update_columns(status: CategoryCleanupDecision.statuses.fetch("proposed"))
+
+        Applier.call(run: "r1")
+
+        assert b_split.reload.applied?
+        assert CategoryItem.exists?(category: b, item: a_book)
+        refute CategoryItem.exists?(category: other, item: a_book)
+      end
+
+      test "a book linked to a split genre with no answer still gets every target" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id])
+
+        Applier.call(run: "r1")
+
+        assert CategoryItem.exists?(category: sf, item: @book)
+        assert CategoryItem.exists?(category: fantasy, item: @book)
+      end
+
+      test "a rename drops its own new name from the alternative names" do
+        genre = genre("Old Name")
+        genre.update!(alternative_names: ["New Name"])
+        decide(genre, :rename, new_name: "New Name")
+
+        Applier.call(run: "r1")
+
+        refute_includes genre.reload.alternative_names, "New Name"
+      end
     end
   end
 end

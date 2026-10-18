@@ -3,8 +3,9 @@
 module Services
   module CategoryCleanup
     # Spec §4.3: executes a run's proposed decisions in dependency order --
-    # split (renaming mode, then merging), rename, merge, retype, create missing parents, set parent, delete,
-    # keep (with extra targets) -- then
+    # split (renaming mode, then merging), rename (without extra targets), merge,
+    # retype, create missing parents, set parent, delete, then keep and rename
+    # with extra targets in one final pass -- then
     # reconciles inherited links once. Staleness is checked for every decision
     # before anything is applied. Each decision is its own savepoint: a failure
     # marks that decision `failed` and the run carries on. Re-running only
@@ -42,7 +43,7 @@ module Services
         apply_each("delete")
         # A keep or rename with extra targets (genre cleanup `also:`) links books,
         # so it runs one by one; a plain keep only records the decision.
-        pending.where(action: %i[rename keep]).where.not(extra_target_ids: []).order(:id).find_each { |decision| apply_one(decision) }
+        pending.where(action: %i[rename keep]).where.not(extra_target_ids: []).find_each { |decision| apply_one(decision) }
         kept = pending.where(action: :keep).update_all(status: ::CategoryCleanupDecision.statuses.fetch("applied"), updated_at: Time.current)
         @stats["keep"] += kept if kept.positive?
 
@@ -118,8 +119,8 @@ module Services
       # renamed, re-parented or kept: the terminal decision wins and the rest go
       # stale. With several terminal decisions the lowest TERMINAL_RANK (merge,
       # split, retype, delete; ties by id) is kept. The one exception: a RENAME that
-      # accompanies a winning retype survives (the rename phase runs before
-      # the retype phase, so "not a place -> subject, under a cleaner name"
+      # accompanies a winning retype survives (a plain rename runs before the
+      # retype phase, so "not a place -> subject, under a cleaner name"
       # applies as a pair).
       def supersede_conflicting
         pending.order(:id).to_a.group_by(&:category_id).each_value do |decisions|
@@ -150,20 +151,33 @@ module Services
         current == expected
       end
 
+      MATERIALIZED = "_materialized"
+
       # Splits run first: a merge or an `also:` link into a renaming split's
       # primary would otherwise hand the split books it never assigned, and it
       # would give those books every target. Renaming mode goes before merging
       # mode, each by id. Splits can also feed each other (A's target is the
-      # primary B renames to), so before any split runs, each split's genre
-      # books are snapshotted and a split touches only its own snapshot: links
-      # that arrived from another split during this run stay as they are.
+      # primary B renames to), so before any split runs, each pending split's
+      # genre books are written into its own split_assignments (a book with no
+      # answer gets every target) and committed. A split acts only on the books
+      # listed there; links that arrived from another split stay as they are,
+      # even when the run crashes and resumes after the first split landed.
       def apply_splits
         splits = pending.where(action: :split).order(:id).to_a
         return if splits.empty?
 
-        @split_books = ::CategoryItem.where(category_id: splits.map(&:category_id).uniq, item_type: "Books::Book")
-          .pluck(:category_id, :item_id).each_with_object(Hash.new { |h, k| h[k] = Set.new }) { |(c, b), out| out[c] << b }
+        splits.each { |decision| materialize_assignments(decision) }
         splits.partition { |d| d.target_category_id.nil? }.flatten.each { |d| apply_one(d) }
+      end
+
+      def materialize_assignments(decision)
+        return if decision.split_assignments[MATERIALIZED]
+
+        targets = ([decision.target_category_id || decision.category_id] + decision.extra_target_ids).uniq
+        book_ids = ::CategoryItem.where(category_id: decision.category_id, item_type: "Books::Book").pluck(:item_id)
+        answers = decision.split_assignments.dup
+        book_ids.each { |book_id| answers[book_id.to_s] = targets unless answers.key?(book_id.to_s) }
+        decision.update_columns(split_assignments: answers.merge(MATERIALIZED => true), updated_at: Time.current)
       end
 
       def apply_each(action)
@@ -190,7 +204,7 @@ module Services
       def rename_category(category, new_name)
         old_name = category.name
         old_key = NameNormalizer.twin_key(old_name)
-        alternatives = Array(category.alternative_names)
+        alternatives = Array(category.alternative_names).reject { |alt| alt == new_name }
         remember_old = old_key && old_key != NameNormalizer.twin_key(new_name) &&
           alternatives.none? { |alt| NameNormalizer.twin_key(alt) == old_key }
         # Keep the old name as an alternative so a set_parent chain proposed
@@ -216,16 +230,15 @@ module Services
         # Every target must still be live under the id the plan named: a
         # target merged or deleted since would silently strip or strand tags.
         require_live_targets!(targets - [category.id])
-        own_books = @split_books[category.id]
-        links = category.category_items.where(item_type: "Books::Book").pluck(:item_id, :source).to_h.slice(*own_books)
-        assigned = decision.split_assignments.transform_keys(&:to_i)
+        assigned = decision.split_assignments.except(MATERIALIZED).transform_keys(&:to_i)
+        links = category.category_items.where(item_type: "Books::Book").pluck(:item_id, :source).to_h.slice(*assigned.keys)
         assigned.each do |book_id, ids|
           raise "split assignment for book #{book_id} is not a list" unless ids.is_a?(Array)
 
           stray = ids.map(&:to_i) - targets
           raise "split assignment for book #{book_id} names #{stray.inspect}, which is not a target" if stray.any?
         end
-        wanted = links.keys.index_with { |book_id| assigned.key?(book_id) ? assigned[book_id].map(&:to_i) : targets }
+        wanted = links.keys.index_with { |book_id| assigned[book_id].map(&:to_i) }
 
         insert_links(wanted.flat_map { |book_id, ids| (ids - [category.id]).map { |id| [id, book_id, links[book_id]] } })
         if decision.target_category_id
