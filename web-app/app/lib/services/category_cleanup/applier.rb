@@ -3,7 +3,8 @@
 module Services
   module CategoryCleanup
     # Spec §4.3: executes a run's proposed decisions in dependency order --
-    # rename, merge, retype, create missing parents, set parent, delete -- then
+    # rename, merge, split, retype, create missing parents, set parent, delete,
+    # keep (with extra targets) -- then
     # reconciles inherited links once. Staleness is checked for every decision
     # before anything is applied. Each decision is its own savepoint: a failure
     # marks that decision `failed` and the run carries on. Re-running only
@@ -12,9 +13,9 @@ module Services
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
       COMPARED = %w[name category_type parent_id deleted].freeze
-      STAT_KEYS = %w[rename merge retype set_parent delete keep created stale failed].freeze
+      STAT_KEYS = %w[rename merge split retype set_parent delete keep created stale failed].freeze
       # Which terminal decision wins when one category has several: phase order.
-      TERMINAL_RANK = {"merge" => 0, "retype" => 1, "delete" => 2}.freeze
+      TERMINAL_RANK = {"merge" => 0, "split" => 1, "retype" => 2, "delete" => 3}.freeze
 
       def self.call(run:, only_rules: false)
         new(run: run, only_rules: only_rules).call
@@ -28,11 +29,14 @@ module Services
 
       def call
         mark_stale
-        %w[rename merge retype].each { |action| apply_each(action) }
+        %w[rename merge split retype].each { |action| apply_each(action) }
         @lookup = LocationLookup.new
         create_missing_parents
         apply_each("set_parent")
         apply_each("delete")
+        # A keep with extra targets (genre cleanup `also:`) links books, so it
+        # runs one by one; a plain keep only records the decision.
+        pending.where(action: :keep).where.not(extra_target_ids: []).find_each { |decision| apply_one(decision) }
         kept = pending.where(action: :keep).update_all(status: ::CategoryCleanupDecision.statuses.fetch("applied"), updated_at: Time.current)
         @stats["keep"] += kept if kept.positive?
 
@@ -156,14 +160,74 @@ module Services
 
       def apply_rename(decision)
         category = live_category!(decision)
+        rename_category(category, decision.new_name)
+        link_books(category, decision.extra_target_ids)
+      end
+
+      def rename_category(category, new_name)
         old_name = category.name
         old_key = NameNormalizer.twin_key(old_name)
         alternatives = Array(category.alternative_names)
-        remember_old = old_key && old_key != NameNormalizer.twin_key(decision.new_name) &&
+        remember_old = old_key && old_key != NameNormalizer.twin_key(new_name) &&
           alternatives.none? { |alt| NameNormalizer.twin_key(alt) == old_key }
         # Keep the old name as an alternative so a set_parent chain proposed
         # against it still resolves once the rename has landed.
-        category.update!({name: decision.new_name}.merge(remember_old ? {alternative_names: alternatives + [old_name]} : {}))
+        category.update!({name: new_name}.merge(remember_old ? {alternative_names: alternatives + [old_name]} : {}))
+      end
+
+      def apply_keep(decision)
+        link_books(live_category!(decision), decision.extra_target_ids)
+      end
+
+      # Spec 2026-10-17 section 4, "Combined genres". Each book gets the targets
+      # split_check assigned it (all of them when it has no answer), then the
+      # genre's own book links go: merging mode merges the emptied genre into
+      # the primary, so saved searches, old URLs and legacy links follow it;
+      # renaming mode keeps the links of books assigned the primary and renames.
+      def apply_split(decision)
+        category = live_category!(decision)
+        raise "#{category.name} has places under it" if category.child_categories.active.exists?
+
+        primary_id = decision.target_category_id ? decision.target_category.canonical.id : category.id
+        targets = ([primary_id] + decision.extra_target_ids).uniq
+        links = category.category_items.where(item_type: "Books::Book").pluck(:item_id, :source).to_h
+        assigned = decision.split_assignments.transform_keys(&:to_i)
+        wanted = links.keys.index_with { |book_id| Array(assigned.fetch(book_id, targets)).map(&:to_i) & targets }
+
+        insert_links(wanted.flat_map { |book_id, ids| (ids - [category.id]).map { |id| [id, book_id, links[book_id]] } })
+        if decision.target_category_id
+          ::CategoryItem.where(category_id: category.id, item_type: "Books::Book").delete_all
+          ::Categories::Merger.new(category: category, category_to_merge_with: ::Category.find(primary_id)).merge
+        else
+          dropped = wanted.reject { |_book_id, ids| ids.include?(category.id) }.keys
+          ::CategoryItem.where(category_id: category.id, item_type: "Books::Book", item_id: dropped).delete_all
+          rename_category(category, decision.new_name)
+        end
+        ::Categories::ItemCounter.call(([category.id] + targets).uniq)
+        ::Categories::ItemReindexer.queue_items(links.keys.map { |book_id| ["Books::Book", book_id] })
+      end
+
+      # Links every book of `category` to each of `target_ids`, keeping each
+      # link's origin; existing links are left alone.
+      def link_books(category, target_ids)
+        return if target_ids.blank?
+
+        links = category.category_items.where(item_type: "Books::Book").pluck(:item_id, :source)
+        insert_links(target_ids.flat_map { |id| links.map { |book_id, origin| [id, book_id, origin] } })
+        ::Categories::ItemCounter.call(target_ids)
+        ::Categories::ItemReindexer.queue_items(links.map { |book_id, _| ["Books::Book", book_id] })
+      end
+
+      # rows: [[category_id, book_id, origin], ...]
+      def insert_links(rows)
+        return if rows.empty?
+
+        now = Time.current
+        ::CategoryItem.insert_all(
+          # pluck returns the enum's name; insert_all skips enum casting.
+          rows.map { |category_id, book_id, origin| {category_id: category_id, item_type: "Books::Book", item_id: book_id, source: ::CategoryItem.sources.fetch(origin.to_s), created_at: now, updated_at: now} },
+          unique_by: :index_category_items_on_category_id_and_item_type_and_item_id
+        )
       end
 
       def apply_merge(decision)

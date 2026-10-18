@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_16_223424) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_18_023530) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -535,6 +535,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_223424) do
     t.text "error"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "extra_target_ids", default: [], null: false, array: true
+    t.jsonb "split_assignments", default: {}, null: false
     t.index ["ai_chat_id"], name: "index_category_cleanup_decisions_on_ai_chat_id"
     t.index ["category_id"], name: "index_category_cleanup_decisions_on_category_id"
     t.index ["run", "category_id"], name: "index_category_cleanup_decisions_on_run_and_category_id"
