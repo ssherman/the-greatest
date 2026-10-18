@@ -6,7 +6,7 @@ module Services
       class MappingReportTest < ActiveSupport::TestCase
         setup do
           @map = ::Books::WorldCat::GenreMap.load(file_fixture("worldcat_genre_map.yml"))
-          @out = Rails.root.join("tmp", "worldcat-genre-mapping-test.md")
+          @out = Rails.root.join("tmp", "worldcat-genre-mapping-test-#{SecureRandom.hex(6)}.md")
         end
 
         teardown { File.delete(@out) if File.exist?(@out) }
