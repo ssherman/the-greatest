@@ -214,7 +214,7 @@ module BooksSimilarCompare
     active = book.categories.select { |c| c.deleted == false }
 
     ::Books::Book::SIMILARITY_CATEGORY_TYPES.each do |type|
-      of_type = active.select { |c| c.category_type == type }.sort_by { |c| [c.item_count.to_i, c.id] }
+      of_type = active.select { |c| ::Books::Book.scoring_type(c.category_type) == type }.sort_by { |c| [c.item_count.to_i, c.id] }
       next if of_type.empty?
 
       kept, dropped = of_type.partition { |c| selected_ids.include?(c.id) }

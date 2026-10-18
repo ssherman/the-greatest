@@ -62,9 +62,10 @@ class Books::Book < ApplicationRecord
   # per-edition source arrives, and should go away when one does.
   enum :book_length, {very_short: 0, short: 1, medium: 2, moderate: 3, long: 4, very_long: 5}
 
-  # The category types that participate in similarity scoring. Books carry no
-  # `theme` categories today; counting only the scoring types keeps
-  # similarity_category_count honest if that changes.
+  # The scoring buckets of similarity and recommendations. Audience scores in
+  # the genre bucket; SCORED_CATEGORY_TYPES is the list of scored types.
+  # Books carry no `theme` categories today; counting only the scored types
+  # keeps similarity_category_count honest if that changes.
   SIMILARITY_CATEGORY_TYPES = %w[genre subject location].freeze
 
   # Category type -> the bucket it scores in. Audience scores exactly as a
