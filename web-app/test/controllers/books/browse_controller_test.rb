@@ -25,6 +25,14 @@ module Books
       assert_select "a[href='/the-greatest/novels/books']"
     end
 
+    test "the audiences list renders when there are no audience categories" do
+      Books::Category.where(category_type: :audience).update_all(deleted: true)
+
+      get "/categories/audiences"
+
+      assert_response :success
+    end
+
     test "categories is edge cacheable" do
       get "/categories"
 

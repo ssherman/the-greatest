@@ -31,6 +31,18 @@ module Services
           assert_equal 0, SplitCheck.calls_needed(plan: @plan, assignments: loaded)
         end
 
+        test "a link to a book that no longer exists is skipped" do
+          ghost = CategoryItem.new(category: @sff, item_type: "Books::Book", item_id: 999_999_999)
+          ghost.save!(validate: false)
+          Services::Ai::Tasks::Books::GenreSplitCheckTask.any_instance.stubs(:call).returns(Services::Ai::Result.new(success: true, data: {results: {"1" => ["Fantasy"], "2" => ["Fantasy"]}}))
+          Services::CategoryCleanup::CostGuard.stubs(:check!).returns(0.0)
+
+          result = SplitCheck.call(plan: @plan, assignments: @assignments)
+
+          assert_equal [2, 0], result.data.values_at(:checked, :failed_calls)
+          assert_not_includes Assignments.load(@path).for(@sff.id).keys, 999_999_999
+        end
+
         test "a failed call appends nothing and is counted" do
           Services::Ai::Tasks::Books::GenreSplitCheckTask.any_instance.stubs(:call).returns(Services::Ai::Result.new(success: false, error: "bad"))
           Services::CategoryCleanup::CostGuard.stubs(:check!).returns(0.0)

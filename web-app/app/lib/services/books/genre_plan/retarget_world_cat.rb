@@ -30,7 +30,11 @@ module Services
           terms = data["terms"].to_h do |term, entry|
             next [term, entry] unless %w[genre audience].include?(entry["verdict"])
 
-            next [term, entry] if final_form?(entry)
+            if final_form?(entry)
+              widened = with_also(entry)
+              retargeted += 1 unless widened == entry
+              next [term, widened]
+            end
 
             target = entry["genre"] || entry["audience"]
             decisions = @by_name[target]
@@ -39,7 +43,7 @@ module Services
               next [term, entry]
             end
 
-            fresh = rewrite_all(term, decisions, errors)
+            fresh = rewrite_all(term, decisions, errors, entry)
             next [term, entry] if fresh.nil?
 
             check_headers(term, fresh, errors)
@@ -57,16 +61,31 @@ module Services
         private
 
         # Already rewritten by an earlier run: its target is on the list of the
-        # kind its verdict names. Left alone, so its `also` and `weak` survive.
+        # kind its verdict names, and carries every `also` a kept or renamed
+        # genre of that name requires. Otherwise left alone, so its `also` and
+        # `weak` survive.
         def final_form?(entry)
-          (entry["verdict"] == "genre" && @plan.genre_names.include?(entry["genre"])) ||
+          on_list = (entry["verdict"] == "genre" && @plan.genre_names.include?(entry["genre"])) ||
             (entry["verdict"] == "audience" && @plan.audience_names.include?(entry["audience"]))
+          on_list && with_also(entry) == entry
+        end
+
+        # The entry with the `also` names of the kept or renamed genres that
+        # end under its target added (a union, never repeating the target).
+        def with_also(entry)
+          return entry unless %w[genre audience].include?(entry["verdict"])
+
+          primary = entry["genre"] || entry["audience"]
+          required = @plan.decisions.values.select { |d| (d["action"] == "keep" && d["name"] == primary) || (d["action"] == "rename" && d["to"] == primary) }
+            .flat_map { |d| Array(d["also"]) }
+          merged = (Array(entry["also"]) + required).uniq - [primary]
+          (merged == Array(entry["also"])) ? entry : entry.merge("also" => merged)
         end
 
         # Genre names are not unique, so several decisions can share one. They
         # must agree on what the term becomes.
-        def rewrite_all(term, decisions, errors)
-          outcomes = decisions.map { |decision| rewrite(term, decision, errors) }
+        def rewrite_all(term, decisions, errors, entry)
+          outcomes = decisions.map { |decision| rewrite(term, decision, errors, entry) }
           if outcomes.uniq.size > 1
             errors << "#{term.inspect} targets #{decisions.first["name"].inspect}, which several decisions share and rewrite differently"
             return nil
@@ -85,12 +104,15 @@ module Services
 
         def list_name?(name) = @plan.genre_names.include?(name) || @plan.audience_names.include?(name)
 
-        def rewrite(term, decision, errors)
+        def rewrite(term, decision, errors, entry)
           return verdict(term, [decision["worldcat"]]) if decision["worldcat"]
 
+          # A kept or renamed genre carries its `also` names; so does any list
+          # name the term already had.
+          extra = Array(entry["also"]).select { |name| list_name?(name) } + Array(decision["also"])
           case decision["action"]
-          when "keep" then verdict(term, [decision["name"]])
-          when "rename" then verdict(term, [decision["to"]])
+          when "keep" then verdict(term, [decision["name"]] + extra)
+          when "rename" then verdict(term, [decision["to"]] + extra)
           when "merge" then verdict(term, [decision["into"]])
           when "audience" then verdict(term, [decision["as"]])
           when "subject" then {"verdict" => "subject", "subject" => decision["as"] || decision["name"]}
@@ -116,6 +138,7 @@ module Services
         # only on an audience primary, so a juvenile term that names Children's
         # puts it first, otherwise it would count as strong evidence in `also`.
         def verdict(term, names)
+          names = names.uniq
           weak = juvenile?(term) && names.include?(CHILDRENS)
           names = [CHILDRENS] + (names - [CHILDRENS]) if weak
           primary = names.first

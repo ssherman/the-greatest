@@ -16,7 +16,8 @@ module Services
         def initialize(path, batch_size, map)
           @plan = PlanFile.load(path)
           @batch_size = batch_size
-          @worldcat_terms = map.terms_by_genre
+          # Genre names differ in case between the map and the live categories.
+          @worldcat_terms = map.terms_by_genre.each_with_object({}) { |(name, terms), out| (out[name.to_s.downcase] ||= []).concat(terms) }
         end
 
         def call
@@ -34,7 +35,7 @@ module Services
             entries = slice.each_with_index.map do |category, index|
               ::Services::Ai::Tasks::Books::GenreMapTask::Entry.new(key: (index + 1).to_s, name: category.name,
                 books: category.item_count.to_i, samples: ::Services::CategoryCleanup::SampleTitles.for(category),
-                references: references[category.id], worldcat_terms: @worldcat_terms.fetch(category.name, []))
+                references: references[category.id], worldcat_terms: @worldcat_terms.fetch(category.name.downcase, []).uniq.sort)
             end
             response = ::Services::Ai::Tasks::Books::GenreMapTask.new(entries: entries, genres: @plan.genres, audiences: @plan.audiences).call
             unless response.success?

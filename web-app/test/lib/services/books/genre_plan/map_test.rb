@@ -55,6 +55,18 @@ module Services
           assert_equal [[], ["Hockey stories"], []], captured.map(&:worldcat_terms)
         end
 
+        test "WorldCat terms are found whatever the case of the genre name" do
+          captured = nil
+          worldcat = ::Books::WorldCat::GenreMap.new("terms" => {"Hockey stories" => {"verdict" => "genre", "genre" => "hockey romance"}, "Puck tales" => {"verdict" => "genre", "genre" => "Hockey romance"}})
+          Services::Ai::Tasks::Books::GenreMapTask.stubs(:new).with { |**kw| captured = kw[:entries] }.returns(stub(call: respond(
+            "1" => answer("1", {}), "2" => answer("2", {}), "3" => answer("3", {})
+          )))
+
+          Map.call(path: @path, map: worldcat)
+
+          assert_equal [[], ["Hockey stories", "Puck tales"], []], captured.map(&:worldcat_terms)
+        end
+
         test "a subject answer naming an existing subject gets its target_id" do
           Services::Ai::Tasks::Books::GenreMapTask.any_instance.stubs(:call).returns(respond(
             "1" => answer("1", action: "subject", as: "hockey"), "2" => answer("2", {}), "3" => answer("3", {})

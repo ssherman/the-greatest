@@ -37,6 +37,16 @@ module Books
           map.targets_for("Juvenile fantasy").map { |t| [t.kind, t.name, t.weak] }
       end
 
+      test "targets_for never repeats a target" do
+        map = Books::WorldCat::GenreMap.new({
+          "genres" => ["Science Fiction", "Fantasy"], "audiences" => ["Children's"],
+          "terms" => {"x" => {"verdict" => "genre", "genre" => "Fantasy", "also" => ["Fantasy", "Science Fiction", "Science Fiction", "Children's"]}}
+        })
+
+        assert_equal [[:genre, "Fantasy"], [:genre, "Science Fiction"], [:audience, "Children's"]],
+          map.targets_for("x").map { |t| [t.kind, t.name] }
+      end
+
       test "targets_for reads genre, audience, also and weak" do
         map = Books::WorldCat::GenreMap.new({
           "genres" => ["Science Fiction", "Fantasy"], "audiences" => ["Children's", "Young Adult"],

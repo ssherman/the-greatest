@@ -55,6 +55,28 @@ module Services
             refute @task.send(:process_and_persist, {parsed: {results: [split, result]}}).success?
           end
 
+          test "also is held to the Validator's rule: not itself, not Fiction or Nonfiction" do
+            task = GenreMapTask.new(genres: @genres + [{"name" => "Fiction", "definition" => "f"}], audiences: @audiences, entries: [
+              Entry.new(key: "1", name: "Fantasy", books: 5, samples: [], references: 0, worldcat_terms: [])
+            ])
+            [{action: "keep", also: ["Fantasy"]}, {action: "keep", also: ["Fiction"]}, {action: "rename", to: "Science Fiction", also: ["Science Fiction"]},
+              {action: "keep", also: ["Children's"]}].each do |o|
+              refute task.send(:process_and_persist, {parsed: {results: [result(o.merge(key: "1"))]}}).success?, o.inspect
+            end
+            ok = result(key: "1", action: "keep", also: ["Science Fiction"])
+            assert task.send(:process_and_persist, {parsed: {results: [ok]}}).success?
+          end
+
+          test "duplicate names in also and worldcat_terms are collapsed" do
+            split = result(key: "1", action: "split", into: ["Science Fiction", "Fantasy"],
+              worldcat_terms: [{term: "Fantasy och science fiction", targets: ["Fantasy", "Fantasy", "Science Fiction"]}])
+            outcome = @task.send(:process_and_persist, {parsed: {results: [split, result(key: "2", action: "keep", also: [])]}})
+
+            assert outcome.success?, outcome.error
+            assert_equal({"Fantasy och science fiction" => ["Fantasy", "Science Fiction"]}, outcome.data[:results]["1"][:worldcat_terms])
+            assert_equal ["Fantasy"], @task.send(:normalize, result(also: ["Fantasy", "Fantasy"]))[:also]
+          end
+
           test "fails on shape problems and a missing worldcat term, and accepts an empty term list" do
             bad = [{action: "merge", into: ["Fantasy", "Science Fiction"]}, {action: "split", into: ["Fantasy"], worldcat_terms: [{term: "Fantasy och science fiction", targets: []}]},
               {action: "split", into: ["Fantasy", "Science Fiction"], worldcat_terms: []}]

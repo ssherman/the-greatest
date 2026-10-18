@@ -112,6 +112,46 @@ module Services
           assert_equal({"verdict" => "audience", "audience" => "Children's", "weak" => true, "also" => ["Fantasy"]}, terms["Juvenile fantasy"])
         end
 
+        test "a kept genre's also names reach its terms, as a union, and stay put on a second run" do
+          @path.write(YAML.safe_load_file(@path).tap { |m|
+            m["terms"]["Romantasy"] = {"verdict" => "genre", "genre" => "Romantasy"}
+            m["terms"]["Romance fantasy"] = {"verdict" => "genre", "genre" => "Romantasy", "also" => ["Fantasy"]}
+          }.to_yaml)
+          @plan.data["genres"].concat([{"name" => "Romantasy"}, {"name" => "Romance"}, {"name" => "Fantasy"}])
+          @plan.decisions[20] = {"name" => "Romantasy", "action" => "keep", "also" => ["Romance", "Fantasy"]}
+
+          result = RetargetWorldCat.call(plan: @plan, path: @path)
+          first = @path.read
+          again = RetargetWorldCat.call(plan: @plan, path: @path)
+
+          assert result.success?, result.errors.inspect
+          assert_equal({"verdict" => "genre", "genre" => "Romantasy", "also" => ["Romance", "Fantasy"]}, terms["Romantasy"])
+          assert_equal({"verdict" => "genre", "genre" => "Romantasy", "also" => ["Fantasy", "Romance"]}, terms["Romance fantasy"])
+          assert_equal first, @path.read
+          assert_equal 0, again.data[:retargeted]
+        end
+
+        test "a renamed genre's also names reach its terms" do
+          @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["Romantic fantasy"] = {"verdict" => "genre", "genre" => "Romance fantasy"} }.to_yaml)
+          @plan.data["genres"].concat([{"name" => "Romantasy"}, {"name" => "Romance"}, {"name" => "Fantasy"}])
+          @plan.decisions[21] = {"name" => "Romance fantasy", "action" => "rename", "to" => "Romantasy", "also" => ["Romance", "Fantasy"]}
+
+          RetargetWorldCat.call(plan: @plan, path: @path)
+
+          assert_equal({"verdict" => "genre", "genre" => "Romantasy", "also" => ["Romance", "Fantasy"]}, terms["Romantic fantasy"])
+        end
+
+        test "also never repeats the primary or itself" do
+          @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["Art photography"] = {"verdict" => "genre", "genre" => "Art and Photography"} }.to_yaml)
+          @plan.data["genres"].concat([{"name" => "Art"}, {"name" => "Photography"}])
+          @plan.decisions[11] = {"name" => "Art and Photography", "action" => "split", "into" => ["Art", "Photography"],
+                                 "worldcat_terms" => {"Art photography" => ["Art", "Photography", "Photography", "Art"]}}
+
+          RetargetWorldCat.call(plan: @plan, path: @path)
+
+          assert_equal({"verdict" => "genre", "genre" => "Art", "also" => ["Photography"]}, terms["Art photography"])
+        end
+
         test "two decisions sharing a name that rewrite a term differently stop it" do
           @plan.decisions[15] = {"name" => "Drama", "action" => "keep"}
 

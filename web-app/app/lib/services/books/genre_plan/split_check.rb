@@ -33,6 +33,10 @@ module Services
           jobs.each do |category, targets, book_ids|
             book_ids.each_slice(@batch_size) do |slice|
               books = ::Books::Book.where(id: slice).includes(:authors, :categories).index_by(&:id)
+              # A link to a book that no longer exists has nothing to ask about.
+              slice = slice.select { |book_id| books.key?(book_id) }
+              next if slice.empty?
+
               entries = slice.each_with_index.map { |book_id, index| entry(books.fetch(book_id), (index + 1).to_s, category) }
               response = ::Services::Ai::Tasks::Books::GenreSplitCheckTask.new(genre: category.name, targets: targets, books: entries).call
               made += 1

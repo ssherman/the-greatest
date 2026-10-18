@@ -48,7 +48,8 @@ module Books
         end
         return [] unless primary
 
-        [primary] + Array(entry["also"]).map { |name| Target.new(kind: @audiences.include?(name) ? :audience : :genre, name: name, weak: false) }
+        extras = Array(entry["also"]).map { |name| Target.new(kind: @audiences.include?(name) ? :audience : :genre, name: name, weak: false) }
+        ([primary] + extras).uniq { |target| [target.kind, target.name] }
       end
 
       def terms_by_audience

@@ -110,6 +110,12 @@ module Services
             return "rename needs a genre-list name in \"to\"" if action == "rename" && !genre_names.include?(r[:to])
             return "merge needs exactly one \"into\"" if action == "merge" && r[:into].size != 1
             return "audience needs an audience-list name in \"as\"" if action == "audience" && !audience_names.include?(r[:as])
+            if %w[keep rename].include?(action) && r[:also].any?
+              # The Validator's rule for `also`: other genres on the list, never Fiction or Nonfiction.
+              own = (action == "rename") ? r[:to] : entry.name
+              bad = r[:also].find { |name| !genre_names.include?(name) || name == own || Services::Books::GenrePlan::Validator::BOOK_TYPE_NAMES.include?(name) }
+              return "also must name other genres on the list, never Fiction or Nonfiction (#{bad.inspect})" if bad
+            end
             return unless action == "split"
 
             return "split needs at least two targets" if r[:into].size + r[:into_subjects].size < 2
@@ -122,9 +128,9 @@ module Services
           def normalize(raw)
             strings = ->(key) { Array(value(raw, key)).map { |v| v.to_s.strip }.reject(&:blank?) }
             scalar = ->(key) { value(raw, key).to_s.strip.presence }
-            terms = Array(value(raw, :worldcat_terms)).to_h { |t| [value(t, :term).to_s, Array(value(t, :targets)).map(&:to_s)] }
+            terms = Array(value(raw, :worldcat_terms)).to_h { |t| [value(t, :term).to_s, Array(value(t, :targets)).map(&:to_s).uniq] }
             {key: value(raw, :key).to_s, action: value(raw, :action).to_s, to: scalar.call(:to), into: strings.call(:into),
-             into_subjects: strings.call(:into_subjects), as: scalar.call(:as), also: strings.call(:also),
+             into_subjects: strings.call(:into_subjects), as: scalar.call(:as), also: strings.call(:also).uniq,
              worldcat: scalar.call(:worldcat), worldcat_terms: terms, reason: value(raw, :reason).to_s}
           end
 
