@@ -363,4 +363,8 @@ class CategoryTest < ActiveSupport::TestCase
     refute_equal old_slug, category.slug
     assert_equal category, ::Books::Category.friendly.find(old_slug)
   end
+
+  test "audience is category type 6" do
+    assert_equal 6, Category.category_types["audience"]
+  end
 end

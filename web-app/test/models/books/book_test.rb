@@ -315,6 +315,26 @@ module Books
       assert_equal 3, books_books(:crime_and_punishment).as_indexed_json[:similarity_category_count]
     end
 
+    test "an audience category indexes and counts as a genre" do
+      book = books_books(:crime_and_punishment)
+      audience = Books::Category.create!(name: "Young Adult", category_type: :audience)
+      CategoryItem.create!(category: audience, item: book)
+      book.reload
+      json = book.as_indexed_json
+
+      assert_includes json[:genre_category_ids], audience.id
+      assert_includes json[:category_ids], audience.id
+      assert_equal 4, json[:similarity_category_count]
+    end
+
+    test "scoring_type buckets audience with genre and ignores unscored types" do
+      assert_equal "genre", Books::Book.scoring_type("audience")
+      assert_equal "genre", Books::Book.scoring_type(:genre)
+      assert_equal "subject", Books::Book.scoring_type("subject")
+      assert_equal "location", Books::Book.scoring_type("location")
+      assert_nil Books::Book.scoring_type("theme")
+    end
+
     test "as_indexed_json excludes the book-type categories from the scoring count" do
       # Fiction/Nonfiction never contribute to the score numerator, so counting them
       # in the denominator divides a correctly-tagged book by more than an
