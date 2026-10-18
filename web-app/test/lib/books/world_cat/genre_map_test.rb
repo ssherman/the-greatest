@@ -27,6 +27,16 @@ module Books
         assert_nil map.genre_for("Fiction")
       end
 
+      test "an also name in the audiences header is an audience target" do
+        map = Books::WorldCat::GenreMap.new({
+          "genres" => ["Fantasy"], "audiences" => ["Children's"],
+          "terms" => {"Juvenile fantasy" => {"verdict" => "genre", "genre" => "Fantasy", "also" => ["Children's"]}}
+        })
+
+        assert_equal [[:genre, "Fantasy", false], [:audience, "Children's", false]],
+          map.targets_for("Juvenile fantasy").map { |t| [t.kind, t.name, t.weak] }
+      end
+
       test "targets_for reads genre, audience, also and weak" do
         map = Books::WorldCat::GenreMap.new({
           "genres" => ["Science Fiction", "Fantasy"], "audiences" => ["Children's", "Young Adult"],
