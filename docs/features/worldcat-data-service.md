@@ -338,9 +338,9 @@ terms:
   "Detective and mystery fiction":
     verdict: genre          # genre | audience | subject | drop
     genre: Mystery          # for genre: a name from `genres`
-    # also: [Fantasy]       optional: more genres or audiences this term supports (genre or audience verdicts)
-    # audience: Young Adult for audience: a name from `audiences`
-    # weak: true            audience verdicts only: weak evidence (see below)
+    # audience: Young Adult                    for audience: a name from `audiences`
+    # also: [Fantasy]                          optional, genre or audience verdicts: more names this term supports
+    # weak: true                               audience verdicts only: weak evidence (see below)
     # subject: <canonical English phrase>      for subject
     # reason: format | language_of_material | not_a_genre | too_specific    for drop
     language: en            # ISO 639-1 of the term

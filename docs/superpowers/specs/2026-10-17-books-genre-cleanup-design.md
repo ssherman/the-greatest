@@ -260,18 +260,19 @@ written.
   `also:` may not name Fiction or Nonfiction.
 - A split's WorldCat term may be answered `[]`: it supports none of the split's halves, and
   `retarget_worldcat` writes it as a `drop` with reason `not_a_genre`.
-- `run:` is not blank, and a run that already has decisions from another stage is refused.
+- `run:` is not blank, and a run that already has decisions from another stage is refused (checked by `apply`, not the validator).
 
-(A check that no merge or split target is itself merged, split, retyped or deleted was dropped.
-Targets are list entries, and list entries are produced only by keep, rename, a renaming split or
-an audience retype, so a merge into an audience-retyped category, `teen` into Young Adult, is
-legitimate.)
 - `also:` appears only on `keep` and `rename`, and names genre list entries other than the
   genre's own.
 - The four protected genres are `keep`. Nothing merges into `Fiction` or `Nonfiction`.
 - Every `target_id` is live, of the stated type, and still has the stated name.
 - `location` always has a `target_id`.
 - Every `worldcat:` names a genre or audience entry.
+
+(A check that no merge or split target is itself merged, split, retyped or deleted was dropped.
+Targets are list entries, and list entries are produced only by keep, rename, a renaming split or
+an audience retype, so a merge into an audience-retyped category, `teen` into Young Adult, is
+legitimate.)
 
 ## 5. Commands
 
@@ -368,7 +369,7 @@ switch-over.
 ## 7. WorldCat
 
 The map (`config/worldcat/genre_map.yml`, 4,261 terms) names genres by name, and production steps
-12–13 of launch-todo §9 have not run. This cleanup must land first.
+14–15 of launch-todo §9 (aliases and backfill) have not run. This cleanup must land first.
 
 - `GenreMap` accepts a third target verdict, `audience` (`audience: <name>`), and an
   `audiences:` header list.
@@ -397,7 +398,7 @@ The map (`config/worldcat/genre_map.yml`, 4,261 terms) names genres by name, and
   (`Fantasy och science fiction` supports both Science Fiction and Fantasy; `History` supports only
   History). A term missing from `worldcat_terms` stops the retarget. It rewrites the `genres:` and `audiences:` header
   lists and leaves subject and drop verdicts alone. Running it twice gives the same file.
-- `worldcat:apply_aliases` then runs against the cleaned list (step 12, unchanged).
+- `worldcat:apply_aliases` then runs against the cleaned list (§9 step 14, unchanged).
 
 ## 8. The old site
 
@@ -424,9 +425,9 @@ apply. Soft-deleted genres there stay soft-deleted, so nothing comes back throug
 4. Production (Shane): the four-table dump from the category cleanup runbook, then
    `bin/rails categories:genres:apply`. If it stops on a genre missing from the plan, run `map`
    in dev for it, review, and ship the updated file.
-5. Then launch-todo §9 steps 12–13 (WorldCat aliases and backfill) as already planned.
+5. Then launch-todo §9 steps 14–15 (WorldCat aliases and backfill) as already planned.
 
-`docs/launch-todo.md` gains steps 3–4 ahead of §9 step 12.
+`docs/launch-todo.md` gains steps 3–4 as §9 steps 12–13, ahead of the WorldCat aliases (now step 14).
 
 ## 10. Testing
 

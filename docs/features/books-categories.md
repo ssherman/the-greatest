@@ -267,7 +267,7 @@ row; the audiences are not exactly the three; an `into:` or `as:` names nothing 
 entry would not end as exactly one live category; list names collide; a `target_id` is not live, of
 the stated type and still named so; a protected genre (Fiction, Nonfiction, Religion & Spirituality,
 Poetry) is not `keep`, or anything merges into Fiction or Nonfiction; `location` has no
-`target_id`; or a split is malformed (see below). Re-running `apply` skips the validator and builder
+`target_id`; or a split is malformed (see "Splits and `also:`"). Re-running `apply` skips the validator and builder
 once the run has decisions, and exits non-zero while any decision of the run is failed or stale,
 printing the remedy for each: a failed one is fixed, reset to `proposed` and re-run; a stale one
 (the category changed after the plan was built) is handled by hand and then marked `rejected`.
@@ -283,10 +283,16 @@ Non-primary targets are stored in `extra_target_ids`.
 
 The Applier runs splits first (renaming-mode, then merging-mode, by id), then plain renames, merge,
 retype, parents, set_parent, delete, and last the keeps and renames that carry extra targets. Each
-split first records its own books in `split_assignments` and acts only on those. A split, or a
+split genre's books are recorded in `split_assignments` for ALL pending splits, committed, before the first split runs (that ordering is what makes a crash safe); each split then acts only on its own recorded books. A split, or a
 keep or rename with extras, fails its decision if a target is missing, deleted or merged, or an
 answer names an id outside the targets: a failed decision can be redone, a silently dropped tag
 cannot. In merging mode a book that already had its own link to the primary keeps it.
+
+The validator also requires: a split renames its genre only when the primary is on the genre list;
+an audience-name primary is produced by an `audience` decision or an existing live audience (the
+split then merges into it), never both; a split's WorldCat term may be answered `[]`, which
+`retarget_worldcat` writes as a `drop` with reason `not_a_genre`; and `also:` may not name Fiction
+or Nonfiction.
 
 `also:` on a `keep` or `rename` names genres every book of that genre necessarily belongs to
 (`Romantasy` also Romance and Fantasy); its books are linked to them. It is not transitive.

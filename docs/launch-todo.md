@@ -313,7 +313,8 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
 13. **Genre cleanup, in production. Shane runs with `!`.** Needs the plan files merged and deployed
     (`config/books/genre_plan.yml`, `genre_split_assignments.csv`, the retargeted
     `config/worldcat/genre_map.yml`). Dump the four tables first (the command in the category cleanup
-    runbook, `docs/features/books-categories.md`), then `bin/rails categories:genres:apply`. If it
+    runbook, `docs/features/books-categories.md`) and add `-t saved_searches -t recommendation_configs`,
+    because the apply also rewrites `criteria` on those, so a restore brings back a consistent state, then `bin/rails categories:genres:apply`. If it
     exits non-zero, read its remedy lines before re-running. If it stops on a genre missing from the
     plan, run `categories:genres:map` in development for it, review, and ship the updated file. The
     `/categories` Audiences tab appears only as edge-cached `/categories` pages expire after
