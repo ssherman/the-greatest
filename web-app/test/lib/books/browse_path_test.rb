@@ -84,5 +84,10 @@ module Books
         Books::BrowsePath.call(axis: :authors)
       end
     end
+
+    test "the audience type has its own segment" do
+      assert_equal "/categories/audiences", Books::BrowsePath.call(axis: :categories, type: "audience")
+      assert_equal "/categories/audiences/sorted-by/name", Books::BrowsePath.call(axis: :categories, type: "audience", sort: "name")
+    end
   end
 end

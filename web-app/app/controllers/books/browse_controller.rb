@@ -12,6 +12,7 @@ class Books::BrowseController < ApplicationController
 
   TITLES = {
     "genre" => "Book Genres",
+    "audience" => "Books by Audience",
     "location" => "Book Settings",
     "subject" => "Book Subjects"
   }.freeze

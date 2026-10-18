@@ -4,7 +4,7 @@ module Books
   # counter caches (categories.item_count, books_countries.book_count) cover the
   # whole catalog, and gating on them sent 76% of cards to an empty page.
   class BrowseQuery
-    TYPES = %w[genre location subject].freeze
+    TYPES = %w[genre audience location subject].freeze
     SORTS = %w[book_count name].freeze
 
     SEARCH_LIMIT = 60
@@ -18,7 +18,7 @@ module Books
       order_by(scope, sort, "categories.name")
     end
 
-    # Searches all three category types through the same ranked gate and count
+    # Searches every category type through the same ranked gate and count
     # as the grid, so a hit never disagrees with the page it links to. Results
     # sort by match quality first: past merges left junk alternative_names
     # ("World War I Europe" on Europe), so a name match must beat an alias-only
@@ -121,10 +121,11 @@ module Books
         .select("categories.*, ranked_counts.ranked_count")
 
       # Subject and location cards need a minimum of ranked books (spec §6);
-      # one-book categories exist for similarity, not as landing pages.
+      # one-book categories exist for similarity, not as landing pages. Genres
+      # and audiences are a short curated list and always show.
       scope.where(
-        "categories.category_type = :genre OR ranked_counts.ranked_count >= :min",
-        genre: ::Category.category_types.fetch("genre"),
+        "categories.category_type IN (:curated) OR ranked_counts.ranked_count >= :min",
+        curated: ::Category.category_types.values_at("genre", "audience"),
         min: Rails.configuration.x.books.browse_min_category_books
       )
     end

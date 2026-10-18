@@ -18,6 +18,15 @@ module Books
       Books::BrowseQuery.countries(ranking_configuration: @rc, **options)
     end
 
+    test "audience categories list without the ranked-book minimum, like genres" do
+      audience = Books::Category.create!(name: "Young Adult", category_type: :audience)
+      CategoryItem.create!(category: audience, item: books_books(:war_and_peace))
+
+      ids = with_browse_minimum(2) { categories_for(type: "audience").map(&:id) }
+
+      assert_equal [audience.id], ids
+    end
+
     test "categories returns only the requested type" do
       # The fixture subject has one ranked book; lower the card minimum so the
       # type filter is what is under test.

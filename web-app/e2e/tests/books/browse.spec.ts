@@ -18,6 +18,12 @@ async function firstCardHref(page: Page) {
 }
 
 test.describe('Books browse pages', () => {
+  test('the audiences page renders', async ({ page }) => {
+    const response = await page.goto('/categories/audiences');
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Books by Audience');
+  });
+
   test('a genre card navigates to its filter page', async ({ page }) => {
     await page.goto('/categories');
 

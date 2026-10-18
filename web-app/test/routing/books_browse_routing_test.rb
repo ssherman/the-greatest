@@ -12,6 +12,8 @@ class BooksBrowseRoutingTest < ActionDispatch::IntegrationTest
     ["/categories/settings/page/2", "categories", {filter: "location", page: "2"}],
     ["/categories/settings/sorted-by/name/page/4",
       "categories", {filter: "location", sort: "name", page: "4"}],
+    ["/categories/audiences", "categories", {filter: "audience"}],
+    ["/categories/audiences/sorted-by/name/page/2", "categories", {filter: "audience", sort: "name", page: "2"}],
     ["/categories/subjects", "categories", {filter: "subject"}],
     ["/categories/subjects/sorted-by/name", "categories", {filter: "subject", sort: "name"}],
     ["/categories/subjects/page/2", "categories", {filter: "subject", page: "2"}],
