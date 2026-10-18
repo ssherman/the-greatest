@@ -1,0 +1,259 @@
+# Books genre cleanup and the audience type
+
+Date: 2026-10-17. Follows `2026-10-11-books-category-cleanup-design.md` (Spec A), which cleaned
+subjects and locations and left genres alone.
+
+## 1. Why
+
+Genres are the most used category axis (filters, saved searches, recommendations, similar books,
+the global canon, WorldCat). They came from Goodreads, whose "genres" are the most popular reader
+shelves, so they mix every kind of label. Measured in dev (a production copy) on 2026-10-17:
+
+- 171 live genres, 693,800 book links, all `legacy` source. 92 genres have 1,000+ books.
+- Mixed into them: audience (`Children's books` 5,276, `Young adult` 5,197, `Adult` 4,887,
+  `Middle Grade` 2,022, `teen`), time periods (`Victorian`, `Elizabethan Period`, `Georgian`,
+  `Anglo Saxon`, `Ancient`, `Prehistoric`, `21st Century`), moods (`Dark`, `Cozy`), romance tropes
+  (`Slow Burn`, `Forced Proximity`, `Second Chance`), reception (`Banned books`, `Cult Classics`,
+  `Summer Reads`), format (`Ebooks`), creator identity (`Latino`, `Latinx`, `Hispanic`, `Aapi`),
+  places and noise (`Agerstown`, `South dakota`, `Suisse`, `Magrathea`, `Apple`, `Own`), and twins
+  (`Manga Comics`/`Comics Manga`, `Thriller & Suspense`/`Thriller Suspense`).
+- `Drama` (5,838) is a Goodreads "dramatic" shelf: only 942 of its books are also `Plays`; the
+  rest are mostly novels, romance and manga, with some untagged real plays.
+- 832 of 5,415 saved searches and 11 of 33 recommendation settings reference a genre.
+
+Goal: a tight, deliberate genre list (about 40–60), a new **audience** type, and every current
+genre given exactly one reviewed fate, without breaking anything that reads categories.
+
+## 2. Prior art and the facet model
+
+Library of Congress keeps separate vocabularies for subjects (what a book is about, with places
+and periods as subdivisions), genre/form (what a book is) and demographic groups (who it is for,
+who made it). FAST (OCLC, the source of our WorldCat data) facets topic, place, period, event and
+genre/form. Thema (book trade) adds qualifiers for place, period and interest age. BISAC puts
+juvenile and young adult in separate top-level branches. StoryGraph adds reader-voted mood and pace.
+
+The test this spec uses everywhere: **a genre is what the book is; a subject is what it is about.**
+
+| type | holds | change |
+|---|---|---|
+| genre | form (short stories, plays, graphic novels, letters and diaries, picture books) and reader conventions (mystery, fantasy, memoir, true crime, cookbooks) | tightened |
+| audience | `Children's`, `Middle Grade`, `Young Adult` | **new**, flat |
+| subject | topics, time periods, LGBTQ+, real moods/tropes/reception labels worth keeping | receives retypes |
+| location | places | receives a few merges |
+
+Decided and out of scope: no `Adult` audience (no audience means general readership; nothing is
+assigned automatically); no time-period type (periods become subjects, revisit in Spec B); no
+mood, pace or trope types.
+
+## 3. Rules for the genre list
+
+These go into both AI prompts (§5) and are what the reviewer checks against.
+
+1. A genre names what kind of book it is (form or a convention readers shelve by).
+2. Fold a subgenre into its parent unless readers widely shelve by it and it holds enough books
+   to stand alone. Aim for about 40–60 genres.
+3. Topics and time periods become subjects.
+4. Places merge into an existing location, otherwise are deleted. A genre never creates a place.
+5. Audience goes to the audience list. `Adult` is not an audience.
+6. Moods, tropes and reception labels become subjects when they are real topics (`Banned books`),
+   otherwise are deleted (`Summer Reads`, `Slow Burn`).
+7. Formats (`Ebooks`) are deleted.
+8. Creator identity (`Latino`, `Latinx`, `Hispanic`, `Aapi`) is deleted.
+9. LGBTQ+ is a subject: `Gay fiction` and `Lesbian Fantasy` merge into the existing `LGBTQ+`
+   subject (893 books).
+10. `Drama` is deleted as a genre; its WorldCat terms point at `Plays` (§7). Books that are plays
+    but carry neither tag are left for Spec B's per-book pass.
+11. The four protected book-type genres (`Fiction`, `Nonfiction`, `Religion & Spirituality`,
+    `Poetry`, `Books::Category.protected_ids`) are on the list, unchanged: no rename, retype, merge
+    or delete. Nothing merges into `Fiction` or `Nonfiction`; they are the book-type split.
+12. Names are consistent title case (`Science Fiction`, `Historical Fiction`).
+13. A genre that saved searches or recommendation settings use prefers `subject` over `delete`
+    (a retype keeps its id, so they keep working).
+
+## 4. The plan file
+
+All decisions live in one committed file, `web-app/config/books/genre_plan.yml`, drafted by AI in
+development, edited by Shane, reviewed in the PR, and applied unchanged in production. Production
+makes no AI calls. Dev and production share category ids (dev is a production restore).
+
+```yaml
+version: 1
+run: genres-2026-10
+genres:                 # the list; Shane owns this part
+  - name: Science Fiction
+    definition: Stories built on speculative science or technology.
+audiences:
+  - name: Children's
+    definition: Written for readers up to about age 8.
+decisions:              # exactly one per live genre, keyed by category id
+  41231: {name: "Science fiction", action: rename, to: "Science Fiction", reason: "..."}
+  41290: {name: "Space Opera", action: merge, into: "Science Fiction", reason: "..."}
+  40112: {name: "Children's books", action: audience, as: "Children's", reason: "..."}
+  41377: {name: "Vegetarian", action: subject, reason: "..."}
+  41402: {name: "Victorian", action: subject, as: "Victorian Era", target_id: 23311, reason: "..."}
+  41180: {name: "Gay fiction", action: subject, as: "LGBTQ+", target_id: 20981, reason: "..."}
+  41455: {name: "South dakota", action: location, as: "South Dakota", target_id: 3121, reason: "..."}
+  41501: {name: "Ebooks", action: delete, reason: "..."}
+  40870: {name: "Drama", action: delete, worldcat: "Plays", reason: "..."}
+```
+
+Actions and what apply turns them into (`CategoryCleanupDecision` rows, new stage `genres`):
+
+| action | meaning | decisions |
+|---|---|---|
+| `keep` | already on a list under this exact name | keep |
+| `rename` | on a list under the name in `to:` | rename |
+| `merge` | `into:` names a list entry | merge (target = the category that becomes that entry) |
+| `audience` | becomes the audience in `as:` | retype to audience, plus rename when `as:` differs |
+| `subject` | `target_id` set: merge into that live subject; otherwise retype (plus rename if `as:` differs) | merge, or retype (+ rename) |
+| `location` | `target_id` required: merge into that live location | merge |
+| `delete` | soft delete | delete |
+
+`target_id` is resolved when the file is written (§5) by exact name, then alternative name,
+against live subjects or locations, and kept alongside `as:` so the reviewer sees both. The
+optional `worldcat:` key overrides where this genre's WorldCat terms go (§7).
+
+### Checks (`Services::Books::GenrePlan::Validator`)
+
+Run by `apply`, and by a test over the committed file. Any failure stops everything; nothing is
+written.
+
+- Every live genre has exactly one decision; every decision's `name` matches its live row; a live
+  genre missing from the file is named in the error (it means the plan is out of date).
+- Every `into:` names a list entry; every `as:` for `audience` names an audience entry.
+- Every list entry ends as exactly one live category of its type: one `keep`/`rename` for each
+  genre entry, one `audience` decision (or `keep` of an existing audience) for each audience entry.
+- The four protected genres are `keep`. Nothing merges into `Fiction` or `Nonfiction`.
+- Every `target_id` is live, of the stated type, and still has the stated name.
+- `location` always has a `target_id`.
+- Every `worldcat:` names a genre or audience entry.
+
+## 5. Commands
+
+All in `lib/tasks/genre_cleanup.rake`, namespace `categories:genres`. The AI tasks use the
+`:premium` role (`gpt-6-astra`); the whole job is about ten calls, so `CostGuard` is never near
+its limit.
+
+1. **`draft`** (dev). One call, `Services::Ai::Tasks::Books::GenreDraftTask`. Input per live genre:
+   name, book count, five highest-ranked titles, saved-search and recommendation-setting
+   reference counts; plus the §3 rules. Output schema: `genres` and `audiences` (name, definition)
+   and `notes` (what happens to each large genre not kept). Writes the `genres:` and `audiences:`
+   sections of the plan file and prints the notes. Refuses to overwrite a file that already has
+   `decisions:` unless `FORCE=1`.
+2. Shane edits the lists.
+3. **`map`** (dev). `Services::Ai::Tasks::Books::GenreMapTask`, batches of 30, with the lists and
+   their definitions in the prompt and the same per-genre facts as `draft`. The response schema
+   restricts `into:` and audience `as:` to list names (enums built per call). Resolves `as:` to
+   `target_id` (§4); a `location` with no match is written as `delete` with the reason "no such
+   location: X" for the reviewer. Writes `decisions:`. Resumable: genres already in `decisions:`
+   are skipped, so it also covers genres added later.
+4. Shane reviews and edits the file in the PR. **`report`** prints the decisions grouped by
+   action with book counts and, for every `delete`, the saved-search and recommendation-setting
+   reference counts.
+5. **`retarget_worldcat`** (dev). Rewrites `config/worldcat/genre_map.yml` from the plan (§7).
+   The rewritten map is committed in the same PR as the plan.
+6. **`apply`** (production; Shane runs it). Runs the validator, writes the stage-`genres`
+   decisions for `run:` (idempotent: decisions already written for the run are not duplicated),
+   runs `Services::CategoryCleanup::Applier` for the run, then removes the ids of applied deletes
+   from saved searches and recommendation settings (§6) and prints which records it changed.
+   Re-running changes nothing.
+
+`CategoryCleanupDecision::STAGES` gains `genres`. The applier is used as it is: its staleness
+check, merge-cycle breaking, the Merger's refusals, soft deletes and search reindexing all apply.
+A rename paired with a retype survives `supersede_conflicting` already.
+
+## 6. Everything that reads categories
+
+Principle: an audience behaves exactly as a genre does today wherever genres score or match, and
+appears as its own group wherever types are shown. Retypes keep ids, so stored ids keep working.
+
+| area | today | change |
+|---|---|---|
+| Category enum (`app/models/category.rb`) | 6 types | add `audience: 6`; the admin type select picks it up |
+| Search index (`Books::Book#as_indexed_json`, `book_index.rb`) | `genre/subject/location_category_ids` | add `audience_category_ids`; audience ids are also written into `genre_category_ids` and counted in `similarity_category_count`, so scoring is unchanged |
+| Similar books (`book_similar.rb`), recommendations (`adapter.rb`, `profile_builder.rb`, `book_recommendations.rb`, `genre_calibration.rb`) | genre-only paths | audience is treated as genre (one shared constant for "genre-like types" next to `SIMILARITY_CATEGORY_TYPES`); taste and explainer displays label it by its real type |
+| Saved searches, recommendation settings | ids, type-agnostic; merges followed at query time | no change for retype or merge. Applied deletes: ids removed from included and excluded lists by `apply` (an included deleted id would otherwise return nothing). Label copy "genres" becomes "categories" |
+| Filter modal (`filter_facets_query.rb`, `filters_controller.rb`, `filter_modal_component`) | default list shows genres only | add an Audience group; copy "Genre, subject, or setting" includes audience |
+| Page titles (`filter_title.rb`) | genre/subject/location only | audience contributes ("The Greatest Young Adult Books…") |
+| Global canon (`global_canon_params.rb`, `global_canon_controller.rb`) | exclusions must be `genre` slugs; unknown slug 404s | accept genre and audience slugs; picker searches both; a merged or renamed slug 301s to the current one through `CategorySlugResolver`, as `FilterParams` does |
+| `/categories` (`BrowseQuery::TYPES`, `BrowseController::TITLES`, the route's `browse_filter`, `BrowsePath`) | genre/location/subject tabs | add an audience tab, exempt from the 5-ranked-book minimum like genre |
+| Book page (`books_controller.rb` `CATEGORY_TYPE_ORDER`) | unknown types last | order genre, audience, subject, location |
+| CSV export (`csv_exports/books/ranked_book_row.rb`) | genres/subjects/locations columns | add an audiences column |
+| Subject cleanup prompt (`subject_task.rb`) | deletes audience-like subjects | merges them into the matching audience |
+| Public API | `category_type` is a free string | document `audience` in the OpenAPI description |
+| Legacy `/genres/:id` | resolves merges, 404s plain deletes | unchanged; deleted junk genres 404 |
+
+Unchanged and verified: `FilterParams` (slug lookup has no type), `RankedBooksQuery`, saved-search
+and recommendation criteria storage, the protected-category lookups (by name, as `genre`), the
+reindex callbacks (`saved_change_to_category_type?` requeues a retyped category's books).
+
+Legacy sync: in sync mode an already-mapped category keeps its new type, name and deleted flag;
+links to a merged category land on its target; links to a deleted one are dropped. A full
+non-sync `data_migration:all` would revert the retypes, and it no longer runs after the
+switch-over.
+
+## 7. WorldCat
+
+The map (`config/worldcat/genre_map.yml`, 4,261 terms) names genres by name, and production steps
+12–13 of launch-todo §9 have not run. This cleanup must land first.
+
+- `GenreMap` accepts a third target verdict, `audience` (`audience: <name>`), and an
+  `audiences:` header list.
+- `ApplyCategories` resolves audience verdicts against active audience categories with the same
+  evidence rule as genres; `ApplyAliases` adds aliases to audiences too.
+- `retarget_worldcat` rewrites each term from the plan: a `keep`/`rename` genre takes the list
+  name; `merge` takes its target (an audience target becomes an audience verdict); `audience`
+  becomes an audience verdict; `subject` becomes a subject verdict with the resulting subject's
+  name; `location` and `delete` become `drop` with reason `not_a_genre`, unless the decision has
+  `worldcat:`, which wins (`Drama` → `Plays`). It rewrites the `genres:` and `audiences:` header
+  lists and leaves subject and drop verdicts alone. Running it twice gives the same file.
+- `worldcat:apply_aliases` then runs against the cleaned list (step 12, unchanged).
+
+## 8. The old site
+
+Genres are created in one place: the Goodreads import, `the-greatest-books/admin/app/models/book.rb`
+around line 1627, `Category.create!(name: genre, import_source: :goodreads, category_type: :genre)`.
+Change it to skip a genre it cannot find (`next if category.nil?`). Goodreads imports keep linking
+existing genres. A separate small PR in that repository; Shane deploys it before the production
+apply. Soft-deleted genres there stay soft-deleted, so nothing comes back through the sync.
+
+## 9. Rollout
+
+1. Dev: `draft`, edit, `map`, review, `retarget_worldcat`. Snapshot
+   (`bin/snapshot-dev-db.sh --label pre-genre-cleanup`), then `apply` in dev and spot-check the
+   filter modal, `/categories`, the global canon with `/excluding/childrens-books`, a saved search
+   that used a deleted genre, and Shane's recommendations page (user 1141).
+2. One PR: code, plan file, rewritten WorldCat map, docs. Merge deploys it. The code must work
+   with zero audience categories (empty Audience group and tab are hidden).
+3. Old site: the Goodreads change, deployed.
+4. Production (Shane): the four-table dump from the category cleanup runbook, then
+   `bin/rails categories:genres:apply`. If it stops on a genre missing from the plan, run `map`
+   in dev for it, review, and ship the updated file.
+5. Then launch-todo §9 steps 12–13 (WorldCat aliases and backfill) as already planned.
+
+`docs/launch-todo.md` gains steps 3–4 ahead of §9 step 12.
+
+## 10. Testing
+
+- Validator: one test per check, plus a test that the committed `genre_plan.yml` passes against
+  fixtures shaped like it (structure only; ids differ).
+- Decision builder: each action produces the decisions in §4, including the audience and subject
+  rename-plus-retype pairs and merges into a renamed list entry.
+- `apply`: end to end on fixtures, idempotent on a second run; deleted ids removed from saved
+  search and recommendation criteria, and only those.
+- AI tasks: stubbed responses; schema enums reject names off the lists; `map` resumes.
+- `retarget_worldcat`: every action and the `worldcat:` override; a second run is a no-op.
+- `ApplyCategories`/`ApplyAliases`: audience verdicts.
+- Every row of §6 that changes gets a test; the existing tests that pin genre-only behaviour
+  (`filter_facets_query_test.rb`, `filter_title_test.rb`, `global_canon_params_test.rb`,
+  `browse_query_test.rb`, `book_test.rb` indexing, `book_similar_test.rb`, recommendations) are
+  extended, not loosened.
+- E2E: the filter modal's Audience group and the `/categories` audience tab.
+
+## 11. Out of scope
+
+- Per-book genre fixes, including plays tagged only `Drama`: Spec B.
+- Audience-aware scoring (keeping a children's book's similar books children's): later, tuned
+  against user 1141.
+- A time-period type; mood, pace and trope facets.
+- Cleaning junk `alternative_names` left by past merges (`docs/todo.md`).
