@@ -115,7 +115,9 @@ module ActiveSupport
       # Sidekiq runs jobs inline in tests, and the importer queues this job for
       # every new book. Without this stub, any test that imports a new book
       # would run the real Amazon job against WebMock or missing credentials.
-      # A test that cares overrides it with `expects`.
+      # A test that cares overrides it with `expects`; one asserting an exact
+      # count must `unstub` first, because `expects` alone only adds to this stub
+      # and a second call would fall through to it.
       ::Books::AmazonProductEnrichmentJob.stubs(:perform_async)
     end
 

@@ -233,6 +233,7 @@ module Services
           test "creating a text row with the real importer queues AI enrichment and Amazon" do
             row = wizard_row(@list, position: 1, title: "A Brand New Tolstoy Book", authors: ["Leo Tolstoy"], wizard: {bucket: "create"})
             ::Books::EnrichBookJob.expects(:perform_async).once
+            ::Books::AmazonProductEnrichmentJob.unstub(:perform_async)
             ::Books::AmazonProductEnrichmentJob.expects(:perform_async).once
             book = @adapter.create(row)
             assert book.persisted?

@@ -473,6 +473,7 @@ module DataImporters
 
         test "a new book with enrichment on queues Amazon once" do
           stub_resolve_down
+          ::Books::AmazonProductEnrichmentJob.unstub(:perform_async)
           ::Books::AmazonProductEnrichmentJob.expects(:perform_async).once
           result = Importer.call(title: "Hadji Murat", author_names: ["Leo Tolstoy"])
           assert_includes result.summary[:data_populated], :amazon_enrichment_queued
