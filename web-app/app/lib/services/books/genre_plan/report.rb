@@ -22,7 +22,7 @@ module Services
           @plan.decisions.sort.group_by { |_, d| d["action"] }.sort.each do |action, rows|
             lines << "" << "== #{action} (#{rows.size})"
             rows.each do |id, d|
-              refs = (action == "delete" || d["saved_searches"].to_i.positive?) ? ", saved searches #{d["saved_searches"].to_i}" : ""
+              refs = (action == "delete" || d["saved_searches"].to_i.positive?) ? ", saved searches + recommendation settings #{d["saved_searches"].to_i}" : ""
               lines << ["#{id} #{d["name"]}#{target(d)} (books #{d["books"].to_i}#{refs})", d["reason"]].compact_blank.join(" ")
             end
           end
@@ -34,13 +34,16 @@ module Services
 
         def target(d)
           to = d["to"] || d["as"] || ((d["action"] == "split") ? Array(d["into"]).map { |e| Validator.target_label(e) }.join(" + ") : d["into"])
+          to = "delete" if to.nil? && d["worldcat"]
           extra = Array(d["also"]).any? ? " also #{d["also"].join(", ")}" : ""
+          extra += " (worldcat #{d["worldcat"]})" if d["worldcat"]
+          extra += " (target #{d["target_id"]})" if d["target_id"]
           to ? " -> #{to}#{extra}" : extra
         end
 
         def split_block(id, d)
           answers = @assignments.for(id)
-          on_genre = ::CategoryItem.where(category_id: id, item_type: "Books::Book").pluck(:item_id)
+          on_genre = ::CategoryItem.where(category_id: id, item_type: "Books::Book").order(:item_id).pluck(:item_id)
           outcomes = Hash.new { |h, k| h[k] = [] }
           on_genre.each { |book_id| outcomes[outcome(answers[book_id])] << book_id }
           titles = ::Books::Book.where(id: outcomes.values.flat_map { |ids| ids.first(SAMPLES) }).pluck(:id, :title).to_h

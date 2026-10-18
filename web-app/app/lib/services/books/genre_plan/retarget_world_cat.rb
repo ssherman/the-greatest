@@ -20,7 +20,7 @@ module Services
         def initialize(plan, path)
           @plan = plan
           @path = path
-          @by_name = plan.decisions.values.index_by { |d| d["name"] }
+          @by_name = plan.decisions.values.group_by { |d| d["name"] }
         end
 
         def call
@@ -30,19 +30,23 @@ module Services
           terms = data["terms"].to_h do |term, entry|
             next [term, entry] unless %w[genre audience].include?(entry["verdict"])
 
+            next [term, entry] if final_form?(entry)
+
             target = entry["genre"] || entry["audience"]
-            decision = @by_name[target]
-            if decision.nil?
+            decisions = @by_name[target]
+            if decisions.nil?
               errors << "#{term.inspect} targets #{target.inspect}, which the plan does not know" unless list_name?(target)
               next [term, entry]
             end
 
-            fresh = rewrite(term, decision, errors)
+            fresh = rewrite_all(term, decisions, errors)
             next [term, entry] if fresh.nil?
 
+            check_headers(term, fresh, errors)
             retargeted += 1 unless fresh == entry.except(*KEPT_KEYS)
             [term, fresh.merge(entry.slice(*KEPT_KEYS))]
           end
+          errors.uniq!
           return Result.new(success?: false, data: nil, errors: errors) if errors.any?
 
           out = {"version" => data["version"], "genres" => @plan.genre_names, "audiences" => @plan.audience_names, "terms" => terms}
@@ -51,6 +55,33 @@ module Services
         end
 
         private
+
+        # Already rewritten by an earlier run: its target is on the list of the
+        # kind its verdict names. Left alone, so its `also` and `weak` survive.
+        def final_form?(entry)
+          (entry["verdict"] == "genre" && @plan.genre_names.include?(entry["genre"])) ||
+            (entry["verdict"] == "audience" && @plan.audience_names.include?(entry["audience"]))
+        end
+
+        # Genre names are not unique, so several decisions can share one. They
+        # must agree on what the term becomes.
+        def rewrite_all(term, decisions, errors)
+          outcomes = decisions.map { |decision| rewrite(term, decision, errors) }
+          if outcomes.uniq.size > 1
+            errors << "#{term.inspect} targets #{decisions.first["name"].inspect}, which several decisions share and rewrite differently"
+            return nil
+          end
+          outcomes.first
+        end
+
+        def check_headers(term, fresh, errors)
+          primary = fresh["genre"] || fresh["audience"]
+          home = (fresh["verdict"] == "audience") ? @plan.audience_names : @plan.genre_names
+          errors << "#{term.inspect} would target #{primary.inspect}, which is not in the #{fresh["verdict"]} list" if primary && !home.include?(primary)
+          Array(fresh["also"]).each do |name|
+            errors << "#{term.inspect} would also target #{name.inspect}, which is on no list" unless list_name?(name)
+          end
+        end
 
         def list_name?(name) = @plan.genre_names.include?(name) || @plan.audience_names.include?(name)
 

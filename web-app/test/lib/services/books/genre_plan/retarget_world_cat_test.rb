@@ -89,12 +89,47 @@ module Services
           assert_equal({"verdict" => "audience", "audience" => "Children's", "weak" => true, "also" => ["Fantasy"]}, terms["Juvenile fantasy"])
         end
 
-        test "running it twice gives the same file" do
+        test "running it twice gives the same file, also lists included" do
+          @path.write(YAML.safe_load_file(@path).tap { |m|
+            m["terms"]["Art photography"] = {"verdict" => "genre", "genre" => "Art and Photography"}
+            m["terms"]["Juvenile fantasy"] = {"verdict" => "genre", "genre" => "Fantasy Mix"}
+          }.to_yaml)
+          @plan.data["genres"].concat([{"name" => "Art"}, {"name" => "Photography"}, {"name" => "Fantasy"}])
+          @plan.decisions[11] = {"name" => "Art and Photography", "action" => "split", "into" => ["Art", "Photography"],
+                                 "worldcat_terms" => {"Art photography" => ["Art", "Photography"]}}
+          @plan.decisions[12] = {"name" => "Art", "action" => "keep"}
+          @plan.decisions[13] = {"name" => "Fantasy Mix", "action" => "split", "into" => ["Fantasy", "Children's"],
+                                 "worldcat_terms" => {"Juvenile fantasy" => ["Fantasy", "Children's"]}}
+          @plan.decisions[14] = {"name" => "Children's", "action" => "keep"}
+
           RetargetWorldCat.call(plan: @plan, path: @path)
           first = @path.read
           result = RetargetWorldCat.call(plan: @plan, path: @path)
+
           assert_equal first, @path.read
           assert_equal 0, result.data[:retargeted]
+          assert_equal({"verdict" => "genre", "genre" => "Art", "also" => ["Photography"]}, terms["Art photography"])
+          assert_equal({"verdict" => "audience", "audience" => "Children's", "weak" => true, "also" => ["Fantasy"]}, terms["Juvenile fantasy"])
+        end
+
+        test "two decisions sharing a name that rewrite a term differently stop it" do
+          @plan.decisions[15] = {"name" => "Drama", "action" => "keep"}
+
+          result = RetargetWorldCat.call(plan: @plan, path: @path)
+
+          refute result.success?
+          assert_match(/Drama/, result.errors.join)
+        end
+
+        test "a rewritten target missing from the headers stops it without writing" do
+          @plan.decisions[3]["as"] = "Teen Zone"
+          before = @path.read
+
+          result = RetargetWorldCat.call(plan: @plan, path: @path)
+
+          refute result.success?
+          assert_match(/Teen Zone/, result.errors.join)
+          assert_equal before, @path.read
         end
 
         test "a term on a split genre missing from worldcat_terms stops it" do

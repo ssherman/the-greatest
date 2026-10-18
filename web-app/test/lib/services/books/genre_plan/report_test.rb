@@ -21,7 +21,7 @@ module Services
           lines = Report.call(plan: plan, assignments: assignments).data[:lines]
           text = lines.join("\n")
 
-          assert_includes text, "1 Ebooks (books 52, saved searches 3) A format."
+          assert_includes text, "1 Ebooks (books 52, saved searches + recommendation settings 3) A format."
           assert_includes text, "2 Space Opera -> Science Fiction (books 9)"
           assert_includes text, "== split Science Fiction Fantasy (5 books)"
           assert_includes lines, "Fantasy: 1"
@@ -34,12 +34,24 @@ module Services
           assert_includes text, books[0].title
         end
 
+        test "shows a worldcat override and a target id" do
+          plan = PlanFile.new({"run" => "g", "decisions" => {
+            1 => {"name" => "Drama", "action" => "delete", "worldcat" => "Plays"},
+            2 => {"name" => "Vegetarian", "action" => "subject", "as" => "Vegetarianism", "target_id" => 7}
+          }})
+
+          text = Report.call(plan: plan, assignments: Assignments.new([])).data[:lines].join("\n")
+
+          assert_includes text, "1 Drama -> delete (worldcat Plays) (books 0"
+          assert_includes text, "2 Vegetarian -> Vegetarianism (target 7)"
+        end
+
         test "a delete with no saved searches still shows the count" do
           plan = PlanFile.new({"run" => "g", "decisions" => {1 => {"name" => "Ebooks", "action" => "delete", "books" => 2}}})
 
           text = Report.call(plan: plan, assignments: Assignments.new([])).data[:lines].join("\n")
 
-          assert_includes text, "1 Ebooks (books 2, saved searches 0)"
+          assert_includes text, "1 Ebooks (books 2, saved searches + recommendation settings 0)"
         end
       end
     end
