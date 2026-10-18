@@ -7,7 +7,9 @@ module Services
     class AmazonBookIdentifiersTest < ActiveSupport::TestCase
       test "writes ASIN, ISBN-13 and ISBN-10 to the book with source amazon" do
         book = books_books(:war_and_peace)
-        AmazonBookIdentifiers.call(book: book, product: product(asin: "B000FC0PDA", isbns: ["9781400079988", "1400079985"]))
+        result = AmazonBookIdentifiers.call(book: book, product: product(asin: "B000FC0PDA", isbns: ["9781400079988", "1400079985"]))
+        assert_equal [["books_work_asin", "B000FC0PDA"], ["books_work_isbn13", "9781400079988"], ["books_work_isbn10", "1400079985"]], result.written
+        assert_empty result.flagged_book_ids
         rows = book.identifiers.where(identifier_type: %w[books_work_asin books_work_isbn13 books_work_isbn10], source: :amazon)
         assert_equal [["books_work_asin", "B000FC0PDA"], ["books_work_isbn10", "1400079985"], ["books_work_isbn13", "9781400079988"]],
           rows.pluck(:identifier_type, :value).sort
@@ -48,14 +50,40 @@ module Services
         book = books_books(:war_and_peace)
         p = product(asin: "B000FC0PDA", isbns: ["9781400079988", "1400079985"])
 
+        result = nil
         assert_no_difference "book.identifiers.count" do
-          2.times { AmazonBookIdentifiers.call(book: book, product: p) }
+          2.times { result = AmazonBookIdentifiers.call(book: book, product: p) }
         end
+        assert_equal [other.id], result.flagged_book_ids
+        assert_empty result.written
         candidate = pair_candidates(book, other).sole
         assert_equal ["Books::Book", "identifier_collision", "pending", 2],
           [candidate.item_type, candidate.source, candidate.status, candidate.occurrences]
         assert_equal [book.id, other.id].sort, [candidate.item_a_id, candidate.item_b_id]
         assert_equal "B000FC0PDA", candidate.evidence["amazon_asin"]
+        assert_equal "War and Peace", candidate.evidence["amazon_title"]
+        assert_equal [{"identifier_type" => "books_work_isbn13", "value" => "9781400079988", "holder_book_id" => other.id, "holder_source" => "worldcat"}],
+          candidate.evidence["conflicts"]
+      end
+
+      test "two verified holders are flagged separately, each with only its own conflict, and nothing is written" do
+        holder_a = ::Books::Book.create!(title: "Holder A")
+        holder_a.identifiers.create!(identifier_type: :books_work_isbn13, value: "9781400079988", source: :worldcat)
+        holder_b = ::Books::Book.create!(title: "Holder B")
+        holder_b.identifiers.create!(identifier_type: :books_work_isbn10, value: "1400079985", source: :open_library)
+        book = books_books(:war_and_peace)
+
+        result = nil
+        assert_no_difference "book.identifiers.count" do
+          result = AmazonBookIdentifiers.call(book: book, product: product(asin: nil, isbns: ["9781400079988", "1400079985"]))
+        end
+
+        assert_equal [holder_a.id, holder_b.id].sort, result.flagged_book_ids.sort
+        assert_empty result.written
+        conflicts_a = pair_candidates(book, holder_a).sole.evidence["conflicts"]
+        conflicts_b = pair_candidates(book, holder_b).sole.evidence["conflicts"]
+        assert_equal [["books_work_isbn13", "9781400079988", holder_a.id]], conflicts_a.map { |c| c.values_at("identifier_type", "value", "holder_book_id") }
+        assert_equal [["books_work_isbn10", "1400079985", holder_b.id]], conflicts_b.map { |c| c.values_at("identifier_type", "value", "holder_book_id") }
       end
 
       test "a pair already marked not_duplicate stays closed" do
@@ -66,6 +94,7 @@ module Services
         ::DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: a, item_b_id: b, source: :identifier_collision, status: :not_duplicate, evidence: {})
         AmazonBookIdentifiers.call(book: book, product: product(asin: nil, isbns: ["9781400079988"]))
         assert pair_candidates(book, other).sole.not_duplicate?
+        refute book.identifiers.exists?(value: "9781400079988")
       end
 
       private

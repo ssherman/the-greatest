@@ -82,7 +82,7 @@ module Services
         ::Services::Books::AmazonBookIdentifiers.call(book: book, product: product)
       rescue => e
         @errors << "Failed to write book identifiers for ASIN #{product["asin"]}: #{e.message}"
-        Rails.logger.error "Book identifier error for book #{book.id}: #{e.message}"
+        Rails.logger.error "Book identifier error for book #{book.id}, ASIN #{product["asin"]}: #{e.message}"
         nil
       end
 
