@@ -27,7 +27,7 @@ module Services
             assert_includes system, "Romantasy"
             assert_includes system, "Fiction, Nonfiction, Religion & Spirituality and Poetry"
             prompt = @task.send(:user_prompt)
-            assert_includes prompt, "Science fiction (7181 books, used by 100 saved searches)"
+            assert_includes prompt, "Science fiction (7181 books, used by 100 saved searches or recommendation settings)"
             assert_includes prompt, "Dune by Frank Herbert"
           end
 
@@ -36,6 +36,13 @@ module Services
             assert outcome.success?
             assert_equal 5, outcome.data[:genres].size
             assert_equal ["Ebooks is a format."], outcome.data[:notes]
+          end
+
+          test "reads OpenAI::BaseModel genres" do
+            models = ["Fiction", "Nonfiction", "Religion & Spirituality", "Poetry"].map { |n| GenreDraftTask::DraftGenre.new(name: n, definition: "x") }
+            outcome = @task.send(:process_and_persist, {parsed: {genres: models, notes: []}})
+            assert outcome.success?, outcome.error
+            assert_equal "Fiction", outcome.data[:genres].first[:name]
           end
 
           test "fails when a protected genre is missing or a name repeats" do

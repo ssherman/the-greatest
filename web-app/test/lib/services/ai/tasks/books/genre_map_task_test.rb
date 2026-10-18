@@ -46,9 +46,43 @@ module Services
             refute @task.send(:process_and_persist, {parsed: {results: [result]}}).success?
           end
 
+          test "fails on off-list to, also, worldcat, worldcat_terms and audience as" do
+            [{action: "rename", to: "Space Opera"}, {action: "keep", also: ["Nope"]}, {action: "delete", worldcat: "Nope"},
+              {action: "audience", as: "Science Fiction"}].each do |o|
+              refute @task.send(:process_and_persist, {parsed: {results: [result(o.merge(key: "1")), result]}}).success?, o.inspect
+            end
+            split = result(key: "1", action: "split", into: ["Science Fiction", "Fantasy"], worldcat_terms: [{term: "Fantasy och science fiction", targets: ["Children's"]}])
+            refute @task.send(:process_and_persist, {parsed: {results: [split, result]}}).success?
+          end
+
+          test "fails on shape problems and a missing worldcat term, and accepts an empty term list" do
+            bad = [{action: "merge", into: ["Fantasy", "Science Fiction"]}, {action: "split", into: ["Fantasy"], worldcat_terms: [{term: "Fantasy och science fiction", targets: []}]},
+              {action: "split", into: ["Fantasy", "Science Fiction"], worldcat_terms: []}]
+            bad.each do |o|
+              refute @task.send(:process_and_persist, {parsed: {results: [result(o.merge(key: "1")), result]}}).success?, o.inspect
+            end
+            empty = result(key: "1", action: "split", into: ["Fantasy", "Science Fiction"], worldcat_terms: [{term: "Fantasy och science fiction", targets: []}])
+            assert @task.send(:process_and_persist, {parsed: {results: [empty, result]}}).success?
+          end
+
+          test "a protected genre only gets keep" do
+            task = GenreMapTask.new(genres: @genres, audiences: @audiences, entries: [Entry.new(key: "1", name: "Poetry", books: 5, samples: [], references: 0, worldcat_terms: [])])
+            refute task.send(:process_and_persist, {parsed: {results: [result(key: "1", action: "delete")]}}).success?
+            assert task.send(:process_and_persist, {parsed: {results: [result(key: "1", action: "keep")]}}).success?
+          end
+
+          test "reads nested WorldcatTerm models" do
+            term = GenreMapTask::WorldcatTerm.new(term: "Fantasy och science fiction", targets: ["Fantasy"])
+            model = GenreMapTask::MapResult.new(result(key: "1", action: "split", into: ["Science Fiction", "Fantasy"], worldcat_terms: [term]))
+            outcome = @task.send(:process_and_persist, {parsed: {results: [model, result]}})
+            assert outcome.success?, outcome.error
+            assert_equal({"Fantasy och science fiction" => ["Fantasy"]}, outcome.data[:results]["1"][:worldcat_terms])
+          end
+
           test "reads OpenAI::BaseModel results" do
             model = GenreMapTask::MapResult.new(result(key: "1", action: "merge", into: ["Fantasy"]))
             outcome = @task.send(:process_and_persist, {parsed: {results: [model, result]}})
+            assert outcome.success?, outcome.error
             assert_equal ["Fantasy"], outcome.data[:results]["1"][:into]
           end
         end

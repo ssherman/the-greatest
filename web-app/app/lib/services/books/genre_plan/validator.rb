@@ -130,10 +130,7 @@ module Services
           end
           list_targets = into.grep(String)
           (decision["worldcat_terms"] || {}).each do |term, names|
-            if Array(names).empty?
-              errors << "#{label}: worldcat_terms #{term.inspect} names no genres"
-              next
-            end
+            # An empty list is valid: the term supports none of the halves and becomes a drop at retarget.
             bad = Array(names) - list_targets
             errors << "#{label}: worldcat_terms #{term.inspect} names #{bad.join(", ")}, not this split's genres" if bad.any?
           end

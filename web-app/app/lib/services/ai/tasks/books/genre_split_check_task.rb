@@ -61,7 +61,7 @@ module Services
               key = value(raw, :key).to_s
               next if !keys.include?(key) || results.key?(key)
 
-              names = Array(value(raw, :targets)).map(&:to_s)
+              names = Array(value(raw, :targets)).map { |t| t.to_s.strip }.reject(&:blank?).uniq
               off = names - targets
               return failure("#{off.first.inspect} is not one of #{targets.join(", ")}") if off.any?
 

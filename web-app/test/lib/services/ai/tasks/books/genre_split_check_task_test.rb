@@ -30,6 +30,13 @@ module Services
             assert_equal({"1" => ["Fantasy"], "2" => :unknown}, outcome.data[:results])
           end
 
+          test "strips and de-duplicates names, reads models, and fails on a missing key" do
+            model = GenreSplitCheckTask::CheckResult.new(key: "1", targets: [" Fantasy ", "Fantasy"], unknown: false, reason: "")
+            outcome = @task.send(:process_and_persist, {parsed: {results: [model, {key: "2", targets: [], unknown: true, reason: ""}]}})
+            assert_equal ["Fantasy"], outcome.data[:results]["1"]
+            refute @task.send(:process_and_persist, {parsed: {results: [{key: "1", targets: [], unknown: false, reason: ""}]}}).success?
+          end
+
           test "fails the batch on a target that is not offered" do
             refute @task.send(:process_and_persist, {parsed: {results: [
               {key: "1", targets: ["Horror"], unknown: false, reason: ""}, {key: "2", targets: [], unknown: true, reason: ""}

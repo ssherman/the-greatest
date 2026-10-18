@@ -42,7 +42,7 @@ module Services
               Not genres, so leave them off the list:
               - Topics and time periods (Vegetarian, Trucks, Victorian, Ancient): these become subjects.
               - Places (South Dakota): these become locations.
-              - Audience (Children's, Middle Grade, Young Adult, Adult, teen): audience is a separate list the site already has.
+              - Audience (Children's, Middle Grade, Young Adult, teen): audience is a separate list the site already has. "Adult" is not an audience and not a genre: a book with no audience is for general readers.
               - Moods, romance tropes and reception labels (Dark, Cozy, Slow Burn, Banned Books, Summer Reads).
               - Formats (Ebooks).
               - Creator identity (Latino, Latinx, Hispanic, AAPI).
@@ -62,9 +62,9 @@ module Services
           end
 
           def user_prompt
-            lines = ["Current genres (books carrying it; saved searches using it):"]
+            lines = ["Current genres (books carrying it; saved searches or recommendation settings using it):"]
             entries.each do |entry|
-              lines << "- #{entry.name} (#{entry.books} books, used by #{entry.references} saved searches)"
+              lines << "- #{entry.name} (#{entry.books} books, used by #{entry.references} saved searches or recommendation settings)"
               lines << "  e.g. #{entry.samples.join("; ")}" if entry.samples.any?
             end
             lines.join("\n")

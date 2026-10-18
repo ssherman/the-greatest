@@ -142,10 +142,10 @@ module Services
           assert_match(/worldcat_terms "space" names Horror/, errors_for(plan(@sff.id => decision)).join("\n"))
         end
 
-        test "an empty worldcat_terms list has its own message" do
+        test "an empty worldcat_terms list is valid: the term is dropped at retarget" do
           decision = {"name" => "Science Fiction Fantasy", "action" => "split", "into" => ["Science Fiction", "Fantasy"],
                       "worldcat_terms" => {"space" => []}}
-          assert_match(/worldcat_terms "space" names no genres/, errors_for(plan(@sff.id => decision)).join("\n"))
+          refute_match(/worldcat_terms/, errors_for(plan(@sff.id => decision)).join("\n"))
         end
 
         test "an unknown action" do

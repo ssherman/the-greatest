@@ -9,7 +9,8 @@ module Services
         # naming something off the lists; the batch is retried on the next run.
         class GenreMapTask < BaseTask
           Entry = Struct.new(:key, :name, :books, :samples, :references, :worldcat_terms, keyword_init: true)
-          ACTIONS = %w[keep rename merge audience subject location delete split].freeze
+          ACTIONS = Services::Books::GenrePlan::Validator::ACTIONS
+          PROTECTED = ["Fiction", "Nonfiction", "Religion & Spirituality", "Poetry"].freeze
 
           attr_reader :entries, :genres, :audiences
 
@@ -52,7 +53,8 @@ module Services
               - "subject": it is a topic, a time period, LGBTQ+, or a real mood, trope or reception label (Banned Books); "as" may give a cleaner subject name. Gay fiction and Lesbian Fantasy go to the subject "LGBTQ+".
               - "location": it is a place; put the place's name in "as".
               - "delete": formats (Ebooks), noise (Own, Apple), labels with no meaning as a subject (Summer Reads, Slow Burn), creator identity (Latino, Latinx, Hispanic, AAPI), and Drama (a shelf for "dramatic" books, not plays; set "worldcat" to "Plays").
-              - "split": it combines two things readers look for separately (Science Fiction Fantasy, Rom Com, History and Politics, Hockey Romance). Put its genre or audience halves in "into", primary first, and subject halves in "into_subjects". For each of its WorldCat terms, list in "worldcat_terms" which of its genre or audience halves that term supports ("History" supports only History).
+              - "delete" also covers Adult: it is not an audience (a book with no audience is for general readers). Delete it, or merge it into Erotica if that is what its books are. Never answer an audience of Adult.
+              - "split": it combines two things readers look for separately (Science Fiction Fantasy, Rom Com, History and Politics, Hockey Romance). Put its genre or audience halves in "into", primary first, and subject halves in "into_subjects". For each of its WorldCat terms, list in "worldcat_terms" which of its genre or audience halves that term supports ("History" supports only History). A term that supports none of the halves gets an empty "targets" list; it is then dropped. Give every WorldCat term listed for the genre exactly one entry.
 
               A kept or renamed genre that by definition is always also other list genres names them in "also" (Romantasy: also Romance and Fantasy). Use it only when every book of the genre is necessarily the others.
 
@@ -69,7 +71,7 @@ module Services
             audiences.each { |a| lines << "- #{a["name"]}: #{a["definition"]}" }
             lines << "" << "Current genres to map:"
             entries.each do |entry|
-              lines << "[#{entry.key}] #{entry.name.inspect} (#{entry.books} books, used by #{entry.references} saved searches)"
+              lines << "[#{entry.key}] #{entry.name.inspect} (#{entry.books} books, used by #{entry.references} saved searches or recommendation settings)"
               lines << "  e.g. #{entry.samples.join("; ")}" if entry.samples.any?
               lines << "  WorldCat terms: #{entry.worldcat_terms.join("; ")}" if entry.worldcat_terms.any?
             end
@@ -89,22 +91,41 @@ module Services
             missing = keys - results.keys
             return failure("No result for #{missing.join(", ")}") if missing.any?
 
+            by_key = entries.index_by(&:key)
             results.each_value do |r|
-              return failure("Unknown action #{r[:action].inspect} for #{r[:key]}") unless ACTIONS.include?(r[:action])
-              named = [r[:to], r[:worldcat], *r[:into], *r[:also], *r[:worldcat_terms].values.flatten].compact
-              named << r[:as] if r[:action] == "audience"
-              off = named - list_names
-              return failure("#{off.first.inspect} is not on the lists (genre #{r[:key]})") if off.any?
+              problem = problem_with(r, by_key[r[:key]])
+              return failure("#{problem} (genre #{r[:key]})") if problem
             end
             Services::Ai::Result.new(success: true, data: {results: results}, ai_chat: chat)
           end
 
+          def problem_with(r, entry)
+            action = r[:action]
+            return "Unknown action #{action.inspect}" unless ACTIONS.include?(action)
+            return "#{entry.name} is protected: it can only be kept" if PROTECTED.include?(entry.name) && action != "keep"
+
+            named = [r[:to], r[:worldcat], *r[:into], *r[:also]].compact
+            off = (named + r[:worldcat_terms].values.flatten) - list_names
+            return "#{off.first.inspect} is not on the lists" if off.any?
+            return "rename needs a genre-list name in \"to\"" if action == "rename" && !genre_names.include?(r[:to])
+            return "merge needs exactly one \"into\"" if action == "merge" && r[:into].size != 1
+            return "audience needs an audience-list name in \"as\"" if action == "audience" && !audience_names.include?(r[:as])
+            return unless action == "split"
+
+            return "split needs at least two targets" if r[:into].size + r[:into_subjects].size < 2
+            outside = r[:worldcat_terms].values.flatten - r[:into]
+            return "worldcat_terms names #{outside.first.inspect}, not one of this split's halves" if outside.any?
+            absent = entry.worldcat_terms.map(&:to_s) - r[:worldcat_terms].keys
+            "worldcat_terms is missing #{absent.first.inspect}" if absent.any?
+          end
+
           def normalize(raw)
             strings = ->(key) { Array(value(raw, key)).map { |v| v.to_s.strip }.reject(&:blank?) }
+            scalar = ->(key) { value(raw, key).to_s.strip.presence }
             terms = Array(value(raw, :worldcat_terms)).to_h { |t| [value(t, :term).to_s, Array(value(t, :targets)).map(&:to_s)] }
-            {key: value(raw, :key).to_s, action: value(raw, :action).to_s, to: value(raw, :to).presence, into: strings.call(:into),
-             into_subjects: strings.call(:into_subjects), as: value(raw, :as).presence, also: strings.call(:also),
-             worldcat: value(raw, :worldcat).presence, worldcat_terms: terms, reason: value(raw, :reason).to_s}
+            {key: value(raw, :key).to_s, action: value(raw, :action).to_s, to: scalar.call(:to), into: strings.call(:into),
+             into_subjects: strings.call(:into_subjects), as: scalar.call(:as), also: strings.call(:also),
+             worldcat: scalar.call(:worldcat), worldcat_terms: terms, reason: value(raw, :reason).to_s}
           end
 
           def value(raw, key)
