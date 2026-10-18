@@ -1,5 +1,6 @@
 module Books
-  # Facet counts for the filter modal. The two axes are asymmetric on purpose:
+  # Facet counts for the filter modal. The category facet lists genres and
+  # audiences. The two axes are asymmetric on purpose:
   # genres AND, so their facet keeps the category filter applied and reports the
   # intersection you would actually get by drilling down; countries OR, so their
   # facet drops the country filter and reports alternatives. Each axis omits
@@ -51,7 +52,7 @@ module Books
       counts = CategoryItem
         .where(item_type: "Books::Book", item_id: book_ids(countries: @countries, categories: @categories))
         .joins(:category)
-        .where(categories: {deleted: false, category_type: Category.category_types[:genre], type: "Books::Category"})
+        .where(categories: {deleted: false, category_type: Category.category_types.values_at("genre", "audience"), type: "Books::Category"})
         .where.not(category_id: @categories.map(&:id))
         .group(:category_id)
         .order(count_all: :desc, category_id: :asc)

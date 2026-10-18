@@ -10,7 +10,7 @@ module CsvExports
       URL_HELPERS = Rails.application.routes.url_helpers
 
       HEADERS = ["Rank", "Score", "ID", "Title", "Authors", "Year", "Original Language", "Countries",
-        "Genres", "Subjects", "Locations", "Page Range", "Word Count", "URL"].freeze
+        "Genres", "Audiences", "Subjects", "Locations", "Page Range", "Word Count", "URL"].freeze
 
       def self.preloads
         [:original_language]
@@ -36,6 +36,7 @@ module CsvExports
             group_by: "books_book_countries.book_id", name: "books_countries.name", order: "books_countries.name"
           ),
           genres: category_names(categories, types[:genre]),
+          audiences: category_names(categories, types[:audience]),
           subjects: category_names(categories, types[:subject]),
           locations: category_names(categories, types[:location])
         }
@@ -56,6 +57,7 @@ module CsvExports
           book.original_language&.name,
           ctx[:countries][book.id],
           ctx[:genres][book.id],
+          ctx[:audiences][book.id],
           ctx[:subjects][book.id],
           ctx[:locations][book.id],
           book.page_range,

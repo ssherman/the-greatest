@@ -26,12 +26,16 @@ module Books
 
     private
 
+    # Audience reads as part of the kind of book: "Young Adult Fantasy Books".
     def genre_parts
-      names = names_for(:genre)
-      return ["Books"] if names.empty?
+      audiences = names_for(:audience)
+      genres = names_for(:genre)
+      return ["Books"] if audiences.empty? && genres.empty?
 
-      parts = [format_list(names)]
-      parts << "Books" unless names.any? { |name| name.end_with?("s") }
+      parts = []
+      parts << format_list(audiences) if audiences.any?
+      parts << format_list(genres) if genres.any?
+      parts << "Books" unless genres.any? { |name| name.end_with?("s") }
       parts
     end
 

@@ -1,7 +1,7 @@
 module Books
   class FilterModalComponent < ViewComponent::Base
     AXES = [
-      {axis: "category", label: "Category", hint: "Genre, subject, or setting"},
+      {axis: "category", label: "Category", hint: "Genre, audience, subject, or setting"},
       {axis: "country", label: "Origin", hint: "The book's national tradition, not the author's birthplace"},
       {axis: "year", label: "Published", hint: nil}
     ].freeze

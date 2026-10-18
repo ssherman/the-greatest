@@ -11,9 +11,17 @@ module CsvExports
         @ranked = RankedItem.create!(item: @book, ranking_configuration: @config, rank: 1, score: 99.5)
       end
 
+      test "an audience goes in the Audiences column" do
+        CategoryItem.create!(category: ::Books::Category.create!(name: "Young Adult", category_type: :audience), item: @book)
+
+        row = RankedBookRow.row(@ranked, RankedBookRow.context([@book.id]))
+
+        assert_equal "Young Adult", row[RankedBookRow::HEADERS.index("Audiences")]
+      end
+
       test "headers" do
         assert_equal ["Rank", "Score", "ID", "Title", "Authors", "Year", "Original Language", "Countries",
-          "Genres", "Subjects", "Locations", "Page Range", "Word Count", "URL"], RankedBookRow::HEADERS
+          "Genres", "Audiences", "Subjects", "Locations", "Page Range", "Word Count", "URL"], RankedBookRow::HEADERS
       end
 
       test "a row from a ranked item" do
@@ -21,7 +29,7 @@ module CsvExports
 
         assert_equal [
           1, "99.50", @book.id, "War and Peace", "Leo Tolstoy", 1869, "Russian", "French",
-          "Classics, Novels", nil, nil, nil, nil,
+          "Classics, Novels", nil, nil, nil, nil, nil,
           "#{Api::Host.base_url(:books)}/book/war-and-peace"
         ], RankedBookRow.row(@ranked, ctx)
       end
@@ -77,7 +85,7 @@ module CsvExports
 
         row = RankedBookRow.row(ranked, RankedBookRow.context([book.id]))
 
-        assert_equal ["Novels", "Politics", "France"], row[8..10]
+        assert_equal ["Novels", "Politics", "France"], row[8..11].values_at(0, 2, 3)
       end
 
       test "several authors with no position are joined in id order, and page range and word count are carried" do
@@ -92,7 +100,7 @@ module CsvExports
         row = RankedBookRow.row(@ranked.reload, RankedBookRow.context([@book.id]))
 
         assert_equal "Leo Tolstoy, Second Author", row[4]
-        assert_equal ["300-350", 587_287], row[11..12]
+        assert_equal ["300-350", 587_287], row[12..13]
       end
     end
   end
