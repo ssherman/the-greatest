@@ -72,7 +72,9 @@ These go into both AI prompts (§5) and are what the reviewer checks against.
 
 1. A genre names what kind of book it is (form or a convention readers shelve by).
 2. Fold a subgenre into its parent unless readers widely shelve by it and it holds enough books
-   to stand alone. Aim for about 40–60 genres.
+   to stand alone. Aim for about 40–60 genres. "Widely shelved" means in today's book market, not
+   only in our catalog, which leans to the canon: `Romantasy` (225 books here, one of the
+   best-selling genres now) is kept.
 3. Topics and time periods become subjects.
 4. Places merge into an existing location, otherwise are deleted. A genre never creates a place.
 5. Audience goes to one of the three audiences (§2). `Adult` is not an audience: the `Adult` genre
@@ -96,6 +98,9 @@ These go into both AI prompts (§5) and are what the reviewer checks against.
     Humor, `Hockey Romance` → Romance and the Hockey subject. A compound that names one convention
     (`Thriller & Suspense`) is kept or renamed, and one whose second half adds nothing
     (`Cozy Fantasy`) merges.
+15. A kept genre that is by definition also other list genres names them in `also:`, so its books
+    are found under those too: `Romantasy` is kept with `also: [Romance, Fantasy]`. Use it only
+    when every book of the genre is necessarily the others; otherwise split.
 
 ## 4. The plan file
 
@@ -132,7 +137,7 @@ Actions and what apply turns them into (`CategoryCleanupDecision` rows, new stag
 
 | action | meaning | decisions |
 |---|---|---|
-| `keep` | already on a list under this exact name | keep |
+| `keep` | already on a list under this exact name; optional `also:` list names (rule 15) | keep; with `also:`, its books are linked to those genres too (no per-book check: the definition implies them) |
 | `rename` | on a list under the name in `to:` | rename |
 | `merge` | `into:` names a list entry | merge (target = the category that becomes that entry) |
 | `audience` | becomes the audience in `as:` | retype to audience, plus rename when `as:` differs |
@@ -156,8 +161,17 @@ half only, and once merged the books can no longer be told apart, so splitting h
   41702: {name: "Hockey Romance", action: split, into: ["Romance", {subject: "Hockey", target_id: 31187}]}
 ```
 
-- Every book on the genre gets every target. `into:` entries are list names (genre or audience)
-  or existing subjects (`target_id` resolved as for `as:`); never locations.
+- **Each book gets only the targets that fit it, checked book by book.** The combined genres are
+  noisy: of `Science Fiction Fantasy`'s 252 books, 63 carry neither `Science fiction` nor `Fantasy`,
+  and they include *The Fabric of the Cosmos* (physics) and a Captain Marvel comic; a blind split
+  would also file *The Lord of the Rings* under Science Fiction. `split_check` (§5) decides per
+  book, in development, and its answers are committed (`config/books/genre_split_assignments.csv`:
+  `book_id,category_id,targets`). A book can get one target, several, or none (it loses the tag).
+  A book the AI does not recognise keeps every target, so no information is lost. A book on the
+  genre that is missing from the file (added to production after the dev copy) gets every target,
+  and `apply` prints how many.
+- `into:` entries are list names (genre or audience) or existing subjects (`target_id` resolved as
+  for `as:`); never locations.
 - The first entry is the primary. If another decision already produces that list entry (a `keep`
   or `rename`), the split genre merges into it, so saved searches and old URLs follow it there. If
   nothing else produces it, the split genre is renamed to it, keeping its id (`History and
@@ -170,14 +184,25 @@ half only, and once merged the books can no longer be told apart, so splitting h
 
 The applier gains a `split` action (enum value 6) and the decision table an `extra_target_ids`
 `bigint[]` column (default `{}`), filled from the non-primary targets. A split runs in the merge
-phase: it adds the genre's book links to each extra target (skipping books already there, keeping
-each link's `source`), then merges into the primary or renames to it. It is terminal like a merge
-for `supersede_conflicting` and the staleness check. Reindexing comes from the merge or rename,
-which already requeues the genre's books.
+phase, in one transaction:
+
+1. For each book on the genre, add links to its assigned targets (skipping links that already
+   exist, keeping the original link's `source`).
+2. Merging mode: remove the genre's own links, then merge the now-empty genre into the primary, so
+   it is soft-deleted with `merged_into`, its aliases move, and saved searches, old URLs and legacy
+   links follow it. Renaming mode: remove the links of books not assigned the primary, then rename.
+
+It is terminal like a merge for `supersede_conflicting` and the staleness check. Every book on the
+genre is requeued for reindexing (the Merger's own requeue sees no items once the links are gone).
 
 Legacy sync: a new legacy link to a split genre would otherwise reach only the primary (through the
-merge redirect) or the renamed genre. `CategoryItemMigrator` loads the applied split decisions once
-per run and also links the extra targets, skipping links that already exist.
+merge redirect) or the renamed genre. `CategoryItemMigrator` loads the applied decisions that carry
+`extra_target_ids` (splits, and keeps or renames with `also:`) once per run and also links those
+targets, skipping links that already exist. For a split this gives a new book every target, since
+the sync cannot check it.
+
+A `keep` or `rename` with `also:` stores the `also:` genres in `extra_target_ids` too; the applier
+links the genre's books to them after the keep or rename, skipping existing links.
 
 `target_id` is resolved when the file is written (§5) by exact name, then alternative name,
 against live subjects or locations, and kept alongside `as:` so the reviewer sees both. The
@@ -198,6 +223,8 @@ written.
 - A `split` has at least two `into:` targets, no duplicates, and no location; its subject targets
   have live `target_id`s; every `worldcat_terms` target is one of its genre or audience targets.
 - No merge or split target is itself merged, split, retyped or deleted by the plan.
+- `also:` appears only on `keep` and `rename`, and names genre list entries other than the
+  genre's own.
 - The four protected genres are `keep`. Nothing merges into `Fiction` or `Nonfiction`.
 - Every `target_id` is live, of the stated type, and still has the stated name.
 - `location` always has a `target_id`.
@@ -205,9 +232,9 @@ written.
 
 ## 5. Commands
 
-All in `lib/tasks/genre_cleanup.rake`, namespace `categories:genres`. The AI tasks use the
-`:premium` role (`gpt-6-astra`); the whole job is about ten calls, so `CostGuard` is never near
-its limit.
+All in `lib/tasks/genre_cleanup.rake`, namespace `categories:genres`. `draft` and `map` use the
+`:premium` role (`gpt-6-astra`), about ten calls; `split_check` uses `:standard` (below). The
+whole job stays well under `CostGuard`'s limit.
 
 1. **`draft`** (dev). One call, `Services::Ai::Tasks::Books::GenreDraftTask`. Input per live genre:
    name, book count, five highest-ranked titles, saved-search and recommendation-setting
@@ -223,12 +250,19 @@ its limit.
    location: X" for the reviewer. For a `split`, the batch also receives the WorldCat terms that
    target that genre in `genre_map.yml` and returns `worldcat_terms`. Writes `decisions:`.
    Resumable: genres already in `decisions:` are skipped, so it also covers genres added later.
-4. Shane reviews and edits the file in the PR. **`report`** prints the decisions grouped by
+4. **`split_check`** (dev). `Services::Ai::Tasks::Books::GenreSplitCheckTask`, `:standard` role,
+   10 books per call. For each book on a `split` genre: title, authors, year, description when we
+   have one, and its other genres; the answer is a subset of that split's targets, or `unknown`.
+   Writes `config/books/genre_split_assignments.csv`. Resumable by book. About 17,700 books
+   (`History and Politics` 12,605 and `Science Nature` 4,140 are most of them), so about 1,800
+   calls, a few dollars. `report` prints, per split, how many books got each target, several, none
+   and `unknown`, with 20 sample titles per outcome.
+5. Shane reviews and edits the file in the PR. **`report`** prints the decisions grouped by
    action with book counts and, for every `delete`, the saved-search and recommendation-setting
    reference counts.
-5. **`retarget_worldcat`** (dev). Rewrites `config/worldcat/genre_map.yml` from the plan (§7).
+6. **`retarget_worldcat`** (dev). Rewrites `config/worldcat/genre_map.yml` from the plan (§7).
    The rewritten map is committed in the same PR as the plan.
-6. **`apply`** (production; Shane runs it). Runs the validator, writes the stage-`genres`
+7. **`apply`** (production; Shane runs it). Runs the validator, writes the stage-`genres`
    decisions for `run:` (idempotent: decisions already written for the run are not duplicated),
    runs `Services::CategoryCleanup::Applier` for the run, then removes the ids of applied deletes
    from saved searches and recommendation settings (§6) and prints which records it changed.
@@ -352,3 +386,7 @@ apply. Soft-deleted genres there stay soft-deleted, so nothing comes back throug
   against user 1141.
 - A time-period type; mood, pace and trope facets.
 - Cleaning junk `alternative_names` left by past merges (`docs/todo.md`).
+- Book records that are really series or box sets (*A Song of Ice and Fire* and its "5 Book Boxed
+  Set"; about 400 titles match trilogy, box set, omnibus or complete series). They sit on lists and
+  in rankings, so they need their own spec alongside the empty `Books::Series` model; added to
+  `docs/todo.md`. This cleanup treats them like any other book.
