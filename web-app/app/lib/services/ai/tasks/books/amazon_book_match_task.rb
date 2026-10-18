@@ -49,6 +49,8 @@ module Services
               - Different volumes or parts of a series
               - SparkNotes or CliffsNotes editions
               - Abridged versions (unless the original is also abridged)
+              - Box sets, omnibus editions, or multi-book bundles
+              - Collections, anthologies or bundles that contain this book together with others
             CRITERIA
           end
 

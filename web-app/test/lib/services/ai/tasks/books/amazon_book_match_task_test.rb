@@ -62,6 +62,14 @@ module Services
             assert_includes criteria, "CliffsNotes"
           end
 
+          test "non_match_criteria exclude box sets, omnibus editions and collections" do
+            criteria = @task.send(:non_match_criteria)
+
+            assert_match(/box sets/i, criteria)
+            assert_match(/omnibus/i, criteria)
+            assert_match(/collections, anthologies or bundles that contain this book together with others/i, criteria)
+          end
+
           test "match_criteria allows different bindings of the same work" do
             criteria = @task.send(:match_criteria)
 

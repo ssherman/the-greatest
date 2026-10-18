@@ -55,6 +55,13 @@ module Services
       end
 
       def persist_match(match, product)
+        # An edition must be exactly this book. The AI's yes is not enough to
+        # let a box set or omnibus become one.
+        if ::Services::Books::AmazonBookCheck.set?(book, product)
+          Rails.logger.info "Skipping set product #{product["asin"]} for book #{book.id}"
+          return
+        end
+
         edition = ::Services::Books::AmazonEditionUpserter.call(book: book, product: product).edition
         @persisted << {edition: edition, product: product}
 

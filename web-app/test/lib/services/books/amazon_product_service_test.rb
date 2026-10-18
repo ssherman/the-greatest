@@ -268,6 +268,28 @@ module Services
 
       private
 
+      test "an AI-accepted box set writes no edition, link or cover" do
+        boxed = amazon_product.deep_merge("itemInfo" => {"title" => {"displayValue" => "War and Peace (Boxed Set)"}})
+        ::Services::Amazon::Client.stubs(:search_items).returns([boxed])
+        stub_ai_match
+        stub_image
+
+        assert_no_difference ["::Books::Edition.count", "ExternalLink.count", "Image.count"] do
+          AmazonProductService.call(book: @book)
+        end
+      end
+
+      test "a single-book series marker still becomes an edition" do
+        marker = amazon_product.deep_merge("itemInfo" => {"title" => {"displayValue" => "War and Peace (Tolstoy Trilogy, Book 1)"}})
+        ::Services::Amazon::Client.stubs(:search_items).returns([marker])
+        stub_ai_match
+        stub_image
+
+        assert_difference "::Books::Edition.count", 1 do
+          AmazonProductService.call(book: @book)
+        end
+      end
+
       def amazon_product
         {
           "asin" => "1400079985",
