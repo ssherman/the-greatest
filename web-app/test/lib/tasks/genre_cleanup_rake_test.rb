@@ -23,6 +23,20 @@ class GenreCleanupRakeTest < ActiveSupport::TestCase
     old.each { |k, v| ENV[k] = v }
   end
 
+  def aborting(task)
+    captured = +""
+    capture_io do
+      assert_raises(SystemExit) { Rake::Task["categories:genres:#{task}"].invoke }
+    ensure
+      captured << $stderr.string
+    end
+    captured
+  end
+
+  def stub_existing_plan
+    GP::PlanFile.stubs(:load).returns(GP::PlanFile.new({"run" => "rk1"}, path: @missing))
+  end
+
   def ok(klass, data) = klass::Result.new(success?: true, data: data, errors: [])
 
   def apply_result(rerun: false)
@@ -36,9 +50,7 @@ class GenreCleanupRakeTest < ActiveSupport::TestCase
 
   test "apply with no plan file aborts and says so" do
     run_apply do
-      assert_raises(SystemExit) do
-        assert_output(nil, /no plan file/) { Rake::Task["categories:genres:apply"].invoke }
-      end
+      assert_match(/no plan file/, aborting("apply"))
     end
   end
 
@@ -67,11 +79,40 @@ class GenreCleanupRakeTest < ActiveSupport::TestCase
       capture_io do
         assert_raises(SystemExit) { Rake::Task["categories:genres:apply"].invoke }
       ensure
-        combined << $stdout.string << $stderr.string
+        combined << $stderr.string
       end
       assert_match(/failed/, combined)
       assert_includes combined, "Broken Genre"
       assert_includes combined, "boom"
+      assert_match(/failed: fix the cause, reset the decision to proposed/, combined)
+      refute_match(/stale:/, combined)
+    end
+  end
+
+  test "apply aborts with the stale remedy for a stale decision" do
+    category = ::Books::Category.create!(name: "Moved Genre", category_type: :genre)
+    CategoryCleanupDecision.create!(category: category, run: "rk1", stage: GP::DecisionBuilder::STAGE, action: :delete, decided_by: :ai,
+      status: :stale)
+    stub_existing_plan
+    GP::Apply.stubs(:call).returns(apply_result)
+
+    run_apply do
+      combined = aborting("apply")
+      assert_includes combined, "Moved Genre"
+      assert_match(/stale: the category changed after the plan was built.*status: :rejected/m, combined)
+      refute_match(/failed: fix the cause/, combined)
+    end
+  end
+
+  test "apply ignores failed decisions from other stages" do
+    category = ::Books::Category.create!(name: "Other Stage", category_type: :genre)
+    CategoryCleanupDecision.create!(category: category, run: "rk1", stage: "subjects_head", action: :delete, decided_by: :ai, status: :failed, error: "x")
+    stub_existing_plan
+    GP::Apply.stubs(:call).returns(apply_result)
+
+    run_apply do
+      out, = capture_io { Rake::Task["categories:genres:apply"].invoke }
+      assert_match(/Applied:/, out)
     end
   end
 
@@ -83,6 +124,8 @@ class GenreCleanupRakeTest < ActiveSupport::TestCase
       assert_match(/already built/, out)
       assert_match(/new `run:` value/, out)
       assert_match(/not retried/, out)
+      assert_match(/Stale decisions/, out)
+      refute_match(/split genres with no answer \(given/, out)
     end
   end
 
@@ -90,9 +133,7 @@ class GenreCleanupRakeTest < ActiveSupport::TestCase
     GP::Apply.stubs(:call).returns(GP::Apply::Result.new(success?: false, data: nil, errors: ["bad plan"]))
 
     run_apply do
-      assert_raises(SystemExit) do
-        assert_output(nil, /bad plan/) { Rake::Task["categories:genres:apply"].invoke }
-      end
+      assert_match(/bad plan/, aborting("apply"))
     end
   end
 
@@ -108,9 +149,7 @@ class GenreCleanupRakeTest < ActiveSupport::TestCase
     GP::Draft.stubs(:call).returns(GP::Draft::Result.new(success?: false, data: nil, errors: ["has decisions"]))
 
     with_env("PLAN" => @missing, "FORCE" => nil) do
-      assert_raises(SystemExit) do
-        assert_output(nil, /has decisions/) { Rake::Task["categories:genres:draft"].invoke }
-      end
+      assert_match(/has decisions/, aborting("draft"))
     end
   end
 
@@ -140,7 +179,14 @@ class GenreCleanupRakeTest < ActiveSupport::TestCase
     end
   end
 
+  test "split_check aborts when there is no plan file" do
+    with_env("PLAN" => @missing, "ASSIGNMENTS" => @assignments) do
+      assert_match(/no plan file/, aborting("split_check"))
+    end
+  end
+
   test "split_check prints the estimate before calling" do
+    stub_existing_plan
     GP::SplitCheck.stubs(:calls_needed).returns(3)
     GP::SplitCheck.stubs(:call).returns(ok(GP::SplitCheck, checked: 30, calls: 3, failed_calls: 0))
 
@@ -150,13 +196,12 @@ class GenreCleanupRakeTest < ActiveSupport::TestCase
   end
 
   test "split_check aborts when the cost guard trips" do
+    stub_existing_plan
     GP::SplitCheck.stubs(:calls_needed).returns(99_999)
     GP::SplitCheck.stubs(:call).raises(Services::CategoryCleanup::CostGuard::TooExpensive, "too much")
 
     with_env("PLAN" => @missing, "ASSIGNMENTS" => @assignments) do
-      assert_raises(SystemExit) do
-        assert_output(nil, /too much/) { Rake::Task["categories:genres:split_check"].invoke }
-      end
+      assert_match(/too much/, aborting("split_check"))
     end
   end
 
@@ -174,9 +219,7 @@ class GenreCleanupRakeTest < ActiveSupport::TestCase
     GP::RetargetWorldCat.stubs(:call).returns(GP::RetargetWorldCat::Result.new(success?: false, data: nil, errors: ["bad term"]))
 
     with_env("PLAN" => @missing) do
-      assert_raises(SystemExit) do
-        assert_output(nil, /bad term/) { Rake::Task["categories:genres:retarget_worldcat"].invoke }
-      end
+      assert_match(/bad term/, aborting("retarget_worldcat"))
     end
   end
 end

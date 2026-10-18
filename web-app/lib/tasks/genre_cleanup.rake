@@ -27,6 +27,7 @@ namespace :categories do
     desc "Ask, book by book, which halves of each split genre fit (resumable; FORCE=1 past the cost guard)"
     task split_check: :environment do
       plan = Services::Books::GenrePlan::PlanFile.load(plan_path.call)
+      abort "no plan file at #{plan.path}" unless plan.exists?
       assignments = Services::Books::GenrePlan::Assignments.load(assignments_path.call)
       calls = Services::Books::GenrePlan::SplitCheck.calls_needed(plan: plan, assignments: assignments)
       puts "split_check: #{calls} calls"
@@ -70,19 +71,30 @@ namespace :categories do
         puts "This plan was already built for run #{plan.run.inspect}; only the applier and the cleaner ran again."
         puts "Edits to the plan file are ignored until it has a new `run:` value."
         puts "Failed decisions are not retried automatically; reset them to proposed to retry."
+        puts "Stale decisions (the category changed after the plan was built) never retry; mark them rejected once handled by hand."
       end
       puts "Applied: #{d[:applier].inspect}"
       puts "Saved searches cleaned: #{d[:cleaned][:saved_searches].inspect}"
       puts "Recommendation settings cleaned: #{d[:cleaned][:recommendation_configs].inspect}"
-      puts "Books on split genres with no answer (given every target): #{d[:unassigned_split_books]}"
+      if d[:rerun]
+        puts "Books on split genres with no answer: not recounted on a rerun."
+      else
+        puts "Books on split genres with no answer (given every target): #{d[:unassigned_split_books]}"
+      end
 
-      problems = CategoryCleanupDecision.for_run(plan.run).where(status: %i[failed stale]).includes(:category).order(:id)
+      problems = CategoryCleanupDecision.for_run(plan.run).where(stage: Services::Books::GenrePlan::DecisionBuilder::STAGE, status: %i[failed stale]).includes(:category).order(:id)
       if problems.any?
         warn "WARNING: #{problems.size} decisions did not apply cleanly. This apply is PARTIAL."
         problems.each do |decision|
           warn "  ##{decision.id} #{decision.status} #{decision.category&.name.inspect} (category #{decision.category_id}): #{decision.error}"
         end
-        abort "Fix the cause, reset the failed decisions to proposed, and run apply again."
+        remedies = []
+        remedies << "failed: fix the cause, reset the decision to proposed, and run apply again." if problems.any?(&:failed?)
+        if problems.any?(&:stale?)
+          remedies << "stale: the category changed after the plan was built. Handle that category by hand, then mark the decision " \
+            "rejected (CategoryCleanupDecision.find(ID).update!(status: :rejected)) so it stops counting."
+        end
+        abort remedies.join("\n")
       end
     end
   end
