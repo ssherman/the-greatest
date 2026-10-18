@@ -161,6 +161,46 @@ module Services
           refute CategoryItem.exists?(category: politics, item: wh_book)
           assert CategoryItem.exists?(category: history, item: wh_book)
         end
+
+        test "a split whose extra is another split's primary does not hand its books that split's targets" do
+          a = ::Books::Category.create!(name: "History and Politics", category_type: :genre)
+          b = ::Books::Category.create!(name: "Politics and Society", category_type: :genre)
+          a_book = books_books(:war_and_peace)
+          b_book = books_books(:crime_and_punishment)
+          CategoryItem.create!(category: a, item: a_book)
+          CategoryItem.create!(category: b, item: b_book)
+          decisions = {
+            a.id => {"name" => "History and Politics", "action" => "split", "into" => ["History", "Politics"]},
+            b.id => {"name" => "Politics and Society", "action" => "split",
+                     "into" => ["Politics", {"subject" => "Hockey", "target_id" => @hockey.id}]}
+          }
+          the_plan = plan(decisions, genres: ["Fiction", "Nonfiction", "Science Fiction", "Fantasy", "History", "Politics"])
+          assignments = Assignments.new([[a_book.id, a.id, ["Politics"]], [b_book.id, b.id, ["Politics"]]])
+
+          result = Apply.call(plan: the_plan, assignments: assignments)
+
+          assert result.success?, result.errors.inspect
+          assert_equal [b.id], CategoryItem.where(item: a_book, category_id: [a.id, b.id]).pluck(:category_id)
+          refute CategoryItem.exists?(category: @hockey, item: a_book)
+          assert_equal [b.id], CategoryItem.where(item: b_book, category_id: [a.id, b.id]).pluck(:category_id)
+          refute CategoryItem.exists?(category: @hockey, item: b_book)
+        end
+
+        test "books merged into a renamed genre with also get its extra targets" do
+          x = ::Books::Category.create!(name: "Space Opera", category_type: :genre)
+          x_book = books_books(:war_and_peace)
+          CategoryItem.create!(category: x, item: x_book)
+          decisions = {
+            x.id => {"name" => "Space Opera", "action" => "merge", "into" => "Science Fiction"},
+            @sf.id => {"name" => "Science fiction", "action" => "rename", "to" => "Science Fiction", "also" => ["Fantasy"]}
+          }
+
+          result = Apply.call(plan: plan(decisions), assignments: @assignments)
+
+          assert result.success?, result.errors.inspect
+          assert CategoryItem.exists?(category: @sf, item: x_book)
+          assert CategoryItem.exists?(category: @fantasy, item: x_book)
+        end
       end
     end
   end

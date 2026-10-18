@@ -14,7 +14,8 @@ module Services
 
       COMPARED = %w[name category_type parent_id deleted].freeze
       STAT_KEYS = %w[rename merge split retype set_parent delete keep created stale failed].freeze
-      # Which terminal decision wins when one category has several: phase order.
+      # Which terminal decision wins when one category has several: this rank
+      # (merge, split, retype, delete), not the order the phases run in.
       TERMINAL_RANK = {"merge" => 0, "split" => 1, "retype" => 2, "delete" => 3}.freeze
 
       def self.call(run:, only_rules: false)
@@ -30,14 +31,18 @@ module Services
       def call
         mark_stale
         apply_splits
-        %w[rename merge retype].each { |action| apply_each(action) }
+        # A rename with extra targets links books, so it waits for the merges
+        # and runs with the keep pass below; books merged into the renamed
+        # genre then get its extras, as they do for a kept genre.
+        pending.where(action: :rename, extra_target_ids: []).find_each { |decision| apply_one(decision) }
+        %w[merge retype].each { |action| apply_each(action) }
         @lookup = LocationLookup.new
         create_missing_parents
         apply_each("set_parent")
         apply_each("delete")
-        # A keep with extra targets (genre cleanup `also:`) links books, so it
-        # runs one by one; a plain keep only records the decision.
-        pending.where(action: :keep).where.not(extra_target_ids: []).find_each { |decision| apply_one(decision) }
+        # A keep or rename with extra targets (genre cleanup `also:`) links books,
+        # so it runs one by one; a plain keep only records the decision.
+        pending.where(action: %i[rename keep]).where.not(extra_target_ids: []).order(:id).find_each { |decision| apply_one(decision) }
         kept = pending.where(action: :keep).update_all(status: ::CategoryCleanupDecision.statuses.fetch("applied"), updated_at: Time.current)
         @stats["keep"] += kept if kept.positive?
 
@@ -111,10 +116,11 @@ module Services
 
       # A category with a proposed merge, retype or delete cannot also be
       # renamed, re-parented or kept: the terminal decision wins and the rest go
-      # stale. With several terminal decisions the first by phase order (merge,
-      # retype, delete; ties by id) is kept. The one exception: a RENAME that
-      # accompanies a winning retype survives (the rename phase runs first, so
-      # "not a place -> subject, under a cleaner name" applies as a pair).
+      # stale. With several terminal decisions the lowest TERMINAL_RANK (merge,
+      # split, retype, delete; ties by id) is kept. The one exception: a RENAME that
+      # accompanies a winning retype survives (the rename phase runs before
+      # the retype phase, so "not a place -> subject, under a cleaner name"
+      # applies as a pair).
       def supersede_conflicting
         pending.order(:id).to_a.group_by(&:category_id).each_value do |decisions|
           winner = decisions.select { |d| TERMINAL_RANK.key?(d.action) }.min_by { |d| [TERMINAL_RANK[d.action], d.id] }
@@ -147,10 +153,17 @@ module Services
       # Splits run first: a merge or an `also:` link into a renaming split's
       # primary would otherwise hand the split books it never assigned, and it
       # would give those books every target. Renaming mode goes before merging
-      # mode, each by id. Producers keep their ids through rename and retype,
-      # and split targets are checked by id, so the order is safe.
+      # mode, each by id. Splits can also feed each other (A's target is the
+      # primary B renames to), so before any split runs, each split's genre
+      # books are snapshotted and a split touches only its own snapshot: links
+      # that arrived from another split during this run stay as they are.
       def apply_splits
-        pending.where(action: :split).order(:id).partition { |d| d.target_category_id.nil? }.flatten.each { |d| apply_one(d) }
+        splits = pending.where(action: :split).order(:id).to_a
+        return if splits.empty?
+
+        @split_books = ::CategoryItem.where(category_id: splits.map(&:category_id).uniq, item_type: "Books::Book")
+          .pluck(:category_id, :item_id).each_with_object(Hash.new { |h, k| h[k] = Set.new }) { |(c, b), out| out[c] << b }
+        splits.partition { |d| d.target_category_id.nil? }.flatten.each { |d| apply_one(d) }
       end
 
       def apply_each(action)
@@ -203,7 +216,8 @@ module Services
         # Every target must still be live under the id the plan named: a
         # target merged or deleted since would silently strip or strand tags.
         require_live_targets!(targets - [category.id])
-        links = category.category_items.where(item_type: "Books::Book").pluck(:item_id, :source).to_h
+        own_books = @split_books[category.id]
+        links = category.category_items.where(item_type: "Books::Book").pluck(:item_id, :source).to_h.slice(*own_books)
         assigned = decision.split_assignments.transform_keys(&:to_i)
         assigned.each do |book_id, ids|
           raise "split assignment for book #{book_id} is not a list" unless ids.is_a?(Array)
@@ -215,7 +229,7 @@ module Services
 
         insert_links(wanted.flat_map { |book_id, ids| (ids - [category.id]).map { |id| [id, book_id, links[book_id]] } })
         if decision.target_category_id
-          ::CategoryItem.where(category_id: category.id, item_type: "Books::Book").delete_all
+          ::CategoryItem.where(category_id: category.id, item_type: "Books::Book", item_id: links.keys).delete_all
           ::Categories::Merger.new(category: category, category_to_merge_with: ::Category.find(primary_id)).merge
         else
           dropped = wanted.reject { |_book_id, ids| ids.include?(category.id) }.keys
