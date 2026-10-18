@@ -45,6 +45,7 @@ module Services
             fresh = rewrite_all(term, decisions, errors, entry)
             next [term, entry] if fresh.nil?
 
+            fresh = with_also(fresh)
             check_headers(term, fresh, errors)
             retargeted += 1 unless fresh == entry.except(*KEPT_KEYS)
             [term, fresh.merge(entry.slice(*KEPT_KEYS))]
@@ -107,16 +108,17 @@ module Services
         def list_name?(name) = @plan.genre_names.include?(name) || @plan.audience_names.include?(name)
 
         def rewrite(term, decision, errors, entry)
-          return verdict(term, [decision["worldcat"]]) if decision["worldcat"]
+          # Any list name the term already had in `also` is carried, so a second
+          # run gives the same entry; a kept or renamed genre adds its own.
+          carried = Array(entry["also"]).select { |name| list_name?(name) }
+          return verdict(term, [decision["worldcat"]] + carried) if decision["worldcat"]
 
-          # A kept or renamed genre carries its `also` names; so does any list
-          # name the term already had.
-          extra = Array(entry["also"]).select { |name| list_name?(name) } + Array(decision["also"])
+          extra = carried + Array(decision["also"])
           case decision["action"]
           when "keep" then verdict(term, [decision["name"]] + extra)
           when "rename" then verdict(term, [decision["to"]] + extra)
-          when "merge" then verdict(term, [decision["into"]])
-          when "audience" then verdict(term, [decision["as"]])
+          when "merge" then verdict(term, [decision["into"]] + carried)
+          when "audience" then verdict(term, [decision["as"]] + carried)
           when "subject" then {"verdict" => "subject", "subject" => decision["as"] || decision["name"]}
           when "location", "delete" then dropped
           when "split" then split_verdict(term, decision, errors, entry)

@@ -332,7 +332,7 @@ whole job stays well under `CostGuard`'s limit.
    categories hold it: the dead holders move to `<slug>-<id>`, their history rows for the slug go, and
    the renamed category's old slug stays in history. A live holder keeps the slug. It is idempotent
    and requeues the categories it changed for search. `retarget_worldcat` leaves a term already in final form
-   alone, so a second run gives the same file; once retargeted, split terms no longer point at the
+   alone (unless a plan decision names its target, which then wins), so a second run gives the same file; once retargeted, split terms no longer point at the
    split genre, so changing a split's `worldcat_terms` means restoring `config/worldcat/genre_map.yml`
    from git first.
 
@@ -408,7 +408,7 @@ The map (`config/worldcat/genre_map.yml`, 4,261 terms) names genres by name, and
   decision's `worldcat_terms`: the first name becomes its `genre:` (or `audience:`), any others go
   in a new optional `also:` list, and `ApplyCategories` counts the term as support for each
   (`Fantasy och science fiction` supports both Science Fiction and Fantasy; `History` supports only
-  History). A term missing from `worldcat_terms` stops the retarget. It rewrites the `genres:` and `audiences:` header
+  History). A term missing from `worldcat_terms` stops the retarget, except when the split's first target is its own name and the term is already a genre verdict naming it (an earlier run's output, or a term the split left alone): that term is kept. It rewrites the `genres:` and `audiences:` header
   lists and leaves subject and drop verdicts alone. Running it twice gives the same file.
 - `worldcat:apply_aliases` then runs against the cleaned list (§9 step 14, unchanged).
 

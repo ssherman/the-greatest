@@ -163,7 +163,97 @@ module Services
           assert_equal "Science Fiction", terms["Space operas"]["genre"]
 
           @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["Stranger"] = {"verdict" => "audience", "audience" => "Science Fiction"} }.to_yaml)
-          refute RetargetWorldCat.call(plan: @plan, path: @path).success?
+          stranger = RetargetWorldCat.call(plan: @plan, path: @path)
+          refute stranger.success?
+          assert_match(/not in its worldcat_terms/, stranger.errors.join)
+        end
+
+        test "a pre-retarget term missing from an in-place split's worldcat_terms is kept, not an error" do
+          split_into_own_name
+          @plan.decisions[30]["worldcat_terms"].delete("Hard SF")
+
+          result = RetargetWorldCat.call(plan: @plan, path: @path)
+
+          assert result.success?, result.errors.inspect
+          assert_equal({"verdict" => "genre", "genre" => "Science Fiction"}, terms["Hard SF"])
+        end
+
+        test "a merging-mode split still stops on a term missing from worldcat_terms" do
+          split_into_own_name
+          @plan.decisions[30]["name"] = "Sci Fi Mix"
+          @plan.decisions[30]["into"] = ["Fantasy", "Science Fiction"]
+          @plan.data["genres"] << {"name" => "Sci Fi Mix"}
+          @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["Sci Fi term"] = {"verdict" => "genre", "genre" => "Sci Fi Mix"} }.to_yaml)
+
+          result = RetargetWorldCat.call(plan: @plan, path: @path)
+
+          refute result.success?
+          assert_match(/not in its worldcat_terms/, result.errors.join)
+        end
+
+        def assert_two_runs_agree
+          first = RetargetWorldCat.call(plan: @plan, path: @path)
+          assert first.success?, first.errors.inspect
+          snapshot = @path.read
+          again = RetargetWorldCat.call(plan: @plan, path: @path)
+          assert again.success?, again.errors.inspect
+          assert_equal snapshot, @path.read
+          assert_equal 0, again.data[:retargeted]
+        end
+
+        test "an audience retype named like its audience keeps a split answer's also on a second run" do
+          @plan.data["genres"].concat([{"name" => "Young Adult"}, {"name" => "Fantasy"}, {"name" => "YA Fantasy"}])
+          @plan.decisions[40] = {"name" => "Young Adult", "action" => "audience", "as" => "Young Adult"}
+          @plan.decisions[41] = {"name" => "YA Fantasy", "action" => "split", "into" => ["Young Adult", "Fantasy"],
+                                 "worldcat_terms" => {"YA fantasy" => ["Young Adult", "Fantasy"]}}
+          @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["YA fantasy"] = {"verdict" => "genre", "genre" => "YA Fantasy"} }.to_yaml)
+
+          assert_two_runs_agree
+          assert_equal({"verdict" => "audience", "audience" => "Young Adult", "also" => ["Fantasy"]}, terms["YA fantasy"])
+        end
+
+        test "a weak juvenile answer keeps its also when Children's is an audience decision" do
+          @plan.data["genres"] << {"name" => "Fantasy"} << {"name" => "Fantasy Mix"}
+          @plan.decisions[42] = {"name" => "Children's", "action" => "audience", "as" => "Children's"}
+          @plan.decisions[43] = {"name" => "Fantasy Mix", "action" => "split", "into" => ["Fantasy", "Children's"],
+                                 "worldcat_terms" => {"Juvenile fantasy" => ["Fantasy", "Children's"]}}
+          @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["Juvenile fantasy"] = {"verdict" => "genre", "genre" => "Fantasy Mix"} }.to_yaml)
+
+          assert_two_runs_agree
+          assert_equal({"verdict" => "audience", "audience" => "Children's", "weak" => true, "also" => ["Fantasy"]}, terms["Juvenile fantasy"])
+        end
+
+        test "a duplicate merged into its same-named twin keeps a split answer's also on a second run" do
+          @plan.data["genres"].concat([{"name" => "Fantasy"}, {"name" => "Romance"}, {"name" => "Fantasy Romance Mix"}])
+          @plan.decisions[44] = {"name" => "Fantasy", "action" => "keep"}
+          @plan.decisions[45] = {"name" => "Fantasy", "action" => "merge", "into" => "Fantasy"}
+          @plan.decisions[46] = {"name" => "Fantasy Romance Mix", "action" => "split", "into" => ["Fantasy", "Romance"],
+                                 "worldcat_terms" => {"Fantasy romance" => ["Fantasy", "Romance"]}}
+          @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["Fantasy romance"] = {"verdict" => "genre", "genre" => "Fantasy Romance Mix"} }.to_yaml)
+
+          assert_two_runs_agree
+          assert_equal({"verdict" => "genre", "genre" => "Fantasy", "also" => ["Romance"]}, terms["Fantasy romance"])
+        end
+
+        test "a merge into a keep genre with also converges on the first run" do
+          @plan.data["genres"].concat([{"name" => "Romantasy"}, {"name" => "Romance"}, {"name" => "Fantasy"}])
+          @plan.decisions[47] = {"name" => "Romantasy", "action" => "keep", "also" => ["Romance", "Fantasy"]}
+          @plan.decisions[48] = {"name" => "Fantasy romance", "action" => "merge", "into" => "Romantasy"}
+          @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["Fantasy romance"] = {"verdict" => "genre", "genre" => "Fantasy romance"} }.to_yaml)
+
+          assert_two_runs_agree
+          assert_equal({"verdict" => "genre", "genre" => "Romantasy", "also" => ["Romance", "Fantasy"]}, terms["Fantasy romance"])
+        end
+
+        test "a split answer onto a keep genre with also converges on the first run" do
+          @plan.data["genres"].concat([{"name" => "Romantasy"}, {"name" => "Romance"}, {"name" => "Fantasy"}, {"name" => "Mix"}])
+          @plan.decisions[47] = {"name" => "Romantasy", "action" => "keep", "also" => ["Romance", "Fantasy"]}
+          @plan.decisions[49] = {"name" => "Mix", "action" => "split", "into" => ["Romantasy", "Fantasy"],
+                                 "worldcat_terms" => {"Mixed term" => ["Romantasy"]}}
+          @path.write(YAML.safe_load_file(@path).tap { |m| m["terms"]["Mixed term"] = {"verdict" => "genre", "genre" => "Mix"} }.to_yaml)
+
+          assert_two_runs_agree
+          assert_equal({"verdict" => "genre", "genre" => "Romantasy", "also" => ["Romance", "Fantasy"]}, terms["Mixed term"])
         end
 
         test "a split genre named like its own first target is stable on a second run" do
