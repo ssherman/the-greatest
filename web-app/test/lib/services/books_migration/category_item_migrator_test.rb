@@ -211,4 +211,61 @@ class Services::BooksMigration::CategoryItemMigratorTest < ActiveSupport::TestCa
     assert CategoryItem.exists?(category: romantasy, item_id: book.id, item_type: "Books::Book")
     assert CategoryItem.exists?(category: romance, item_id: book.id, item_type: "Books::Book")
   end
+
+  test "a link arriving through an alias of a kept genre reaches the genre's extras" do
+    k = make_category(8104)
+    fantasy = ::Books::Category.create!(name: "Fantasy")
+    CategoryCleanupDecision.create!(category: k, run: "g1", stage: "genres", action: :keep, decided_by: :ai,
+      status: :applied, extra_target_ids: [fantasy.id], category_snapshot: {})
+    a = make_category(8105)
+    a.update!(deleted: true, merged_into: k)
+    book = ::Books::Book.create!(title: "Alias Link Book")
+
+    run_migrator([{"id" => 14, "category_id" => 8105, "book_id" => book.id}])
+
+    assert CategoryItem.exists?(category: k, item_id: book.id, item_type: "Books::Book")
+    assert CategoryItem.exists?(category: fantasy, item_id: book.id, item_type: "Books::Book")
+    assert_equal 2, CategoryItem.where(item_id: book.id, item_type: "Books::Book").count
+  end
+
+  test "an extra equal to the usual target makes no duplicate row" do
+    k = make_category(8106)
+    CategoryCleanupDecision.create!(category: k, run: "g1", stage: "genres", action: :keep, decided_by: :ai,
+      status: :applied, extra_target_ids: [k.id], category_snapshot: {})
+    book = ::Books::Book.create!(title: "Self Extra Book")
+
+    result = run_migrator([{"id" => 15, "category_id" => 8106, "book_id" => book.id}])
+
+    assert result[:success], result[:error]
+    assert_equal 1, CategoryItem.where(item_id: book.id, item_type: "Books::Book").count
+  end
+
+  test "an existing extra-target link keeps its source" do
+    k = make_category(8107)
+    fantasy = ::Books::Category.create!(name: "Fantasy")
+    CategoryCleanupDecision.create!(category: k, run: "g1", stage: "genres", action: :keep, decided_by: :ai,
+      status: :applied, extra_target_ids: [fantasy.id], category_snapshot: {})
+    book = ::Books::Book.create!(title: "Admin Link Book")
+    CategoryItem.create!(category: fantasy, item_type: "Books::Book", item_id: book.id, source: :admin)
+
+    run_migrator([{"id" => 16, "category_id" => 8107, "book_id" => book.id}])
+
+    assert_equal "admin", CategoryItem.find_by(category: fantasy, item_id: book.id, item_type: "Books::Book").source
+  end
+
+  test "extras are unioned across two applied decisions on one category" do
+    k = make_category(8108)
+    fantasy = ::Books::Category.create!(name: "Fantasy")
+    romance = ::Books::Category.create!(name: "Romance")
+    [fantasy, romance].each_with_index do |extra, i|
+      CategoryCleanupDecision.create!(category: k, run: "g#{i}", stage: "genres", action: :keep, decided_by: :ai,
+        status: :applied, extra_target_ids: [extra.id], category_snapshot: {})
+    end
+    book = ::Books::Book.create!(title: "Union Book")
+
+    run_migrator([{"id" => 17, "category_id" => 8108, "book_id" => book.id}])
+
+    assert_equal [k.id, fantasy.id, romance.id].sort,
+      CategoryItem.where(item_id: book.id, item_type: "Books::Book").pluck(:category_id).sort
+  end
 end
