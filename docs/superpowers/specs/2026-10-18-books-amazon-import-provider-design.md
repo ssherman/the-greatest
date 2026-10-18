@@ -42,8 +42,11 @@ applies.
 
 ## Non-goals
 
-- Making editions accurate, merging the duplicate-ASIN edition groups, or changing how editions are
-  written. Editions keep being written exactly as today.
+- Making existing editions accurate or merging the duplicate-ASIN edition groups. Edition writes are
+  unchanged except that set products (box sets, omnibuses, collections) no longer become editions
+  (section 3a).
+- A record for related Amazon products (box sets and the like) kept only for referral links. That is
+  a future ticket.
 - Enriching books the legacy sync created. Dev holds 1,055 books from 2026-10-02 with no enrichment of
   any kind; whether the sync goes through the importer was not checked. Separate question.
 - A periodic price-refresh job like legacy's `RefreshAmazonEditionsJob`. It was never ported.
@@ -207,6 +210,30 @@ edition.
 Because this sits in the service, the existing rake entry points (`books:amazon_enrich`,
 `books:amazon_enrich_ranked`) also write book-level identifiers from now on. That is intended.
 
+### 3a. No set editions (owner, 2026-10-18)
+
+An edition must be **exactly this book**. A box set, omnibus or collection that contains it is not an
+edition of it. Today the AI's non-match list does not mention sets, so such a product becomes an
+edition, with a cover and a buy link.
+
+- **AI reject list.** Add to `AmazonBookMatchTask#non_match_criteria`: box sets, omnibus editions,
+  collections, and anthologies or bundles that contain this book together with others. A single book
+  that is one volume of a series is unaffected (already covered by "different volumes or parts of a
+  series").
+- **Code backstop before the upserter.** In `AmazonProductService#persist_match`, skip, and log, any
+  product that fails the set test from check 2a above: set words in the cleaned subtitle, set words in
+  a bracketed part that is not a single-book marker, or a binding containing "box". Skipped products
+  write no edition, link or cover. Put the set test in one place, shared by this backstop and the
+  book-level check.
+- The full title, author and year checks are **not** applied to editions *(my call)*. Amazon's titles
+  and contributor lists are messy enough that they would drop real editions and their buy links.
+  Those checks gate only book-level identifiers, where a wrong value does the most damage.
+- Existing set editions in the database are left alone. They belong to the later editions ticket.
+
+**Future ticket, not this one:** a separate Amazon product record, not an edition, that ties a
+related product (a box set, a collection) to a book purely for the affiliate link. Until it exists,
+such products are dropped, not stored.
+
 ### 4. Docs
 
 - `docs/features/data_importers.md`: add Amazon to the Books row of the providers table, and add a
@@ -258,6 +285,12 @@ Because this sits in the service, the existing rake entry points (`books:amazon_
   - another book holding it with an unverified source (written);
   - re-running the same product (no duplicate rows, existing source unchanged);
   - an identifier write failure (run still succeeds, error reported).
+- **Set editions:**
+  - the AI task's non-match criteria name box sets, omnibus editions and collections;
+  - an AI-accepted "(Boxed Set)" product creates no edition, link or cover;
+  - a single-book series marker still creates its edition;
+  - a product failing only the title or author check still creates its edition (it just writes no
+    book-level identifiers).
 - Stub `Services::Amazon::Client.search_items` and the AI task with Mocha; never hit the network.
 - Root-anchor `::Books::…` inside `Services::Books` and its tests (nested-namespace shadowing).
 - No new user-facing page, so no Playwright test.
