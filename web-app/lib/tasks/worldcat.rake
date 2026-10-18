@@ -37,7 +37,7 @@ namespace :worldcat do
     )
     abort result.errors.join("; ") unless result.success?
     c = result.data[:counts]
-    puts "#{c[:genre]} genre, #{c[:subject]} subject, #{c[:drop]} drop; #{result.data[:unplaced].size} terms with no genre -> docs/data-quality/worldcat-genre-mapping.md"
+    puts "#{c[:genre]} genre, #{c[:audience]} audience, #{c[:subject]} subject, #{c[:drop]} drop; #{result.data[:unplaced].size} terms with no genre -> docs/data-quality/worldcat-genre-mapping.md"
   end
 
   desc "Add every mapped WorldCat term as an alternative name on its genre category (idempotent)"

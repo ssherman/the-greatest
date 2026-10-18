@@ -27,7 +27,7 @@ module Services
           top = rows.first(@top)
           unplaced = rows.select { |r| r[:verdict] == "subject" || (r[:verdict] == "drop" && UNPLACED_DROP_REASONS.include?(r[:reason])) }
             .sort_by { |r| [-r[:books], r[:term]] }
-          counts = %w[genre subject drop].to_h { |v| [v.to_sym, rows.count { |r| r[:verdict] == v }] }
+          counts = %w[genre audience subject drop].to_h { |v| [v.to_sym, rows.count { |r| r[:verdict] == v }] }
           @out_path.dirname.mkpath
           @out_path.write(render(top, unplaced, counts))
           Result.new(success?: true, data: {top:, unplaced:, counts:}, errors: [])
@@ -36,18 +36,18 @@ module Services
         private
 
         def row(term, entry)
-          {term:, verdict: entry["verdict"], genre: entry["genre"], subject: entry["subject"], reason: entry["reason"],
+          {term:, verdict: entry["verdict"], genre: entry["genre"], audience: entry["audience"], subject: entry["subject"], reason: entry["reason"],
            language: entry["language"], uses: entry["uses"].to_i, books: entry["books"].to_i}
         end
 
         def target(r)
-          r[:genre] || r[:subject] || r[:reason]
+          r[:genre] || r[:audience] || r[:subject] || r[:reason]
         end
 
         def render(top, unplaced, counts)
           lines = ["# WorldCat genre mapping", "",
             "**Generated #{Date.current}** by `bin/rails worldcat:report` from `config/worldcat/genre_map.yml`",
-            "(#{@map.size} terms: #{counts[:genre]} genre, #{counts[:subject]} subject, #{counts[:drop]} drop).",
+            "(#{@map.size} terms: #{counts[:genre]} genre, #{counts[:audience]} audience, #{counts[:subject]} subject, #{counts[:drop]} drop).",
             "Regenerate after editing the map; this page describes one file on one day.", "",
             "## Top #{top.size} terms by uses", "", "| Term | Uses | Books | Verdict | Target |", "|---|---:|---:|---|---|"]
           top.each { |r| lines << "| #{r[:term]} | #{r[:uses]} | #{r[:books]} | #{r[:verdict]} | #{target(r)} |" }

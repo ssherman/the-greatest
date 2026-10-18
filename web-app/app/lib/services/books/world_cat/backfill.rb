@@ -32,7 +32,7 @@ module Services
           return failure(EMPTY_MAP) if @map.size.zero?
           return failure("a WorldCat backfill is already running") unless (@locked = try_lock)
 
-          stats = {processed: 0, matched: 0, genres_linked: 0, subjects_linked: 0, type_conflicts: 0, subjects_unresolved: Hash.new(0), stopped: false, error: nil}
+          stats = {processed: 0, matched: 0, genres_linked: 0, audiences_linked: 0, subjects_linked: 0, type_conflicts: 0, subjects_unresolved: Hash.new(0), stopped: false, error: nil}
           books_with_isbns.each_slice(@batch_size) do |slice|
             results = lookup_with_retries(slice.flat_map(&:last).uniq)
             if results.nil?
@@ -48,11 +48,12 @@ module Services
               stats[:processed] += 1
               stats[:matched] += 1 if outcome[:records].positive?
               stats[:genres_linked] += outcome[:genres_linked].size
+              stats[:audiences_linked] += outcome[:audiences_linked].size
               stats[:subjects_linked] += outcome[:subjects_linked].size
               stats[:type_conflicts] += outcome[:type_conflicts]
               outcome[:subjects_unresolved].each { |phrase| stats[:subjects_unresolved][phrase] += 1 }
             end
-            Rails.logger.info("WorldCat backfill #{@run_id}: #{stats[:processed]} books, #{stats[:genres_linked]} genre links, #{stats[:type_conflicts]} type conflicts")
+            Rails.logger.info("WorldCat backfill #{@run_id}: #{stats[:processed]} books, #{stats[:genres_linked]} genre links, #{stats[:audiences_linked]} audience links, #{stats[:type_conflicts]} type conflicts")
           end
           stats[:error] = @last_error&.message
           stats[:subjects_unresolved] = stats[:subjects_unresolved].sort_by { |phrase, n| [-n, phrase] }.to_h

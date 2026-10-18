@@ -40,6 +40,19 @@ module Services
           assert_match(/no terms/, result.errors.first)
           assert_equal [], categories(:books_fiction_genre).reload.alternative_names
         end
+
+        test "audience terms become alternative names on the audience; a missing audience is reported" do
+          ya = ::Books::Category.create!(name: "Young Adult", category_type: :audience)
+          map = ::Books::WorldCat::GenreMap.new("audiences" => ["Young Adult", "Middle Grade"], "terms" => {
+            "Young adult fiction" => {"verdict" => "audience", "audience" => "Young Adult"},
+            "Middle grade fiction" => {"verdict" => "audience", "audience" => "Middle Grade"}
+          })
+
+          result = ApplyAliases.call(map: map)
+
+          assert_includes ya.reload.alternative_names, "Young adult fiction"
+          assert_includes result.data[:missing_genres], "Middle Grade"
+        end
       end
     end
   end

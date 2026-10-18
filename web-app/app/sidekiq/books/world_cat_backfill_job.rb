@@ -16,7 +16,7 @@ class Books::WorldCatBackfillJob
 
     Rails.logger.info(
       "WorldCat backfill #{run_id}: #{data[:processed]} books, #{data[:matched]} matched, " \
-      "#{data[:genres_linked]} genre links, #{data[:subjects_linked]} subject links, " \
+      "#{data[:genres_linked]} genre links, #{data[:audiences_linked]} audience links, #{data[:subjects_linked]} subject links, " \
       "#{data[:type_conflicts]} type conflicts, " \
       "#{data[:subjects_unresolved].size} unresolved subject phrases" \
       "#{" -- stopped: #{data[:error]}" if data[:stopped]}"
