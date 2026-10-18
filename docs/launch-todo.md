@@ -234,7 +234,7 @@ the sync never undoes them.
 Adds the WorldCat exact-lookup service on the home server and backfills genre categories from it.
 Independent of section 2: the switch-over ran on 2026-10-10 (`data_migration:sync_init`), so the
 category links the backfill writes in production are kept across the weekly `data_migration:sync`.
-The sync does add new books, though, so the backfill (step 13) is also section 4 step 7: it re-runs
+The sync does add new books, though, so the backfill (step 15) is also section 4 step 7: it re-runs
 after every sync and again at cutover (section 6, step 3).
 Details: `docs/features/worldcat-data-service.md`; the VM runbook is
 `docs/features/home-server.md`, "Loading the WorldCat artifact (once)".
@@ -297,7 +297,7 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    API running: `docker compose --profile worldcat up -d worldcat` in `data-sources/`. Run
    `bin/rails worldcat:vocabulary`, `worldcat:map` and `worldcat:report`. Review and edit
    `config/worldcat/genre_map.yml` by hand, then commit it. The reviewed map must be merged and
-   deployed before steps 12 and 13 run in production.
+   deployed before steps 14 and 15 run in production.
 11. **Rehearse the backfill in development.** The dev database is not disposable, so snapshot it
     first: `bin/snapshot-dev-db.sh --label pre-worldcat` (from the repo root). Then, with the local WorldCat API running,
     `bin/rails "worldcat:backfill[2000]"`. Read the worker log's line for the run (grep the Sidekiq
@@ -306,8 +306,21 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
     genre should be one you would have chosen, and none should carry both Fiction and Nonfiction.
     Fix the map and rerun if not. Restore with `bin/snapshot-dev-db.sh --restore` if the links look
     wrong.
-12. **Aliases, in production. Shane runs with `!`.** `bin/rails worldcat:apply_aliases`.
-13. **The backfill, in production. Shane runs with `!`.** `bin/rails "worldcat:backfill[all]"`.
-14. **The report, if the map changed.** After the backfill, if the map was edited during review, re-run
+12. **Old site: stop the Goodreads import creating genres. Shane makes this change.** In
+    `the-greatest-books/admin/app/models/book.rb`, the `Category.create!` in the Goodreads genre loop
+    becomes `next if category.nil?`. This branch did not make it (the old repo's checkout had
+    uncommitted work on another branch). Deploy it before the genre apply.
+13. **Genre cleanup, in production. Shane runs with `!`.** Needs the plan files merged and deployed
+    (`config/books/genre_plan.yml`, `genre_split_assignments.csv`, the retargeted
+    `config/worldcat/genre_map.yml`). Dump the four tables first (the command in the category cleanup
+    runbook, `docs/features/books-categories.md`), then `bin/rails categories:genres:apply`. If it
+    exits non-zero, read its remedy lines before re-running. If it stops on a genre missing from the
+    plan, run `categories:genres:map` in development for it, review, and ship the updated file. The
+    `/categories` Audiences tab appears only as edge-cached `/categories` pages expire after
+    audiences are created. Details: "Genre cleanup and audiences" in
+    `docs/features/books-categories.md`. Steps 14 and 15 wait for this step.
+14. **Aliases, in production. Shane runs with `!`.** `bin/rails worldcat:apply_aliases`.
+15. **The backfill, in production. Shane runs with `!`.** `bin/rails "worldcat:backfill[all]"`.
+16. **The report, if the map changed.** After the backfill, if the map was edited during review, re-run
     `bin/rails worldcat:report` in development and commit the regenerated
     `docs/data-quality/worldcat-genre-mapping.md`. It depends only on the map file, not on the backfill.

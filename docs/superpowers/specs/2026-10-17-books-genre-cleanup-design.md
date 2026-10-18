@@ -183,14 +183,37 @@ half only, and once merged the books can no longer be told apart, so splitting h
   today, which of the split's genre or audience targets it now supports (§7).
 
 The applier gains a `split` action (enum value 6) and the decision table an `extra_target_ids`
-`bigint[]` column (default `{}`), filled from the non-primary targets. A split runs in the merge
-phase, in one transaction:
+`bigint[]` column (default `{}`), filled from the non-primary targets. Splits run first, before any other phase, each in one
+transaction: renaming-mode splits by id, then merging-mode splits by id. The Applier's order is
+then plain renames, merge, retype, parents, set_parent, delete, and a final pass for keeps and
+renames that carry extra targets (`also:`). An earlier design ran splits in the merge phase; a
+merge into a renaming split's primary (World History into History, where History is "History and
+Politics" renamed) then ran before the split, so the merged books looked like unanswered split
+books and got every target, Politics included. Renames with `also:` wait for the final pass so
+books merged into them get the `also:` targets too, as they do for a kept genre. Each split:
 
 1. For each book on the genre, add links to its assigned targets (skipping links that already
    exist, keeping the original link's `source`).
 2. Merging mode: remove the genre's own links, then merge the now-empty genre into the primary, so
    it is soft-deleted with `merged_into`, its aliases move, and saved searches, old URLs and legacy
    links follow it. Renaming mode: remove the links of books not assigned the primary, then rename.
+
+Rulings made while building this:
+
+- **A split acts only on its own books.** Before any split runs, each pending split's current books
+  are written into its `split_assignments` (a book with no answer gets every target) with a
+  `_materialized` marker, committed before the first split. A split then acts only on books listed
+  there; links that arrive from another split stay on the genre untouched. This survives a crash
+  or a retry.
+- **Targets are checked, never followed.** A split, or a keep or rename with extra targets, fails
+  its decision when any target is missing, deleted or merged, when an answer names an id outside
+  the split's targets, or when an answer is not a list. A failed decision is recoverable; silently
+  dropping a book's tag is not.
+- **Merging mode keeps a book's independent link.** A book that already had its own link to the
+  primary keeps it even when its answer leaves the primary out. "*The Lord of the Rings* must not
+  end on Science Fiction" means not through the split.
+- **`also:` is not transitive.** If R is also K and K is also F, R's books are not guaranteed to
+  reach F.
 
 It is terminal like a merge for `supersede_conflicting` and the staleness check. Every book on the
 genre is requeued for reindexing (the Merger's own requeue sees no items once the links are gone).
@@ -199,7 +222,14 @@ Legacy sync: a new legacy link to a split genre would otherwise reach only the p
 merge redirect) or the renamed genre. `CategoryItemMigrator` loads the applied decisions that carry
 `extra_target_ids` (splits, and keeps or renames with `also:`) once per run and also links those
 targets, skipping links that already exist. For a split this gives a new book every target, since
-the sync cannot check it.
+the sync cannot check it. Extra targets are looked up by the link's own new-app id and by its
+redirected target; the redirected lookup takes only keep and rename extras, so a split's extras
+reach only links on the split genre itself.
+
+Known gap, accepted: a merging-mode split's pre-existing aliases (categories merged into the
+combined genre before the plan) are flattened onto the primary by the Merger, so a new legacy book
+linked through one reaches only the primary during the sync window. The same holds for the
+pre-existing aliases of a renaming split. The sync ends at launch.
 
 A `keep` or `rename` with `also:` stores the `also:` genres in `extra_target_ids` too; the applier
 links the genre's books to them after the keep or rename, skipping existing links.
@@ -222,7 +252,20 @@ written.
   audience) for each audience entry.
 - A `split` has at least two `into:` targets, no duplicates, and no location; its subject targets
   have live `target_id`s; every `worldcat_terms` target is one of its genre or audience targets.
-- No merge or split target is itself merged, split, retyped or deleted by the plan.
+- A split may rename only when its primary is on the genre list. An audience-name primary must be
+  produced by an `audience` decision or an existing live audience, and the split then merges into
+  it. Existing live audiences count before splits. An `audience` decision plus an existing live
+  audience of the same name is an error (two producers).
+- Genre and audience list names are unique within and across both lists, case-insensitively.
+  `also:` may not name Fiction or Nonfiction.
+- A split's WorldCat term may be answered `[]`: it supports none of the split's halves, and
+  `retarget_worldcat` writes it as a `drop` with reason `not_a_genre`.
+- `run:` is not blank, and a run that already has decisions from another stage is refused.
+
+(A check that no merge or split target is itself merged, split, retyped or deleted was dropped.
+Targets are list entries, and list entries are produced only by keep, rename, a renaming split or
+an audience retype, so a merge into an audience-retyped category, `teen` into Young Adult, is
+legitimate.)
 - `also:` appears only on `keep` and `rename`, and names genre list entries other than the
   genre's own.
 - The four protected genres are `keep`. Nothing merges into `Fiction` or `Nonfiction`.
@@ -237,15 +280,18 @@ All in `lib/tasks/genre_cleanup.rake`, namespace `categories:genres`. `draft` an
 whole job stays well under `CostGuard`'s limit.
 
 1. **`draft`** (dev). One call, `Services::Ai::Tasks::Books::GenreDraftTask`. Input per live genre:
-   name, book count, five highest-ranked titles, saved-search and recommendation-setting
-   reference counts; plus the §3 rules. Output schema: `genres` and `audiences` (name, definition)
-   and `notes` (what happens to each large genre not kept). Writes the `genres:` and `audiences:`
-   sections of the plan file and prints the notes. Refuses to overwrite a file that already has
+   name, book count, five sample titles (`Services::CategoryCleanup::SampleTitles`, oldest ids, which skew to well-known books), saved-search and recommendation-setting
+   reference counts; plus the §3 rules. Output schema: `genres` (name, definition) and `notes` (what
+   happens to each large genre not kept). The audiences are fixed by §2, so the AI does not draft
+   them: the `audiences:` section is written from `PlanFile::AUDIENCES`. Writes both sections of the
+   plan file and prints the notes. Refuses to overwrite a file that already has
    `decisions:` unless `FORCE=1`.
 2. Shane edits the lists.
 3. **`map`** (dev). `Services::Ai::Tasks::Books::GenreMapTask`, batches of 30, with the lists and
-   their definitions in the prompt and the same per-genre facts as `draft`. The response schema
-   restricts `into:` and audience `as:` to list names (enums built per call). Resolves `as:` to
+   their definitions in the prompt and the same per-genre facts as `draft`. An `into:` or audience `as:`
+   that is not on the lists fails the whole batch (rejected by validation in the task, not by schema
+   enums: `OpenAI::BaseModel` classes are static, so per-call enums are not possible; the batch is
+   retried on the next run, as `WorldCatGenreMappingTask` does). Resolves `as:` to
    `target_id` (§4); a `location` with no match is written as `delete` with the reason "no such
    location: X" for the reviewer. For a `split`, the batch also receives the WorldCat terms that
    target that genre in `genre_map.yml` and returns `worldcat_terms`. Writes `decisions:`.
@@ -268,6 +314,20 @@ whole job stays well under `CostGuard`'s limit.
    from saved searches and recommendation settings (§6) and prints which records it changed.
    Re-running changes nothing.
 
+   A re-run skips the validator and the builder once the run has `genres` decisions, so edits to
+   the plan need a new `run:` value. Failed decisions are not retried automatically. `apply` exits
+   non-zero while any decision of the run is failed or stale, and prints a remedy for each: failed
+   means fix the cause, reset the decision to proposed and run again; stale means the category
+   changed after the plan was built, so handle it by hand and mark the decision rejected.
+   `report` prints the combined count of saved searches and recommendation settings (the plan
+   file's key stays `saved_searches`). `retarget_worldcat` leaves a term already in final form
+   alone, so a second run gives the same file; once retargeted, split terms no longer point at the
+   split genre, so changing a split's `worldcat_terms` means restoring `config/worldcat/genre_map.yml`
+   from git first.
+
+   Overrides: `PLAN=path` and `ASSIGNMENTS=path` replace the default plan and split-answers files on
+   any of the commands (used by the tests and by rehearsals).
+
 `CategoryCleanupDecision::STAGES` gains `genres`. The applier is used as it is: its staleness
 check, merge-cycle breaking, the Merger's refusals, soft deletes and search reindexing all apply.
 A rename paired with a retype survives `supersede_conflicting` already.
@@ -280,16 +340,16 @@ appears as its own group wherever types are shown. Retypes keep ids, so stored i
 | area | today | change |
 |---|---|---|
 | Category enum (`app/models/category.rb`) | 6 types | add `audience: 6`; the admin type select picks it up |
-| Search index (`Books::Book#as_indexed_json`, `book_index.rb`) | `genre/subject/location_category_ids` | add `audience_category_ids`; audience ids are also written into `genre_category_ids` and counted in `similarity_category_count`, so scoring is unchanged |
-| Similar books (`book_similar.rb`), recommendations (`adapter.rb`, `profile_builder.rb`, `book_recommendations.rb`, `genre_calibration.rb`) | genre-only paths | audience is treated as genre (one shared constant for "genre-like types" next to `SIMILARITY_CATEGORY_TYPES`); taste and explainer displays label it by its real type |
+| Search index (`Books::Book#as_indexed_json`, `book_index.rb`) | `genre/subject/location_category_ids` | no `audience_category_ids` field. Audience ids are written into `genre_category_ids` and counted in `similarity_category_count` (through `Books::Book::SCORING_TYPE_OF`), so scoring and the category filter are unchanged. Nothing would query a separate field (filters use `category_ids`, scoring uses `genre_category_ids`), and adding a mapped field to the live index needs a rebuild |
+| Similar books (`book_similar.rb`), recommendations (`adapter.rb`, `profile_builder.rb`, `book_recommendations.rb`, `genre_calibration.rb`) | genre-only paths | audience is treated as genre (`Books::Book::SCORING_TYPE_OF` / `GENRE_SCORED_TYPES`); the taste panel shows audiences under Genres, because recommendations see them as genres and a separate label would mean carrying the real type through the profile for no scoring benefit |
 | Saved searches, recommendation settings | ids, type-agnostic; merges followed at query time | no change for retype or merge. Applied deletes: ids removed from included and excluded lists by `apply` (an included deleted id would otherwise return nothing). Label copy "genres" becomes "categories" |
-| Filter modal (`filter_facets_query.rb`, `filters_controller.rb`, `filter_modal_component`) | default list shows genres only | add an Audience group; copy "Genre, subject, or setting" includes audience |
+| Filter modal (`filter_facets_query.rb`, `filters_controller.rb`, `filter_modal_component`) | default list shows genres only | add an Audience group; the search placeholders are unchanged (14 Playwright selectors depend on them), and the axis hint becomes "Genre, audience, subject, or setting" |
 | Page titles (`filter_title.rb`) | genre/subject/location only | audience contributes ("The Greatest Young Adult Books…") |
 | Global canon (`global_canon_params.rb`, `global_canon_controller.rb`) | exclusions must be `genre` slugs; unknown slug 404s | accept genre and audience slugs; picker searches both; a merged or renamed slug 301s to the current one through `CategorySlugResolver`, as `FilterParams` does |
 | `/categories` (`BrowseQuery::TYPES`, `BrowseController::TITLES`, the route's `browse_filter`, `BrowsePath`) | genre/location/subject tabs | add an audience tab, exempt from the 5-ranked-book minimum like genre |
 | Book page (`books_controller.rb` `CATEGORY_TYPE_ORDER`) | unknown types last | order genre, audience, subject, location |
 | CSV export (`csv_exports/books/ranked_book_row.rb`) | genres/subjects/locations columns | add an audiences column |
-| Subject cleanup prompt (`subject_task.rb`) | deletes audience-like subjects | merges them into the matching audience |
+| Subject cleanup prompt (`subject_task.rb`) | deletes audience-like subjects | keeps deleting audience-named subjects, now naming the type ("an audience ... which is its own category type") |
 | Public API | `category_type` is a free string | document `audience` in the OpenAPI description |
 | Legacy `/genres/:id` | resolves merges, 404s plain deletes | unchanged; deleted junk genres 404 |
 
@@ -298,7 +358,10 @@ and recommendation criteria storage, the protected-category lookups (by name, as
 reindex callbacks (`saved_change_to_category_type?` requeues a retyped category's books).
 
 Legacy sync: in sync mode an already-mapped category keeps its new type, name and deleted flag;
-links to a merged category land on its target; links to a deleted one are dropped. A full
+links to a merged category land on its target; links to a deleted one are dropped. `SavedSearchMigrator` and `RecommendationConfigMigrator`
+likewise drop category ids whose category is deleted and not merged (merged ids stay, since queries
+follow them); without that, the weekly sync would put deleted genre ids back into criteria after
+`apply` cleaned them. A full
 non-sync `data_migration:all` would revert the retypes, and it no longer runs after the
 switch-over.
 
@@ -320,7 +383,10 @@ The map (`config/worldcat/genre_map.yml`, 4,261 terms) names genres by name, and
   least one matched record supports Children's through a non-weak term ("Children's stories",
   "Picture books for children", "Children's literature"). The retarget step sets the flag;
   `ApplyCategories` enforces it. Young Adult terms ("Young adult fiction", "Teen fiction") are not
-  weak. Nothing in WorldCat maps to Middle Grade.
+  weak. The retarget step puts a weak Children's verdict first (as `audience:` with
+  `weak: true`) whenever a Juvenile term's names include it, because `GenreMap` honours `weak` only
+  on an audience primary. It fails when two decisions sharing a name would rewrite a term
+  differently, or when a rewritten target is not in the headers. Nothing in WorldCat maps to Middle Grade.
 - `retarget_worldcat` rewrites each term from the plan: a `keep`/`rename` genre takes the list
   name; `merge` takes its target (an audience target becomes an audience verdict); `audience`
   becomes an audience verdict; `subject` becomes a subject verdict with the resulting subject's

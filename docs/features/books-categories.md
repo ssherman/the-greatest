@@ -1,7 +1,7 @@
 # Books subjects and locations
 
 How the books `subject` and `location` categories are named, organised, merged and cleaned up.
-Genres are separate and not covered here. Design: `docs/superpowers/specs/2026-10-11-books-category-cleanup-design.md`.
+Genres and audiences are covered in "Genre cleanup and audiences" below. Design: `docs/superpowers/specs/2026-10-11-books-category-cleanup-design.md`.
 Measurements: `docs/data-quality/books-categories.md`.
 
 ## What subjects and locations are for
@@ -91,7 +91,7 @@ The saved-search category picker has no threshold. That is deliberate.
 
 URLs:
 
-- `/categories` is genres, `/categories/settings` and `/categories/subjects` the other two types. The enum stays `genre` / `location` / `subject`; `Books::BrowsePath` is the one place that maps the type to the URL word.
+- `/categories` is genres, `/categories/audiences`, `/categories/settings` and `/categories/subjects` the other types. The enum values are `genre` / `audience` / `location` / `subject`; `Books::BrowsePath` is the one place that maps the type to the URL word.
 - `…/sorted-by/name` is A to Z (most books is the default and has no segment). `…/page/N` paginates, 120 per page.
 - Sort and page segments are regex-constrained in the routes. That is load-bearing: the query object falls back to the default for any input, so an open segment would mint endless soft-duplicate URLs. A sorted variant is `noindex, follow` and canonicalizes to the unsorted path.
 - Old `/genres` index URLs (`/genres`, `/genres/filtered-by/<type>`, `/genres/sorted-by/…`, `…/page/N`, and the `?filter=&sort=&page=` forms) answer a single 301 to the matching `/categories` URL. A redirect that went through an intermediate URL would hand crawlers two hops. `/genres/:id` is unchanged and still 301s to `/the-greatest/<slug>/books`; it must stay declared after the redirect.
@@ -114,7 +114,7 @@ Top-level categories and all subjects show no chain.
 
 Search (`/categories/search?q=&filter=`):
 
-- Covers all three types, so a reader looking for "War" does not have to know which tab it lives on. Each result carries a type badge ("Genre", "Setting", "Subject"). Results are capped at 60, with no pagination, and require at least two characters.
+- Covers every browsable type, so a reader looking for "War" does not have to know which tab it lives on. Each result carries a type badge ("Genre", "Audience", "Setting", "Subject"). Results are capped at 60, with no pagination, and require at least two characters.
 - A match is a case-insensitive substring of the name or an alternative name (the same condition as `CategorySearchQuery`).
 - Ordering is match quality first: name equals the query, then name starts with it, then a word in the name starts with it, then name contains it, then alias-only. The current tab's type is the tiebreaker within a quality, then ranked count, then name. Type-first was tried and rejected: past merges left junk alternative names (Europe carries "World War I Europe"), so an alias-only hit on the current tab outranked the category literally named "War".
 - Searching runs from the page's form, which targets the `categories_results` Turbo frame (frame `target: "_top"`, so result links leave the frame; the form carries its own `data-turbo-frame`). The `books--category-search` Stimulus controller submits 250 ms after typing stops, from two characters up. The URL does not change. One character leaves whatever is showing alone. Clearing the box after a search loads the grid page into the frame again, and the controller cancels an in-flight search or restore so a slow response cannot land late and put results back under an empty box.
@@ -202,6 +202,109 @@ After the first cleanup is applied, `data_migration:sync` runs a `category_clean
 pass over categories no run has decided, with the rule decisions applied at once (AI decisions are
 never auto-applied). Categories whose only decisions failed or went stale are retried each week.
 Anything else waits for your next `propose`.
+
+## Genre cleanup and audiences
+
+Design: `docs/superpowers/specs/2026-10-17-books-genre-cleanup-design.md`. The genres came from
+Goodreads shelves and mix every kind of label, so the cleanup gives each of the 171 live genres one
+reviewed fate and adds an `audience` category type. The test throughout: a genre is what the book
+is; a subject is what it is about.
+
+### The types
+
+| type | holds |
+|---|---|
+| genre | form and reader conventions: Mystery, Fantasy, Memoir, Plays, Graphic Novels. About 40 to 60 after the cleanup |
+| audience | who the book is for. Exactly three, flat: Children's (about 0 to 8), Middle Grade (8 to 12), Young Adult (12 to 18) |
+| subject | topics, time periods, LGBTQ+, real moods and reception labels |
+| location | places |
+
+No audience means a general adult readership; nothing is tagged Adult. Audience scores exactly as a
+genre does: `Books::Book::SCORING_TYPE_OF` maps it to the genre bucket, so its ids go into
+`genre_category_ids` and `similarity_category_count`, and similar books and recommendations treat it
+as a genre. There is no separate `audience_category_ids` index field. Everywhere types are shown it
+is its own group: the filter modal, `/categories/audiences` (hidden until an audience exists),
+page titles, the book page order (genre, audience, subject, location), the CSV export, and the
+global canon, whose exclusions accept genre and audience slugs.
+
+### The two files
+
+Both are committed and reviewed in a PR; production makes no AI calls.
+
+- `config/books/genre_plan.yml`: the `genres:` list and the three fixed `audiences:` (each with a
+  definition), then `decisions:`, one per live genre keyed by category id. Actions: `keep`
+  (optionally `also:`), `rename`, `merge`, `audience`, `subject`, `location`, `delete`, `split`.
+  `run:` names the batch of decisions. Edits after a first `apply` need a new `run:`.
+- `config/books/genre_split_assignments.csv` (`book_id,category_id,targets`): for each book on a
+  `split` genre, which of the split's targets fit it, or every target when the answer was
+  `unknown`.
+
+`PLAN=path` and `ASSIGNMENTS=path` point any command at other copies.
+
+### The commands
+
+All are `categories:genres:<name>`, run from `web-app/`, in this order:
+
+1. `draft` (development). One AI call proposes the genre list and notes. Refuses to overwrite a
+   plan that has decisions unless `FORCE=1`. Then Shane edits the list.
+2. `map` (development). Batches of 30 genres mapped onto the lists. Resumable; a batch whose answer
+   names something off the lists fails whole and is retried on the next run.
+3. `split_check` (development). One call per 10 books on a split genre, asking which targets fit.
+   Resumable by book, `FORCE=1` past the cost guard.
+4. `report` (development). Decisions by action with book counts, delete reference counts (saved
+   searches plus recommendation settings), and the validator's verdict.
+5. `retarget_worldcat` (development). Rewrites `config/worldcat/genre_map.yml` from the plan (see
+   `worldcat-data-service.md`). A second run changes nothing.
+6. `apply` (production, Shane runs it). Validates, writes the decisions, runs
+   `Services::CategoryCleanup::Applier`, then removes applied deletes from saved searches and
+   recommendation settings.
+
+### What apply checks
+
+`Services::Books::GenrePlan::Validator` stops everything, writing nothing, when: a live genre has no
+decision (the error names it, which means the plan is out of date); a name no longer matches its
+row; the audiences are not exactly the three; an `into:` or `as:` names nothing on the lists; a list
+entry would not end as exactly one live category; list names collide; a `target_id` is not live, of
+the stated type and still named so; a protected genre (Fiction, Nonfiction, Religion & Spirituality,
+Poetry) is not `keep`, or anything merges into Fiction or Nonfiction; `location` has no
+`target_id`; or a split is malformed (see below). Re-running `apply` skips the validator and builder
+once the run has decisions, and exits non-zero while any decision of the run is failed or stale,
+printing the remedy for each: a failed one is fixed, reset to `proposed` and re-run; a stale one
+(the category changed after the plan was built) is handled by hand and then marked `rejected`.
+
+### Splits and `also:`
+
+A `split` genre is two things at once (`Science Fiction Fantasy`, `History and Politics`). Its
+books get each target that fits them, as recorded in the assignments file; a book the AI could not
+place gets every target, and a book on the genre but missing from the file gets every target too
+(`apply` prints how many). The first `into:` entry is the primary. If another decision already
+produces it, the split genre merges into it; otherwise the genre is renamed to it and keeps its id.
+Non-primary targets are stored in `extra_target_ids`.
+
+The Applier runs splits first (renaming-mode, then merging-mode, by id), then plain renames, merge,
+retype, parents, set_parent, delete, and last the keeps and renames that carry extra targets. Each
+split first records its own books in `split_assignments` and acts only on those. A split, or a
+keep or rename with extras, fails its decision if a target is missing, deleted or merged, or an
+answer names an id outside the targets: a failed decision can be redone, a silently dropped tag
+cannot. In merging mode a book that already had its own link to the primary keeps it.
+
+`also:` on a `keep` or `rename` names genres every book of that genre necessarily belongs to
+(`Romantasy` also Romance and Fantasy); its books are linked to them. It is not transitive.
+
+### Saved searches, recommendation settings and the sync
+
+Retypes keep ids, so stored ids keep working, and merged ids are followed at query time. A deleted
+genre's id would match nothing, so `apply` removes applied deletes from the included and excluded
+lists of saved searches and recommendation settings and prints what it changed. In the weekly
+`data_migration:sync`, an already-mapped category keeps its new type, name and deleted flag; links
+to a merged one land on its target; links to a deleted one are dropped; the saved-search and
+recommendation-setting migrators drop deleted-and-unmerged ids from criteria. `CategoryItemMigrator`
+also links a split genre's, or an `also:` genre's, extra targets. Known gap: pre-existing aliases of
+a split genre are flattened onto its primary, so a new legacy book linked through one reaches only
+the primary until the sync ends at launch.
+
+The `/categories` Audiences tab appears only as edge-cached `/categories` pages expire after
+audiences are created.
 
 ## Configuration
 
