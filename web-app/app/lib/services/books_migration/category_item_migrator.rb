@@ -11,6 +11,8 @@ module Services
     # success-looking low count — mirrors BookMigrator#remap_language. item_id is book_id
     # directly (books preserve their id). finalize recomputes categories.item_count
     # (upsert_all bypasses the counter_cache), scoped to Books::Category.
+    # A category with an applied cleanup decision carrying extra targets (a split
+    # genre, or a kept one with `also:`) also gets a link to each live extra target.
     class CategoryItemMigrator < BulkUpsertMigrator
       private
 
@@ -45,6 +47,17 @@ module Services
         # merged here since they were mapped: dropping their items is deliberate.
         # Only an id with no map entry at all is a missing prerequisite.
         @known_category_ids = LegacyIdMap.where(model: "Books::Category").pluck(:legacy_id).to_set
+        # Genre cleanup (spec 2026-10-17 section 4): a split genre, or a kept genre
+        # with `also:`, sends its links to extra categories too. Keyed by the
+        # category's own new-app id, before the merge redirect above. Only live
+        # extra targets count; one deleted or merged since is skipped, not an error.
+        @new_ids = LegacyIdMap.where(model: "Books::Category").pluck(:legacy_id, :new_id).to_h
+        live = ::Category.where(deleted: false)
+        @extra_targets = ::CategoryCleanupDecision.applied.where.not(extra_target_ids: [])
+          .pluck(:category_id, :extra_target_ids)
+          .each_with_object({}) do |(category_id, ids), out|
+            out[category_id] = ((out[category_id] || []) + live.where(id: ids).pluck(:id)).uniq
+          end
       end
 
       def sync_filter
@@ -54,7 +67,10 @@ module Services
       def build_rows(attrs)
         legacy_category_id = attrs["category_id"]
         new_category_id = @category_map[legacy_category_id]
-        return [{category_id: new_category_id, item_type: "Books::Book", item_id: attrs["book_id"]}] if new_category_id
+        if new_category_id
+          extras = @extra_targets.fetch(@new_ids[legacy_category_id], [])
+          return ([new_category_id] + extras).uniq.map { |id| {category_id: id, item_type: "Books::Book", item_id: attrs["book_id"]} }
+        end
         # No live mapping: a migrated-but-soft-deleted category is a deliberate drop
         # (legacy corruption); an unmigrated one is a missing prerequisite -> raise.
         return [] if @known_category_ids.include?(legacy_category_id)
