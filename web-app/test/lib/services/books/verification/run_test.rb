@@ -110,7 +110,10 @@ module Services
         end
 
         test "the lock is released when the run raises" do
-          VerifyBook.stubs(:call).raises(ActiveRecord::RecordNotUnique, "boom")
+          # A book's own error is recorded; recording it failing too (the
+          # database is down) is what still ends the run.
+          VerifyBook.stubs(:call).raises(RuntimeError, "boom")
+          ApplyBook.stubs(:record_failure).raises(ActiveRecord::RecordNotUnique, "boom")
           assert_raises(ActiveRecord::RecordNotUnique) { run_backfill }
 
           assert_lock_free
@@ -481,6 +484,53 @@ module Services
           assert_equal [@war, @crime, @got, @clash].map(&:id).sort, order.sort
           assert row.reload.stage_identifiers?
           assert_match(/NotFoundError.*no such work/, row.stage_error)
+        end
+
+        test "an unexpected error on one book is recorded on its row and the run goes on" do
+          row = ::Books::Verification.create!(book: @war, work_outcome: :keyed, new_key: "OL1W", run_id: "old", stage: :signals)
+          order = []
+          VerifyBook.stubs(:call).with do |book:, run_id:, **|
+            order << book.id
+            raise URI::InvalidURIError, "bad URI (is not URI?): \"/identifiers/isbn13/Twelfth Night\"" if book.id == @war.id
+
+            ::Books::Verification.find_or_initialize_by(book: book).update!(work_outcome: :keyed, run_id: run_id, stage: :done)
+            true
+          end.returns(ok)
+
+          result = run_backfill
+
+          assert_not result.data[:stopped]
+          assert_equal [@war, @crime, @got, @clash].map(&:id).sort, order.sort
+          assert row.reload.stage_signals?
+          assert_match(/URI::InvalidURIError.*Twelfth Night/, row.stage_error)
+        end
+
+        test "unexpected errors on UNEXPECTED_ERROR_LIMIT books in a row stop the run with the last one" do
+          VerifyBook.stubs(:call).raises(RuntimeError, "every book breaks")
+
+          result = run_backfill
+
+          assert result.data[:stopped]
+          assert_match(/RuntimeError: every book breaks/, result.data[:error])
+          assert_equal Run::UNEXPECTED_ERROR_LIMIT, ::Books::Verification.where(work_outcome: :failed).count
+        end
+
+        test "a book that ends any other way resets the unexpected-error count" do
+          outcomes = [:unexpected, :book_specific, :unexpected, :unexpected]
+          calls = 0
+          VerifyBook.stubs(:call).with do |**|
+            outcome = outcomes[calls]
+            calls += 1
+            raise "boom" if outcome == :unexpected
+            raise ::Books::OpenLibrary::Exceptions::ClientError.new("rejected", 422) if outcome == :book_specific
+
+            true
+          end.returns(ok)
+
+          result = run_backfill
+
+          assert_not result.data[:stopped]
+          assert_equal 4, calls
         end
 
         test "a WorldCat 404 is book-specific too" do
