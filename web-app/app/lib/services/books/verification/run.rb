@@ -23,6 +23,11 @@ module Services
         RESOLVE_PAUSE = 4
         # A 4xx that is about this book's data, not about us or the service.
         BOOK_SPECIFIC_STATUSES = [400, 422].freeze
+        # Any other error is recorded on the book's row and the run goes on,
+        # so one book's bad data cannot end a days-long run ("Twelfth Night"
+        # held as an ISBN-13 did, silently: the job has no retries). This many
+        # in a row is not one book's data: the run stops.
+        UNEXPECTED_ERROR_LIMIT = 3
         # Session advisory lock key: one verification run at a time. A fixed 64-bit
         # constant, not a hash; the app's other advisory locks use hashtext of a
         # string, so this cannot collide with them by accident.
@@ -50,6 +55,7 @@ module Services
           @sleeper = sleeper || ->(seconds) { sleep(seconds) }
           @scope = scope || ::Books::Book.all
           @attempted = Set.new
+          @unexpected_in_a_row = 0
         end
 
         def call
@@ -137,6 +143,7 @@ module Services
             return :skipped unless result.success?
 
             @sleeper.call(RESOLVE_PAUSE) if result.data&.via_resolve
+            @unexpected_in_a_row = 0
             :done
           rescue ::Books::OpenLibrary::Exceptions::Error, ::Books::WorldCat::Exceptions::Error => e
             if book_specific?(e)
@@ -154,7 +161,20 @@ module Services
             @error = "#{e.class}: #{e.message}"
             record_stop(book, @error)
             :failed
+          rescue => e
+            unexpected(book, e)
           end
+        end
+
+        def unexpected(book, error)
+          message = "#{error.class}: #{error.message}"
+          ::Rails.logger.error("Verification run #{@run_id}: book #{book.id}: #{message}\n#{Array(error.backtrace).first(15).join("\n")}")
+          record_stop(book, message)
+          @unexpected_in_a_row += 1
+          return :skipped if @unexpected_in_a_row < UNEXPECTED_ERROR_LIMIT
+
+          @error = message
+          :failed
         end
 
         # Stage 1 failing logs the book failed, as before; a later stage keeps

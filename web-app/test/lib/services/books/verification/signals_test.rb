@@ -34,6 +34,17 @@ module Services
           assert_not_nil row.checked_at
         end
 
+        test "values that are not a valid ISBN or Goodreads id are never looked up and use no lookup slot" do
+          hold(:books_work_isbn13, "Twelfth Night")
+          hold(:books_work_isbn10, "12345")
+          hold(:books_work_goodreads_id, "gr-77")
+          client = FakeOlClient.new
+          Signals.call(verification: @row, client: client)
+
+          assert_equal [[:identifier, "isbn13", "9780140447934"]], client.calls.select { |call| call.first == :identifier }
+          assert @row.reload.stage_done?
+        end
+
         test "one foreign work is recorded but is not a lump" do
           row = run_signals(hits: {["isbn13", "9780140447934"] => [ol_hit("OL7W")]}, works: {"OL7W" => ol_work("OL7W", title: "Anna Karenina")})
 

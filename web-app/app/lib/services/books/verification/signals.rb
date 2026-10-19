@@ -31,7 +31,8 @@ module Services
 
         def call
           excluded_keys # memoize before any thread starts
-          held = @book.identifiers.unverified.where(identifier_type: TYPES.keys).order(:id).limit(MAX_SIGNAL_LOOKUPS).pluck(:identifier_type, :value)
+          held = @book.identifiers.unverified.where(identifier_type: TYPES.keys).order(:id).pluck(:identifier_type, :value)
+            .select { |type, value| lookupable?(type, value) }.first(MAX_SIGNAL_LOOKUPS)
           hits = lookups(held).flat_map { |(type, value), found| found.map { |hit| [type, value, hit] } }
           foreign = hits.reject { |_type, _value, hit| ours?(hit) }
           works = foreign.empty? ? {} : @client.works_batch(foreign.map { |_t, _v, hit| hit.work_key }.uniq)
@@ -89,6 +90,12 @@ module Services
 
         def drop_article(title)
           Check.normalize(title)&.sub(LEADING_ARTICLE, "")
+        end
+
+        # Legacy data holds junk under these types ("Twelfth Night" as an
+        # ISBN-13). It cannot be a hit, so it is not worth a lookup slot.
+        def lookupable?(type, value)
+          (type == "books_work_goodreads_id") ? value.to_s.strip.match?(/\A\d+\z/) : ::Books::Isbn.normalize(value).present?
         end
 
         def ours?(hit) = excluded_keys.include?(hit.work_key) || Array(hit.redirected_from).intersect?(excluded_keys)

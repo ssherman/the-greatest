@@ -53,7 +53,9 @@ module Books
           raise ArgumentError, "invalid identifier type: #{type.inspect}"
         end
 
-        (get("/identifiers/#{type}/#{value}")["data"] || []).map { |record| IdentifierHit.from_record(record) }
+        # Escaped: legacy data holds values like "Twelfth Night" under isbn13,
+        # and a raw space is an invalid URI that no caller expects.
+        (get("/identifiers/#{type}/#{ERB::Util.url_encode(value.to_s)}")["data"] || []).map { |record| IdentifierHit.from_record(record) }
       end
 
       # The service counts raw keys against MAX_BATCH before dedup, so this
