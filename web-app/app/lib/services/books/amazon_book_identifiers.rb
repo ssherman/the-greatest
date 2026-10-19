@@ -72,12 +72,28 @@ module Services
         Array(@product.dig("itemInfo", "externalIds", kind, "displayValues"))
       end
 
+      # One publication can sit on another book under a different form: the
+      # same ISBN as 10 or 13 digits, and a physical book's ASIN is usually its
+      # ISBN-10. Each value is checked in every form, and a conflict is reported
+      # against the value as Amazon gave it.
       def verified_conflicts(pairs)
         pairs.flat_map do |type, value|
-          ::Identifier.where(identifiable_type: "Books::Book", identifier_type: type, value: value)
-            .where.not(identifiable_id: @book.id).verified
-            .map { |row| {"identifier_type" => type, "value" => value, "holder_book_id" => row.identifiable_id, "holder_source" => row.source} }
-        end
+          equivalents(type, value).flat_map do |held_type, held_value|
+            ::Identifier.where(identifiable_type: "Books::Book", identifier_type: held_type, value: held_value)
+              .where.not(identifiable_id: @book.id).verified
+              .map { |row| {"identifier_type" => type, "value" => value, "holder_book_id" => row.identifiable_id, "holder_source" => row.source} }
+          end
+        end.uniq
+      end
+
+      def equivalents(type, value)
+        forms = [[type, value]]
+        normalized = ::Books::Isbn.normalize(value)
+        return forms if normalized.nil?
+
+        forms << ["books_work_isbn13", normalized.isbn13]
+        forms << ["books_work_isbn10", normalized.isbn10] if normalized.isbn10
+        forms.uniq
       end
 
       def flag(conflicts)

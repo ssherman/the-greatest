@@ -62,20 +62,23 @@ module Services
         assert_equal [book.id, other.id].sort, [candidate.item_a_id, candidate.item_b_id]
         assert_equal "B000FC0PDA", candidate.evidence["amazon_asin"]
         assert_equal "War and Peace", candidate.evidence["amazon_title"]
-        assert_equal [{"identifier_type" => "books_work_isbn13", "value" => "9781400079988", "holder_book_id" => other.id, "holder_source" => "worldcat"}],
-          candidate.evidence["conflicts"]
+        # The product's ISBN-10 is the same publication as the held ISBN-13, so it conflicts too.
+        assert_equal [
+          {"identifier_type" => "books_work_isbn13", "value" => "9781400079988", "holder_book_id" => other.id, "holder_source" => "worldcat"},
+          {"identifier_type" => "books_work_isbn10", "value" => "1400079985", "holder_book_id" => other.id, "holder_source" => "worldcat"}
+        ], candidate.evidence["conflicts"]
       end
 
       test "two verified holders are flagged separately, each with only its own conflict, and nothing is written" do
         holder_a = ::Books::Book.create!(title: "Holder A")
         holder_a.identifiers.create!(identifier_type: :books_work_isbn13, value: "9781400079988", source: :worldcat)
         holder_b = ::Books::Book.create!(title: "Holder B")
-        holder_b.identifiers.create!(identifier_type: :books_work_isbn10, value: "1400079985", source: :open_library)
+        holder_b.identifiers.create!(identifier_type: :books_work_isbn13, value: "9780316769488", source: :open_library)
         book = books_books(:war_and_peace)
 
         result = nil
         assert_no_difference "book.identifiers.count" do
-          result = AmazonBookIdentifiers.call(book: book, product: product(asin: nil, isbns: ["9781400079988", "1400079985"]))
+          result = AmazonBookIdentifiers.call(book: book, product: product(asin: nil, isbns: ["9781400079988", "9780316769488"]))
         end
 
         assert_equal [holder_a.id, holder_b.id].sort, result.flagged_book_ids.sort
@@ -83,7 +86,7 @@ module Services
         conflicts_a = pair_candidates(book, holder_a).sole.evidence["conflicts"]
         conflicts_b = pair_candidates(book, holder_b).sole.evidence["conflicts"]
         assert_equal [["books_work_isbn13", "9781400079988", holder_a.id]], conflicts_a.map { |c| c.values_at("identifier_type", "value", "holder_book_id") }
-        assert_equal [["books_work_isbn10", "1400079985", holder_b.id]], conflicts_b.map { |c| c.values_at("identifier_type", "value", "holder_book_id") }
+        assert_equal [["books_work_isbn13", "9780316769488", holder_b.id]], conflicts_b.map { |c| c.values_at("identifier_type", "value", "holder_book_id") }
       end
 
       test "a pair already marked not_duplicate stays closed" do
@@ -95,6 +98,37 @@ module Services
         AmazonBookIdentifiers.call(book: book, product: product(asin: nil, isbns: ["9781400079988"]))
         assert pair_candidates(book, other).sole.not_duplicate?
         refute book.identifiers.exists?(value: "9781400079988")
+      end
+
+      test "a verified ISBN-13 elsewhere blocks the same ISBN arriving only as ISBN-10, and the reverse" do
+        book = books_books(:war_and_peace)
+        holder13 = ::Books::Book.create!(title: "Holder 13")
+        holder13.identifiers.create!(identifier_type: :books_work_isbn13, value: "9781400079988", source: :worldcat)
+
+        result = AmazonBookIdentifiers.call(book: book, product: product(asin: nil, isbns: ["1400079985"]))
+
+        assert_equal [holder13.id], result.flagged_book_ids
+        refute book.identifiers.exists?(value: "1400079985")
+        assert_equal [["books_work_isbn10", "1400079985"]],
+          pair_candidates(book, holder13).sole.evidence["conflicts"].map { |c| c.values_at("identifier_type", "value") }
+
+        holder10 = ::Books::Book.create!(title: "Holder 10")
+        holder10.identifiers.create!(identifier_type: :books_work_isbn10, value: "0140447938", source: :open_library)
+
+        result = AmazonBookIdentifiers.call(book: book, product: product(asin: nil, isbns: ["9780140447934"]))
+
+        assert_equal [holder10.id], result.flagged_book_ids
+      end
+
+      test "a physical book's ASIN that is an ISBN-10 is checked against verified ISBNs too" do
+        book = books_books(:war_and_peace)
+        holder = ::Books::Book.create!(title: "Holder")
+        holder.identifiers.create!(identifier_type: :books_work_isbn13, value: "9781400079988", source: :worldcat)
+
+        result = AmazonBookIdentifiers.call(book: book, product: product(asin: "1400079985"))
+
+        assert_equal [holder.id], result.flagged_book_ids
+        refute book.identifiers.exists?(value: "1400079985")
       end
 
       private
