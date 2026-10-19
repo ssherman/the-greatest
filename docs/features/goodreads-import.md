@@ -201,7 +201,8 @@ queues `Books::Goodreads::RunImportJob`.
 - **Approve** (`Approve`, `PromoteRecords`):
   - It deletes unticked records the import created, when nothing else uses them.
   - It promotes every provisional book the import created or its rows point at, with the book's provisional authors,
-    then queues enrichment. A book credited to a newly promoted author waits for that author's chain, as the importer
+    then queues enrichment, including Amazon enrichment (`Books::AmazonProductEnrichmentJob`) for every promoted
+    book, even one whose AI enrichment waits on its author. A book credited to a newly promoted author waits for that author's chain, as the importer
     does.
   - Promotion also purges the records' cached show pages (which carried `noindex` and the notice) and the public goal
     pages of the book's readers. It regenerates the users' favorites list when a promoted book is on anyone's

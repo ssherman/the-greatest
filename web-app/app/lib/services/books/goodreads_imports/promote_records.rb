@@ -51,6 +51,12 @@ module Services
           ActiveRecord.after_all_transactions_commit do
             author_ids.each { |id| ::Books::Authors::WikidataJob.perform_async(id) }
             enrich_now.each { |id| ::Books::EnrichBookJob.perform_async(id) }
+            # Amazon runs for every promoted book with an author (the job fails
+            # without one), including one whose AI enrichment waits on its
+            # author's chain.
+            ::Books::BookAuthor.where(book_id: @books.map(&:id)).distinct.pluck(:book_id).each do |id|
+              ::Books::AmazonProductEnrichmentJob.perform_async(id)
+            end
             if @books.any? || author_ids.any?
               ::Books::PurgeShowPagesJob.perform_async(@books.map(&:id), author_ids.to_a)
             end

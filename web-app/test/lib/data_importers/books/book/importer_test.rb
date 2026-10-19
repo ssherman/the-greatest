@@ -463,11 +463,36 @@ module DataImporters
           assert_equal [books_authors(:tolstoy)], books_books(:war_and_peace).reload.authors.to_a
         end
 
-        test "providers run Open Library, Authors, AI enrichment, then the new authors' chain" do
+        test "providers run Open Library, Authors, AI enrichment, then the new authors' chain, then Amazon" do
           providers = Importer.new.send(:providers)
 
-          assert_equal [Providers::OpenLibrary, Providers::Authors, Providers::AiEnrichment, Providers::AuthorEnrichment],
+          assert_equal [Providers::OpenLibrary, Providers::Authors, Providers::AiEnrichment, Providers::AuthorEnrichment,
+            Providers::Amazon],
             providers.map(&:class)
+        end
+
+        test "a new book with enrichment on queues Amazon once" do
+          stub_resolve_down
+          ::Books::AmazonProductEnrichmentJob.unstub(:perform_async)
+          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).once
+          result = Importer.call(title: "Hadji Murat", author_names: ["Leo Tolstoy"])
+          assert_includes result.summary[:data_populated], :amazon_enrichment_queued
+        end
+
+        test "providers: [:amazon] runs only the Amazon provider" do
+          book = books_books(:war_and_peace)
+          ::Books::AmazonProductEnrichmentJob.unstub(:perform_async)
+          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).with(book.id).once
+
+          result = Importer.call(item: book, providers: [:amazon])
+
+          assert_equal ["DataImporters::Books::Book::Providers::Amazon"], result.provider_results.map(&:provider_name)
+        end
+
+        test "enrich: false does not queue Amazon" do
+          stub_resolve_down
+          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).never
+          Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], enrich: false)
         end
 
         # The race closed by spec §10: the Wikidata step for a new author must

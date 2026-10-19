@@ -12,7 +12,7 @@ module Services
 
           # A row created from its own text has no Open Library work: the
           # Open Library provider is left out, so a re-resolve cannot attach one.
-          TEXT_PROVIDERS = %i[authors ai_enrichment author_enrichment].freeze
+          TEXT_PROVIDERS = %i[authors ai_enrichment author_enrichment amazon].freeze
           CreateFailed = Class.new(StandardError)
 
           def listable_type = LISTABLE_TYPE

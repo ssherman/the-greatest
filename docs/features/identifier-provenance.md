@@ -10,7 +10,7 @@ Spec: `docs/superpowers/specs/2026-10-16-book-verification-design.md`, section 1
 | `open_library` | Open Library tied it to the book | the book and author importers' Open Library providers, the verification pass (stages 1-2: work keys it adds or confirms, and edition identifiers) |
 | `worldcat` | a WorldCat record agreeing on title, author and year | the verification pass (stage 3) |
 | `goodreads_import` | copied from a Goodreads export row or page by our own matcher | member Goodreads imports, the replay's identifier fixes |
-| `amazon` | the live Amazon product API | `AmazonEditionUpserter` |
+| `amazon` | the live Amazon product API | `AmazonEditionUpserter` (edition identifiers) and `Services::Books::AmazonBookIdentifiers` (book-level `books_work_*`) |
 | `wikidata`, `viaf` | author enrichment | `FactSheet` via `ApplyWikidata` / `ApplyViaf`, `RestoreIdentifier` |
 
 **Trust.** `Identifier.verified` is `open_library` and `worldcat`. Nothing else is trusted, `null`

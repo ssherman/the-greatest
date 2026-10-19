@@ -82,7 +82,7 @@ end
 | Music | Release | MusicBrainz | Complete |
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
-| Books | Book | OpenLibrary, Authors, AiEnrichment, AuthorEnrichment | Complete |
+| Books | Book | OpenLibrary, Authors, AiEnrichment, AuthorEnrichment, Amazon | Complete |
 | Books | Author | OpenLibrary, Enrichment | Complete (Wikidata, VIAF, AI step; Reject link and backfill still to come) |
 
 ### Music Providers
@@ -202,6 +202,30 @@ author is enriched. See `docs/features/books_enrichment.md` and
 AiEnrichment has already written the book's `deferred_to_authors` row, so a chain that finishes
 fast cannot reach its hand-off before the book's wait is even recorded. It does nothing, and
 reports failure, for a book that was never persisted.
+
+#### Amazon (Async)
+`Providers::Amazon` runs last, after AuthorEnrichment. It queues `Books::AmazonProductEnrichmentJob` (queue
+`serial`) after the outermost transaction commits, so a worker never runs before the book exists and a
+rolled-back book queues nothing, and returns `[:amazon_enrichment_queued]`. It fails fast, without queuing,
+for a book with no title, no authors or no persisted row, because the job builds its search from the author.
+
+- Like the other providers it is gated by `enrich:`, so a Goodreads import (`enrich: false`) does not queue it
+  at import time. `PromoteRecords` queues it for every promoted book that has an author when an admin approves the import.
+- List-wizard text rows include it through `Services::Lists::Wizard::Books::Adapter::TEXT_PROVIDERS`.
+- Box sets and other multi-book products never become editions: `Services::Books::AmazonBookCheck` (`set?`,
+  `same_book?`) filters them, `AmazonProductService#persist_match` refuses a set product, and
+  `AmazonBookMatchTask` has non-match criteria for them.
+- An exact match (`same_book?`) writes the product's ASIN and ISBNs to the book as `books_work_*` identifiers
+  with source `amazon` (`Services::Books::AmazonBookIdentifiers`).
+- `same_book?` also rejects adaptations and study aids (`AmazonBookCheck.derivative?`: graphic novel, abridged,
+  young readers, coloring book, study guide and similar), so their ISBNs never land on the original book. A
+  term the book's own title carries does not count. The edition backstop does not use `derivative?`, because
+  original graphic novels carry series brackets such as "(Pantheon Graphic Novels)"; `AmazonBookMatchTask`
+  excludes adaptation editions instead.
+- If another book already holds any of those values from a verified source (Open Library, WorldCat), nothing
+  is written. A duplicate candidate with source `identifier_collision` is flagged for a human instead. A value
+  held only from an unverified source does not block the write.
+- Locally it needs a running Sidekiq (`bin/dev` starts one; a bare `bin/rails server` queues the job and never runs it).
 
 #### Authors (Sync)
 `Providers::Authors` runs after Open Library. When the book still has no authors (Open Library abstained,

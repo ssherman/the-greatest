@@ -122,8 +122,10 @@ and fails the test outright rather than degrading to a `failure` result.
 
 ## Known gaps
 
-- **Books does not use Amazon yet.** There is no `Services::Books::AmazonProductService`
-  and no Amazon provider in the books importer.
+- **Books uses Amazon through the importer provider only.** `Providers::Amazon` queues
+  `Books::AmazonProductEnrichmentJob`, which runs `Services::Books::AmazonProductService`; there is no
+  other books entry point. Box sets and adaptations are filtered by `Services::Books::AmazonBookCheck`
+  (see `data_importers.md`, Amazon (Async)).
 - Existing `external_links.metadata["amazon"]` payloads written before 2026-05
   hold PA-API-shaped (PascalCase) JSON. Nothing reads them at render time, so they
   were left as-is. `Services::BooksMigration::EditionTransformer` still reads the

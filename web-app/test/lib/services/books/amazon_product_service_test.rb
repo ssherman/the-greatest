@@ -266,7 +266,84 @@ module Services
         assert_match(/Failed to create book-level Amazon link: boom/, result[:errors].join(" "))
       end
 
+      test "an AI-accepted box set writes no edition, link or cover" do
+        boxed = amazon_product.deep_merge("itemInfo" => {"title" => {"displayValue" => "War and Peace (Boxed Set)"}})
+        ::Services::Amazon::Client.stubs(:search_items).returns([boxed])
+        stub_ai_match
+        stub_image
+
+        assert_no_difference ["::Books::Edition.count", "ExternalLink.count", "Image.count"] do
+          AmazonProductService.call(book: @book)
+        end
+      end
+
+      test "a single-book series marker still becomes an edition" do
+        marker = amazon_product.deep_merge("itemInfo" => {"title" => {"displayValue" => "War and Peace (Tolstoy Trilogy, Book 1)"}})
+        ::Services::Amazon::Client.stubs(:search_items).returns([marker])
+        stub_ai_match
+        stub_image
+
+        assert_difference "::Books::Edition.count", 1 do
+          AmazonProductService.call(book: @book)
+        end
+      end
+
+      test "a single-book series marker creates its edition and writes the book-level identifiers" do
+        marker = with_identifiers.deep_merge("itemInfo" => {"title" => {"displayValue" => "War and Peace (Tolstoy Trilogy, Book 1)"}})
+        ::Services::Amazon::Client.stubs(:search_items).returns([marker])
+        stub_ai_match
+        stub_image
+
+        assert_difference "::Books::Edition.count", 1 do
+          AmazonProductService.call(book: @book)
+        end
+        assert @book.identifiers.exists?(identifier_type: :books_work_isbn13, value: "9781400079988", source: :amazon)
+      end
+
+      test "an exact match also writes its identifiers to the book" do
+        ::Services::Amazon::Client.stubs(:search_items).returns([with_identifiers])
+        stub_ai_match
+        stub_image
+
+        AmazonProductService.call(book: @book)
+
+        assert @book.identifiers.exists?(identifier_type: :books_work_isbn13, value: "9781400079988", source: :amazon)
+        assert @book.identifiers.exists?(identifier_type: :books_work_asin, value: "1400079985", source: :amazon)
+      end
+
+      test "an accepted product that is not exactly the book still becomes an edition but writes no book identifiers" do
+        no_author = with_identifiers.deep_merge("itemInfo" => {"byLineInfo" => {"contributors" => []}})
+        ::Services::Amazon::Client.stubs(:search_items).returns([no_author])
+        stub_ai_match
+        stub_image
+
+        assert_difference "::Books::Edition.count", 1 do
+          AmazonProductService.call(book: @book)
+        end
+        refute @book.identifiers.exists?(source: :amazon)
+      end
+
+      test "a failure writing book identifiers is reported but the run still succeeds" do
+        ::Services::Amazon::Client.stubs(:search_items).returns([with_identifiers])
+        stub_ai_match
+        stub_image
+        ::Services::Books::AmazonBookIdentifiers.stubs(:call).raises(StandardError, "boom")
+
+        result = AmazonProductService.call(book: @book)
+
+        assert result[:success]
+        assert_equal 1, @book.editions.joins(:identifiers).where(identifiers: {value: "1400079985"}).count
+        assert(result[:errors].any? { |e| e.include?("boom") })
+      end
+
       private
+
+      def with_identifiers
+        amazon_product.deep_merge("itemInfo" => {
+          "externalIds" => {"isbns" => {"displayValues" => ["9781400079988"]}},
+          "byLineInfo" => {"contributors" => [{"name" => "Leo Tolstoy", "role" => "Author"}]}
+        })
+      end
 
       def amazon_product
         {

@@ -175,7 +175,9 @@ the sync never undoes them.
 - **Book AI enrichment:** `bin/rails "books:enrich_missing[<limit>]"`. Nothing queues it
   automatically.
 - **Amazon enrichment of ranked books:** `bin/rails books:amazon_enrich_ranked`. It has never been
-  run.
+  run. It now also writes book-level `books_work_*` identifiers (source amazon) and raises
+  `identifier_collision` duplicate candidates. Run it AFTER the verification pass and WorldCat stamping, so
+  the verified-collision guard has verified values to compare against.
 
 ## 6. Cutover
 

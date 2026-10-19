@@ -73,7 +73,9 @@ module DataImporters
         # and AiEnrichment run after the save that follows Authors, so the
         # chain sees this book among their titles (spec §10). QueryIdentifiers
         # runs after Authors when stamp_identifiers is asked for; enrich: false
-        # drops the two enrichment providers.
+        # drops the enrichment providers. Amazon is last: it only
+        # queues a job that needs the book's authors, which the earlier steps
+        # have linked by then.
         def providers
           @providers ||= begin
             list = [
@@ -85,6 +87,7 @@ module DataImporters
             if @enrich
               list << Providers::AiEnrichment.new(new_author_ids: new_author_ids)
               list << Providers::AuthorEnrichment.new(new_author_ids: new_author_ids)
+              list << Providers::Amazon.new
             end
             list
           end
