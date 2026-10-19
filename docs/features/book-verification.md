@@ -82,14 +82,14 @@ Errors are handled by what they are about:
   run stops. Run the task again later.
 - Any error that is not from either service (a bug, or bad data such as "Twelfth Night" held as an
   ISBN-13) is logged with its backtrace and recorded on that book's row like a book-specific error,
-  and the run continues. Three such errors in a row (`Run::UNEXPECTED_ERROR_LIMIT`) are not one
+  and the run continues. Three such errors in a row (`Run::UNEXPECTED_ERROR_LIMIT`; any other outcome resets the count) are not one
   book's data, so the run stops with the last one. The job has `retry: false`, so an error that
   escapes it never reaches Sidekiq's Retries or Dead lists: before this rule, one book's bad value
   ended a days-long run with nothing in the report. A book stopped this way is taken again by the
   next run (once per run).
 
-Stage 4 looks up only values that are valid for their type (an ISBN that normalizes, an all-digit
-Goodreads id); the Open Library client also escapes every identifier value it puts in a URL.
+Stage 4 looks up only values that are valid for their type (an ISBN that normalizes, a Goodreads id with
+leading digits, slug forms included); the Open Library client also escapes every identifier value it puts in a URL.
 
 ## Stage 1: the work
 

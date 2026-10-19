@@ -45,6 +45,14 @@ module Services
           assert @row.reload.stage_done?
         end
 
+        test "a slug-form Goodreads id is still looked up" do
+          hold(:books_work_goodreads_id, "32076670-ball-lightning")
+          client = FakeOlClient.new
+          Signals.call(verification: @row, client: client)
+
+          assert_includes client.calls, [:identifier, "goodreads", "32076670-ball-lightning"]
+        end
+
         test "one foreign work is recorded but is not a lump" do
           row = run_signals(hits: {["isbn13", "9780140447934"] => [ol_hit("OL7W")]}, works: {"OL7W" => ol_work("OL7W", title: "Anna Karenina")})
 

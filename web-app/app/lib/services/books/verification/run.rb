@@ -140,13 +140,15 @@ module Services
           begin
             prepare(book)
             result = VerifyBook.call(book: book, ol_client: @client, wc_client: @wc_client, run_id: @run_id, wc_dump_date: @wc_dump_date)
+            # Any outcome but an unexpected error ends a run of them.
+            @unexpected_in_a_row = 0
             return :skipped unless result.success?
 
             @sleeper.call(RESOLVE_PAUSE) if result.data&.via_resolve
-            @unexpected_in_a_row = 0
             :done
           rescue ::Books::OpenLibrary::Exceptions::Error, ::Books::WorldCat::Exceptions::Error => e
             if book_specific?(e)
+              @unexpected_in_a_row = 0
               # This book fails the same way every time: log it, move on.
               record_stop(book, "#{e.class}: #{e.message}")
               return :skipped

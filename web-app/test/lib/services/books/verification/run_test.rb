@@ -515,6 +515,24 @@ module Services
           assert_equal Run::UNEXPECTED_ERROR_LIMIT, ::Books::Verification.where(work_outcome: :failed).count
         end
 
+        test "a book that ends any other way resets the unexpected-error count" do
+          outcomes = [:unexpected, :book_specific, :unexpected, :unexpected]
+          calls = 0
+          VerifyBook.stubs(:call).with do |**|
+            outcome = outcomes[calls]
+            calls += 1
+            raise "boom" if outcome == :unexpected
+            raise ::Books::OpenLibrary::Exceptions::ClientError.new("rejected", 422) if outcome == :book_specific
+
+            true
+          end.returns(ok)
+
+          result = run_backfill
+
+          assert_not result.data[:stopped]
+          assert_equal 4, calls
+        end
+
         test "a WorldCat 404 is book-specific too" do
           ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "old", stage: :worldcat)
           VerifyBook.stubs(:call).raises(::Books::WorldCat::Exceptions::NotFoundError.new("gone", 404))

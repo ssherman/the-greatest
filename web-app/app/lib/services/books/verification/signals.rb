@@ -93,9 +93,11 @@ module Services
         end
 
         # Legacy data holds junk under these types ("Twelfth Night" as an
-        # ISBN-13). It cannot be a hit, so it is not worth a lookup slot.
+        # ISBN-13). It cannot be a hit, so it is not worth a lookup slot. A
+        # slug-form Goodreads id ("32076670-ball-lightning") is valid: the
+        # service reads its leading digits, as GoodreadsId does.
         def lookupable?(type, value)
-          (type == "books_work_goodreads_id") ? value.to_s.strip.match?(/\A\d+\z/) : ::Books::Isbn.normalize(value).present?
+          (type == "books_work_goodreads_id") ? ::Books::GoodreadsId.normalize(value).present? : ::Books::Isbn.normalize(value).present?
         end
 
         def ours?(hit) = excluded_keys.include?(hit.work_key) || Array(hit.redirected_from).intersect?(excluded_keys)
