@@ -98,8 +98,8 @@ terms:
     uses: 124923
     books: 31100
   History:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: en
     uses: 42564
     books: 10574
@@ -761,8 +761,8 @@ terms:
     uses: 652
     books: 229
   Bildband:
-    verdict: subject
-    subject: Photography
+    verdict: drop
+    reason: not_a_genre
     language: de
     uses: 618
     books: 429
@@ -1103,8 +1103,8 @@ terms:
     uses: 365
     books: 234
   Historia:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: es
     uses: 352
     books: 319
@@ -1529,8 +1529,8 @@ terms:
     uses: 233
     books: 227
   Geschiedenis (vorm):
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: nl
     uses: 230
     books: 215
@@ -3129,8 +3129,8 @@ terms:
     uses: 74
     books: 73
   Local history:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: en
     uses: 74
     books: 36
@@ -3196,7 +3196,7 @@ terms:
     books: 26
   Portraits:
     verdict: subject
-    subject: Photography
+    subject: Visual Arts
     language: en
     uses: 72
     books: 35
@@ -5071,8 +5071,8 @@ terms:
     uses: 35
     books: 32
   History (form):
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: en
     uses: 35
     books: 34
@@ -6403,8 +6403,8 @@ terms:
     uses: 24
     books: 12
   Billedværker:
-    verdict: subject
-    subject: Photography
+    verdict: drop
+    reason: not_a_genre
     language: da
     uses: 24
     books: 23
@@ -6493,8 +6493,8 @@ terms:
     uses: 24
     books: 7
   Plaatwerken (vorm):
-    verdict: subject
-    subject: Photography
+    verdict: drop
+    reason: not_a_genre
     language: nl
     uses: 24
     books: 24
@@ -6649,8 +6649,8 @@ terms:
     uses: 23
     books: 13
   Geschichte:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: de
     uses: 23
     books: 21
@@ -6673,8 +6673,8 @@ terms:
     uses: 23
     books: 15
   Pictures:
-    verdict: subject
-    subject: Photography
+    verdict: drop
+    reason: not_a_genre
     language: en
     uses: 23
     books: 9
@@ -8471,8 +8471,8 @@ terms:
     uses: 16
     books: 12
   Zgodovinski pregledi:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: sl
     uses: 16
     books: 15
@@ -14061,14 +14061,14 @@ terms:
     uses: 7
     books: 5
   Histoire:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: fr
     uses: 7
     books: 7
   Historie:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: nl
     uses: 7
     books: 7
@@ -14397,8 +14397,8 @@ terms:
     uses: 7
     books: 7
   Political:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: Politics
     language: en
     uses: 7
     books: 4
@@ -14884,7 +14884,7 @@ terms:
     books: 7
   catalogues raisonnés:
     verdict: subject
-    subject: Photography
+    subject: Visual Arts
     language: fr
     uses: 7
     books: 4
@@ -15106,7 +15106,7 @@ terms:
     books: 4
   Catalogue d'art (Descripteur de forme):
     verdict: subject
-    subject: Photography
+    subject: Visual Arts
     language: fr
     uses: 6
     books: 6
@@ -16350,8 +16350,8 @@ terms:
     uses: 6
     books: 2
   Storia medievale (692-1303) Saggi, varia:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: it
     uses: 6
     books: 6
@@ -17984,8 +17984,8 @@ terms:
     uses: 5
     books: 5
   Oral history:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: en
     uses: 5
     books: 5
@@ -19120,8 +19120,8 @@ terms:
     uses: 5
     books: 5
   zgodovinski pregledi:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: sl
     uses: 5
     books: 5
@@ -19810,8 +19810,8 @@ terms:
     uses: 4
     books: 2
   Dialogues, Greek:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: Philosophy
     language: en
     uses: 4
     books: 4
@@ -20399,8 +20399,8 @@ terms:
     uses: 4
     books: 4
   Historical Works:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: en
     uses: 4
     books: 4
@@ -20970,8 +20970,8 @@ terms:
     uses: 4
     books: 4
   Natural history literature:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: Nature
     language: en
     uses: 4
     books: 1
@@ -21750,8 +21750,8 @@ terms:
     uses: 4
     books: 4
   Publicystyka polityczna:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: Politics
     language: pl
     uses: 4
     books: 4
@@ -22686,8 +22686,8 @@ terms:
     uses: 4
     books: 3
   teori, filosofi:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: Philosophy
     language: da
     uses: 4
     books: 4
@@ -23457,7 +23457,7 @@ terms:
     books: 3
   Catalegs d'exposicions:
     verdict: subject
-    subject: Photography
+    subject: Visual Arts
     language: ca
     uses: 3
     books: 3
@@ -23578,14 +23578,14 @@ terms:
     uses: 3
     books: 3
   Chroniques portugaises:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: fr
     uses: 3
     books: 2
   Chroniques portugaises 2000-...:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: fr
     uses: 3
     books: 3
@@ -25642,8 +25642,8 @@ terms:
     uses: 3
     books: 3
   National histories:
-    verdict: drop
-    reason: not_a_genre
+    verdict: subject
+    subject: History
     language: en
     uses: 3
     books: 1

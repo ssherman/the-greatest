@@ -1388,11 +1388,37 @@ decisions:
     saved_searches: 0
   67574:
     name: Art and Photography
-    action: subject
-    as: Photography
-    target_id: 4699
-    reason: Merged into the existing Photography subject; most art books here are
-      also tagged Art.
+    action: split
+    into:
+    - subject: Visual Arts
+      target_id: 38526
+    - subject: Photography
+      target_id: 4699
+    worldcat_terms:
+      photobooks: []
+      Photography, Artistic: []
+      Fotografier: []
+      Photographie (Descripteur de forme): []
+      Photobooks: []
+      Photographs: []
+      photographies: []
+      "[Photographies]": []
+      Fotografías: []
+      Documentary photography: []
+      Aerial photographs: []
+      Photographies: []
+      Fotoböcker: []
+      Landscape photography: []
+      Portraits: []
+      Catalogue d'art (Descripteur de forme): []
+      catalogues raisonnés: []
+      Catalegs d'exposicions: []
+      Bildband: []
+      Plaatwerken (vorm): []
+      Billedværker: []
+      Pictures: []
+    reason: Only 35 of 355 books are photography; checked book by book (Visual Arts
+      and Photography subjects).
     books: 355
     saved_searches: 0
   67706:
