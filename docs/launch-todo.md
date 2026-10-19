@@ -308,7 +308,7 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
     genre should be one you would have chosen, and none should carry both Fiction and Nonfiction.
     Fix the map and rerun if not. Restore with `bin/snapshot-dev-db.sh --restore` if the links look
     wrong.
-12. **Old site: stop the Goodreads import creating genres. Shane merges and deploys.** The change is
+12. **Old site: stop the Goodreads import creating genres. Shane merges and deploys. DONE 2026-10-18.** The change is
     `the-greatest-books` PR #10 (branch `stop-goodreads-genre-creation`): the Goodreads genre loop in
     `admin/app/models/book.rb` skips a genre it cannot find instead of creating it. Merging there
     deploys. Deploy it before the genre apply.
@@ -322,6 +322,8 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
     `/categories` Audiences tab appears only as edge-cached `/categories` pages expire after
     audiences are created. Details: "Genre cleanup and audiences" in
     `docs/features/books-categories.md`. Steps 14 and 15 wait for this step.
+    After a clean apply, set the parent of **Noir** and **Hardboiled** to **Crime Fiction** in the admin
+    category form (the plan file cannot set parents).
 14. **Aliases, in production. Shane runs with `!`.** `bin/rails worldcat:apply_aliases`.
 15. **The backfill, in production. Shane runs with `!`.** `bin/rails "worldcat:backfill[all]"`.
 16. **The report, if the map changed.** After the backfill, if the map was edited during review, re-run
