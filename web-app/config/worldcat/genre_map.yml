@@ -11,7 +11,7 @@ genres:
 - Biography
 - Comics & Graphic Novels
 - Coming-of-Age Fiction
-- Contemporary Fiction
+- Contemporary
 - Cookbooks
 - Crime Fiction
 - Cyberpunk
@@ -19,10 +19,9 @@ genres:
 - Dark Humor
 - Diaries & Journals
 - Dystopian Fiction
-- Encyclopedic Fiction
 - Erotica
 - Existentialist
-- Experimental Fiction
+- Experimental
 - Family Sagas
 - Fantasy
 - Fiction
@@ -36,7 +35,7 @@ genres:
 - Horror
 - How-To Guides
 - Humor
-- Inspirational Fiction
+- Inspirational
 - Letters
 - Literary Fiction
 - Magical Realism
@@ -47,7 +46,7 @@ genres:
 - Modernist Literature
 - Mystery
 - Narrative Nonfiction
-- Nautical Fiction
+- Nautical
 - Noir
 - Nonfiction
 - Novellas
@@ -81,7 +80,7 @@ genres:
 - Textbooks
 - Thriller & Suspense
 - Tragedy
-- Travel Writing
+- Travel
 - True Crime
 - War & Military Fiction
 - Weird Fiction
@@ -600,7 +599,7 @@ terms:
     books: 593
   Christian fiction:
     verdict: genre
-    genre: Inspirational Fiction
+    genre: Inspirational
     language: en
     uses: 947
     books: 231
@@ -768,7 +767,7 @@ terms:
     books: 429
   'Erzählende Literatur: Gegenwartsliteratur ab 1945':
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: de
     uses: 617
     books: 457
@@ -792,7 +791,7 @@ terms:
     books: 200
   Encyclopedias:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: en
     uses: 580
     books: 161
@@ -1044,7 +1043,7 @@ terms:
     books: 246
   Sea stories:
     verdict: genre
-    genre: Nautical Fiction
+    genre: Nautical
     language: en
     uses: 391
     books: 113
@@ -1242,7 +1241,7 @@ terms:
     books: 102
   Experimental fiction:
     verdict: genre
-    genre: Experimental Fiction
+    genre: Experimental
     language: en
     uses: 311
     books: 121
@@ -1929,7 +1928,7 @@ terms:
     books: 154
   Powieść amerykańska 1990-:
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: pl
     uses: 160
     books: 146
@@ -2019,7 +2018,7 @@ terms:
     books: 117
   Powieść amerykańska 1990-:
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: pl
     uses: 145
     books: 121
@@ -2157,7 +2156,7 @@ terms:
     books: 132
   Guidebook:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: en
     uses: 134
     books: 97
@@ -2241,7 +2240,7 @@ terms:
     books: 119
   Travel writing:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: en
     uses: 128
     books: 87
@@ -2313,7 +2312,7 @@ terms:
     books: 110
   Modern & contemporary fiction (post c 1945):
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: en
     uses: 120
     books: 89
@@ -2355,7 +2354,7 @@ terms:
     books: 30
   Reisebericht:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: de
     uses: 118
     books: 65
@@ -2535,7 +2534,7 @@ terms:
     books: 96
   Encyclopedia:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: en
     uses: 102
     books: 79
@@ -3274,7 +3273,7 @@ terms:
     books: 68
   Führer:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: de
     uses: 69
     books: 45
@@ -3461,7 +3460,7 @@ terms:
     books: 32
   travel guidebooks:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: en
     uses: 64
     books: 55
@@ -3762,7 +3761,7 @@ terms:
     books: 47
   encyclopedias:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: en
     uses: 56
     books: 43
@@ -4064,7 +4063,7 @@ terms:
     books: 47
   Sea fiction:
     verdict: genre
-    genre: Nautical Fiction
+    genre: Nautical
     language: en
     uses: 50
     books: 35
@@ -4238,7 +4237,7 @@ terms:
     books: 44
   Inspirational fiction:
     verdict: genre
-    genre: Inspirational Fiction
+    genre: Inspirational
     language: en
     uses: 47
     books: 40
@@ -4652,7 +4651,7 @@ terms:
     books: 40
   travelog (performed works genre):
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: en
     uses: 41
     books: 36
@@ -4988,7 +4987,7 @@ terms:
     books: 36
   Modern fiction:
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: en
     uses: 36
     books: 35
@@ -5012,13 +5011,13 @@ terms:
     books: 30
   Powieść niemiecka 1990-:
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: pl
     uses: 36
     books: 32
   Powieść polska 1990-:
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: pl
     uses: 36
     books: 30
@@ -5144,7 +5143,7 @@ terms:
     books: 25
   Encyclopedieën (vorm):
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: nl
     uses: 34
     books: 19
@@ -5726,7 +5725,7 @@ terms:
     books: 18
   Livres de croissance personnelle:
     verdict: genre
-    genre: Inspirational Fiction
+    genre: Inspirational
     language: fr
     uses: 29
     books: 28
@@ -6248,7 +6247,7 @@ terms:
     books: 19
   Rejseførere:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: da
     uses: 26
     books: 24
@@ -6374,7 +6373,7 @@ terms:
     books: 23
   Reisbeschrijvingen (vorm):
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: nl
     uses: 25
     books: 25
@@ -6566,7 +6565,7 @@ terms:
     books: 24
   travelers’ writings:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: en
     uses: 24
     books: 21
@@ -6680,7 +6679,7 @@ terms:
     books: 9
   Potopisi:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: sl
     uses: 23
     books: 23
@@ -6704,7 +6703,7 @@ terms:
     books: 19
   Stream of consciousness fiction:
     verdict: genre
-    genre: Experimental Fiction
+    genre: Experimental
     language: en
     uses: 23
     books: 10
@@ -6951,7 +6950,7 @@ terms:
     books: 20
   encyklopedie:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: cs
     uses: 22
     books: 19
@@ -7120,7 +7119,7 @@ terms:
     books: 20
   Travel books:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: en
     uses: 21
     books: 20
@@ -7752,7 +7751,7 @@ terms:
     books: 18
   lexikon:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: de
     uses: 18
     books: 16
@@ -7818,7 +7817,7 @@ terms:
     books: 17
   Encyclopedias and dictionaries:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: en
     uses: 17
     books: 13
@@ -8070,7 +8069,7 @@ terms:
     books: 16
   Turistični vodniki:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: sl
     uses: 17
     books: 14
@@ -8196,7 +8195,7 @@ terms:
     books: 14
   Contemporary fiction:
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: en
     uses: 16
     books: 14
@@ -8238,7 +8237,7 @@ terms:
     books: 16
   'Erzählende Literatur: Gegenwartsliteratur ab 1945':
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: de
     uses: 16
     books: 15
@@ -8742,7 +8741,7 @@ terms:
     books: 9
   Reiseskildring:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: 'no'
     uses: 15
     books: 15
@@ -9229,7 +9228,7 @@ terms:
     books: 9
   Turistični vodniki:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: sl
     uses: 14
     books: 13
@@ -9265,7 +9264,7 @@ terms:
     books: 11
   rejseførere:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: da
     uses: 14
     books: 14
@@ -9493,7 +9492,7 @@ terms:
     books: 12
   Libros de viajes:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: es
     uses: 13
     books: 12
@@ -9985,7 +9984,7 @@ terms:
     books: 4
   Lexikon:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: de
     uses: 12
     books: 11
@@ -10411,13 +10410,13 @@ terms:
     books: 11
   Enciclopedias:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: es
     uses: 11
     books: 11
   Encyclopedias, Juvenile:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: en
     uses: 11
     books: 6
@@ -11385,7 +11384,7 @@ terms:
     books: 10
   Rejsebeskrivelser:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: da
     uses: 10
     books: 10
@@ -11992,7 +11991,7 @@ terms:
     books: 9
   Guides touristiques et de visite:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: fr
     uses: 9
     books: 8
@@ -12466,7 +12465,7 @@ terms:
     books: 4
   Travel guides:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: en
     uses: 9
     books: 7
@@ -12514,7 +12513,7 @@ terms:
     books: 8
   "[Descriptions et voyages]":
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: fr
     uses: 9
     books: 8
@@ -12732,7 +12731,7 @@ terms:
     books: 4
   Descriptions et voyages:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: fr
     uses: 8
     books: 8
@@ -13328,7 +13327,7 @@ terms:
     books: 7
   Reseskildringar:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: sv
     uses: 8
     books: 7
@@ -13526,7 +13525,7 @@ terms:
     books: 5
   przewodniki:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: pl
     uses: 8
     books: 8
@@ -13918,7 +13917,7 @@ terms:
     books: 6
   Encyklopedia:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: pl
     uses: 7
     books: 6
@@ -13954,7 +13953,7 @@ terms:
     books: 2
   Experimental fiction, American:
     verdict: genre
-    genre: Experimental Fiction
+    genre: Experimental
     language: en
     uses: 7
     books: 6
@@ -14554,7 +14553,7 @@ terms:
     books: 3
   Reisebericht 1824:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: de
     uses: 7
     books: 1
@@ -16123,7 +16122,7 @@ terms:
     books: 5
   Reisebericht 1869:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: de
     uses: 6
     books: 1
@@ -16423,7 +16422,7 @@ terms:
     books: 6
   Viajes:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: es
     uses: 6
     books: 6
@@ -16501,7 +16500,7 @@ terms:
     books: 6
   "[Récit de voyage]":
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: fr
     uses: 6
     books: 6
@@ -16639,7 +16638,7 @@ terms:
     books: 5
   reseskildringar:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: sv
     uses: 6
     books: 6
@@ -16952,7 +16951,7 @@ terms:
     books: 1
   Christian Fiction:
     verdict: genre
-    genre: Inspirational Fiction
+    genre: Inspirational
     language: en
     uses: 5
     books: 3
@@ -17024,7 +17023,7 @@ terms:
     books: 3
   Contemporary Fiction:
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: en
     uses: 5
     books: 5
@@ -17114,13 +17113,13 @@ terms:
     books: 5
   Descripciones y viajes:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: es
     uses: 5
     books: 5
   Descrizioni e viaggi:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: it
     uses: 5
     books: 5
@@ -17210,7 +17209,7 @@ terms:
     books: 4
   Enciclopèdies:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: ca
     uses: 5
     books: 5
@@ -17481,7 +17480,7 @@ terms:
     books: 4
   Guías turísticas:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: es
     uses: 5
     books: 3
@@ -18429,7 +18428,7 @@ terms:
     books: 5
   Resor:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: sv
     uses: 5
     books: 5
@@ -18585,7 +18584,7 @@ terms:
     books: 4
   SELF-HELP / Motivational & Inspirational:
     verdict: genre
-    genre: Inspirational Fiction
+    genre: Inspirational
     language: en
     uses: 5
     books: 2
@@ -18839,7 +18838,7 @@ terms:
     books: 3
   Travel:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: en
     uses: 5
     books: 5
@@ -19091,13 +19090,13 @@ terms:
     books: 5
   rejsebeskrivelser:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: da
     uses: 5
     books: 5
   récit de voyage:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: fr
     uses: 5
     books: 4
@@ -19433,7 +19432,7 @@ terms:
     books: 2
   CHRISTIAN FICTION:
     verdict: genre
-    genre: Inspirational Fiction
+    genre: Inspirational
     language: en
     uses: 4
     books: 4
@@ -19505,13 +19504,13 @@ terms:
     books: 3
   Christian fiction Adult fiction Print:
     verdict: genre
-    genre: Inspirational Fiction
+    genre: Inspirational
     language: en
     uses: 4
     books: 3
   Christian fiction, American:
     verdict: genre
-    genre: Inspirational Fiction
+    genre: Inspirational
     language: en
     uses: 4
     books: 4
@@ -19943,7 +19942,7 @@ terms:
     books: 3
   Enciklopedije:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: hr
     uses: 4
     books: 4
@@ -19955,7 +19954,7 @@ terms:
     books: 4
   Enzyklopädie:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: de
     uses: 4
     books: 4
@@ -20334,7 +20333,7 @@ terms:
     books: 4
   Guides touristiques:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: fr
     uses: 4
     books: 4
@@ -21745,7 +21744,7 @@ terms:
     books: 4
   Publicaciones de autoayuda:
     verdict: genre
-    genre: Inspirational Fiction
+    genre: Inspirational
     language: es
     uses: 4
     books: 4
@@ -21787,7 +21786,7 @@ terms:
     books: 1
   Reisebericht 1995:
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: de
     uses: 4
     books: 2
@@ -22063,7 +22062,7 @@ terms:
     books: 3
   Self-Help / Motivational & Inspirational:
     verdict: genre
-    genre: Inspirational Fiction
+    genre: Inspirational
     language: en
     uses: 4
     books: 4
@@ -22417,7 +22416,7 @@ terms:
     books: 4
   "[récit de voyage]":
     verdict: genre
-    genre: Travel Writing
+    genre: Travel
     language: fr
     uses: 4
     books: 4
@@ -22507,7 +22506,7 @@ terms:
     books: 3
   encyclopédie:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: fr
     uses: 4
     books: 4
@@ -23783,7 +23782,7 @@ terms:
     books: 2
   Cut-ups (Literature):
     verdict: genre
-    genre: Experimental Fiction
+    genre: Experimental
     language: en
     uses: 3
     books: 2
@@ -24065,7 +24064,7 @@ terms:
     books: 3
   Encyclopédies:
     verdict: genre
-    genre: Encyclopedic Fiction
+    genre: Reference
     language: fr
     uses: 3
     books: 3
@@ -24185,7 +24184,7 @@ terms:
     books: 3
   FICTION / Contemporary Women:
     verdict: genre
-    genre: Contemporary Fiction
+    genre: Contemporary
     language: en
     uses: 3
     books: 3

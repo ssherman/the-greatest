@@ -27,8 +27,8 @@ genres:
 - name: Coming-of-Age Fiction
   definition: Fiction structured around a protagonist's formative passage toward maturity
     and self-understanding.
-- name: Contemporary Fiction
-  definition: Fiction set in and engaging with the present day or recent past of its
+- name: Contemporary
+  definition: Books set in and engaging with the present day or recent past of their
     time.
 - name: Cookbooks
   definition: Instructional works organized around recipes, food preparation and cooking
@@ -49,17 +49,14 @@ genres:
 - name: Dystopian Fiction
   definition: Speculative fiction structured around life within an imagined oppressive
     or dehumanizing social order.
-- name: Encyclopedic Fiction
-  definition: Vast, digressive novels that try to take in a whole culture's knowledge
-    (Gravity's Rainbow, Infinite Jest).
 - name: Erotica
   definition: Fiction in which explicit sexual experience and erotic arousal are central
     purposes.
 - name: Existentialist
   definition: Literature concerned with freedom, choice, absurdity and the individual's
     search for meaning, in the tradition of Sartre and Camus.
-- name: Experimental Fiction
-  definition: Fiction that breaks conventional form, language or structure as a central
+- name: Experimental
+  definition: Books that break conventional form, language or structure as a central
     part of the work.
 - name: Family Sagas
   definition: Long narratives following a family or community across generations.
@@ -98,8 +95,8 @@ genres:
 - name: Humor
   definition: Works whose primary organizing purpose is comedy, whether through narrative,
     essays or comic sketches.
-- name: Inspirational Fiction
-  definition: Fiction written to uplift, often centred on faith, hope or moral renewal.
+- name: Inspirational
+  definition: Books written to uplift, often centred on faith, hope or personal renewal.
 - name: Letters
   definition: Correspondence, real or fictional, including epistolary novels told
     through letters.
@@ -130,8 +127,8 @@ genres:
 - name: Narrative Nonfiction
   definition: Factual writing organized through scenes, characters and a sustained
     narrative arc.
-- name: Nautical Fiction
-  definition: Fiction centred on ships, sailors and life at sea.
+- name: Nautical
+  definition: Books centred on ships, sailors and life at sea, fiction and nonfiction.
 - name: Noir
   definition: Bleak crime fiction of doomed protagonists, moral compromise and fatalism.
 - name: Nonfiction
@@ -224,9 +221,8 @@ genres:
     consequential outcomes.
 - name: Tragedy
   definition: Works tracing a protagonist's downfall through fate, flaw or circumstance.
-- name: Travel Writing
-  definition: Firsthand nonfiction journey narratives shaped by encounters, observation
-    and reflection.
+- name: Travel
+  definition: Books about travel and journeys, fiction and nonfiction.
 - name: True Crime
   definition: Documentary or narrative accounts reconstructing actual crimes, investigations
     and their consequences.
@@ -254,9 +250,9 @@ decisions:
     saved_searches: 78
   2689:
     name: Travel
-    action: rename
-    to: Travel Writing
-    reason: Mis-tagged novels (On the Road) get fixed per book later.
+    action: keep
+    reason: Spans fiction and nonfiction, so it keeps a neutral name (Fiction/Nonfiction
+      already say which).
     books: 6231
     saved_searches: 5
   2702:
@@ -634,9 +630,9 @@ decisions:
     saved_searches: 2
   17375:
     name: Contemporary
-    action: rename
-    to: Contemporary Fiction
-    reason: Samples are contemporary literary fiction (Updike, Proulx, Elkin).
+    action: keep
+    reason: Spans fiction and nonfiction, so it keeps a neutral name (Fiction/Nonfiction
+      already say which).
     books: 14562
     saved_searches: 8
   17656:
@@ -841,9 +837,9 @@ decisions:
     saved_searches: 2
   23515:
     name: Experimental
-    action: rename
-    to: Experimental Fiction
-    reason: A literary mode worth browsing by.
+    action: keep
+    reason: Spans fiction and nonfiction, so it keeps a neutral name (Fiction/Nonfiction
+      already say which).
     books: 3608
     saved_searches: 15
   23524:
@@ -855,8 +851,9 @@ decisions:
   23550:
     name: Sailors & The Sea
     action: rename
-    to: Nautical Fiction
-    reason: Conrad, Melville, Hemingway at sea.
+    to: Nautical
+    reason: Spans fiction and nonfiction, so it keeps a neutral name (Fiction/Nonfiction
+      already say which).
     books: 833
     saved_searches: 0
   23561:
@@ -917,9 +914,9 @@ decisions:
     saved_searches: 0
   23762:
     name: Inspirational
-    action: rename
-    to: Inspirational Fiction
-    reason: Kept by Shane as a fiction genre.
+    action: keep
+    reason: Spans fiction and nonfiction, so it keeps a neutral name (Fiction/Nonfiction
+      already say which).
     books: 4497
     saved_searches: 1
   23834:
@@ -1177,9 +1174,10 @@ decisions:
     saved_searches: 4
   39192:
     name: Encyclopedic
-    action: rename
-    to: Encyclopedic Fiction
-    reason: Gravity's Rainbow, Infinite Jest, The Recognitions.
+    action: delete
+    worldcat: Reference
+    reason: 92% of its books are nonfiction using 'encyclopedic' as an adjective;
+      the fiction genre is rare. Its WorldCat terms (encyclopedias) point to Reference.
     books: 678
     saved_searches: 3
   39194:
