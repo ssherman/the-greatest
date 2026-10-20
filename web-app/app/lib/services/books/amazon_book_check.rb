@@ -19,10 +19,12 @@ module Services
       # range ("Books 1-3") still names a set, so it is not a marker.
       # Amazon also writes "(Series Trilogy, 1)" and "(Series, Book One)": a bare
       # trailing number, or a spelled-out one, each with no range after it.
+      # Numbers stop at three digits: "(The Complete Series, 2010)" ends in a
+      # year, and reading it as "book 2010" would let a set through.
       NUMBER_WORDS = "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve"
       SINGLE_BOOK_MARKER = /
-        (?:\b(?:book|vol(?:ume)?\.?)|\#)\s*\d+\b(?!\s*(?:-|–|to|through|and|&)\s*\d)
-        | ,\s*\d+\s*[)\]]
+        (?:\b(?:book|vol(?:ume)?\.?)|\#)\s*\d{1,3}\b(?!\s*(?:-|–|to|through|and|&)\s*\d)
+        | ,\s*\d{1,3}\s*[)\]]
         | \b(?:book|vol(?:ume)?\.?)\s+(?:#{NUMBER_WORDS})\b(?!\s*(?:-|–|to|through|and|&)\s*\w)
       /xi
       # A "#1-3" range anywhere is a set. Kept here, never in the shared SET_WORDS.
