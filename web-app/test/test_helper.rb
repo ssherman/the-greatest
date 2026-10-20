@@ -33,6 +33,7 @@ require_relative "support/books/open_library/fake_redis"
 require_relative "support/goodreads_import_helper"
 require_relative "support/list_wizard_helper"
 require_relative "support/ol_backfill_helper"
+require_relative "support/workflows/test_definition"
 require_relative "support/validator_response_stub"
 
 # Configure Sidekiq to run jobs inline during tests
