@@ -124,7 +124,9 @@ and fails the test outright rather than degrading to a `failure` result.
 
 - **Books enrichment runs through `Books::AmazonProductEnrichmentJob`** (`Services::Books::AmazonProductService`).
   Four entry points queue or run it:
-  - the importer's `Providers::Amazon`, for every new book with `enrich: true`;
+  - the importer's `Providers::Amazon`, whenever an import with `enrich: true` runs its providers on
+    a saved book that has a title and an author. That covers new books, and existing ones imported
+    with `item:` or `force_providers: true`;
   - `GoodreadsImports::PromoteRecords`, for each promoted book that has an author;
   - `books:amazon_enrich[id]`;
   - `books:amazon_enrich_ranked`.
