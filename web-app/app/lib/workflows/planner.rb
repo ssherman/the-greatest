@@ -7,6 +7,7 @@ module Workflows
     Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
     NOT_REQUESTED = "not_requested"
+    ONE_ACTIVE_INDEX = "index_workflow_runs_one_active"
 
     # options: engine keys are "only" (step keys to run; the rest are planned
     # skipped) and "start_at" (a step key; the steps before it are planned
@@ -23,8 +24,8 @@ module Workflows
       @definition = definition
       @enrichable = enrichable
       @initiated_by = initiated_by
-      @options = options.deep_stringify_keys
-      @waits = waits.transform_keys(&:to_s)
+      @options = normalize(options.deep_stringify_keys)
+      @waits = waits.transform_keys(&:to_s).transform_values(&:uniq)
       @skips = skips.transform_keys(&:to_s)
       @start_after = start_after
       @parent_run = parent_run
@@ -36,8 +37,10 @@ module Workflows
       return failure(errors) if errors.any?
 
       plan_in_transaction
-    rescue ActiveRecord::RecordNotUnique
+    rescue ActiveRecord::RecordNotUnique => error
       # Another worker planned the same target between our check and our insert.
+      # Any other unique violation is a bug in the arguments, not a reuse.
+      raise unless error.message.include?(ONE_ACTIVE_INDEX)
       existing = active_run
       raise unless existing
 
@@ -58,7 +61,10 @@ module Workflows
         steps = create_steps(run)
         create_dependencies(steps)
         settle(steps)
-        success(run: run, reused: false, ready_steps: run.steps.where(state: :ready).order(:id).to_a)
+        # A plan can end with every step already terminal (all skipped); nothing
+        # would ever finish it, and the dead run would block the target.
+        Workflows::Coordinator.close_if_finished(run)
+        success(run: run.reload, reused: false, ready_steps: run.steps.where(state: :ready).order(:id).to_a)
       end
     end
 
@@ -117,6 +123,14 @@ module Workflows
       end
     end
 
+    # "only" becomes an Array of strings and "start_at" a String, so a bare
+    # value works. A start_at that is not a scalar is left for validate to refuse.
+    def normalize(options)
+      options["only"] = Array(options["only"]).map(&:to_s) if options.key?("only")
+      options["start_at"] = options["start_at"].to_s if options["start_at"].is_a?(Symbol)
+      options
+    end
+
     def planned_skip(key)
       return NOT_REQUESTED if unrequested?(key)
 
@@ -125,10 +139,10 @@ module Workflows
 
     def unrequested?(key)
       keys = @definition.steps.map { |declared| declared.key.to_s }
-      return true if @options["only"] && !@options["only"].map(&:to_s).include?(key)
+      return true if @options["only"] && !@options["only"].include?(key)
 
       start_at = @options["start_at"]
-      !!start_at && keys.index(key) < keys.index(start_at.to_s)
+      !!start_at && keys.index(key) < keys.index(start_at)
     end
 
     def validate
@@ -137,7 +151,10 @@ module Workflows
       unless @enrichable.is_a?(@definition.target_class)
         errors << "#{@definition.workflow} runs on #{@definition.target_class}, not #{@enrichable.class}"
       end
-      referenced = {"only" => Array(@options["only"]).map(&:to_s), "start_at" => Array(@options["start_at"]).map(&:to_s),
+      if @options["start_at"] && !@options["start_at"].is_a?(String)
+        errors << "start_at must be a single step key, got #{@options["start_at"].inspect}"
+      end
+      referenced = {"only" => @options["only"] || [], "start_at" => [@options["start_at"]].compact.grep(String),
                     "skips" => @skips.keys, "waits" => @waits.keys}
       referenced.each do |source, keys|
         (keys - known).each { |key| errors << "#{source} names unknown step #{key.inspect}" }

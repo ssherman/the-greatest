@@ -52,6 +52,21 @@ module Workflows
       assert_equal "running", a.reload.state
     end
 
+    test "close_if_finished leaves a run with open steps running and closes a finished one once" do
+      assert_equal [false, "running"], [Coordinator.close_if_finished(workflow_run), workflow_run.reload.status]
+      workflow_run.steps.update_all(state: WorkflowStep.states[:succeeded])
+      assert_equal [true, "completed"], [Coordinator.close_if_finished(workflow_run), workflow_run.reload.status]
+      assert workflow_run.finished_at
+      assert_equal false, Coordinator.close_if_finished(workflow_run)
+    end
+
+    test "close_if_finished reports completed_with_failures when a step failed" do
+      workflow_run.steps.update_all(state: WorkflowStep.states[:succeeded])
+      workflow_run.step(:b).update!(state: :failed)
+      Coordinator.close_if_finished(workflow_run)
+      assert_equal "completed_with_failures", workflow_run.reload.status
+    end
+
     test "cancel skips every non-terminal step with the outcome and cancels the run" do
       workflow_run.step(:a).update!(state: :succeeded, outcome: "done", finished_at: Time.current, released_at: Time.current)
       workflow_run.step(:b).update!(state: :running, lease_token: "t", lease_expires_at: 5.minutes.from_now)

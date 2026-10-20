@@ -114,6 +114,29 @@ module Workflows
       assert_equal [false, 0], [result.success?, WorkflowRun.where(workflow: "test.diamond").count]
     end
 
+    test "a plan whose steps all end skipped closes the run, so the next plan starts fresh" do
+      first = plan(options: {only: []}).data[:run]
+      assert_equal ["completed", true], [first.status, first.finished_at.present?]
+      second = plan
+      assert_equal [false, true], [second.data[:reused], second.data[:run].id != first.id]
+    end
+
+    test "a duplicate prerequisite in waits plans once, and does not undo a supersede" do
+      other = workflow_steps(:tolstoy_wikidata)
+      first = plan.data[:run]
+      result = plan(waits: {a: [other, other]}, supersede: true)
+      assert_equal [true, false, "cancelled"], [result.success?, result.data[:reused], first.reload.status]
+      assert_equal 1, result.data[:run].step(:a).dependencies.count
+    end
+
+    test "a bare only string and a symbol start_at are accepted; a non-scalar start_at is refused" do
+      assert_equal "skipped", plan(options: {only: "a"}).data[:run].step(:b).state
+      assert_equal "skipped", plan(options: {start_at: :b}, supersede: true).data[:run].step(:a).state
+      result = plan(options: {start_at: ["b"]}, supersede: true)
+      assert_equal false, result.success?
+      assert_match(/start_at/, result.errors.join)
+    end
+
     test "a rolled-back caller transaction leaves no run" do
       ActiveRecord::Base.transaction do
         plan

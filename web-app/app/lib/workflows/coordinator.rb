@@ -46,6 +46,18 @@ module Workflows
         run.update!(status: :cancelled, finished_at: now)
       end
 
+      # Closes a run whose steps are all terminal: completed_with_failures when
+      # any failed, else completed. Conditional on the run still being running, so
+      # a second caller changes nothing. Returns true when this call closed it.
+      def close_if_finished(run)
+        states = run.steps.pluck(:state)
+        return false if states.empty? || states.any? { |state| !WorkflowStep::TERMINAL_STATES.include?(state) }
+
+        status = states.include?("failed") ? :completed_with_failures : :completed
+        WorkflowRun.where(id: run.id, status: :running).update_all(status: WorkflowRun.statuses[status],
+          finished_at: Time.current, updated_at: Time.current).positive?
+      end
+
       private
 
       # A finish edge needs its prerequisite to be terminal; a release edge only
