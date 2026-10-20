@@ -1,0 +1,24 @@
+# Intentionally empty: dependency edges are built by the tests that need them.
+# == Schema Information
+#
+# Table name: workflow_dependencies
+#
+#  id                   :bigint           not null, primary key
+#  kind                 :integer          default("release"), not null
+#  satisfied_at         :datetime
+#  created_at           :datetime         not null
+#  updated_at           :datetime         not null
+#  prerequisite_step_id :bigint           not null
+#  step_id              :bigint           not null
+#
+# Indexes
+#
+#  idx_on_step_id_prerequisite_step_id_a38419b889       (step_id,prerequisite_step_id) UNIQUE
+#  index_workflow_dependencies_on_prerequisite_step_id  (prerequisite_step_id)
+#  index_workflow_dependencies_on_step_id               (step_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (prerequisite_step_id => workflow_steps.id) ON DELETE => cascade
+#  fk_rails_...  (step_id => workflow_steps.id) ON DELETE => cascade
+#
