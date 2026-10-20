@@ -36,15 +36,19 @@ RUN apt-get update -qq && \
 # Install JavaScript dependencies. node-build comes from a release tag whose
 # tarball checksum is pinned here; if GitHub ever regenerates the archive the
 # build fails loudly, and the fix is to re-verify and update the checksum.
-ARG NODE_VERSION=22.20.0
+# The Node version is read from .node-version, the one place it is set (mise
+# and CI read the same file). A node-build release only knows the Node
+# versions published before it, so bumping .node-version past what this
+# release defines means bumping NODE_BUILD_VERSION and its checksum too.
 ARG YARN_VERSION=1.22.22
-ARG NODE_BUILD_VERSION=5.4.56
-ARG NODE_BUILD_SHA256=23ee5f1fb900437ac14d3f7012de861dc5ba86ccddb45526315a70dea5933f72
+ARG NODE_BUILD_VERSION=5.4.59
+ARG NODE_BUILD_SHA256=3a7b65b44c51e2be0a368e26aa9246b37ae07dcd48d5b3acbc4d3c0e21d515cc
 ENV PATH=/usr/local/node/bin:$PATH
+COPY .node-version ./
 RUN curl -fsSL -o /tmp/node-build.tar.gz "https://github.com/nodenv/node-build/archive/refs/tags/v${NODE_BUILD_VERSION}.tar.gz" && \
     echo "${NODE_BUILD_SHA256}  /tmp/node-build.tar.gz" | sha256sum -c - && \
     tar xzf /tmp/node-build.tar.gz -C /tmp/ && \
-    /tmp/node-build-${NODE_BUILD_VERSION}/bin/node-build "${NODE_VERSION}" /usr/local/node && \
+    /tmp/node-build-${NODE_BUILD_VERSION}/bin/node-build "$(cat .node-version)" /usr/local/node && \
     npm install -g yarn@$YARN_VERSION && \
     rm -rf /tmp/node-build.tar.gz /tmp/node-build-${NODE_BUILD_VERSION}
 

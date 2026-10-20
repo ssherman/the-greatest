@@ -104,6 +104,14 @@ categories across genre, theme, game mode and player perspective.
 - Authors Duplicate fixer
 - Invalid Book Finder
 - old archived ranking configurations
+- **run `worldcat:backfill[all]` in production once the ISBN cleanup is done** (launch-todo §9
+  step 15). It looks up every book's ISBN-13s in the WorldCat service and adds genre, audience
+  and subject links through the reviewed map. It only adds links, so a wrong ISBN leaves genres
+  from someone else's book that a later run will not remove. That is why it waits for the agents
+  correcting ISBNs. `bin/rails "worldcat:backfill[all]"` queues a Sidekiq job (one run at a time,
+  progress in the worker log). Then re-run `worldcat:report` in development and commit the
+  regenerated `docs/data-quality/worldcat-genre-mapping.md` (step 16), since the genre plan
+  changed the map.
 - **clean junk `alternative_names` off books categories.** Past merges copied the merged
   category's whole name into the survivor's aliases. Some are real old names ("Calcutta" →
   Kolkata), but many are not: Europe carries "World War I Europe", "1. Europe" and
