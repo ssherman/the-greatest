@@ -93,6 +93,15 @@ module Services
         assert AmazonBookCheck.set?(shadow, product(title: "Shadow and Bone (The Shadow and Bone Trilogy)"))
       end
 
+      test "a year is not a book number, so a series bracket ending in one stays a set" do
+        hunger = ::Books::Book.create!(title: "The Hunger Games")
+        assert AmazonBookCheck.set?(hunger, product(title: "The Hunger Games (The Complete Series, 2010)"))
+        assert AmazonBookCheck.set?(hunger, product(title: "The Hunger Games (Hunger Games Trilogy, 2010)"))
+        assert AmazonBookCheck.set?(hunger, product(title: "The Hunger Games (Hunger Games Trilogy, Book 2010)"))
+        refute AmazonBookCheck.set?(hunger, product(title: "The Hunger Games (Hunger Games Trilogy, 1)"))
+        refute AmazonBookCheck.set?(hunger, product(title: "The Hunger Games (Hunger Games Trilogy, Book 12)"))
+      end
+
       test "set? counts a #N-M range anywhere in the title" do
         dune = ::Books::Book.create!(title: "Dune")
         assert AmazonBookCheck.set?(dune, product(title: "Dune (Dune Chronicles, #1-3)"))
