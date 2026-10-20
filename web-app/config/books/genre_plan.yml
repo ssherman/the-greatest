@@ -1,0 +1,1470 @@
+# Books genre cleanup plan (docs/superpowers/specs/2026-10-17-books-genre-cleanup-design.md).
+# Drafted by `bin/rails categories:genres:draft` and `map`; reviewed and edited by hand.
+---
+version: 1
+run: genres-2026-10
+genres:
+- name: Absurdist
+  definition: Fiction and drama built on the meaninglessness or irrationality of existence,
+    often through illogical situations played straight.
+- name: Adventure
+  definition: Fiction driven by hazardous journeys, quests, exploration or feats of
+    survival.
+- name: Allegory
+  definition: Works in which characters and events stand systematically for ideas,
+    morals or historical events.
+- name: Anthologies
+  definition: Curated collections of separate works by multiple creators, also classified
+    by their constituent forms.
+- name: Autobiography
+  definition: An author's factual account of their own life across a substantial span.
+- name: Biography
+  definition: A factual reconstruction of another person's life, including collective
+    life histories.
+- name: Comics & Graphic Novels
+  definition: Works that tell stories or develop ideas through sequential images,
+    usually combined with text.
+- name: Coming-of-Age Fiction
+  definition: Fiction structured around a protagonist's formative passage toward maturity
+    and self-understanding.
+- name: Contemporary
+  definition: Books set in and engaging with the present day or recent past of their
+    time.
+- name: Cookbooks
+  definition: Instructional works organized around recipes, food preparation and cooking
+    techniques.
+- name: Crime Fiction
+  definition: Fiction organized around criminal acts and their execution, investigation
+    or consequences.
+- name: Cyberpunk
+  definition: Science fiction set in high-tech, low-life futures of networks, corporations
+    and altered bodies.
+- name: Dark
+  definition: Fiction of bleak, violent or morally disturbing vision, whatever its
+    genre.
+- name: Dark Humor
+  definition: Comedy drawn from death, cruelty, despair or taboo subjects.
+- name: Diaries & Journals
+  definition: Works composed of diary or journal entries, real or fictional.
+- name: Dystopian Fiction
+  definition: Speculative fiction structured around life within an imagined oppressive
+    or dehumanizing social order.
+- name: Erotica
+  definition: Fiction in which explicit sexual experience and erotic arousal are central
+    purposes.
+- name: Existentialist
+  definition: Literature concerned with freedom, choice, absurdity and the individual's
+    search for meaning, in the tradition of Sartre and Camus.
+- name: Experimental
+  definition: Books that break conventional form, language or structure as a central
+    part of the work.
+- name: Family Sagas
+  definition: Long narratives following a family or community across generations.
+- name: Fantasy
+  definition: Fiction in which magic, impossible beings or supernatural worlds are
+    integral to the story.
+- name: Fiction
+  definition: The site's book type for invented narratives, including novels and stories.
+- name: Folklore & Fairy Tales
+  definition: Traditional myths, legends, folktales and fairy tales, including literary
+    versions using those conventions.
+- name: Food Writing
+  definition: Essayistic or narrative nonfiction about food, eating and cooking, distinct
+    from recipe books.
+- name: Gothic
+  definition: Fiction using decaying settings, buried secrets and a threatening past
+    to build dread and mystery.
+- name: Hard Science Fiction
+  definition: Science fiction that keeps closely to established science and technical
+    plausibility.
+- name: Hardboiled
+  definition: Tough, terse crime fiction with cynical detectives and violent urban
+    settings, in the tradition of Hammett and Chandler.
+- name: High Fantasy
+  definition: Fantasy set primarily in a fully imagined secondary world with its own
+    magical order.
+- name: Historical Fiction
+  definition: Fiction that reconstructs a period preceding the author's own era as
+    an integral part of its storytelling.
+- name: Horror
+  definition: Fiction designed to evoke fear or dread through threatening, uncanny
+    or monstrous forces.
+- name: How-To Guides
+  definition: Instructional works organized around methods, procedures or steps for
+    accomplishing practical tasks.
+- name: Humor
+  definition: Works whose primary organizing purpose is comedy, whether through narrative,
+    essays or comic sketches.
+- name: Inspirational
+  definition: Books written to uplift, often centred on faith, hope or personal renewal.
+- name: Letters
+  definition: Correspondence, real or fictional, including epistolary novels told
+    through letters.
+- name: Literary Fiction
+  definition: Fiction emphasizing language, characterization and artistic structure
+    over established genre formulas.
+- name: Magical Realism
+  definition: Fiction that treats extraordinary events as ordinary within an otherwise
+    recognizable reality.
+- name: Manga
+  definition: Sequential-art works published within the Japanese manga tradition and
+    its established storytelling conventions.
+- name: Memoir
+  definition: A reflective firsthand account organized around selected experiences,
+    relationships or periods of a life.
+- name: Metafiction
+  definition: Fiction that draws attention to its own fictionality, storytelling or
+    the act of reading.
+- name: Microhistory
+  definition: Close historical study of a single person, object, event or community
+    that illuminates a larger past.
+- name: Modernist Literature
+  definition: 'Literature of the Modernist movement (roughly 1890s to 1940s): fragmented
+    form, stream of consciousness, formal experiment.'
+- name: Mystery
+  definition: Fiction structured around investigating and resolving a crime, puzzle
+    or unexplained event.
+- name: Narrative Nonfiction
+  definition: Factual writing organized through scenes, characters and a sustained
+    narrative arc.
+- name: Nautical
+  definition: Books centred on ships, sailors and life at sea, fiction and nonfiction.
+- name: Noir
+  definition: Bleak crime fiction of doomed protagonists, moral compromise and fatalism.
+- name: Nonfiction
+  definition: The site's book type for works presented as factual accounts, explanations
+    or arguments.
+- name: Novellas
+  definition: Sustained prose fiction shorter and typically more concentrated than
+    a novel.
+- name: Pastoral
+  definition: Works idealising rural life, landscape and the natural world.
+- name: Philosophical Fiction
+  definition: Fiction substantially devoted to exploring philosophical questions.
+- name: Picaresque
+  definition: Episodic fiction following a roguish hero through a series of adventures
+    across society.
+- name: Picture Books
+  definition: Works in which images carry an essential share of the narrative or meaning,
+    with or without text.
+- name: Plays
+  definition: Dramatic works written for performance through dialogue, action and
+    stage directions.
+- name: Poetry
+  definition: The site's book type for verse and prose poems shaped by concentrated
+    language, rhythm and imagery.
+- name: Police Procedural
+  definition: Crime fiction following the step-by-step work of police investigators.
+- name: Political Fiction
+  definition: Fiction in which politics, power or ideology organise the story.
+- name: Popular Science
+  definition: Explanatory nonfiction presenting scientific ideas and research without
+    requiring specialist training.
+- name: Post-Apocalyptic Fiction
+  definition: Fiction set during or after the collapse of civilisation, including
+    the apocalypse itself.
+- name: Postmodern Literature
+  definition: 'Literature of the postmodern movement: irony, pastiche, fragmentation
+    and play with genre and truth.'
+- name: Psychological Fiction
+  definition: Fiction centred on the inner lives, motives and mental states of its
+    characters.
+- name: Pulp
+  definition: 'Fast, sensational genre fiction in the tradition of the pulp magazines:
+    adventure, sword and sorcery, planetary romance, crime.'
+- name: Reference
+  definition: Works organized primarily for consultation and lookup rather than continuous
+    reading.
+- name: Religion & Spirituality
+  definition: The site's book type for sacred texts, theology, devotional works and
+    spiritual teaching.
+- name: Romance
+  definition: Fiction centered on a developing love relationship with an emotionally
+    satisfying, optimistic resolution.
+- name: Romantasy
+  definition: Fiction in which a central romantic arc and a fully developed fantasy
+    plot are inseparable.
+- name: Satire
+  definition: Works structured around irony, ridicule or exaggeration to expose folly,
+    vice or abuses of power.
+- name: Science Fiction
+  definition: Fiction extrapolating from scientific, technological or other rationally
+    imagined departures from reality.
+- name: Short Stories
+  definition: Brief, self-contained prose fiction, published individually or in collections.
+- name: Social Fiction
+  definition: Fiction that portrays and examines a society, its classes and institutions
+    through its characters.
+- name: Space Opera
+  definition: Science fiction featuring large-scale adventure, conflict and intrigue
+    across interplanetary or interstellar settings.
+- name: Speculative Fiction
+  definition: 'Fiction built on an imagined departure from reality: the umbrella over
+    fantasy, science fiction, horror and dystopia.'
+- name: Spy Fiction
+  definition: Fiction built around espionage operations, covert identities, intelligence
+    work and divided loyalties.
+- name: Steampunk
+  definition: Speculative fiction set in alternate histories powered by steam-age
+    technology, usually Victorian.
+- name: Supernatural Fiction
+  definition: Fiction in which ghosts, spirits or other supernatural forces play a
+    central part, not always to frighten.
+- name: Surreal
+  definition: Fiction with dreamlike, irrational imagery and logic, in the tradition
+    of Surrealism.
+- name: Textbooks
+  definition: Works designed for systematic instruction through sequenced explanations,
+    examples and often exercises.
+- name: Thriller & Suspense
+  definition: Fiction driven by escalating danger, uncertainty and anticipation of
+    consequential outcomes.
+- name: Tragedy
+  definition: Works tracing a protagonist's downfall through fate, flaw or circumstance.
+- name: Travel
+  definition: Books about travel and journeys, fiction and nonfiction.
+- name: True Crime
+  definition: Documentary or narrative accounts reconstructing actual crimes, investigations
+    and their consequences.
+- name: War & Military Fiction
+  definition: Fiction centred on war, combat and military life.
+- name: Weird Fiction
+  definition: Fiction of the strange and unknowable, from Poe and Machen through Lovecraft
+    to the New Weird.
+- name: Westerns
+  definition: Fiction using frontier conventions such as contested law, settlement,
+    outlaws and personal justice.
+audiences:
+- name: Children's
+  definition: Written for readers up to about age 8.
+- name: Middle Grade
+  definition: Written for readers about 8 to 12.
+- name: Young Adult
+  definition: Written for readers about 12 to 18.
+decisions:
+  2683:
+    name: Fiction
+    action: keep
+    reason: Protected book type.
+    books: 88753
+    saved_searches: 78
+  2689:
+    name: Travel
+    action: keep
+    reason: Spans fiction and nonfiction, so it keeps a neutral name (Fiction/Nonfiction
+      already say which).
+    books: 6231
+    saved_searches: 5
+  2702:
+    name: Drama
+    action: delete
+    worldcat: Plays
+    reason: 'Your decision: delete, and its WorldCat terms point to Plays.'
+    books: 5838
+    saved_searches: 10
+  2726:
+    name: Historical fiction
+    action: rename
+    to: Historical Fiction
+    reason: Capitalization.
+    books: 13481
+    saved_searches: 27
+  2727:
+    name: Literary Fiction
+    action: keep
+    books: 20561
+    saved_searches: 33
+  2785:
+    name: Satire
+    action: keep
+    books: 4648
+    saved_searches: 11
+  2939:
+    name: Science fiction
+    action: rename
+    to: Science Fiction
+    reason: Capitalization.
+    books: 7181
+    saved_searches: 113
+  2951:
+    name: Psychological
+    action: split
+    into:
+    - Psychological Fiction
+    - subject: Psychology
+      target_id: 28244
+    worldcat_terms:
+      Psychological fiction:
+      - Psychological Fiction
+      Roman psychologique:
+      - Psychological Fiction
+      Romans psychologiques:
+      - Psychological Fiction
+      Novelas psicológicas:
+      - Psychological Fiction
+      Psychological fiction, American:
+      - Psychological Fiction
+      Novela psicológica:
+      - Psychological Fiction
+      Powieść psychologiczna:
+      - Psychological Fiction
+      Novelas psicológicas:
+      - Psychological Fiction
+      Psychological fictio:
+      - Psychological Fiction
+      Psyhological fiction:
+      - Psychological Fiction
+      Psychologial fiction:
+      - Psychological Fiction
+      Psychological fiction, English:
+      - Psychological Fiction
+    reason: Mixed novels and psychology books.
+    books: 9540
+    saved_searches: 17
+  3005:
+    name: Adult
+    action: delete
+    reason: No Adult audience (your decision).
+    books: 4887
+    saved_searches: 1
+  3012:
+    name: Tragedy
+    action: keep
+    reason: A mode, like Dark.
+    books: 1886
+    saved_searches: 2
+  3071:
+    name: Agerstown
+    action: delete
+    reason: No books.
+    books: 0
+    saved_searches: 0
+  3104:
+    name: metafiction
+    action: rename
+    to: Metafiction
+    reason: Capitalization.
+    books: 931
+    saved_searches: 1
+  3106:
+    name: novella
+    action: rename
+    to: Novellas
+    books: 1065
+    saved_searches: 0
+  3211:
+    name: Poetry
+    action: keep
+    reason: Protected book type.
+    books: 6549
+    saved_searches: 69
+  3227:
+    name: Family & Relationships
+    action: subject
+    as: Family & Relationships
+    reason: A topic that runs across fiction and nonfiction, not a kind of book.
+    books: 22865
+    saved_searches: 5
+  3339:
+    name: Biography
+    action: keep
+    books: 8199
+    saved_searches: 18
+  3348:
+    name: Nonfiction
+    action: keep
+    reason: Protected book type.
+    books: 68857
+    saved_searches: 116
+  3351:
+    name: Modern
+    action: delete
+    reason: Only 264 of 2,203 books are also Modernist; a vague period shelf.
+    books: 2203
+    saved_searches: 0
+  3453:
+    name: Coming of age
+    action: rename
+    to: Coming-of-Age Fiction
+    books: 8338
+    saved_searches: 3
+  3490:
+    name: Good and evil
+    action: subject
+    as: Good and Evil
+    target_id: 28626
+    reason: A theme.
+    books: 495
+    saved_searches: 0
+  3502:
+    name: Fantasy
+    action: keep
+    books: 14742
+    saved_searches: 104
+  3617:
+    name: Magical Realism
+    action: keep
+    books: 3853
+    saved_searches: 17
+  3618:
+    name: Supernatural
+    action: rename
+    to: Supernatural Fiction
+    reason: Ghost stories and the uncanny (A Christmas Carol, Dracula), wider than
+      Horror.
+    books: 7727
+    saved_searches: 3
+  3663:
+    name: Autobiography
+    action: keep
+    reason: Or merge into Memoir.
+    books: 3036
+    saved_searches: 12
+  3679:
+    name: Crime
+    action: rename
+    to: Crime Fiction
+    books: 11723
+    saved_searches: 26
+  3944:
+    name: military fiction
+    action: rename
+    to: War & Military Fiction
+    books: 1785
+    saved_searches: 2
+  4127:
+    name: Comics & Graphic Novels
+    action: keep
+    books: 8193
+    saved_searches: 17
+  4179:
+    name: Romance
+    action: keep
+    books: 7188
+    saved_searches: 47
+  4207:
+    name: Plays
+    action: keep
+    books: 1159
+    saved_searches: 72
+  4235:
+    name: Magrathea
+    action: delete
+    reason: No books; a fictional planet.
+    books: 0
+    saved_searches: 0
+  4597:
+    name: Children's books
+    action: audience
+    as: Children's
+    books: 5276
+    saved_searches: 55
+  4809:
+    name: 21st Century
+    action: delete
+    reason: Changed by Shane in the worksheet.
+    books: 796
+    saved_searches: 0
+  4834:
+    name: Mystery
+    action: keep
+    books: 14417
+    saved_searches: 41
+  5108:
+    name: True crime
+    action: rename
+    to: True Crime
+    reason: Capitalization.
+    books: 1075
+    saved_searches: 6
+  5278:
+    name: Frontier and pioneer life
+    action: subject
+    as: Frontier
+    target_id: 25375
+    books: 626
+    saved_searches: 1
+  5427:
+    name: Humor
+    action: keep
+    books: 8811
+    saved_searches: 18
+  5530:
+    name: Young adult
+    action: audience
+    as: Young Adult
+    books: 5197
+    saved_searches: 11
+  5857:
+    name: picture books
+    action: rename
+    to: Picture Books
+    reason: A form; audience is recorded separately.
+    books: 1930
+    saved_searches: 3
+  5989:
+    name: Horror
+    action: keep
+    books: 6472
+    saved_searches: 78
+  6093:
+    name: Political
+    action: split
+    into:
+    - Political Fiction
+    - subject: Politics
+      target_id: 5016
+    worldcat_terms:
+      Political fiction:
+      - Political Fiction
+      Political fiction, American:
+      - Political Fiction
+      Novel·la política:
+      - Political Fiction
+      Political: []
+      Political Fiction:
+      - Political Fiction
+      Novel·la política:
+      - Political Fiction
+      Politique-fiction:
+      - Political Fiction
+      Romans politiques:
+      - Political Fiction
+      Publicystyka polityczna: []
+    reason: Mostly nonfiction with some novels; each book is checked.
+    books: 16585
+    saved_searches: 21
+  6676:
+    name: Sagas
+    action: rename
+    to: Family Sagas
+    reason: Gone With the Wind, One Hundred Years of Solitude.
+    books: 1041
+    saved_searches: 3
+  7588:
+    name: Gothic
+    action: keep
+    books: 2455
+    saved_searches: 10
+  7783:
+    name: Reference
+    action: keep
+    books: 4694
+    saved_searches: 1
+  8425:
+    name: epic
+    action: delete
+    reason: Used as an adjective for long books (War and Peace, Moby-Dick).
+    books: 1615
+    saved_searches: 6
+  9343:
+    name: Religion & Spirituality
+    action: keep
+    reason: Protected book type.
+    books: 14746
+    saved_searches: 17
+  9448:
+    name: Textbooks
+    action: keep
+    books: 3571
+    saved_searches: 1
+  11517:
+    name: Anthologies
+    action: keep
+    reason: 'Not the same as Short Stories: may hold poems or essays.'
+    books: 2402
+    saved_searches: 1
+  12593:
+    name: Dystopian
+    action: rename
+    to: Dystopian Fiction
+    books: 2003
+    saved_searches: 13
+  12986:
+    name: popular science
+    action: rename
+    to: Popular Science
+    reason: Capitalization.
+    books: 8153
+    saved_searches: 7
+  14533:
+    name: Banned books
+    action: delete
+    reason: A status, not a kind of book (your example).
+    books: 60
+    saved_searches: 0
+  14552:
+    name: Memoir
+    action: keep
+    books: 6836
+    saved_searches: 36
+  14697:
+    name: Cookbooks
+    action: keep
+    reason: A form; food is recorded as a subject too.
+    books: 1348
+    saved_searches: 4
+  14934:
+    name: Urban
+    action: subject
+    as: Urban Life
+    target_id: 3460
+    reason: Mixes Jane Jacobs with urban fiction (Clockers).
+    books: 1052
+    saved_searches: 0
+  16023:
+    name: Cultural
+    action: subject
+    as: Culture
+    target_id: 4785
+    reason: 'Mixed topics: samples run from Vienna history to Mahfouz.'
+    books: 17629
+    saved_searches: 4
+  17158:
+    name: Victorian
+    action: subject
+    as: Victorian Era
+    target_id: 26560
+    reason: A time period.
+    books: 1037
+    saved_searches: 2
+  17375:
+    name: Contemporary
+    action: keep
+    reason: Spans fiction and nonfiction, so it keeps a neutral name (Fiction/Nonfiction
+      already say which).
+    books: 14562
+    saved_searches: 8
+  17656:
+    name: philosophical
+    action: split
+    into:
+    - Philosophical Fiction
+    - subject: Philosophy
+      target_id: 7521
+    worldcat_terms:
+      Philosophical fiction:
+      - Philosophical Fiction
+      Dialogues, Greek: []
+      teori, filosofi: []
+    reason: Samples are mostly novels (Blood Meridian, Herzog, Invisible Man).
+    books: 11040
+    saved_searches: 35
+  17816:
+    name: International
+    action: delete
+    reason: Says nothing about the kind of book.
+    books: 1201
+    saved_searches: 0
+  18241:
+    name: Americana
+    action: subject
+    as: American Culture
+    target_id: 30301
+    books: 2227
+    saved_searches: 0
+  18794:
+    name: Cyberpunk
+    action: keep
+    reason: Child of Science Fiction.
+    books: 349
+    saved_searches: 8
+  18936:
+    name: teen
+    action: merge
+    into: Young Adult
+    reason: Same audience.
+    books: 187
+    saved_searches: 0
+  19527:
+    name: noir
+    action: rename
+    to: Noir
+    reason: 'parent: Crime Fiction'
+    books: 1596
+    saved_searches: 6
+  19789:
+    name: Retellings
+    action: delete
+    reason: Changed by Shane in the worksheet.
+    books: 834
+    saved_searches: 0
+  19816:
+    name: High Fantasy
+    action: keep
+    reason: Child of Fantasy.
+    books: 1956
+    saved_searches: 30
+  20414:
+    name: Westerns
+    action: keep
+    books: 396
+    saved_searches: 5
+  20420:
+    name: Dark Humor
+    action: keep
+    reason: A mode, like Dark.
+    books: 1107
+    saved_searches: 6
+  20499:
+    name: Speculative Fiction
+    action: keep
+    reason: Parent of Fantasy, Science Fiction, Horror and Dystopian; both reports
+      keep it.
+    books: 24545
+    saved_searches: 24
+  20593:
+    name: Erotica
+    action: keep
+    books: 379
+    saved_searches: 6
+  20746:
+    name: Cozy
+    action: delete
+    reason: Changed by Shane in the worksheet.
+    books: 732
+    saved_searches: 3
+  21101:
+    name: Literary Letters
+    action: rename
+    to: Letters
+    reason: Real letters plus epistolary novels (Clarissa, Possession).
+    books: 416
+    saved_searches: 0
+  21603:
+    name: Pop Culture
+    action: subject
+    as: Popular Culture
+    target_id: 6636
+    books: 3399
+    saved_searches: 1
+  21781:
+    name: Culinary
+    action: subject
+    as: Cooking
+    target_id: 9819
+    reason: Cookbooks keep their own genre; this is the topic.
+    books: 1680
+    saved_searches: 2
+  21881:
+    name: Thriller & Suspense
+    action: keep
+    books: 12408
+    saved_searches: 38
+  22127:
+    name: Ancient
+    action: subject
+    as: Antiquity
+    target_id: 31879
+    reason: 'A time period (your decision: periods become subjects).'
+    books: 1694
+    saved_searches: 2
+  22861:
+    name: South dakota
+    action: location
+    as: South Dakota
+    target_id: 15108
+    reason: No books.
+    books: 0
+    saved_searches: 0
+  23022:
+    name: Prehistoric
+    action: subject
+    as: Prehistory
+    target_id: 22255
+    reason: A time period.
+    books: 76
+    saved_searches: 0
+  23064:
+    name: Steampunk
+    action: keep
+    reason: Child of Science Fiction.
+    books: 288
+    saved_searches: 0
+  23204:
+    name: Gay fiction
+    action: subject
+    as: LGBTQ+
+    target_id: 23570
+    reason: 'Your decision: Gay fiction merges into the LGBTQ+ subject.'
+    books: 545
+    saved_searches: 9
+  23494:
+    name: Picaresque
+    action: keep
+    books: 1105
+    saved_searches: 2
+  23500:
+    name: Dark
+    action: keep
+    reason: A mood with a coherent shelf (Blood Meridian, A Clockwork Orange).
+    books: 1930
+    saved_searches: 5
+  23502:
+    name: Absurdist
+    action: keep
+    reason: A literary mode worth browsing by.
+    books: 2280
+    saved_searches: 9
+  23505:
+    name: Postmodern
+    action: rename
+    to: Postmodern Literature
+    reason: A literary movement worth browsing by.
+    books: 4886
+    saved_searches: 19
+  23508:
+    name: Social & Cultural Fiction
+    action: rename
+    to: Social Fiction
+    reason: Novels of society (Augie March, All the King's Men). Or merge into Literary
+      Fiction.
+    books: 11944
+    saved_searches: 3
+  23510:
+    name: Modernist
+    action: rename
+    to: Modernist Literature
+    reason: A literary movement worth browsing by.
+    books: 3061
+    saved_searches: 11
+  23511:
+    name: Allegorical
+    action: rename
+    to: Allegory
+    reason: Animal Farm, The Bridge of San Luis Rey.
+    books: 2572
+    saved_searches: 2
+  23515:
+    name: Experimental
+    action: keep
+    reason: Spans fiction and nonfiction, so it keeps a neutral name (Fiction/Nonfiction
+      already say which).
+    books: 3608
+    saved_searches: 15
+  23524:
+    name: Spy
+    action: rename
+    to: Spy Fiction
+    books: 1096
+    saved_searches: 1
+  23550:
+    name: Sailors & The Sea
+    action: rename
+    to: Nautical
+    reason: Spans fiction and nonfiction, so it keeps a neutral name (Fiction/Nonfiction
+      already say which).
+    books: 833
+    saved_searches: 0
+  23561:
+    name: Existentialist
+    action: keep
+    reason: A literary movement worth browsing by.
+    books: 596
+    saved_searches: 2
+  23565:
+    name: Latino
+    action: delete
+    reason: Creator identity (your decision).
+    books: 274
+    saved_searches: 0
+  23571:
+    name: Short Story Collection
+    action: rename
+    to: Short Stories
+    books: 3727
+    saved_searches: 10
+  23573:
+    name: Post Apocalyptic
+    action: rename
+    to: Post-Apocalyptic Fiction
+    books: 901
+    saved_searches: 5
+  23591:
+    name: Anglo Saxon
+    action: subject
+    as: Anglo-Saxons
+    target_id: 17098
+    reason: A time period.
+    books: 44
+    saved_searches: 0
+  23599:
+    name: Chick Lit
+    action: merge
+    into: Romance
+    reason: Dated marketing label (Bridget Jones's Diary).
+    books: 1041
+    saved_searches: 6
+  23722:
+    name: Pulp
+    action: keep
+    books: 633
+    saved_searches: 1
+  23724:
+    name: Pastoral
+    action: keep
+    books: 382
+    saved_searches: 0
+  23725:
+    name: Arthurian
+    action: subject
+    as: Arthurian Legend
+    target_id: 23579
+    books: 203
+    saved_searches: 0
+  23762:
+    name: Inspirational
+    action: keep
+    reason: Spans fiction and nonfiction, so it keeps a neutral name (Fiction/Nonfiction
+      already say which).
+    books: 4497
+    saved_searches: 1
+  23834:
+    name: Realistic Fiction
+    action: delete
+    reason: Means 'not speculative', which every other novel already is.
+    books: 4551
+    saved_searches: 3
+  24005:
+    name: Food Writing
+    action: keep
+    books: 1733
+    saved_searches: 0
+  24039:
+    name: Weird Fiction
+    action: keep
+    books: 1677
+    saved_searches: 3
+  24055:
+    name: Adventure
+    action: keep
+    books: 15184
+    saved_searches: 18
+  24174:
+    name: Middle Grade
+    action: audience
+    as: Middle Grade
+    books: 2022
+    saved_searches: 5
+  27693:
+    name: Hard Science Fiction
+    action: keep
+    reason: Child of Science Fiction.
+    books: 394
+    saved_searches: 5
+  27694:
+    name: Soft Science Fiction
+    action: merge
+    into: Science Fiction
+    books: 228
+    saved_searches: 2
+  27695:
+    name: Space Opera
+    action: keep
+    reason: Child of Science Fiction.
+    books: 1487
+    saved_searches: 3
+  27697:
+    name: Apocalyptic
+    action: merge
+    into: Post-Apocalyptic Fiction
+    books: 278
+    saved_searches: 2
+  27698:
+    name: Low Fantasy
+    action: merge
+    into: Fantasy
+    reason: Small and loosely defined.
+    books: 171
+    saved_searches: 15
+  28221:
+    name: Art
+    action: subject
+    as: Art
+    reason: A topic. Samples are novels about artists and art books.
+    books: 9358
+    saved_searches: 1
+  35024:
+    name: Books About Books
+    action: subject
+    as: Books
+    target_id: 3009
+    reason: Novels and criticism about books (Possession, Aspects of the Novel).
+    books: 2935
+    saved_searches: 0
+  35028:
+    name: Science Fiction Fantasy
+    action: split
+    into:
+    - Science Fiction
+    - Fantasy
+    worldcat_terms:
+      Fantasy och science fiction:
+      - Science Fiction
+      - Fantasy
+      Science-fiction et fantastique:
+      - Science Fiction
+      - Fantasy
+      Science Fiction, Fantasy:
+      - Science Fiction
+      - Fantasy
+    reason: Checked book by book; LOTR does not get Science Fiction.
+    books: 252
+    saved_searches: 10
+  35032:
+    name: Science Nature
+    action: split
+    into:
+    - subject: Science
+      target_id: 4787
+    - subject: Nature
+      target_id: 28220
+    worldcat_terms:
+      Natural history literature: []
+    reason: Two topics; each book gets one or both.
+    books: 4140
+    saved_searches: 4
+  35036:
+    name: Media Tie In
+    action: delete
+    reason: A publishing label, not a kind of book.
+    books: 787
+    saved_searches: 0
+  35111:
+    name: Romantasy
+    action: keep
+    also:
+    - Romance
+    - Fantasy
+    reason: 'Your decision: kept, with also Romance and Fantasy.'
+    books: 225
+    saved_searches: 4
+  35146:
+    name: Hard Boiled
+    action: rename
+    to: Hardboiled
+    reason: 'parent: Crime Fiction'
+    books: 500
+    saved_searches: 0
+  35214:
+    name: Foodie
+    action: subject
+    as: Food
+    target_id: 12295
+    books: 340
+    saved_searches: 0
+  35228:
+    name: Microhistory
+    action: keep
+    books: 2716
+    saved_searches: 2
+  35237:
+    name: How To
+    action: rename
+    to: How-To Guides
+    books: 8764
+    saved_searches: 3
+  35243:
+    name: Unfinished
+    action: delete
+    reason: Random books; a reader's shelf.
+    books: 29
+    saved_searches: 0
+  35267:
+    name: Manga Comics
+    action: rename
+    to: Manga
+    books: 1862
+    saved_searches: 4
+  35286:
+    name: History and Politics
+    action: split
+    into:
+    - subject: History
+      target_id: 2723
+    - subject: Politics
+      target_id: 5016
+    worldcat_terms:
+      History: []
+      Historia: []
+      Geschiedenis (vorm): []
+      Local history: []
+      History (form): []
+      Geschichte: []
+      Zgodovinski pregledi: []
+      Histoire: []
+      Historie: []
+      Storia medievale (692-1303) Saggi, varia: []
+      Oral history: []
+      zgodovinski pregledi: []
+      Historical Works: []
+      Chroniques portugaises: []
+      Chroniques portugaises 2000-...: []
+      National histories: []
+    reason: Two topics; each book gets one or both.
+    books: 12605
+    saved_searches: 9
+  35524:
+    name: Elizabethan Period
+    action: subject
+    as: Elizabethan Era
+    target_id: 31059
+    reason: A time period.
+    books: 59
+    saved_searches: 0
+  35543:
+    name: Georgian
+    action: subject
+    as: Georgian Era
+    reason: A time period.
+    books: 34
+    saved_searches: 0
+  36006:
+    name: Counselling
+    action: subject
+    as: Psychology
+    target_id: 28244
+    reason: 'Samples are Freud and Styron: the psychology topic.'
+    books: 2738
+    saved_searches: 0
+  36044:
+    name: Esoterica
+    action: subject
+    as: Esotericism
+    target_id: 23678
+    reason: Jung, William James, Frances Yates.
+    books: 1971
+    saved_searches: 0
+  37494:
+    name: True Story
+    action: rename
+    to: Narrative Nonfiction
+    reason: Samples are narrative nonfiction (And the Band Played On).
+    books: 2921
+    saved_searches: 0
+  37613:
+    name: Surreal
+    action: keep
+    reason: A literary mode worth browsing by.
+    books: 1501
+    saved_searches: 4
+  37649:
+    name: Technical
+    action: delete
+    reason: Vague label; samples are popular-science classics already covered.
+    books: 3856
+    saved_searches: 2
+  37662:
+    name: Modern Classics
+    action: delete
+    reason: A reception label; the rankings already say this.
+    books: 891
+    saved_searches: 0
+  37676:
+    name: Lovecraftian
+    action: merge
+    into: Weird Fiction
+    reason: Small; Lovecraft is the root of Weird Fiction.
+    books: 222
+    saved_searches: 1
+  39191:
+    name: Folklore & Fairy Tales
+    action: keep
+    books: 3066
+    saved_searches: 4
+  39192:
+    name: Encyclopedic
+    action: delete
+    worldcat: Reference
+    reason: 92% of its books are nonfiction using 'encyclopedic' as an adjective;
+      the fiction genre is rare. Its WorldCat terms (encyclopedias) point to Reference.
+    books: 678
+    saved_searches: 3
+  39194:
+    name: Diaries & Journals
+    action: keep
+    books: 643
+    saved_searches: 1
+  39226:
+    name: Mythological
+    action: subject
+    as: Mythology
+    target_id: 7535
+    reason: 'Noisy: Pale Fire, Proust and the Iliad. The topic survives.'
+    books: 1538
+    saved_searches: 6
+  39268:
+    name: Bulgarian Literature
+    action: delete
+    reason: Creator nationality; country filters cover it.
+    books: 19
+    saved_searches: 1
+  39332:
+    name: Cult Classics
+    action: delete
+    reason: A reception label.
+    books: 58
+    saved_searches: 0
+  39745:
+    name: Theosophy
+    action: subject
+    as: Esotericism
+    target_id: 23678
+    books: 162
+    saved_searches: 0
+  47830:
+    name: Challenged Books
+    action: delete
+    reason: A status, not a kind of book.
+    books: 2
+    saved_searches: 0
+  47831:
+    name: Mormonism
+    action: subject
+    as: Mormonism
+    books: 11
+    saved_searches: 0
+  49066:
+    name: Bande Dessinée
+    action: merge
+    into: Comics & Graphic Novels
+    books: 24
+    saved_searches: 0
+  51509:
+    name: Own
+    action: delete
+    reason: One book; a shelf name.
+    books: 1
+    saved_searches: 0
+  51969:
+    name: Summer Reads
+    action: delete
+    reason: A shelf, not a kind of book.
+    books: 55
+    saved_searches: 0
+  52696:
+    name: Suisse
+    action: location
+    as: Switzerland
+    target_id: 5677
+    books: 3
+    saved_searches: 0
+  57138:
+    name: Light Novel
+    action: delete
+    reason: Changed by Shane in the worksheet.
+    books: 308
+    saved_searches: 1
+  67061:
+    name: Ebooks
+    action: delete
+    reason: An edition format (your example).
+    books: 52
+    saved_searches: 0
+  67068:
+    name: Beach Reads
+    action: delete
+    reason: A shelf.
+    books: 6
+    saved_searches: 0
+  67077:
+    name: Slow Burn
+    action: merge
+    into: Romance
+    reason: A trope (your example).
+    books: 4
+    saved_searches: 0
+  67081:
+    name: Latinx
+    action: delete
+    reason: Creator identity (your decision).
+    books: 27
+    saved_searches: 0
+  67082:
+    name: Cozy Fantasy
+    action: merge
+    into: Fantasy
+    reason: You listed cozy as junk.
+    books: 15
+    saved_searches: 1
+  67083:
+    name: Second Chance
+    action: merge
+    into: Romance
+    reason: A trope.
+    books: 9
+    saved_searches: 0
+  67084:
+    name: Second Chance Romance
+    action: merge
+    into: Romance
+    reason: A trope.
+    books: 14
+    saved_searches: 0
+  67095:
+    name: Apple
+    action: delete
+    reason: 'One book: Apple in China.'
+    books: 1
+    saved_searches: 0
+  67099:
+    name: Thriller Suspense
+    action: merge
+    into: Thriller & Suspense
+    reason: Duplicate spelling.
+    books: 7
+    saved_searches: 2
+  67102:
+    name: Forced Proximity
+    action: merge
+    into: Romance
+    reason: A trope.
+    books: 4
+    saved_searches: 0
+  67103:
+    name: Rom Com
+    action: merge
+    into: Romance
+    reason: Changed by Shane in the worksheet.
+    books: 108
+    saved_searches: 0
+  67119:
+    name: Trucks
+    action: delete
+    reason: Your example of junk.
+    books: 4
+    saved_searches: 0
+  67120:
+    name: Vegetarian
+    action: subject
+    as: Vegetarianism
+    target_id: 17896
+    reason: Your example of junk.
+    books: 2
+    saved_searches: 0
+  67123:
+    name: Hispanic
+    action: delete
+    reason: Creator identity (your decision).
+    books: 2
+    saved_searches: 0
+  67124:
+    name: Weird West
+    action: merge
+    into: Westerns
+    reason: You listed it as junk.
+    books: 5
+    saved_searches: 0
+  67125:
+    name: Hockey Romance
+    action: split
+    into:
+    - Romance
+    - subject: Hockey
+      target_id: 30814
+    worldcat_terms: {}
+    books: 4
+    saved_searches: 0
+  67146:
+    name: Aapi
+    action: delete
+    reason: Creator identity (your decision).
+    books: 2
+    saved_searches: 0
+  67151:
+    name: Contemporary History
+    action: subject
+    as: Contemporary History
+    books: 805
+    saved_searches: 0
+  67568:
+    name: He Falls First
+    action: merge
+    into: Romance
+    reason: A trope.
+    books: 1
+    saved_searches: 0
+  67574:
+    name: Art and Photography
+    action: split
+    into:
+    - subject: Visual Arts
+      target_id: 38526
+    - subject: Photography
+      target_id: 4699
+    worldcat_terms:
+      photobooks: []
+      Photography, Artistic: []
+      Fotografier: []
+      Photographie (Descripteur de forme): []
+      Photobooks: []
+      Photographs: []
+      photographies: []
+      "[Photographies]": []
+      Fotografías: []
+      Documentary photography: []
+      Aerial photographs: []
+      Photographies: []
+      Fotoböcker: []
+      Landscape photography: []
+      Portraits: []
+      Catalogue d'art (Descripteur de forme): []
+      catalogues raisonnés: []
+      Catalegs d'exposicions: []
+      Bildband: []
+      Plaatwerken (vorm): []
+      Billedværker: []
+      Pictures: []
+    reason: Only 35 of 355 books are photography; checked book by book (Visual Arts
+      and Photography subjects).
+    books: 355
+    saved_searches: 0
+  67706:
+    name: Shonen
+    action: merge
+    into: Manga
+    books: 164
+    saved_searches: 0
+  67707:
+    name: Shojo
+    action: merge
+    into: Manga
+    books: 10
+    saved_searches: 0
+  68223:
+    name: Procedural
+    action: rename
+    to: Police Procedural
+    books: 214
+    saved_searches: 0
+  68725:
+    name: Smut
+    action: merge
+    into: Erotica
+    reason: One book.
+    books: 1
+    saved_searches: 0
+  71140:
+    name: Comics Manga
+    action: merge
+    into: Manga
+    reason: Duplicate spelling.
+    books: 11
+    saved_searches: 1
+  76563:
+    name: Lesbian Fantasy
+    action: split
+    into:
+    - Fantasy
+    - subject: LGBTQ+
+      target_id: 23570
+    worldcat_terms: {}
+    books: 2
+    saved_searches: 0
+  83449:
+    name: Military Thriller
+    action: merge
+    into: Thriller & Suspense
+    reason: One book.
+    books: 1
+    saved_searches: 0
