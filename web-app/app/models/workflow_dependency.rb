@@ -15,9 +15,9 @@
 #
 # Indexes
 #
-#  idx_on_step_id_prerequisite_step_id_a38419b889       (step_id,prerequisite_step_id) UNIQUE
-#  index_workflow_dependencies_on_prerequisite_step_id  (prerequisite_step_id)
-#  index_workflow_dependencies_on_step_id               (step_id)
+#  index_workflow_dependencies_on_prerequisite_step_id         (prerequisite_step_id)
+#  index_workflow_dependencies_on_step_and_prerequisite        (step_id,prerequisite_step_id) UNIQUE
+#  index_workflow_dependencies_open_on_prerequisite_step_id    (prerequisite_step_id) WHERE (satisfied_at IS NULL)
 #
 # Foreign Keys
 #

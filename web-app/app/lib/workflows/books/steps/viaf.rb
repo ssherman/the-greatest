@@ -27,7 +27,9 @@ module Workflows
 
         def call(step:, run:, target:)
           refresh = run.options.fetch("refresh", false)
-          in_line = step.result["in_line"] == true
+          # In-line is the step's own result once it has one. Before that, a run
+          # planned by the ViafJob shim carries the old message's flag as an option.
+          in_line = step.result.fetch("in_line") { run.options["in_line"] } == true
 
           # A step not yet in the line waits behind anyone already in it, rather
           # than competing with them for VIAF's two requests a minute.

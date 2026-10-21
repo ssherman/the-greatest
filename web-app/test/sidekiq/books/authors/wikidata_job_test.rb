@@ -26,13 +26,19 @@ class Books::Authors::WikidataJobTest < ActiveSupport::TestCase
     assert_equal [false, "legacy_job"], [planned.options["allow_research"], planned.initiated_by]
   end
 
-  test "refresh carries into the run, and so does via_viaf, which was a forced hop" do
+  test "refresh carries into a full run" do
     Books::Authors::WikidataJob.new.perform(@author.id, true)
-    assert_equal [true, true], planned.options.values_at("refresh", "allow_research")
-    planned.update!(status: :cancelled)
 
-    Books::Authors::WikidataJob.new.perform(@author.id, false, true)
-    assert_equal true, WorkflowRun.running.find_by!(enrichable: @author).options["refresh"]
+    assert_equal [true, true, nil], planned.options.values_at("refresh", "allow_research", "only")
+  end
+
+  test "via_viaf was the forced hop after a VIAF match: a run of just the forced Wikidata step and the AI step" do
+    Books::Authors::WikidataJob.new.perform(@author.id, false, true, false)
+
+    run = planned
+    assert_equal [true, false, %w[wikidata author_facts]], run.options.values_at("refresh", "allow_research", "only")
+    assert_equal %w[ready blocked], %w[wikidata author_facts].map { run.step(it).state }
+    assert_equal ["not_requested"], %w[viaf wikidata_via_viaf author_facts_late].map { run.step(it).outcome }.uniq
   end
 
   test "an author with an active run gets no second one" do

@@ -76,7 +76,7 @@ A definition (`Workflows::Definition` subclass) declares `workflow` name, `versi
 | `key`, `queue` | The step's name and the Sidekiq queue it dispatches onto |
 | `adapter` | Anything responding to `call(step:, run:, target:)`; returns a `Workflows::Outcome` or raises |
 | `waits_on` | `{prerequisite_key => :finish \| :release}` |
-| `max_attempts` | Default 3 |
+| `max_attempts` | Default 3; the book workflow's `amazon` step uses 7 |
 | `lease` | How long a worker may hold the step before the sweep reclaims it (default 10 minutes) |
 | `skip_if` | `->(run) { "reason" or nil }`; a string skips the step with that outcome |
 | `on_terminal` | `->(step, target) { ... }`, a side effect run when a worker finishes or fails the step |
@@ -123,16 +123,19 @@ it for the transitional legacy hand-off (see below).
 4. **Execute.** The adapter runs outside any transaction. `WorkflowStepJob` has `retry: 0`: the
    workflow owns retries. `Sidekiq::Shutdown` is re-raised.
 5. **Finish** (`Coordinator.finish` / `fail`). Token-guarded: a worker whose lease was lost writes
-   nothing. A raise puts the step in `waiting` with `run_after` set to the backoff, `30 s x 4^(n-1)`
-   (30 s, 2 min, 8 min), and the next sweep after that wakes it; at `max_attempts` it is `failed`
-   and released instead. **Attempts count failures and expired leases,
+   nothing, and the dropped write is logged as a warning naming the step and token (the only symptom
+   of a lease shorter than the step's real run time). A raise puts the step in `waiting` with `run_after` set to the backoff, `30 s x 4^(n-1)`
+   (30 s, 2 min, 8 min, and so on up to `max_attempts`), and the next sweep after that wakes it; at
+   `max_attempts` it is `failed` and released instead. Attempts are per step: 3 by default, 7 for
+   `amazon` (about 11 hours of backoff in all, standing in for the weeks the old job kept retrying). **Attempts count failures and expired leases,
    not claims**, so a rate-limit wait or a deploy push-back never uses one up.
 6. **Advance** (`Coordinator.advance`). For each edge on a step that finished or was released:
    record it satisfied, lock the dependent `FOR UPDATE` (in id order), and evaluate it: `ready`,
    `waiting` (run_after in the future), `skipped` (its condition), or released through. A dependent
    that comes out skipped or released is advanced in turn. The conditional transitions make the
    advance exactly-once even when two prerequisites finish at the same moment. Every touched run with
-   no open step left is closed (`completed`, or `completed_with_failures` if any step failed).
+   no open step left is closed (`completed`, or `completed_with_failures` if any step failed, with `error_summary` set to the first
+   failed step's key and error, cut to 1,000 characters).
    **A `waiting` step is never dispatched from a finish**: only the sweep moves `waiting` to `ready`.
 7. **Cancel** (`Coordinator.cancel(run, outcome:)`). Skips every unfinished step with the outcome,
    releases each so nothing downstream waits on it, advances dependents in other runs, and marks the
@@ -200,8 +203,10 @@ Goodreads project will add its edges to this file. `start` is
 `Workflows::Books::BookEnrichment.start(book, initiated_by:, new_author_ids:, author_names:, options:)`.
 It starts an author run (or joins the active one) for each id in `new_author_ids`, whether or not the
 book is linked to it, and makes `book_facts` wait on those linked to the book. If the book already has
-an active run, that run is returned untouched and the event is logged. Dispatch happens after the
-outermost commit; the plan rows are written in the caller's transaction.
+an active run, that run is returned untouched and the event is logged. A joined author run whose
+`wikidata` step is a backfill-paced wait (`waiting`, never attempted, `run_after` in the future) is
+pulled forward to now, so the book is not held for days by the backfill's pacing. Dispatch happens after
+the outermost commit; the plan rows are written in the caller's transaction.
 
 Callers: `DataImporters::Books::Book::Providers::Enrichment` (importer with `enrich: true`, and the
 list wizard's text rows) and `Services::Books::GoodreadsImports::PromoteRecords` (admin approval of a
@@ -281,9 +286,12 @@ result. For example, a `goodreads` step in the book workflow (the same applies t
    prerequisite with `run.step(:goodreads).result`.
 4. Use `skip_if: ->(run) { "reason" if ... }` for a step that should not run; it is evaluated at
    advance time, never by dispatch.
-5. **Bump `version`** on the definition when the step set changes, so in-flight runs keep the shape
-   they were planned with. A step key missing from the current definition is finished as
-   `unknown_step`, never wedged.
+5. **Bump `version`** on the definition when the step set changes. It is recorded on the run, but
+   nothing reads it: adapters, `skip_if` and `on_terminal` always come from the *current* definition,
+   and a step key missing from it is finished as `unknown_step`, never wedged. So an adapter or
+   `skip_if` must tolerate a step missing from a run planned under an older definition: use
+   `run.steps.find_by(key:)` and treat nil as "not present", never `run.step(:key)` followed by a
+   method call. The Goodreads change has to follow this for runs already in flight.
 6. Test with `Workflows::TestDefinitionHelpers` and `stub_workflow_dispatch` (Sidekiq runs inline in
    tests, so an unstubbed dispatch runs the whole workflow). The helper `workflow_run` is the
    memoized run; `plan_other_run` plants a second one for cross-run waits.

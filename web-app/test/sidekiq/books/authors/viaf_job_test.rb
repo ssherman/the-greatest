@@ -25,6 +25,36 @@ class Books::Authors::ViafJobTest < ActiveSupport::TestCase
     assert_equal ["viaf", true, "legacy_job"], run.options.values_at("start_at", "skip_ai_if_ran") + [run.initiated_by]
   end
 
+  test "an old message's in_line flag keeps its place in the line: the step asks VIAF instead of taking a new turn" do
+    freeze_time
+    schedule = ::Viaf::Schedule.new(redis: ::Books::OpenLibrary::FakeRedis.new)
+    ::Viaf::Schedule.stubs(:new).returns(schedule)
+    schedule.reserve(not_before: 30) # someone else is waiting in the line
+    outcome = ::Services::Books::Authors::EnrichFromViaf::Result.new(success?: true,
+      data: {outcome: :matched, wikidata_qid: nil, decision: nil}, errors: [])
+    ::Services::Books::Authors::EnrichFromViaf.expects(:call).once.returns(outcome)
+
+    Books::Authors::ViafJob.new.perform(@author.id, false, false, true, true)
+
+    run = WorkflowRun.find_by!(enrichable: @author)
+    result = Workflows::Books::Steps::Viaf.new.call(step: run.step(:viaf), run: run, target: @author)
+    assert_equal [true, :succeeded], [run.options["in_line"], result.kind]
+  end
+
+  test "a message that was not in the line joins it when someone is waiting" do
+    freeze_time
+    schedule = ::Viaf::Schedule.new(redis: ::Books::OpenLibrary::FakeRedis.new)
+    ::Viaf::Schedule.stubs(:new).returns(schedule)
+    schedule.reserve(not_before: 30)
+    ::Services::Books::Authors::EnrichFromViaf.expects(:call).never
+
+    Books::Authors::ViafJob.new.perform(@author.id, false, false, true, false)
+
+    run = WorkflowRun.find_by!(enrichable: @author)
+    result = Workflows::Books::Steps::Viaf.new.call(step: run.step(:viaf), run: run, target: @author)
+    assert_equal :wait, result.kind
+  end
+
   test "refresh and research carry into the run, and an AI step not yet queued is not skipped" do
     Books::Authors::ViafJob.new.perform(@author.id, true, false, false)
 

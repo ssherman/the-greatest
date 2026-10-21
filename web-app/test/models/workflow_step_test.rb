@@ -31,7 +31,6 @@ require "test_helper"
 #  index_workflow_steps_on_state_and_dispatched_at     (state,dispatched_at)
 #  index_workflow_steps_on_state_and_lease_expires_at  (state,lease_expires_at)
 #  index_workflow_steps_on_state_and_run_after         (state,run_after)
-#  index_workflow_steps_on_workflow_run_id             (workflow_run_id)
 #  index_workflow_steps_on_workflow_run_id_and_key     (workflow_run_id,key) UNIQUE
 #
 # Foreign Keys

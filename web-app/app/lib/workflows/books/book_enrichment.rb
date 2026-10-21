@@ -20,7 +20,11 @@ module Workflows
       add_step key: :book_facts, queue: :low, lease: 15.minutes,
         adapter: Steps::BookFacts.new
 
-      add_step key: :amazon, queue: :serial, lease: 10.minutes,
+      # Seven attempts: 30 s x 4^n backoff adds up to about 11 hours. The old job
+      # retried for weeks, and amazon_enriched_at is stamped on the first pass, so
+      # nothing but the ranked sweep (books:amazon_enrich_ranked) would ever try
+      # a failed book again.
+      add_step key: :amazon, queue: :serial, lease: 10.minutes, max_attempts: 7,
         adapter: Steps::Amazon.new
 
       # Plans a book run and dispatches what is ready once the caller's
@@ -56,11 +60,24 @@ module Workflows
           else
             # Display only: the first book run to ask keeps the author run.
             WorkflowRun.where(id: author_runs.values.map(&:id), parent_run_id: nil).update_all(parent_run_id: run.id)
+            pull_forward_paced_wikidata(waited_on)
           end
           Workflows::Dispatcher.after_commit(result.data[:ready_steps])
           run
         end
       end
+
+      # A book that joins an author run planned with start_after (a backfill's
+      # pacing, which can be days off) would sit in book_facts for all of it. The
+      # book's own import wants the author now, so the paced Wikidata step wakes
+      # at the next sweep. Only a step that never ran (attempts 0): a failure's
+      # backoff waits are not pacing, and are left alone.
+      def self.pull_forward_paced_wikidata(author_runs)
+        now = Time.current
+        WorkflowStep.where(workflow_run_id: author_runs.map(&:id), key: "wikidata", state: :waiting, attempts: 0)
+          .where("run_after > ?", now).update_all(run_after: now, updated_at: now)
+      end
+      private_class_method :pull_forward_paced_wikidata
     end
   end
 end

@@ -52,6 +52,11 @@ module Workflows
         assert_equal [{}, {}], BookEnrichment.steps.map(&:waits_on)
       end
 
+      test "amazon gets seven attempts (about 11 hours of backoff) where the others get three" do
+        assert_equal [3, 7], BookEnrichment.steps.map(&:max_attempts)
+        assert_equal [3, 7], start.steps.order(:id).pluck(:max_attempts)
+      end
+
       test "a book with no new authors makes book_facts and amazon ready at once" do
         run = start
 
@@ -133,6 +138,29 @@ module Workflows
           assert_equal [facts], prerequisites_of(run.step(:book_facts))
         end
         assert_equal run_ids(existing), run_ids(author_run(tolstoy))
+      end
+
+      test "a book joining a backfill-paced author run pulls the paced Wikidata step forward" do
+        tolstoy_author_facts
+        paced = workflow_runs(:tolstoy_author_run).step(:wikidata)
+        paced.update_columns(state: WorkflowStep.states[:waiting], run_after: 3.days.from_now)
+
+        freeze_time do
+          start(books_books(:war_and_peace), new_author_ids: [books_authors(:tolstoy).id])
+
+          assert_equal Time.current, paced.reload.run_after
+        end
+        assert_equal "waiting", paced.state
+      end
+
+      test "a failure's backoff wait on the joined author run is not pulled forward" do
+        tolstoy_author_facts
+        backoff = workflow_runs(:tolstoy_author_run).step(:wikidata)
+        backoff.update_columns(state: WorkflowStep.states[:waiting], run_after: 2.minutes.from_now, attempts: 1)
+
+        start(books_books(:war_and_peace), new_author_ids: [books_authors(:tolstoy).id])
+
+        assert_operator backoff.reload.run_after, :>, 1.minute.from_now
       end
 
       test "an author whose AI step is already released does not hold the book" do

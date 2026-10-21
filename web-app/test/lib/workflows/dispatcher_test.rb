@@ -40,6 +40,14 @@ module Workflows
       assert_equal [[nil, 0], [nil, 0]], %i[a b].map { workflow_run.step(it).reload.values_at(:dispatched_at, :dispatch_count) }
     end
 
+    test "any error on a step is logged and swallowed, since the caller's transaction already committed" do
+      WorkflowStepJob.stubs(:set).raises(ConnectionPool::TimeoutError, "no connection")
+      step_a = workflow_run.step(:a)
+      Rails.logger.expects(:error).with { it.include?("step #{step_a.id}") && it.include?("ConnectionPool::TimeoutError") }.once
+      assert_nothing_raised { Workflows::Dispatcher.dispatch([step_a]) }
+      assert_equal [nil, 0], step_a.reload.values_at(:dispatched_at, :dispatch_count)
+    end
+
     test "a failed enqueue does not stop the remaining steps from being dispatched" do
       Sidekiq::Testing.fake! do
         setter = WorkflowStepJob.set(queue: "author_chain")

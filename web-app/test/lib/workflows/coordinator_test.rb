@@ -105,6 +105,42 @@ module Workflows
       assert_equal "completed_with_failures", workflow_run.reload.status
     end
 
+    test "a run that ends completed_with_failures records the first failed step's key and error, truncated" do
+      workflow_run.steps.update_all(state: WorkflowStep.states[:succeeded])
+      workflow_run.step(:b).update!(state: :failed, error: "StandardError: boom " + ("x" * 2000))
+      workflow_run.step(:c).update!(state: :failed, error: "StandardError: later")
+      Coordinator.close_if_finished(workflow_run)
+
+      summary = workflow_run.reload.error_summary
+      assert summary.start_with?("b: StandardError: boom")
+      assert_equal 1_000, summary.length
+    end
+
+    test "a run that completes cleanly has no error summary" do
+      workflow_run.steps.update_all(state: WorkflowStep.states[:succeeded])
+      Coordinator.close_if_finished(workflow_run)
+
+      assert_nil workflow_run.reload.error_summary
+    end
+
+    test "a stale finish, wait or fail is dropped with a warning naming the step and token" do
+      step = workflow_run.step(:a)
+      Coordinator.claim(step.id, token: "new")
+      Rails.logger.expects(:warn).with { it.include?("step #{step.id}") && it.include?("token old") }.times(3)
+
+      Coordinator.finish(step, token: "old", outcome: Workflows::Outcome.succeeded("x"))
+      Coordinator.finish(step, token: "old", outcome: Workflows::Outcome.wait(1.minute.from_now))
+      Coordinator.fail(step, token: "old", error: RuntimeError.new("late"))
+    end
+
+    test "a finish by the lease holder logs no warning" do
+      step = workflow_run.step(:a)
+      Coordinator.claim(step.id, token: "t")
+      Rails.logger.expects(:warn).never
+
+      Coordinator.finish(step, token: "t", outcome: Workflows::Outcome.succeeded("x"))
+    end
+
     test "cancel skips every non-terminal step with the outcome and cancels the run" do
       workflow_run.step(:a).update!(state: :succeeded, outcome: "done", finished_at: Time.current, released_at: Time.current)
       workflow_run.step(:b).update!(state: :running, lease_token: "t", lease_expires_at: 5.minutes.from_now)

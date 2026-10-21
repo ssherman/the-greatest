@@ -11,9 +11,11 @@ module Workflows
       # Enqueues each step that is ready now. Readiness is read from the
       # database: the steps the coordinator returns are in-memory rows from
       # before their update_all, and a step claimed by a worker in the meantime
-      # must not be queued again. Never raises: a Redis outage on one step is
-      # logged and leaves that step's dispatched_at and dispatch_count alone,
-      # which is exactly what the sweep looks for.
+      # must not be queued again. Never raises: any failure on one step (a Redis
+      # outage, a pool timeout, a database error in the counter update) is logged
+      # and leaves that step's dispatched_at alone, which is exactly what the
+      # sweep looks for. The caller's transaction has already committed, so an
+      # error here would only turn a finished write into an exception.
       def dispatch(steps)
         Array(steps).each do |step|
           current = WorkflowStep.find_by(id: step.id)
@@ -32,7 +34,7 @@ module Workflows
       def enqueue(step)
         WorkflowStepJob.set(queue: step.queue).perform_async(step.id)
         WorkflowStep.where(id: step.id).update_all(["dispatched_at = ?, dispatch_count = dispatch_count + 1", Time.current])
-      rescue RedisClient::Error => e
+      rescue => e
         Rails.logger.error("Workflows::Dispatcher: could not enqueue step #{step.id}: #{e.class}: #{e.message}")
       end
     end

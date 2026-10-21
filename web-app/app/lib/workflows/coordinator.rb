@@ -92,6 +92,7 @@ module Workflows
           RETURNING *
         SQL
         failed = WorkflowStep.find_by_sql(sql).first
+        warn_stale_write(step, token, "fail") if failed.nil?
         return [] unless failed&.failed?
 
         settle_terminal(failed)
@@ -187,13 +188,20 @@ module Workflows
         return false if states.empty? || states.any? { |state| !WorkflowStep::TERMINAL_STATES.include?(state) }
 
         status = states.include?("failed") ? :completed_with_failures : :completed
-        WorkflowRun.where(id: run.id, status: :running).update_all(status: WorkflowRun.statuses[status],
-          finished_at: Time.current, updated_at: Time.current).positive?
+        attributes = {status: WorkflowRun.statuses[status], finished_at: Time.current, updated_at: Time.current}
+        attributes[:error_summary] = error_summary(run) if status == :completed_with_failures
+        WorkflowRun.where(id: run.id, status: :running).update_all(attributes).positive?
       end
 
       private
 
       def running_state = WorkflowStep.states[:running]
+
+      # The first failed step's key and error, for the admin panel's run header.
+      def error_summary(run)
+        failed = run.steps.where(state: :failed).order(:id).first
+        "#{failed.key}: #{failed.error}".truncate(MAX_ERROR_LENGTH)
+      end
 
       def ready_state = WorkflowStep.states[:ready]
 
@@ -204,7 +212,10 @@ module Workflows
           "released_at = COALESCE(released_at, ?), lease_token = NULL, lease_expires_at = NULL, updated_at = ?",
           WorkflowStep.states[outcome.kind], outcome.outcome, outcome.result.to_json, now, now, now
         ])
-        return [] if updated.zero?
+        if updated.zero?
+          warn_stale_write(step, token, "finish")
+          return []
+        end
 
         settle_terminal(step.reload)
       end
@@ -220,11 +231,20 @@ module Workflows
             "lease_expires_at = NULL, updated_at = ?",
             WorkflowStep.states[:waiting], outcome.run_after, outcome.result.to_json, now
           ])
+          warn_stale_write(step, token, "wait") if updated.zero?
           if updated.positive? && outcome.release
             released = WorkflowStep.where(id: step.id, released_at: nil).update_all(released_at: now, updated_at: now).positive?
           end
         end
         released ? advance(step.reload) : []
+      end
+
+      # A token-guarded write that changed nothing: the lease was reclaimed while
+      # this worker was still running (or the step was cancelled). The log line is
+      # the only symptom of a lease set shorter than the step's real run time.
+      def warn_stale_write(step, token, action)
+        Rails.logger.warn("Workflows::Coordinator: stale #{action} dropped for step #{step.id} (token #{token}); " \
+          "its lease was reclaimed or the step is no longer running")
       end
 
       # The step, but only while this worker still holds its lease.
