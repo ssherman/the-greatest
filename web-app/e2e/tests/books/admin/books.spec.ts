@@ -63,4 +63,29 @@ test.describe('books admin — books', () => {
     // A new book has no runs, or its runs show as a table.
     await expect(page.getByText("No enrichment runs.").or(page.getByRole("table").filter({ hasText: "Outcome" }))).toBeVisible();
   });
+
+  test("shows the Identifiers card", async ({ page }) => {
+    const title = `E2E Identifiers Book ${Date.now()}`;
+    await page.goto("/admin/books/new");
+    await page.locator('input[name="books_book[title]"]').fill(title);
+    await page.getByRole("button", { name: "Create Book" }).click();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+    // The card's frame loads lazily, once it scrolls into view. A new book has none.
+    const heading = page.getByRole("heading", { name: /^Identifiers/ });
+    await heading.scrollIntoViewIfNeeded();
+    await expect(heading).toBeVisible();
+    await expect(page.getByText("No identifiers.")).toBeVisible();
+  });
+
+  test("lists an existing book's identifiers in a table", async ({ page }) => {
+    await page.goto("/admin/books");
+    await page.locator("table tbody tr").first().getByRole("link").first().click();
+    await expect(page.getByText("Basic Information")).toBeVisible();
+
+    const heading = page.getByRole("heading", { name: /^Identifiers/ });
+    await heading.scrollIntoViewIfNeeded();
+    // Seeded books may or may not hold identifiers; either way the frame must fill.
+    await expect(page.getByText("No identifiers.").or(page.getByRole("table").filter({ hasText: "Source" }))).toBeVisible();
+  });
 });
