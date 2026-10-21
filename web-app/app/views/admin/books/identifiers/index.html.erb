@@ -1,0 +1,35 @@
+<% stamp = ->(time) { time.strftime("%Y-%m-%d %H:%M") } %>
+<%= turbo_frame_tag "identifiers_list" do %>
+  <% if @identifiers.empty? %>
+    <p class="text-base-content/60 text-sm">No identifiers.</p>
+  <% else %>
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Value</th>
+            <th>Source</th>
+            <th>Added</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @identifiers.each do |identifier| %>
+            <tr>
+              <td><%= identifier.identifier_type&.titleize %></td>
+              <td class="font-mono text-sm break-all"><%= identifier.value %></td>
+              <td><%= identifier.source&.titleize || "–" %></td>
+              <td class="whitespace-nowrap"><%= stamp.call(identifier.created_at) %></td>
+              <td class="whitespace-nowrap"><%= stamp.call(identifier.updated_at) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+    <%# Page links stay inside this frame on purpose: paging swaps only the table. %>
+    <% if @pagy.pages > 1 %>
+      <div class="mt-4 flex justify-center"><%== @pagy.series_nav %></div>
+    <% end %>
+  <% end %>
+<% end %>

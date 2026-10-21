@@ -707,6 +707,7 @@ Rails.application.routes.draw do
         resources :credits, only: [:create]
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
         resources :workflow_runs, only: [:index]
+        resources :identifiers, only: [:index]
         member do
           post :execute_action
         end
