@@ -235,7 +235,7 @@ module Workflows
 
     test "finish calls on_terminal with the step and its target, and skips it when the target is gone" do
       finish(:x, Workflows::Outcome.succeeded("done"), run: plan_chain)
-      assert_equal [["x", Books::Author]], ChainDefinition::TERMINATED
+      assert_equal [["x", ::Books::Author]], ChainDefinition::TERMINATED
 
       gone = plan_chain(supersede: true)
       gone.update_columns(enrichable_id: -1)

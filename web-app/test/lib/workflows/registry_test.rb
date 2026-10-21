@@ -23,7 +23,7 @@ module Workflows
       assert_equal [:a, :b, :c], definition.steps.map(&:key)
       assert_equal({a: :finish, b: :release}, definition.step(:c).waits_on)
       assert_nil definition.step(:nope)
-      assert_equal [Books::Author, 1], [definition.target_class, definition.version]
+      assert_equal [::Books::Author, 1], [definition.target_class, definition.version]
     end
 
     test "step build applies the defaults" do

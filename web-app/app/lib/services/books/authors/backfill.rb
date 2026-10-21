@@ -46,7 +46,7 @@ module Services
           waiting = @queued || QueuedChain.author_ids
           wikidata = take(ranked(self.class.unprocessed).pluck(:id), waiting)
           viaf = take(viaf_retries.order(:id).pluck(:id), waiting)
-          ran = ai_step_ran(viaf)
+          ran = LedgerRun.ai_step_ran_ids(viaf)
 
           wikidata.each_with_index do |id, index|
             ::Books::Authors::WikidataJob.perform_in(index * SPACING, id, false, false, false)
@@ -86,21 +86,6 @@ module Services
             .where(id: wikidata.where(outcome: :unrecognized).select(:enrichable_id))
             .where.not(id: wikidata.where(outcome: %w[applied nothing_to_apply]).select(:enrichable_id))
             .where.not(id: LedgerRun.processed(EnrichFromViaf::KIND).select(:enrichable_id))
-        end
-
-        # Authors whose AI step already completed this era (a non-failed
-        # books.author_facts row newer than the author row): their VIAF
-        # retry must not queue it again. A failed row means every retry was
-        # exhausted and the step never completed, so it does not count. A
-        # lost chain never reached it, so theirs does.
-        def ai_step_ran(ids)
-          return Set.new if ids.empty?
-
-          ::Enrichment.for_kind(EnrichAuthor::KIND).where(enrichable_type: "Books::Author", enrichable_id: ids)
-            .where.not(outcome: :failed)
-            .joins("INNER JOIN books_authors ON books_authors.id = enrichments.enrichable_id")
-            .where("enrichments.created_at > books_authors.created_at")
-            .distinct.pluck(:enrichable_id).to_set
         end
       end
     end

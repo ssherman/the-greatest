@@ -48,6 +48,20 @@ module Services
           assert_equal [[wikidata.id], [viaf.id]],
             [processed_ids & [wikidata.id, viaf.id], processed_ids(EnrichFromViaf::KIND) & [wikidata.id, viaf.id]]
         end
+
+        test "ai_step_ran_ids: a non-failed AI row newer than the author counts; a failed, stale or other-kind row does not" do
+          ran = author("Ran").tap { |a| row(a, :applied, kind: EnrichAuthor::KIND) }
+          failed = author("Failed").tap { |a| row(a, :failed, kind: EnrichAuthor::KIND) }
+          stale = author("Stale").tap { |a| row(a, :applied, kind: EnrichAuthor::KIND, at: a.created_at - 1.day) }
+          other = author("Other").tap { |a| row(a, :applied) }
+          ids = [ran, failed, stale, other].map(&:id)
+
+          assert_equal Set[ran.id], LedgerRun.ai_step_ran_ids(ids)
+        end
+
+        test "ai_step_ran_ids of nothing is empty without a query" do
+          assert_equal Set.new, LedgerRun.ai_step_ran_ids([])
+        end
       end
     end
   end

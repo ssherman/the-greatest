@@ -15,7 +15,11 @@ module Workflows
 
     # Come back at `until_time` without using an attempt (rate limit, queue
     # position). `release: true` lets dependents proceed while the step waits.
+    # A nil time is refused: the sweep only wakes a step whose run_after has
+    # passed, so the step would wait forever.
     def self.wait(until_time, release: false, result: {})
+      raise ArgumentError, "Outcome.wait needs a time to wake at" if until_time.nil?
+
       new(kind: :wait, outcome: nil, result: result, run_after: until_time, release: release)
     end
   end

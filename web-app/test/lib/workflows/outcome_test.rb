@@ -8,6 +8,10 @@ module Workflows
       assert_equal Time.zone.parse("2026-10-20 12:00"), outcome.run_after
     end
 
+    test "wait without a time is refused: the sweep only wakes a step whose run_after has passed" do
+      assert_raises(ArgumentError) { Workflows::Outcome.wait(nil) }
+    end
+
     test "wait does not release by default" do
       outcome = Workflows::Outcome.wait(1.minute.from_now)
       assert_equal [false, {}], [outcome.release, outcome.result]
