@@ -208,7 +208,22 @@ list wizard's text rows) and `Services::Books::GoodreadsImports::PromoteRecords`
 Goodreads import). Member Goodreads imports run with `enrich: false` and plan nothing until approval.
 The admin **Enrich With AI** button still queues `EnrichBookJob`, `books:enrich_missing` enqueues
 `EnrichBookJob`, and `books:amazon_enrich*` queue or run `AmazonProductEnrichmentJob`; `books:enrich[id]`
-runs `Services::Books::EnrichBook` inline. None of them creates a run.
+runs `Services::Books::EnrichBook` inline. None of them creates a run. `books:enrich_missing` does
+skip a book that has a running book run.
+
+### Adopting deferred books
+
+Before the book workflow, an import with new authors wrote a skipped `books.book_facts` ledger row
+with reason `deferred_to_authors`, and the author chain's last step handed the book on. A book whose
+latest row is still that deferral has no run, and nothing will release it if its author finished long
+ago. `bin/rails books:workflows:adopt_deferred[limit]` (`Workflows::Books::AdoptDeferred`, a one-off
+after PR 2 deploys) plans one for each: `initiated_by: "adopt_deferred"`, `only: [book_facts]` so
+Amazon is `not_requested`, and `book_facts` waits on the `author_facts` step of every linked author
+that has a **running** author run. It never starts an author run: a deferred book whose authors have
+none gets a `book_facts` that is ready at once. A book that already has a running book run is counted
+as `skipped_active` and left alone, so a second call plans nothing new; once a book's `book_facts` has
+run, its newer ledger row takes it out of the deferred set. The limit caps the books planned, lowest
+id first.
 
 ## Admin panel
 

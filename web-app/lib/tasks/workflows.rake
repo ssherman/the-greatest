@@ -17,3 +17,17 @@ namespace :workflows do
     end
   end
 end
+
+namespace :books do
+  namespace :workflows do
+    desc "One-off after the book workflow deploys: plan a book_facts run for every book still deferred to its " \
+      "authors, waiting on any active author run; the limit is optional. Safe to re-run: bin/rails books:workflows:adopt_deferred[500]"
+    task :adopt_deferred, [:limit] => :environment do |_task, args|
+      limit = args[:limit].presence&.to_i
+      abort "Usage: bin/rails books:workflows:adopt_deferred[limit] -- the limit is optional, but a positive number" if limit && !limit.positive?
+
+      counts = ::Workflows::Books::AdoptDeferred.call(limit: limit)
+      puts "Planned #{counts[:planned]} book run(s); left #{counts[:skipped_active]} book(s) that already have a running book run."
+    end
+  end
+end

@@ -167,6 +167,13 @@ the sync never undoes them.
    - What remains is capacity. A `/resolve` takes about 13 s, and every caller shares the one slot.
      A client that cannot get the slot within its budget gives up, and the finder decides that row
      without Open Library. Watch the flag rate when many members upload at once after launch.
+8. **Books still deferred to their authors, once, after PR 2 of the enrichment workflows deploys.**
+   Run `bin/rails books:workflows:adopt_deferred` (an optional `[limit]` caps the books planned).
+   Books whose latest `books.book_facts` row is `deferred_to_authors` get a `book_facts` run that waits
+   on their authors' active runs. It does not start author runs or run Amazon, and a second run
+   plans nothing new (it prints how many books it left because they already have a run). It needs
+   Sidekiq running, and it does not change the catalog, so it does not have to wait for section 2.
+   Details: `docs/features/enrichment-workflows.md`.
 
 ### Decide at launch
 
