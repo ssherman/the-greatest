@@ -23,6 +23,7 @@
 #  ai_chat_id        :bigint
 #  enrichable_id     :bigint           not null
 #  match_decision_id :bigint
+#  workflow_step_id  :bigint
 #
 # Indexes
 #
@@ -32,11 +33,13 @@
 #  index_enrichments_on_match_decision_id    (match_decision_id)
 #  index_enrichments_on_mode_and_created_at  (mode,created_at)
 #  index_enrichments_on_outcome              (outcome)
+#  index_enrichments_on_workflow_step_id     (workflow_step_id)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (ai_chat_id => ai_chats.id) ON DELETE => nullify
 #  fk_rails_...  (match_decision_id => match_decisions.id) ON DELETE => nullify
+#  fk_rails_...  (workflow_step_id => workflow_steps.id) ON DELETE => nullify
 #
 class Enrichment < ApplicationRecord
   KIND_FORMAT = /\A[a-z_]+\.[a-z_]+\z/
@@ -44,6 +47,10 @@ class Enrichment < ApplicationRecord
   belongs_to :enrichable, polymorphic: true
   belongs_to :ai_chat, optional: true
   belongs_to :match_decision, optional: true
+  belongs_to :workflow_step, optional: true
+
+  # Rows written while a workflow step runs link to it, whichever provider wrote them.
+  before_create { self.workflow_step_id ||= Current.workflow_step_id }
 
   enum :mode, {knowledge: 0, research: 1}
   enum :outcome, {applied: 0, nothing_to_apply: 1, unrecognized: 2, skipped: 3, failed: 4}

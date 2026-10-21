@@ -706,6 +706,7 @@ Rails.application.routes.draw do
         resources :book_relationships, only: [:create]
         resources :credits, only: [:create]
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
+        resources :workflow_runs, only: [:index]
         member do
           post :execute_action
         end
@@ -723,6 +724,7 @@ Rails.application.routes.draw do
         resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         resources :author_relationships, only: [:create]
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
+        resources :workflow_runs, only: [:index]
         member do
           post :execute_action
         end

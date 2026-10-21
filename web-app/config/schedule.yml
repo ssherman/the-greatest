@@ -35,3 +35,8 @@ recommendations_load_books:
   cron: "15 * * * *"
   args: ["books"]
   description: "Load the latest collaborative-filtering model the home server published"
+
+workflow_recovery:
+  class: WorkflowRecoveryJob
+  cron: "0 * * * * *"
+  description: "Redispatch lost or due workflow steps"

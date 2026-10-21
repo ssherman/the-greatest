@@ -33,7 +33,7 @@ class BooksAuthorsRakeTest < ActiveSupport::TestCase
     ::Services::Books::Authors::Backfill.expects(:call).with(limit: 100).returns(result)
     ::Services::Books::Authors::Backfill.expects(:call).with(limit: nil).returns(result)
 
-    assert_output(/Queued 2 author\(s\) for the Wikidata step/) { @task.invoke("100") }
+    assert_output(/Planned 2 author run\(s\) starting at the Wikidata step/) { @task.invoke("100") }
     @task.reenable
     assert_output(/books:authors:enrich_report\[/) { @task.invoke("all") }
   end

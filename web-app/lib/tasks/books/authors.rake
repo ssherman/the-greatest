@@ -12,10 +12,10 @@ namespace :books do
       started = Time.current
       data = ::Services::Books::Authors::Backfill.call(limit: limit).data
       spacing = ::Services::Books::Authors::Backfill::SPACING
-      puts "Queued #{data[:wikidata]} author(s) for the Wikidata step, one every #{spacing}s; " \
+      puts "Planned #{data[:wikidata]} author run(s) starting at the Wikidata step, one every #{spacing}s; " \
         "the last starts about #{data[:wikidata_done_at].utc.iso8601}."
-      puts "Queued #{data[:viaf]} author(s) to retry the VIAF step." if data[:viaf].positive?
-      puts "Left out #{data[:left_out]} author(s) with a chain job already waiting in Sidekiq." if data[:left_out].positive?
+      puts "Planned #{data[:viaf]} author run(s) starting at the VIAF step to retry it." if data[:viaf].positive?
+      puts "Left out #{data[:left_out]} author(s) that already have an active run or a chain job waiting in Sidekiq." if data[:left_out].positive?
       puts "Wikidata misses go on to VIAF at about two requests a minute; each author's AI step follows its last record step."
       puts "Report: bin/rails \"books:authors:enrich_report[#{started.utc.iso8601}]\""
     end

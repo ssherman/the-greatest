@@ -22,6 +22,7 @@ require "test_helper"
 #  ai_chat_id        :bigint
 #  enrichable_id     :bigint           not null
 #  match_decision_id :bigint
+#  workflow_step_id  :bigint
 #
 # Indexes
 #
@@ -31,11 +32,13 @@ require "test_helper"
 #  index_enrichments_on_match_decision_id    (match_decision_id)
 #  index_enrichments_on_mode_and_created_at  (mode,created_at)
 #  index_enrichments_on_outcome              (outcome)
+#  index_enrichments_on_workflow_step_id     (workflow_step_id)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (ai_chat_id => ai_chats.id) ON DELETE => nullify
 #  fk_rails_...  (match_decision_id => match_decisions.id) ON DELETE => nullify
+#  fk_rails_...  (workflow_step_id => workflow_steps.id) ON DELETE => nullify
 #
 class EnrichmentTest < ActiveSupport::TestCase
   test "fixtures cover every outcome" do
@@ -99,6 +102,28 @@ class EnrichmentTest < ActiveSupport::TestCase
   test "low_confidence_on finds rows by a fact's confidence" do
     assert_includes Enrichment.low_confidence_on(:word_count), enrichments(:war_and_peace_facts_applied)
     assert_not_includes Enrichment.low_confidence_on(:first_published_year), enrichments(:war_and_peace_facts_applied)
+  end
+
+  test "stamps the current workflow step on create" do
+    step = workflow_steps(:tolstoy_wikidata)
+    row = Current.set(workflow_step_id: step.id) do
+      books_authors(:tolstoy).enrichments.create!(kind: "books.author_facts", outcome: :skipped, reason: "test")
+    end
+    assert_equal step.id, row.workflow_step_id
+  end
+
+  test "has no workflow step when created outside a step" do
+    row = books_authors(:tolstoy).enrichments.create!(kind: "books.author_facts", outcome: :skipped, reason: "test")
+    assert_nil row.workflow_step_id
+  end
+
+  test "keeps its row when its workflow step is deleted" do
+    step = workflow_steps(:tolstoy_wikidata)
+    row = Current.set(workflow_step_id: step.id) do
+      books_authors(:tolstoy).enrichments.create!(kind: "books.author_facts", outcome: :skipped, reason: "test")
+    end
+    step.delete
+    assert_nil row.reload.workflow_step_id
   end
 
   test "confidence enum is prefixed" do

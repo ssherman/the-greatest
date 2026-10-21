@@ -42,6 +42,16 @@ survive the weekly run. Do not merge, delete or edit books yet: the next `:all` 
 From then on `data_migration:all`, the catalog tasks and the user-data tasks the sync replaces refuse
 to run. Cleanup can start (section 5).
 
+## 2a. Right after the enrichment workflows deploy (once)
+
+Books still deferred to their authors. Run `bin/rails books:workflows:adopt_deferred` once PR 2 of
+the enrichment workflows is deployed and Sidekiq is running; an optional `[limit]` caps the books
+planned. Every book whose latest `books.book_facts` row is `deferred_to_authors` gets a `book_facts`
+run that waits on its authors' active runs. It does not start author runs or run Amazon, and it
+does not change the catalog, so it does not have to wait for section 2. A second run plans nothing
+new (it prints how many books it left because they already have a run). Details:
+`docs/features/enrichment-workflows.md`, "Adopting deferred books".
+
 ## 3. The collaborative-filtering model (once, after spec 2 increment 2 merges)
 
 Depends only on spec 2's increment 2 (the home-server timer) being merged, not on the switch-over.

@@ -230,13 +230,48 @@ module Services
             assert_equal ["/admin/lists", "/admin/lists/#{@list.id}"], [@adapter.lists_path, @adapter.list_path(@list)]
           end
 
-          test "creating a text row with the real importer queues AI enrichment and Amazon" do
+          test "creating a text row with the real importer runs the authors and enrichment providers only, and plans one book run" do
+            stub_workflow_dispatch
             row = wizard_row(@list, position: 1, title: "A Brand New Tolstoy Book", authors: ["Leo Tolstoy"], wizard: {bucket: "create"})
-            ::Books::EnrichBookJob.expects(:perform_async).once
-            ::Books::AmazonProductEnrichmentJob.unstub(:perform_async)
-            ::Books::AmazonProductEnrichmentJob.expects(:perform_async).once
+
             book = @adapter.create(row)
+
             assert book.persisted?
+            run = WorkflowRun.find_by!(enrichable: book, workflow: "books.book_enrichment")
+            assert_equal "importer", run.initiated_by
+            assert_equal ["authors", "enrichment"], Adapter::TEXT_PROVIDERS.map(&:to_s)
+          end
+
+          test "a created author is enriched and the new book waits on it" do
+            stub_workflow_dispatch
+            row = wizard_row(@list, position: 1, title: "A Book By A New Author", authors: ["Zelda Quillfeather"], wizard: {bucket: "create"})
+
+            book = @adapter.create(row)
+
+            author = book.authors.sole
+            author_run = WorkflowRun.find_by!(enrichable: author, workflow: "books.author_enrichment")
+            book_facts = WorkflowRun.find_by!(enrichable: book, workflow: "books.book_enrichment").step(:book_facts)
+            assert_equal [author_run.step(:author_facts)], book_facts.dependencies.map(&:prerequisite_step)
+          end
+
+          test "a rolled-back row leaves no run behind and dispatches nothing" do
+            Workflows::Dispatcher.expects(:dispatch).never
+            row = wizard_row(@list, position: 1, title: "Nobody's Book", wizard: {bucket: "create"})
+            # Plans a book run through the real provider, then ends with no
+            # author link, which the adapter rolls back.
+            authorless = Object.new
+            def authorless.call(**)
+              book = ::Books::Book.create!(title: "Nobody's Book")
+              query = ::DataImporters::Books::Book::ImportQuery.new(title: book.title, author_names: ["Nobody"])
+              ::DataImporters::Books::Book::Providers::Enrichment.new.populate(book, query: query)
+              raise "the provider planned nothing, so the rollback proves nothing" unless ::WorkflowRun.exists?(enrichable: book)
+
+              ::DataImporters::ImportResult.new(item: book, provider_results: [], success: true, created: true)
+            end
+
+            assert_no_difference "WorkflowRun.count" do
+              assert_raises(Adapter::CreateFailed) { @adapter.create(row, importer: authorless) }
+            end
           end
         end
       end

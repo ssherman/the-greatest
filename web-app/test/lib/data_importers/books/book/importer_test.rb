@@ -11,10 +11,8 @@ module DataImporters
         def setup
           ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns([])
           ::Search::Books::Search::AuthorByName.stubs(:call).returns([])
-          # Sidekiq runs inline in tests; a real enqueue would run the AI task.
-          ::Books::EnrichBookJob.stubs(:perform_async)
-          # ...and a real author import would enqueue the Wikidata step.
-          ::Books::Authors::WikidataJob.stubs(:perform_async)
+          # Sidekiq runs inline in tests; a real dispatch would run the whole workflow.
+          stub_workflow_dispatch
         end
 
         def stub_open_library_client
@@ -77,7 +75,6 @@ module DataImporters
 
         test "returns the existing book without calling any provider when the finder finds one" do
           Providers::OpenLibrary.any_instance.expects(:populate).never
-          ::Books::EnrichBookJob.expects(:perform_async).never
           isbn = identifiers(:war_and_peace_isbn13).value
 
           result = Importer.call(isbn13: [isbn])
@@ -95,9 +92,6 @@ module DataImporters
               {"field" => "description", "ours" => nil, "theirs" => "A novel set in the Jazz Age", "kind" => "fill"}
             ]).to_json
           )
-          # F. Scott Fitzgerald is new, so the book waits for his chain
-          # instead of being enriched now (spec §10).
-          ::Books::EnrichBookJob.expects(:perform_async).never
 
           result = Importer.call(title: "The Great Gatsby", author_names: ["F. Scott Fitzgerald"], year: 1925)
 
@@ -111,7 +105,8 @@ module DataImporters
           assert_equal "https://openlibrary.org/works/OL468431W", descriptions.first.source_url
           assert_predicate descriptions.first, :license_cc0?
           assert result.item.identifiers.exists?(identifier_type: :books_work_openlibrary_id, value: "OL468431W")
-          assert_equal [["skipped", "deferred_to_authors"]], result.item.enrichments.pluck(:outcome, :reason)
+          assert_equal 1, WorkflowRun.where(enrichable: result.item, workflow: "books.book_enrichment").count
+          assert_equal 0, result.item.enrichments.count
         end
 
         test "importing a new title resolves once: the finder's resolution feeds the provider" do
@@ -305,13 +300,13 @@ module DataImporters
           assert_equal [books_authors(:tolstoy)], book.authors.to_a
         end
 
-        test "with Open Library unreachable, book.authors is fresh on the returned item and AI enrichment gets the linked author's name" do
+        test "with Open Library unreachable, book.authors is fresh on the returned item and the book run gets the linked author's name" do
           stub_resolve_down
-          ::Books::EnrichBookJob.expects(:perform_async).with(anything, false, ["Leo Tolstoy"])
 
           result = Importer.call(title: "Hadji Murat", author_names: ["Lev Tolstoy"])
 
           assert_equal [books_authors(:tolstoy)], result.item.authors.to_a
+          assert_equal ["Leo Tolstoy"], WorkflowRun.find_by!(enrichable: result.item, workflow: "books.book_enrichment").options["author_names"]
         end
 
         test "with Open Library unreachable, a new author name becomes a new author" do
@@ -397,15 +392,15 @@ module DataImporters
           assert_equal 0, book.identifiers.count
         end
 
-        test "enrich: false runs neither enrichment provider" do
+        test "enrich: false runs only the Open Library and Authors providers and plans no run" do
           stub_resolve_down
-          ::Books::EnrichBookJob.expects(:perform_async).never
-          ::Books::Authors::WikidataJob.expects(:perform_async).never
 
           result = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], enrich: false)
 
           assert_equal ["DataImporters::Books::Book::Providers::OpenLibrary", "DataImporters::Books::Book::Providers::Authors"],
             result.provider_results.map(&:provider_name)
+          assert_equal 0, WorkflowRun.where(enrichable: result.item).count
+          assert_equal 0, WorkflowRun.where(enrichable_type: "Books::Author", enrichable_id: result.created_author_ids).count
         end
 
         test "a supplied match is used instead of running the finder, and its decision points at the new book" do
@@ -438,6 +433,10 @@ module DataImporters
           author = book.authors.sole
           assert_equal ["Anna Brenner", 1901], [author.name, author.birth_year]
           assert author.identifiers.exists?(identifier_type: :books_author_openlibrary_id, value: "OL77A")
+          # The author was created through Open Library, so the book's AI step waits on its run.
+          author_run = WorkflowRun.find_by!(enrichable: author, workflow: "books.author_enrichment")
+          book_facts = WorkflowRun.find_by!(enrichable: book, workflow: "books.book_enrichment").step(:book_facts)
+          assert_equal [author_run.step(:author_facts)], book_facts.dependencies.map(&:prerequisite_step)
         end
 
         test "a forced re-import of a book that has authors touches neither author step" do
@@ -463,65 +462,61 @@ module DataImporters
           assert_equal [books_authors(:tolstoy)], books_books(:war_and_peace).reload.authors.to_a
         end
 
-        test "providers run Open Library, Authors, AI enrichment, then the new authors' chain, then Amazon" do
+        test "providers run Open Library, Authors, then Enrichment" do
           providers = Importer.new.send(:providers)
 
-          assert_equal [Providers::OpenLibrary, Providers::Authors, Providers::AiEnrichment, Providers::AuthorEnrichment,
-            Providers::Amazon],
-            providers.map(&:class)
+          assert_equal [Providers::OpenLibrary, Providers::Authors, Providers::Enrichment], providers.map(&:class)
         end
 
-        test "a new book with enrichment on queues Amazon once" do
-          stub_resolve_down
-          ::Books::AmazonProductEnrichmentJob.unstub(:perform_async)
-          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).once
-          result = Importer.call(title: "Hadji Murat", author_names: ["Leo Tolstoy"])
-          assert_includes result.summary[:data_populated], :amazon_enrichment_queued
+        test "stamp_identifiers puts QueryIdentifiers before Enrichment" do
+          providers = Importer.new(stamp_identifiers: true).send(:providers)
+
+          assert_equal [Providers::OpenLibrary, Providers::Authors, Providers::QueryIdentifiers, Providers::Enrichment], providers.map(&:class)
         end
 
-        test "providers: [:amazon] runs only the Amazon provider" do
+        test "providers: [:enrichment] runs only the Enrichment provider" do
           book = books_books(:war_and_peace)
-          ::Books::AmazonProductEnrichmentJob.unstub(:perform_async)
-          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).with(book.id).once
 
-          result = Importer.call(item: book, providers: [:amazon])
+          result = Importer.call(item: book, providers: [:enrichment])
 
-          assert_equal ["DataImporters::Books::Book::Providers::Amazon"], result.provider_results.map(&:provider_name)
+          assert_equal ["DataImporters::Books::Book::Providers::Enrichment"], result.provider_results.map(&:provider_name)
+          assert WorkflowRun.exists?(enrichable: book, workflow: "books.book_enrichment")
         end
 
-        test "enrich: false does not queue Amazon" do
+        # The race closed by spec §10: the book's AI step must wait for the new
+        # author's chain, which only works once the book_authors row is in the
+        # database when Enrichment plans -- the importer saves after Authors.
+        test "an import whose authors come from the Authors provider has book_facts waiting on the created author" do
           stub_resolve_down
-          ::Books::AmazonProductEnrichmentJob.expects(:perform_async).never
-          Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], enrich: false)
-        end
-
-        # The race closed by spec §10: the Wikidata step for a new author must
-        # see the book among the author's titles, so it is queued only once
-        # the book_authors row exists, AND only once the book's own wait is
-        # already recorded -- and exactly once, not also from the author
-        # importer's own async provider.
-        test "a new author's chain starts once, after the book's wait is recorded and its link is saved" do
-          stub_resolve_down
-          ::Books::EnrichBookJob.expects(:perform_async).never
-          ::Books::Authors::WikidataJob.expects(:perform_async)
-            .with { |author_id| ::Books::BookAuthor.exists?(author_id: author_id) && ::Enrichment.exists?(reason: "deferred_to_authors") }.once
-          ::Books::Authors::WikidataJob.expects(:perform_async)
-            .with { |author_id| !::Books::BookAuthor.exists?(author_id: author_id) }.never
 
           result = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"])
 
-          assert_includes result.summary[:data_populated], :ai_enrichment_deferred_to_authors
-          assert_equal [["skipped", "deferred_to_authors"]], result.item.enrichments.pluck(:outcome, :reason)
+          assert_includes result.summary[:data_populated], :enrichment_planned
+          author = result.item.authors.sole
+          assert_equal [author.id], result.created_author_ids
+          author_run = WorkflowRun.find_by!(enrichable: author, workflow: "books.author_enrichment")
+          book_run = WorkflowRun.find_by!(enrichable: result.item, workflow: "books.book_enrichment")
+          assert_equal [author_run.step(:author_facts)], book_run.step(:book_facts).dependencies.map(&:prerequisite_step)
+          assert_equal book_run.id, author_run.reload.parent_run_id
+          assert_equal ["importer", "importer"], [author_run.initiated_by, book_run.initiated_by]
         end
 
-        test "a book whose authors all exist is enriched at once, and no author chain starts" do
+        test "a book with authors gets a book run whose amazon step is ready, not skipped" do
           stub_resolve_down
-          ::Books::Authors::WikidataJob.expects(:perform_async).never
-          ::Books::EnrichBookJob.expects(:perform_async).with(anything, false, ["Leo Tolstoy"])
 
           result = Importer.call(title: "Hadji Murat", author_names: ["Lev Tolstoy"])
 
-          assert_includes result.summary[:data_populated], :ai_enrichment_queued
+          assert_equal "ready", WorkflowRun.find_by!(enrichable: result.item, workflow: "books.book_enrichment").step(:amazon).state
+        end
+
+        test "a book whose authors all exist plans a book run and no author run" do
+          stub_resolve_down
+
+          result = Importer.call(title: "Hadji Murat", author_names: ["Lev Tolstoy"])
+
+          assert_includes result.summary[:data_populated], :enrichment_planned
+          assert_equal 0, WorkflowRun.where(enrichable: result.item.authors.first, workflow: "books.author_enrichment", initiated_by: "importer").count
+          assert_equal 0, WorkflowRun.find_by!(enrichable: result.item, workflow: "books.book_enrichment").step(:book_facts).dependencies.count
         end
 
         test "a new book is seeded with the query's subtitle, and the finder sends it to /resolve" do

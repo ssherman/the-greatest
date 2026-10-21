@@ -33,6 +33,8 @@ require_relative "support/books/open_library/fake_redis"
 require_relative "support/goodreads_import_helper"
 require_relative "support/list_wizard_helper"
 require_relative "support/ol_backfill_helper"
+require_relative "support/workflows/test_definition"
+require_relative "support/workflows/dispatch_helper"
 require_relative "support/validator_response_stub"
 
 # Configure Sidekiq to run jobs inline during tests
@@ -63,6 +65,7 @@ end
 module ActiveSupport
   class TestCase
     include SqlCapture
+    include Workflows::DispatchHelper
 
     # Capped, not :number_of_processors. Several agents run suites at once in
     # separate worktrees, and every worker holds one Postgres connection, so an
@@ -112,13 +115,6 @@ module ActiveSupport
       ::Books::BookType.reset_category_ids!
       Rails.application.config.x.rate_limit_store.clear
       Services::JwtValidationService.reset_cert_cache!
-      # Sidekiq runs jobs inline in tests, and the importer queues this job for
-      # every new book. Without this stub, any test that imports a new book
-      # would run the real Amazon job against WebMock or missing credentials.
-      # A test that cares overrides it with `expects`; one asserting an exact
-      # count must `unstub` first, because `expects` alone only adds to this stub
-      # and a second call would fall through to it.
-      ::Books::AmazonProductEnrichmentJob.stubs(:perform_async)
     end
 
     # Add more helper methods to be used by all tests here...

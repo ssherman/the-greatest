@@ -12,7 +12,13 @@ also `docs/features/wikimedia-clients.md` for the Wikidata/Wikipedia clients the
 `docs/features/import-finder.md` for the audit pages and the `MatchDecision` machinery this
 reuses.
 
-## The chain today
+## The workflow today
+
+The author steps run as one workflow, `books.author_enrichment`, on the Postgres-backed engine
+described in `docs/features/enrichment-workflows.md` (tables, step states, recovery, the admin
+"Enrichment runs" card, `workflows:stuck`). The steps are the same services as before; what changed
+is that no step enqueues its successor. The coordinator decides what runs next from rows in Postgres,
+so a lost Sidekiq message is recovered by the every-minute sweep instead of stranding the chain.
 
 ```
 Book import (DataImporters::Books::Book::Importer)
@@ -20,59 +26,57 @@ Book import (DataImporters::Books::Book::Importer)
       each author through the author importer with BOOK_STEP_PROVIDERS ([:open_library]);
       the ids of authors this import created are collected
   (the book and its book_authors rows are saved)
-  Providers::AiEnrichment       a created author is linked? -> a deferral row, no EnrichBookJob
-                                otherwise                 -> EnrichBookJob now
-  Providers::AuthorEnrichment   WikidataJob for each author this import created
+  Providers::Enrichment         BookEnrichment.start: an author run for each author this import
+                                created, and one book run whose book_facts waits on the ones
+                                linked to the book
 Direct author import (DataImporters::Books::Author::Importer)
-  Providers::OpenLibrary, then Providers::Enrichment (enqueues WikidataJob)
+  Providers::OpenLibrary, then Providers::Enrichment (plans an author run)
 
-Books::Authors::WikidataJob     EnrichFromWikidata
-  unmatched, not via_viaf ->    ViafJob
-  anything else ->              EnrichJob
-Books::Authors::ViafJob         EnrichFromViaf
-  not in line, someone waiting -> joins Viaf::Schedule's line (no VIAF call yet)
-  new Wikidata id, decision
-  doesn't need review ->        WikidataJob(author_id, true, true), which ends in EnrichJob
-  otherwise ->                  EnrichJob (unless already queued: a pause, a turn too far
-                                 off, or the backfill's VIAF retry)
-  VIAF paused ->                EnrichJob at once (once), then back of the line
-  turn > CHAIN_PATIENCE away -> EnrichJob at once (once), then waits its turn
-  VIAF pace busy, own turn ->   reschedule that turn only
-Books::Authors::EnrichJob       EnrichAuthor, then EnrichBookJob for each book that waited
+books.author_enrichment         one run per author; one active run at a time
+  wikidata             EnrichFromWikidata                                       (author_chain)
+  viaf                 EnrichFromViaf        runs on a Wikidata miss, or when the run starts here
+  wikidata_via_viaf    EnrichFromWikidata    forced, once, for a QID VIAF found that needs no review
+  author_facts         EnrichAuthor          waits on RELEASES of the three above
+  author_facts_late    EnrichAuthor          only if the follow-up Wikidata run finished after
+                                             author_facts started (fills blanks only)
+  author_facts' on_terminal: Books::Authors::EnrichJob.hand_off -- the transitional legacy
+                       hand-off of the books waiting for this author, on success and on exhausted
+                       retries alike. A later PR removes it.
 ```
 
-`allow_research` travels with the author through every job in the chain, so the choice is made
-once, at the chain's start. An import leaves it on; the backfill (increment 6) turns it off.
+Run options travel with the run, so the choice is made once, at the start. `allow_research` is on
+for an import and off for the backfill; `refresh` forces Wikidata (and the VIAF fetch) to ignore
+what was already processed; `start_at: "viaf"` plans the Wikidata step as `not_requested`, which is
+how the backfill retries a VIAF step that never finished; `skip_ai_if_ran` skips `author_facts` when
+the ledger shows the AI step already ran this era (the VIAF retry for an author whose chain was
+partly done). The entry points are the author importer's `Providers::Enrichment`,
+`Services::Books::Authors::Backfill` and `RejectExternalLink` (which supersedes any active run,
+inside its own transaction). `WikidataJob`, `ViafJob` and `EnrichJob` survive only as shims that plan
+a run from a message already in Sidekiq (`EnrichJob` plans a run with only `author_facts`), and
+`EnrichJob.hand_off` is still called by `author_facts`' `on_terminal`.
 
-Every chain is meant to end at `EnrichJob`, whatever the Wikidata or VIAF outcome, so a book
-waiting on its new author is normally handed on -- not guaranteed. An author deleted or merged
-away mid-chain makes every job return early, doing nothing. A `WikidataJob` or `ViafJob` that
-exhausts its own Sidekiq retries never reaches `EnrichJob` either (a `ViafJob` that has already
-handed its author to `EnrichJob` -- on a pause, or a turn more than `CHAIN_PATIENCE` away -- has
-queued it itself, so neither strands anything). Either gap leaves the book to
-`books:enrich_missing`, which counts it whatever descriptions it already has (see "Handing books
-on" below); an exhausted job is also visible in Sidekiq's Dead set. All three jobs run on the
-`author_chain` queue, last in strict order after `low`, with `retry: 3`.
-
-**The book importer starts the chain itself.** A book import runs the author importer without its
-async provider, collects the authors it created (`ImportResult#created?`), and queues their
-`WikidataJob`s from `Providers::AuthorEnrichment`, which runs after the importer has saved the book
-and its `book_authors` rows. The Wikidata and VIAF steps therefore always see the book among the
-author's titles. `Providers::AiEnrichment` runs just before `Providers::AuthorEnrichment` and
-writes the book's `deferred_to_authors` row first, so a chain that finishes fast cannot reach its
-hand-off before the book's wait is even recorded. `Providers::AuthorEnrichment` does nothing, and
-reports failure, for a book that was never persisted (every earlier provider failed). (Before
-increment 4 the author importer's own provider queued the job mid-import, before that save.) A
-direct author import still queues `WikidataJob` from `Providers::Enrichment`.
+**VIAF patience.** The chain never waits on VIAF. A VIAF *pause* (a Cloudflare block, VIAF's 429, or
+the day's budget running low: `Viaf::Exceptions::Paused`), or a turn in `Viaf::Schedule`'s line more
+than `Workflows::Books::Steps::Viaf::CHAIN_PATIENCE` (600 seconds) away, makes the VIAF step answer
+`Outcome.wait(..., release: true)`. A released step satisfies the `release` edge `author_facts`
+waits on, so the AI step runs now while the VIAF step keeps its place in the line; VIAF's facts land
+as fills when its turn comes, and a QID it finds then still triggers `wikidata_via_viaf` and, if the
+AI step started before it, `author_facts_late`. A busy pace hit on the step's own turn only delays
+that turn. A step not yet in the line joins it whenever anyone is already waiting, without spending
+a VIAF call to find that out.
 
 A VIAF match flagged `needs_review` never sends the author back to Wikidata: the stamped id stays
-as VIAF's own, flagged fact rather than evidence for a certain Wikidata match. A job not yet in
-`Viaf::Schedule`'s line joins it whenever anyone else is already waiting, without spending a VIAF
-call to find that out. A VIAF *pause* (a Cloudflare block, VIAF's 429, or the day's budget running
-low: `Viaf::Exceptions::Paused`), or a turn in the line more than `ViafJob::CHAIN_PATIENCE` away,
-sends the author to the AI step at once and reschedules the VIAF job; a busy pace hit on the job's
-own turn only reschedules that turn. If VIAF answers later with a new Wikidata id, the `via_viaf`
-Wikidata run ends in a second `EnrichJob`, which fills only what the first left blank.
+as VIAF's own, flagged fact rather than evidence for a certain Wikidata match.
+
+**The book importer starts the author runs itself.** A book import runs the author importer without
+its async provider, collects the authors it created (`ImportResult#created?`), and
+`Providers::Enrichment` plans their author runs with `Workflows::Books::BookEnrichment.start`. It runs
+after the importer has saved the book and its `book_authors` rows, so the Wikidata and VIAF steps
+always see the book among the author's titles. The book run is planned in the same call, so its
+`book_facts` step waits on the `author_facts` step of every created author linked to the book from
+the first moment; there is no window in which a fast author run could finish before the book's wait
+is recorded. `Providers::Enrichment` does nothing, and reports failure, for a book that was never
+persisted.
 
 An author an admin has flagged `exclude_from_rankings` is skipped by every step without an
 external or model call: a `skipped` ledger row with reason `placeholder`.
@@ -293,9 +297,9 @@ gender, alternate names or countries are written for that run -- and the decisio
 `needs_review`, mirroring Wikidata's `held_qid_conflict`.
 
 **When the cluster names a Wikidata item `ApplyViaf` newly stamps, and the VIAF decision itself
-does not need review**, `ViafJob` enqueues `WikidataJob.perform_async(author_id, true, true)` --
-`refresh: true` because the earlier Wikidata miss already counts as processed, `via_viaf: true` so
-a second miss cannot send the author back to VIAF. An id the author already held, one another
+does not need review**, the workflow's `wikidata_via_viaf` step runs -- a forced (`refresh`)
+Wikidata run, because the earlier Wikidata miss already counts as processed, and it is a step with
+no VIAF successor, so a second miss cannot send the author back to VIAF. An id the author already held, one another
 author holds, or one that conflicts sends nothing. A VIAF match `needs_review` (the AI decided at
 medium or low confidence, or the AI step itself failed) also sends nothing: a Wikidata run at that
 id's held-id stage would treat the stamped id as independent evidence and record a `certain`
@@ -321,9 +325,10 @@ gate closed, or a 429) sends the job to the back of the line. A busy pace hit on
 suggestions and clusters already stored rather than losing the author's place in the line -- one
 author can need more requests than a minute's pace allows. A backlog of waiting authors therefore
 each gets one turn, in order, instead of every job retrying on the same short delay. When VIAF is
-paused, or a job's turn is more than `ViafJob::CHAIN_PATIENCE` (600 seconds) away, the author goes
-on to the AI step at once and the job carries `enrich_queued`, so its own later turn does not queue
-the AI step again; VIAF's facts land as fills whenever that turn comes. A redirect hop is the one
+paused, or a step's turn is more than `Workflows::Books::Steps::Viaf::CHAIN_PATIENCE` (600 seconds)
+away, the step releases itself and the AI step runs at once (see "The workflow today"); VIAF's
+facts land as fills whenever that turn comes. The line logic itself lives in that step now, moved
+from `ViafJob` unchanged. A redirect hop is the one
 exception to all of this: resolving a merged cluster, it waits for its own pace slot instead of
 raising, for up to about a minute, since a hop that has already spent its 301 cannot be rescheduled
 without just repeating it.
@@ -347,8 +352,8 @@ with the backfill's VIAF share running in the background over months.
 
 ## The AI step
 
-`Services::Books::Authors::EnrichAuthor.call(author:, allow_research: true)` (spec §9), run by
-`Books::Authors::EnrichJob`.
+`Services::Books::Authors::EnrichAuthor.call(author:, allow_research: true)` (spec §9), run by the
+workflow's `author_facts` and `author_facts_late` steps (`Workflows::Books::Steps::AuthorFacts`).
 
 **Skips.** A placeholder author, and an author with nothing left to fill: an AI or manual
 description, a birth year, a gender other than `unspecified`, and at least one country. There is
@@ -403,35 +408,41 @@ failure is recorded as `rejected` and not written.
 
 ## Handing books on
 
-When a book import creates an author and links it, `Providers::AiEnrichment` does not queue
-`EnrichBookJob`. It writes a skipped `books.book_facts` row with reason `deferred_to_authors`
-(`Services::Books::DeferredEnrichment`) and reports `[:ai_enrichment_deferred_to_authors]`, so
-the book's origin country can come from its author's stored nationality.
+When a book import creates an author and links it, the book's `book_facts` step waits on that
+author's `author_facts` step (`Workflows::Books::BookEnrichment.start`), so the book's origin country
+can come from its author's stored nationality. New imports no longer write the
+`deferred_to_authors` deferral (`Services::Books::DeferredEnrichment`); the rows already written
+by earlier imports are still handed on as below until a later PR removes the hand-off.
 
-`EnrichJob` ends by queuing `EnrichBookJob` for each of the author's books whose latest
-`books.book_facts` row is that deferral, after a successful run or once its retries are exhausted.
-Only books that waited are handed on this way; the author's other books never are (Shane,
+The `author_facts` step's `on_terminal` calls `Books::Authors::EnrichJob.hand_off`, which queues
+`EnrichBookJob` for each of the author's books whose latest `books.book_facts` row is that
+deferral, whether the step succeeded or failed for good. (`on_terminal` fires only when a worker
+finishes or fails the step, so a step skipped by `skip_ai_if_ran` does not hand off; the AI step
+ran in an earlier era and handed its books on then.) This is transitional: the book workflow now
+waits on the author step directly (new imports plan that wait and write no deferral), so the hand-off
+only serves deferral rows already in the database and goes away in a later PR. Only books that waited are handed on this way; the author's other books never are (Shane,
 2026-09-30), so a bulk author run does not become a catalogue-wide book enrichment.
 
-**A stuck chain.** The hand-off above is not guaranteed. Every job in the chain returns early,
-doing nothing, for an author deleted or merged away between enqueue and run. A `WikidataJob` or
-`ViafJob` that exhausts its own Sidekiq retries never reaches `EnrichJob` either -- except a
-`ViafJob` that has already handed its author to `EnrichJob` (on a pause, or a turn more than
-`CHAIN_PATIENCE` away), which has queued it before rescheduling, so neither alone strands anything.
-`EnrichJob` is built not to have this problem: it hands off even once its own retries are
-exhausted, via `sidekiq_retries_exhausted`, so only a break earlier in the chain can strand a book.
-A book left behind this way is still found by `books:enrich_missing`,
-which counts a deferral-only book as missing whatever descriptions it already has (the Open
-Library provider can write one onto a brand-new book before `AiEnrichment` ever defers it), and
-which also picks up any book a chain never reached at all. An exhausted job is also visible in
-Sidekiq's Dead set. Run `books:enrich_missing` only once no author-chain jobs (`Books::Authors::*`)
-are in the `author_chain` queue or in Sidekiq's Scheduled or Retry sets -- a rate-limited
-`WikidataJob` or a paused `ViafJob` waits in Scheduled, not in `author_chain`. It cannot tell a
-genuinely stranded book from one whose author chain is still legitimately running, and running it
-early enriches a book before its new authors have countries. A scheduled `ViafJob` whose third
-argument (`enrich_queued`) is `true` does not count: its author's AI step already ran (or is
-queued) and has handed its books on, so during a backfill's VIAF tail -- where waiting `ViafJob`s
-can sit in Scheduled for weeks to months -- that job alone is not a reason to hold off.
+**A stuck chain (superseded).** This section used to describe how a chain of Sidekiq jobs could
+strand a book: a job that exhausted its retries never reached `EnrichJob`, and a rate-limited job
+waiting in Scheduled looked like a chain still running, so `books:enrich_missing` could not be
+trusted until every `Books::Authors::*` job had drained. The workflow removes the cause. The state
+is rows in Postgres, not messages in Sidekiq: a step whose message is lost stays `ready` and the
+every-minute sweep dispatches it again; a worker that dies mid-step loses its lease and the sweep
+reclaims it; a step that runs out of attempts is `failed` and released, so the AI step and its
+`on_terminal` hand-off still run; a deleted or merged-away author has its run cancelled
+(`target_gone`). What is left for a person is a step that is `failed`, or one even the sweep could
+not move, and `bin/rails workflows:stuck` lists exactly those (`docs/features/enrichment-workflows.md`).
+
+Two things from the old advice still hold. A book left behind is still found by
+`books:enrich_missing`, which counts a deferral-only book as missing whatever descriptions it
+already has (the Open Library provider can write one onto a brand-new book before a deferral was
+ever recorded). And running it while an author run is still legitimately in flight enriches the
+book before its new authors have countries; check for an active run first
+(`WorkflowRun.running.where(workflow: "books.author_enrichment")`, or the admin "Enrichment runs"
+card) instead of Sidekiq's queues. A `WikidataJob` or `ViafJob` message still sitting in Scheduled
+or Retry from before the workflow shipped only plans a run when it fires, so it no longer needs to
+drain first.
 
 ## Countries
 
@@ -516,11 +527,14 @@ those values came from the wrong person's records. When one of the influenced ru
 author's current AI description, that description is deprecated rather than deleted, the same as a
 legacy Wikipedia description.
 
-**The re-run.** Rejecting queues `Books::Authors::WikidataJob(author_id, true)`, which carries the
-refresh down to VIAF on a miss the same as any other forced re-run. It is queued inside the reject's
-transaction, ten seconds out so it cannot start before the commit: if Sidekiq's Redis refuses the push,
-the whole reject rolls back and the page says so, and trying again later works. A reject never
-commits without its re-run.
+**The re-run.** Rejecting plans an author workflow run with `refresh: true`, which carries the
+refresh down to VIAF on a miss the same as any other forced re-run. It **supersedes** any run already
+active for the author (that run's unfinished steps are skipped `superseded`), because refusing would
+block a reject for as long as a VIAF turn takes, and a second reject is refused as already
+rejected. The plan rows are written inside the reject's transaction, last, with the Wikidata step's
+`run_after` ten seconds out (`RERUN_DELAY`); only the dispatch waits for the commit. A reject
+therefore never commits without its re-run, and a Redis outage can no longer fail the reject: a
+dispatch that is lost is picked up by the recovery sweep.
 
 **Never again.** `RejectedRecords` means a rejected record is never offered as a candidate by either
 resolver, and `FactSheet#stamp` refuses to put its id back on the author, so the forced re-run cannot
@@ -535,11 +549,12 @@ ignores a rejected decision too, so no rejected evidence reaches the AI step. A 
 description no longer counts as present, so the AI step's completeness check runs it again.
 
 **A run whose decision was rejected stops counting as "processed" -- but a re-run can still stall
-before reaching VIAF.** `WikidataJob` only forwards to `ViafJob` when this run's own outcome is
-`:unmatched`; a `:skipped` or `:failed` outcome goes straight to the AI step instead. So after a
-VIAF reject, if the forced re-run fails, the author's earlier Wikidata miss still counts as
-processed, so ordinary (non-forced) runs skip Wikidata and never reach VIAF again; recover with a
-forced run, `Books::Authors::WikidataJob.perform_async(author_id, true)`.
+before reaching VIAF.** The `viaf` step runs only when this run's own Wikidata outcome is
+`unmatched` (or the run starts at VIAF); a `skipped` or `failed` outcome skips it and goes straight to
+the AI step. So after a VIAF reject, if the forced re-run fails, the author's earlier Wikidata miss
+still counts as processed, so ordinary (non-forced) runs skip Wikidata and never reach VIAF again;
+recover with a forced run, `Workflows::Books::AuthorEnrichment.start(author, initiated_by: "manual",
+options: {refresh: true}, supersede: true)`.
 
 **A known gap with VIAF merges.** `Viaf::Client` reports the id that was requested, even across
 VIAF's own redirects (see `docs/features/viaf-api-client.md`, "merged clusters"), so a rejected VIAF
@@ -589,8 +604,9 @@ had already decided a match or non-match before the wait hit -- from `CountryLoo
 `ApplyWikidata`, from `LinkWikipedia`, or from `CleanLegacyWikipedia`), it writes a `failed` row
 with `reason: "rate_limited"` carrying whatever facts were applied before the wait, then re-raises;
 a rate limit hit during resolution itself, before any decision exists, writes nothing -- there is
-no decision yet to tie a row to. Either way the exception still propagates, and `WikidataJob`
-catches it separately to reschedule the whole run with `perform_in(retry_after + jitter)`. A
+no decision yet to tie a row to. Either way the exception still propagates, and the
+`wikidata` step catches it separately and answers `Outcome.wait(retry_after + jitter)`, which holds
+the step in `waiting` without using an attempt until the recovery sweep wakes it. A
 `rate_limited` row does not count as processed (see above), so the rescheduled run still runs.
 
 **A re-run is only cheap in the cases that decide early.** `ResolveWikidata` stores just the
@@ -639,23 +655,25 @@ Run one author by hand:
 
 ```ruby
 Services::Books::Authors::EnrichFromWikidata.call(author: Books::Author.find(id))
-# or, through the job:
-Books::Authors::WikidataJob.new.perform(author_id)
+# or plan the whole workflow run (returns the author's active run if it has one):
+Workflows::Books::AuthorEnrichment.start(Books::Author.find(id), initiated_by: "manual")
 ```
 
 Force a refresh (ignore `external_records` and the "already processed" check, refetch
-everything):
+everything), replacing any active run:
 
 ```ruby
-Books::Authors::WikidataJob.new.perform(author_id, true)
+Workflows::Books::AuthorEnrichment.start(Books::Author.find(id), initiated_by: "manual",
+  options: {refresh: true}, supersede: true)
 ```
 
 Run one VIAF pass by hand (only meaningful after a Wikidata miss):
 
 ```ruby
 Services::Books::Authors::EnrichFromViaf.call(author: Books::Author.find(id))
-# or, through the job:
-Books::Authors::ViafJob.new.perform(author_id)
+# or a run that starts at the VIAF step:
+Workflows::Books::AuthorEnrichment.start(Books::Author.find(id), initiated_by: "manual",
+  options: {start_at: "viaf"})
 ```
 
 Check whether VIAF is currently paused, and what the last call reported for budget:
@@ -672,8 +690,9 @@ Run the AI step by hand (writes a ledger row; a real model call):
 
 ```ruby
 Services::Books::Authors::EnrichAuthor.call(author: Books::Author.find(id))
-# or, through the job, which also hands on any books waiting for this author:
-Books::Authors::EnrichJob.new.perform(author_id)
+# or through the workflow, which also hands on any books waiting for this author:
+Workflows::Books::AuthorEnrichment.start(Books::Author.find(id), initiated_by: "console",
+  options: {only: ["author_facts"]})
 ```
 
 Where to look:
@@ -685,26 +704,28 @@ Where to look:
 - `author.enrichments.for_kind("books.author_wikidata")` (or `"books.author_viaf"`) for one
   author's history.
 
-Before running `books:enrich_missing`, check the queue and Sidekiq's Scheduled and Retry sets for
-any `Books::Authors::*` job -- see "A stuck chain" above. A scheduled `ViafJob` whose third
-argument (`enrich_queued`) is `true` does not count against that check: its author's AI step
-already ran (or is queued).
+Before running `books:enrich_missing`, check for active author runs
+(`WorkflowRun.running.where(workflow: "books.author_enrichment")`) -- see "A stuck chain
+(superseded)" above. A VIAF step waiting weeks for its turn during a backfill's tail does not
+count against that check once its `author_facts` step has run: the AI step does not wait for VIAF.
+`bin/rails workflows:stuck` lists runs that need attention.
 
 ### The backfill
 
-`bin/rails "books:authors:enrich[100]"` (or `[all]`) queues the chain for authors the Wikidata step
+`bin/rails "books:authors:enrich[100]"` (or `[all]`) plans author runs for authors the Wikidata step
 has not processed (`LedgerRun.processed`; placeholders never are, so they are left out): ranked
 authors first by rank under the primary authors configuration, then the rest by how many books they
-wrote. Each `WikidataJob` starts `Backfill::SPACING` (6) seconds after the one before, with research
-off for the whole chain. A limit is required; `all` is the decision to run wide.
+wrote. Each run's Wikidata step starts `Backfill::SPACING` (6) seconds after the one before
+(`start_after`), with research off for the whole run. A limit is required; `all` is the decision to
+run wide.
 
-It also re-queues the VIAF step for any author whose Wikidata step missed and whose VIAF step
-never finished. The retry passes `enrich_queued = true` only for an author with a
-`books.author_facts` row newer than the author row (its AI step already ran this era); an author
-whose chain was lost (no facts row) gets `false`, so the retry queues its AI step. It leaves out
-every author with a `Books::Authors::*` job already scheduled, retrying, or on the `author_chain`
-queue (`QueuedChain`), so a second run while the first is still going queues almost no one twice --
-except a job that is running at that exact moment, which `QueuedChain` cannot see.
+It also plans a run that starts at the VIAF step (`start_at: "viaf"`) for any author whose Wikidata
+step missed and whose VIAF step never finished. Those runs set `skip_ai_if_ran`: the `author_facts`
+step skips itself when a `books.author_facts` ledger row newer than the author row shows its AI
+step already ran this era, and an author whose chain was lost (no facts row) runs it. It leaves out
+every author with an active run, and any author with a chain job from before the workflow still in
+Sidekiq (`QueuedChain`), so a second backfill while the first is still going plans almost no one
+twice.
 
 It prints the counts, when the last Wikidata job starts, and the report command:
 `bin/rails "books:authors:enrich_report[<time the batch was queued>]"`. The report gives:

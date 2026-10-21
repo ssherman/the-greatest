@@ -14,6 +14,7 @@ module Services
                             "pipeline_version" => 1, "matcher_version" => 2}.freeze
 
           setup do
+            stub_workflow_dispatch
             @list = wizard_list
             @adapter = ::Services::Lists::Wizard::Books::Adapter.new
           end

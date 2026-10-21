@@ -35,6 +35,8 @@ module Services
             book.identifiers.map { |identifier| ["Identifier", identifier.id] }
           assert_equal expected.sort, @import.records.map { |record| [record.record_type, record.record_id] }.sort
           assert @import.records.all?(&:created?)
+          # A member import is enriched on admin approval (PromoteRecords), not here.
+          assert_equal 0, WorkflowRun.where(enrichable: [book, author]).count
         end
 
         test "an existing author is linked, never made provisional, never recorded as created" do

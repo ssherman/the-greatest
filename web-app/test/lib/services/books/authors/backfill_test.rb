@@ -7,12 +7,17 @@ module Services
     module Authors
       class BackfillTest < ActiveSupport::TestCase
         def setup
-          # Sidekiq runs inline in tests: record the enqueues instead.
-          @wikidata_calls = []
-          @viaf_calls = []
-          ::Books::Authors::WikidataJob.stubs(:perform_in).with { |*args| @wikidata_calls << args }
-          ::Books::Authors::ViafJob.stubs(:perform_async).with { |*args| @viaf_calls << args }
+          # Sidekiq runs inline in tests: plan the runs without executing them.
+          stub_workflow_dispatch
+          freeze_time
         end
+
+        def planned = ::WorkflowRun.where(initiated_by: "backfill").order(:id)
+
+        # The runs from the start (Wikidata first) and the runs that start at VIAF.
+        def wikidata_runs = planned.reject { |run| run.options["start_at"] }
+
+        def viaf_runs = planned.select { |run| run.options["start_at"] == "viaf" }
 
         def author(name, books: 0, rank: nil)
           created = ::Books::Author.create!(name: name)
@@ -27,11 +32,11 @@ module Services
           author.enrichments.create!(kind: kind, outcome: outcome, match_decision: decision, created_at: author.created_at + 1.minute)
         end
 
-        def queued_ids = @wikidata_calls.map { |args| args[1] }
+        def queued_ids = wikidata_runs.map(&:enrichable_id)
 
         def backfill(limit: nil, queued: Set.new) = Backfill.call(limit: limit, queued: queued)
 
-        test "queues unprocessed authors ranked first by rank, then by books written, at the Wikidata pace with research off" do
+        test "plans unprocessed authors ranked first by rank, then by books written, spaced at the Wikidata pace with research off" do
           second = author("Second Ranked", rank: 2)
           first = author("First Ranked", rank: 1)
           single = author("Single", books: 1)
@@ -40,8 +45,9 @@ module Services
           backfill
 
           assert_equal [first.id, second.id, prolific.id, single.id], queued_ids & [first.id, second.id, prolific.id, single.id]
-          assert_equal (0...@wikidata_calls.size).map { |index| index * Backfill::SPACING }, @wikidata_calls.map(&:first)
-          assert(@wikidata_calls.all? { |args| args[2..] == [false, false, false] })
+          assert_equal (0...wikidata_runs.size).map { |index| Time.current + (index * Backfill::SPACING).seconds },
+            wikidata_runs.map { |run| run.step(:wikidata).run_after }
+          assert(wikidata_runs.all? { |run| run.options == {"allow_research" => false} })
         end
 
         test "leaves out processed authors and placeholders; a failed run or a rejected one leaves an author in" do
@@ -62,14 +68,16 @@ module Services
           waiting = author("Waiting", rank: 1)
           next_up = author("Next", rank: 2)
           author("After", rank: 3)
+          # The fixtures hold an active run for an author this also leaves out.
+          fixture_runs = Backfill.unprocessed.where(id: ::WorkflowRun.running.select(:enrichable_id)).count
 
           result = backfill(limit: 1, queued: Set[waiting.id])
 
           assert_equal [next_up.id], queued_ids
-          assert_equal [1, 1], result.data.values_at(:wikidata, :left_out)
+          assert_equal [1, 1 + fixture_runs], result.data.values_at(:wikidata, :left_out)
         end
 
-        test "a Wikidata miss whose VIAF step never finished gets the VIAF step again, with the AI step marked already queued" do
+        test "a Wikidata miss whose VIAF step never finished gets a run starting at VIAF, with the AI step skipped if it ran" do
           missed = author("Missed").tap do |a|
             done(a, outcome: :unrecognized) && done(a, kind: EnrichFromViaf::KIND, outcome: :failed) && done(a, kind: EnrichAuthor::KIND)
           end
@@ -78,29 +86,23 @@ module Services
 
           backfill
 
-          ours = @viaf_calls.select { |args| [missed.id, viaf_done.id, matched_later.id].include?(args.first) }
-          assert_equal [[missed.id, false, true, false]], ours
+          ours = viaf_runs.select { |run| [missed.id, viaf_done.id, matched_later.id].include?(run.enrichable_id) }
+          assert_equal [missed.id], ours.map(&:enrichable_id)
+          assert_equal({"allow_research" => false, "start_at" => "viaf", "skip_ai_if_ran" => true}, ours.first.options)
           assert_not_includes queued_ids, missed.id
         end
 
-        test "a VIAF-retry author whose only AI-step row this era failed is not marked already queued" do
-          failed_ai = author("Failed AI").tap do |a|
-            done(a, outcome: :unrecognized) && done(a, kind: EnrichFromViaf::KIND, outcome: :failed) && done(a, kind: EnrichAuthor::KIND, outcome: :failed)
-          end
+        test "an author with an active run is left out, whatever Sidekiq holds, and the run is left alone" do
+          active = author("Active", rank: 1)
+          next_up = author("Next", rank: 2)
+          existing = ::Workflows::Books::AuthorEnrichment.start(active, initiated_by: "test")
 
-          backfill
+          result = backfill
 
-          ours = @viaf_calls.select { |args| args.first == failed_ai.id }
-          assert_equal [[failed_ai.id, false, false, false]], ours
-        end
-
-        test "a Wikidata miss with no VIAF row and no AI step this era is a lost chain: the AI step is not marked already queued" do
-          lost = author("Lost").tap { |a| done(a, outcome: :unrecognized) }
-
-          backfill
-
-          ours = @viaf_calls.select { |args| args.first == lost.id }
-          assert_equal [[lost.id, false, false, false]], ours
+          assert_not_includes queued_ids, active.id
+          assert_includes queued_ids, next_up.id
+          assert_operator result.data[:left_out], :>=, 1
+          assert_equal [existing.id], ::WorkflowRun.where(enrichable: active).pluck(:id)
         end
 
         test "with no queued set given, the production path reads the chain Sidekiq itself has waiting" do

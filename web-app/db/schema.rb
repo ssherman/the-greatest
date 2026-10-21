@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_18_023530) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_21_020625) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -705,12 +705,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_023530) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.bigint "match_decision_id"
+    t.bigint "workflow_step_id"
     t.index ["ai_chat_id"], name: "index_enrichments_on_ai_chat_id"
     t.index ["enrichable_type", "enrichable_id"], name: "index_enrichments_on_enrichable"
     t.index ["kind"], name: "index_enrichments_on_kind"
     t.index ["match_decision_id"], name: "index_enrichments_on_match_decision_id"
     t.index ["mode", "created_at"], name: "index_enrichments_on_mode_and_created_at"
     t.index ["outcome"], name: "index_enrichments_on_outcome"
+    t.index ["workflow_step_id"], name: "index_enrichments_on_workflow_step_id"
   end
 
   create_table "external_links", force: :cascade do |t|
@@ -1524,6 +1526,65 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_023530) do
     t.index ["stripe_customer_id"], name: "index_users_on_stripe_customer_id"
   end
 
+  create_table "workflow_dependencies", force: :cascade do |t|
+    t.bigint "step_id", null: false
+    t.bigint "prerequisite_step_id", null: false
+    t.integer "kind", default: 0, null: false
+    t.datetime "satisfied_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["prerequisite_step_id"], name: "index_workflow_dependencies_on_prerequisite_step_id"
+    t.index ["prerequisite_step_id"], name: "index_workflow_dependencies_open_on_prerequisite_step_id", where: "(satisfied_at IS NULL)"
+    t.index ["step_id", "prerequisite_step_id"], name: "index_workflow_dependencies_on_step_and_prerequisite", unique: true
+  end
+
+  create_table "workflow_runs", force: :cascade do |t|
+    t.string "workflow", null: false
+    t.integer "definition_version", null: false
+    t.string "enrichable_type", null: false
+    t.bigint "enrichable_id", null: false
+    t.integer "status", default: 0, null: false
+    t.jsonb "options", default: {}, null: false
+    t.string "initiated_by", null: false
+    t.bigint "parent_run_id"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.text "error_summary"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["enrichable_type", "enrichable_id"], name: "index_workflow_runs_on_enrichable"
+    t.index ["parent_run_id"], name: "index_workflow_runs_on_parent_run_id"
+    t.index ["status"], name: "index_workflow_runs_on_status"
+    t.index ["workflow", "enrichable_type", "enrichable_id"], name: "index_workflow_runs_one_active", unique: true, where: "(status = 0)"
+  end
+
+  create_table "workflow_steps", force: :cascade do |t|
+    t.bigint "workflow_run_id", null: false
+    t.string "key", null: false
+    t.integer "state", default: 0, null: false
+    t.string "outcome"
+    t.datetime "released_at"
+    t.datetime "run_after"
+    t.integer "attempts", default: 0, null: false
+    t.integer "max_attempts", default: 3, null: false
+    t.string "lease_token"
+    t.integer "lease_seconds", null: false
+    t.datetime "lease_expires_at"
+    t.datetime "dispatched_at"
+    t.integer "dispatch_count", default: 0, null: false
+    t.string "queue", null: false
+    t.jsonb "result", default: {}, null: false
+    t.text "error"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["state", "dispatched_at"], name: "index_workflow_steps_on_state_and_dispatched_at"
+    t.index ["state", "lease_expires_at"], name: "index_workflow_steps_on_state_and_lease_expires_at"
+    t.index ["state", "run_after"], name: "index_workflow_steps_on_state_and_run_after"
+    t.index ["workflow_run_id", "key"], name: "index_workflow_steps_on_workflow_run_id_and_key", unique: true
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_chats", "users"
@@ -1578,6 +1639,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_023530) do
   add_foreign_key "duplicate_candidates", "users", column: "resolved_by_id", on_delete: :nullify
   add_foreign_key "enrichments", "ai_chats", on_delete: :nullify
   add_foreign_key "enrichments", "match_decisions", on_delete: :nullify
+  add_foreign_key "enrichments", "workflow_steps", on_delete: :nullify
   add_foreign_key "external_links", "users", column: "submitted_by_id"
   add_foreign_key "games_game_companies", "games_companies", column: "company_id"
   add_foreign_key "games_game_companies", "games_games", column: "game_id"
@@ -1626,4 +1688,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_023530) do
   add_foreign_key "saved_searches", "users"
   add_foreign_key "user_list_items", "user_lists"
   add_foreign_key "user_lists", "users"
+  add_foreign_key "workflow_dependencies", "workflow_steps", column: "prerequisite_step_id", on_delete: :cascade
+  add_foreign_key "workflow_dependencies", "workflow_steps", column: "step_id", on_delete: :cascade
+  add_foreign_key "workflow_runs", "workflow_runs", column: "parent_run_id", on_delete: :nullify
+  add_foreign_key "workflow_steps", "workflow_runs"
 end

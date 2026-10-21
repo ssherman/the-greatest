@@ -13,8 +13,7 @@ module Admin
         @import = @member.goodreads_imports.create!(status: :complete)
         @book = ::Books::Book.create!(title: "Admin Import Book", provisional: true)
         @import.records.create!(record: @book, action: :created)
-        ::Books::EnrichBookJob.stubs(:perform_async)
-        ::Books::Authors::WikidataJob.stubs(:perform_async)
+        stub_workflow_dispatch
         ::Books::PurgeShowPagesJob.stubs(:perform_async)
         ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
       end

@@ -1,35 +1,30 @@
 # frozen_string_literal: true
 
-# One author through Services::Books::Authors::EnrichFromWikidata (spec §11).
-# On the author_chain queue, last in strict order, after low: it has no
-# latency requirement. Expected failures write a failed ledger row inside the
-# runner and do not raise. A rate limit (a 429, maxlag, or our own pace busy
-# for longer than the inline wait) reschedules this job rather than holding
-# a worker thread. A miss goes on to Books::Authors::ViafJob, unless VIAF sent
-# this author here (via_viaf), which would loop. Every other outcome --
-# matched, failed, skipped, or a via_viaf miss -- goes on to the AI step,
-# Books::Authors::EnrichJob, so every chain ends there. allow_research
-# (false for the backfill, spec §13) travels with the author to every later
-# step.
+# A shim for messages already in Sidekiq when the author workflow shipped
+# (spec §11 step 1). It used to run the Wikidata step and chain the next one;
+# the chain now lives in Workflows::Books::AuthorEnrichment, so an old message
+# plans a run instead. The old arguments map to run options: refresh stays
+# refresh and allow_research carries over. via_viaf was the forced hop after a
+# VIAF match, so it plans a run of just that hop: a forced Wikidata step, then
+# the AI step (viaf, wikidata_via_viaf and author_facts_late are planned
+# not_requested, so author_facts runs right after). A full refresh run would
+# send a miss back to VIAF. An author who already has an active run is reused by
+# `start`, which is the "does nothing" an in-flight message should get. Nothing
+# enqueues this job any more; Task 14 deletes it once Sidekiq holds no more of
+# its messages.
 class Books::Authors::WikidataJob
   include Sidekiq::Job
 
   sidekiq_options queue: :author_chain, retry: 3
-
-  RESCHEDULE_JITTER = 0..30
 
   def perform(author_id, refresh = false, via_viaf = false, allow_research = true)
     author = ::Books::Author.find_by(id: author_id)
     # Deleted or merged away between enqueue and run: nothing to do.
     return if author.nil?
 
-    result = ::Services::Books::Authors::EnrichFromWikidata.call(author: author, refresh: refresh)
-    if result.data[:outcome] == :unmatched && !via_viaf
-      ::Books::Authors::ViafJob.perform_async(author_id, refresh, false, allow_research)
-    else
-      ::Books::Authors::EnrichJob.perform_async(author_id, allow_research)
-    end
-  rescue ::Wikimedia::Exceptions::RateLimited => e
-    self.class.perform_in(e.retry_after.to_i + rand(RESCHEDULE_JITTER), author_id, refresh, via_viaf, allow_research)
+    options = {refresh: refresh, allow_research: allow_research}
+    options = options.merge(refresh: true, only: %w[wikidata author_facts]) if via_viaf
+
+    ::Workflows::Books::AuthorEnrichment.start(author, initiated_by: "legacy_job", options: options)
   end
 end
