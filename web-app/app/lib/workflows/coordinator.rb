@@ -201,10 +201,16 @@ module Workflows
       end
 
       # A step just became terminal: tell its definition, then advance. The
-      # update is already committed, so if the callback raises the recovery
-      # sweep still finds a released step whose dependents were not advanced.
+      # callback is a side effect (a cache purge, a ledger note), never a gate:
+      # one that raises is logged and swallowed, so the dependents still move.
+      # on_terminal fires only here, when a worker finishes or fails the step;
+      # a step skipped by skip_if, cancelled, or swept never calls it.
       def settle_terminal(step)
-        run_on_terminal(step)
+        begin
+          run_on_terminal(step)
+        rescue => e
+          Rails.logger.error("Workflows::Coordinator: on_terminal raised for step #{step.id}: #{e.class}: #{e.message}")
+        end
         advance(step)
       end
 

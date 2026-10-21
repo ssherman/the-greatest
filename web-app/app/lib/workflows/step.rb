@@ -6,6 +6,9 @@
 # terminal state) or :release (proceed as soon as it hands off).
 # skip_if is evaluated by the coordinator at advance time, so a step that will
 # be skipped is never dispatched into a long queue just to say so.
+# on_terminal(step, target) fires only when a worker finishes or fails the step
+# (not for a skip_if skip, a cancel or a sweep), and a raise from it is logged
+# and swallowed so the dependents still advance.
 module Workflows
   Step = Data.define(:key, :queue, :waits_on, :max_attempts, :lease, :adapter, :skip_if, :on_terminal) do
     def self.build(key:, queue:, adapter:, waits_on: {}, max_attempts: 3, lease: 10.minutes, skip_if: nil, on_terminal: nil)

@@ -14,7 +14,10 @@ module Workflows
       version 1
       target_class ::Books::Author
 
-      add_step key: :x, queue: :author_chain, adapter: ->(**) {}, on_terminal: ->(step, target) { TERMINATED << [step.key, target.class] }
+      add_step key: :x, queue: :author_chain, adapter: ->(**) {}, on_terminal: ->(step, target) {
+        raise "callback boom" if step.run.options["raise_terminal"]
+        TERMINATED << [step.key, target.class]
+      }
       add_step key: :y, queue: :author_chain, adapter: ->(**) {}, waits_on: {x: :finish},
         skip_if: ->(run) { run.options["skip_y"] ? "not_needed" : nil }
       add_step key: :z, queue: :author_chain, adapter: ->(**) {}, waits_on: {y: :finish}
@@ -238,6 +241,13 @@ module Workflows
       gone.update_columns(enrichable_id: -1)
       finish(:x, Workflows::Outcome.skipped("target_gone"), run: gone)
       assert_equal 1, ChainDefinition::TERMINATED.size
+    end
+
+    test "a raising on_terminal callback is swallowed and the dependent still advances" do
+      run = plan_chain(options: {raise_terminal: true})
+      Rails.logger.expects(:error).with { it.include?("callback boom") }.once
+      ready = finish(:x, Workflows::Outcome.succeeded("done"), run: run)
+      assert_equal [["succeeded", "ready"], %w[y]], [%i[x y].map { run.step(it).state }, ready.map(&:key)]
     end
 
     test "fail retries with backoff, then fails and releases" do

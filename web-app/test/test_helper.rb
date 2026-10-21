@@ -34,6 +34,7 @@ require_relative "support/goodreads_import_helper"
 require_relative "support/list_wizard_helper"
 require_relative "support/ol_backfill_helper"
 require_relative "support/workflows/test_definition"
+require_relative "support/workflows/dispatch_helper"
 require_relative "support/validator_response_stub"
 
 # Configure Sidekiq to run jobs inline during tests
@@ -64,6 +65,7 @@ end
 module ActiveSupport
   class TestCase
     include SqlCapture
+    include Workflows::DispatchHelper
 
     # Capped, not :number_of_processors. Several agents run suites at once in
     # separate worktrees, and every worker holds one Postgres connection, so an
