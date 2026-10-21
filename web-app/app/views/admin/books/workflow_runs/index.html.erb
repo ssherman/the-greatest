@@ -59,10 +59,12 @@
                         <% target_path = Admin::DomainRouting.path_for(target) %>
                         <div>
                           Waiting on <span class="font-mono"><%= prerequisite.key %></span> (<%= edge.kind %>)
-                          <% if target_path %>
+                          <% if prerequisite.workflow_run_id == run.id %>
+                            <%# Same record as this page: no link back to where you already are. %>
+                          <% elsif target_path %>
                             of <%= link_to (target.try(:name) || target.try(:title) || "#{target.class.name.demodulize} ##{target.id}"), target_path,
                                   class: "link link-primary", data: {turbo_frame: "_top"} %>
-                          <% elsif prerequisite.run_id != run.id %>
+                          <% else %>
                             of <%= prerequisite.run.enrichable_type %> #<%= prerequisite.run.enrichable_id %> (removed)
                           <% end %>
                         </div>

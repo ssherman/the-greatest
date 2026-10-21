@@ -22,7 +22,7 @@ class WorkflowsRakeTest < ActiveSupport::TestCase
   end
 
   test "prints one line per stuck step, using the hours argument as the threshold" do
-    workflow_run.step(:a).update_columns(state: WorkflowStep.states[:waiting], updated_at: 3.hours.ago)
+    workflow_run.step(:a).update_columns(state: WorkflowStep.states[:waiting], run_after: 3.hours.ago)
 
     assert_output(/No stuck workflow steps\./) { @task.invoke }
     @task.reenable

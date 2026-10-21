@@ -50,9 +50,10 @@ steps themselves (what Wikidata, VIAF and the AI step do) are in
 ## Step states
 
 `blocked` (waiting on edges) -> `ready` (may be dispatched) -> `running` (a worker holds the lease)
--> `succeeded`, `skipped`, or `failed`. A step can also be `waiting`: it asked to come back later at
-`run_after` (a rate limit, a place in the VIAF line) and the sweep wakes it. `succeeded`, `skipped`
-and `failed` are terminal.
+-> `succeeded`, `skipped`, or `failed`. A step can also be `waiting`: it is
+held until `run_after` and only the sweep wakes it. The reasons are a rate limit, a place in the VIAF
+line, a run planned with `start_after` (the backfill's pacing), and **a failed attempt's backoff**.
+`succeeded`, `skipped` and `failed` are terminal.
 
 ## Edges and release
 
@@ -124,8 +125,9 @@ it for the transitional legacy hand-off (see below).
 4. **Execute.** The adapter runs outside any transaction. `WorkflowStepJob` has `retry: 0`: the
    workflow owns retries. `Sidekiq::Shutdown` is re-raised.
 5. **Finish** (`Coordinator.finish` / `fail`). Token-guarded: a worker whose lease was lost writes
-   nothing. A raise returns the step to `ready` with backoff `30 s x 4^(n-1)` (30 s, 2 min, 8 min)
-   until `max_attempts`, then `failed` and released. **Attempts count failures and expired leases,
+   nothing. A raise puts the step in `waiting` with `run_after` set to the backoff, `30 s x 4^(n-1)`
+   (30 s, 2 min, 8 min), and the next sweep after that wakes it; at `max_attempts` it is `failed`
+   and released instead. **Attempts count failures and expired leases,
    not claims**, so a rate-limit wait or a deploy push-back never uses one up.
 6. **Advance** (`Coordinator.advance`). For each edge on a step that finished or was released:
    record it satisfied, lock the dependent `FOR UPDATE` (in id order), and evaluate it: `ready`,
@@ -200,16 +202,27 @@ follows the parent record's `show` policy, so a books-domain viewer can read it.
 ## `workflows:stuck`
 
 ```bash
-bin/rails workflows:stuck        # idle threshold 6 hours
+bin/rails workflows:stuck        # grace period 6 hours
 bin/rails "workflows:stuck[2]"   # 2 hours
 ```
 
-Prints one line per step that needs a person: `failed` steps in runs that finished in the last 7
-days; `waiting`, `blocked` or `ready` steps untouched for longer than the threshold; and `running`
-steps past their lease (the sweep reclaims these within a minute, so one that stays here means the
-sweep is not running). The same rows come from `Workflows::Stuck.call(older_than:)`. The recovery
-sweep handles the common failures itself; a row here is an exhausted step or one even the sweep
-cannot move.
+Prints one line per step that needs a person. It lists **overdue** work, not old work: a backfill
+plans tens of thousands of runs seconds apart and a VIAF step can wait weeks for its turn, so age
+alone would list a healthy queue. Per state:
+
+- `failed`: finished in the last 7 days, whatever its run's status (a book run can sit behind a failed
+  author step);
+- `waiting`: `run_after` passed more than the grace period ago, so the sweep did not wake it (a far-future
+  `run_after` is not listed);
+- `blocked`: every unsatisfied prerequisite is already released (release edge) or terminal (finish
+  edge), so it should have advanced; a step behind a prerequisite that is legitimately still open is not
+  listed;
+- `ready`: not dispatched for longer than the longest redispatch window (12 hours) plus the grace period;
+- `running`: past its lease (the sweep reclaims these within a minute, so one that stays here means the
+  sweep is not running).
+
+The same rows come from `Workflows::Stuck.call(older_than:)`. The recovery sweep handles the common
+failures itself; a row here is an exhausted step or one even the sweep cannot move.
 
 ## Adding a step to a workflow
 

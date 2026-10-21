@@ -34,6 +34,18 @@ module Admin
         get admin_books_book_workflow_runs_path(@book)
         assert_response :success
         assert_select "table", count: 0
+        # The frame id is the show pages' contract: without it the lazy frame never fills.
+        assert_select "turbo-frame#workflow_runs_list"
+      end
+
+      test "a step waiting on its own run's step shows no link back to the page" do
+        stub_workflow_dispatch
+        plan_other_run
+        get_path = admin_books_author_workflow_runs_path(@author)
+        sign_in_as(@admin_user, stub_auth: true)
+        get get_path
+        assert_response :success
+        assert_select "a[href=?]", admin_books_author_path(@author), count: 0
       end
 
       test "lists only the newest runs, newest first" do

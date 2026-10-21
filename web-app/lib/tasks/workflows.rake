@@ -1,5 +1,5 @@
 namespace :workflows do
-  desc "List workflow steps that need attention: failed, idle for HOURS (default 6), or past their lease"
+  desc "List workflow steps that need attention: failed, or overdue by more than HOURS (default 6)"
   task :stuck, [:hours] => :environment do |_task, args|
     hours = (args[:hours].presence || 6).to_f
     rows = Workflows::Stuck.call(older_than: hours.hours)
