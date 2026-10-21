@@ -51,8 +51,9 @@ how the backfill retries a VIAF step that never finished; `skip_ai_if_ran` skips
 the ledger shows the AI step already ran this era (the VIAF retry for an author whose chain was
 partly done). The entry points are the author importer's `Providers::Enrichment`,
 `Services::Books::Authors::Backfill` and `RejectExternalLink` (which supersedes any active run,
-inside its own transaction). `WikidataJob` and `ViafJob` survive only as shims that plan a run from a
-message already in Sidekiq; `EnrichJob` is unchanged, and `hand_off` is its one live use.
+inside its own transaction). `WikidataJob`, `ViafJob` and `EnrichJob` survive only as shims that plan
+a run from a message already in Sidekiq (`EnrichJob` plans a run with only `author_facts`), and
+`EnrichJob.hand_off` is still called by `author_facts`' `on_terminal`.
 
 **VIAF patience.** The chain never waits on VIAF. A VIAF *pause* (a Cloudflare block, VIAF's 429, or
 the day's budget running low: `Viaf::Exceptions::Paused`), or a turn in `Viaf::Schedule`'s line more
@@ -689,8 +690,9 @@ Run the AI step by hand (writes a ledger row; a real model call):
 
 ```ruby
 Services::Books::Authors::EnrichAuthor.call(author: Books::Author.find(id))
-# or, through the job, which also hands on any books waiting for this author:
-Books::Authors::EnrichJob.new.perform(author_id)
+# or through the workflow, which also hands on any books waiting for this author:
+Workflows::Books::AuthorEnrichment.start(Books::Author.find(id), initiated_by: "console",
+  options: {only: ["author_facts"]})
 ```
 
 Where to look:

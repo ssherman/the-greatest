@@ -1,20 +1,22 @@
 # frozen_string_literal: true
 
-# One author through Services::Books::Authors::EnrichAuthor (spec §9-§11),
-# the chain's last step, on the author_chain queue, last in strict order
-# after low. A failed AI run raises, so
-# Sidekiq retries it as it does a book's. The books whose enrichment waited
-# for this author (Services::Books::DeferredEnrichment) are then handed on
-# to Books::EnrichBookJob: after a successful run, or once the retries are
-# exhausted, so the hand-off happens once either way.
+# A shim for messages already in Sidekiq when the author workflow shipped
+# (spec §11 step 1). An old message plans an author run with only the AI step
+# (author_facts), so the AI call goes through the workflow's lease, retries and
+# ledger link rather than running beside an active run: the old VIAF step queued
+# this job and kept its own turn, so both can be in flight at deploy, and the
+# ViafJob shim's run would then pay for the AI step a second time. An author who
+# already has an active run is reused by `start`, and that run's author_facts
+# does the AI work and the hand-off. Nothing enqueues this job any more; Task 14
+# deletes it.
+#
+# hand_off stays here until then: the author workflow's author_facts step calls
+# it (on_terminal) for books deferred under the old system, after a successful
+# run or once its attempts are spent.
 class Books::Authors::EnrichJob
   include Sidekiq::Job
 
   sidekiq_options queue: :author_chain, retry: 3
-
-  sidekiq_retries_exhausted do |job, _exception|
-    hand_off(job["args"].first)
-  end
 
   def self.hand_off(author_id)
     author = ::Books::Author.find_by(id: author_id)
@@ -35,9 +37,7 @@ class Books::Authors::EnrichJob
     # Deleted or merged away between enqueue and run: nothing to do.
     return if author.nil?
 
-    result = ::Services::Books::Authors::EnrichAuthor.call(author: author, allow_research: allow_research)
-    raise StandardError, "Author enrichment failed for author #{author_id}: #{result.errors.join("; ")}" unless result.success?
-
-    self.class.hand_off(author_id)
+    ::Workflows::Books::AuthorEnrichment.start(author, initiated_by: "legacy_job",
+      options: {allow_research: allow_research, only: ["author_facts"]})
   end
 end

@@ -181,8 +181,9 @@ follow-up that lands while the AI step is still running missed it too.
 `start` is `Workflows::Books::AuthorEnrichment.start(author, initiated_by:, options:, start_after:,
 parent_run:, supersede:)`. Callers: the author importer's `Providers::Enrichment`, `Backfill`, and
 `RejectExternalLink` (which supersedes any active run, inside its own transaction, with
-`refresh: true`). The old `WikidataJob` and `ViafJob` are shims that plan a run for messages already
-in Sidekiq.
+`refresh: true`). The old `WikidataJob`, `ViafJob` and `EnrichJob` are shims that plan a run for
+messages already in Sidekiq (`EnrichJob` plans `only: ["author_facts"]`), so no old message runs a
+step beside an active run; an author with an active run reuses it.
 
 `author_facts`' `on_terminal` calls `Books::Authors::EnrichJob.hand_off`, the **transitional
 legacy hand-off** that queues `EnrichBookJob` for books whose latest ledger row is the
