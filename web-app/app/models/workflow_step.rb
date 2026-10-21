@@ -50,6 +50,12 @@ class WorkflowStep < ApplicationRecord
 
   validates :key, :queue, presence: true
 
+  # The current definition's declaration of this step, or nil when the
+  # definition no longer has the key (the run was planned under an older version).
+  def definition_step
+    Workflows::Registry.fetch(run.workflow).step(key)
+  end
+
   def terminal?
     TERMINAL_STATES.include?(state)
   end

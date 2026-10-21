@@ -49,11 +49,12 @@ module Workflows
       plan_for(books_authors(:king), **planner_args)
     end
 
-    # Plans a TestDefinition run on Tolstoy, cancelling the fixture run first
-    # so the one-active-run index does not refuse it.
+    # Plans a TestDefinition run on Tolstoy. The fixture run on Tolstoy is
+    # cancelled first: that frees the one-active-run slot, and it makes the
+    # fixture run's steps terminal so they stay out of cross-run and sweep tests.
     def plan_other_run(**planner_args)
       WorkflowRun.where(enrichable: books_authors(:tolstoy), status: :running).find_each do |fixture_run|
-        fixture_run.update_columns(status: WorkflowRun.statuses[:cancelled])
+        Workflows::Coordinator.cancel(fixture_run, outcome: "test")
       end
       plan_for(books_authors(:tolstoy), **planner_args)
     end

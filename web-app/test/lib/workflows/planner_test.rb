@@ -129,6 +129,19 @@ module Workflows
       assert_equal 1, result.data[:run].step(:a).dependencies.count
     end
 
+    test "supersede returns the other runs' steps that the cancellation freed, ahead of the new run's own" do
+      first = plan.data[:run]
+      other = plan_other_run(waits: {a: [first.step(:c)]}).data[:run]
+      result = plan(supersede: true)
+      assert_equal [other.step(:a).id], result.data[:ready_steps].map(&:id).first(1)
+      assert_equal 3, result.data[:ready_steps].size
+    end
+
+    test "an explicit only: nil plans every step normally" do
+      run = plan(options: {only: nil}).data[:run]
+      assert_equal({"a" => "ready", "b" => "ready", "c" => "blocked"}, run.steps.pluck(:key, :state).to_h)
+    end
+
     test "a bare only string and a symbol start_at are accepted; a non-scalar start_at is refused" do
       assert_equal "skipped", plan(options: {only: "a"}).data[:run].step(:b).state
       assert_equal "skipped", plan(options: {start_at: :b}, supersede: true).data[:run].step(:a).state

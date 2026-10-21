@@ -55,7 +55,8 @@ module Workflows
         if existing && !@supersede
           next success(run: existing, reused: true, ready_steps: [])
         end
-        Workflows::Coordinator.cancel(existing, outcome: "superseded") if existing
+        # Cancelling can release steps in other runs; they are ready to dispatch too.
+        freed = existing ? Workflows::Coordinator.cancel(existing, outcome: "superseded") : []
 
         run = create_run
         steps = create_steps(run)
@@ -64,7 +65,7 @@ module Workflows
         # A plan can end with every step already terminal (all skipped); nothing
         # would ever finish it, and the dead run would block the target.
         Workflows::Coordinator.close_if_finished(run)
-        success(run: run.reload, reused: false, ready_steps: run.steps.where(state: :ready).order(:id).to_a)
+        success(run: run.reload, reused: false, ready_steps: freed + run.steps.where(state: :ready).order(:id).to_a)
       end
     end
 
@@ -126,7 +127,9 @@ module Workflows
     # "only" becomes an Array of strings and "start_at" a String, so a bare
     # value works. A start_at that is not a scalar is left for validate to refuse.
     def normalize(options)
-      options["only"] = Array(options["only"]).map(&:to_s) if options.key?("only")
+      # An explicit only: nil means "no restriction"; Array(nil) would turn it
+      # into [] and skip every step.
+      options["only"] = Array(options["only"]).map(&:to_s) unless options["only"].nil?
       options["start_at"] = options["start_at"].to_s if options["start_at"].is_a?(Symbol)
       options
     end
