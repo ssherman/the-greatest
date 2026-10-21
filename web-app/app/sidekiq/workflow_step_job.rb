@@ -31,6 +31,9 @@ class WorkflowStepJob
       # claims the step again at once.
       raise
     rescue => e
+      # Logged first: when the error came from finish after its terminal write
+      # committed, fail is a no-op and this line is the only trace of it.
+      Rails.logger.error("WorkflowStepJob: step #{step.id} raised #{e.class}: #{e.message}")
       dispatch(Workflows::Coordinator.fail(step, token: jid, error: e))
     end
   end

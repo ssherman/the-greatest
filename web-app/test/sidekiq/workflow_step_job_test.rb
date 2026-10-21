@@ -97,6 +97,14 @@ class WorkflowStepJobTest < ActiveSupport::TestCase
     assert_not_nil step.error
   end
 
+  test "a raised error is logged with the step id before it is recorded as a failure" do
+    Workflows::TestDefinition.outcomes[:a] = ->(**) { raise "adapter boom" }
+    step = workflow_run.step(:a)
+    Rails.logger.expects(:error).with { it.include?("step #{step.id}") && it.include?("adapter boom") }.once
+    perform(step)
+    assert_equal ["waiting", 1], step.reload.values_at(:state, :attempts)
+  end
+
   test "Sidekiq::Shutdown propagates and leaves the step claimable by the same jid" do
     Workflows::TestDefinition.outcomes[:a] = ->(**) { raise Sidekiq::Shutdown }
     assert_raises(Sidekiq::Shutdown) { perform(workflow_run.step(:a)) }

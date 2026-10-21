@@ -5,6 +5,7 @@ module Workflows
   module Coordinator
     FAILURE_BACKOFF = 30.seconds
     MAX_ERROR_LENGTH = 1_000
+    LEASE_EXPIRED = "lease expired"
 
     class << self
       # Looks at one blocked step and acts on it. Returns:
@@ -94,6 +95,37 @@ module Workflows
         return [] unless failed&.failed?
 
         settle_terminal(failed)
+      end
+
+      # The recovery sweep's counterpart to fail: a worker that held the lease
+      # is gone (crash, deploy, lost connection), so the expiry itself is the
+      # failed attempt. Below max_attempts the step goes straight back to ready
+      # (no backoff: nothing raised, and the worker may simply have been killed)
+      # with dispatched_at cleared so the sweep dispatches it in the same pass;
+      # at max_attempts it fails, released, and its dependents advance. As in a
+      # sweep, on_terminal is not called. Conditional on the lease still being
+      # expired, so a worker that finishes at the same moment either wins (this
+      # returns nil, nothing written) or loses cleanly (its token-guarded write
+      # is dropped). Returns nil when nothing was reclaimed, else the steps that
+      # became ready: the step itself, or the dependents of a failed one.
+      def expire_lease(step, now: Time.current)
+        binds = {running: running_state, ready: ready_state, failed: WorkflowStep.states[:failed],
+                 id: step.id, now: now, error: LEASE_EXPIRED}
+        sql = WorkflowStep.sanitize_sql_array([<<~SQL, binds])
+          UPDATE workflow_steps
+          SET attempts = attempts + 1, error = :error,
+              state = CASE WHEN attempts + 1 >= max_attempts THEN :failed ELSE :ready END,
+              finished_at = CASE WHEN attempts + 1 >= max_attempts THEN :now ELSE finished_at END,
+              released_at = CASE WHEN attempts + 1 >= max_attempts THEN COALESCE(released_at, :now) ELSE released_at END,
+              dispatched_at = NULL, dispatch_count = 0,
+              lease_token = NULL, lease_expires_at = NULL, updated_at = :now
+          WHERE id = :id AND state = :running AND lease_expires_at < :now
+          RETURNING *
+        SQL
+        expired = WorkflowStep.find_by_sql(sql).first
+        return unless expired
+
+        expired.failed? ? advance(expired) : [expired]
       end
 
       # Moves the dependents of a step forward after it finished or was
