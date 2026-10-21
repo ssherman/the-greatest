@@ -17,6 +17,8 @@ module Workflows
       stub_open_library_down
       @calls = []
       stub_services
+      # The fixture run on Tolstoy has a ready step the sweep would also run.
+      Workflows::Coordinator.cancel(workflow_runs(:tolstoy_author_run), outcome: "test")
     end
 
     def stub_open_library_down
@@ -87,6 +89,31 @@ module Workflows
       assert_equal %w[succeeded succeeded], runs_of(book).first.steps.order(:id).map(&:state)
     end
 
+    # The order above also falls out of callback order (the author chains run
+    # inline, ahead of the book run's own dispatch), so this holds one author back
+    # to prove the wait itself: without it book_facts would run at once.
+    test "book AI waits for a held-back author and runs once, after that author's AI step" do
+      ::Services::Books::Authors::EnrichFromWikidata.stubs(:call).with { |**kwargs| kwargs[:author].name == "Basil Tern" }.returns(
+        success(::Services::Books::Authors::EnrichFromWikidata, {outcome: :unmatched})
+      )
+      # A turn inside CHAIN_PATIENCE: Basil's VIAF step waits without releasing.
+      ::Viaf::Schedule.stubs(:new).returns(stub(horizon: 1, reserve: 300))
+
+      book = import("Held Back", "Nora Quillfeather", "Basil Tern")
+
+      assert_equal [["Nora Quillfeather"], []], [called(:author_facts), called(:book_facts)]
+      book_run = runs_of(book).first
+      assert_equal ["running", "blocked"], [book_run.status, book_run.step(:book_facts).state]
+
+      travel_to 10.minutes.from_now do
+        Workflows::Recovery.call
+      end
+
+      assert_equal [["Nora Quillfeather", "Basil Tern"].sort, ["Held Back"]], [called(:author_facts).sort, called(:book_facts)]
+      assert_operator @calls.index([:book_facts, "Held Back"]), :>, @calls.index([:author_facts, "Basil Tern"])
+      assert_equal %w[completed], runs_of(book).map(&:status)
+    end
+
     test "importing the same book again plans and runs nothing" do
       import("Two Hands", "Nora Quillfeather", "Basil Tern")
       @calls.clear
@@ -124,6 +151,7 @@ module Workflows
 
     test "a worker crash mid-step is recovered by the sweep" do
       run = Sidekiq::Testing.fake! { Workflows::Books::BookEnrichment.start(books_books(:got), initiated_by: "test") }
+      WorkflowStepJob.clear
       step = run.step(:book_facts)
       assert_predicate step, :ready?
       Workflows::Coordinator.claim(step.id, token: "dead-worker")
@@ -144,7 +172,7 @@ module Workflows
       serial = WorkflowStepJob.set(queue: "serial")
       WorkflowStepJob.stubs(:set).with(queue: "author_chain").returns(chain)
       WorkflowStepJob.stubs(:set).with(queue: "serial").returns(serial)
-      WorkflowStepJob.stubs(:set).with(queue: "low").raises(RedisClient::CannotConnectError.new("redis is down"))
+      WorkflowStepJob.expects(:set).with(queue: "low").raises(RedisClient::CannotConnectError.new("redis is down")).at_least_once
 
       book = import("Lost Message", "Edda Marlow")
 
