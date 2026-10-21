@@ -44,14 +44,19 @@ module Workflows
           linked_ids = book.book_authors.pluck(:author_id)
           waited_on = author_runs.select { |author, _| linked_ids.include?(author.id) }.values
           result = Workflows::Planner.call(definition: self, enrichable: book, initiated_by: initiated_by,
-            options: options.merge(author_names: author_names),
+            options: options.stringify_keys.merge("author_names" => author_names),
             waits: {book_facts: waited_on.map { |author_run| author_run.step(:author_facts) }},
             skips: linked_ids.empty? ? {amazon: "no_authors"} : {})
           raise ArgumentError, result.errors.join("; ") unless result.success?
 
           run = result.data[:run]
-          # Display only: the first book run to ask keeps the author run.
-          WorkflowRun.where(id: author_runs.values.map(&:id), parent_run_id: nil).update_all(parent_run_id: run.id) unless result.data[:reused]
+          if result.data[:reused]
+            Rails.logger.info "Workflows::Books::BookEnrichment: book #{book.id} already has active run #{run.id}; " \
+              "planned nothing (new authors started unparented: #{authors.map(&:id).inspect})"
+          else
+            # Display only: the first book run to ask keeps the author run.
+            WorkflowRun.where(id: author_runs.values.map(&:id), parent_run_id: nil).update_all(parent_run_id: run.id)
+          end
           Workflows::Dispatcher.after_commit(result.data[:ready_steps])
           run
         end

@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
-# The Amazon step of the book workflow: the body of the old
-# Books::AmazonProductEnrichmentJob, unchanged. Failure raises, so the
-# coordinator retries it (three attempts, where the job's implicit Sidekiq
-# retry count was 25).
+# The Amazon step of the book workflow: a copy of the body of
+# Books::AmazonProductEnrichmentJob. That job is still live (the
+# books:amazon_enrich* rake tasks call it), so the two must be kept in step.
+# Failure raises, so the coordinator retries it (three attempts, where the
+# job's implicit Sidekiq retry count was 25).
 module Workflows
   module Books
     module Steps

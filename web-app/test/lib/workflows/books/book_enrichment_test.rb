@@ -60,9 +60,24 @@ module Workflows
 
       test "start dispatches the ready steps after commit" do
         Workflows::Dispatcher.unstub(:dispatch)
-        Workflows::Dispatcher.expects(:dispatch).with { |steps| steps.map(&:key).sort == %w[amazon book_facts] }
+        dispatched = false
+        Workflows::Dispatcher.expects(:dispatch).once.with { |steps|
+          dispatched = true
+          steps.map(&:key).sort == %w[amazon book_facts]
+        }
 
-        start
+        ActiveRecord::Base.transaction do
+          start
+          assert_not dispatched, "dispatched before the transaction committed"
+        end
+
+        assert dispatched
+      end
+
+      test "a caller's author_names key cannot override the argument" do
+        run = start(author_names: ["Stephen King"], options: {"author_names" => ["Wrong"]})
+
+        assert_equal ["Stephen King"], run.options["author_names"]
       end
 
       test "the options and author names travel on the run" do
@@ -158,6 +173,7 @@ module Workflows
 
       test "an active book run is returned as is: no wait is added and no author run is re-parented" do
         first = start
+        Rails.logger.expects(:info).with(all_of(includes("book #{@book.id} already has active run #{first.id}"), includes("[#{@a.id}]")))
         second = start(new_author_ids: [@a.id])
 
         assert_equal first.id, second.id
