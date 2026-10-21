@@ -1,0 +1,86 @@
+<%
+  state_badges = {
+    "blocked" => "badge-ghost", "ready" => "badge-info", "running" => "badge-primary", "waiting" => "badge-warning",
+    "succeeded" => "badge-success", "skipped" => "badge-ghost", "failed" => "badge-error"
+  }
+  run_badges = {
+    "running" => "badge-primary", "completed" => "badge-success",
+    "completed_with_failures" => "badge-warning", "cancelled" => "badge-ghost"
+  }
+  stamp = ->(time) { time ? time.strftime("%Y-%m-%d %H:%M") : "–" }
+%>
+<%= turbo_frame_tag "workflow_runs_list" do %>
+  <% if @runs.empty? %>
+    <p class="text-base-content/60 text-sm">No enrichment runs.</p>
+  <% else %>
+    <div class="flex flex-col gap-6">
+      <% @runs.each do |run| %>
+        <div data-testid="workflow-run">
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2">
+            <span class="font-semibold"><%= run.workflow %></span>
+            <span class="badge badge-sm <%= run_badges[run.status] %>"><%= run.status.humanize %></span>
+            <span class="text-sm text-base-content/60">by <%= run.initiated_by %></span>
+            <span class="text-sm text-base-content/60">started <%= stamp.call(run.started_at || run.created_at) %></span>
+            <span class="text-sm text-base-content/60">finished <%= stamp.call(run.finished_at) %></span>
+          </div>
+          <% if run.error_summary.present? %>
+            <p class="text-sm text-error mb-2"><%= run.error_summary %></p>
+          <% end %>
+          <div class="overflow-x-auto">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Step</th>
+                  <th>State</th>
+                  <th>Outcome</th>
+                  <th>Attempts</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% run.steps.sort_by(&:id).each do |step| %>
+                  <% ledger = @ledger_by_step.fetch(step.id, []) %>
+                  <% open_edges = step.blocked? ? step.dependencies.reject(&:satisfied_at) : [] %>
+                  <tr>
+                    <td class="font-mono text-sm"><%= step.key %></td>
+                    <td><span class="badge badge-sm <%= state_badges[step.state] %>"><%= step.state %></span></td>
+                    <td><%= step.outcome.presence || "–" %></td>
+                    <td><%= step.attempts %> / <%= step.max_attempts %></td>
+                    <td class="text-sm">
+                      <% if step.waiting? && step.run_after %>
+                        <div>Waiting until <%= stamp.call(step.run_after) %></div>
+                      <% end %>
+                      <% if step.error.present? %>
+                        <div class="text-error break-words"><%= step.error.truncate(300) %></div>
+                      <% end %>
+                      <% open_edges.each do |edge| %>
+                        <% prerequisite = edge.prerequisite_step %>
+                        <% target = @targets[[prerequisite.run.enrichable_type, prerequisite.run.enrichable_id]] %>
+                        <% target_path = Admin::DomainRouting.path_for(target) %>
+                        <div>
+                          Waiting on <span class="font-mono"><%= prerequisite.key %></span> (<%= edge.kind %>)
+                          <% if target_path %>
+                            of <%= link_to (target.try(:name) || target.try(:title) || "#{target.class.name.demodulize} ##{target.id}"), target_path,
+                                  class: "link link-primary", data: {turbo_frame: "_top"} %>
+                          <% elsif prerequisite.run_id != run.id %>
+                            of <%= prerequisite.run.enrichable_type %> #<%= prerequisite.run.enrichable_id %> (removed)
+                          <% end %>
+                        </div>
+                      <% end %>
+                      <% ledger.each do |entry| %>
+                        <div class="text-base-content/70" data-testid="ledger-row">
+                          <span class="font-mono"><%= entry.kind %></span>
+                          <%= entry.mode %>, <%= entry.outcome.to_s.humanize.downcase %>
+                        </div>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>

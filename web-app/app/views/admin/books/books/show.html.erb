@@ -163,6 +163,15 @@
     </div>
   </div>
 
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title text-base">Enrichment runs</h2>
+      <%= turbo_frame_tag "workflow_runs_list", loading: :lazy, src: admin_books_book_workflow_runs_path(@book) do %>
+        <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+      <% end %>
+    </div>
+  </div>
+
   <% if current_user_can_write? %>
     <dialog id="add_book_image_modal" class="modal">
       <div class="modal-box">

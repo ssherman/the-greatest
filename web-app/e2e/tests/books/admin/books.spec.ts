@@ -48,4 +48,19 @@ test.describe('books admin — books', () => {
     await page.getByRole("button", { name: "Delete" }).click();
     await expect(page).toHaveURL(/\/admin\/books$/);
   });
+
+  test("shows the Enrichment runs card", async ({ page }) => {
+    const title = `E2E Runs Book ${Date.now()}`;
+    await page.goto("/admin/books/new");
+    await page.locator('input[name="books_book[title]"]').fill(title);
+    await page.getByRole("button", { name: "Create Book" }).click();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+    // The card's frame loads lazily, once it scrolls into view.
+    const heading = page.getByRole("heading", { name: "Enrichment runs" });
+    await heading.scrollIntoViewIfNeeded();
+    await expect(heading).toBeVisible();
+    // A new book has no runs, or its runs show as a table.
+    await expect(page.getByText("No enrichment runs.").or(page.getByRole("table").filter({ hasText: "Outcome" }))).toBeVisible();
+  });
 });
