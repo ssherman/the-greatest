@@ -83,7 +83,7 @@ end
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
 | Books | Book | OpenLibrary, Authors, QueryIdentifiers, Enrichment | Complete |
-| Books | Author | OpenLibrary, Enrichment | Complete (Wikidata, VIAF, AI step; Reject link and backfill still to come) |
+| Books | Author | OpenLibrary, Enrichment | Complete (Wikidata, VIAF and AI steps as a workflow run; Reject link and backfill plan runs too) |
 
 ### Music Providers
 
@@ -254,13 +254,14 @@ fills blanks from the item, and links the English Wikipedia article only through
 `docs/features/books-author-enrichment.md`. Providers run only for a new author, so a matched
 author is never re-enriched from an import.
 
-On a Wikidata miss, `WikidataJob` chains into `Books::Authors::ViafJob` — VIAF is not a provider of
-its own, but a job the Wikidata step can lead to. Every chain is meant to end in
-`Books::Authors::EnrichJob`, the AI facts step, which also hands the author's waiting books on to
-book enrichment -- see `docs/features/books-author-enrichment.md`'s "The AI step" and "A stuck
-chain" for what the AI step does and the gaps that can keep a chain from reaching it. Spec:
-`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`. The Reject link action
-(increment 5) and the backfill rake task (increment 6) are still to come.
+On a Wikidata miss, the run's `viaf` step follows -- VIAF is not a provider of its own, but a step of
+the author run (`books.author_enrichment`: `wikidata`, `viaf`, `wikidata_via_viaf`, `author_facts`).
+Every run ends in `author_facts`, the AI facts step; a book created in the same import waits on it
+through the book run. See `docs/features/books-author-enrichment.md` ("The AI step") and
+[Enrichment workflows](./enrichment-workflows.md). The Reject link action
+(`Services::Books::Authors::RejectExternalLink`) and the backfill (`Services::Books::Authors::Backfill`,
+`books:authors:enrich`) both plan author runs. Spec:
+`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`.
 
 ## Usage Examples
 

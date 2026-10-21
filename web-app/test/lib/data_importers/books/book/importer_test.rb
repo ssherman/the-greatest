@@ -403,6 +403,65 @@ module DataImporters
           assert_equal 0, WorkflowRun.where(enrichable_type: "Books::Author", enrichable_id: result.created_author_ids).count
         end
 
+        test "a supplied match is used instead of running the finder, and its decision points at the new book" do
+          stub_resolve_down
+          Finder.any_instance.expects(:call).never
+          decision = ::MatchDecision.create!(finder: "DataImporters::Books::Book::Finder", outcome: :unmatched,
+            confidence: :high, decided_by: :rule)
+          match = ::DataImporters::Match.new(outcome: :unmatched, confidence: :high, decided_by: :rule, decision: decision)
+
+          result = Importer.call(title: "The Quiet Year", author_names: ["Anna Brenner"], match: match)
+
+          assert result.created?
+          assert_equal result.item, decision.reload.record
+        end
+
+        test "an Open Library accept links the work's authors, creating one by its key" do
+          stub_open_library_client
+          record = work_record_hash(title: "The Quiet Year").merge(
+            "authors" => [{"key" => {"source" => "openlibrary", "key" => "OL77A"}, "name" => "Anna Brenner"}]
+          )
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: accept_response(diff: [], record: record).to_json)
+          stub_request(:get, "#{BASE_URL}/authors/OL77A").to_return(status: 200, body: {
+            "source_version" => nil,
+            "data" => {"key" => {"source" => "openlibrary", "key" => "OL77A"}, "redirected_from" => [], "name" => "Anna Brenner",
+                       "alternate_names" => [], "birth_year" => 1901, "death_year" => nil}
+          }.to_json)
+
+          book = Importer.call(title: "The Quiet Year", author_names: ["A. Brenner"]).item.reload
+
+          author = book.authors.sole
+          assert_equal ["Anna Brenner", 1901], [author.name, author.birth_year]
+          assert author.identifiers.exists?(identifier_type: :books_author_openlibrary_id, value: "OL77A")
+          # The author was created through Open Library, so the book's AI step waits on its run.
+          author_run = WorkflowRun.find_by!(enrichable: author, workflow: "books.author_enrichment")
+          book_facts = WorkflowRun.find_by!(enrichable: book, workflow: "books.book_enrichment").step(:book_facts)
+          assert_equal [author_run.step(:author_facts)], book_facts.dependencies.map(&:prerequisite_step)
+        end
+
+        test "a forced re-import of a book that has authors touches neither author step" do
+          stub_open_library_client
+          record = work_record_hash(title: "War and Peace").merge(
+            "authors" => [{"key" => {"source" => "openlibrary", "key" => "OL2A"}, "name" => "Stephen King"}]
+          )
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: accept_response(diff: [], record: record).to_json)
+          ::DataImporters::Books::Author::Importer.expects(:call).never
+
+          # The ISBN identifier plus the agreeing title corroborates, so the
+          # finder matches war_and_peace by rule and stops before its own
+          # Open Library source; the forced providers then run with the
+          # query, so the Open Library provider (a persisted book) still
+          # calls /resolve and reaches link_open_library_authors, and the
+          # Authors provider still sees the query's author name.
+          result = Importer.call(
+            title: "War and Peace", isbn13: [identifiers(:war_and_peace_isbn13).value],
+            author_names: ["Stephen King"], force_providers: true
+          )
+
+          assert_equal books_books(:war_and_peace), result.item
+          assert_equal [books_authors(:tolstoy)], books_books(:war_and_peace).reload.authors.to_a
+        end
+
         test "providers run Open Library, Authors, then Enrichment" do
           providers = Importer.new.send(:providers)
 
@@ -440,6 +499,14 @@ module DataImporters
           assert_equal [author_run.step(:author_facts)], book_run.step(:book_facts).dependencies.map(&:prerequisite_step)
           assert_equal book_run.id, author_run.reload.parent_run_id
           assert_equal ["importer", "importer"], [author_run.initiated_by, book_run.initiated_by]
+        end
+
+        test "a book with authors gets a book run whose amazon step is ready, not skipped" do
+          stub_resolve_down
+
+          result = Importer.call(title: "Hadji Murat", author_names: ["Lev Tolstoy"])
+
+          assert_equal "ready", WorkflowRun.find_by!(enrichable: result.item, workflow: "books.book_enrichment").step(:amazon).state
         end
 
         test "a book whose authors all exist plans a book run and no author run" do

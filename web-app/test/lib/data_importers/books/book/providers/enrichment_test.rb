@@ -114,10 +114,24 @@ module DataImporters
 
             ::ActiveRecord::Base.transaction(requires_new: true) do
               @provider.populate(@book, query: @query)
+              assert_equal 1, WorkflowRun.where(enrichable: @book).count, "the provider planned nothing, so the rollback proves nothing"
               raise ::ActiveRecord::Rollback
             end
 
             assert_equal 0, WorkflowRun.where(enrichable: @book).count
+          end
+
+          test "a failure after the author runs were written rolls the whole plan back" do
+            author = ::Books::Author.create!(name: "Fresh Author")
+            ::Books::BookAuthor.create!(book: @book, author: author, position: 2, role: :author)
+            Workflows::Dispatcher.stubs(:after_commit).raises("boom")
+
+            result = ::ActiveRecord::Base.transaction do
+              Enrichment.new(new_author_ids: [author.id]).populate(@book, query: @query)
+            end
+
+            refute result.success?
+            assert_equal 0, WorkflowRun.where(enrichable: [@book, author]).count
           end
         end
       end

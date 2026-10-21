@@ -417,8 +417,9 @@ The `author_facts` step's `on_terminal` calls `Books::Authors::EnrichJob.hand_of
 `EnrichBookJob` for each of the author's books whose latest `books.book_facts` row is that
 deferral, whether the step succeeded or failed for good. (`on_terminal` fires only when a worker
 finishes or fails the step, so a step skipped by `skip_ai_if_ran` does not hand off; the AI step
-ran in an earlier era and handed its books on then.) This is transitional: the book workflow will
-wait on the author step directly and the hand-off goes away. Only books that waited are handed on this way; the author's other books never are (Shane,
+ran in an earlier era and handed its books on then.) This is transitional: the book workflow now
+waits on the author step directly (new imports plan that wait and write no deferral), so the hand-off
+only serves deferral rows already in the database and goes away in a later PR. Only books that waited are handed on this way; the author's other books never are (Shane,
 2026-09-30), so a bulk author run does not become a catalogue-wide book enrichment.
 
 **A stuck chain (superseded).** This section used to describe how a chain of Sidekiq jobs could

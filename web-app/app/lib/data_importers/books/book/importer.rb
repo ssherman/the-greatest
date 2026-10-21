@@ -69,10 +69,10 @@ module DataImporters
         # unreachable). QueryIdentifiers runs after Authors when
         # stamp_identifiers is asked for. Enrichment is last, when enrich is
         # on: it plans an author run for each author this import created and
-        # one book run (Workflows::Books::BookEnrichment), so the book AI waits
-        # for those authors' chains and Amazon runs behind it. It needs the
-        # book's book_authors saved, which the importer does after each
-        # successful provider. enrich: false plans nothing.
+        # one book run (Workflows::Books::BookEnrichment): its AI step waits
+        # for those authors' chains, and its Amazon step runs independently.
+        # It needs the book's book_authors saved, which the importer does
+        # after each successful provider. enrich: false plans nothing.
         def providers
           @providers ||= begin
             list = [

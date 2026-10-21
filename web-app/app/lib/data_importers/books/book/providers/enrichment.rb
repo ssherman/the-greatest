@@ -35,8 +35,13 @@ module DataImporters
             return failure_result(errors: ["Book must have an author for AI enrichment"]) if author_names.empty?
             return failure_result(errors: ["Book must be persisted before queuing AI enrichment"]) unless book.persisted?
 
-            ::Workflows::Books::BookEnrichment.start(book, initiated_by: "importer",
-              new_author_ids: @new_author_ids.uniq, author_names: author_names)
+            # A savepoint of its own: a failure after the author runs were
+            # written takes the whole plan with it, so the failure result below
+            # never leaves half a plan in the caller's transaction.
+            ::ActiveRecord::Base.transaction(requires_new: true) do
+              ::Workflows::Books::BookEnrichment.start(book, initiated_by: "importer",
+                new_author_ids: @new_author_ids.uniq, author_names: author_names)
+            end
             success_result(data_populated: [:enrichment_planned])
           rescue => e
             failure_result(errors: ["Enrichment provider error: #{e.message}"])

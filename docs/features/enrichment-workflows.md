@@ -192,7 +192,7 @@ step directly, and nothing in the import path writes that deferral any more.
 
 | Step | Queue | Waits on | Runs when |
 |---|---|---|---|
-| `book_facts` | `low` | the `author_facts` step of every author run planned with the book (**release**) | Always |
+| `book_facts` | `low` | the `author_facts` step of the runs of authors **linked to the book** that the import created (**release**) | Always |
 | `amazon` | `serial` | - | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
 
 The waits cross runs, so they are passed at plan time rather than declared in the definition. The
@@ -206,8 +206,9 @@ outermost commit; the plan rows are written in the caller's transaction.
 Callers: `DataImporters::Books::Book::Providers::Enrichment` (importer with `enrich: true`, and the
 list wizard's text rows) and `Services::Books::GoodreadsImports::PromoteRecords` (admin approval of a
 Goodreads import). Member Goodreads imports run with `enrich: false` and plan nothing until approval.
-The admin **Enrich With AI** button and the `books:enrich` / `books:amazon_enrich*` rake tasks still
-call `EnrichBookJob` and `AmazonProductEnrichmentJob` directly and create no run.
+The admin **Enrich With AI** button still queues `EnrichBookJob`, `books:enrich_missing` enqueues
+`EnrichBookJob`, and `books:amazon_enrich*` queue or run `AmazonProductEnrichmentJob`; `books:enrich[id]`
+runs `Services::Books::EnrichBook` inline. None of them creates a run.
 
 ## Admin panel
 
