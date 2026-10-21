@@ -30,7 +30,7 @@ module Services
         OWN_IDENTIFIER = {"wikidata" => "books_author_wikidata_qid", "viaf" => "books_author_viaf"}.freeze
         OWN_IDENTIFIER_FACT = {"wikidata" => "wikidata_qid", "viaf" => "viaf"}.freeze
         AI_FACTS = %w[birth_year death_year gender countries].freeze
-        # Seconds before the re-run may start; the transaction that queues
+        # Seconds before the re-run may start; the transaction that plans
         # it commits long before.
         RERUN_DELAY = 10
 
@@ -55,20 +55,22 @@ module Services
             next nil if decision.verdict_rejected?
 
             list = targets.tap { |found| reject_all(found) }
-            # Queued inside the transaction, last, so a push that fails
-            # rolls the whole reject back and a retry can go through: a
-            # reject committed without its re-run would leave the author
-            # stripped, and a retry is refused as already rejected. The
-            # delay keeps the job from starting before this commits.
-            ::Books::Authors::WikidataJob.perform_in(RERUN_DELAY, author.id, true)
+            # Planned inside the transaction, last, so a reject never commits
+            # without its re-run: that would leave the author stripped, and a
+            # retry is refused as already rejected. A refresh run never joins
+            # an active one; it supersedes it (spec 6.3). Only the plan rows
+            # are written here: dispatch waits for the commit, and a dispatch
+            # lost to a Redis outage is picked up by the recovery sweep, so
+            # nothing in this transaction can fail on Redis any more. The
+            # Wikidata step's run_after keeps it from starting at once.
+            ::Workflows::Books::AuthorEnrichment.start(author, initiated_by: "reject_external_link",
+              options: {refresh: true}, start_after: RERUN_DELAY.seconds.from_now, supersede: true)
             list
           end
           return refused("This link was already rejected.") if rejected.nil?
 
           Result.new(success?: true,
             data: {decisions: rejected.map(&:first), reverted: @reverted.uniq, descriptions_deprecated: @deprecated}, errors: [])
-        rescue ::RedisClient::Error => e
-          refused("The author's re-run could not be queued (#{e.class.name.demodulize}), so nothing was changed. Try again.")
         end
 
         private

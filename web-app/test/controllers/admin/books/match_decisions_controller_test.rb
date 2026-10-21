@@ -411,7 +411,7 @@ module Admin
 
       test "an admin rejects a link: the decision is rejected and the author's Wikidata step queued again" do
         decision = link_decision
-        ::Books::Authors::WikidataJob.expects(:perform_in).with(Services::Books::Authors::RejectExternalLink::RERUN_DELAY, books_authors(:tolstoy).id, true)
+        stub_workflow_dispatch
         sign_in_as(@admin, stub_auth: true)
 
         post reject_admin_books_match_decision_path(decision)
@@ -419,6 +419,8 @@ module Admin
         assert_redirected_to admin_books_match_decision_path(decision)
         assert decision.reload.verdict_rejected?
         assert_equal @admin, decision.reviewed_by
+        assert_equal [true, "reject_external_link"],
+          WorkflowRun.running.find_by!(enrichable: books_authors(:tolstoy)).then { |run| [run.options["refresh"], run.initiated_by] }
       end
 
       test "show offers Reject link only on a matched, unrejected link decision" do
