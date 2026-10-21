@@ -55,17 +55,19 @@ module Workflows
         on_terminal: ->(step, author) { ::Books::Authors::EnrichJob.hand_off(author.id) },
         adapter: Steps::AuthorFacts.new
 
-      # The AI step again, only when a VIAF QID arrived after it started, so it
-      # ran without that QID's Wikidata facts (EnrichAuthor skips a complete
-      # author, so this fills blanks only). An AI step skipped as already_ran
-      # ran in an earlier era without this QID too, and the legacy chain ran it
-      # once more after the follow-up (spec 6.1), so it counts as early as well.
+      # The AI step again, only when a VIAF QID's Wikidata facts arrived after the
+      # AI step started, so it ran without them (EnrichAuthor skips a complete
+      # author, so this fills blanks only). "Started" is started_at, not the
+      # finish: a follow-up that lands while the AI step is still running missed
+      # it too. A skipped AI step (already_ran) never started, so its nil
+      # started_at counts as early: it ran in an earlier era without this QID,
+      # and the legacy chain ran it once more after the follow-up (spec 6.1).
       add_step key: :author_facts_late, queue: QUEUE, lease: 15.minutes,
         waits_on: {wikidata_via_viaf: :finish, author_facts: :finish},
         skip_if: lambda { |run|
           follow_up = run.step(:wikidata_via_viaf)
           facts = run.step(:author_facts)
-          late = follow_up.succeeded? && (facts.outcome == "already_ran" || facts.released_at < follow_up.finished_at)
+          late = follow_up.succeeded? && (facts.started_at.nil? || facts.started_at < follow_up.finished_at)
           "not_needed" unless late
         },
         adapter: Steps::AuthorFacts.new

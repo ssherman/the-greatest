@@ -260,6 +260,30 @@ module Workflows
         run_step(run, :author_facts)
       end
 
+      test "a late VIAF QID that lands while the AI step is still running still gets a late AI pass" do
+        stub_services(wikidata: :unmatched)
+        VIAF.stubs(:call).raises(::Viaf::Exceptions::Paused.new("paused", retry_after: 3600))
+        run = start
+        run_step(run, :wikidata)
+        run_step(run, :viaf)
+        # The AI step is claimed and running (a long research call) ...
+        facts = Workflows::Coordinator.claim(run.step(:author_facts).id, token: "long-call")
+        assert_equal "running", facts.state
+
+        # ... when VIAF's turn comes, answers with a QID, and the follow-up finishes.
+        VIAF.stubs(:call).returns(viaf_result(wikidata_qid: "Q1"))
+        wake(run, :viaf)
+        run_step(run, :viaf)
+        run_step(run, :wikidata_via_viaf)
+        assert_equal "blocked", run.step(:author_facts_late).reload.state
+
+        Workflows::Coordinator.finish(facts, token: "long-call", outcome: Workflows::Outcome.succeeded("done"))
+
+        assert_equal "ready", run.step(:author_facts_late).reload.state
+      end
+
+      # on_terminal fires only when a worker finishes or fails a step, never for a
+      # skip_if skip (engine rule, Coordinator#settle_terminal).
       test "a skipped AI step does not hand books on (the skip never ran it)" do
         ::Services::Books::Authors::LedgerRun.stubs(:ai_step_ran_ids).returns(Set[@author.id])
         ::Books::Authors::EnrichJob.expects(:hand_off).never
