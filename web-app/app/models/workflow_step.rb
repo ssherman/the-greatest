@@ -51,9 +51,15 @@ class WorkflowStep < ApplicationRecord
   validates :key, :queue, presence: true
 
   # The current definition's declaration of this step, or nil when the
-  # definition no longer has the key (the run was planned under an older version).
+  # definition no longer has the key (the run was planned under an older
+  # version) or the run's workflow is no longer registered at all. Callers
+  # treat both as "nothing declared": skip_if and on_terminal are skipped and
+  # the job finishes the step as unknown_step, so a removed workflow can never
+  # wedge an advance.
   def definition_step
     Workflows::Registry.fetch(run.workflow).step(key)
+  rescue KeyError
+    nil
   end
 
   def terminal?

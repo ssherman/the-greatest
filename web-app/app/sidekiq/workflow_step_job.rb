@@ -15,32 +15,27 @@ class WorkflowStepJob
     target = run.enrichable_type.constantize.find_by(id: run.enrichable_id)
     return dispatch(Workflows::Coordinator.cancel(run, outcome: "target_gone")) unless target
 
-    adapter = definition_step(step)&.adapter
+    adapter = step.definition_step&.adapter
     return finish(step, Workflows::Outcome.skipped("unknown_step")) unless adapter
 
     begin
       outcome = Current.set(workflow_step_id: step.id) { adapter.call(step: step, run: run, target: target) }
+      # Inside the rescue so an adapter that returns something other than an
+      # Outcome is recorded as an attempt instead of leaving the step to wait
+      # out its lease. After a committed terminal write fail is a no-op: it is
+      # guarded on the step still being running under this token.
+      finish(step, outcome)
     rescue Sidekiq::Shutdown
       # Not a StandardError today, but a shutdown must never be recorded as a
       # step failure: the lease stays with this jid and the pushed-back job
       # claims the step again at once.
       raise
     rescue => e
-      return dispatch(Workflows::Coordinator.fail(step, token: jid, error: e))
+      dispatch(Workflows::Coordinator.fail(step, token: jid, error: e))
     end
-
-    finish(step, outcome)
   end
 
   private
-
-  # A run planned under a workflow that has since been removed is treated like
-  # a step key the definition dropped.
-  def definition_step(step)
-    step.definition_step
-  rescue KeyError
-    nil
-  end
 
   # Called outside any transaction: the coordinator's exactly-once advance
   # relies on the terminal write committing before it locks the dependents.

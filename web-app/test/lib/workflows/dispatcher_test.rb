@@ -52,10 +52,13 @@ module Workflows
     end
 
     test "after_commit dispatches once the outermost transaction commits" do
-      Workflows::Dispatcher.expects(:dispatch).with([:steps]).once
+      dispatched = false
+      Workflows::Dispatcher.expects(:dispatch).with([:steps]).once.with { dispatched = true }
       ActiveRecord::Base.transaction do
         Workflows::Dispatcher.after_commit([:steps])
+        assert_not dispatched, "dispatched before the transaction committed"
       end
+      assert dispatched
     end
   end
 end

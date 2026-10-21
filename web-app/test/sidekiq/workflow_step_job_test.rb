@@ -77,6 +77,26 @@ class WorkflowStepJobTest < ActiveSupport::TestCase
     assert_equal ["skipped", "unknown_step"], step.reload.values_at(:state, :outcome)
   end
 
+  test "an unregistered workflow does not wedge the advance: dependents move on and the run closes" do
+    Sidekiq::Testing.fake! do
+      perform(workflow_run.step(:b))
+      Workflows::Registry.unregister(Workflows::TestDefinition.workflow)
+      assert_nothing_raised { perform(workflow_run.step(:a)) }
+      assert_equal ["skipped", "ready"], [workflow_run.step(:a).reload.state, workflow_run.step(:c).reload.state]
+      assert_equal [[workflow_run.step(:c).id]], WorkflowStepJob.jobs.map { it["args"] }
+      perform(workflow_run.step(:c))
+      assert_equal "completed", workflow_run.reload.status
+    end
+  end
+
+  test "an adapter that returns something other than an Outcome is recorded as an attempt and the step waits" do
+    Workflows::TestDefinition.outcomes[:a] = ->(**) {}
+    perform(workflow_run.step(:a))
+    step = workflow_run.step(:a).reload
+    assert_equal ["waiting", 1], [step.state, step.attempts]
+    assert_not_nil step.error
+  end
+
   test "Sidekiq::Shutdown propagates and leaves the step claimable by the same jid" do
     Workflows::TestDefinition.outcomes[:a] = ->(**) { raise Sidekiq::Shutdown }
     assert_raises(Sidekiq::Shutdown) { perform(workflow_run.step(:a)) }
@@ -90,7 +110,7 @@ class WorkflowStepJobTest < ActiveSupport::TestCase
     assert_equal "running", workflow_run.step(:a).reload.state
   end
 
-  test "the adapter and the terminal write run outside any transaction the job opened" do
+  test "the job does not wrap the adapter call in a transaction of its own" do
     depths = []
     Workflows::TestDefinition.outcomes[:a] = ->(**) {
       depths << ActiveRecord::Base.connection.open_transactions

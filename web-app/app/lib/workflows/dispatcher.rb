@@ -31,7 +31,7 @@ module Workflows
 
       def enqueue(step)
         WorkflowStepJob.set(queue: step.queue).perform_async(step.id)
-        step.update_columns(dispatched_at: Time.current, dispatch_count: step.dispatch_count + 1)
+        WorkflowStep.where(id: step.id).update_all(["dispatched_at = ?, dispatch_count = dispatch_count + 1", Time.current])
       rescue RedisClient::Error => e
         Rails.logger.error("Workflows::Dispatcher: could not enqueue step #{step.id}: #{e.class}: #{e.message}")
       end
