@@ -7,8 +7,7 @@ module Services
         include GoodreadsImportHelper
 
         setup do
-          ::Books::EnrichBookJob.stubs(:perform_async)
-          ::Books::Authors::WikidataJob.stubs(:perform_async)
+          stub_workflow_dispatch
           ::Books::PurgeShowPagesJob.stubs(:perform_async)
           ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
           @user = User.create!(email: "approve@example.com", role: :user, email_verified: false)

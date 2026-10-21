@@ -26,10 +26,9 @@ Book import (DataImporters::Books::Book::Importer)
       each author through the author importer with BOOK_STEP_PROVIDERS ([:open_library]);
       the ids of authors this import created are collected
   (the book and its book_authors rows are saved)
-  Providers::AiEnrichment       a created author is linked? -> a deferral row, no EnrichBookJob
-                                otherwise                 -> EnrichBookJob now
-  Providers::AuthorEnrichment   WikidataJob for each author this import created; the job is now
-                                a shim that plans an author run (the book workflow replaces this)
+  Providers::Enrichment         BookEnrichment.start: an author run for each author this import
+                                created, and one book run whose book_facts waits on the ones
+                                linked to the book
 Direct author import (DataImporters::Books::Author::Importer)
   Providers::OpenLibrary, then Providers::Enrichment (plans an author run)
 
@@ -69,13 +68,14 @@ A VIAF match flagged `needs_review` never sends the author back to Wikidata: the
 as VIAF's own, flagged fact rather than evidence for a certain Wikidata match.
 
 **The book importer starts the author runs itself.** A book import runs the author importer without
-its async provider, collects the authors it created (`ImportResult#created?`), and queues
-their `WikidataJob`s from `Providers::AuthorEnrichment` (the shim plans the run; the book workflow
-will plan it directly), which runs after the importer has saved the book and its
-`book_authors` rows. The Wikidata and VIAF steps therefore always see the book among the author's
-titles. `Providers::AiEnrichment` runs just before and writes the book's `deferred_to_authors` row
-first, so a run that finishes fast cannot reach its hand-off before the book's wait is recorded.
-`Providers::AuthorEnrichment` does nothing, and reports failure, for a book that was never persisted.
+its async provider, collects the authors it created (`ImportResult#created?`), and
+`Providers::Enrichment` plans their author runs with `Workflows::Books::BookEnrichment.start`. It runs
+after the importer has saved the book and its `book_authors` rows, so the Wikidata and VIAF steps
+always see the book among the author's titles. The book run is planned in the same call, so its
+`book_facts` step waits on the `author_facts` step of every created author linked to the book from
+the first moment; there is no window in which a fast author run could finish before the book's wait
+is recorded. `Providers::Enrichment` does nothing, and reports failure, for a book that was never
+persisted.
 
 An author an admin has flagged `exclude_from_rankings` is skipped by every step without an
 external or model call: a `skipped` ledger row with reason `placeholder`.
@@ -407,10 +407,11 @@ failure is recorded as `rejected` and not written.
 
 ## Handing books on
 
-When a book import creates an author and links it, `Providers::AiEnrichment` does not queue
-`EnrichBookJob`. It writes a skipped `books.book_facts` row with reason `deferred_to_authors`
-(`Services::Books::DeferredEnrichment`) and reports `[:ai_enrichment_deferred_to_authors]`, so
-the book's origin country can come from its author's stored nationality.
+When a book import creates an author and links it, the book's `book_facts` step waits on that
+author's `author_facts` step (`Workflows::Books::BookEnrichment.start`), so the book's origin country
+can come from its author's stored nationality. New imports no longer write the
+`deferred_to_authors` deferral (`Services::Books::DeferredEnrichment`); the rows already written
+by earlier imports are still handed on as below until a later PR removes the hand-off.
 
 The `author_facts` step's `on_terminal` calls `Books::Authors::EnrichJob.hand_off`, which queues
 `EnrichBookJob` for each of the author's books whose latest `books.book_facts` row is that
@@ -433,8 +434,8 @@ not move, and `bin/rails workflows:stuck` lists exactly those (`docs/features/en
 
 Two things from the old advice still hold. A book left behind is still found by
 `books:enrich_missing`, which counts a deferral-only book as missing whatever descriptions it
-already has (the Open Library provider can write one onto a brand-new book before `AiEnrichment`
-ever defers it). And running it while an author run is still legitimately in flight enriches the
+already has (the Open Library provider can write one onto a brand-new book before a deferral was
+ever recorded). And running it while an author run is still legitimately in flight enriches the
 book before its new authors have countries; check for an active run first
 (`WorkflowRun.running.where(workflow: "books.author_enrichment")`, or the admin "Enrichment runs"
 card) instead of Sidekiq's queues. A `WikidataJob` or `ViafJob` message still sitting in Scheduled

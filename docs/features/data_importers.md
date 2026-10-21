@@ -82,7 +82,7 @@ end
 | Music | Release | MusicBrainz | Complete |
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
-| Books | Book | OpenLibrary, Authors, AiEnrichment, AuthorEnrichment, Amazon | Complete |
+| Books | Book | OpenLibrary, Authors, QueryIdentifiers, Enrichment | Complete |
 | Books | Author | OpenLibrary, Enrichment | Complete (Wikidata, VIAF, AI step; Reject link and backfill still to come) |
 
 ### Music Providers
@@ -184,34 +184,34 @@ section for the full contract).
   matched under a variant name leaves the re-run to OpenSearch and the AI, and a book linked
   through an Open Library accept is found again by the service's accept on the same key.
 
-#### AI Enrichment (Async)
-Queues `Books::EnrichBookJob` and returns `[:ai_enrichment_queued]`. Runs after OpenLibrary and
-Authors, so the AI fills fewer blanks, and before AuthorEnrichment. Requires a title and either
-`book.authors` names (the usual case, since the author steps run first) or the query's
-`author_names` when the book still has no authors. When the import created one of the book's
-linked authors, it queues nothing: it writes a skipped `deferred_to_authors` ledger row and
-returns `[:ai_enrichment_deferred_to_authors]`, and the author chain hands the book on when the
-author is enriched. See `docs/features/books_enrichment.md` and
-`docs/features/books-author-enrichment.md`.
+#### Enrichment (plans workflow runs)
+`Providers::Enrichment` runs last, and only when `enrich:` is true. It replaces the three async providers
+that used to queue `Books::EnrichBookJob`, `Books::Authors::WikidataJob` and
+`Books::AmazonProductEnrichmentJob`. It calls `Workflows::Books::BookEnrichment.start`
+(see [Enrichment workflows](./enrichment-workflows.md)), which plans an author run for each author the
+import created and one `books.book_enrichment` run, and returns `[:enrichment_planned]`. The provider
+symbol is `:enrichment`, so `providers: [:enrichment]` selects it.
 
-#### Author Enrichment (Async)
-`Providers::AuthorEnrichment` runs last, after AiEnrichment, and queues
-`Books::Authors::WikidataJob` for each author this import created, returning
-`[:author_enrichment_queued]`. It runs after the importer has saved the book and its
-`book_authors` rows, so the author chain sees the book among the author's titles -- and after
-AiEnrichment has already written the book's `deferred_to_authors` row, so a chain that finishes
-fast cannot reach its hand-off before the book's wait is even recorded. It does nothing, and
-reports failure, for a book that was never persisted.
+- It needs a title, and either `book.authors` names (the usual case, since the author steps run first)
+  or the query's `author_names` when the book still has no authors; it fails without them, and for a
+  book that is not persisted. The names go into the run's `author_names` option for `book_facts`.
+- It runs after `Authors`, and the importer saves the book after each successful provider, so the book's
+  `book_authors` rows are in the database when `start` reads them. `book_facts` waits on the author runs
+  of the created authors linked to the book; a created author with no link is still enriched.
+- The plan rows are written immediately, in the caller's transaction, so a rolled-back import (the list
+  wizard's `CreateFailed`, Goodreads' `CreateBook`) leaves no run. Only the dispatch waits for the
+  outermost commit.
+- The `amazon` step waits for nothing, and is skipped `no_authors` for a book without `book_authors` rows
+  (the search is built from the author). Its matching rules are summarised below.
+- A Goodreads member import (`enrich: false`) plans nothing; `PromoteRecords` plans the runs when an admin
+  approves the import. List-wizard text rows use `Services::Lists::Wizard::Books::Adapter::TEXT_PROVIDERS`
+  (`%i[authors enrichment]`).
+- Locally the steps need a running Sidekiq (`bin/dev` starts one; a bare `bin/rails server` plans the run and
+  never executes it).
 
-#### Amazon (Async)
-`Providers::Amazon` runs last, after AuthorEnrichment. It queues `Books::AmazonProductEnrichmentJob` (queue
-`serial`) after the outermost transaction commits, so a worker never runs before the book exists and a
-rolled-back book queues nothing, and returns `[:amazon_enrichment_queued]`. It fails fast, without queuing,
-for a book with no title, no authors or no persisted row, because the job builds its search from the author.
+#### Amazon matching
+What the `amazon` step does to a book (`Services::Books::AmazonProductService`):
 
-- Like the other providers it is gated by `enrich:`, so a Goodreads import (`enrich: false`) does not queue it
-  at import time. `PromoteRecords` queues it for every promoted book that has an author when an admin approves the import.
-- List-wizard text rows include it through `Services::Lists::Wizard::Books::Adapter::TEXT_PROVIDERS`.
 - Box sets and other multi-book products never become editions: `Services::Books::AmazonBookCheck` (`set?`,
   `same_book?`) filters them, `AmazonProductService#persist_match` refuses a set product, and
   `AmazonBookMatchTask` has non-match criteria for them.
@@ -225,7 +225,6 @@ for a book with no title, no authors or no persisted row, because the job builds
 - If another book already holds any of those values from a verified source (Open Library, WorldCat), nothing
   is written. A duplicate candidate with source `identifier_collision` is flagged for a human instead. A value
   held only from an unverified source does not block the write.
-- Locally it needs a running Sidekiq (`bin/dev` starts one; a bare `bin/rails server` queues the job and never runs it).
 
 #### Authors (Sync)
 `Providers::Authors` runs after Open Library. When the book still has no authors (Open Library abstained,
@@ -249,8 +248,8 @@ unions alternate names, stamps `books_author_openlibrary_id`, and writes `name` 
 author already holds the key (or a key it redirects from), it applies nothing, flags the two authors as an
 `external_key_collision` pair on the duplicates page, and reports a failure.
 
-**Enrichment (async).** Queues `Books::Authors::WikidataJob` for the new author and returns
-`[:author_enrichment_queued]`. The job resolves the author to a Wikidata person or to none,
+**Enrichment (async).** Plans a `books.author_enrichment` run for the new author and returns
+`[:author_enrichment_planned]` (see [Enrichment workflows](./enrichment-workflows.md)). The run resolves the author to a Wikidata person or to none,
 fills blanks from the item, and links the English Wikipedia article only through that item. See
 `docs/features/books-author-enrichment.md`. Providers run only for a new author, so a matched
 author is never re-enriched from an import.

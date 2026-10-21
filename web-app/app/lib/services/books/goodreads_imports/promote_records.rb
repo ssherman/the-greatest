@@ -3,16 +3,18 @@
 module Services
   module Books
     module GoodreadsImports
-      # Makes provisional books and authors part of the catalog and queues
+      # Makes provisional books and authors part of the catalog and plans
       # their enrichment (Goodreads import spec §10, Approve steps 2–3). A
       # promoted book takes its provisional authors with it: the catalog never
       # shows a book whose author is hidden. update! reindexes each record.
       #
-      # Enrichment as the importer queues it for a new book: a book credited to
-      # an author promoted here waits for that author's chain (a deferral
-      # ledger row; Books::Authors::EnrichJob hands it on), any other book is
-      # enriched at once, and every promoted author starts its chain. Jobs are
-      # queued after commit, so a chain never runs before the deferral exists.
+      # Enrichment is planned as the importer plans it for a new book
+      # (Workflows::Books::BookEnrichment): each promoted book gets a run whose
+      # book_facts waits on the author runs of the authors promoted with it,
+      # and a promoted author credited to no promoted book gets an author run
+      # of its own. The plan rows are written in the transaction below, so a
+      # failure there leaves none; the dispatch waits for the commit. A record
+      # that already has an active run joins it instead of getting a second.
       class PromoteRecords
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -28,35 +30,30 @@ module Services
         def call
           authors = (@authors + @books.flat_map(&:authors)).uniq.select(&:provisional?)
           author_ids = authors.map(&:id).to_set
-          enrich_now = []
           goal_urls = []
+          credited_to_a_book = Set.new
           on_favorites = false
           ActiveRecord::Base.transaction(requires_new: true) do
             authors.each { |author| author.update!(provisional: false) }
             @books.each do |book|
               book.update!(provisional: false)
-              if book.book_authors.any? { |book_author| author_ids.include?(book_author.author_id) }
-                ::Services::Books::DeferredEnrichment.defer!(book)
-              else
-                enrich_now << book.id
-              end
+              # Only the authors promoted with this book: it waits on those,
+              # and the others have their own book, or their own run below.
+              credited = book.book_authors.map(&:author_id).select { |id| author_ids.include?(id) }
+              credited_to_a_book.merge(credited)
+              ::Workflows::Books::BookEnrichment.start(book, initiated_by: "goodreads_promote", new_author_ids: credited)
               # Public goal pages count catalog books only, so a promoted
               # book's readers' pages change; at the new count these URLs
               # cover the old pages too.
               goal_urls.concat(::Services::Books::ReadingGoals::DestructionInvalidator.for_book(book: book))
             end
+            authors.reject { |author| credited_to_a_book.include?(author.id) }.each do |author|
+              ::Workflows::Books::AuthorEnrichment.start(author, initiated_by: "goodreads_promote")
+            end
             on_favorites = @books.any? &&
               ::UserListItem.joins(:user_list).merge(::Books::UserList.favorites).where(listable: @books).exists?
           end
           ActiveRecord.after_all_transactions_commit do
-            author_ids.each { |id| ::Books::Authors::WikidataJob.perform_async(id) }
-            enrich_now.each { |id| ::Books::EnrichBookJob.perform_async(id) }
-            # Amazon runs for every promoted book with an author (the job fails
-            # without one), including one whose AI enrichment waits on its
-            # author's chain.
-            ::Books::BookAuthor.where(book_id: @books.map(&:id)).distinct.pluck(:book_id).each do |id|
-              ::Books::AmazonProductEnrichmentJob.perform_async(id)
-            end
             if @books.any? || author_ids.any?
               ::Books::PurgeShowPagesJob.perform_async(@books.map(&:id), author_ids.to_a)
             end

@@ -22,9 +22,9 @@ module GoodreadsImportHelper
     stub_request(:post, "#{OPEN_LIBRARY_URL}/resolve").to_return(status: 200, body: open_library_abstain.to_json)
     ::Search::Books::Search::BookByTitleAndAuthors.stubs(:call).returns(search_hits)
     ::Search::Books::Search::AuthorByName.stubs(:call).returns([])
-    ::Books::EnrichBookJob.stubs(:perform_async)
-    ::Books::AmazonProductEnrichmentJob.stubs(:perform_async)
-    ::Books::Authors::WikidataJob.stubs(:perform_async)
+    # Inline Sidekiq would run every planned enrichment step against the real
+    # adapters; a test that cares about the plan reads the WorkflowRun rows.
+    stub_workflow_dispatch
     # Sidekiq runs inline in tests; a test that cares asserts on this.
     ::Books::Goodreads::FetchPageJob.stubs(:perform_async)
   end

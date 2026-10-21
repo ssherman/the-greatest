@@ -6,10 +6,8 @@ next, and Sidekiq only executes a step when told to. It replaced a set of Sideki
 enqueued the next one, which lost work whenever a message disappeared and could not express "the
 book waits for its author" without a database flag and a rake task to rescue strays.
 
-Spec: `docs/superpowers/specs/2026-10-20-books-enrichment-workflows-design.md`. Today the engine
-runs **one workflow, `books.author_enrichment`**. The book workflow (`books.book_enrichment`) is
-the next increment and does not exist yet; this page describes only what is built. The author
-steps themselves (what Wikidata, VIAF and the AI step do) are in
+Spec: `docs/superpowers/specs/2026-10-20-books-enrichment-workflows-design.md`. The engine runs two
+workflows: `books.author_enrichment` and `books.book_enrichment`. The author steps themselves (what Wikidata, VIAF and the AI step do) are in
 `docs/features/books-author-enrichment.md`.
 
 ## Where the code lives
@@ -18,8 +16,8 @@ steps themselves (what Wikidata, VIAF and the AI step do) are in
 |---|---|
 | Tables' models | `app/models/workflow_run.rb`, `workflow_step.rb`, `workflow_dependency.rb` |
 | Engine | `app/lib/workflows/` (`Planner`, `Coordinator`, `Dispatcher`, `Recovery`, `Registry`, `Definition`, `Step`, `Outcome`, `Stuck`) |
-| Definitions | `app/lib/workflows/books/author_enrichment.rb` |
-| Step adapters | `app/lib/workflows/books/steps/` (`Wikidata`, `Viaf`, `AuthorFacts`) |
+| Definitions | `app/lib/workflows/books/author_enrichment.rb`, `book_enrichment.rb` |
+| Step adapters | `app/lib/workflows/books/steps/` (`Wikidata`, `Viaf`, `AuthorFacts`, `BookFacts`, `Amazon`) |
 | Jobs | `app/sidekiq/workflow_step_job.rb`, `app/sidekiq/workflow_recovery_job.rb` (cron, every minute, `config/schedule.yml`) |
 | Admin panel | `Admin::Books::WorkflowRunsController`, `app/views/admin/books/workflow_runs/` |
 | Test support | `test/support/workflows/` (`TestDefinition`, a Goodreads-shaped diamond; `DispatchHelper`) |
@@ -185,8 +183,31 @@ in Sidekiq.
 
 `author_facts`' `on_terminal` calls `Books::Authors::EnrichJob.hand_off`, the **transitional
 legacy hand-off** that queues `EnrichBookJob` for books whose latest ledger row is the
-`deferred_to_authors` deferral. A later PR removes it when the book workflow waits on the author
-step directly.
+`deferred_to_authors` deferral. A later PR removes it: the book workflow now waits on the author
+step directly, and nothing in the import path writes that deferral any more.
+
+## The book workflow
+
+`books.book_enrichment` (definition version 1) has two steps, each wrapping an existing service:
+
+| Step | Queue | Waits on | Runs when |
+|---|---|---|---|
+| `book_facts` | `low` | the `author_facts` step of every author run planned with the book (**release**) | Always |
+| `amazon` | `serial` | - | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
+
+The waits cross runs, so they are passed at plan time rather than declared in the definition. The
+Goodreads project will add its edges to this file. `start` is
+`Workflows::Books::BookEnrichment.start(book, initiated_by:, new_author_ids:, author_names:, options:)`.
+It starts an author run (or joins the active one) for each id in `new_author_ids`, whether or not the
+book is linked to it, and makes `book_facts` wait on those linked to the book. If the book already has
+an active run, that run is returned untouched and the event is logged. Dispatch happens after the
+outermost commit; the plan rows are written in the caller's transaction.
+
+Callers: `DataImporters::Books::Book::Providers::Enrichment` (importer with `enrich: true`, and the
+list wizard's text rows) and `Services::Books::GoodreadsImports::PromoteRecords` (admin approval of a
+Goodreads import). Member Goodreads imports run with `enrich: false` and plan nothing until approval.
+The admin **Enrich With AI** button and the `books:enrich` / `books:amazon_enrich*` rake tasks still
+call `EnrichBookJob` and `AmazonProductEnrichmentJob` directly and create no run.
 
 ## Admin panel
 
@@ -228,8 +249,7 @@ failures itself; a row here is an exhausted step or one even the sweep cannot mo
 
 The shape the Goodreads work needs, and the one `Workflows::TestDefinition` keeps under test:
 independent steps `a` and `b`, and `c` waiting for `a` to finish and `b` to release, reading `a`'s
-result. For example, a `goodreads` step in the book workflow (the book workflow is not built yet;
-the same applies to the author one):
+result. For example, a `goodreads` step in the book workflow (the same applies to the author workflow):
 
 1. Write an adapter under `app/lib/workflows/books/steps/`: a class with
    `call(step:, run:, target:)` that wraps an existing service and returns an `Outcome`. A rate

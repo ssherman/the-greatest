@@ -8,21 +8,27 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 
 ## How a book gets enriched
 
-1. **Trigger.** One of three entry points runs `Services::Books::EnrichBook`, two of them
-   through `Books::EnrichBookJob`:
-   - `DataImporters::Books::Book::Providers::AiEnrichment`, third in the importer's provider
-     chain (after `OpenLibrary` and `Authors`, before `AuthorEnrichment`), passing the linked
+1. **Trigger.** `Services::Books::EnrichBook` runs from the `book_facts` step of a
+   `books.book_enrichment` workflow run (`Workflows::Books::Steps::BookFacts`; see
+   `docs/features/enrichment-workflows.md`), or directly from the places that still call
+   `Books::EnrichBookJob`. Entry points:
+   - `DataImporters::Books::Book::Providers::Enrichment`, last in the importer's provider chain
+     (after `OpenLibrary`, `Authors` and, when asked for, `QueryIdentifiers`), runs when `enrich:`
+     is true. It plans one book run (`Workflows::Books::BookEnrichment.start`), passing the linked
      authors' names, and falling back to the query's author names only when the book still has
-     none. When the import created one of the book's linked authors, it queues nothing instead: it
-     writes a skipped `deferred_to_authors` row -- before `AuthorEnrichment` queues that author's
-     chain -- and the author chain's last step (`Books::Authors::EnrichJob`) queues the book once
-     the author is enriched, so the book's origin country can come from the author's stored
-     nationality. See `docs/features/books-author-enrichment.md`, "Handing books on".
+     none. When the import created one of the book's linked authors, `book_facts` waits for that
+     author's `author_facts` step, so the book's origin country can come from the author's stored
+     nationality. The list wizard's text rows plan the same run.
+   - `Services::Books::GoodreadsImports::PromoteRecords`, when an admin approves a Goodreads
+     import: a book run per promoted book, waiting on the author runs of the authors promoted with
+     it. Member imports themselves run with `enrich: false` and plan nothing.
    - The **Enrich With AI** button on the admin book page (`Actions::Admin::Books::EnrichBook`),
-     with a checkbox that forces the web-search run.
+     with a checkbox that forces the web-search run. It still queues `Books::EnrichBookJob`
+     and creates no run.
    - `bin/rails books:enrich[id]` (runs inline and prints the ledger) and
-     `bin/rails books:enrich_missing[limit]` (enqueues books with no ledger row and no description,
-     plus any book whose only rows are `deferred_to_authors` deferrals, described or not).
+     `bin/rails books:enrich_missing[limit]` (enqueues `EnrichBookJob` for books with no ledger
+     row and no description, plus any book whose only rows are `deferred_to_authors` deferrals,
+     described or not; those deferrals are no longer written by new imports).
    There is deliberately no model callback: `data_migration:all` creates 157k books.
 2. **Knowledge run.** `Services::Books::EnrichBook` runs
    `Services::Ai::Tasks::Books::BookFactsTask` in `knowledge` mode on the `standard` role. One
