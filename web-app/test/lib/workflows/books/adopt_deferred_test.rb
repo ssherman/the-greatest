@@ -37,6 +37,21 @@ module Workflows
         ]
       end
 
+      test "when the author's AI step finishes, the old hand-off skips the adopted book and book_facts is released" do
+        ::Services::Books::DeferredEnrichment.defer!(@book)
+        author_run = AuthorEnrichment.start(@author, initiated_by: "test")
+        AdoptDeferred.call
+        # Forced ready and finished as a worker would; the chain before it is not the point.
+        step = author_run.step(:author_facts)
+        step.update_columns(state: WorkflowStep.states[:ready])
+        claimed = Workflows::Coordinator.claim(step.id, token: "t")
+        ::Books::EnrichBookJob.expects(:perform_async).never
+
+        Workflows::Coordinator.finish(claimed, token: "t", outcome: Workflows::Outcome.succeeded("done"))
+
+        assert_equal "ready", book_runs(@book).sole.step(:book_facts).reload.state
+      end
+
       test "does not start an author run for a linked author that has none" do
         ::Services::Books::DeferredEnrichment.defer!(@book)
         author_run = AuthorEnrichment.start(@author, initiated_by: "test")

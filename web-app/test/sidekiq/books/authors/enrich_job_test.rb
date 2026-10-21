@@ -3,6 +3,8 @@
 require "test_helper"
 
 class Books::Authors::EnrichJobTest < ActiveSupport::TestCase
+  include Workflows::DispatchHelper
+
   def setup
     @author = ::Books::Author.create!(name: "Anna Brenner")
     @waiting = ::Books::Book.create!(title: "The Quiet Year")
@@ -26,6 +28,19 @@ class Books::Authors::EnrichJobTest < ActiveSupport::TestCase
     ::Services::Books::Authors::EnrichAuthor.expects(:call).with(author: @author, allow_research: true).returns(outcome(true))
     ::Books::EnrichBookJob.expects(:perform_async).with(@waiting.id).once
     ::Books::EnrichBookJob.expects(:perform_async).with(@never_waited.id).never
+
+    Books::Authors::EnrichJob.new.perform(@author.id)
+  end
+
+  test "does not hand on a waiting book that has a running book run; its book_facts step enriches it" do
+    owned = ::Books::Book.create!(title: "Adopted Book")
+    owned.book_authors.create!(author: @author, position: 1)
+    ::Services::Books::DeferredEnrichment.defer!(owned)
+    stub_workflow_dispatch
+    Workflows::Books::BookEnrichment.start(owned, initiated_by: "test", options: {only: ["book_facts"]})
+    ::Services::Books::Authors::EnrichAuthor.stubs(:call).returns(outcome(true))
+    ::Books::EnrichBookJob.expects(:perform_async).with(owned.id).never
+    ::Books::EnrichBookJob.expects(:perform_async).with(@waiting.id).once
 
     Books::Authors::EnrichJob.new.perform(@author.id)
   end

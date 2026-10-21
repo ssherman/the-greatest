@@ -24,7 +24,7 @@ module Workflows
           enrichable_id: candidate_ids).pluck(:enrichable_id).to_set
         counts = {planned: 0, skipped_active: 0}
 
-        ::Books::Book.where(id: candidate_ids).order(:id).find_each do |book|
+        ::Books::Book.where(id: candidate_ids).find_each do |book|
           break if limit && counts[:planned] >= limit
 
           if active_ids.include?(book.id)
@@ -51,6 +51,12 @@ module Workflows
       # BookEnrichment.start starts an author run for any id it is given, so
       # hand it only authors that already have a running one: starting one
       # would be a new enrichment, not the release of a waiting book.
+      #
+      # Known race, accepted: an author run can end between this read and
+      # start's own join, and start would then plan a fresh author run. It needs
+      # a run to finish within milliseconds of its book being adopted, the cost
+      # is one extra author enrichment, and the alternative is locking every
+      # author run for a one-off task.
       def self.waited_on_author_ids(book)
         running = WorkflowRun.running.where(workflow: AuthorEnrichment.workflow, enrichable_type: "Books::Author")
           .select(:enrichable_id)

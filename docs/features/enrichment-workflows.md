@@ -225,6 +225,9 @@ as `skipped_active` and left alone, so a second call plans nothing new; once a b
 run, its newer ledger row takes it out of the deferred set. The limit caps the books planned, lowest
 id first.
 
+The transitional `Books::Authors::EnrichJob.hand_off` skips any waiting book that has a running book
+run, so an adopted book is enriched once, by its run's `book_facts`, not also by `EnrichBookJob`.
+
 ## Admin panel
 
 The books admin **book** and **author** show pages have a full-width "Enrichment runs" card, a lazy

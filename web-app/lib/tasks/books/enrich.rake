@@ -43,7 +43,7 @@ namespace :books do
     #
     # A book with a running book run is being enriched, so neither group
     # takes it (adopted deferred books are in exactly that state).
-    running = WorkflowRun.running.where(workflow: "books.book_enrichment", enrichable_type: "Books::Book").select(:enrichable_id)
+    running = WorkflowRun.running.where(workflow: ::Workflows::Books::BookEnrichment.workflow, enrichable_type: "Books::Book").select(:enrichable_id)
     missing = ::Books::Book.where.not(id: ledgered.select(:enrichable_id)).where.not(id: running)
     waiting = Enrichment.where(enrichable_type: "Books::Book", reason: ::Services::Books::DeferredEnrichment::REASON).select(:enrichable_id)
     described = Description.where(describable_type: "Books::Book").select(:describable_id)

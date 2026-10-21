@@ -20,7 +20,14 @@ class Books::Authors::EnrichJob
     author = ::Books::Author.find_by(id: author_id)
     return if author.nil?
 
-    ::Services::Books::DeferredEnrichment.waiting_book_ids(author).each { |book_id| ::Books::EnrichBookJob.perform_async(book_id) }
+    ids = ::Services::Books::DeferredEnrichment.waiting_book_ids(author)
+    # A book with a running book run (Workflows::Books::AdoptDeferred plans one
+    # for every deferred book) is enriched by that run's book_facts step. Handing
+    # it on as well would pay for the AI enrichment twice. Only books that have
+    # no run yet are this hand-off's (spec section 11). Task 14 deletes it.
+    owned = ::WorkflowRun.running.where(workflow: ::Workflows::Books::BookEnrichment.workflow,
+      enrichable_type: "Books::Book", enrichable_id: ids).pluck(:enrichable_id)
+    (ids - owned).each { |book_id| ::Books::EnrichBookJob.perform_async(book_id) }
   end
 
   def perform(author_id, allow_research = true)
