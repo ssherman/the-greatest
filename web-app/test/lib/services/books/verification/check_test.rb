@@ -33,6 +33,46 @@ module Services
           assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Dune", subtitle: "Part One"))
         end
 
+        test "title_key forgives punctuation, case, articles, diacritics and folded letters" do
+          assert_equal Check.title_key("From Russia, with love"), Check.title_key("From Russia with Love")
+          assert_equal Check.title_key("The Metamorphosis"), Check.title_key("Metamorphosis")
+          assert_equal Check.title_key("Le Mariage De Figaro"), Check.title_key("Mariage de Figaro")
+          assert_equal Check.title_key("L' huile sur le feu"), Check.title_key("L'huile sur le feu")
+          assert_equal Check.title_key("Émile"), Check.title_key("Emile")
+          assert_equal Check.title_key("Søren"), Check.title_key("Soren")
+        end
+
+        test "title_key never comes out empty and keeps non-Latin letters" do
+          assert_equal "мы", Check.title_key("Мы")
+          assert_equal "the", Check.title_key("The")
+          assert_equal "it", Check.title_key("It")
+        end
+
+        test "title_forms drops a trailing edition parenthetical but keeps a volume or set one" do
+          assert_equal ["atlas shrugged centennial ed hc", "atlas shrugged"], Check.title_forms("Atlas Shrugged (Centennial Ed. HC)")
+          [
+            "In Search of Lost Time (In Search of Lost Time 1)", "Guards! Guards! (Discworld, #4)",
+            "Capital (Volume 2)", "The Hobbit (Box Set)", "Wolf Hall (Book Two)"
+          ].each { |title| assert_nil Check.title_forms(title)[1], title }
+        end
+
+        test "title_forms splits a subtitle on the first colon" do
+          assert_equal ["dune messiah", "dune"], Check.title_forms("Dune: Messiah")
+        end
+
+        test "titles agree through the forgiving key" do
+          @book.title = "The Metamorphosis"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "Metamorphosis"))
+          @book.title = "Atlas Shrugged"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "Atlas Shrugged (Centennial Ed. HC)"))
+          @book.title = "In Search of Lost Time"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "In Search of Lost Time (In Search of Lost Time 1)"))
+        end
+
+        test "compact folds letters NFKD leaves alone" do
+          assert_equal Check.compact("Søren Kierkegaard"), Check.compact("Soren Kierkegaard")
+        end
+
         test "an alternate title agrees, a different title does not" do
           assert Check.titles_agree?(@book, ol_work("OL1W", title: "Voyna i mir"))
           assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Anna Karenina"))

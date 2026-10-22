@@ -12,6 +12,18 @@ module Services
         COMPACT_MIN = 4
         AUTHOR_FETCH_LIMIT = 5
 
+        # Letters NFKD leaves whole, folded to their plain-Latin spelling.
+        FOLD = {
+          "ø" => "o", "Ø" => "O", "æ" => "ae", "Æ" => "AE", "œ" => "oe", "Œ" => "OE",
+          "ß" => "ss", "ẞ" => "SS", "đ" => "d", "Đ" => "D", "ł" => "l", "Ł" => "L",
+          "þ" => "th", "Þ" => "TH"
+        }.freeze
+        FOLD_PATTERN = Regexp.union(FOLD.keys)
+        LEADING_ARTICLES = %w[the a an le la les l el los las il lo i gli o os as der die das].freeze
+        # A trailing parenthetical with any of these names a volume: never dropped.
+        VOLUME_PARENTHETICAL = /\d|#|\b(vols?|volumes?|books?|part|tome)\b/i
+        TRAILING_PARENTHETICAL = /\A(?<head>.*\S)\s*\((?<inside>[^()]*)\)\s*\z/
+
         def agree?(book, work, ol_authors: [])
           titles_agree?(book, work) && authors_agree?(book, work, ol_authors: ol_authors)
         end
@@ -47,16 +59,17 @@ module Services
           !authors_agree?(book, work, ol_authors: records)
         end
 
-        # Equal after normalizing, or equal once a subtitle (text after the
-        # first ":") is dropped from ONE side, never both: "Dune: Messiah"
-        # and "Dune: Part One" do not agree. The work's own subtitle field,
-        # when present, is its subtitle.
+        # Equal by title key, or equal once a subtitle (text after the first
+        # ":") or a trailing edition parenthetical is dropped from ONE side,
+        # never both: "Dune: Messiah" and "Dune: Part One" do not agree. The
+        # work's own subtitle field, when present, is its subtitle.
         def titles_agree?(book, work)
-          ours = ([book.title] + Array(book.alternate_titles)).filter_map { |title| normalize(title) }.uniq
-          theirs_full, theirs_short = their_titles(work)
-          return false if ours.empty? || theirs_full.nil?
+          forms = ([book.title] + Array(book.alternate_titles)).map { |title| title_forms(title) }.reject { |full, _| full.nil? }
+          theirs_full, theirs_short = their_title_keys(work)
+          return false if forms.empty? || theirs_full.nil?
 
-          ours_short = ours.filter_map { |title| short(title) }
+          ours = forms.map(&:first).uniq
+          ours_short = forms.filter_map(&:last)
           ours.include?(theirs_full) || (!theirs_short.nil? && ours.include?(theirs_short)) || ours_short.include?(theirs_full)
         end
 
@@ -91,7 +104,7 @@ module Services
         def compact(text)
           return nil if text.blank?
 
-          letters = text.to_s.unicode_normalize(:nfkd).gsub(/\p{Mn}/, "").downcase.gsub(/[^\p{L}]/, "")
+          letters = fold(text).downcase.gsub(/[^\p{L}]/, "")
           letters if letters.length >= COMPACT_MIN
         end
 
@@ -108,6 +121,51 @@ module Services
 
           subtitle = normalize(work.subtitle)
           subtitle ? ["#{title}: #{subtitle}", title] : [title, short(title)]
+        end
+
+        # Comparison key: normalized, letters folded, diacritics and punctuation
+        # gone, one leading article dropped (never leaving it empty).
+        def title_key(text)
+          normalized = normalize(text)
+          return nil if normalized.nil?
+
+          words = fold(normalized).downcase.gsub(/[^\p{L}\p{N} ]/, " ").split
+          words.shift if words.length > 1 && LEADING_ARTICLES.include?(words.first)
+          words.join(" ").presence
+        end
+
+        # [full key, key without a subtitle or edition parenthetical (nil when
+        # there is none)]. Split before keying, while the punctuation is intact.
+        def title_forms(text)
+          normalized = normalize(text)
+          return [nil, nil] if normalized.nil?
+
+          full = title_key(normalized)
+          match = TRAILING_PARENTHETICAL.match(normalized)
+          if match
+            inside = match[:inside]
+            return [full, nil] if inside.match?(VOLUME_PARENTHETICAL) || inside.match?(EditionCheck::SET_WORDS)
+
+            return [full, title_key(match[:head])]
+          end
+
+          head, separator, = normalized.partition(":")
+          [full, (title_key(head) if separator.present?)]
+        end
+
+        # [full key, short key or nil] for an Open Library work; its subtitle
+        # field, when present, is its subtitle.
+        def their_title_keys(work)
+          return [nil, nil] if normalize(work.title).nil?
+
+          subtitle = normalize(work.subtitle)
+          return title_forms(work.title) unless subtitle
+
+          [title_key("#{normalize(work.title)}: #{subtitle}"), title_key(work.title)]
+        end
+
+        def fold(text)
+          text.to_s.gsub(FOLD_PATTERN, FOLD).unicode_normalize(:nfkd).gsub(/\p{Mn}/, "")
         end
 
         def short(normalized)
