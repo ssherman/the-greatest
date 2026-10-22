@@ -33,6 +33,36 @@ module Services
           assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Dune", subtitle: "Part One"))
         end
 
+        test "a volume named in a colon subtitle or a subtitle field never agrees with the whole book" do
+          @book.title = "Le Comte de Monte-Cristo"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Le Comte de Monte-Cristo", subtitle: "Tome II"))
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Le Comte de Monte-Cristo: Tome 2"))
+          @book.title = "In Search of Lost Time"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "In Search of Lost Time: Volume 1"))
+          @book.title = "Persepolis"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Persepolis", subtitle: "Volume 1"))
+          @book.title = "Faust: Part One"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Faust"))
+          @book.title = "Faust"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Faust: II"))
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Faust", subtitle: "Teil 2"))
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Faust: Band Eins"))
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Faust: Livre premier"))
+          # Accepted recall cost: a numbered book in a subtitle is a volume too.
+          @book.title = "Dune"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Dune: Book One of the Dune Chronicles"))
+        end
+
+        test "a volume named in a colon subtitle survives a dropped edition parenthetical" do
+          @book.title = "In Search of Lost Time"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "In Search of Lost Time: Volume 1 (Penguin Classics)"))
+        end
+
+        test "an ordinary colon subtitle still agrees with the plain title" do
+          @book.title = "Dune: Messiah"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "Dune"))
+        end
+
         test "title_key forgives punctuation, case, articles, diacritics and folded letters" do
           assert_equal Check.title_key("From Russia, with love"), Check.title_key("From Russia with Love")
           assert_equal Check.title_key("The Metamorphosis"), Check.title_key("Metamorphosis")

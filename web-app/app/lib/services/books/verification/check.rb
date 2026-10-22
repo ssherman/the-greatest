@@ -20,8 +20,9 @@ module Services
         }.freeze
         FOLD_PATTERN = Regexp.union(FOLD.keys)
         LEADING_ARTICLES = %w[the a an le la les l el los las il lo gli os der das].freeze
-        # A trailing parenthetical with any of these names a volume: never dropped.
-        VOLUME_PARENTHETICAL = /\d|#|\b(vols?|volumes?|books?|part|tome)\b/i
+        # A trailing parenthetical, a colon subtitle or a subtitle field with any
+        # of these names a volume: never dropped.
+        VOLUME_PARENTHETICAL = /\d|#|\b(vols?|volumes?|books?|part|tome|teil|band|livre)\b/i
         ROMAN_NUMERAL = /\A[ivxlcdm]+\z/i
         TRAILING_PARENTHETICAL = /\A(?<head>.*\S)\s*\((?<inside>[^()]*)\)\s*\z/
 
@@ -135,16 +136,26 @@ module Services
           full = title_key(normalized)
           match = TRAILING_PARENTHETICAL.match(normalized)
           if match
-            inside = match[:inside]
-            return [full, nil] if inside.match?(VOLUME_PARENTHETICAL) || inside.match?(EditionCheck::SET_WORDS) ||
-              inside.strip.match?(ROMAN_NUMERAL)
+            return [full, nil] if names_volume?(match[:inside])
 
-            head = match[:head]
-            return [full, title_key(head.include?(":") ? head.partition(":").first : head)]
+            return [full, title_key(drop_subtitle(match[:head]))]
           end
 
-          head, separator, = normalized.partition(":")
-          [full, (title_key(head) if separator.present?)]
+          head = drop_subtitle(normalized)
+          [full, (title_key(head) unless head == normalized)]
+        end
+
+        # The text before the first ":", unless the subtitle after it names a
+        # volume or a set ("Faust: Part One", "Tome II"): that is kept whole.
+        def drop_subtitle(text)
+          head, separator, subtitle = text.partition(":")
+          (separator.present? && !names_volume?(subtitle)) ? head : text
+        end
+
+        # A volume, a set, or a bare Roman numeral: dropping it would let one
+        # volume (or an omnibus) agree with the whole book.
+        def names_volume?(text)
+          text.match?(VOLUME_PARENTHETICAL) || text.match?(EditionCheck::SET_WORDS) || text.strip.match?(ROMAN_NUMERAL)
         end
 
         # [full key, short key or nil] for an Open Library work; its subtitle
@@ -155,7 +166,8 @@ module Services
           subtitle = normalize(work.subtitle)
           return title_forms(work.title) unless subtitle
 
-          [title_key("#{normalize(work.title)}: #{subtitle}"), title_key(work.title)]
+          full = title_key("#{normalize(work.title)}: #{subtitle}")
+          [full, (title_key(work.title) unless names_volume?(subtitle))]
         end
 
         def fold(text)
