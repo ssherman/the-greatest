@@ -42,6 +42,12 @@ module Services
           assert_equal Check.title_key("Søren"), Check.title_key("Soren")
         end
 
+        test "title_key keeps ordinary English words that are foreign articles" do
+          assert_equal "i claudius", Check.title_key("I, Claudius")
+          assert_equal "as i lay dying", Check.title_key("As I Lay Dying")
+          assert_equal "die hard", Check.title_key("Die Hard")
+        end
+
         test "title_key never comes out empty and keeps non-Latin letters" do
           assert_equal "мы", Check.title_key("Мы")
           assert_equal "the", Check.title_key("The")

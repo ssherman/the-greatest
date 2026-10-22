@@ -104,7 +104,7 @@ module Services
 
         test "punctuation and a trailing creator do not make a record clearly different" do
           book = ::Books::Book.create!(title: "From Russia with Love")
-          book.book_authors.create!(author: ::Books::Author.create!(name: "Ian Fleming"))
+          book.book_authors.create!(author: ::Books::Author.create!(name: "Ian Lancaster Fleming"))
 
           refute WorldCatCheck.clearly_different?(book.reload, record(title: "From Russia, with love / Ian Fleming", creator: "Fleming, Ian"))
         end

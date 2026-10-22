@@ -50,6 +50,11 @@ module Services
           refute agrees?("War and Peace (War and Peace 1)")
         end
 
+        test "SET_WORDS bare-space run needs one- or two-digit numbers" do
+          refute "Dune: Book 1 2019 Edition".match?(EditionCheck::SET_WORDS)
+          assert "war and peace books 2 4".match?(EditionCheck::SET_WORDS)
+        end
+
         test "our own volume parenthetical agrees only with the same volume" do
           @book.update_columns(title: "In Search of Lost Time (Volume 1)")
           @work = ol_work("OL1W", title: "Remembrance of Things Past")

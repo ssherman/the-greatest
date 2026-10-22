@@ -19,7 +19,7 @@ module Services
           "þ" => "th", "Þ" => "TH"
         }.freeze
         FOLD_PATTERN = Regexp.union(FOLD.keys)
-        LEADING_ARTICLES = %w[the a an le la les l el los las il lo i gli o os as der die das].freeze
+        LEADING_ARTICLES = %w[the a an le la les l el los las il lo gli os der das].freeze
         # A trailing parenthetical with any of these names a volume: never dropped.
         VOLUME_PARENTHETICAL = /\d|#|\b(vols?|volumes?|books?|part|tome)\b/i
         ROMAN_NUMERAL = /\A[ivxlcdm]+\z/i
