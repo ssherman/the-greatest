@@ -27,6 +27,17 @@ module Services
           assert_equal "open_library", @book.identifiers.find_by!(identifier_type: :books_work_oclc_id).source
         end
 
+        test "via_resolve is true for every lookup but identifiers" do
+          %w[resolve resolve_candidate exact_title held_key worldcat_isbns].each do |lookup|
+            ::Books::Verification.where(book: @book).delete_all
+            work = ol_work("OL1W", title: "War and Peace", authors: [["OL26783A", "Leo Tolstoy"]])
+            Lookup.stubs(:call).returns(Lookup::Answer.new(work: work, lookup: lookup.to_sym, duplicates: [], redirect_sources: [], source_version: nil))
+            ol = FakeOlClient.new(works: {"OL1W" => work}, editions: {"OL1W" => []})
+
+            assert verify(ol).data.via_resolve, lookup
+          end
+        end
+
         test "a row stopped at worldcat resumes there and never repeats stages 1 and 2" do
           row = ::Books::Verification.create!(book: @book, work_outcome: :keyed, new_key: "OL1W", run_id: "old", stage: :worldcat)
           ol = FakeOlClient.new

@@ -31,7 +31,7 @@ module Services
             return Result.new(success?: false, data: nil, errors: applied.errors) unless applied.success?
 
             row = applied.data
-            via_resolve = row.via_resolve?
+            via_resolve = !row.via_identifiers?
           end
           row.update!(run_id: @run_id) unless row.run_id == @run_id
 

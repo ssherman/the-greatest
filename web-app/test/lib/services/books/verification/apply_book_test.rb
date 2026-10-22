@@ -461,11 +461,61 @@ module Services
         end
 
         test "a removed row is settled: it is skipped and never overwritten" do
-          ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL5W"])
+          ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL5W"], stage: :done)
           client = fast_client
 
           assert_not ApplyBook.call(book: @book, client: client, run_id: "run-2").success?
           assert_empty client.calls
+        end
+
+        # --- second-chance answers ---
+
+        def stub_answer(lookup, work: @work)
+          Lookup.stubs(:call).returns(Lookup::Answer.new(work: work, lookup: lookup, duplicates: [], redirect_sources: [],
+            source_version: {dump_date: "2026-07-31", matcher_version: 3}))
+        end
+
+        test "a resolve_candidate answer settles the book and writes no author key" do
+          stub_answer(:resolve_candidate)
+
+          row = ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-1").data
+
+          assert_equal [["OL1W"], "keyed", "resolve_candidate", {}], [work_keys, row.work_outcome, row.lookup, row.author_changes]
+        end
+
+        test "a resolve accept still writes the author key" do
+          stub_answer(:resolve)
+
+          row = ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-1").data
+
+          assert_equal [[books_authors(:tolstoy).id, "OL26783A"]], row.author_changes["added"]
+        end
+
+        test "a held_key answer for a held key is confirmed and the key becomes open_library" do
+          add_key("OL1W")
+          stub_answer(:held_key)
+
+          row = ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-1").data
+
+          assert_equal ["confirmed", "open_library", {}], [row.work_outcome, @book.identifiers.find_by!(value: "OL1W").source, row.author_changes]
+        end
+
+        test "a removed row reset to the work stage is reprocessed and keeps its old keys" do
+          ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL3W"], stage: :work)
+          add_key("OL1W")
+          stub_answer(:held_key)
+
+          result = ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-2")
+
+          assert result.success?
+          assert_equal ["OL3W", "OL1W"], result.data.old_keys
+          assert_equal 2, result.data.attempts
+        end
+
+        test "a removed row at the done stage is still settled" do
+          ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL3W"], stage: :done)
+
+          assert_not ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-2").success?
         end
 
         # --- pairs only for a holder that really looks like the same work ---

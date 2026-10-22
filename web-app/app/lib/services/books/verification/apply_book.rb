@@ -33,7 +33,17 @@ module Services
           end
         end
 
-        def self.settled?(row) = row&.persisted? && REPROCESSABLE.exclude?(row.work_outcome)
+        # The routes that may write Open Library author keys: the ones whose answer
+        # Open Library's matcher accepted. Second-chance routes never do.
+        MATCHER_LOOKUPS = %w[identifiers resolve].freeze
+
+        # A removed row is also reprocessable while it sits at the work stage: the
+        # second-chance run resets such rows there. At any later stage it is settled.
+        def self.settled?(row)
+          return false unless row&.persisted?
+
+          REPROCESSABLE.exclude?(row.work_outcome) && !(row.work_outcome == "removed" && row.stage_work?)
+        end
 
         def initialize(book, client, run_id, cohort = :pre_import)
           @cohort = cohort
@@ -55,7 +65,9 @@ module Services
 
             attempts = row.new_record? ? 1 : row.attempts + 1
             @inserting = row.new_record?
+            previous_keys = row.new_record? ? [] : row.old_keys
             decided = decide(answer)
+            decided = decided.merge(old_keys: (previous_keys + decided[:old_keys]).uniq)
             stage = ::Books::Verification::SETTLED_FOR_EDITIONS.include?(decided[:work_outcome].to_s) ? :identifiers : :worldcat
             row.assign_attributes(decided.merge(
               cohort: @cohort, stage: stage, stage_error: nil,
@@ -102,7 +114,7 @@ module Services
           flag_duplicate_holder(key, work) unless outcome == :confirmed
           {work_outcome: outcome, old_keys: stored, new_key: key, pair_book_id: other,
            duplicate_keys: save_duplicates(answer.duplicates + kept, key, work),
-           author_changes: AuthorKeys.call(book: @book, work: work)}
+           author_changes: MATCHER_LOOKUPS.include?(answer.lookup.to_s) ? AuthorKeys.call(book: @book, work: work) : {}}
         end
 
         # [outcome, Open Library's records for the stored keys (nil when not fetched)].
