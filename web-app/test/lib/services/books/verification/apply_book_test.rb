@@ -438,6 +438,19 @@ module Services
           assert_equal [[:works_batch, ["OL5W", "OL6W"]]], client.calls.select { |call| call.first == :works_batch }
         end
 
+        test "removed with a survivor: neither stored key passes, only the clearly different one goes" do
+          add_key("OL5W")
+          add_key("OL6W")
+          wrong = ol_work("OL5W", title: "Anna Karenina", authors: [["OL9A", "Someone Else"]])
+          unknown_author = ol_work("OL6W", title: "War and Peace") # title agrees, no author to confirm: not verified, not clearly different
+          client = abstain_client(works: {"OL5W" => wrong, "OL6W" => unknown_author})
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal [["OL6W"], "removed", ["OL5W", "OL6W"]], [work_keys, row.work_outcome, row.old_keys]
+          assert_equal [[:works_batch, ["OL5W", "OL6W"]], [:works_batch, ["OL5W", "OL6W"]]], client.calls.select { |call| call.first == :works_batch }
+        end
+
         test "an unsure book with no stored key makes no works_batch call" do
           client = abstain_client
 

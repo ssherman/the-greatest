@@ -133,13 +133,14 @@ module Services
           return nil unless resolution.volume_guards_tripped.empty?
 
           usable = resolution.candidates.select { |candidate| candidate.record && candidate.conflicting_features.empty? }
+          conflicted = resolution.candidates.reject { |candidate| candidate.conflicting_features.empty? }.map(&:work_key)
           resolve_candidate(resolution, usable) || exact_title(resolution, usable) ||
-            held_key(resolution) || worldcat_isbns(resolution)
+            held_key(resolution, conflicted) || worldcat_isbns(resolution, conflicted)
         end
 
         # Spec step 4: a legacy key the book holds whose live work passes our check.
-        def held_key(resolution)
-          keys = stored_keys.uniq
+        def held_key(resolution, conflicted)
+          keys = stored_keys.uniq - conflicted
           return nil if keys.empty?
 
           works = @client.works_batch(keys)
@@ -148,13 +149,13 @@ module Services
 
           ours = Check.title_key(@book.title)
           chosen = passing.find { |work| ours && Check.their_title_keys(work).first == ours } || passing.first
-          Answer.new(work: chosen, lookup: :held_key, duplicates: [], redirect_sources: [],
+          Answer.new(work: chosen, lookup: :held_key, duplicates: passing.map(&:key) - [chosen.key], redirect_sources: [],
             source_version: resolution.source_version, ol_pick: resolution.candidates.first&.work_key)
         end
 
         # Spec step 5: the book's WorldCat-confirmed ISBNs, looked up in Open
         # Library as ISBN-13s; the work most of them lead to, if it passes.
-        def worldcat_isbns(resolution)
+        def worldcat_isbns(resolution, conflicted)
           isbns = @book.identifiers.where(identifier_type: [:books_work_isbn13, :books_work_isbn10], source: :worldcat)
             .order(:id).pluck(:value).filter_map { |value| ::Books::Isbn.normalize(value)&.isbn13 }.uniq
           return nil if isbns.empty?
@@ -162,7 +163,9 @@ module Services
           tally = lookup_hits(isbns.first(MAX_WORLDCAT_LOOKUPS).map { |isbn| ["isbn13", isbn] }).filter_map(&:work_key).tally
           return nil if tally.empty?
 
-          keys = tally.keys.each_with_index.sort_by { |key, index| [-tally[key], index] }.map(&:first)
+          keys = (tally.keys - conflicted).each_with_index.sort_by { |key, index| [-tally[key], index] }.map(&:first)
+          return nil if keys.empty?
+
           works = @client.works_batch(keys)
           passing = keys.filter_map { |key| works[key] }.select { |work| Check.verified?(@book, work, @client) }
           return nil if passing.empty?

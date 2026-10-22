@@ -337,14 +337,46 @@ module Services
           assert_equal "OL9W", Lookup.call(book: @book, client: client).work.key
         end
 
-        test "a held key whose work fails the check falls through, and a missing work is skipped" do
-          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+        test "a held key with no live work is skipped, not the end of the route" do
           hold(:books_work_openlibrary_id, "OL8W", :legacy)
-          client = FakeOlClient.new(resolution: abstain_with_nothing, works: {"OL9W" => tolstoy_work("OL9W", "Anna Karenina"), "OL8W" => nil})
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          client = FakeOlClient.new(resolution: abstain_with_nothing, works: {"OL8W" => nil, "OL9W" => tolstoy_work("OL9W", "War and Peace")})
 
           answer = Lookup.call(book: @book, client: client)
 
-          assert_nil answer.work
+          assert_equal ["OL9W", :held_key], [answer.work.key, answer.lookup]
+        end
+
+        test "the other passing held keys are the duplicates" do
+          hold(:books_work_openlibrary_id, "OL8W", :legacy)
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          client = FakeOlClient.new(resolution: abstain_with_nothing, works: {
+            "OL8W" => tolstoy_work("OL8W", "War and Peace: A Novel"), "OL9W" => tolstoy_work("OL9W", "War and Peace")
+          })
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL9W", ["OL8W"]], [answer.work.key, answer.duplicates]
+        end
+
+        test "a held key that is a candidate with conflicting features is not taken" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          held = tolstoy_work("OL9W", "War and Peace")
+          # not the top candidate, so the earlier confirm-the-stored-key path does not apply
+          top = tolstoy_work("OL5W", "Anna Karenina")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(top), candidate(held, conflicts: ["identifier"])]),
+            works: {"OL9W" => held})
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
+        test "a WorldCat-hit work that is a candidate with conflicting features is not taken" do
+          hold(:books_work_isbn13, "9780199232765", :worldcat)
+          hit = tolstoy_work("OL5W", "War and Peace")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(hit, conflicts: ["identifier"])]),
+            hits: {["isbn13", "9780199232765"] => [ol_hit("OL5W"), ol_hit("OL5W"), ol_hit("OL7W")]}, works: {"OL5W" => hit})
+
+          assert_nil Lookup.call(book: @book, client: client).work
         end
 
         test "a held key whose work fails falls through to the WorldCat ISBNs" do
@@ -357,6 +389,8 @@ module Services
           answer = Lookup.call(book: @book, client: client)
 
           assert_equal ["OL5W", :worldcat_isbns], [answer.work.key, answer.lookup]
+          # once in the fast pass, once from the WorldCat route
+          assert_equal 2, client.calls.count([:identifier, "isbn13", "9780199232765"])
         end
 
         test "WorldCat ISBNs lead to the work with most hits, the other passing work is a duplicate" do
@@ -375,13 +409,13 @@ module Services
         end
 
         test "an ISBN-10 held only as ISBN-10 is looked up in its ISBN-13 form" do
-          hold(:books_work_isbn10, "0140447938", :worldcat)
+          hold(:books_work_isbn10, "0199535566", :worldcat)
           client = FakeOlClient.new(resolution: abstain_with_nothing)
 
           Lookup.call(book: @book, client: client)
 
-          # once in the fast pass (the legacy ISBN-13 the fixture holds), once from the WorldCat route
-          assert_equal 2, client.calls.count([:identifier, "isbn13", "9780140447934"])
+          # the fast pass looks it up as an ISBN-10; only the WorldCat route asks for the ISBN-13 form
+          assert_equal [1, 1], [client.calls.count([:identifier, "isbn10", "0199535566"]), client.calls.count([:identifier, "isbn13", "9780199535569"])]
         end
 
         test "a WorldCat work that fails the check is no answer" do
@@ -416,10 +450,13 @@ module Services
 
         test "an identifier conflict stops the held-key and WorldCat routes" do
           hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          hold(:books_work_isbn13, "9780199232765", :worldcat)
           client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", reason: "identifier conflict on the best candidate: isbn13",
-            candidates: []), works: {"OL9W" => tolstoy_work("OL9W", "War and Peace")})
+            candidates: []), hits: {["isbn13", "9780199232765"] => [ol_hit("OL5W"), ol_hit("OL5W"), ol_hit("OL7W")]},
+            works: {"OL9W" => tolstoy_work("OL9W", "War and Peace"), "OL5W" => tolstoy_work("OL5W", "War and Peace")})
 
           assert_nil Lookup.call(book: @book, client: client).work
+          assert_equal 1, client.calls.count([:identifier, "isbn13", "9780199232765"])
         end
 
         test "a tripped volume guard stops the held-key route" do
