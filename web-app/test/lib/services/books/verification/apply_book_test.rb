@@ -425,7 +425,7 @@ module Services
           assert_equal [["OL5W"], "unsure"], [work_keys, row.work_outcome]
         end
 
-        test "removed: of two stored keys only the clearly different one goes, with one works_batch call" do
+        test "an unsure book settles on the passing one of two stored keys and the clearly different one goes, with one works_batch call" do
           add_key("OL5W")
           add_key("OL6W")
           wrong = ol_work("OL5W", title: "Anna Karenina", authors: [["OL9A", "Someone Else"]])
@@ -434,7 +434,7 @@ module Services
 
           row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
 
-          assert_equal [["OL6W"], "removed", ["OL5W", "OL6W"]], [work_keys, row.work_outcome, row.old_keys]
+          assert_equal [["OL6W"], "confirmed", ["OL5W", "OL6W"]], [work_keys, row.work_outcome, row.old_keys]
           assert_equal [[:works_batch, ["OL5W", "OL6W"]]], client.calls.select { |call| call.first == :works_batch }
         end
 

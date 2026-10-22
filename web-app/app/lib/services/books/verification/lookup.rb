@@ -24,6 +24,7 @@ module Services
         }.freeze
         # Enough lookups to show whether a book's identifiers agree.
         MAX_FAST_LOOKUPS = 5
+        MAX_WORLDCAT_LOOKUPS = 5
         NO_HIT_STATUSES = [400, 422].freeze
         RESOLVE_IDENTIFIERS_PER_TYPE = 3
 
@@ -69,9 +70,13 @@ module Services
         # concurrent requests; the threads touch no database connection).
         # Joined in order; the first error, in lookup order, is raised.
         def fast_hits
-          threads = identifiers.first(MAX_FAST_LOOKUPS).map do |type, value|
+          lookup_hits(identifiers.first(MAX_FAST_LOOKUPS).map { |type, value| [FAST_TYPES.fetch(type), value] })
+        end
+
+        def lookup_hits(lookups)
+          threads = lookups.map do |type, value|
             Thread.new do
-              hits_for(FAST_TYPES.fetch(type), value)
+              hits_for(type, value)
             rescue => e
               e
             end
@@ -120,15 +125,50 @@ module Services
         end
 
         # Spec steps 2-3: Open Library's own candidates, each held to our check.
-        # Returns an Answer or nil. Later routes (held keys, WorldCat ISBNs)
-        # add their own methods and are tried here in order.
+        # Returns an Answer or nil. Then the held keys (step 4) and the
+        # WorldCat-confirmed ISBNs (step 5), all behind the same guards.
         def second_chance(resolution)
           return nil if resolution.decision.verdict == "reject"
           return nil if resolution.decision.reason.to_s.start_with?("identifier conflict")
           return nil unless resolution.volume_guards_tripped.empty?
 
           usable = resolution.candidates.select { |candidate| candidate.record && candidate.conflicting_features.empty? }
-          resolve_candidate(resolution, usable) || exact_title(resolution, usable)
+          resolve_candidate(resolution, usable) || exact_title(resolution, usable) ||
+            held_key(resolution) || worldcat_isbns(resolution)
+        end
+
+        # Spec step 4: a legacy key the book holds whose live work passes our check.
+        def held_key(resolution)
+          keys = stored_keys.uniq
+          return nil if keys.empty?
+
+          works = @client.works_batch(keys)
+          passing = keys.filter_map { |key| works[key] }.select { |work| Check.verified?(@book, work, @client) }
+          return nil if passing.empty?
+
+          ours = Check.title_key(@book.title)
+          chosen = passing.find { |work| ours && Check.their_title_keys(work).first == ours } || passing.first
+          Answer.new(work: chosen, lookup: :held_key, duplicates: [], redirect_sources: [],
+            source_version: resolution.source_version, ol_pick: resolution.candidates.first&.work_key)
+        end
+
+        # Spec step 5: the book's WorldCat-confirmed ISBNs, looked up in Open
+        # Library as ISBN-13s; the work most of them lead to, if it passes.
+        def worldcat_isbns(resolution)
+          isbns = @book.identifiers.where(identifier_type: [:books_work_isbn13, :books_work_isbn10], source: :worldcat)
+            .order(:id).pluck(:value).filter_map { |value| ::Books::Isbn.normalize(value)&.isbn13 }.uniq
+          return nil if isbns.empty?
+
+          tally = lookup_hits(isbns.first(MAX_WORLDCAT_LOOKUPS).map { |isbn| ["isbn13", isbn] }).filter_map(&:work_key).tally
+          return nil if tally.empty?
+
+          keys = tally.keys.each_with_index.sort_by { |key, index| [-tally[key], index] }.map(&:first)
+          works = @client.works_batch(keys)
+          passing = keys.filter_map { |key| works[key] }.select { |work| Check.verified?(@book, work, @client) }
+          return nil if passing.empty?
+
+          Answer.new(work: passing.first, lookup: :worldcat_isbns, duplicates: passing.drop(1).map(&:key), redirect_sources: [],
+            source_version: resolution.source_version, ol_pick: resolution.candidates.first&.work_key)
         end
 
         def resolve_candidate(resolution, usable)
