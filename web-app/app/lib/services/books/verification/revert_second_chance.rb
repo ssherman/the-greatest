@@ -9,6 +9,12 @@ module Services
       # finding logic; only what the second chance wrote (findings and
       # edition candidates created at or after second_chance_at) is undone.
       class RevertSecondChance < Revert
+        # The row keeps its run_id, so a re-queue under the same second-chance
+        # run id will not retake it; a new run will.
+        # A duplicate_pair settle (the route's work is held by another book) is
+        # reverted like a keyed one.
+        SETTLED = (::Books::Verification::KEYED_OUTCOMES + %w[duplicate_pair]).freeze
+        # The one list of routes; Report uses it too.
         ROUTES = %w[resolve_candidate exact_title held_key worldcat_isbns].freeze
 
         # Reverts every row a route settled. A row with no second_chance_at was
@@ -19,7 +25,7 @@ module Services
           raise ArgumentError, "unknown route #{lookup.inspect}; use #{ROUTES.join(", ")}" unless ROUTES.include?(lookup)
 
           counts = {reverted: 0, failed: 0}
-          ::Books::Verification.where(lookup: lookup, work_outcome: ::Books::Verification::KEYED_OUTCOMES).includes(:book).find_each do |row|
+          ::Books::Verification.where(lookup: lookup, work_outcome: SETTLED).includes(:book).find_each do |row|
             result = row.second_chance_at ? call(book: row.book) : Revert.call(book: row.book)
             counts[result.success? ? :reverted : :failed] += 1
           end
@@ -30,7 +36,7 @@ module Services
           row = ::Books::Verification.find_by(book: @book)
           return failure("book #{@book.id} has no backfill row") unless row
           return failure("book #{@book.id} has no second chance to revert") unless row.second_chance_at
-          unless ::Books::Verification::KEYED_OUTCOMES.include?(row.work_outcome)
+          unless SETTLED.include?(row.work_outcome)
             return failure("book #{@book.id} is #{row.work_outcome}; the second chance did not settle it")
           end
 

@@ -21,7 +21,6 @@ module Services
 
         test "reverts an unsure row: new and duplicate keys go, prior keys return legacy, later records go, earlier ones stay" do
           ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::WORK_KEY, value: "OL1W", source: :open_library)
-          ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::WORK_KEY, value: "OL5W", source: :open_library)
           ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::DUPLICATE_KEY, value: "OL2W", source: :open_library)
           row = settled_row(prior_keys: ["OL5W"], old_keys: ["OL5W"], duplicate_keys: ["OL2W"])
           early = ::Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "11")
@@ -44,6 +43,22 @@ module Services
           assert_equal ["unsure", "resolve", nil, "done", nil, nil, []],
             [row.work_outcome, row.lookup, row.new_key, row.stage, row.second_chance_at, row.prior_outcome, row.prior_keys]
           assert_equal [], row.duplicate_keys
+        end
+
+        test "a confirmed key is kept under the same identifier and goes back to legacy" do
+          held = ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::WORK_KEY, value: "OL5W", source: :open_library)
+          settled_row(work_outcome: :confirmed, new_key: "OL5W", prior_keys: ["OL5W"], old_keys: ["OL5W"])
+
+          assert RevertSecondChance.call(book: @book).success?
+
+          assert_equal [[held.id, "legacy"]], @book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).pluck(:id, :source)
+        end
+
+        test "a duplicate_pair settle reverts to the prior outcome, and the route counts it" do
+          row = settled_row(prior: :removed, work_outcome: :duplicate_pair, new_key: "OL1W", old_keys: ["OL9W"])
+
+          assert_equal({reverted: 1, failed: 0}, RevertSecondChance.route(:resolve_candidate))
+          assert_equal ["removed", nil], [row.reload.work_outcome, row.second_chance_at]
         end
 
         test "a removed row reverts to removed and its removed key is not recreated" do

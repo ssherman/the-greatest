@@ -33,12 +33,21 @@ module Services
 
           text = Report.call.join("\n")
 
-          assert_match(/Settled by second-chance route:/, text)
+          assert_match(/Settled via route:/, text)
           assert_match(/resolve_candidate\s+1/, text)
           assert_match(/worldcat_isbns\s+1/, text)
           assert_match(/exact_title\s+0/, text)
           assert_match(/held_key\s+0/, text)
-          assert_match(/via resolve_candidate:\n\s+book #{war.id} "War and Peace"/, text)
+          assert_match(/via resolve_candidate \(keyed\):\n\s+book #{war.id} "War and Peace"/, text)
+        end
+
+        test "route samples show Open Library's title when a client is given" do
+          war = books_books(:war_and_peace)
+          ::Books::Verification.create!(book: war, work_outcome: :keyed, run_id: "r", lookup: :exact_title, new_key: "OL1W")
+          client = stub
+          client.stubs(:works_batch).with(["OL1W"]).returns({"OL1W" => stub(title: "Voyna i mir", author_names: ["Leo Tolstoy"])})
+
+          assert_match(/via exact_title \(keyed\):\n\s+book #{war.id} .*-> OL1W.*Voyna i mir/, Report.call(client: client).join("\n"))
         end
 
         test "the latest failure shows the book, error and time; none when there is none" do

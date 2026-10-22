@@ -7,7 +7,7 @@ module Services
       class Report
         RECENT = 20
         SAMPLE = 10
-        ROUTES = %i[resolve_candidate exact_title held_key worldcat_isbns].freeze
+        ROUTES = RevertSecondChance::ROUTES
 
         def self.call(client: nil)
           new(client).call
@@ -27,9 +27,9 @@ module Services
           counts = rows.group(:work_outcome).count
           ::Books::Verification.work_outcomes.each_key { |outcome| lines << format("  %-15s %d", outcome, counts.fetch(outcome, 0)) }
           lines << ""
-          lines << "Settled by second-chance route:"
+          lines << "Settled via route:"
           route_counts = rows.where(lookup: ROUTES).group(:lookup).count
-          ROUTES.each { |route| lines << format("  %-18s %d", route, route_counts.fetch(route.to_s, 0)) }
+          ROUTES.each { |route| lines << format("  %-18s %d", route, route_counts.fetch(route, 0)) }
           lines << ""
           lines << abstain_line
           lines << ranked_line
@@ -86,11 +86,14 @@ module Services
             sampled.each { |row| lines << "    #{book_label(row.book)}#{outcome_tail(row, ol)}" }
           end
           ROUTES.each do |route|
-            sampled = rows.where(lookup: route).includes(book: :authors).order(Arel.sql("random()")).limit(SAMPLE).to_a
-            next if sampled.empty?
+            ::Books::Verification.work_outcomes.each_key do |outcome|
+              sampled = rows.where(lookup: route, work_outcome: outcome).includes(book: :authors).order(Arel.sql("random()")).limit(SAMPLE).to_a
+              next if sampled.empty?
 
-            lines << "  via #{route}:"
-            sampled.each { |row| lines << "    #{book_label(row.book)}#{outcome_tail(row, {})}" }
+              lines << "  via #{route} (#{outcome}):"
+              ol = open_library_records(sampled.filter_map { |row| row.new_key.presence })
+              sampled.each { |row| lines << "    #{book_label(row.book)}#{outcome_tail(row, ol)}" }
+            end
           end
           lines.concat(finding_samples("Open Library trusted writes", ::Books::VerificationFinding.where(source: :open_library, kind: %i[added confirmed])))
           lines.concat(finding_samples("WorldCat confirmations", ::Books::VerificationFinding.confirmed.where(source: :worldcat)))
