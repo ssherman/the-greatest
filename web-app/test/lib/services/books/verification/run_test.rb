@@ -438,6 +438,43 @@ module Services
           run_backfill(flags: %w[reharvest unranked], scope: ::Books::Book.where(id: @war.id))
         end
 
+        test "second_chance takes done unsure and removed books from other runs, back to stage 1, recording what they were" do
+          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: true, data: VerifyBook::Outcome.new(row: nil, via_resolve: false), errors: []))
+          unsure = ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", stage: :done)
+          removed = ::Books::Verification.create!(book: @crime, work_outcome: :removed, run_id: "old", stage: :done, old_keys: ["OL5W"])
+          keyed = ::Books::Verification.create!(book: @got, work_outcome: :keyed, run_id: "old", stage: :done)
+          reverted = ::Books::Verification.create!(book: @clash, work_outcome: :reverted, run_id: "old", stage: :done)
+          Identifier.create!(identifiable: @war, identifier_type: :books_work_openlibrary_id, value: "OL1W", source: :open_library)
+
+          freeze_time do
+            run_backfill(flags: %w[second_chance unranked])
+
+            assert unsure.reload.stage_work?
+            assert_equal Time.current, unsure.second_chance_at
+            assert_equal ::Books::Verification.work_outcomes["unsure"], unsure.prior_outcome
+            assert_equal ["OL1W"], unsure.prior_keys
+            assert removed.reload.stage_work?
+            assert_equal ::Books::Verification.work_outcomes["removed"], removed.prior_outcome
+            assert_equal ["OL262758W"], removed.prior_keys
+          end
+          assert [keyed, reverted].map(&:reload).all?(&:stage_done?)
+          assert_nil keyed.second_chance_at
+        end
+
+        test "second_chance does not take a book this run already finished, so a re-queued run does not redo it" do
+          ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "run-1", stage: :done)
+          VerifyBook.expects(:call).never
+
+          run_backfill(flags: %w[second_chance unranked], scope: ::Books::Book.where(id: @war.id))
+        end
+
+        test "without second_chance a done unsure book is not taken" do
+          ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", stage: :done)
+          VerifyBook.expects(:call).never
+
+          run_backfill(scope: ::Books::Book.where(id: @war.id))
+        end
+
         test "a WorldCat outage after the retries stops the run and leaves the book at its stage" do
           ::Books::Verification.create!(book: @war, work_outcome: :keyed, new_key: "OL1W", run_id: "old", stage: :worldcat)
           VerifyBook.stubs(:call).raises(::Books::WorldCat::Exceptions::ServerError.new("down", 503))
