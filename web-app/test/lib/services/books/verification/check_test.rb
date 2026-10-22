@@ -56,6 +56,22 @@ module Services
           ].each { |title| assert_nil Check.title_forms(title)[1], title }
         end
 
+        test "a droppable parenthetical still lets the colon split apply to the head" do
+          long = "War and Peace: The Maude Translation (Oxford World Classics)"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: long))
+          @book.title = long
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "War and Peace"))
+        end
+
+        test "a bare Roman numeral parenthetical is a volume" do
+          assert_nil Check.title_forms("Les Misérables (II)")[1]
+          assert_nil Check.title_forms("Les Misérables (IV)")[1]
+        end
+
+        test "title_key keeps Indic spacing marks" do
+          assert_equal "किताब", Check.title_key("किताब")
+        end
+
         test "title_forms splits a subtitle on the first colon" do
           assert_equal ["dune messiah", "dune"], Check.title_forms("Dune: Messiah")
         end

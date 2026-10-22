@@ -22,6 +22,7 @@ module Services
         LEADING_ARTICLES = %w[the a an le la les l el los las il lo i gli o os as der die das].freeze
         # A trailing parenthetical with any of these names a volume: never dropped.
         VOLUME_PARENTHETICAL = /\d|#|\b(vols?|volumes?|books?|part|tome)\b/i
+        ROMAN_NUMERAL = /\A[ivxlcdm]+\z/i
         TRAILING_PARENTHETICAL = /\A(?<head>.*\S)\s*\((?<inside>[^()]*)\)\s*\z/
 
         def agree?(book, work, ol_authors: [])
@@ -129,7 +130,7 @@ module Services
           normalized = normalize(text)
           return nil if normalized.nil?
 
-          words = fold(normalized).downcase.gsub(/[^\p{L}\p{N} ]/, " ").split
+          words = fold(normalized).downcase.gsub(/[^\p{L}\p{M}\p{N} ]/, " ").split
           words.shift if words.length > 1 && LEADING_ARTICLES.include?(words.first)
           words.join(" ").presence
         end
@@ -144,9 +145,11 @@ module Services
           match = TRAILING_PARENTHETICAL.match(normalized)
           if match
             inside = match[:inside]
-            return [full, nil] if inside.match?(VOLUME_PARENTHETICAL) || inside.match?(EditionCheck::SET_WORDS)
+            return [full, nil] if inside.match?(VOLUME_PARENTHETICAL) || inside.match?(EditionCheck::SET_WORDS) ||
+              inside.strip.match?(ROMAN_NUMERAL)
 
-            return [full, title_key(match[:head])]
+            head = match[:head]
+            return [full, title_key(head.include?(":") ? head.partition(":").first : head)]
           end
 
           head, separator, = normalized.partition(":")
