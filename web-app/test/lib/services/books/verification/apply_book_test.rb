@@ -24,6 +24,8 @@ module Services
           FakeOlClient.new(resolution: resolution, works: works)
         end
 
+        def work_keys_with_source = @book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).pluck(:value, :source)
+
         def work_keys(book = @book) = book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).order(:id).pluck(:value)
 
         def duplicate_keys(book = @book) = book.identifiers.where(identifier_type: ApplyBook::DUPLICATE_KEY).order(:id).pluck(:value)
@@ -512,10 +514,32 @@ module Services
           assert_equal 2, result.data.attempts
         end
 
-        test "a removed row at the done stage is still settled" do
-          ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL3W"], stage: :done)
+        test "a removed row reset to work that finds nothing stays removed and can still be reverted" do
+          row = ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL3W"], stage: :work)
+          Lookup.stubs(:call).returns(Lookup::Answer.new(work: nil, lookup: :exact_title, duplicates: [], redirect_sources: [], source_version: nil))
 
-          assert_not ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-2").success?
+          ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-2")
+
+          assert_equal ["removed", ["OL3W"], "exact_title", "run-2"], row.reload.then { |r| [r.work_outcome, r.old_keys, r.lookup, r.run_id] }
+          assert Revert.call(book: @book).success?
+          assert_equal [["OL3W", "legacy"]], work_keys_with_source
+        end
+
+        test "record_failure keeps a removed row removed" do
+          row = ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL3W"], stage: :work)
+
+          ApplyBook.record_failure(book: @book, run_id: "run-2", error: StandardError.new("boom"))
+
+          assert_equal ["removed", "boom", 2], row.reload.then { |r| [r.work_outcome, r.error, r.attempts] }
+        end
+
+        test "a removed row with no held key is keyed by a worldcat_isbns answer, keeps its old keys, writes no author key" do
+          ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL3W"], stage: :work)
+          stub_answer(:worldcat_isbns)
+
+          row = ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-2").data
+
+          assert_equal ["keyed", ["OL3W"], {}], [row.work_outcome, row.old_keys, row.author_changes]
         end
 
         # --- pairs only for a holder that really looks like the same work ---

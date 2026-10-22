@@ -26,7 +26,9 @@ module Services
             row.lock! unless row.new_record?
             next row if settled?(row)
 
-            row.assign_attributes(work_outcome: :failed, run_id: run_id, error: error.to_s.truncate(1000),
+            # A removed row keeps its outcome: Revert needs it to restore the removed keys.
+            row.work_outcome = :failed unless row.removed?
+            row.assign_attributes(run_id: run_id, error: error.to_s.truncate(1000),
               attempts: row.new_record? ? 1 : row.attempts + 1)
             row.save!
             row
@@ -65,9 +67,12 @@ module Services
 
             attempts = row.new_record? ? 1 : row.attempts + 1
             @inserting = row.new_record?
+            was_removed = row.removed?
             previous_keys = row.new_record? ? [] : row.old_keys
             decided = decide(answer)
             decided = decided.merge(old_keys: (previous_keys + decided[:old_keys]).uniq)
+            # A removed row that finds nothing stays removed, so Revert can restore its keys.
+            decided[:work_outcome] = :removed if was_removed && decided[:work_outcome] == :unsure
             stage = ::Books::Verification::SETTLED_FOR_EDITIONS.include?(decided[:work_outcome].to_s) ? :identifiers : :worldcat
             row.assign_attributes(decided.merge(
               cohort: @cohort, stage: stage, stage_error: nil,
