@@ -87,15 +87,13 @@ module Services
           end
         end
 
-        LEADING_ARTICLE = /\A(the|a|an) /
-
-        # The work's full title (subtitle included) is our own title, a leading
-        # article aside. Alternate titles do not count: legacy data gives some
+        # The work's full title (subtitle included) is our own title by the
+        # comparison key. Alternate titles do not count: legacy data gives some
         # volumes their series' name.
         def same_title?(work)
-          theirs = Check.their_titles(work).first
-          ours = Check.normalize(@book.title)
-          theirs.present? && ours.present? && theirs.sub(LEADING_ARTICLE, "") == ours.sub(LEADING_ARTICLE, "")
+          theirs = Check.their_title_keys(work).first
+          ours = Check.title_key(@book.title)
+          theirs.present? && ours.present? && theirs == ours
         end
 
         # A duplicate Open Library no longer has is skipped; the settled work's

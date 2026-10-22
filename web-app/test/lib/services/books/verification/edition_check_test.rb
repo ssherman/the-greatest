@@ -44,6 +44,21 @@ module Services
           assert agrees?("War and Peace", subtitle: "Complete and Unabridged")
         end
 
+        test "the comparison key ignores an edition parenthetical but not a set or a volume" do
+          assert agrees?("War and Peace (Centennial Ed. HC)")
+          refute agrees?("War and Peace: Books 2-4")
+          refute agrees?("War and Peace (War and Peace 1)")
+        end
+
+        test "our own volume parenthetical agrees only with the same volume" do
+          @book.update_columns(title: "In Search of Lost Time (Volume 1)")
+          @work = ol_work("OL1W", title: "Remembrance of Things Past")
+
+          assert agrees?("In Search of Lost Time (Volume 1)")
+          refute agrees?("In Search of Lost Time")
+          refute agrees?("In Search of Lost Time (Volume 2)")
+        end
+
         test "a translation or another title does not agree" do
           refute agrees?("Krieg und Frieden")
           refute agrees?("Anna Karenina")

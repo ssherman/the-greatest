@@ -109,6 +109,17 @@ module Services
           refute @book.identifiers.exists?(value: "9780199232765")
         end
 
+        test "a duplicate work differing only by a leading article passes the title gate" do
+          @book.update_columns(title: "The Metamorphosis")
+          duplicate("OL9W")
+          harvest_with(
+            works: {"OL9W" => ol_work("OL9W", title: "Metamorphosis", authors: [["OL1A", "Leo Tolstoy"]])},
+            editions: {"OL1W" => [], "OL9W" => [ol_edition("OL91M", title: "Metamorphosis", isbn13: ["9780199232765"])]}
+          )
+
+          assert_includes held("books_work_isbn13"), ["9780199232765", "open_library"]
+        end
+
         test "a duplicate work that is a volume or part of our title is never harvested" do
           duplicate("OL8W")
           client = harvest_with(

@@ -115,15 +115,6 @@ module Services
           ::Services::Text::NameNormalizer.call(::Services::Text::QuoteNormalizer.call(text.to_s)).downcase.presence
         end
 
-        # [full title, title without its subtitle (nil when there is none)].
-        def their_titles(work)
-          title = normalize(work.title)
-          return [nil, nil] if title.nil?
-
-          subtitle = normalize(work.subtitle)
-          subtitle ? ["#{title}: #{subtitle}", title] : [title, short(title)]
-        end
-
         # Comparison key: normalized, letters folded, diacritics and punctuation
         # gone, one leading article dropped (never leaving it empty).
         def title_key(text)
@@ -169,11 +160,6 @@ module Services
 
         def fold(text)
           text.to_s.gsub(FOLD_PATTERN, FOLD).unicode_normalize(:nfkd).gsub(/\p{Mn}/, "")
-        end
-
-        def short(normalized)
-          head, separator, = normalized.partition(":")
-          head.strip.presence if separator.present?
         end
       end
     end
