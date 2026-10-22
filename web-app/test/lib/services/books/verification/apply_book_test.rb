@@ -493,6 +493,25 @@ module Services
           assert_equal [[books_authors(:tolstoy).id, "OL26783A"]], row.author_changes["added"]
         end
 
+        test "a resolve_candidate pick the book holds is confirmed and keeps its other passing exact-title held key as a duplicate" do
+          add_key("OL5W")
+          add_key("OL7W")
+          add_key("OL8W")
+          tolstoy = [["OL26783A", "Leo Tolstoy"]]
+          resolution = ol_resolution_with(verdict: "abstain", candidates: [
+            {work: ol_work("OL4W", title: "Anna Karenina", authors: tolstoy)}, {work: ol_work("OL5W", title: "War and Peace", authors: tolstoy)}
+          ])
+          client = resolve_client(resolution, works: {
+            "OL7W" => ol_work("OL7W", title: "War and Peace", authors: tolstoy),
+            "OL8W" => ol_work("OL8W", title: "War and Peace: A Novel", authors: tolstoy)
+          })
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal ["confirmed", "resolve_candidate", ["OL5W"], ["OL7W"], ["OL7W"]],
+            [row.work_outcome, row.lookup, work_keys, duplicate_keys, row.duplicate_keys]
+        end
+
         test "a held_key answer for a held key is confirmed and the key becomes open_library" do
           add_key("OL1W")
           stub_answer(:held_key)

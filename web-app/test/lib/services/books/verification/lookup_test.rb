@@ -202,6 +202,45 @@ module Services
           assert_nil Lookup.call(book: @book, client: client).work
         end
 
+        test "a decision-level reject never confirms the held top candidate" do
+          ::Identifier.create!(identifiable: @book, identifier_type: :books_work_openlibrary_id, value: "OL1W")
+          client = FakeOlClient.new(resolution: ol_resolution(verdict: "reject", work: @work))
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal [nil, false], [answer.work, answer.confirm_only]
+        end
+
+        test "an identifier conflict never confirms the held top candidate" do
+          ::Identifier.create!(identifiable: @book, identifier_type: :books_work_openlibrary_id, value: "OL1W")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", reason: "identifier conflict on the best candidate: isbn13",
+            candidates: [candidate(@work)]))
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal [nil, false], [answer.work, answer.confirm_only]
+        end
+
+        test "a tripped volume guard never confirms the held top candidate" do
+          ::Identifier.create!(identifiable: @book, identifier_type: :books_work_openlibrary_id, value: "OL1W")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", volume_guards_tripped: ["author_shelf"],
+            candidates: [candidate(@work)]))
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal [nil, false], [answer.work, answer.confirm_only]
+        end
+
+        test "a held top candidate with conflicting features is never confirmed" do
+          ::Identifier.create!(identifiable: @book, identifier_type: :books_work_openlibrary_id, value: "OL1W")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(@work, conflicts: ["isbn13"])]),
+            works: {"OL1W" => @work})
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal [nil, false], [answer.work, answer.confirm_only]
+        end
+
         def candidate(work, verdict: "abstain", score: 0.9, conflicts: [])
           {work: work, verdict: verdict, score: score, conflicts: conflicts}
         end
@@ -231,14 +270,57 @@ module Services
           assert_equal ["OL5W", ["OL6W"]], [answer.work.key, answer.duplicates]
         end
 
-        test "a candidate with an exact title beats one that passes only without its subtitle" do
+        # A duplicate key is an identity claim (importers look books up by it):
+        # only a work whose full title is ours, not one agreeing without its subtitle.
+        test "a candidate with an exact title beats one that passes only without its subtitle, which is no duplicate" do
           subtitled = tolstoy_work("OL5W", "War and Peace: A Novel")
           exact = tolstoy_work("OL6W", "War and Peace")
           client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(subtitled), candidate(exact)]))
 
           answer = Lookup.call(book: @book, client: client)
 
-          assert_equal ["OL6W", ["OL5W"]], [answer.work.key, answer.duplicates]
+          assert_equal ["OL6W", []], [answer.work.key, answer.duplicates]
+        end
+
+        test "a candidate matching only an alternate title is no duplicate" do
+          @book.update_columns(alternate_titles: ["Voina i mir"])
+          exact = tolstoy_work("OL5W", "War and Peace")
+          alternate = tolstoy_work("OL6W", "Voina i mir")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(exact), candidate(alternate)]))
+
+          assert_equal ["OL5W", []], Lookup.call(book: @book, client: client).then { |answer| [answer.work.key, answer.duplicates] }
+        end
+
+        test "a route pick the book already holds keeps its other passing exact-title held keys as duplicates" do
+          hold(:books_work_openlibrary_id, "OL5W", :legacy)
+          hold(:books_work_openlibrary_id, "OL7W", :legacy)
+          hold(:books_work_openlibrary_id, "OL8W", :legacy)
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          top = tolstoy_work("OL4W", "Anna Karenina")
+          held = tolstoy_work("OL5W", "War and Peace")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(top), candidate(held)]), works: {
+            "OL7W" => tolstoy_work("OL7W", "War and Peace"), "OL8W" => tolstoy_work("OL8W", "War and Peace: A Novel"),
+            "OL9W" => tolstoy_work("OL9W", "Anna Karenina")
+          })
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL5W", :resolve_candidate, ["OL7W"]], [answer.work.key, answer.lookup, answer.duplicates]
+        end
+
+        test "an exact_title pick the book already holds keeps its other passing exact-title held keys as duplicates" do
+          @book.update_columns(title: "Demons")
+          hold(:books_work_openlibrary_id, "OL6W", :legacy)
+          hold(:books_work_openlibrary_id, "OL7W", :legacy)
+          other = tolstoy_work("OL5W", "The Possessed")
+          demons = tolstoy_work("OL6W", "Demons")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain",
+            candidates: [candidate(other), candidate(demons, verdict: "reject", score: 0.2)]),
+            works: {"OL7W" => tolstoy_work("OL7W", "Demons")})
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL6W", :exact_title, ["OL7W"]], [answer.work.key, answer.lookup, answer.duplicates]
         end
 
         test "an accepted work that fails our check gives way to a passing candidate behind it" do
@@ -347,7 +429,19 @@ module Services
           assert_equal ["OL9W", :held_key], [answer.work.key, answer.lookup]
         end
 
-        test "the other passing held keys are the duplicates" do
+        test "the other passing exact-title held keys are the duplicates" do
+          hold(:books_work_openlibrary_id, "OL8W", :legacy)
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          client = FakeOlClient.new(resolution: abstain_with_nothing, works: {
+            "OL8W" => tolstoy_work("OL8W", "War and Peace"), "OL9W" => tolstoy_work("OL9W", "War and Peace")
+          })
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL8W", ["OL9W"]], [answer.work.key, answer.duplicates]
+        end
+
+        test "a held key passing only without its subtitle is no duplicate" do
           hold(:books_work_openlibrary_id, "OL8W", :legacy)
           hold(:books_work_openlibrary_id, "OL9W", :legacy)
           client = FakeOlClient.new(resolution: abstain_with_nothing, works: {
@@ -356,7 +450,7 @@ module Services
 
           answer = Lookup.call(book: @book, client: client)
 
-          assert_equal ["OL9W", ["OL8W"]], [answer.work.key, answer.duplicates]
+          assert_equal ["OL9W", []], [answer.work.key, answer.duplicates]
         end
 
         test "a held key that is a candidate with conflicting features is not taken" do
@@ -406,6 +500,17 @@ module Services
           answer = Lookup.call(book: @book, client: client)
 
           assert_equal ["OL5W", ["OL6W"], :worldcat_isbns], [answer.work.key, answer.duplicates, answer.lookup]
+        end
+
+        test "a WorldCat work passing only without its subtitle is no duplicate" do
+          hold(:books_work_isbn13, "9780199232765", :worldcat)
+          client = FakeOlClient.new(resolution: abstain_with_nothing,
+            hits: {["isbn13", "9780199232765"] => [ol_hit("OL5W"), ol_hit("OL5W"), ol_hit("OL6W")]},
+            works: {"OL5W" => tolstoy_work("OL5W", "War and Peace"), "OL6W" => tolstoy_work("OL6W", "War and Peace: A Novel")})
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL5W", [], :worldcat_isbns], [answer.work.key, answer.duplicates, answer.lookup]
         end
 
         test "an ISBN-10 held only as ISBN-10 is looked up in its ISBN-13 form" do

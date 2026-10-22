@@ -128,14 +128,32 @@ module Services
         # Returns an Answer or nil. Then the held keys (step 4) and the
         # WorldCat-confirmed ISBNs (step 5), all behind the same guards.
         def second_chance(resolution)
-          return nil if resolution.decision.verdict == "reject"
-          return nil if resolution.decision.reason.to_s.start_with?("identifier conflict")
-          return nil unless resolution.volume_guards_tripped.empty?
+          return nil if guarded?(resolution)
 
           usable = resolution.candidates.select { |candidate| candidate.record && candidate.conflicting_features.empty? }
-          conflicted = resolution.candidates.reject { |candidate| candidate.conflicting_features.empty? }.map(&:work_key)
-          resolve_candidate(resolution, usable) || exact_title(resolution, usable) ||
+          conflicted = conflicted_keys(resolution)
+          resolve_candidate(resolution, usable, conflicted) || exact_title(resolution, usable, conflicted) ||
             held_key(resolution, conflicted) || worldcat_isbns(resolution, conflicted)
+        end
+
+        # The matcher's guards: a reject, an identifier conflict, a tripped volume guard.
+        def guarded?(resolution)
+          resolution.decision.verdict == "reject" ||
+            resolution.decision.reason.to_s.start_with?("identifier conflict") ||
+            !resolution.volume_guards_tripped.empty?
+        end
+
+        def conflicted_keys(resolution)
+          resolution.candidates.reject { |candidate| candidate.conflicting_features.empty? }.map(&:work_key)
+        end
+
+        # A duplicate key is an identity claim (importers find books by it), so
+        # only a work whose full title, subtitle included, is the book's own
+        # title. Alternate titles do not count, as in HarvestEditions: legacy
+        # data gives some volumes their series' name.
+        def exact_title?(work)
+          ours = Check.title_key(@book.title)
+          ours.present? && Check.their_title_keys(work).first == ours
         end
 
         # Spec step 4: a legacy key the book holds whose live work passes our check.
@@ -149,7 +167,7 @@ module Services
 
           ours = Check.title_key(@book.title)
           chosen = passing.find { |work| ours && Check.their_title_keys(work).first == ours } || passing.first
-          Answer.new(work: chosen, lookup: :held_key, duplicates: passing.map(&:key) - [chosen.key], redirect_sources: [],
+          Answer.new(work: chosen, lookup: :held_key, duplicates: passing.select { |work| exact_title?(work) }.map(&:key) - [chosen.key], redirect_sources: [],
             source_version: resolution.source_version, ol_pick: resolution.candidates.first&.work_key)
         end
 
@@ -170,44 +188,58 @@ module Services
           passing = keys.filter_map { |key| works[key] }.select { |work| Check.verified?(@book, work, @client) }
           return nil if passing.empty?
 
-          Answer.new(work: passing.first, lookup: :worldcat_isbns, duplicates: passing.drop(1).map(&:key), redirect_sources: [],
+          Answer.new(work: passing.first, lookup: :worldcat_isbns, duplicates: passing.drop(1).select { |work| exact_title?(work) }.map(&:key), redirect_sources: [],
             source_version: resolution.source_version, ol_pick: resolution.candidates.first&.work_key)
         end
 
-        def resolve_candidate(resolution, usable)
+        def resolve_candidate(resolution, usable, conflicted)
           passing = usable.reject(&:reject?).select { |candidate| Check.verified?(@book, candidate.record, @client) }
           return nil if passing.empty?
 
           wanted = ([@book.title] + Array(@book.alternate_titles)).filter_map { |title| Check.title_key(title) }
           chosen = passing.find { |candidate| wanted.include?(Check.their_title_keys(candidate.record).first) } || passing.first
-          second_chance_answer(resolution, :resolve_candidate, chosen, passing - [chosen])
+          others = (passing - [chosen]).map(&:record).select { |work| exact_title?(work) }.map(&:key)
+          second_chance_answer(resolution, :resolve_candidate, chosen, others, conflicted)
         end
 
         # A reject-banded candidate whose full title is exactly ours.
-        def exact_title(resolution, usable)
+        def exact_title(resolution, usable, conflicted)
           ours = Check.title_key(@book.title)
           return nil if ours.nil?
 
           chosen = usable.select(&:reject?).sort_by { |candidate| -candidate.score.to_f }.find do |candidate|
             Check.their_title_keys(candidate.record).first == ours && Check.verified?(@book, candidate.record, @client)
           end
-          chosen && second_chance_answer(resolution, :exact_title, chosen, [])
+          chosen && second_chance_answer(resolution, :exact_title, chosen, [], conflicted)
         end
 
-        def second_chance_answer(resolution, lookup, chosen, others)
-          Answer.new(work: chosen.record, lookup: lookup, duplicates: others.map(&:work_key).uniq - [chosen.work_key],
+        # A pick the book already holds settles as confirmed, which drops the
+        # book's other work keys: those whose live work passes and carries our
+        # exact title are kept as duplicates, the way a replaced key is.
+        def second_chance_answer(resolution, lookup, chosen, others, conflicted)
+          others += held_duplicates(chosen.work_key, conflicted) if stored_keys.include?(chosen.work_key)
+          Answer.new(work: chosen.record, lookup: lookup, duplicates: others.uniq - [chosen.work_key],
             redirect_sources: Array(chosen.redirect_sources), source_version: resolution.source_version,
             ol_pick: resolution.candidates.first&.work_key)
         end
 
+        def held_duplicates(chosen_key, conflicted)
+          keys = stored_keys.uniq - [chosen_key] - conflicted
+          return [] if keys.empty?
+
+          works = @client.works_batch(keys)
+          keys.select { |key| (work = works[key]) && exact_title?(work) && Check.verified?(@book, work, @client) }
+        end
+
         # Not an accept, but the top candidate is a key we hold and its record
         # agrees with the book: famous books with many near-identical Open
-        # Library records abstain on margin even then.
+        # Library records abstain on margin even then. Behind the same guards
+        # as the second chance: confirming trusts the key.
         def confirmable_stored_key(resolution)
-          return nil if resolution.accept?
+          return nil if resolution.accept? || guarded?(resolution)
 
           top = resolution.candidates.first
-          return nil unless top&.record && stored_keys.include?(top.work_key)
+          return nil unless top&.record && top.conflicting_features.empty? && stored_keys.include?(top.work_key)
 
           top.record if Check.verified?(@book, top.record, @client)
         end
