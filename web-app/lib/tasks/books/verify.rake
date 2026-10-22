@@ -36,4 +36,14 @@ namespace :books do
     puts "reverted book #{book.id}: work keys back to #{result.data[:row].old_keys.inspect}; " \
       "#{result.data[:skipped]} identifiers had moved and were skipped"
   end
+
+  desc "Verification pass: revert every book a second-chance route settled: " \
+    "books:verify_revert_route[<resolve_candidate|exact_title|held_key|worldcat_isbns>]"
+  task :verify_revert_route, [:lookup] => :environment do |_task, args|
+    routes = Services::Books::Verification::RevertSecondChance::ROUTES
+    abort "usage: books:verify_revert_route[#{routes.join("|")}] -- unknown value #{args[:lookup].inspect}" unless routes.include?(args[:lookup])
+
+    counts = Services::Books::Verification::RevertSecondChance.route(args[:lookup])
+    puts "route #{args[:lookup]}: reverted #{counts[:reverted]}, failed #{counts[:failed]}"
+  end
 end

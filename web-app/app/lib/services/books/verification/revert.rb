@@ -52,17 +52,17 @@ module Services
         # Undoes stages 2-4: identifiers the pass added go, sources it upgraded
         # go back. An identifier that moved to another book or is gone is
         # counted, not touched. Returns that count.
-        def revert_findings(row)
+        def revert_findings(row, findings = row.findings)
           skipped = 0
-          row.findings.added.each do |finding|
+          findings.added.each do |finding|
             identifier = held_identifier(finding)
             identifier ? identifier.destroy! : skipped += 1
           end
-          row.findings.confirmed.each do |finding|
+          findings.confirmed.each do |finding|
             identifier = held_identifier(finding)
             identifier ? identifier.update!(source: finding.previous_source) : skipped += 1
           end
-          row.findings.delete_all
+          findings.delete_all
           skipped
         end
 

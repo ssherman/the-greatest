@@ -26,6 +26,21 @@ module Services
           assert_match(/pair with book #{war.id}/, text)
         end
 
+        test "the report counts each second-chance route and samples its books" do
+          war = books_books(:war_and_peace)
+          ::Books::Verification.create!(book: war, work_outcome: :keyed, run_id: "r", lookup: :resolve_candidate, new_key: "OL1W")
+          ::Books::Verification.create!(book: books_books(:crime_and_punishment), work_outcome: :keyed, run_id: "r", lookup: :worldcat_isbns, new_key: "OL2W")
+
+          text = Report.call.join("\n")
+
+          assert_match(/Settled by second-chance route:/, text)
+          assert_match(/resolve_candidate\s+1/, text)
+          assert_match(/worldcat_isbns\s+1/, text)
+          assert_match(/exact_title\s+0/, text)
+          assert_match(/held_key\s+0/, text)
+          assert_match(/via resolve_candidate:\n\s+book #{war.id} "War and Peace"/, text)
+        end
+
         test "the latest failure shows the book, error and time; none when there is none" do
           assert_match(/Latest failure: none/, Report.call.join("\n"))
 
