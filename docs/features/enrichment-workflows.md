@@ -231,6 +231,10 @@ as `skipped_active` and left alone, so a second call plans nothing new; once a b
 run, its newer ledger row takes it out of the deferred set. The limit caps the books planned, lowest
 id first.
 
+It has not been needed in production: the 2026-10-21 production backup held no `deferred_to_authors`
+rows at all, and nothing writes them since the book workflow shipped, so it is not a launch step. It
+goes with the rest of the legacy hand-off in the clean-up PR.
+
 The transitional `Books::Authors::EnrichJob.hand_off` skips any waiting book that has a running book
 run, so an adopted book is enriched once, by its run's `book_facts`, not also by `EnrichBookJob`.
 
