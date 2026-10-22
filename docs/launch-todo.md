@@ -132,6 +132,13 @@ the sync never undoes them.
    and it carries on under the same run id; logged books resume at their stage. If the worker
    crashes instead, the run is lost: run the task again. Details:
    `docs/features/book-verification.md`.
+   **Unsure books second chance, once, after the deploy that carries it:** run
+   `bin/rails "books:verify[all,second_chance]"` (the existing unsure and removed rows are all ranked
+   `pre_import`, so no other flag is needed), then `bin/rails books:verify_report`. Spot-check per
+   route: read the "via <route>" samples for `resolve_candidate`, `exact_title`, `held_key` and
+   `worldcat_isbns`, and the top books by Goodreads rows. If a route is wrong, undo it with
+   `bin/rails "books:verify_revert_route[<route>]"`. Leave the flag off routine runs: a rerun repeats
+   the same lookups.
 4. **Duplicates.** Review the pairs the sweep found in the Duplicates queue and merge them. Every
    merge is recorded as a redirect, so the sync never brings the merged book back.
 5. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.

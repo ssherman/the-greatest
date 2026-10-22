@@ -24,20 +24,22 @@ bin/rails "books:verify[all]"                      # everything not yet done (da
 bin/rails "books:verify[all,post_import]"          # also the post_import cohort
 bin/rails "books:verify[all,unranked]"             # continue past the ranking into the rest
 bin/rails "books:verify[200,retry_unsure]"         # also retry unsure books from an older OL version
+bin/rails "books:verify[all,second_chance]"        # once: give done unsure and removed books another try (see Second chance)
 bin/rails "books:verify[all,recheck]"              # redo stages 2-4 for books with new legacy identifiers
 bin/rails "books:verify[500,reharvest]"            # once: redo stages 2-4 for the books done before duplicate works were harvested
 bin/rails books:verify_report                      # counts, coverage, signals, latest run, samples
 bin/rails "books:verify_revert[123]"               # put book 123's keys and sources back
+bin/rails "books:verify_revert_route[held_key]"    # undo every book one second-chance route settled
 ```
 
 Flags go after the count, in any order: `post_import`, `unranked`, `retry_unsure`, `recheck`,
-`reharvest`. An
+`reharvest`, `second_chance`. An
 unknown flag or count aborts with a usage line.
 
 Each run is one `Books::VerificationJob` on the `low` queue. It holds one of Sidekiq's five threads
 for as long as it runs. It works through books one at a time: ranked books by rank, then (with
 `unranked`) the rest by how many lists a book is on, then by id. The default scope is ranked
-`pre_import` books, and it also applies to `retry_unsure`, `recheck` and `reharvest`: add `unranked` or
+`pre_import` books, and it also applies to `retry_unsure`, `recheck`, `reharvest` and `second_chance`: add `unranked` or
 `post_import` to widen them.
 
 A book is taken when it has no log row, when its row stopped at a stage (`stage` is not `done`), or
@@ -100,7 +102,17 @@ leading digits, slug forms included); the Open Library client also escapes every
 2. **Full match:** otherwise one `POST /resolve` (12-13 s) with title, authors, year, ISBNs and the
    stored key as a hint. Acted on only for an `accept` that passes the same check.
 
-Titles agree when equal after normalizing, or once a subtitle is dropped from one side (never both).
+Titles agree when their comparison keys are equal, or once a subtitle or a trailing edition
+parenthetical is dropped from one side (never both). The key is the normalized title with letters
+folded (diacritics, and `ø æ œ ß đ ł þ` to `o ae oe ss d l th`; the same folding applies when authors
+are compared), punctuation gone, and one leading article dropped, never leaving the key empty ("The"
+keys to "the"; non-Latin titles keep their letters). The articles are `the a an le la les l el los
+las il lo gli os der das`. "i", "as", "die" and "o" are not dropped because they are English words
+("I, Claudius"). A trailing parenthetical ("Dune (Special Edition)") is dropped as an edition note
+unless it names a volume: it holds a digit or "#", a whole word `vol(s)`, `volume(s)`, `book(s)`,
+`part` or `tome`, a set word (`EditionCheck::SET_WORDS`), or is only a Roman numeral ("(II)"). A
+volume parenthetical is never dropped, on our title or theirs, so "In Search of Lost Time (Volume 1)"
+agrees only with the same volume.
 Authors agree when any of these holds: a name (or alternate name) of ours equals one on the work
 after normalizing; the two names are equal once reduced to letters only, with diacritics stripped
 ("J.R.R. Tolkien" and "J. R. R. Tolkien"; a reduced name under four letters is ignored); one of our
@@ -116,7 +128,41 @@ When `/resolve` does not accept (it abstains on margin, which famous books with 
 Open Library records do) but its top candidate is a work key the book already holds and that
 candidate passes the check, the book is `confirmed` with no change at all: no key added, swapped or
 removed, no duplicates saved, no author keys. The row has `confirmed_on_abstain` set, and the report
-counts these. Any other non-accept stays `unsure`. A confirmed-on-abstain book flags no pair either.
+counts these. Any other non-accept goes to the second-chance routes below, and stays `unsure` if none
+settles it. A confirmed-on-abstain book flags no pair either.
+
+### Second chance: four routes after `/resolve`
+
+Open Library's matcher is cautious, so a non-accept (or an accept whose work fails our check) often
+leaves a right answer on the table. Before a book is left `unsure`, `Lookup` tries four routes in
+order, after the guards below. They run on every stage 1 pass, not only under the flag. Each ends in `Check.verified?` (title
+and an author agree); nothing settles on score alone. The row's `lookup` records the route.
+
+**Guards.** There is no second chance at all when the matcher's decision is `reject`, when its reason starts with
+"identifier conflict", or when a volume guard tripped (`volume_guards_tripped` not empty). A
+candidate with conflicting features is never taken, and a work that appears among the conflicted
+candidates is skipped by routes 4 and 5.
+
+2. **`resolve_candidate`.** The resolution's candidates that are not reject-banded, in score order;
+   the first that passes the check, preferring one whose full title key equals ours (or an alternate
+   title's) over one that passes only by dropping a subtitle. The other passing candidates are saved as
+   duplicate works.
+3. **`exact_title`.** The highest-scoring reject-band candidate whose full title key equals our title's
+   (not an alternate title, not by dropping a subtitle) and that passes the check, so an author
+   agrees. This is the English-titled work that Open Library ranks below the original-language one
+   (*The Trial*, *Demons*, *We*).
+4. **`held_key`.** A work key the book already holds whose live record passes the check, preferring an
+   exact title key. The other passing held keys are kept as duplicate keys.
+5. **`worldcat_isbns`.** Up to five of the book's WorldCat-confirmed ISBNs (source `worldcat`) looked
+   up in Open Library as ISBN-13s (ISBN-10s are converted first); the work most of them lead to, if it
+   passes the check. Other passing works become duplicate keys. A book stage 3 has not yet run on has no
+   such ISBNs and skips this route.
+
+(The route numbers follow the design's steps, where step 1 is the comparison key above.) A route settle is applied
+like an accept, with two differences: it writes **no Open Library author keys** (a weaker answer must
+not spread keys to authors), and it keeps the rest of the guards. A work another book holds still makes
+the book a `duplicate_pair`, and the route's work is not saved. A `removed` row that is reprocessed and
+still settles nothing stays `removed`, so its removed keys can still be restored by a revert.
 
 | Outcome | Meaning |
 |---|---|
@@ -125,7 +171,7 @@ counts these. Any other non-accept stays `unsure`. A confirmed-on-abstain book f
 | `replaced` | the stored key was another work, or dead; swapped (old key in the log). An old key whose own record agrees with the book on title and author is kept as a duplicate key |
 | `keyed` | the book had no key; added |
 | `duplicate_pair` | another book holds the answer; nothing saved, pair in Books → Duplicates |
-| `unsure` | no confident, agreeing answer; nothing changed |
+| `unsure` | no confident, agreeing answer; nothing changed (a `second_chance` run may still settle it) |
 | `removed` | no confident answer, and a stored key's record is clearly another book; that key was removed (see below) |
 | `failed` | Open Library failing, or an error about this book; retried by a later run |
 | `reverted` | undone by `books:verify_revert`; never redone |
@@ -270,6 +316,20 @@ ISBNs. Telling a lump from an omnibus is later work. Lump suspects are a candida
 AI check, not a verdict: Open Library keeps some translations as separate works, which the known-translation
 rule above only partly catches.
 
+## The `second_chance` flag
+
+`second_chance` takes `done` rows whose outcome is `unsure` or `removed`, from any earlier run (a row
+the same run id already finished is skipped, so a re-queued run does not redo it), and starts them
+over at stage 1 so the routes above can look at them. It wins over `retry_unsure` and `recheck` when
+combined with them, since its reset covers what they would do. Before the reset the row records
+`second_chance_at`, `prior_outcome` and `prior_keys` (the work keys the book held). The record is made
+once: a row taken a second time keeps its earliest values until a revert clears them. Rows still
+`unsure` afterwards are logged as such and are retaken by any later `second_chance` run, which repeats
+the lookups, so run it once and leave it off routine runs. The scope is the usual one: ranked
+`pre_import` unless `unranked` or `post_import` is added. In production the existing unsure and
+removed rows are all ranked `pre_import`, so `books:verify[all,second_chance]` with no other flags
+covers them.
+
 ## Cohorts
 
 A book's cohort comes from its id. `post_import` is the id range `16_572...250_000`; everything else
@@ -304,8 +364,11 @@ the Goodreads rebuild has repaired their titles and authors; the `post_import` f
 - ranked identifier coverage by type and source, verified against `legacy`;
 - findings by kind, lump suspects and candidates;
 - the latest run, its failure and the last stage error;
+- "Settled via route": how many books each second-chance route settled (`resolve_candidate`,
+  `exact_title`, `held_key`, `worldcat_isbns`);
 - recent risky changes: the latest `replaced`, `removed` and `duplicate_pair` books;
 - random samples: 10 books per work outcome (with Open Library's title when it can be reached), 10
+  per route and outcome ("via held_key (replaced):", with Open Library's title beside ours), 10
   Open Library trusted writes (stage 2's `added` and `confirmed` findings, with the edition they
   came from), 10 WorldCat confirmations and 10 `wrong_identifier` findings.
 
@@ -328,6 +391,23 @@ checked too; read them. Pairs are reviewed in the Duplicates queue like any othe
 A work key that arrived afterwards (a merge, an admin) stays. Another book processed later may have
 relied on an author key the pass added, so check those books. Pairs the run flagged stay in the
 Duplicates queue.
+
+### Reverting a route
+
+`bin/rails "books:verify_revert_route[<route>]"` (`resolve_candidate`, `exact_title`, `held_key` or
+`worldcat_isbns`) reverts every book that route settled, for the production spot-check: if a route's
+samples are wrong, undo that route and leave the others. It prints the reverted and failed counts.
+
+- A book a `second_chance` run settled (outcome `keyed`, `updated`, `replaced`, `confirmed` or
+  `duplicate_pair`) goes back to what it was: `prior_outcome` (`unsure` or `removed`) and
+  `prior_keys`. The key the route added is deleted, a prior key it confirmed returns to `legacy`
+  (a removed key stays removed), duplicate keys it saved go, and only the findings and edition
+  candidates created at or after `second_chance_at` are undone. The row clears its second-chance
+  record, so a later `second_chance` run can take it fresh.
+- A book settled by a route on a first pass has no `second_chance_at`, so it goes through the full
+  `books:verify_revert` and ends `reverted`, never redone.
+- A reverted second-chance row keeps its `run_id`, so a re-queue of the same run will not retake it;
+  only a new run does.
 
 ## How long it takes
 
