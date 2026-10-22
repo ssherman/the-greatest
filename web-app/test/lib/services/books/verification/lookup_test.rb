@@ -182,7 +182,7 @@ module Services
 
           answer = Lookup.call(book: @book, client: client)
 
-          assert_equal ["OL1W", true, [], []], [answer.work.key, answer.confirm_only, answer.duplicates, answer.redirect_sources]
+          assert_equal ["OL1W", true, :resolve, [], []], [answer.work.key, answer.confirm_only, answer.lookup, answer.duplicates, answer.redirect_sources]
         end
 
         test "an abstain whose agreeing top candidate is not the stored key is a second-chance answer, not a confirmation" do
@@ -296,6 +296,52 @@ module Services
           answer = Lookup.call(book: @book, client: client)
 
           assert_equal ["OL6W", []], [answer.work.key, answer.duplicates]
+        end
+
+        test "a reject candidate titled exactly like the book but by another author is no answer" do
+          @book.update_columns(title: "Demons")
+          stranger = ol_work("OL6W", title: "Demons", authors: [["OL7A", "Somebody Else"]])
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain",
+            candidates: [candidate(stranger, verdict: "reject", score: 0.2)]))
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
+        test "a reject candidate whose subtitle makes its full title longer is no exact title" do
+          @book.update_columns(title: "Demons")
+          subtitled = ol_work("OL6W", title: "Demons", subtitle: "A Novel in Three Parts", authors: [["OL1A", "Leo Tolstoy"]])
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain",
+            candidates: [candidate(subtitled, verdict: "reject", score: 0.2)]))
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
+        test "the highest-scoring qualifying reject candidate wins, whatever the service order" do
+          @book.update_columns(title: "Demons")
+          lower = tolstoy_work("OL5W", "Demons")
+          higher = tolstoy_work("OL6W", "Demons")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain",
+            candidates: [candidate(lower, verdict: "reject", score: 0.30), candidate(higher, verdict: "reject", score: 0.35)]))
+
+          assert_equal "OL6W", Lookup.call(book: @book, client: client).work.key
+        end
+
+        test "a decision-level reject gives no second chance" do
+          @book.update_columns(title: "Demons")
+          demons = tolstoy_work("OL6W", "Demons")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "reject",
+            candidates: [candidate(demons, verdict: "reject", score: 0.2)]))
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
+        test "the exact-title preference also follows an alternate title" do
+          @book.update_columns(alternate_titles: ["Voina i mir"])
+          subtitled = tolstoy_work("OL5W", "Voina i mir: roman")
+          exact = tolstoy_work("OL6W", "Voina i mir")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(subtitled), candidate(exact)]))
+
+          assert_equal "OL6W", Lookup.call(book: @book, client: client).work.key
         end
 
         test "a confident accept is not a confirm_only answer" do

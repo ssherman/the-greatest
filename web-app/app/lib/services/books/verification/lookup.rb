@@ -123,6 +123,7 @@ module Services
         # Returns an Answer or nil. Later routes (held keys, WorldCat ISBNs)
         # add their own methods and are tried here in order.
         def second_chance(resolution)
+          return nil if resolution.decision.verdict == "reject"
           return nil if resolution.decision.reason.to_s.start_with?("identifier conflict")
           return nil unless resolution.volume_guards_tripped.empty?
 
@@ -144,7 +145,7 @@ module Services
           ours = Check.title_key(@book.title)
           return nil if ours.nil?
 
-          chosen = usable.select(&:reject?).find do |candidate|
+          chosen = usable.select(&:reject?).sort_by { |candidate| -candidate.score.to_f }.find do |candidate|
             Check.their_title_keys(candidate.record).first == ours && Check.verified?(@book, candidate.record, @client)
           end
           chosen && second_chance_answer(resolution, :exact_title, chosen, [])
