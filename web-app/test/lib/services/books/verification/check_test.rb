@@ -53,6 +53,37 @@ module Services
           assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Dune: Book One of the Dune Chronicles"))
         end
 
+        test "a number alone does not make a dropped part a volume" do
+          @book.title = "War and Peace"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "War and Peace: 150th Anniversary Edition"))
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "War and Peace (150th Anniversary Edition)"))
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "War and Peace: 2nd Edition"))
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "War and Peace", subtitle: "1984 Printing"))
+          @book.title = "Atlas Shrugged"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "Atlas Shrugged (Centennial Ed. HC)"))
+        end
+
+        test "a bare or trailing number, a hash or a volume word in another language is a volume" do
+          @book.title = "Dune"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Dune: 2"))
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Dune (2008)"))
+          @book.title = "Mort"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Mort (Discworld, #4)"))
+          @book.title = "Les Misérables"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Les Misérables (II)"))
+          {
+            "Don Quijote" => ["Tomo I", "Primera parte", "Libro primero"],
+            "Also sprach Zarathustra" => ["Erstes Buch"],
+            "Pan Tadeusz" => ["Tom pierwszy"],
+            "O Primo Basílio" => ["Livro 1"]
+          }.each do |title, subtitles|
+            @book.title = title
+            subtitles.each do |subtitle|
+              assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "#{title}: #{subtitle}")), "#{title}: #{subtitle}"
+            end
+          end
+        end
+
         test "a volume named in a colon subtitle survives a dropped edition parenthetical" do
           @book.title = "In Search of Lost Time"
           assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "In Search of Lost Time: Volume 1 (Penguin Classics)"))

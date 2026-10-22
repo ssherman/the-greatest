@@ -20,9 +20,13 @@ module Services
         }.freeze
         FOLD_PATTERN = Regexp.union(FOLD.keys)
         LEADING_ARTICLES = %w[the a an le la les l el los las il lo gli os der das].freeze
-        # A trailing parenthetical, a colon subtitle or a subtitle field with any
-        # of these names a volume: never dropped.
-        VOLUME_PARENTHETICAL = /\d|#|\b(vols?|volumes?|books?|part|tome|teil|band|livre)\b/i
+        # A trailing parenthetical, a colon subtitle or a subtitle field holding one
+        # of these whole words names a volume: never dropped. "Tom" is also an
+        # English name, an accepted recall cost.
+        VOLUME_WORDS = /\b(vols?|volumes?|books?|part|tome|teil|band|livre|tomo|parte|libro|buch|tom|livro)\b/i
+        # A number ending the text, or making it up ("Dune: 2", "In Search of Lost Time 1"). A digit elsewhere
+        # ("150th Anniversary Edition", "1984 Printing") does not name a volume.
+        TRAILING_NUMBER = /\b\d+\s*\z/
         ROMAN_NUMERAL = /\A[ivxlcdm]+\z/i
         TRAILING_PARENTHETICAL = /\A(?<head>.*\S)\s*\((?<inside>[^()]*)\)\s*\z/
 
@@ -152,10 +156,13 @@ module Services
           (separator.present? && !names_volume?(subtitle)) ? head : text
         end
 
-        # A volume, a set, or a bare Roman numeral: dropping it would let one
-        # volume (or an omnibus) agree with the whole book.
+        # A volume, a set, or a bare number or Roman numeral: dropping it would let
+        # one volume (or an omnibus) agree with the whole book.
         def names_volume?(text)
-          text.match?(VOLUME_PARENTHETICAL) || text.match?(EditionCheck::SET_WORDS) || text.strip.match?(ROMAN_NUMERAL)
+          stripped = text.strip
+          text.match?(VOLUME_WORDS) || text.include?("#") ||
+            stripped.match?(ROMAN_NUMERAL) || stripped.match?(TRAILING_NUMBER) ||
+            text.match?(EditionCheck::SET_WORDS)
         end
 
         # [full key, short key or nil] for an Open Library work; its subtitle

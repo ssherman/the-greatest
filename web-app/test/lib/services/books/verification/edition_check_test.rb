@@ -74,6 +74,10 @@ module Services
           refute agrees?("In Search of Lost Time", subtitle: "Volume 1")
         end
 
+        test "an edition whose subtitle only holds a number agrees" do
+          assert agrees?("War and Peace: 150th Anniversary Edition")
+        end
+
         test "a translation or another title does not agree" do
           refute agrees?("Krieg und Frieden")
           refute agrees?("Anna Karenina")

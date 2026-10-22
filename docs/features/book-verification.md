@@ -110,15 +110,21 @@ comparison), punctuation gone, and one leading article dropped, never leaving th
 keys to "the"; non-Latin titles keep their letters). The articles are `the a an le la les l el los
 las il lo gli os der das`. "i", "as", "die" and "o" are not dropped because they are English words
 ("I, Claudius"). A trailing parenthetical ("Dune (Special Edition)") is dropped as an edition note
-unless it names a volume: it holds a digit or "#", a whole word `vol(s)`, `volume(s)`, `book(s)`,
-`part`, `tome`, `teil`, `band` or `livre`, a set word (`EditionCheck::SET_WORDS`), or is only a Roman
-numeral ("(II)"). A volume parenthetical is never dropped, on our title or theirs, so "In Search of
+unless it names a volume. The dropped text names a volume when it holds a whole volume word
+(`vol`, `vols`, `volume`, `volumes`, `book`, `books`, `part`, `tome`, `teil`, `band`, `livre`, `tomo`,
+`parte`, `libro`, `buch`, `tom`, `livro`, any case) or a "#"; is only digits or only a Roman numeral
+("(II)", "Dune: 2", "Dune (2008)"); ends in a standalone number ("In Search of Lost Time 1"); or
+holds a set word (`EditionCheck::SET_WORDS`). A digit anywhere else is not enough: "War and Peace:
+150th Anniversary Edition", "(2nd Edition)" and "1984 Printing" are dropped, and agree with "War and
+Peace". A volume parenthetical is never dropped, on our title or theirs, so "In Search of
 Lost Time (Volume 1)" agrees only with the same volume. The same rule holds for a subtitle after the
 first colon and for an Open Library subtitle field: one that names a volume is never dropped, so "Le
 Comte de Monte-Cristo: Tome 2", "In Search of Lost Time: Volume 1", "Faust: Part One" and a work with
 the subtitle field "Volume 1" or "Tome II" do not agree with the plain title, while "Dune: Messiah"
 still agrees with "Dune". The cost is recall: "Dune: Book One of the Dune Chronicles" no longer
-agrees with "Dune". Stage 2's edition check and the Amazon check inherit this rule.
+agrees with "Dune". Two more accepted costs: "Tom" (an English name) in a subtitle blocks it, and a
+volume named only by its own title ("The Lord of the Rings: The Two Towers") still agrees with the
+whole book. Stage 2's edition check and the Amazon check inherit this rule.
 Authors agree when any of these holds: a name (or alternate name) of ours equals one on the work
 after normalizing; the two names are equal once reduced to letters only, with diacritics stripped
 ("J.R.R. Tolkien" and "J. R. R. Tolkien"; a reduced name under four letters is ignored); one of our
@@ -152,12 +158,13 @@ and an author agree); nothing settles on score alone. The row's `lookup` records
 candidate with conflicting features is never taken, and a work that appears among the conflicted
 candidates is skipped by routes 4 and 5.
 
-**Duplicates are exact-title only.** A duplicate key (`books_work_openlibrary_duplicate_id`) is an
+**Second-chance duplicates are exact-title only.** A duplicate key (`books_work_openlibrary_duplicate_id`) is an
 identity lookup: the list wizard and the Open Library importer find a book by it. So a route saves a
 passing work as a duplicate only when its full title key, subtitle included, equals the key of the
 book's own title. A work that passes only by dropping a subtitle, or only through an alternate title,
 is not saved (alternate titles do not count, as in stage 2's duplicate harvest: legacy data gives some
-volumes their series' name).
+volumes their series' name). The `replaced` path of an ordinary accept is the exception: it still keeps
+every old key whose record passes the check (`ApplyBook#agreeing_old_keys`), exact title or not.
 
 2. **`resolve_candidate`.** The resolution's candidates that are not reject-banded, in score order;
    the first that passes the check, preferring one whose full title key equals ours (or an alternate
@@ -176,7 +183,8 @@ volumes their series' name).
 
 When a `resolve_candidate` or `exact_title` pick is a key the book already holds, the book is
 `confirmed`, which drops its other work keys; those whose live work passes the check and carries our
-exact title are kept as duplicate keys, the way a `replaced` book keeps its agreeing old keys.
+exact title are kept as duplicate keys. (A `replaced` book keeps its agreeing old keys without the
+exact-title rule.)
 
 (The route numbers follow the design's steps, where step 1 is the comparison key above.) A route settle is applied
 like an accept, with two differences: it writes **no Open Library author keys** (a weaker answer must
