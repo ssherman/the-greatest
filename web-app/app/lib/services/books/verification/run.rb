@@ -191,27 +191,32 @@ module Services
           end
         end
 
-        # A done row picked up by retry_unsure starts over at stage 1; one picked
-        # up by recheck re-runs from the editions (settled work) or WorldCat
-        # (no settled work); one picked up by reharvest re-runs from the
-        # editions; one picked up by second_chance starts over at stage 1. Same predicates as next_ids.
+        # A done row picked up by second_chance starts over at stage 1 and keeps
+        # a record of what it was; that check comes first because its reset
+        # covers what retry_unsure and recheck would do. One picked up by
+        # retry_unsure also starts over at stage 1; one picked up by recheck
+        # re-runs from the editions (settled work) or WorldCat (no settled
+        # work); one picked up by reharvest re-runs from the editions. Same
+        # predicates as next_ids.
         def prepare(book)
           row = ::Books::Verification.stage_done.where.not(work_outcome: :reverted).find_by(book_id: book.id)
           return unless row
 
-          if @retry_unsure && @version && retryable_unsure(@version).where(book_id: book.id).exists?
+          if @second_chance && second_chanceable.where(book_id: book.id).exists?
+            # The earliest record stays: a row taken twice keeps its first
+            # second_chance_at, prior_outcome and prior_keys.
+            record = row.second_chance_at ? {} : {
+              second_chance_at: Time.current,
+              prior_outcome: ::Books::Verification.work_outcomes[row.work_outcome],
+              prior_keys: ::Identifier.where(identifiable: book, identifier_type: :books_work_openlibrary_id).pluck(:value)
+            }
+            row.update!(stage: :work, **record)
+          elsif @retry_unsure && @version && retryable_unsure(@version).where(book_id: book.id).exists?
             row.update!(stage: :work)
           elsif @recheck && recheckable.where(book_id: book.id).exists?
             row.update!(stage: ::Books::Verification::SETTLED_FOR_EDITIONS.include?(row.work_outcome) ? :identifiers : :worldcat)
           elsif @reharvest && reharvestable.where(book_id: book.id).exists?
             row.update!(stage: :identifiers)
-          elsif @second_chance && second_chanceable.where(book_id: book.id).exists?
-            row.update!(
-              stage: :work,
-              second_chance_at: Time.current,
-              prior_outcome: ::Books::Verification.work_outcomes[row.work_outcome],
-              prior_keys: Identifier.where(identifiable: book, identifier_type: :books_work_openlibrary_id).pluck(:value)
-            )
           end
         end
 

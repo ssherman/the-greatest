@@ -461,6 +461,46 @@ module Services
           assert_nil keyed.second_chance_at
         end
 
+        test "second_chance with retry_unsure still records the prior outcome and keys on a row both take" do
+          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: true, data: VerifyBook::Outcome.new(row: nil, via_resolve: false), errors: []))
+          @client = FakeOlClient.new(version: {dump_date: "2026-09-30", matcher_version: 3})
+          row = ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", stage: :done, dump_date: "2026-07-31", matcher_version: 3)
+
+          run_backfill(flags: %w[second_chance retry_unsure unranked], scope: ::Books::Book.where(id: @war.id))
+
+          row.reload
+          assert row.stage_work?
+          assert_not_nil row.second_chance_at
+          assert_equal ::Books::Verification.work_outcomes["unsure"], row.prior_outcome
+          assert_equal Identifier.where(identifiable: @war, identifier_type: :books_work_openlibrary_id).pluck(:value), row.prior_keys
+        end
+
+        test "second_chance with recheck sends a recheckable unsure row to stage 1, not WorldCat" do
+          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: true, data: VerifyBook::Outcome.new(row: nil, via_resolve: false), errors: []))
+          row = ::Books::Verification.create!(book: @crime, work_outcome: :unsure, run_id: "old", stage: :done, checked_at: 1.day.ago)
+          Identifier.create!(identifiable: @crime, identifier_type: :books_work_isbn10, value: "0140447938", source: :legacy)
+
+          run_backfill(flags: %w[second_chance recheck unranked], scope: ::Books::Book.where(id: @crime.id))
+
+          row.reload
+          assert row.stage_work?
+          assert_not_nil row.second_chance_at
+          assert_equal ::Books::Verification.work_outcomes["unsure"], row.prior_outcome
+        end
+
+        test "second_chance keeps the earliest record when a row is taken again" do
+          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: true, data: VerifyBook::Outcome.new(row: nil, via_resolve: false), errors: []))
+          first = 3.days.ago.change(usec: 0)
+          row = ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", stage: :done,
+            second_chance_at: first, prior_outcome: ::Books::Verification.work_outcomes["removed"], prior_keys: ["OL7W"])
+
+          run_backfill(flags: %w[second_chance unranked], scope: ::Books::Book.where(id: @war.id))
+
+          row.reload
+          assert row.stage_work?
+          assert_equal [first, ::Books::Verification.work_outcomes["removed"], ["OL7W"]], [row.second_chance_at, row.prior_outcome, row.prior_keys]
+        end
+
         test "second_chance does not take a book this run already finished, so a re-queued run does not redo it" do
           ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "run-1", stage: :done)
           VerifyBook.expects(:call).never
