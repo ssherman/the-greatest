@@ -185,14 +185,13 @@ module Services
           assert_equal ["OL1W", true, [], []], [answer.work.key, answer.confirm_only, answer.duplicates, answer.redirect_sources]
         end
 
-        test "an abstain whose top candidate is not the stored key stays unsure" do
+        test "an abstain whose agreeing top candidate is not the stored key is a second-chance answer, not a confirmation" do
           ::Identifier.create!(identifiable: @book, identifier_type: :books_work_openlibrary_id, value: "OL9W")
           client = FakeOlClient.new(resolution: ol_resolution(verdict: "abstain", work: @work))
 
           answer = Lookup.call(book: @book, client: client)
 
-          assert_nil answer.work
-          assert_equal false, answer.confirm_only
+          assert_equal ["OL1W", :resolve_candidate, false], [answer.work.key, answer.lookup, answer.confirm_only]
         end
 
         test "an abstain whose top candidate is the stored key but fails the check stays unsure" do
@@ -201,6 +200,102 @@ module Services
           client = FakeOlClient.new(resolution: ol_resolution(verdict: "abstain", work: other))
 
           assert_nil Lookup.call(book: @book, client: client).work
+        end
+
+        def candidate(work, verdict: "abstain", score: 0.9, conflicts: [])
+          {work: work, verdict: verdict, score: score, conflicts: conflicts}
+        end
+
+        def tolstoy_work(key, title) = ol_work(key, title: title, authors: [["OL1A", "Leo Tolstoy"]])
+
+        test "an abstain whose lower candidate passes our check settles on it" do
+          @book.update_columns(title: "The Iliad")
+          odyssey = ol_work("OL5W", title: "Ὀδύσσεια", authors: [["OL1A", "Leo Tolstoy"]])
+          iliad = ol_work("OL6W", title: "The Iliad", authors: [["OL1A", "Leo Tolstoy"]])
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain",
+            candidates: [candidate(odyssey, score: 0.877), candidate(iliad, score: 0.876)]))
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL6W", :resolve_candidate, false], [answer.work.key, answer.lookup, answer.confirm_only]
+          assert_equal "OL5W", answer.ol_pick
+        end
+
+        test "other passing candidates are the duplicates" do
+          first = tolstoy_work("OL5W", "War and Peace")
+          second = tolstoy_work("OL6W", "War and Peace")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(first), candidate(second)]))
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL5W", ["OL6W"]], [answer.work.key, answer.duplicates]
+        end
+
+        test "a candidate with an exact title beats one that passes only without its subtitle" do
+          subtitled = tolstoy_work("OL5W", "War and Peace: A Novel")
+          exact = tolstoy_work("OL6W", "War and Peace")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(subtitled), candidate(exact)]))
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL6W", ["OL5W"]], [answer.work.key, answer.duplicates]
+        end
+
+        test "an accepted work that fails our check gives way to a passing candidate behind it" do
+          wrong = tolstoy_work("OL5W", "Anna Karenina")
+          right = tolstoy_work("OL6W", "War and Peace")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "accept",
+            candidates: [candidate(wrong, verdict: "accept"), candidate(right)]))
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL6W", :resolve_candidate], [answer.work.key, answer.lookup]
+        end
+
+        test "a reject candidate titled exactly like the book settles as exact_title" do
+          @book.update_columns(title: "Demons")
+          other = tolstoy_work("OL5W", "The Possessed")
+          demons = tolstoy_work("OL6W", "Demons")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain",
+            candidates: [candidate(other), candidate(demons, verdict: "reject", score: 0.2)]))
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL6W", :exact_title], [answer.work.key, answer.lookup]
+        end
+
+        test "a reject candidate matching only an alternate title is no answer" do
+          @book.update_columns(title: "Demons", alternate_titles: ["The Possessed"])
+          possessed = tolstoy_work("OL6W", "The Possessed")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain",
+            candidates: [candidate(possessed, verdict: "reject", score: 0.2)]))
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
+        test "an identifier conflict on the best candidate gives no second chance" do
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", reason: "identifier conflict on the best candidate: isbn13",
+            candidates: [candidate(tolstoy_work("OL5W", "War and Peace"))]))
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
+        test "a tripped volume guard gives no second chance" do
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", volume_guards_tripped: ["author_shelf"],
+            candidates: [candidate(tolstoy_work("OL5W", "War and Peace"))]))
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
+        test "a passing candidate with conflicting features is skipped" do
+          conflicted = tolstoy_work("OL5W", "War and Peace")
+          clean = tolstoy_work("OL6W", "War and Peace")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain",
+            candidates: [candidate(conflicted, conflicts: ["isbn13"]), candidate(clean)]))
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL6W", []], [answer.work.key, answer.duplicates]
         end
 
         test "a confident accept is not a confirm_only answer" do

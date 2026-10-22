@@ -111,9 +111,49 @@ module Services
           end
 
           held = confirmable_stored_key(resolution)
+          chance = second_chance(resolution) unless held
+          return chance if chance
+
           Answer.new(work: held, lookup: :resolve, duplicates: [], redirect_sources: [],
             source_version: resolution.source_version, confirm_only: !held.nil?,
             ol_pick: accepted&.work_key || resolution.candidates.first&.work_key)
+        end
+
+        # Spec steps 2-3: Open Library's own candidates, each held to our check.
+        # Returns an Answer or nil. Later routes (held keys, WorldCat ISBNs)
+        # add their own methods and are tried here in order.
+        def second_chance(resolution)
+          return nil if resolution.decision.reason.to_s.start_with?("identifier conflict")
+          return nil unless resolution.volume_guards_tripped.empty?
+
+          usable = resolution.candidates.select { |candidate| candidate.record && candidate.conflicting_features.empty? }
+          resolve_candidate(resolution, usable) || exact_title(resolution, usable)
+        end
+
+        def resolve_candidate(resolution, usable)
+          passing = usable.reject(&:reject?).select { |candidate| Check.verified?(@book, candidate.record, @client) }
+          return nil if passing.empty?
+
+          wanted = ([@book.title] + Array(@book.alternate_titles)).filter_map { |title| Check.title_key(title) }
+          chosen = passing.find { |candidate| wanted.include?(Check.their_title_keys(candidate.record).first) } || passing.first
+          second_chance_answer(resolution, :resolve_candidate, chosen, passing - [chosen])
+        end
+
+        # A reject-banded candidate whose full title is exactly ours.
+        def exact_title(resolution, usable)
+          ours = Check.title_key(@book.title)
+          return nil if ours.nil?
+
+          chosen = usable.select(&:reject?).find do |candidate|
+            Check.their_title_keys(candidate.record).first == ours && Check.verified?(@book, candidate.record, @client)
+          end
+          chosen && second_chance_answer(resolution, :exact_title, chosen, [])
+        end
+
+        def second_chance_answer(resolution, lookup, chosen, others)
+          Answer.new(work: chosen.record, lookup: lookup, duplicates: others.map(&:work_key).uniq - [chosen.work_key],
+            redirect_sources: Array(chosen.redirect_sources), source_version: resolution.source_version,
+            ol_pick: resolution.candidates.first&.work_key)
         end
 
         # Not an accept, but the top candidate is a key we hold and its record

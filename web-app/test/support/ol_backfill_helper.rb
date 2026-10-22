@@ -54,6 +54,26 @@ module OlBackfillHelper
     )
   end
 
+  # A /resolve answer with several candidates, in rank order. Each candidate
+  # is {work:, verdict:, score:, conflicts: []}; `verdict` is the decision.
+  def ol_resolution_with(verdict:, candidates:, reason: "test", volume_guards_tripped: [], source_version: SOURCE_VERSION)
+    built = candidates.map do |candidate|
+      ::Books::OpenLibrary::Candidate.new(
+        work_key: candidate[:work].key, source: "openlibrary", score: candidate.fetch(:score, 0.9), rules: ["title_author"],
+        margin: 0.0, verdict: candidate.fetch(:verdict, "abstain"), evidence: {},
+        conflicting_features: candidate.fetch(:conflicts, []), diff: [], record: candidate[:work], redirect_sources: []
+      )
+    end
+    ::Books::OpenLibrary::Resolution.new(
+      decision: ::Books::OpenLibrary::Resolution::Decision.new(
+        verdict: verdict, key: ((verdict == "accept") ? built.first&.work_key : nil), score: 0.9, margin: 0.0, reason: reason,
+        duplicates: [], duplicate_redirect_sources: []
+      ),
+      candidates: built, guards_tripped: [], volume_guards_tripped: volume_guards_tripped,
+      source_version: source_version.deep_symbolize_keys
+    )
+  end
+
   # hits: {[type, value] => [IdentifierHit] or an exception to raise}
   # works: {key => Work or nil}
   # authors: {key => Author or nil}
