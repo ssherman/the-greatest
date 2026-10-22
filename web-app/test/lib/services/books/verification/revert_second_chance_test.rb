@@ -80,6 +80,39 @@ module Services
           assert_equal "replaced", row.reload.work_outcome
         end
 
+        test "author keys the second chance added go" do
+          author = books_authors(:tolstoy)
+          ::Identifier.create!(identifiable: author, identifier_type: :books_author_openlibrary_id, value: "OL26783A", source: :open_library)
+          ::Identifier.create!(identifiable: @book, identifier_type: ApplyBook::WORK_KEY, value: "OL1W", source: :open_library)
+          settled_row(lookup: :resolve, work_outcome: :keyed, author_changes: {"added" => [[author.id, "OL26783A"]]})
+
+          assert RevertSecondChance.call(book: @book).success?
+
+          assert_empty author.identifiers.where(identifier_type: :books_author_openlibrary_id)
+          assert_equal({}, ::Books::Verification.find_by(book: @book).author_changes)
+        end
+
+        test "second_chance_matcher reverts matcher-lookup rows the second chance settled, and nothing else" do
+          other = books_books(:crime_and_punishment)
+          third = books_books(:got)
+          fourth = books_books(:clash)
+          settled_row(lookup: :resolve, work_outcome: :keyed)
+          ::Books::Verification.create!(book: other, work_outcome: :confirmed, run_id: "run-2", lookup: :identifiers, stage: :done,
+            second_chance_at: @at, prior_outcome: 5, new_key: "OL3W")
+          first_pass = ::Books::Verification.create!(book: third, work_outcome: :keyed, run_id: "run-1", lookup: :resolve,
+            stage: :done, new_key: "OL4W")
+          route_row = ::Books::Verification.create!(book: fourth, work_outcome: :keyed, run_id: "run-2", lookup: :held_key, stage: :done,
+            second_chance_at: @at, prior_outcome: 5, new_key: "OL5W")
+
+          assert_equal({reverted: 2, failed: 0}, RevertSecondChance.route(:second_chance_matcher))
+          assert_equal ["unsure", "unsure", "keyed", "keyed"],
+            [@book, other].map { |book| ::Books::Verification.find_by(book: book).work_outcome } + [first_pass.reload.work_outcome, route_row.reload.work_outcome]
+        end
+
+        test "an unknown route raises" do
+          assert_raises(ArgumentError) { RevertSecondChance.route(:everything) }
+        end
+
         test "route reverts only that route's rows; a first-pass settle takes the full revert" do
           other = books_books(:crime_and_punishment)
           third = books_books(:got)

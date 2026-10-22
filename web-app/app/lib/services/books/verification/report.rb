@@ -28,8 +28,10 @@ module Services
           ::Books::Verification.work_outcomes.each_key { |outcome| lines << format("  %-15s %d", outcome, counts.fetch(outcome, 0)) }
           lines << ""
           lines << "Settled via route:"
-          route_counts = rows.where(lookup: ROUTES).group(:lookup).count
+          # Settled only: a reverted or unsure row keeps its lookup but settled nothing.
+          route_counts = rows.where(lookup: ROUTES, work_outcome: RevertSecondChance::SETTLED).group(:lookup).count
           ROUTES.each { |route| lines << format("  %-18s %d", route, route_counts.fetch(route, 0)) }
+          lines << format("  %-18s %d", RevertSecondChance::MATCHER_ROUTE, RevertSecondChance.matcher_settled.count)
           lines << ""
           lines << abstain_line
           lines << ranked_line

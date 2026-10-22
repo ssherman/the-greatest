@@ -43,6 +43,10 @@ module Services
         def revert_keys(row)
           restore_work_keys(row)
           @book.identifiers.where(identifier_type: ApplyBook::DUPLICATE_KEY, value: row.duplicate_keys).destroy_all
+          revert_author_keys(row)
+        end
+
+        def revert_author_keys(row)
           Array(row.author_changes["added"]).each do |author_id, key|
             ::Identifier.where(identifiable_type: "Books::Author", identifiable_id: author_id,
               identifier_type: :books_author_openlibrary_id, value: key).destroy_all

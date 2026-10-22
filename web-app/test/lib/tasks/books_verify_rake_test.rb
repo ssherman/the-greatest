@@ -11,7 +11,7 @@ class BooksVerifyRakeTest < ActiveSupport::TestCase
       Rake::Task.define_task(:environment) {} unless Rake::Task.task_defined?(:environment)
       silence_warnings { load Rails.root.join("lib/tasks/books/verify.rake").to_s }
     end
-    %w[books:verify books:verify_report books:verify_revert].each { |name| Rake::Task[name].reenable }
+    %w[books:verify books:verify_report books:verify_revert books:verify_revert_route].each { |name| Rake::Task[name].reenable }
   end
 
   test "a count and flags queue one run" do
@@ -38,6 +38,37 @@ class BooksVerifyRakeTest < ActiveSupport::TestCase
     Services::Books::Verification::Report.expects(:call).returns(["Book verification pass", "line two"])
 
     assert_output(/Book verification pass\nline two/) { Rake::Task["books:verify_report"].invoke }
+  end
+
+  test "revert of a row a second chance settled undoes only the second chance, and says so" do
+    book = books_books(:war_and_peace)
+    Books::Verification.create!(book: book, work_outcome: :keyed, run_id: "run-2", lookup: :resolve_candidate, stage: :done,
+      second_chance_at: 1.hour.ago, prior_outcome: Books::Verification.work_outcomes[:unsure], prior_keys: [], new_key: "OL1W")
+    # (Not Revert.expects(:call).never: RevertSecondChance inherits Revert's .call, so Mocha would catch it too.)
+    # The full Revert would leave the row reverted; the second-chance revert leaves it unsure.
+    assert_output(/reverted the second chance on book #{book.id}: back to unsure/) { Rake::Task["books:verify_revert"].invoke(book.id.to_s) }
+    assert_equal "unsure", Books::Verification.find_by(book: book).work_outcome
+  end
+
+  test "revert of a second-chance row the second chance did not settle takes the full revert" do
+    book = books_books(:war_and_peace)
+    row = Books::Verification.create!(book: book, work_outcome: :removed, run_id: "run-2", lookup: :resolve, stage: :done,
+      second_chance_at: 1.hour.ago, prior_outcome: Books::Verification.work_outcomes[:removed], old_keys: ["OL5W"])
+    Services::Books::Verification::Revert.expects(:call).with(book: book)
+      .returns(Services::Books::Verification::Revert::Result.new(success?: true, data: {row: row, skipped: 0}, errors: []))
+
+    assert_output(/reverted book #{book.id}: work keys back to/) { Rake::Task["books:verify_revert"].invoke(book.id.to_s) }
+  end
+
+  test "revert_route takes the second_chance_matcher pseudo-route and aborts on an unknown one" do
+    Services::Books::Verification::RevertSecondChance.expects(:route).with("second_chance_matcher").returns({reverted: 3, failed: 1})
+
+    assert_output(/route second_chance_matcher: reverted 3, failed 1/) { Rake::Task["books:verify_revert_route"].invoke("second_chance_matcher") }
+
+    Rake::Task["books:verify_revert_route"].reenable
+    assert_output(nil, /usage: books:verify_revert_route\[.*second_chance_matcher\]/) do
+      assert_raises(SystemExit) { Rake::Task["books:verify_revert_route"].invoke("everything") }
+    end
   end
 
   test "revert reverts one book, and aborts on an unknown book or a refused revert" do

@@ -30,6 +30,16 @@ namespace :books do
     book = Books::Book.find_by(id: args[:book_id])
     abort "usage: books:verify_revert[<book id>] -- no book #{args[:book_id].inspect}" unless book
 
+    # A row a second chance settled goes back to what it was before the second
+    # chance (unsure or removed), not all the way to before the first pass.
+    if Services::Books::Verification::RevertSecondChance.applies_to?(Books::Verification.find_by(book: book))
+      result = Services::Books::Verification::RevertSecondChance.call(book: book)
+      abort result.errors.join("; ") unless result.success?
+
+      next puts "reverted the second chance on book #{book.id}: back to #{result.data[:row].work_outcome}; " \
+        "#{result.data[:skipped]} identifiers had moved and were skipped"
+    end
+
     result = Services::Books::Verification::Revert.call(book: book)
     abort result.errors.join("; ") unless result.success?
 
@@ -38,9 +48,10 @@ namespace :books do
   end
 
   desc "Verification pass: revert every book a second-chance route settled: " \
-    "books:verify_revert_route[<resolve_candidate|exact_title|held_key|worldcat_isbns>]"
+    "books:verify_revert_route[<resolve_candidate|exact_title|held_key|worldcat_isbns|second_chance_matcher>]; " \
+    "second_chance_matcher is the books a second_chance run settled through Open Library's matcher"
   task :verify_revert_route, [:lookup] => :environment do |_task, args|
-    routes = Services::Books::Verification::RevertSecondChance::ROUTES
+    routes = Services::Books::Verification::RevertSecondChance::REVERTIBLE_ROUTES
     abort "usage: books:verify_revert_route[#{routes.join("|")}] -- unknown value #{args[:lookup].inspect}" unless routes.include?(args[:lookup])
 
     counts = Services::Books::Verification::RevertSecondChance.route(args[:lookup])

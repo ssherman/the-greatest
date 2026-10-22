@@ -41,6 +41,29 @@ module Services
           assert_match(/via resolve_candidate \(keyed\):\n\s+book #{war.id} "War and Peace"/, text)
         end
 
+        test "settled via route counts only settled rows, not reverted or unsure ones" do
+          ::Books::Verification.create!(book: books_books(:war_and_peace), work_outcome: :reverted, run_id: "r", lookup: :held_key, new_key: "OL1W")
+          ::Books::Verification.create!(book: books_books(:crime_and_punishment), work_outcome: :unsure, run_id: "r", lookup: :exact_title)
+          ::Books::Verification.create!(book: books_books(:got), work_outcome: :duplicate_pair, run_id: "r", lookup: :exact_title, new_key: "OL3W")
+
+          text = Report.call.join("\n")
+
+          assert_match(/Settled via route:\n\s+resolve_candidate\s+0\n\s+exact_title\s+1\n\s+held_key\s+0\n/, text)
+        end
+
+        test "settled via route has a line for the books a second chance settled through the matcher" do
+          at = 1.hour.ago
+          ::Books::Verification.create!(book: books_books(:war_and_peace), work_outcome: :keyed, run_id: "r", lookup: :resolve, new_key: "OL1W",
+            second_chance_at: at, prior_outcome: 5)
+          ::Books::Verification.create!(book: books_books(:crime_and_punishment), work_outcome: :confirmed, run_id: "r", lookup: :identifiers,
+            new_key: "OL2W", second_chance_at: at, prior_outcome: 5)
+          ::Books::Verification.create!(book: books_books(:got), work_outcome: :keyed, run_id: "r", lookup: :resolve, new_key: "OL3W")
+          ::Books::Verification.create!(book: books_books(:clash), work_outcome: :removed, run_id: "r", lookup: :resolve,
+            second_chance_at: at, prior_outcome: 8)
+
+          assert_match(/Settled via route:(\n\s+\w+\s+\d+)*\n\s+second_chance_matcher\s+2\n/, Report.call.join("\n"))
+        end
+
         test "route samples show Open Library's title when a client is given" do
           war = books_books(:war_and_peace)
           ::Books::Verification.create!(book: war, work_outcome: :keyed, run_id: "r", lookup: :exact_title, new_key: "OL1W")
