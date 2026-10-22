@@ -132,13 +132,23 @@ the sync never undoes them.
    and it carries on under the same run id; logged books resume at their stage. If the worker
    crashes instead, the run is lost: run the task again. Details:
    `docs/features/book-verification.md`.
-   **Unsure books second chance, once, after the deploy that carries it:** run
-   `bin/rails "books:verify[all,second_chance]"` (the existing unsure and removed rows are all ranked
-   `pre_import`, so no other flag is needed), then `bin/rails books:verify_report`. Spot-check per
-   route: read the "via <route>" samples for `resolve_candidate`, `exact_title`, `held_key` and
-   `worldcat_isbns`, and the top books by Goodreads rows. If a route is wrong, undo it with
-   `bin/rails "books:verify_revert_route[<route>]"`. Leave the flag off routine runs: a rerun repeats
-   the same lookups.
+   **Unsure books second chance, once, after the deploy that carries it:** first wait for the
+   running `books:verify[all]` pass to finish (only one run works at a time, and the second chance
+   should see every book that pass leaves unsure). Then check with a count that every done unsure or
+   removed row is ranked `pre_import`, because the default scope covers only those:
+   ```bash
+   bin/rails runner 'ranked = RankedItem.where(ranking_configuration_id: Books::RankingConfiguration.default_primary.id, item_type: "Books::Book").where.not(rank: nil).select(:item_id); rows = Books::Verification.stage_done.where(work_outcome: %i[unsure removed]); puts "all #{rows.count}, ranked pre_import #{rows.where(book_id: ranked).where.not(book_id: Services::Books::Verification::Cohort.post_import_range).count}"'
+   ```
+   If the two numbers are equal, run `bin/rails "books:verify[all,second_chance]"`; if not, add
+   `unranked` and/or `post_import` to cover the rest. Settled books go on through stages 2-4, so the
+   run makes more Open Library calls and writes than the lookups alone. Then
+   `bin/rails books:verify_report`. Spot-check per route: read the "via <route>" samples for
+   `resolve_candidate`, `exact_title`, `held_key` and `worldcat_isbns`, the `second_chance_matcher`
+   count, and the top books by Goodreads rows. If a route is wrong, undo it with
+   `bin/rails "books:verify_revert_route[<route>]"` (`second_chance_matcher` undoes the books the
+   run settled through Open Library's own matcher); undo one book with
+   `bin/rails "books:verify_revert[<book id>]"`, which undoes only its second chance. Leave the flag
+   off routine runs: a rerun repeats the same lookups.
 4. **Duplicates.** Review the pairs the sweep found in the Duplicates queue and merge them. Every
    merge is recorded as a redirect, so the sync never brings the merged book back.
 5. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
