@@ -20,14 +20,14 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     get saved_searches_path
 
     assert_response :success
-    assert_select "button[onclick*='login_modal']"
+    assert_select "main button[onclick*='login_modal']"
   end
 
   test "signed out, a later index page renders the intro page" do
     get "/searches/page/2"
 
     assert_response :success
-    assert_select "button[onclick*='login_modal']"
+    assert_select "main button[onclick*='login_modal']"
   end
 
   test "index lists only the current user's searches" do
@@ -398,7 +398,7 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     get new_saved_search_path
 
     assert_response :success
-    assert_select "button[onclick*='login_modal']"
+    assert_select "main button[onclick*='login_modal']"
     assert_select "form#saved-search-form", count: 0
   end
 
