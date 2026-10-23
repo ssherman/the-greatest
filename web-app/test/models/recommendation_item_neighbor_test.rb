@@ -2,6 +2,24 @@
 
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: recommendation_item_neighbors
+#
+#  id                      :bigint           not null, primary key
+#  weight                  :float            not null
+#  item_id                 :bigint           not null
+#  neighbor_id             :bigint           not null
+#  recommendation_model_id :bigint           not null
+#
+# Indexes
+#
+#  idx_on_recommendation_model_id_item_id_65911a84a9  (recommendation_model_id,item_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (recommendation_model_id => recommendation_models.id)
+#
 class RecommendationItemNeighborTest < ActiveSupport::TestCase
   test "belongs to a model and requires a weight" do
     model = RecommendationModel.create!(domain: "books", version: "v")

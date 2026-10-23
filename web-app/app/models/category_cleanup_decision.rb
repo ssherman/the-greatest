@@ -2,6 +2,47 @@
 # (spec §4.1). Written by Services::CategoryCleanup::RulePass and ::AiPass,
 # reviewed through the report, executed by ::Applier. Validations and scopes
 # only; the logic lives in app/lib/services/category_cleanup/.
+# == Schema Information
+#
+# Table name: category_cleanup_decisions
+#
+#  id                 :bigint           not null, primary key
+#  action             :integer          not null
+#  ambiguous          :boolean          default(FALSE), not null
+#  category_snapshot  :jsonb            not null
+#  decided_by         :integer          not null
+#  error              :text
+#  extra_target_ids   :bigint           default([]), not null, is an Array
+#  new_category_type  :integer
+#  new_name           :string
+#  parent_chain       :string           default([]), not null, is an Array
+#  place_kind         :string
+#  reason             :text
+#  run                :string           not null
+#  split_assignments  :jsonb            not null
+#  stage              :string           not null
+#  status             :integer          default("proposed"), not null
+#  created_at         :datetime         not null
+#  updated_at         :datetime         not null
+#  ai_chat_id         :bigint
+#  category_id        :bigint           not null
+#  target_category_id :bigint
+#
+# Indexes
+#
+#  index_category_cleanup_decisions_on_ai_chat_id           (ai_chat_id)
+#  index_category_cleanup_decisions_on_category_id          (category_id)
+#  index_category_cleanup_decisions_on_run_and_category_id  (run,category_id)
+#  index_category_cleanup_decisions_on_run_and_stage        (run,stage)
+#  index_category_cleanup_decisions_on_run_and_status       (run,status)
+#  index_category_cleanup_decisions_on_target_category_id   (target_category_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (ai_chat_id => ai_chats.id)
+#  fk_rails_...  (category_id => categories.id)
+#  fk_rails_...  (target_category_id => categories.id)
+#
 class CategoryCleanupDecision < ApplicationRecord
   STAGES = %w[rules locations_head locations_tail subjects_head subjects_tail sync apply genres].freeze
   SNAPSHOT_FIELDS = %w[name category_type parent_id deleted item_count].freeze
