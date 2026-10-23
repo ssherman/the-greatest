@@ -56,7 +56,10 @@ test.describe('books admin — books', () => {
     await expect(page.locator('input[type="text"][name="books_book[alternate_titles][]"]')).toHaveValue(alt);
     await page.getByRole("button", { name: "Remove" }).click();
     await page.getByRole("button", { name: "Update Book" }).click();
-    await expect(page.getByText("Basic Information")).toBeVisible();
+    // Basic Information is also on the edit form, so wait for the show page itself.
+    await expect(page).not.toHaveURL(/\/edit/);
+    await expect(page.getByText("Book updated.")).toBeVisible();
+    await expect(page.locator("dt", { hasText: "Alternate Titles" }).locator("xpath=following-sibling::dd")).toHaveText("—");
     await expect(page.getByText(alt)).toHaveCount(0);
   });
 
