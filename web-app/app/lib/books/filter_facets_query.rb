@@ -42,17 +42,24 @@ module Books
     end
 
     def category_facet(type, limit)
-      counts = CategoryItem
+      scope = CategoryItem
         .where(item_type: "Books::Book", item_id: book_ids(countries: @countries, categories: @categories))
         .joins(:category)
         .where(categories: {deleted: false, category_type: Category.category_types.fetch(type), type: "Books::Category"})
         .group(:category_id)
-        .order(count_all: :desc, category_id: :asc)
-        .limit(limit)
-        .count
 
+      counts = scope.order(count_all: :desc, category_id: :asc).limit(limit).count
       rows = rows_for(Books::Category.where(id: counts.keys), counts)
-      rows + zero_rows(@categories.select { |category| category.category_type == type }, rows)
+
+      # An applied category carries every book in the result, so it ties for the
+      # top count and can fall past the limit on the id tiebreak. Its real count
+      # is appended, not zero; zero is only for categories with genuinely no books.
+      missing = @categories.select { |category| category.category_type == type && counts.keys.exclude?(category.id) }
+      if missing.any?
+        extra = scope.where(category_id: missing.map(&:id)).count
+        rows += missing.map { |category| {record: category, count: extra.fetch(category.id, 0)} }
+      end
+      rows
     end
 
     def country_facet
@@ -64,7 +71,8 @@ module Books
         .count
 
       rows = rows_for(Books::Country.where(id: counts.keys), counts)
-      rows + zero_rows(@countries, rows)
+      listed = rows.map { |row| row[:record].id }
+      rows + @countries.reject { |country| listed.include?(country.id) }.map { |country| {record: country, count: 0} }
     end
 
     private
@@ -86,12 +94,6 @@ module Books
     def rows_for(scope, counts)
       by_id = scope.index_by(&:id)
       counts.map { |id, count| {record: by_id[id], count: count} }.reject { |row| row[:record].nil? }
-    end
-
-    # Applied records the count query did not return: they still render, ticked.
-    def zero_rows(applied, rows)
-      listed = rows.map { |row| row[:record].id }
-      applied.reject { |record| listed.include?(record.id) }.map { |record| {record: record, count: 0} }
     end
   end
 end

@@ -51,6 +51,16 @@ module Books
       assert_equal [americana, 0], [rows.last[:record], rows.last[:count]]
     end
 
+    test "an applied category cut off by the limit keeps its real count" do
+      novels = categories(:books_novels_genre)
+      classics = categories(:books_classics_genre)
+      # Both carry the one book that has both, so they tie at 1 and limit 1
+      # cuts one of them off whichever way the id tiebreak falls.
+      rows = categories_for("genre", categories: [novels, classics], limit: 1)
+
+      assert_equal [[novels, 1], [classics, 1]].sort_by { |r| r[0].id }, rows.map { |r| [r[:record], r[:count]] }.sort_by { |r| r[0].id }
+    end
+
     test "an applied category of another type is not listed" do
       politics = categories(:books_politics_subject)
       rows = categories_for("genre", categories: [politics])
