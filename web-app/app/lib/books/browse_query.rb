@@ -79,6 +79,8 @@ module Books
     end
     private_class_method :ranked_book_ids_sql
 
+    # Public because Books::FilterCategorySearchQuery orders by the same tiers.
+    #
     # 0 name equals, 1 name starts with, 2 a word in the name starts with,
     # 3 name contains, 4 matched only through alternative_names. Every value is
     # bound, so no user text is interpolated.
@@ -98,7 +100,6 @@ module Books
         END
       SQL
     end
-    private_class_method :name_match_quality_sql
 
     # candidate_ids_sql, when given, limits which categories the subquery counts.
     # It only narrows the rows; each surviving category's count is unchanged.
