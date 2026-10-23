@@ -325,6 +325,10 @@ checked too; read them. Pairs are reviewed in the Duplicates queue like any othe
 - It deletes the book's findings and candidates, and marks the row `reverted`. A reverted book is
   never redone, and `recheck` skips it.
 
+Findings that agreed only through an alternate title the AI review later removed are undone by a
+separate step, `books:alternate_titles:undo_findings`, not by this task
+(`docs/features/books-alternate-titles.md`).
+
 A work key that arrived afterwards (a merge, an admin) stays. Another book processed later may have
 relied on an author key the pass added, so check those books. Pairs the run flagged stay in the
 Duplicates queue.
