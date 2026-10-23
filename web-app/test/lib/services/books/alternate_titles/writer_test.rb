@@ -268,6 +268,44 @@ module Services
 
           assert_includes newly, "Prestuplenie"
         end
+
+        test "move survives a source whose array holds its own main title" do
+          @other.update_columns(alternate_titles: [@other.title.upcase])
+          @other.reload
+
+          newly = Writer.move(source_book: @other, target_book: @book)
+
+          assert_includes newly, @other.title.upcase
+          assert_equal 1, @book.alternate_title_records.where(normalized_title: @other.title.downcase).count
+        end
+
+        test "add works after the caller preloaded the association" do
+          @book.update_columns(alternate_titles: ["Voyna i mir"])
+          @book.reload
+          @book.alternate_title_records.to_a
+
+          result = Writer.add(book: @book, titles: ["Voyna i mir", "Guerre"], source: :merge)
+
+          assert_equal ["Guerre"], result.data[:added]
+        end
+
+        test "reinstating clears a generated removal reason but keeps an AI reason" do
+          generated = row(@book, "Gen", status: :removed, reason: "removed by admin")
+          ai = row(@book, "Ai", status: :removed, reason: "chapter title")
+
+          Writer.add(book: @book, titles: ["Gen", "Ai"], source: :admin)
+
+          assert_nil generated.reload.reason
+          assert_equal "chapter title", ai.reload.reason
+        end
+
+        test "replace reinstating clears a generated removal reason" do
+          generated = row(@book, "Gen", status: :removed, reason: "removed by correction")
+
+          Writer.replace(book: @book, titles: ["Gen"], source: :correction)
+
+          assert_nil generated.reload.reason
+        end
       end
     end
   end

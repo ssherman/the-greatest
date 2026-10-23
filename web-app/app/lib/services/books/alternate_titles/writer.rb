@@ -40,14 +40,14 @@ module Services
             ::Books::AlternateTitle.transaction do
               incoming = unique_titles(titles).reject { |normalized, _| normalized == main_normalized(book) }
               now = Time.current
-              book.alternate_title_records.listed.each do |row|
+              rows_for(book).listed.each do |row|
                 next if incoming.key?(row.normalized_title)
                 row.update!(status: :removed, reason: REMOVED_BY.fetch(source), decided_by: source,
                   decided_by_user_id: user&.id, decided_at: now)
                 data[:removed] << row.title
               end
               write_titles(book, incoming.values, source, data, user: user)
-              book.alternate_title_records.where(normalized_title: incoming.keys).each do |row|
+              rows_for(book).where(normalized_title: incoming.keys).each do |row|
                 spelling = incoming[row.normalized_title]
                 row.update!(title: spelling) if row.title != spelling
               end
@@ -62,8 +62,7 @@ module Services
 
             attrs = {status: status, decided_by: :admin, decided_by_user_id: user&.id, decided_at: Time.current}
             default_reason = (status == :removed) ? REMOVED_BY[:admin] : KEPT_BY_ADMIN
-            generated = REMOVED_BY.values + [KEPT_BY_ADMIN]
-            attrs[:reason] = default_reason if row.reason.blank? || generated.include?(row.reason)
+            attrs[:reason] = default_reason if row.reason.blank? || generated_reason?(row.reason)
             book = row.book
             ::Books::AlternateTitle.transaction do
               row.update!(attrs)
@@ -80,9 +79,9 @@ module Services
             Backfill.call(target_book)
             before = listed_titles(target_book)
             ::Books::AlternateTitle.transaction do
-              target_rows = target_book.alternate_title_records.index_by(&:normalized_title)
+              target_rows = rows_for(target_book).index_by(&:normalized_title)
               target_main = main_normalized(target_book)
-              source_book.alternate_title_records.order(:id).each do |row|
+              rows_for(source_book).order(:id).each do |row|
                 if (existing = target_rows[row.normalized_title])
                   carry_removal(row, existing)
                   row.destroy!
@@ -100,10 +99,14 @@ module Services
           end
 
           def listed_titles(book)
-            book.alternate_title_records.listed.pluck(:title)
+            rows_for(book).listed.pluck(:title)
           end
 
           private
+
+          def rows_for(book) = ::Books::AlternateTitle.where(book_id: book.id)
+
+          def generated_reason?(reason) = (REMOVED_BY.values + [KEPT_BY_ADMIN]).include?(reason)
 
           def success(data) = Result.new(success?: true, data: data, errors: [])
 
@@ -126,19 +129,21 @@ module Services
           def write_titles(book, titles, source, data, user: nil)
             source = source.to_sym
             main = main_normalized(book)
-            existing = book.alternate_title_records.index_by(&:normalized_title)
+            existing = rows_for(book).index_by(&:normalized_title)
             now = Time.current
             unique_titles(titles).each do |normalized, title|
               next if normalized == main
 
               row = existing[normalized]
               if row.nil?
-                existing[normalized] = book.alternate_title_records.create!(title: title, source: source, status: :kept)
+                existing[normalized] = ::Books::AlternateTitle.create!(book: book, title: title, source: source, status: :kept)
                 data[:added] << title
               elsif row.removed?
                 if REINSTATING_SOURCES.include?(source)
-                  row.update!(status: :kept, source: source, decided_by: source,
-                    decided_by_user_id: user&.id, decided_at: now)
+                  attrs = {status: :kept, source: source, decided_by: source,
+                           decided_by_user_id: user&.id, decided_at: now}
+                  attrs[:reason] = nil if generated_reason?(row.reason)
+                  row.update!(attrs)
                   data[:reinstated] << row.title
                 else
                   data[:skipped_removed] << title
