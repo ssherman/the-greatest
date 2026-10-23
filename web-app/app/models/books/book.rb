@@ -105,7 +105,7 @@ class Books::Book < ApplicationRecord
   correctable_field :first_published_year, type: :integer
   correctable_field :page_range, type: :string, hint: "A number or a range, e.g. 300 or 250-350"
   correctable_field :word_count, type: :integer
-  correctable_field :alternate_titles, type: :string_array
+  correctable_field :alternate_titles, type: :string_array, target: :alternate_titles
   correctable_field :description, type: :text, target: :description
 
   belongs_to :original_language, class_name: "Language", optional: true
@@ -115,6 +115,7 @@ class Books::Book < ApplicationRecord
   has_many :editions, class_name: "Books::Edition", dependent: :destroy
   has_one :verification, class_name: "Books::Verification", dependent: :delete
   has_many :verification_findings, class_name: "Books::VerificationFinding", dependent: :delete_all
+  has_many :alternate_title_records, as: :titleable, class_name: "::AlternateTitle", dependent: :delete_all
   has_many :edition_candidates, class_name: "Books::EditionCandidate", dependent: :delete_all
 
   has_many :credits, as: :creditable, class_name: "Books::Credit", dependent: :destroy

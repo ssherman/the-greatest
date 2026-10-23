@@ -10,6 +10,10 @@ module Books
     enum :source, ::Identifier.sources, prefix: :source
     enum :previous_source, ::Identifier.sources, prefix: :previous
 
+    # What undoing this finding did (Services::Books::AlternateTitles::UndoFindings).
+    enum :undo_action, {identifier_destroyed: 0, source_restored: 1, identifier_gone: 2}, prefix: :undo
+    scope :not_undone, -> { where(undone_at: nil) }
+
     validates :kind, :identifier_type, :value, presence: true
   end
 end

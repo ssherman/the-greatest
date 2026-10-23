@@ -44,7 +44,7 @@ module Services
 
         def finding(verification, kind, type, value, **attributes)
           row = ::Books::VerificationFinding.find_or_initialize_by(verification: verification, kind: kind, identifier_type: type, value: value)
-          row.assign_attributes(book_id: verification.book_id, **attributes)
+          row.assign_attributes(book_id: verification.book_id, undone_at: nil, undo_action: nil, **attributes)
           row.save!
           row
         end

@@ -1,0 +1,16 @@
+war_and_peace_voyna:
+  titleable: war_and_peace (Books::Book)
+  title: Voyna i mir
+  normalized_title: voyna i mir
+  source: legacy
+  status: kept
+
+crime_and_punishment_removed_junk:
+  titleable: crime_and_punishment (Books::Book)
+  title: Crime and Punishment (Book Club Edition)
+  normalized_title: crime and punishment (book club edition)
+  source: legacy
+  status: removed
+  verdict: not_same_work
+  category: junk
+  decided_by: ai

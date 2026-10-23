@@ -79,6 +79,7 @@ class User < ApplicationRecord
   has_many :reviewed_match_decisions, class_name: "MatchDecision", foreign_key: :reviewed_by_id, dependent: :nullify
   has_many :resolved_duplicate_candidates, class_name: "DuplicateCandidate", foreign_key: :resolved_by_id, dependent: :nullify
   has_many :news_posts, dependent: :destroy
+  has_many :decided_alternate_titles, class_name: "::AlternateTitle", foreign_key: :decided_by_user_id, dependent: :nullify
 
   enum :role, [:user, :admin, :editor]
   enum :external_provider, [:facebook, :twitter, :google, :apple, :password]

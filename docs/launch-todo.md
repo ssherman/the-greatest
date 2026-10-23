@@ -329,3 +329,31 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
 16. **The report, if the map changed.** After the backfill, if the map was edited during review, re-run
     `bin/rails worldcat:report` in development and commit the regenerated
     `docs/data-quality/worldcat-genre-mapping.md`. It depends only on the map file, not on the backfill.
+
+## 10. Alternate titles cleanup (the review and the undo repeat)
+
+Spec: `docs/superpowers/specs/2026-10-23-alternate-titles-cleanup-design.md`; explained in
+`docs/features/books-alternate-titles.md`. Do the dev rehearsal and its hand checks first (the doc's
+"Proving it"). Needs Sidekiq running for the review.
+
+1. **Deploy.** The migration creates `alternate_titles`; the code writes through it from then on.
+2. **`bin/rails books:alternate_titles:backfill`.** Idempotent; creates a `legacy` row per existing
+   alternate title. Run once.
+3. **`bin/rails "books:alternate_titles:review[ranked]"`.** Queues one AI call per ranked book on the
+   `low` queue. Wait for the queue to empty, then `bin/rails books:alternate_titles:report` and check
+   by hand: the known cases, 50 random removals, 50 random keeps, every non-Latin removal. Work the
+   `review` rows on the admin review page.
+4. **`bin/rails "books:alternate_titles:review[all]"`.** The rest of the catalogue.
+5. **`bin/rails books:alternate_titles:undo_findings`** (dry run). Read the counts, the wrong-work list
+   and the samples. Then **`bin/rails "books:alternate_titles:undo_findings[apply]"`**.
+   `redo_finding[id]` reverses one.
+
+**Repeating steps: `review` and `undo_findings`.** Run `review[all]` and then `undo_findings` (dry run,
+then `[apply]`) again after merges, after each weekly `data_migration:sync`, after working the review
+page or accepting corrections, and in the final launch sequence. Each only handles rows it has not
+handled before, so repeating is safe. A finding `undo_findings` leaves alone ("held with another
+source") is not retried by re-running: the apply run stamps the book's removed rows, so it is
+re-judged only when another title on that book is later removed. `undone_findings[book_id]` lists a
+book's undone findings for `redo_finding`.
+
+The unsure-books second-chance verification run follows this cleanup.

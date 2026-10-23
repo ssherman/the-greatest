@@ -34,7 +34,7 @@ class Admin::Books::BooksController < Admin::Books::BaseController
     assign_book_attributes(@book)
     authorize @book
 
-    if @book.save
+    if save_with_titles(@book)
       redirect_to admin_books_book_path(@book), notice: "Book created."
     else
       render :new, status: :unprocessable_entity
@@ -47,7 +47,7 @@ class Admin::Books::BooksController < Admin::Books::BaseController
   def update
     assign_book_attributes(@book)
 
-    if @book.save
+    if save_with_titles(@book)
       redirect_to admin_books_book_path(@book), notice: "Book updated."
     else
       render :edit, status: :unprocessable_entity
@@ -146,7 +146,33 @@ class Admin::Books::BooksController < Admin::Books::BaseController
 
   def assign_book_attributes(record)
     record.assign_attributes(book_params)
-    raw = params.dig(:books_book, :alternate_titles_string)
-    record.alternate_titles = raw.to_s.split(",").map(&:strip).reject(&:blank?) unless raw.nil?
+    @submitted_titles = submitted_alternate_titles
+  end
+
+  # nil when the form did not post the key, so another form posting to update
+  # leaves the titles alone. Never permitted through book_params: the titles
+  # are written through the alternate_titles table, not assigned.
+  def submitted_alternate_titles
+    return unless params[:books_book].respond_to?(:key?) && params[:books_book].key?(:alternate_titles)
+    Array(params[:books_book][:alternate_titles]).map { |t| t.to_s.strip }.reject(&:blank?)
+  end
+
+  # The book save and the title rows commit together (create needs the id
+  # first). A validation failure writes nothing and leaves the submitted
+  # titles in @submitted_titles so the re-rendered form shows them.
+  def save_with_titles(record)
+    titles = @submitted_titles
+    saved = false
+    ::Books::Book.transaction do
+      unless record.save
+        raise ActiveRecord::Rollback
+      end
+      if titles
+        Services::AlternateTitles::Writer.replace(record: record, titles: titles, source: :admin, user: current_user)
+        record.save! if record.changed?
+      end
+      saved = true
+    end
+    saved
   end
 end
