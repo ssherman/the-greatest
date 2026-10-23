@@ -75,8 +75,10 @@ before anything is written, so a failed call leaves the book untouched.
 Verdict handling, in one transaction with the array copy:
 
 - `same_work`: stays `kept`, verdict recorded.
-- `not_same_work` at or above `config.x.books_alternate_titles.auto_remove_confidence` (0.8, set in
-  `config/initializers/books_alternate_titles.rb`): `removed`.
+- `not_same_work` at or above `config.x.books_alternate_titles.auto_remove_confidence` (0.9, set in
+  `config/initializers/books_alternate_titles.rb`): `removed`. The dev rehearsal of 2026-10-23 raised
+  it from 0.8: below 0.9, "other work" removals included real translations the model did not
+  recognise.
 - `not_same_work` below it: `review`, waiting for an admin.
 - Rows whose source is `admin` or `correction` are never removed automatically: `not_same_work` sends them to `review` whatever the confidence. (An admin accepted every correction; later decision, 2026-10-22, final review.)
 
