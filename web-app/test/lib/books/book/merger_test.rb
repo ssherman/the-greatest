@@ -745,6 +745,44 @@ module Books
         assert_equal 1869, @target.reload.first_published_year
       end
 
+      test "merge moves rows with their status" do
+        ::AlternateTitle.create!(titleable: @source, title: "Prestuplenie", source: :legacy, status: :review,
+          verdict: :not_same_work, category: :variant, confidence: 0.6, decided_by: :ai)
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        merger.call
+
+        row = ::AlternateTitle.find_by!(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: "prestuplenie")
+        assert_equal ["review", "not_same_work"], [row.status, row.verdict]
+        main = ::AlternateTitle.find_by!(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: "crime and punishment")
+        assert main.from_merge?
+        added = merger.stats[:alternate_titles_added]
+        assert_includes added, "Prestuplenie"
+        assert_includes added, "Crime and Punishment"
+      end
+
+      test "merge removed wins over kept" do
+        title = "The Treasure of the City of Ladies"
+        ::AlternateTitle.create!(titleable: @source, title: title, source: :legacy, status: :removed, reason: "x")
+        ::AlternateTitle.create!(titleable: @target, title: title, source: :legacy, status: :kept)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        rows = ::AlternateTitle.where(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: title.downcase)
+        assert_equal ["removed"], rows.map(&:status)
+        assert_not_includes @target.reload.alternate_titles, title
+      end
+
+      test "merge does not readd a removed source title" do
+        ::AlternateTitle.create!(titleable: @target, title: "Crime and Punishment", source: :legacy, status: :removed)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        row = ::AlternateTitle.find_by!(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: "crime and punishment")
+        assert row.removed?
+        assert_not_includes @target.reload.alternate_titles, "Crime and Punishment"
+      end
+
       test "absorbs the source title and its alternates into the target's alternate titles" do
         @source.update!(alternate_titles: ["Prestuplenie i nakazanie"])
 

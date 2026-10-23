@@ -6,6 +6,7 @@
 #
 #  id          :bigint           not null, primary key
 #  item_type   :string           not null
+#  source      :integer          default("legacy"), not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  category_id :bigint           not null

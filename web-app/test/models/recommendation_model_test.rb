@@ -2,6 +2,23 @@
 
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: recommendation_models
+#
+#  id         :bigint           not null, primary key
+#  domain     :string           not null
+#  manifest   :jsonb            not null
+#  state      :integer          default("loading"), not null
+#  version    :string           not null
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#
+# Indexes
+#
+#  index_recommendation_models_on_domain_and_state    (domain,state)
+#  index_recommendation_models_on_domain_and_version  (domain,version) UNIQUE
+#
 class RecommendationModelTest < ActiveSupport::TestCase
   test "version is unique per domain and active_for returns the one active model" do
     a = RecommendationModel.create!(domain: "books", version: "2026-10-01", state: :retired)

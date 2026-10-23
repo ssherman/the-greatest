@@ -5,7 +5,7 @@
 #  id         :bigint           not null, primary key
 #  domain     :string           not null
 #  manifest   :jsonb            not null
-#  state      :integer          default(0), not null
+#  state      :integer          default("loading"), not null
 #  version    :string           not null
 #  created_at :datetime         not null
 #  updated_at :datetime         not null

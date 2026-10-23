@@ -29,18 +29,22 @@ module Services
         @applied = []
       end
 
+      # One transaction: Writer.add inserts rows immediately, so a failing save
+      # must not leave them behind with a stale array copy.
       def call
-        apply_first_published_year
-        apply_original_language
-        apply_word_count
-        apply_page_range
-        apply_subtitle
-        apply_alternate_titles
-        apply_origin_countries
-        record_only_facts
-        apply_description
+        ::Books::Book.transaction do
+          apply_first_published_year
+          apply_original_language
+          apply_word_count
+          apply_page_range
+          apply_subtitle
+          apply_alternate_titles
+          apply_origin_countries
+          record_only_facts
+          apply_description
 
-        book.save!
+          book.save!
+        end
         Result.new(success?: true, data: {facts: ledger, applied: applied}, errors: [])
       end
 
@@ -150,13 +154,10 @@ module Services
         return record(:alternate_titles, f, applied: false, reason: "null", value: []) if incoming.empty?
         return record(:alternate_titles, f, applied: false, reason: "human_cleared", value: []) if human_cleared?(:alternate_titles)
 
-        existing = Array(book.alternate_titles)
-        taken = (existing + [book.title]).map(&:downcase)
-        new_titles = incoming.reject { |t| taken.include?(t.downcase) }.uniq(&:downcase)
-        return record(:alternate_titles, f, applied: false, reason: "already_set", value: []) if new_titles.empty?
+        added = ::Services::AlternateTitles::Writer.add(record: book, titles: incoming, source: :ai_enrichment).data[:added]
+        return record(:alternate_titles, f, applied: false, reason: "already_set", value: []) if added.empty?
 
-        book.alternate_titles = existing + new_titles
-        record(:alternate_titles, f, applied: true, reason: "filled", value: new_titles)
+        record(:alternate_titles, f, applied: true, reason: "filled", value: added)
       end
 
       def apply_origin_countries
