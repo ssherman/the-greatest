@@ -139,8 +139,13 @@
 
       <div class="border-t border-base-300 p-4 sm:px-6 flex flex-col">
         <%# Never hidden, only emptied: a live region has to stay in the
-            accessibility tree for a screen reader to announce its new text. %>
-        <p class="text-sm text-warning mb-2 empty:mb-0" role="status" data-books--filter-target="capNotice"></p>
+            accessibility tree for a screen reader to announce its new text.
+            Its one line is always reserved, so the footer is the same height
+            with or without the notice: on a short page the box is sized to its
+            content, and a footer that grew would slide every row, including the
+            one just ticked. On the narrowest phones the text is cut to that one
+            line with an ellipsis; a screen reader still gets the whole sentence. %>
+        <p class="h-4 mb-2 text-xs leading-4 text-warning truncate" role="status" data-books--filter-target="capNotice"></p>
         <div class="flex justify-end gap-2">
           <button type="button" class="btn btn-ghost" data-action="books--filter#clear">Clear</button>
           <button type="submit" class="btn btn-primary" data-books--filter-target="submit"><%= show_label(total_count) %></button>

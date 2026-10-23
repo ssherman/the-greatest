@@ -271,6 +271,50 @@ test.describe('Books filters', () => {
     await expect(page.locator("[data-books--filter-target='capNotice']")).not.toBeEmpty();
   });
 
+  // The cap notice lives in the footer. If its text changed the footer's
+  // height, a short page (the modal box sized to its content and pinned to the
+  // bottom on a phone) would slide every row when the cap is reached. Typing a
+  // genre's name makes the Genre page short without depending on which short
+  // pages the data happens to have.
+  test('reaching the cap does not move the panel or the ticked row', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+    await openPanel(page);
+    await openPage(page, 'genre');
+
+    const boxes = rows(page, 'genre').locator('input[type=checkbox]');
+    await boxes.first().waitFor();
+    for (let i = 0; i < 5; i++) await boxes.nth(i).check();
+
+    const sixth = rows(page, 'genre').nth(5);
+    const name = (await sixth.getAttribute('data-filter-text'))!;
+    await search(page, 'genre', name);
+    await expect(sixth).toBeVisible();
+
+    const panel = dialog(page).locator('.modal-box');
+    const notice = page.locator("[data-books--filter-target='capNotice']");
+    await expect(notice).toBeEmpty();
+    const panelBefore = await panel.boundingBox();
+    const rowBefore = await positionOf(page, sixth);
+
+    await sixth.locator('input[type=checkbox]').check();
+    await expect(notice).not.toBeEmpty();
+    await nextFrames(page);
+    // The slot is one line; at a common phone width the sentence must fit it
+    // rather than end in an ellipsis.
+    expect(await notice.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+
+    expect(await panel.boundingBox()).toEqual(panelBefore);
+    expect(await positionOf(page, sixth)).toEqual(rowBefore);
+
+    await sixth.locator('input[type=checkbox]').uncheck();
+    await expect(notice).toBeEmpty();
+    await nextFrames(page);
+
+    expect(await panel.boundingBox()).toEqual(panelBefore);
+    expect(await positionOf(page, sixth)).toEqual(rowBefore);
+  });
+
   test('the Show button count changes after a tick', async ({ page }) => {
     await page.goto('/');
     await openPanel(page);
