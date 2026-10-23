@@ -38,13 +38,18 @@ module Services
         def self.redo(finding:)
           return failure("finding #{finding.id} is not undone") if finding.undone_at.nil?
 
-          error = case finding.undo_action
-          when "identifier_destroyed" then recreate(finding)
-          when "source_restored" then restore_source(finding)
+          error = nil
+          ::ActiveRecord::Base.transaction do
+            error = case finding.undo_action
+            when "identifier_destroyed" then recreate(finding)
+            when "source_restored" then restore_source(finding)
+            end
+            raise ::ActiveRecord::Rollback if error
+
+            finding.update!(undone_at: nil, undo_action: nil)
           end
           return failure(error) if error
 
-          finding.update!(undone_at: nil, undo_action: nil)
           Result.new(success?: true, data: {finding: finding}, errors: [])
         end
 
@@ -58,21 +63,29 @@ module Services
           identifier = ::Identifier.find_or_initialize_by(identifiable_type: "Books::Book", identifiable_id: finding.book_id, identifier_type: type, value: value)
           identifier.source = finding.source
           identifier.save!
+          repoint(finding, identifier)
+        end
+
+        # Sibling findings of the same value (a chained confirmation) must follow the recreated row.
+        def self.repoint(finding, identifier)
           finding.identifier_id = identifier.id
+          ::Books::VerificationFinding.where(verification_id: finding.verification_id, identifier_type: finding.identifier_type_before_type_cast,
+            value: finding.value).where.not(id: finding.id).update_all(identifier_id: identifier.id)
           nil
         end
 
         def self.restore_source(finding)
-          identifier = ::Identifier.find_by(id: finding.identifier_id, identifiable_type: "Books::Book", identifiable_id: finding.book_id)
+          identifier = ::Identifier.find_by(identifiable_type: "Books::Book", identifiable_id: finding.book_id,
+            identifier_type: finding.identifier_type_before_type_cast, value: finding.value)
           return "the identifier of finding #{finding.id} is gone" unless identifier
 
           identifier.update!(source: finding.source)
-          nil
+          repoint(finding, identifier)
         end
 
         def self.failure(message) = Result.new(success?: false, data: nil, errors: [message])
 
-        private_class_method :recreate, :restore_source, :failure
+        private_class_method :recreate, :restore_source, :repoint, :failure
 
         def initialize(apply:, client:)
           @apply = apply
@@ -81,6 +94,7 @@ module Services
           @wrong_work = []
           @samples = []
           @checked = 0
+          @left_alone = 0
         end
 
         def call
@@ -93,7 +107,7 @@ module Services
           books.each { |book| process(book, verifications[book.id], keys[book.id], works) }
 
           Result.new(success?: true, errors: [], data: {books: books.size, findings_checked: @checked, undone: @counts,
-                                                        wrong_work: @wrong_work, samples: @samples})
+                                                        wrong_work: @wrong_work, left_alone: @left_alone, samples: @samples})
         end
 
         private
@@ -115,7 +129,8 @@ module Services
         def process(book, verification, key, works)
           rows = ::AlternateTitle.where(titleable_type: "Books::Book", titleable_id: book.id)
           kept = rows.where(status: [:kept, :review]).order(:id).pluck(:title)
-          removed = rows.where(status: :removed).order(:id).pluck(:title)
+          judged = rows.where(status: :removed).order(:id).pluck(:id, :title)
+          removed = judged.map(&:last)
           kept_view = TitleView.new(book.title, kept)
           full_view = TitleView.new(book.title, kept + removed)
           work = works[key] if key
@@ -125,7 +140,7 @@ module Services
 
           ::ActiveRecord::Base.transaction do
             undo_book(book, verification, kept_view, full_view, work, wrong) if verification
-            rows.where(status: :removed, undo_checked_at: nil).update_all(undo_checked_at: Time.current) if @apply
+            ::AlternateTitle.where(id: judged.map(&:first), undo_checked_at: nil).update_all(undo_checked_at: Time.current) if @apply
           end
         end
 
@@ -140,6 +155,11 @@ module Services
             next if agrees?(kept_view, wrong ? nil : work, finding)
 
             action = undo(finding, book, state)
+            if action == :left_alone
+              @left_alone += 1
+              note(book, "#{finding.kind} #{finding.identifier_type} #{finding.value} via \"#{evidence_title(finding)}\" -> left alone (held with another source)")
+              next
+            end
             @counts[action] += 1
             note(book, "#{finding.kind} #{finding.identifier_type} #{finding.value} via \"#{evidence_title(finding)}\" -> #{action}")
             finding.update!(undone_at: Time.current, undo_action: action) if @apply
@@ -149,7 +169,9 @@ module Services
         def undo(finding, book, state)
           identifier = ::Identifier.find_by(id: finding.identifier_id, identifiable_type: "Books::Book", identifiable_id: book.id)
           source = state.fetch(identifier&.id) { identifier&.source }
-          return :identifier_gone if identifier.nil? || source == :destroyed || source != finding.source
+          return :identifier_gone if identifier.nil? || source == :destroyed
+          # Held here under another source: a later undo may bring it back, so leave the finding to be judged again.
+          return :left_alone if source != finding.source
 
           if finding.added?
             identifier.destroy! if @apply

@@ -105,7 +105,71 @@ module Services
 
           assert ::Identifier.exists?(identifier.id)
           assert_predicate identifier.reload, :source_worldcat?
-          assert_predicate finding("9780000000006"), :undo_identifier_gone?
+          assert_nil finding("9780000000006").undone_at
+          assert_nil finding("9780000000006").undo_action
+        end
+
+        test "a finding left alone is judged again once the confirmation behind it is undone" do
+          kept = add_title("Kept Title", :kept)
+          identifier = added("9780000000020", REMOVED, held: :worldcat)
+          @verification.findings.create!(book: @book, kind: :confirmed, identifier_type: :books_work_isbn13, value: "9780000000020",
+            identifier_id: identifier.id, source: :worldcat, previous_source: :open_library,
+            evidence: {"records" => [{"oclc" => "1", "title" => "Kept Title", "creator" => "x", "year" => 1900}]})
+
+          first = run_undo
+          assert ::Identifier.exists?(identifier.id)
+          assert_equal 0, first.data[:undone].values.sum
+          assert_equal 1, first.data[:left_alone]
+
+          kept.update!(status: :removed, verdict: :not_same_work, category: :junk)
+          second = run_undo
+
+          refute ::Identifier.exists?(identifier.id)
+          assert_equal 1, second.data[:undone][:source_restored]
+          assert_equal 1, second.data[:undone][:identifier_destroyed]
+        end
+
+        test "dry run counts match apply for a confirmed then added pair" do
+          identifier = added("9780000000021", REMOVED, held: :worldcat)
+          @verification.findings.create!(book: @book, kind: :confirmed, identifier_type: :books_work_isbn13, value: "9780000000021",
+            identifier_id: identifier.id, source: :worldcat, previous_source: :open_library,
+            evidence: {"records" => [{"oclc" => "1", "title" => REMOVED, "creator" => "x", "year" => 1900}]})
+
+          dry = run_undo(apply: false)
+          applied = run_undo
+
+          assert_equal dry.data[:undone], applied.data[:undone]
+          assert_equal 1, applied.data[:undone][:source_restored]
+          assert_equal 1, applied.data[:undone][:identifier_destroyed]
+        end
+
+        test "only the removed rows that were judged are stamped" do
+          late = nil
+          ::Services::Books::Verification::Check.stubs(:titles_agree?).with do |*|
+            late ||= add_title("Removed Mid Run", :removed)
+            true
+          end.returns(false)
+
+          run_undo
+
+          assert_not_nil @removed.reload.undo_checked_at
+          assert_nil late.reload.undo_checked_at
+        end
+
+        test "redo reverses a chained pair" do
+          identifier = added("9780000000022", REMOVED, held: :worldcat)
+          @verification.findings.create!(book: @book, kind: :confirmed, identifier_type: :books_work_isbn13, value: "9780000000022",
+            identifier_id: identifier.id, source: :worldcat, previous_source: :open_library,
+            evidence: {"records" => [{"oclc" => "1", "title" => REMOVED, "creator" => "x", "year" => 1900}]})
+          run_undo
+
+          assert UndoFindings.redo(finding: finding("9780000000022")).success?
+          assert UndoFindings.redo(finding: finding("9780000000022", :confirmed)).success?
+
+          restored = @book.identifiers.find_by!(value: "9780000000022")
+          assert_predicate restored, :source_worldcat?
+          assert_equal [[nil, nil]] * 2, @verification.findings.where(value: "9780000000022").map { |f| [f.undone_at, f.undo_action] }
+          assert_equal [restored.id], @verification.findings.where(value: "9780000000022").map(&:identifier_id).uniq
         end
 
         test "wrong work is listed and its title does not count" do

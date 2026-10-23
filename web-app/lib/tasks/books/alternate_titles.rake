@@ -25,6 +25,7 @@ namespace :books do
       data = result.data
       puts "alternate titles undo (#{apply ? "applied" : "dry run"}): #{data[:books]} books, #{data[:findings_checked]} findings checked"
       data[:undone].each { |action, count| puts "  #{action}: #{count}" }
+      puts "  left alone (held with another source): #{data[:left_alone]}"
       puts "wrong work (#{data[:wrong_work].size}):"
       data[:wrong_work].each { |entry| puts "  book #{entry[:book_id]} #{entry[:title].inspect}: #{entry[:work_key]} #{entry[:work_title].inspect}" }
       puts "samples:"
