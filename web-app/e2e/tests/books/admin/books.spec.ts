@@ -100,6 +100,34 @@ test.describe('books admin — books', () => {
     await expect(page.getByLabel("Source")).toBeVisible();
   });
 
+  test("copies a deep-research prompt for an alternate title", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const title = `E2E Alt Prompt Book ${Date.now()}`;
+    const alt = `E2E Alt Prompt Title ${Date.now()}`;
+    await page.goto("/admin/books/new");
+    await page.locator('input[name="books_book[title]"]').fill(title);
+    await page.getByRole("button", { name: "Create Book" }).click();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+    await page.getByRole("link", { name: "Edit", exact: true }).click();
+    await page.getByRole("button", { name: "Add alternate title" }).click();
+    await page.locator('input[type="text"][name="books_book[alternate_titles][]"]').fill(alt);
+    await page.getByRole("button", { name: "Update Book" }).click();
+    await expect(page.getByText("Book updated.")).toBeVisible();
+
+    await page.locator("#alternate_titles_list").scrollIntoViewIfNeeded();
+    const row = page.locator('[data-testid="alternate-title-row"]', { hasText: alt });
+    const copy = row.getByTestId("copy-research-prompt");
+    await copy.click();
+    await expect(copy).toHaveText("Copied!");
+
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboardText).toContain(`Title: ${title}`);
+    expect(clipboardText).toContain(`Alternate title in question: "${alt}"`);
+    // The icon-only button gets its icon back after the "Copied!" feedback.
+    await expect(copy.locator("svg")).toBeVisible({ timeout: 5000 });
+  });
+
   test("deletes a book", async ({ page }) => {
     const title = `E2E Delete Book ${Date.now()}`;
     await page.goto("/admin/books/new");

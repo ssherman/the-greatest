@@ -97,6 +97,11 @@ then the rest by id. A book whose rows all carry a verdict is not sent again, so
   rewrites the array copy.
 - **Review page** (`admin/books/alternate_titles/review`): every row in `review` across books, with an
   optional source filter, and the same keep and remove buttons.
+- **Research prompt** (clipboard icon on every row of both): copies a prompt for a deep-research
+  agent, too costly to run per title through the API. It holds the book's title, authors, year,
+  original language and other titles, the title in question and the AI's verdict, and asks for
+  editions with sources and a closing `VERDICT: same work | different work | unsure` line
+  (`Services::Books::AlternateTitles::ResearchPrompt`).
 
 Restoring a removed title sets it `kept` and leaves the AI verdict on the row, so the review never
 sends it again.
