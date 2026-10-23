@@ -73,7 +73,7 @@ module Services
             rows.each do |stale|
               result = verdicts[stale.id] or next
               row = current[stale.id]
-              next unless row&.kept? && row.verdict.nil?
+              next unless row&.kept? && row.verdict.nil? && row.decided_by.nil?
 
               attrs = {verdict: result[:verdict], category: result[:category], confidence: result[:confidence],
                        reason: result[:reason], ai_chat: result[:ai_chat], judged_at: now}

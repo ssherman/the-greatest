@@ -25,7 +25,8 @@ polymorphic link has no foreign key to cascade.
   `Services::Books::Verification::Check.normalize`, and a test keeps them in agreement. Two spellings
   that collapse to one are one row. A title equal to the book's own main title is never a row through the writer; the backfill keeps a legacy array element equal to the main title as it finds it.
 
-`unjudged` rows are `kept` rows with no verdict. A removed row is never deleted: it is the record that
+`unjudged` rows are `kept` rows with no verdict that no admin or correction has decided (an admin's
+keep or restore is a decision, and the AI never sees that row again). A removed row is never deleted: it is the record that
 stops the title coming back.
 
 ## The array copy

@@ -32,6 +32,11 @@ class AlternateTitleTest < ActiveSupport::TestCase
     assert_equal [unjudged], @book.alternate_title_records.unjudged.to_a
   end
 
+  test "unjudged leaves out a row an admin already decided" do
+    ::AlternateTitle.create!(titleable: @book, title: "A title", source: :legacy, decided_by: :admin, decided_at: Time.current)
+    assert_empty @book.alternate_title_records.unjudged
+  end
+
   test "rows are deleted with their book" do
     AlternateTitle.create!(titleable: @book, title: "Voyna", source: :legacy)
     AlternateTitle.create!(titleable: @other, title: "Prestuplenie", source: :legacy)

@@ -117,6 +117,30 @@ module Services
           assert_nil r.verdict
         end
 
+        test "a row an admin restored before its first review is not sent" do
+          restored = row("Anna Karenina")
+          Services::AlternateTitles::Writer.decide(row: restored, status: :removed)
+          Services::AlternateTitles::Writer.decide(row: restored.reload, status: :kept)
+          Task.expects(:new).never
+
+          Review.call(book: @book)
+
+          assert restored.reload.kept?
+          assert_nil restored.verdict
+        end
+
+        test "a row an admin restored while the AI call ran is left as it is" do
+          r = row("Anna Karenina")
+          Task.any_instance.stubs(:call).with { r.update_columns(decided_by: ::AlternateTitle.decided_bies[:admin]) || true }
+            .returns(respond("1" => verdict(confidence: 0.99)))
+
+          Review.call(book: @book)
+
+          r.reload
+          assert r.kept?
+          assert_nil r.verdict
+        end
+
         test "admin rows go to review whatever the confidence" do
           r = row("Anna Karenina", source: :admin)
           stub_task(respond("1" => verdict(confidence: 0.99)))

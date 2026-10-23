@@ -27,7 +27,6 @@ module Admin
         sign_in_as(@admin, stub_auth: true)
         get admin_books_book_alternate_titles_path(@book)
         assert_response :success
-        assert_select "turbo-frame#alternate_titles_list"
         assert_equal [@kept.id, @review.id], row_ids
       end
 

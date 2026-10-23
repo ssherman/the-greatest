@@ -18,7 +18,9 @@ class AlternateTitle < ApplicationRecord
   before_save { self.undo_checked_at = nil if will_save_change_to_status?(to: "removed") }
 
   scope :listed, -> { where(status: [:kept, :review]).order(:id) }
-  scope :unjudged, -> { where(status: :kept, verdict: nil) }
+  # An admin's or a correction's keep is a decision too, even with no AI
+  # verdict on the row: it is never sent to the AI again.
+  scope :unjudged, -> { where(status: :kept, verdict: nil, decided_by: nil) }
 
   # The comparison form of a title: quotes and names normalized, lowercased.
   # Nil for a blank title. Services::Books::Verification::Check.normalize uses
