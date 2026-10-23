@@ -14,7 +14,7 @@ class BooksAlternateTitlesRakeTest < ActiveSupport::TestCase
   end
 
   test "runs the backfill and prints the count" do
-    ::Services::Books::AlternateTitles::Backfill.expects(:all).returns(5)
+    ::Services::AlternateTitles::Backfill.expects(:all).returns(5)
 
     assert_output(/5 rows created/) { @task.invoke }
   end

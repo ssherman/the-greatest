@@ -144,7 +144,7 @@ module Services
             changed_alternates = []
             saved = save_book_with_rows!(book) do
               rewrite_alternate_title_rows(book)
-              book.alternate_titles = AlternateTitles::Writer.listed_titles(book)
+              book.alternate_titles = ::Services::AlternateTitles::Writer.listed_titles(book)
               changed_alternates = book.alternate_titles - stale_alternates
             end
             next unless saved
@@ -179,8 +179,8 @@ module Services
       # what normalize folds, so a rewrite never changes a row's
       # normalized_title; a rewrite that is blank is left alone.
       def rewrite_alternate_title_rows(book)
-        AlternateTitles::Backfill.call(book)
-        ::Books::AlternateTitle.where(book_id: book.id).order(:id).each do |row|
+        ::Services::AlternateTitles::Backfill.call(book)
+        ::AlternateTitle.where(titleable: book).order(:id).each do |row|
           rewritten = normalize(row.title)
           next if rewritten == row.title || rewritten.blank?
 

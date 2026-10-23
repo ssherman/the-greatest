@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_23_020635) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_23_022827) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -61,6 +61,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_020635) do
     t.index ["user_id"], name: "index_ai_chats_on_user_id"
   end
 
+  create_table "alternate_titles", force: :cascade do |t|
+    t.bigint "titleable_id", null: false
+    t.string "title", null: false
+    t.string "normalized_title", null: false
+    t.integer "source", null: false
+    t.integer "status", default: 0, null: false
+    t.integer "verdict"
+    t.integer "category"
+    t.float "confidence"
+    t.text "reason"
+    t.bigint "ai_chat_id"
+    t.integer "decided_by"
+    t.bigint "decided_by_user_id"
+    t.datetime "decided_at"
+    t.datetime "judged_at"
+    t.datetime "undo_checked_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "titleable_type", null: false
+    t.index ["ai_chat_id"], name: "index_alternate_titles_on_ai_chat_id"
+    t.index ["decided_by_user_id"], name: "index_alternate_titles_on_decided_by_user_id"
+    t.index ["status"], name: "index_alternate_titles_on_status"
+    t.index ["titleable_type", "titleable_id", "normalized_title"], name: "index_alternate_titles_on_titleable_and_normalized_title", unique: true
+    t.index ["titleable_type", "titleable_id"], name: "index_alternate_titles_on_titleable_type_and_titleable_id"
+  end
+
   create_table "api_tokens", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.string "name", null: false
@@ -90,31 +116,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_020635) do
     t.datetime "updated_at", null: false
     t.index ["key"], name: "index_billing_plans_on_key", unique: true
     t.index ["stripe_price_id"], name: "index_billing_plans_on_stripe_price_id", unique: true
-  end
-
-  create_table "books_alternate_titles", force: :cascade do |t|
-    t.bigint "book_id", null: false
-    t.string "title", null: false
-    t.string "normalized_title", null: false
-    t.integer "source", null: false
-    t.integer "status", default: 0, null: false
-    t.integer "verdict"
-    t.integer "category"
-    t.float "confidence"
-    t.text "reason"
-    t.bigint "ai_chat_id"
-    t.integer "decided_by"
-    t.bigint "decided_by_user_id"
-    t.datetime "decided_at"
-    t.datetime "judged_at"
-    t.datetime "undo_checked_at"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["ai_chat_id"], name: "index_books_alternate_titles_on_ai_chat_id"
-    t.index ["book_id", "normalized_title"], name: "index_books_alternate_titles_on_book_id_and_normalized_title", unique: true
-    t.index ["book_id"], name: "index_books_alternate_titles_on_book_id"
-    t.index ["decided_by_user_id"], name: "index_books_alternate_titles_on_decided_by_user_id"
-    t.index ["status"], name: "index_books_alternate_titles_on_status"
   end
 
   create_table "books_author_countries", force: :cascade do |t|
@@ -1613,10 +1614,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_020635) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_chats", "users"
+  add_foreign_key "alternate_titles", "ai_chats", on_delete: :nullify
+  add_foreign_key "alternate_titles", "users", column: "decided_by_user_id", on_delete: :nullify
   add_foreign_key "api_tokens", "users"
-  add_foreign_key "books_alternate_titles", "ai_chats", on_delete: :nullify
-  add_foreign_key "books_alternate_titles", "books_books", column: "book_id", on_delete: :cascade
-  add_foreign_key "books_alternate_titles", "users", column: "decided_by_user_id", on_delete: :nullify
   add_foreign_key "books_author_countries", "books_authors", column: "author_id"
   add_foreign_key "books_author_countries", "books_countries", column: "country_id"
   add_foreign_key "books_author_relationships", "books_authors", column: "from_author_id"

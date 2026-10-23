@@ -115,7 +115,7 @@ class Books::Book < ApplicationRecord
   has_many :editions, class_name: "Books::Edition", dependent: :destroy
   has_one :verification, class_name: "Books::Verification", dependent: :delete
   has_many :verification_findings, class_name: "Books::VerificationFinding", dependent: :delete_all
-  has_many :alternate_title_records, class_name: "Books::AlternateTitle", dependent: :delete_all
+  has_many :alternate_title_records, as: :titleable, class_name: "::AlternateTitle", dependent: :delete_all
   has_many :edition_candidates, class_name: "Books::EditionCandidate", dependent: :delete_all
 
   has_many :credits, as: :creditable, class_name: "Books::Credit", dependent: :destroy

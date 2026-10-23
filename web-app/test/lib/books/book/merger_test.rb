@@ -746,15 +746,15 @@ module Books
       end
 
       test "merge moves rows with their status" do
-        ::Books::AlternateTitle.create!(book: @source, title: "Prestuplenie", source: :legacy, status: :review,
+        ::AlternateTitle.create!(titleable: @source, title: "Prestuplenie", source: :legacy, status: :review,
           verdict: :not_same_work, category: :variant, confidence: 0.6, decided_by: :ai)
 
         merger = ::Books::Book::Merger.new(source: @source, target: @target)
         merger.call
 
-        row = ::Books::AlternateTitle.find_by!(book_id: @target.id, normalized_title: "prestuplenie")
+        row = ::AlternateTitle.find_by!(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: "prestuplenie")
         assert_equal ["review", "not_same_work"], [row.status, row.verdict]
-        main = ::Books::AlternateTitle.find_by!(book_id: @target.id, normalized_title: "crime and punishment")
+        main = ::AlternateTitle.find_by!(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: "crime and punishment")
         assert main.from_merge?
         added = merger.stats[:alternate_titles_added]
         assert_includes added, "Prestuplenie"
@@ -763,22 +763,22 @@ module Books
 
       test "merge removed wins over kept" do
         title = "The Treasure of the City of Ladies"
-        ::Books::AlternateTitle.create!(book: @source, title: title, source: :legacy, status: :removed, reason: "x")
-        ::Books::AlternateTitle.create!(book: @target, title: title, source: :legacy, status: :kept)
+        ::AlternateTitle.create!(titleable: @source, title: title, source: :legacy, status: :removed, reason: "x")
+        ::AlternateTitle.create!(titleable: @target, title: title, source: :legacy, status: :kept)
 
         ::Books::Book::Merger.call(source: @source, target: @target)
 
-        rows = ::Books::AlternateTitle.where(book_id: @target.id, normalized_title: title.downcase)
+        rows = ::AlternateTitle.where(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: title.downcase)
         assert_equal ["removed"], rows.map(&:status)
         assert_not_includes @target.reload.alternate_titles, title
       end
 
       test "merge does not readd a removed source title" do
-        ::Books::AlternateTitle.create!(book: @target, title: "Crime and Punishment", source: :legacy, status: :removed)
+        ::AlternateTitle.create!(titleable: @target, title: "Crime and Punishment", source: :legacy, status: :removed)
 
         ::Books::Book::Merger.call(source: @source, target: @target)
 
-        row = ::Books::AlternateTitle.find_by!(book_id: @target.id, normalized_title: "crime and punishment")
+        row = ::AlternateTitle.find_by!(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: "crime and punishment")
         assert row.removed?
         assert_not_includes @target.reload.alternate_titles, "Crime and Punishment"
       end

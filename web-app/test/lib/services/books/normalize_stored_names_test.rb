@@ -64,7 +64,7 @@ module Services
 
       test "apply rewrites row titles" do
         book = raw_book("Plain Title")
-        row = ::Books::AlternateTitle.create!(book: book, title: "L\u2019Etranger", source: :legacy, status: :kept)
+        row = ::AlternateTitle.create!(titleable: book, title: "L\u2019Etranger", source: :legacy, status: :kept)
         book.update_columns(alternate_titles: ["L\u2019Etranger"])
 
         NormalizeStoredNames.call(apply: true)
@@ -75,9 +75,9 @@ module Services
 
       test "apply reports a row rewrite that raises and leaves that book untouched" do
         book = raw_book("Plain#{NNBSP}Title")
-        row = ::Books::AlternateTitle.create!(book: book, title: "L\u2019Etranger", source: :legacy, status: :kept)
+        row = ::AlternateTitle.create!(titleable: book, title: "L\u2019Etranger", source: :legacy, status: :kept)
         book.update_columns(alternate_titles: ["L\u2019Etranger"])
-        ::Books::AlternateTitle.any_instance.stubs(:update!).raises(ActiveRecord::RecordInvalid)
+        ::AlternateTitle.any_instance.stubs(:update!).raises(ActiveRecord::RecordInvalid)
 
         result = NormalizeStoredNames.call(apply: true)
 

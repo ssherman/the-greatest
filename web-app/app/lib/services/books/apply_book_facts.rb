@@ -154,7 +154,7 @@ module Services
         return record(:alternate_titles, f, applied: false, reason: "null", value: []) if incoming.empty?
         return record(:alternate_titles, f, applied: false, reason: "human_cleared", value: []) if human_cleared?(:alternate_titles)
 
-        added = AlternateTitles::Writer.add(book: book, titles: incoming, source: :ai_enrichment).data[:added]
+        added = ::Services::AlternateTitles::Writer.add(record: book, titles: incoming, source: :ai_enrichment).data[:added]
         return record(:alternate_titles, f, applied: false, reason: "already_set", value: []) if added.empty?
 
         record(:alternate_titles, f, applied: true, reason: "filled", value: added)

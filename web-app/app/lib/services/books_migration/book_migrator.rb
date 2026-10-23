@@ -32,7 +32,7 @@ module Services
           book.original_language_id = remap_language(attrs["original_language_id"])
           book.save!
           # Rows are the truth; a title an editor removed stays removed on a re-run.
-          Services::Books::AlternateTitles::Writer.add(book: book, titles: alternate_titles, source: :legacy)
+          ::Services::AlternateTitles::Writer.add(record: book, titles: alternate_titles, source: :legacy)
           book.save! if book.changed?
         end
       end

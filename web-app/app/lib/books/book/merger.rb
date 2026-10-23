@@ -541,8 +541,8 @@ module Books
       # feeds as_indexed_json, so the search index picks this up on the target's
       # post-commit reindex.
       def absorb_alternate_titles
-        @stats[:alternate_titles_added] = ::Services::Books::AlternateTitles::Writer.move(
-          source_book: source_book, target_book: target_book
+        @stats[:alternate_titles_added] = ::Services::AlternateTitles::Writer.move(
+          source: source_book, target: target_book
         )
       end
 
