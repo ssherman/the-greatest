@@ -1,29 +1,53 @@
 module Books
   class FilterPaneComponent < ViewComponent::Base
-    def initialize(axis:, facet_rows: [], results_src: nil)
-      @axis = axis.to_s
-      @facet_rows = Array(facet_rows)
+    NOUNS = {
+      "genre" => "genres", "audience" => "audiences", "subject" => "subjects",
+      "location" => "settings", "country" => "origins"
+    }.freeze
+
+    # type is a category type or "country". results_src is present only for the
+    # long-tail types (subject, setting), which search server-side.
+    def initialize(type:, rows:, results_src: nil)
+      @type = type.to_s
+      @rows = Array(rows)
       @results_src = results_src
     end
 
     private
 
-    attr_reader :axis, :facet_rows, :results_src
+    attr_reader :type, :rows, :results_src
+
+    def axis
+      (type == "country") ? "country" : "category"
+    end
 
     def pane_frame_id
-      "books_filter_pane_#{axis}"
+      "books_filter_pane_#{type}"
     end
 
     def results_frame_id
-      "books_filter_results_#{axis}"
+      "books_filter_results_#{type}"
     end
 
+    def noun
+      NOUNS.fetch(type)
+    end
+
+    # Only these lists are short enough to ship whole and filter in the browser.
+    # Audience is short too, but has no search box, so nothing could filter it.
+    def client_filtered?
+      %w[genre country].include?(type)
+    end
+
+    # The audience/subject/setting indexes have no named route helpers.
     def browse_path
-      (axis == "category") ? helpers.books_categories_path : helpers.books_countries_path
-    end
-
-    def browse_label
-      (axis == "category") ? "Browse all categories" : "Browse all origins"
+      case type
+      when "genre" then helpers.books_categories_path
+      when "subject" then "/categories/subjects"
+      when "location" then "/categories/settings"
+      when "audience" then "/categories/audiences"
+      else helpers.books_countries_path
+      end
     end
   end
 end

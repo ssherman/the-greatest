@@ -19,6 +19,13 @@ module Books
       MODAL_ID
     end
 
+    # One per category, one per country, and one for the whole year range
+    # however many bounds it has: the badge counts what the reader chose,
+    # which is what the chips below list.
+    def active_count
+      categories.size + countries.size + ((year_start.present? || year_end.present?) ? 1 : 0)
+    end
+
     def chips
       category_chips + country_chips + date_chips
     end
