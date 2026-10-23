@@ -43,16 +43,19 @@ export default class extends Controller {
     this.discardBound = this.discard.bind(this)
     this.dialog?.addEventListener("close", this.discardBound)
     // Turbo snapshots the page for its back/forward cache. Without this, a
-    // reader who ticks things and then follows a link would come back to a
-    // panel full of picks they never applied.
-    document.addEventListener("turbo:before-cache", this.discardBound)
+    // reader who ticks things and then follows a link (or presses Show) would
+    // come back to a panel full of picks they never applied -- and, since the
+    // snapshot keeps the dialog's open attribute, to an open dialog that is no
+    // longer modal: no backdrop, no Escape (see books/nav_drawer_controller.js).
+    this.beforeCacheBound = this.beforeCache.bind(this)
+    document.addEventListener("turbo:before-cache", this.beforeCacheBound)
 
     this.sync()
   }
 
   disconnect() {
     this.dialog?.removeEventListener("close", this.discardBound)
-    document.removeEventListener("turbo:before-cache", this.discardBound)
+    document.removeEventListener("turbo:before-cache", this.beforeCacheBound)
     this.cancelTimers()
     this.countRequest?.abort()
   }
@@ -69,8 +72,13 @@ export default class extends Controller {
     // Focus on *entering* a page is fine: nothing has been ticked on it yet.
     // Hiding the page the reader was on drops focus to <body>; this keeps a
     // keyboard user's place and tells a screen reader the contents changed.
+    // Only a mouse or trackpad gets the search box: on a phone, focusing it
+    // raises the keyboard over the list and the pinned footer before the
+    // reader has asked to type, so a touch reader lands on the page heading.
     const levelEl = this.levelFor(level)
-    const target = this.queryFor(level) || levelEl?.querySelector("[data-action~='books--filter#back']")
+    const target = window.matchMedia("(pointer: fine)").matches
+      ? this.queryFor(level) || levelEl?.querySelector("[data-action~='books--filter#back']")
+      : document.getElementById(`books_filter_modal_heading_${level}`)
     target?.focus()
   }
 
@@ -150,9 +158,9 @@ export default class extends Controller {
     this.sync()
   }
 
-  // Cancel, Escape and a backdrop click all close the dialog, and closing
-  // always lands here, so unapplied work is thrown away the same way however
-  // the reader left.
+  // The close button, Escape and a backdrop click all close the dialog, and
+  // closing always lands here, so unapplied work is thrown away the same way
+  // however the reader left.
   discard() {
     this.cancelTimers()
     this.countRequest?.abort()
@@ -171,6 +179,13 @@ export default class extends Controller {
 
     this.sync()
     this.show("root")
+  }
+
+  // discard() runs here rather than from the "close" event: that event is
+  // queued, so it would fire after Turbo had already taken the snapshot.
+  beforeCache() {
+    this.discard()
+    if (this.dialog?.open) this.dialog.close()
   }
 
   // Everything visible is derived from the store here. It sets properties and

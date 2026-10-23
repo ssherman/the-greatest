@@ -1,5 +1,5 @@
 <dialog id="<%= modal_id %>" class="modal modal-bottom sm:modal-middle" aria-labelledby="books_filter_modal_heading_root">
-  <div class="modal-box max-w-xl p-0 flex flex-col max-h-[85dvh]"
+  <div class="modal-box relative max-w-xl p-0 flex flex-col max-h-[85dvh]"
        data-controller="books--filter"
        data-books--filter-max-categories-value="<%= max_categories %>"
        data-books--filter-max-countries-value="<%= max_countries %>"
@@ -56,7 +56,9 @@
         <% type_rows.each do |row| %>
           <% key = row[:key] %>
           <div hidden data-books--filter-target="level" data-level="<%= key %>">
-            <h3 id="books_filter_modal_heading_<%= key %>" class="sr-only"><%= row[:label] %></h3>
+            <%# tabindex: a touch reader entering the page is focused here, not on
+                the search box (see open() in the controller). %>
+            <h3 id="books_filter_modal_heading_<%= key %>" class="sr-only" tabindex="-1"><%= row[:label] %></h3>
             <button type="button" class="btn btn-ghost btn-sm mb-3" aria-label="Back to filters" data-action="books--filter#back">
               <span aria-hidden="true">&lsaquo;</span> <%= row[:label] %>
             </button>
@@ -94,7 +96,7 @@
         <% end %>
 
         <div hidden data-books--filter-target="level" data-level="year">
-          <h3 id="books_filter_modal_heading_year" class="sr-only">Published</h3>
+          <h3 id="books_filter_modal_heading_year" class="sr-only" tabindex="-1">Published</h3>
           <button type="button" class="btn btn-ghost btn-sm mb-3" aria-label="Back to filters" data-action="books--filter#back">
             <span aria-hidden="true">&lsaquo;</span> Published
           </button>
@@ -152,6 +154,13 @@
         </div>
       </div>
     <% end %>
+
+    <%# After the main form, so opening the dialog still focuses the first row,
+        and outside it, so the button closes without submitting. Closing runs
+        discard() like Escape does. %>
+    <form method="dialog" class="absolute right-2 top-2">
+      <button class="btn btn-sm btn-circle btn-ghost" aria-label="Close filters"><span aria-hidden="true">&times;</span></button>
+    </form>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button aria-label="Close">close</button>

@@ -262,12 +262,17 @@ test.describe('Books filters', () => {
     await search(page, 'subject', 'war');
     await waitForResult(page, 'subject', 'war');
 
-    const states = await results(page, 'subject')
-      .locator('input[type=checkbox]')
-      .evaluateAll((els) => els.map((el) => ({ checked: (el as HTMLInputElement).checked, disabled: (el as HTMLInputElement).disabled })));
-    const unticked = states.filter((s) => !s.checked);
-    expect(unticked.length).toBeGreaterThan(0);
-    expect(unticked.every((s) => s.disabled)).toBe(true);
+    // Polled: a result row is visible a frame or two before frameLoaded()
+    // syncs it, and until then it is neither ticked nor disabled.
+    await expect
+      .poll(async () => {
+        const states = await results(page, 'subject')
+          .locator('input[type=checkbox]')
+          .evaluateAll((els) => els.map((el) => ({ checked: (el as HTMLInputElement).checked, disabled: (el as HTMLInputElement).disabled })));
+        const unticked = states.filter((s) => !s.checked);
+        return unticked.length > 0 && unticked.every((s) => s.disabled);
+      })
+      .toBe(true);
     await expect(page.locator("[data-books--filter-target='capNotice']")).not.toBeEmpty();
   });
 
@@ -394,6 +399,43 @@ test.describe('Books filters', () => {
     await expect(results(page, 'subject').locator('input')).toHaveCount(0);
   });
 
+  test('the close button closes the panel and discards unapplied picks', async ({ page }) => {
+    await page.goto(FILTERED);
+    await openPanel(page);
+
+    await dialog(page).getByRole('button', { name: 'Clear' }).click();
+    await expect(summary(page, 'genre')).toHaveText('Any');
+
+    await dialog(page).getByRole('button', { name: 'Close filters' }).click();
+    await expect(dialog(page)).toBeHidden();
+
+    await openPanel(page);
+    await expect(summary(page, 'genre')).toHaveText('Fiction');
+  });
+
+  // Turbo's snapshot keeps the dialog's open attribute, so without closing it
+  // first Back would restore the panel open, as a non-modal dialog.
+  test('Show then Back does not bring the panel back open', async ({ page }) => {
+    await page.goto('/');
+    await openPanel(page);
+    await openPage(page, 'genre');
+
+    const genre = rows(page, 'genre').first();
+    await genre.waitFor();
+    await genre.locator('input[type=checkbox]').check();
+
+    await showButton(page).click();
+    await page.waitForLoadState('networkidle');
+    await expect(page).not.toHaveURL('/');
+
+    await page.goBack();
+    await expect(page).toHaveURL('/');
+    await expect(dialog(page)).not.toBeVisible();
+
+    await openPanel(page);
+    await expect(summary(page, 'genre')).toHaveText('Any');
+  });
+
   test('pressing Enter in a search box does not submit', async ({ page }) => {
     await page.goto('/');
     await openPanel(page);
@@ -478,6 +520,14 @@ test.describe('Books filters', () => {
     }
   });
 
+  test('with a mouse, opening a page focuses its search box', async ({ page }) => {
+    await page.goto('/');
+    await openPanel(page);
+    await openPage(page, 'subject');
+
+    await expect(level(page, 'subject').getByRole('searchbox')).toBeFocused();
+  });
+
   test('the trigger reads "Filter books" unfiltered and shows a count when filtered', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('button', { name: 'Filter books' })).toBeVisible();
@@ -497,5 +547,21 @@ test.describe('Books filters', () => {
 
     await page.getByRole('main').getByRole('button', { name: 'Login' }).click();
     await expect(page.locator('dialog#login_modal')).toBeVisible();
+  });
+});
+
+// A touch screen reports a coarse pointer. Focusing the search box there would
+// raise the keyboard over the list the reader came to see.
+test.describe('Books filters on a touch screen', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+
+  test('opening a page focuses its heading, not the search box', async ({ page }) => {
+    await page.goto('/');
+    expect(await page.evaluate(() => window.matchMedia('(pointer: fine)').matches)).toBe(false);
+    await openPanel(page);
+    await openPage(page, 'subject');
+
+    await expect(page.locator('#books_filter_modal_heading_subject')).toBeFocused();
+    await expect(level(page, 'subject').getByRole('searchbox')).not.toBeFocused();
   });
 });
