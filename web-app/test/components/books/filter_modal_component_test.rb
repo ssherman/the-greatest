@@ -140,7 +140,7 @@ module Books
       assert_selector "[data-books--filter-target='scroll']"
       assert_no_selector "[data-books--filter-target='scroll'] [data-books--filter-target='submit']"
       assert_selector "button[type='button'][data-action='books--filter#clear']", text: "Clear"
-      assert_selector "[data-books--filter-target='capNotice'][role='status']", visible: :all
+      assert_selector "[data-books--filter-target='capNotice'][role='status']:not([hidden])", visible: :all
     end
 
     test "the advanced search link points at the new saved search page" do

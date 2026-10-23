@@ -50,10 +50,13 @@ module Books
     end
 
     test "client-filtered panes carry a hidden no-matches line" do
-      %w[genre audience country].each do |type|
+      %w[genre country].each do |type|
         render_pane(type: type)
         assert_selector "p[hidden][data-filter-no-matches]", visible: :all
       end
+
+      render_pane(type: "audience")
+      assert_no_selector "[data-filter-no-matches]", visible: :all
 
       %w[subject location].each do |type|
         render_pane(type: type, results_src: "/x")
@@ -61,10 +64,10 @@ module Books
       end
     end
 
-    test "the cap notice starts hidden, empty and live" do
+    test "the pane has no cap notice of its own; the panel footer holds the only one" do
       render_pane
 
-      assert_selector "[data-books--filter-target='capNotice'].hidden[role='status'][aria-live='polite']", text: ""
+      assert_no_selector "[data-books--filter-target='capNotice']", visible: :all
     end
 
     test "links out to the type's own browse page" do

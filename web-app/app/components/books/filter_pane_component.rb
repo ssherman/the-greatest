@@ -34,8 +34,9 @@ module Books
     end
 
     # Only these lists are short enough to ship whole and filter in the browser.
+    # Audience is short too, but has no search box, so nothing could filter it.
     def client_filtered?
-      %w[genre audience country].include?(type)
+      %w[genre country].include?(type)
     end
 
     # The audience/subject/setting indexes have no named route helpers.

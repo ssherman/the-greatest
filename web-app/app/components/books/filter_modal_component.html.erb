@@ -57,8 +57,8 @@
           <% key = row[:key] %>
           <div hidden data-books--filter-target="level" data-level="<%= key %>">
             <h3 id="books_filter_modal_heading_<%= key %>" class="sr-only"><%= row[:label] %></h3>
-            <button type="button" class="btn btn-ghost btn-sm mb-3" data-action="books--filter#back">
-              &lsaquo; <%= row[:label] %>
+            <button type="button" class="btn btn-ghost btn-sm mb-3" aria-label="Back to filters" data-action="books--filter#back">
+              <span aria-hidden="true">&lsaquo;</span> <%= row[:label] %>
             </button>
 
             <% if searchable?(key) %>
@@ -71,8 +71,13 @@
               </div>
             <% end %>
 
+            <%# One line of fixed height that scrolls sideways, never wraps: a chip
+                appears the moment a row is ticked, and a strip that grew would push
+                the very row the reader just ticked down the page. %>
             <% if chips?(key) %>
-              <div class="flex flex-wrap gap-2 mb-3" data-books--filter-target="chips" data-type="<%= key %>"></div>
+              <div class="flex flex-nowrap items-center gap-2 h-8 mb-3 overflow-x-auto overflow-y-hidden"
+                   role="group" aria-label="Selected <%= row[:plural] %>"
+                   data-books--filter-target="chips" data-type="<%= key %>"></div>
             <% end %>
 
             <%# turbo:frame-load bubbles, so this one listener also catches the
@@ -90,8 +95,8 @@
 
         <div hidden data-books--filter-target="level" data-level="year">
           <h3 id="books_filter_modal_heading_year" class="sr-only">Published</h3>
-          <button type="button" class="btn btn-ghost btn-sm mb-3" data-action="books--filter#back">
-            &lsaquo; Published
+          <button type="button" class="btn btn-ghost btn-sm mb-3" aria-label="Back to filters" data-action="books--filter#back">
+            <span aria-hidden="true">&lsaquo;</span> Published
           </button>
 
           <p class="text-sm font-semibold mb-2">Eras</p>
@@ -132,12 +137,13 @@
         </div>
       </div>
 
-      <div class="border-t border-base-300 p-4 sm:px-6 flex flex-col gap-2">
-        <p class="text-sm text-warning" role="status" hidden data-books--filter-target="capNotice"></p>
+      <div class="border-t border-base-300 p-4 sm:px-6 flex flex-col">
+        <%# Never hidden, only emptied: a live region has to stay in the
+            accessibility tree for a screen reader to announce its new text. %>
+        <p class="text-sm text-warning mb-2 empty:mb-0" role="status" data-books--filter-target="capNotice"></p>
         <div class="flex justify-end gap-2">
           <button type="button" class="btn btn-ghost" data-action="books--filter#clear">Clear</button>
-          <button type="submit" class="btn btn-primary" data-books--filter-target="submit"
-                  data-disable-with="false"><%= show_label(total_count) %></button>
+          <button type="submit" class="btn btn-primary" data-books--filter-target="submit"><%= show_label(total_count) %></button>
         </div>
       </div>
     <% end %>
