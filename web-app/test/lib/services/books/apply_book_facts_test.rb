@@ -163,6 +163,14 @@ module Services
         assert_equal ["Neu"], result.data[:facts]["alternate_titles"]["value"]
       end
 
+      test "a failing save rolls back the alternate title rows" do
+        @book.stubs(:save!).raises(ActiveRecord::RecordInvalid)
+
+        assert_raises(ActiveRecord::RecordInvalid) { apply }
+
+        assert_equal 0, ::Books::AlternateTitle.where(book_id: @book.id, source: :ai_enrichment).count
+      end
+
       test "alternate titles with nothing new are already_set" do
         @book.update!(alternate_titles: ["Fresh"])
 

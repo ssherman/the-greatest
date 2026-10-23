@@ -22,15 +22,19 @@ module Services
         # Insert-only in sync mode: the catalog here is the master (spec §5).
         return if sync && ::Books::Book.exists?(attrs["id"])
 
-        book = ::Books::Book.find_or_initialize_by(id: attrs["id"])
-        attributes = BookTransformer.call(attrs)
-        alternate_titles = attributes.delete(:alternate_titles)
-        book.assign_attributes(attributes)
-        book.original_language_id = remap_language(attrs["original_language_id"])
-        book.save!
-        # Rows are the truth; a title an editor removed stays removed on a re-run.
-        Services::Books::AlternateTitles::Writer.add(book: book, titles: alternate_titles, source: :legacy)
-        book.save! if book.changed?
+        # One transaction: a saved book without its titles would be skipped by
+        # every later sync (insert-only), losing them for good.
+        ::Books::Book.transaction do
+          book = ::Books::Book.find_or_initialize_by(id: attrs["id"])
+          attributes = BookTransformer.call(attrs)
+          alternate_titles = attributes.delete(:alternate_titles)
+          book.assign_attributes(attributes)
+          book.original_language_id = remap_language(attrs["original_language_id"])
+          book.save!
+          # Rows are the truth; a title an editor removed stays removed on a re-run.
+          Services::Books::AlternateTitles::Writer.add(book: book, titles: alternate_titles, source: :legacy)
+          book.save! if book.changed?
+        end
       end
 
       def sync_filter

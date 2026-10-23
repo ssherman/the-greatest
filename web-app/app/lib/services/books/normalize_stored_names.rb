@@ -141,10 +141,13 @@ module Services
             before = book.title
             after = normalize(before)
             stale_alternates = Array(book.alternate_titles)
-            rewrite_alternate_title_rows(book)
-            book.alternate_titles = AlternateTitles::Writer.listed_titles(book)
-            changed_alternates = book.alternate_titles - stale_alternates
-            next unless save_row!(book)
+            changed_alternates = []
+            saved = save_book_with_rows!(book) do
+              rewrite_alternate_title_rows(book)
+              book.alternate_titles = AlternateTitles::Writer.listed_titles(book)
+              changed_alternates = book.alternate_titles - stale_alternates
+            end
+            next unless saved
 
             # Same rule as the authors: the retitled title, plus any alternate
             # title that only now equals another same-author book's title --
@@ -155,6 +158,21 @@ module Services
             flag("Books::Book", book, collision, before: before) if collision
           end
         end
+      end
+
+      # Row rewrites and the book save commit together or not at all; a row
+      # error is reported like save_row!'s and the run moves on.
+      def save_book_with_rows!(book)
+        saved = false
+        ::Books::Book.transaction do
+          yield
+          saved = save_row!(book)
+          raise ActiveRecord::Rollback unless saved
+        end
+        saved
+      rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+        @errors << "#{book.class.name}##{book.id}: #{e.message}"
+        false
       end
 
       # Rows are the truth for alternate titles. Check.normalize already folds

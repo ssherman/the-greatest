@@ -63,6 +63,15 @@ class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
     assert_equal ["Keep"], ::Books::Book.find(90011).alternate_titles
   end
 
+  test "a failure writing alternate titles leaves no book behind" do
+    Services::Books::AlternateTitles::Writer.stubs(:add).raises("boom")
+
+    result = run_migrator([{"id" => 90012, "title" => "Atomic Book", "original_language_id" => nil, "alternate_titles" => ["X"]}])
+
+    refute ::Books::Book.exists?(90012)
+    refute result[:success] && result[:data][:count].to_i.positive?
+  end
+
   test "suppresses search indexing during the load" do
     assert_no_difference -> { SearchIndexRequest.count } do
       run_migrator([{"id" => 90003, "title" => "Quiet Book", "original_language_id" => nil}])

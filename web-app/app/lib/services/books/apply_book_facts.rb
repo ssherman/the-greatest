@@ -29,18 +29,22 @@ module Services
         @applied = []
       end
 
+      # One transaction: Writer.add inserts rows immediately, so a failing save
+      # must not leave them behind with a stale array copy.
       def call
-        apply_first_published_year
-        apply_original_language
-        apply_word_count
-        apply_page_range
-        apply_subtitle
-        apply_alternate_titles
-        apply_origin_countries
-        record_only_facts
-        apply_description
+        ::Books::Book.transaction do
+          apply_first_published_year
+          apply_original_language
+          apply_word_count
+          apply_page_range
+          apply_subtitle
+          apply_alternate_titles
+          apply_origin_countries
+          record_only_facts
+          apply_description
 
-        book.save!
+          book.save!
+        end
         Result.new(success?: true, data: {facts: ledger, applied: applied}, errors: [])
       end
 
