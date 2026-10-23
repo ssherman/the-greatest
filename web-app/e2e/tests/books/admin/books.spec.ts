@@ -63,6 +63,43 @@ test.describe('books admin — books', () => {
     await expect(page.getByText(alt)).toHaveCount(0);
   });
 
+  test("alternate titles card removes and restores a title, and the review page loads", async ({ page }) => {
+    const title = `E2E Alt Card Book ${Date.now()}`;
+    const alt = `E2E Alt Card Title ${Date.now()}`;
+    await page.goto("/admin/books/new");
+    await page.locator('input[name="books_book[title]"]').fill(title);
+    await page.getByRole("button", { name: "Create Book" }).click();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+    await page.getByRole("link", { name: "Edit", exact: true }).click();
+    await page.getByRole("button", { name: "Add alternate title" }).click();
+    await page.locator('input[type="text"][name="books_book[alternate_titles][]"]').fill(alt);
+    await page.getByRole("button", { name: "Update Book" }).click();
+    await expect(page).not.toHaveURL(/\/edit/);
+    await expect(page.getByText("Book updated.")).toBeVisible();
+
+    // The card is a lazy frame: it loads once scrolled into view.
+    await page.locator("#alternate_titles_list").scrollIntoViewIfNeeded();
+    const row = page.locator('[data-testid="alternate-title-row"]', { hasText: alt });
+    await expect(row).toBeVisible();
+    await expect(row).toHaveAttribute("data-status", "kept");
+
+    await row.getByRole("button", { name: "Remove" }).click();
+    // The redirect reloads the page and the lazy card with it.
+    await expect(page.getByText("Alternate title removed.")).toBeVisible();
+    await page.locator("#alternate_titles_list").scrollIntoViewIfNeeded();
+    await expect(row).toHaveAttribute("data-status", "removed");
+
+    await row.getByRole("button", { name: "Restore" }).click();
+    await expect(page.getByText("Alternate title kept.")).toBeVisible();
+    await page.locator("#alternate_titles_list").scrollIntoViewIfNeeded();
+    await expect(row).toHaveAttribute("data-status", "kept");
+
+    await page.goto("/admin/alternate_titles/review");
+    await expect(page.getByRole("heading", { name: "Alternate titles to review" })).toBeVisible();
+    await expect(page.getByLabel("Source")).toBeVisible();
+  });
+
   test("deletes a book", async ({ page }) => {
     const title = `E2E Delete Book ${Date.now()}`;
     await page.goto("/admin/books/new");

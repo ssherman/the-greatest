@@ -1,0 +1,42 @@
+<%# One alternate-title decision. show_book adds the book's title (review page). %>
+<% stamp = ->(time) { time&.strftime("%Y-%m-%d %H:%M") } %>
+<% reviewer = row.decided_by_user %>
+<tr data-testid="alternate-title-row" data-alternate-title-id="<%= row.id %>" data-status="<%= row.status %>">
+  <% if local_assigns[:show_book] %>
+    <td class="[overflow-wrap:anywhere]"><%= link_to row.titleable.title, admin_books_book_path(row.titleable), class: "link" %></td>
+  <% end %>
+  <td class="[overflow-wrap:anywhere]"><%= row.title %></td>
+  <td><%= row.source.humanize %></td>
+  <td><span class="badge badge-sm <%= {"kept" => "badge-success", "removed" => "badge-error", "review" => "badge-warning"}[row.status] %>"><%= row.status.humanize %></span></td>
+  <td><%= row.verdict&.humanize || "–" %></td>
+  <td><%= row.category&.humanize || "–" %></td>
+  <td><%= row.confidence ? number_with_precision(row.confidence, precision: 2) : "–" %></td>
+  <td class="[overflow-wrap:anywhere] max-w-xs"><%= row.reason.presence || "–" %></td>
+  <td>
+    <% if row.ai_chat %>
+      <%= link_to "Chat", admin_books_ai_chat_path(row.ai_chat), class: "link", target: "_top" %>
+    <% else %>
+      –
+    <% end %>
+  </td>
+  <td class="whitespace-nowrap">
+    <% if row.decided_at %>
+      <%= row.decided_by&.humanize %><%= " (#{reviewer.display_name.presence || reviewer.name.presence || reviewer.email})" if reviewer %>,
+      <%= stamp.call(row.decided_at) %>
+    <% else %>
+      –
+    <% end %>
+  </td>
+  <td class="whitespace-nowrap">
+    <% if current_user_can_write? %>
+      <% if row.review? %>
+        <%= button_to "Keep", keep_admin_books_alternate_title_path(row), method: :post, class: "btn btn-xs btn-success", form: {data: {turbo_frame: "_top"}, class: "inline"} %>
+      <% end %>
+      <% if row.kept? || row.review? %>
+        <%= button_to "Remove", remove_admin_books_alternate_title_path(row), method: :post, class: "btn btn-xs btn-error", form: {data: {turbo_frame: "_top"}, class: "inline"} %>
+      <% elsif row.removed? %>
+        <%= button_to "Restore", restore_admin_books_alternate_title_path(row), method: :post, class: "btn btn-xs", form: {data: {turbo_frame: "_top"}, class: "inline"} %>
+      <% end %>
+    <% end %>
+  </td>
+</tr>

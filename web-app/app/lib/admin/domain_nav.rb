@@ -104,6 +104,7 @@ module Admin
           {label: "Match Decisions", icon: :chart, path: -> { URL_HELPERS.admin_books_match_decisions_path }},
           {label: "Duplicates", icon: :list, path: -> { URL_HELPERS.admin_books_duplicate_candidates_path }},
           {label: "Repair Verdicts", icon: :list, path: -> { URL_HELPERS.admin_books_repair_verdicts_path }},
+          {label: "Alternate Titles", icon: :list, path: -> { URL_HELPERS.review_admin_books_alternate_titles_path }},
           {label: "Goodreads Imports", icon: :list, path: -> { URL_HELPERS.admin_books_goodreads_imports_path }},
           {label: "Contact", icon: :chat, path: -> { URL_HELPERS.admin_books_contact_messages_path }},
           {label: "News", icon: :chat, path: -> { URL_HELPERS.admin_books_news_posts_path }},
