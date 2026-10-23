@@ -67,15 +67,21 @@ module Services
           threshold = Rails.configuration.x.books_alternate_titles.auto_remove_confidence
           now = Time.current
           ::AlternateTitle.transaction do
-            rows.each do |row|
-              result = verdicts[row.id] or next
+            # The AI call took seconds: judge only rows that are still this
+            # book's, kept and unjudged, as they were when sent.
+            current = ::AlternateTitle.where(id: rows.map(&:id), titleable: @book).lock.index_by(&:id)
+            rows.each do |stale|
+              result = verdicts[stale.id] or next
+              row = current[stale.id]
+              next unless row&.kept? && row.verdict.nil?
+
               attrs = {verdict: result[:verdict], category: result[:category], confidence: result[:confidence],
                        reason: result[:reason], ai_chat: result[:ai_chat], judged_at: now}
               if result[:verdict] == "same_work"
                 attrs[:decided_by] = :ai
                 attrs[:decided_at] = now
                 counts[:kept] += 1
-              elsif result[:confidence] >= threshold && !row.from_admin?
+              elsif result[:confidence] >= threshold && !(row.from_admin? || row.from_correction?)
                 attrs.merge!(status: :removed, decided_by: :ai, decided_at: now)
                 counts[:removed] += 1
               else

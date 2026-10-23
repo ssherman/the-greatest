@@ -78,4 +78,23 @@ class BooksAlternateTitlesRakeTest < ActiveSupport::TestCase
 
     assert_output(/redid finding 7/) { task.invoke("7") }
   end
+
+  test "undone_findings lists a book's undone findings" do
+    book = books_books(:war_and_peace)
+    verification = ::Books::Verification.create!(book: book, work_outcome: :keyed, run_id: "r", new_key: "OL1W")
+    finding = verification.findings.create!(book: book, kind: :added, identifier_type: :books_work_isbn13, value: "9780000000001",
+      source: :open_library, evidence: {"title" => "Some Edition"}, undone_at: Time.current, undo_action: "identifier_destroyed")
+    verification.findings.create!(book: book, kind: :added, identifier_type: :books_work_isbn13, value: "9780000000002",
+      source: :open_library, evidence: {"title" => "Live"})
+    task = Rake::Task["books:alternate_titles:undone_findings"]
+    task.reenable
+
+    out, = capture_io { task.invoke(book.id.to_s) }
+
+    assert_includes out, finding.id.to_s
+    assert_includes out, "9780000000001"
+    assert_includes out, "identifier_destroyed"
+    assert_includes out, "Some Edition"
+    assert_not_includes out, "9780000000002"
+  end
 end

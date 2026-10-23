@@ -159,7 +159,9 @@ module Services
         def carry_removal(source_row, target_row)
           return unless source_row.removed? && !target_row.removed?
 
-          target_row.update_columns(source_row.attributes.slice(*VERDICT_COLUMNS).merge("updated_at" => Time.current))
+          # The target's removal is new, so it is not stamped as checked, whatever the source's was.
+          target_row.update_columns(source_row.attributes.slice(*(VERDICT_COLUMNS - ["undo_checked_at"]))
+            .merge("undo_checked_at" => nil, "updated_at" => Time.current))
         end
       end
     end

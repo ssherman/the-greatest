@@ -10,7 +10,9 @@ findings that agreed only through a removed title are undone. Spec:
 `alternate_titles` is shared across domains: the model is the global `AlternateTitle`, with a
 polymorphic `titleable`. Only books write to it today. Rows go with their record
 (`dependent: :delete_all`; a polymorphic link cannot carry a foreign key). The AI review, the admin
-card and the undo are books only.
+card and the undo are books only. A domain that adopts the table must add
+`has_many :alternate_title_records, as: :titleable, dependent: :delete_all` to its model, since the
+polymorphic link has no foreign key to cascade.
 
 - **Source:** `legacy`, `merge`, `ai_enrichment`, `admin`, `correction`. Where the title came from.
 - **Status:** `kept`, `removed`, `review` (waiting for an admin). A new row is `kept`.
@@ -21,7 +23,7 @@ card and the undo are books only.
 - **Uniqueness:** one row per record and normalized title. `AlternateTitle.normalize` applies the
   name and quote normalizers, then lowercases; it is the same rule as
   `Services::Books::Verification::Check.normalize`, and a test keeps them in agreement. Two spellings
-  that collapse to one are one row. A title equal to the book's own main title is never a row.
+  that collapse to one are one row. A title equal to the book's own main title is never a row through the writer; the backfill keeps a legacy array element equal to the main title as it finds it.
 
 `unjudged` rows are `kept` rows with no verdict. A removed row is never deleted: it is the record that
 stops the title coming back.
@@ -58,7 +60,7 @@ place. A `removed` title is never added back by `legacy`, `merge` or `ai_enrichm
 and `correction` may reinstate one.
 
 `Services::AlternateTitles::Backfill` creates one `legacy` row per array element (idempotent, the array
-is unchanged). The writer calls it for a record first, so a book never backfilled is handled.
+is unchanged; blank and normalized-duplicate array elements are skipped). The writer calls it for a record first, so a book never backfilled is handled.
 
 ## The AI review
 
@@ -75,7 +77,7 @@ Verdict handling, in one transaction with the array copy:
 - `not_same_work` at or above `config.x.books_alternate_titles.auto_remove_confidence` (0.8, set in
   `config/initializers/books_alternate_titles.rb`): `removed`.
 - `not_same_work` below it: `review`, waiting for an admin.
-- Rows whose source is `admin` are never removed automatically: `not_same_work` sends them to `review`.
+- Rows whose source is `admin` or `correction` are never removed automatically: `not_same_work` sends them to `review` whatever the confidence. (An admin accepted every correction; later decision, 2026-10-22, final review.)
 
 Only unjudged rows get a verdict, so a recorded decision never flips. Titles added later by a merge,
 enrichment or the sync arrive unjudged and are picked up when the review runs again.
@@ -88,7 +90,7 @@ then the rest by id. A book whose rows all carry a verdict is not sent again, so
 
 - **Alternate titles card** on the admin book page (lazy, `Admin::Books::AlternateTitlesController#index`):
   every row with source, status, verdict, category, confidence, reason and a link to the AI chat.
-  Review rows have keep and remove buttons; removed rows a restore button. Each records the admin and
+  Review rows have keep and remove buttons, and kept rows a remove button; removed rows a restore button. Each records the admin and
   rewrites the array copy.
 - **Review page** (`admin/books/alternate_titles/review`): every row in `review` across books, with an
   optional source filter, and the same keep and remove buttons.
@@ -108,7 +110,7 @@ removed title:
   `review` titles. A finding that still agrees through anything else stays.
 - An `added` identifier is destroyed, if the book still holds it with the same source; a `confirmed`
   one goes back to its `previous_source`. A finding whose identifier is held with another source is
-  left alone (counted as "held with another source") and is judged again on a later run.
+  left alone (counted as "held with another source"). An apply run stamps every removed row of the book it judged, so a left-alone finding is re-judged only when another title on that book is later removed (which is exactly when the vouching finding can lose its agreement). "Left alone: N" is not retried by simply re-running.
 - When the settled Open Library work agrees with the book only through a removed title (City of
   Ladies settled on the *Treasure* work), the book is listed under "wrong work" and its work key is
   not changed. The work's own title does not count as agreement for those books.
@@ -127,6 +129,7 @@ All in `web-app/lib/tasks/books/alternate_titles.rake`.
 | `books:alternate_titles:report` | Read-only. Counts by verdict, category and source, with samples per category. |
 | `books:alternate_titles:undo_findings` | Dry run: prints counts of books and findings checked, what would be undone, findings left alone, the wrong-work list and samples. Writes nothing. |
 | `books:alternate_titles:undo_findings[apply]` | The same run, writing the undo and the `undo_checked_at` stamps. |
+| `books:alternate_titles:undone_findings[book_id]` | Lists that book's undone findings (id, kind, type, value, source, undo_action, undone_at, evidence title), so each can be passed to `redo_finding`. |
 | `books:alternate_titles:redo_finding[finding_id]` | Reverses one undone finding (recreates the identifier or resets its source). Aborts with the reason if it cannot, for example another book now holds the identifier as verified. |
 | `books:alternate_titles:restore[row_id]` | Sets a removed row back to `kept`, AI verdict preserved. |
 

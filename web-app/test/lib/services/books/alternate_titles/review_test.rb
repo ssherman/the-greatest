@@ -81,6 +81,42 @@ module Services
           assert_equal ["Anna Karenina"], @book.reload.alternate_titles
         end
 
+        test "correction rows go to review whatever the confidence" do
+          r = row("Anna Karenina", source: :correction)
+          stub_task(respond("1" => verdict(confidence: 0.99)))
+
+          Review.call(book: @book)
+
+          assert r.reload.review?
+        end
+
+        test "a row removed while the AI call ran is left as it is" do
+          r = row("Anna Karenina")
+          Task.any_instance.stubs(:call).with { r.update_columns(status: ::AlternateTitle.statuses[:removed]) || true }
+            .returns(respond("1" => verdict(confidence: 0.3)))
+
+          result = Review.call(book: @book)
+
+          assert result.success?
+          assert r.reload.removed?
+          assert_nil r.verdict
+          assert_equal 0, result.data[:judged]
+        end
+
+        test "a row moved to another book while the AI call ran is left alone" do
+          r = row("Anna Karenina")
+          other = books_books(:crime_and_punishment)
+          Task.any_instance.stubs(:call).with { r.update_columns(titleable_id: other.id) || true }
+            .returns(respond("1" => verdict))
+
+          Review.call(book: @book)
+
+          r.reload
+          assert_equal other.id, r.titleable_id
+          assert r.kept?
+          assert_nil r.verdict
+        end
+
         test "admin rows go to review whatever the confidence" do
           r = row("Anna Karenina", source: :admin)
           stub_task(respond("1" => verdict(confidence: 0.99)))

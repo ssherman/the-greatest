@@ -41,6 +41,25 @@ module Services
             assert_equal "A chapter.", outcome.data[:results]["1"][:reason]
           end
 
+          test "a repeated key whose answers disagree is dropped" do
+            response = {parsed: {results: [
+              result,
+              result(verdict: "same_work", category: "translation"),
+              result(key: "2", verdict: "same_work", category: "translation"),
+              result(key: "2", verdict: "same_work", category: "translation", confidence: 0.5)
+            ]}}
+
+            outcome = @task.send(:process_and_persist, response)
+
+            assert_equal ["2"], outcome.data[:results].keys
+          end
+
+          test "a repeated key that disagrees on category is dropped" do
+            response = {parsed: {results: [result, result(category: "junk")]}}
+
+            assert_empty @task.send(:process_and_persist, response).data[:results]
+          end
+
           test "user prompt holds the book and numbered titles" do
             @book.update_columns(subtitle: "A Novel", first_published_year: 1869)
             prompt = AlternateTitlesReviewTask.new(parent: @book, entries: @entries, accepted: ["Guerre et paix"]).send(:user_prompt)

@@ -13,6 +13,9 @@ class AlternateTitle < ApplicationRecord
   validates :normalized_title, uniqueness: {scope: [:titleable_type, :titleable_id]}
 
   before_validation :set_normalized_title
+  # A row that becomes removed again has not been through the undo pass for
+  # this removal, whatever stamp an earlier removal left.
+  before_save { self.undo_checked_at = nil if will_save_change_to_status?(to: "removed") }
 
   scope :listed, -> { where(status: [:kept, :review]).order(:id) }
   scope :unjudged, -> { where(status: :kept, verdict: nil) }

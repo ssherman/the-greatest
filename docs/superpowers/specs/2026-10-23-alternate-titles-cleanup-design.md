@@ -156,7 +156,7 @@ always together with the book's own details.
   rehearsal decides it.
 - **`not_same_work` below the threshold:** the row becomes `review` and waits for an admin. While in
   review the title stays in the array copy (it is not yet judged wrong).
-- **Rows whose source is `admin`** are never removed automatically. A `not_same_work` verdict on them
+- **Rows whose source is `admin` or `correction`** are never removed automatically (correction added by a later decision, 2026-10-22, final review: an admin accepted every correction). A `not_same_work` verdict on them
   goes to `review` whatever the confidence.
 
 **The review queue:** the existing admin review queue for `Books::RepairVerdict`

@@ -142,6 +142,39 @@ module Services
         assert_equal ["Old", "New"], @book.alternate_titles
       end
 
+      test "decide keep then remove clears undo_checked_at" do
+        r = row(@book, "B", status: :removed, verdict: :not_same_work, category: :junk, decided_by: :ai, undo_checked_at: Time.current)
+        Writer.decide(row: r, status: :kept)
+        r.reload.update_columns(undo_checked_at: Time.current)
+
+        Writer.decide(row: r.reload, status: :removed)
+
+        assert r.reload.removed?
+        assert_nil r.undo_checked_at
+      end
+
+      test "replace reinstate then omit clears undo_checked_at" do
+        r = row(@book, "B", status: :removed, undo_checked_at: Time.current)
+        Writer.replace(record: @book, titles: ["B"], source: :admin)
+        r.reload.update_columns(undo_checked_at: Time.current)
+
+        Writer.replace(record: @book, titles: [], source: :admin)
+
+        assert r.reload.removed?
+        assert_nil r.undo_checked_at
+      end
+
+      test "move onto a kept target row does not copy the source stamp" do
+        t = row(@book, "Same")
+        row(@other, "same", status: :removed, verdict: :not_same_work, category: :junk, decided_by: :ai, undo_checked_at: Time.current)
+
+        Writer.move(source: @other, target: @book)
+
+        assert t.reload.removed?
+        assert_nil t.undo_checked_at
+        assert_includes ::AlternateTitle.where(titleable_type: "Books::Book", status: :removed, undo_checked_at: nil).pluck(:titleable_id), @book.id
+      end
+
       test "replace rejects other sources" do
         assert_raises(ArgumentError) { Writer.replace(record: @book, titles: [], source: :legacy) }
       end

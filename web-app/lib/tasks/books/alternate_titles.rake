@@ -40,6 +40,15 @@ namespace :books do
       puts "alternate titles: redid finding #{finding.id}"
     end
 
+    desc "List a book's undone verification findings, to pass to redo_finding: undone_findings[book_id]"
+    task :undone_findings, [:book_id] => :environment do |_task, args|
+      findings = Books::VerificationFinding.where(book_id: args[:book_id]).where.not(undone_at: nil).order(:id)
+      puts "alternate titles: #{findings.size} undone findings for book #{args[:book_id]}"
+      findings.each do |f|
+        puts "  #{f.id} #{f.kind} #{f.identifier_type} #{f.value} source=#{f.source} undo_action=#{f.undo_action} undone_at=#{f.undone_at.iso8601} via #{f.evidence&.dig("title").inspect}"
+      end
+    end
+
     desc "Restore a removed alternate title (kept, AI verdict preserved so it is never re-sent): restore[row_id]"
     task :restore, [:row_id] => :environment do |_task, args|
       row = AlternateTitle.find(args[:row_id])

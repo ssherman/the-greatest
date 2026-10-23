@@ -351,6 +351,9 @@ Spec: `docs/superpowers/specs/2026-10-23-alternate-titles-cleanup-design.md`; ex
 **Repeating steps: `review` and `undo_findings`.** Run `review[all]` and then `undo_findings` (dry run,
 then `[apply]`) again after merges, after each weekly `data_migration:sync`, after working the review
 page or accepting corrections, and in the final launch sequence. Each only handles rows it has not
-handled before, so repeating is safe.
+handled before, so repeating is safe. A finding `undo_findings` leaves alone ("held with another
+source") is not retried by re-running: the apply run stamps the book's removed rows, so it is
+re-judged only when another title on that book is later removed. `undone_findings[book_id]` lists a
+book's undone findings for `redo_finding`.
 
 The unsure-books second-chance verification run follows this cleanup.

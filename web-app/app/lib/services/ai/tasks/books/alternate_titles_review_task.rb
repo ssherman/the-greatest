@@ -74,12 +74,20 @@ module Services
           # a model instance, so read through `value`.
           def process_and_persist(provider_response)
             keys = entries.map(&:key).to_set
+            conflicted = Set.new
             results = Array(value(provider_response[:parsed], :results)).each_with_object({}) do |raw, by_key|
               parsed = normalize(raw)
-              next if parsed.nil? || !keys.include?(parsed[:key]) || by_key.key?(parsed[:key])
+              next if parsed.nil? || !keys.include?(parsed[:key])
 
-              by_key[parsed[:key]] = parsed.except(:key)
+              first = by_key[parsed[:key]]
+              if first.nil?
+                by_key[parsed[:key]] = parsed.except(:key)
+              elsif first.values_at(:verdict, :category) != parsed.values_at(:verdict, :category)
+                conflicted << parsed[:key]
+              end
             end
+            # A key answered two ways stays unjudged; the retry asks again.
+            results = results.except(*conflicted)
             Services::Ai::Result.new(success: true, data: {results: results}, ai_chat: chat)
           end
 
