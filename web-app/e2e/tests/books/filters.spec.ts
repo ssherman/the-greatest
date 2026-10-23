@@ -477,4 +477,13 @@ test.describe('Books filters', () => {
       await level(page, key).getByRole('button', { name: 'Back to filters' }).click();
     }
   });
+
+  test('the trigger reads "Filter books" unfiltered and shows a count when filtered', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: 'Filter books' })).toBeVisible();
+    await expect(page.locator('[data-testid="filter-count"]')).toHaveCount(0);
+
+    await page.goto('/the-greatest/fiction/books/written-by/french/authors');
+    await expect(page.locator('[data-testid="filter-count"]')).toHaveText('2');
+  });
 });
