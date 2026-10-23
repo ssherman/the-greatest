@@ -6,7 +6,7 @@ module Books
       {key: "audience", label: "Audience", plural: "audiences"},
       {key: "country", label: "Origin", plural: "origins", hint: "The book's national tradition, not the author's birthplace"},
       {key: "subject", label: "Subject", plural: "subjects"},
-      {key: "location", label: "Setting", plural: "settings"}
+      {key: "location", label: "Setting", plural: "settings", hint: "Where the book is set or the place it covers, not where it comes from"}
     ].freeze
 
     ERAS = [
