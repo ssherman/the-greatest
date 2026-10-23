@@ -70,9 +70,16 @@ legacy sync only adds books new on legacy and does not change existing books' al
 
 ## The design
 
-### Part 1: the `books_alternate_titles` table
+### Part 1: the `alternate_titles` table
 
 One row per alternate title of a book.
+
+**Shared across domains** (Shane, 2026-10-22: "we will have this same issue with other domains"). The table is
+`alternate_titles`, with a polymorphic `titleable` (a book today; albums, songs and games later), and the model is the
+global `AlternateTitle`. The writer and the backfill take any record with a `title`; they keep an array copy only on a
+record that has an `alternate_titles` column. Rows are deleted with their record by `dependent: :delete_all`, since a
+polymorphic link cannot carry a database foreign key. Everything else in this spec (the AI review, the admin card, the
+undo) is for books only. Where this section says "book" below, read "titleable record".
 
 - **Columns:** the book, the title (as stored today), a source, a status, and the review fields
   (verdict, category, confidence, reason, the `AiChat` it came from, who decided, when). Plus

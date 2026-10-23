@@ -22,7 +22,7 @@ ViewComponents/ERB + DaisyUI 5, Stimulus (`shared--form-token`), Playwright.
 - All Rails commands run from `web-app/`. Docs live in `docs/` at the project root.
 - Use generators: `bin/rails generate model ...`, `bin/rails generate migration ...`, `bin/rails generate sidekiq:job ...`, `bin/rails generate controller ...`.
 - Services live in `app/lib/services/`, jobs in `app/sidekiq/`, and tests mirror them (`test/lib/services/...`, `test/sidekiq/...`).
-- Inside `module Services::Books`, model constants are root-anchored: `::Books::Book`, `::Books::AlternateTitle`.
+- Inside `module Services::Books`, model constants are root-anchored: `::Books::Book`, and the shared model is `::AlternateTitle` (Task 3b).
 - Rails 8 enum syntax: `enum :status, {kept: 0, removed: 1, review: 2}`.
 - Minitest 6: `assert_nil`, never `assert_equal nil, x`. Mocha stubs every OpenAI and Open Library call.
 - Controller tests assert behavior (status, redirects, rows changed), never HTML or copy.
@@ -229,6 +229,31 @@ git commit -m "Merger, enrichment, legacy migrator and name normalizer write alt
 
 ---
 
+### Task 3b: Make the table shared across domains
+
+Added 2026-10-22 at Shane's request (spec Part 1, "Shared across domains"). Tasks 1-3 built a books-only table; this
+task converts it before anything else builds on it. Later tasks use the names this task produces.
+
+**Files:**
+- Create (generator `bin/rails generate migration ConvertBooksAlternateTitlesToShared`): `web-app/db/migrate/<ts>_convert_books_alternate_titles_to_shared.rb`
+- Move: `web-app/app/models/books/alternate_title.rb` → `web-app/app/models/alternate_title.rb`; its test → `web-app/test/models/alternate_title_test.rb`; fixtures → `web-app/test/fixtures/alternate_titles.yml`
+- Move: `web-app/app/lib/services/books/alternate_titles/{writer,backfill}.rb` → `web-app/app/lib/services/alternate_titles/{writer,backfill}.rb`, tests likewise under `web-app/test/lib/services/alternate_titles/`
+- Modify: `web-app/app/models/books/book.rb`, `web-app/app/models/user.rb`, every caller from Task 3 (merger, ApplyBookFacts, BookMigrator, NormalizeStoredNames), `web-app/lib/tasks/books/alternate_titles.rake`
+
+**Interfaces:**
+- Produces: table `alternate_titles` with `titleable_type` (string, not null) and `titleable_id` (bigint, not null) in place of `book_id`; no foreign key to `books_books`; unique index `[titleable_type, titleable_id, normalized_title]`, index `[titleable_type, titleable_id]`; the other columns, indexes and foreign keys unchanged.
+- Produces: global model `AlternateTitle`, `belongs_to :titleable, polymorphic: true`, same enums and scopes; `AlternateTitle.normalize(text)` is the normalization (same rule as `Check.normalize`; a test asserts they agree).
+- Produces: `Books::Book has_many :alternate_title_records, as: :titleable, class_name: "::AlternateTitle", dependent: :delete_all`; `User has_many :decided_alternate_titles, class_name: "::AlternateTitle", ...`.
+- Produces: `Services::AlternateTitles::Writer` (same methods and Results; the `book:` keyword becomes `record:`; `move(source:, target:)`) and `Services::AlternateTitles::Backfill.call(record)` / `Backfill.all` (books only, as now). Rows are read with `::AlternateTitle.where(titleable: record)`. The array copy is assigned only when `record.has_attribute?(:alternate_titles)`.
+- Unchanged and still books-only: everything Tasks 6-9 build (`Services::Books::AlternateTitles::Review`, `Report`, `UndoFindings`, `Books::AlternateTitles::ReviewJob`).
+
+- [ ] **Step 1: Write the migration** (rename the table, add `titleable_type` filled with `'Books::Book'`, rename `book_id` to `titleable_id`, drop the `books_books` foreign key, rebuild the indexes). It must be reversible. Run it on dev and the test DB; check `schema.rb` holds only this change.
+- [ ] **Step 2: Move and rename** the model, services, tests and fixtures (`titleable: war_and_peace (Books::Book)` in fixtures). Add `test_rows_are_deleted_with_their_book` and `test_normalize_agrees_with_verification_check` and `test_writer_accepts_a_record_without_an_array_column` (a stub record class or a music album, with no array assigned).
+- [ ] **Step 3: Run** `mise exec -- bin/rails test test/models/alternate_title_test.rb test/lib/services/alternate_titles` and the Task 3 test files. Expected: PASS, and the full suite green.
+- [ ] **Step 4: Commit** `Alternate titles table is shared across domains`.
+
+---
+
 ### Task 4: Corrections write through the table
 
 **Files:**
@@ -237,7 +262,7 @@ git commit -m "Merger, enrichment, legacy migrator and name normalizer write alt
 - Test: `web-app/test/lib/services/corrections/applier_test.rb`
 
 **Interfaces:**
-- Consumes: `Writer.replace(book:, titles:, source: :correction)`.
+- Consumes: `Writer.replace(record:, titles:, source: :correction)`.
 - Produces: correctable target `:alternate_titles` (`Services::Corrections::Targets::AlternateTitles` with `read`, `write`, `accepts_blank?` → true).
 
 - [ ] **Step 1: Write the failing tests**
@@ -274,7 +299,7 @@ git commit -m "Accepted corrections write alternate titles through the table"
 - Test: `web-app/test/controllers/admin/books/books_controller_test.rb`, `web-app/e2e/tests/books/admin/books.spec.ts`
 
 **Interfaces:**
-- Consumes: `Writer.replace(book:, titles:, source: :admin, user: current_user)`.
+- Consumes: `Writer.replace(record:, titles:, source: :admin, user: current_user)`.
 - The form posts `books_book[alternate_titles][]`, one per input, plus one always-blank hidden input (so clearing every row still sends the key), using the `shared--form-token` list markup from `app/views/admin/corrections/show.html.erb:88-115`.
 
 - [ ] **Step 1: Write the failing tests**
