@@ -7,6 +7,25 @@ module Books
   class FilterCategorySearchQuery
     MAX_LENGTH = 100
 
+    # Subjects and settings are a long tail of one- and two-book categories that
+    # exist for similarity, not as filters, so they need the browse minimum of
+    # book links, as the pane search before this one did (CategorySearchQuery's
+    # min_items with an item type). Genres and audiences are short curated lists.
+    MINIMUM_TYPES = %w[subject location].freeze
+
+    # item_count is a cheap necessary condition; the capped count then checks only
+    # that that many book links exist, without counting a whole category. Book
+    # links, ranked or not: author links do not make a subject findable.
+    MINIMUM_SQL = <<~SQL.squish
+      categories.item_count >= :min AND (
+        SELECT COUNT(*) FROM (
+          SELECT 1 FROM category_items ci
+          WHERE ci.category_id = categories.id AND ci.item_type = 'Books::Book'
+          LIMIT :min
+        ) capped
+      ) >= :min
+    SQL
+
     def self.call(query:, type:, ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, collection: nil, limit: 10)
       raise ArgumentError, "unknown category type: #{type.inspect}" unless FilterFacetsQuery::TYPES.include?(type.to_s)
 
@@ -21,6 +40,7 @@ module Books
         .where(category_type: ::Category.category_types.fetch(type.to_s))
         .where(::CategorySearchQuery::NAME_OR_ALIAS_SQL, pattern: "%#{escaped}%")
         .select(:id)
+      candidates = apply_minimum(candidates) if MINIMUM_TYPES.include?(type.to_s)
 
       # RankedBooksQuery carries includes and an order for rendering; both are
       # wrong inside an IN subquery.
@@ -45,5 +65,13 @@ module Books
         .limit(limit)
         .to_a
     end
+
+    def self.apply_minimum(candidates)
+      min = Rails.configuration.x.books.browse_min_category_books.to_i
+      return candidates if min <= 0
+
+      candidates.where(MINIMUM_SQL, min: min)
+    end
+    private_class_method :apply_minimum
   end
 end

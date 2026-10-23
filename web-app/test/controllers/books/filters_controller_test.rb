@@ -144,12 +144,23 @@ module Books
       assert_nil query["q"]
     end
 
-    test "the genre pane is not capped" do
-      rank_book(books_books(:war_and_peace))
+    test "the genre pane asks for every genre and has no search" do
+      Books::FilterFacetsQuery.expects(:categories).with(has_entries(type: "genre", limit: nil)).returns([])
 
       get "/filters/categories", params: {type: "genre"}
 
+      assert_response :success
       assert_select "turbo-frame[id^='books_filter_results_']", false
+    end
+
+    test "the subject and setting panes ask for the popular head only" do
+      Books::FilterFacetsQuery.expects(:categories).with(has_entries(type: "subject", limit: 25)).returns([])
+      Books::FilterFacetsQuery.expects(:categories).with(has_entries(type: "location", limit: 25)).returns([])
+
+      get "/filters/categories", params: {type: "subject"}
+      assert_response :success
+      get "/filters/categories", params: {type: "location"}
+      assert_response :success
     end
 
     test "the country pane renders its own frame" do
@@ -201,9 +212,13 @@ module Books
     def link_a_book(*category_fixtures)
       book = books_books(:war_and_peace)
       category_fixtures.each { |name| CategoryItem.find_or_create_by!(category: categories(name), item: book) }
+      set_browse_minimum(1)
+    end
+
+    def set_browse_minimum(value)
       original = Rails.configuration.x.books.browse_min_category_books
-      Rails.configuration.x.books.browse_min_category_books = 1
-      @restore_minimum = -> { Rails.configuration.x.books.browse_min_category_books = original }
+      Rails.configuration.x.books.browse_min_category_books = value
+      @restore_minimum ||= -> { Rails.configuration.x.books.browse_min_category_books = original }
     end
 
     teardown { @restore_minimum&.call }
@@ -230,14 +245,23 @@ module Books
       assert_select "input[data-slug='american-setting']", false
     end
 
-    test "a search hides a location whose links are authors, not books" do
+    test "a search hides a location whose links are mostly authors, not books" do
+      set_browse_minimum(2)
+      rank_book(books_books(:war_and_peace))
+      rank_book(books_books(:crime_and_punishment), 2)
+      # One ranked book plus four authors: item_count clears the minimum, the
+      # book-link count does not.
       place = ::Books::Category.create!(name: "Authorland", category_type: :location)
-      5.times { |n| CategoryItem.create!(category: place, item: ::Books::Author.create!(name: "Writer #{n}")) }
+      CategoryItem.create!(category: place, item: books_books(:war_and_peace))
+      4.times { |n| CategoryItem.create!(category: place, item: ::Books::Author.create!(name: "Writer #{n}")) }
+      control = ::Books::Category.create!(name: "Authorland Heights", category_type: :location)
+      [:war_and_peace, :crime_and_punishment].each { |book| CategoryItem.create!(category: control, item: books_books(book)) }
 
       get "/filters/categories", params: {q: "authorland", type: "location"}
 
       assert_response :success
       assert_select "input[data-slug=?]", place.slug, false
+      assert_select "input[data-slug=?]", control.slug
     end
 
     test "a blank search returns the pane, not an empty results frame" do
@@ -356,12 +380,20 @@ module Books
     end
 
     test "the public category search hides locations under the browse minimum" do
-      ::Books::Category.create!(name: "Zzyzx Springs", category_type: :location, item_count: 1)
+      set_browse_minimum(2)
+      rank_book(books_books(:war_and_peace))
+      rank_book(books_books(:crime_and_punishment), 2)
+      # Both hold a ranked book, so only the minimum separates them.
+      under = ::Books::Category.create!(name: "Zzyzx Springs", category_type: :location)
+      CategoryItem.create!(category: under, item: books_books(:war_and_peace))
+      at = ::Books::Category.create!(name: "Zzyzx Flats", category_type: :location)
+      [:war_and_peace, :crime_and_punishment].each { |book| CategoryItem.create!(category: at, item: books_books(book)) }
 
       get "/filters/categories", params: {q: "Zzyzx", type: "location"}
 
       assert_response :success
-      assert_no_match "Zzyzx Springs", response.body
+      assert_select "input[data-slug=?]", under.slug, false
+      assert_select "input[data-slug=?]", at.slug
     end
   end
 end
