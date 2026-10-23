@@ -66,6 +66,18 @@ module Services
           assert theirs.reload.source_legacy?
         end
 
+        test "rewriting a finding clears its undo" do
+          stamp("9780000000017")
+          row = finding(:added, "9780000000017")
+          row.update!(undone_at: Time.current, undo_action: :identifier_destroyed)
+
+          Stamp.finding(@row, :added, :books_work_isbn13, "9780000000017", source: :open_library)
+
+          row.reload
+          assert_nil row.undone_at
+          assert_nil row.undo_action
+        end
+
         test "stamping twice writes one identifier and one finding" do
           stamp("9780000000017")
           stamp("9780000000017")

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_23_022827) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_23_031053) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -477,6 +477,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_022827) do
     t.jsonb "evidence", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "undone_at"
+    t.integer "undo_action"
     t.index ["book_id"], name: "index_books_verification_findings_on_book_id"
     t.index ["kind"], name: "index_books_verification_findings_on_kind"
     t.index ["other_book_id"], name: "index_books_verification_findings_on_other_book_id"

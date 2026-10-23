@@ -18,6 +18,27 @@ namespace :books do
       puts Services::Books::AlternateTitles::Report.call
     end
 
+    desc "Undo verification findings that agreed only through a removed alternate title. Dry run unless the arg is apply: undo_findings[apply]"
+    task :undo_findings, [:mode] => :environment do |_task, args|
+      apply = args[:mode] == "apply"
+      result = Services::Books::AlternateTitles::UndoFindings.call(apply: apply)
+      data = result.data
+      puts "alternate titles undo (#{apply ? "applied" : "dry run"}): #{data[:books]} books, #{data[:findings_checked]} findings checked"
+      data[:undone].each { |action, count| puts "  #{action}: #{count}" }
+      puts "wrong work (#{data[:wrong_work].size}):"
+      data[:wrong_work].each { |entry| puts "  book #{entry[:book_id]} #{entry[:title].inspect}: #{entry[:work_key]} #{entry[:work_title].inspect}" }
+      puts "samples:"
+      data[:samples].each { |sample| puts "  #{sample}" }
+    end
+
+    desc "Reverse one undone verification finding: redo_finding[finding_id]"
+    task :redo_finding, [:finding_id] => :environment do |_task, args|
+      finding = Books::VerificationFinding.find(args[:finding_id])
+      result = Services::Books::AlternateTitles::UndoFindings.redo(finding: finding)
+      abort "alternate titles: #{result.errors.join("; ")}" unless result.success?
+      puts "alternate titles: redid finding #{finding.id}"
+    end
+
     desc "Restore a removed alternate title (kept, AI verdict preserved so it is never re-sent): restore[row_id]"
     task :restore, [:row_id] => :environment do |_task, args|
       row = AlternateTitle.find(args[:row_id])
