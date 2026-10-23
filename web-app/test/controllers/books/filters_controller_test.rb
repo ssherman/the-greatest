@@ -235,6 +235,42 @@ module Books
       assert_response :not_found
     end
 
+    test "count returns the number of ranked books for a selection" do
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+      RankedItem.create!(item: books_books(:got), ranking_configuration: @rc, rank: 2, score: 90)
+
+      get "/filters/count", params: {category_slugs: ["classics"]}, as: :json
+
+      assert_response :success
+      assert_equal({"count" => 1}, response.parsed_body)
+    end
+
+    test "count is a 404 for an unknown slug" do
+      get "/filters/count", params: {category_slugs: ["no-such-genre"]}
+
+      assert_response :not_found
+    end
+
+    test "count respects a collection" do
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+      books_countries(:algerian).update!(labels: ["african"])
+      Books::BookCountry.create!(book: books_books(:of_mice_and_men), country: books_countries(:algerian))
+      CategoryItem.create!(category: categories(:books_classics_genre), item: books_books(:of_mice_and_men))
+      RankedItem.create!(item: books_books(:of_mice_and_men), ranking_configuration: @rc, rank: 2, score: 90)
+
+      get "/filters/count", params: {category_slugs: ["classics"]}, as: :json
+      assert_equal 2, response.parsed_body["count"]
+
+      get "/filters/count", params: {category_slugs: ["classics"], collection: "africa"}, as: :json
+      assert_equal 1, response.parsed_body["count"]
+    end
+
+    test "count is not cacheable" do
+      get "/filters/count", as: :json
+
+      assert_match(/no-store|no-cache/, response.headers["Cache-Control"])
+    end
+
     test "the category pane's facet counts are scoped to the collection" do
       # war_and_peace -> french (western), categorized novels + classics.
       # of_mice_and_men -> made african here, categorized classics only.

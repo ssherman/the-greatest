@@ -28,6 +28,21 @@ class Books::FiltersController < ApplicationController
     render_pane(:country)
   end
 
+  # Backs the panel's live "Show N books" button. Counts the same set the
+  # results page lists (RankedBooksQuery), so the button never promises a
+  # number the page then contradicts.
+  def count
+    filters = resolved_filters
+    rc = @ranking_configuration || Books::RankingConfiguration.default_primary
+    raise ActiveRecord::RecordNotFound if rc.nil?
+
+    # except(:includes)/reorder(nil): the query eager-loads and orders for
+    # display, which a COUNT neither needs nor wants.
+    total = Books::RankedBooksQuery.call(**facet_args(filters, rc)).except(:includes).reorder(nil).count
+
+    render json: {count: total}
+  end
+
   private
 
   def render_pane(axis)
