@@ -2,15 +2,15 @@ war_and_peace_voyna:
   book: war_and_peace
   title: Voyna i mir
   normalized_title: voyna i mir
-  source: 0
-  status: 0
+  source: legacy
+  status: kept
 
 crime_and_punishment_removed_junk:
   book: crime_and_punishment
   title: Crime and Punishment (Book Club Edition)
   normalized_title: crime and punishment (book club edition)
-  source: 0
-  status: 1
-  verdict: 1
-  category: 7
-  decided_by: 0
+  source: legacy
+  status: removed
+  verdict: not_same_work
+  category: junk
+  decided_by: ai
