@@ -16,14 +16,14 @@ class Admin::Books::AlternateTitlesController < Admin::Books::BaseController
     authorize @book, :show?
     rows = book_rows(@book)
     @total = rows.count
-    @pagy, @rows = pagy(rows.includes(:ai_chat, :decided_by_user).order(:id), limit: PER_PAGE)
+    @pagy, @rows = pagy(rows.includes(:ai_chat, :decided_by_user, titleable: [:authors, :original_language]).order(:id), limit: PER_PAGE)
     render layout: false
   end
 
   def review
     scope = book_rows.review
     scope = scope.where(source: source_filter) if source_filter
-    @pagy, @rows = pagy(scope.includes(:titleable, :ai_chat, :decided_by_user).order(:id), limit: PER_PAGE)
+    @pagy, @rows = pagy(scope.includes(:ai_chat, :decided_by_user, titleable: [:authors, :original_language]).order(:id), limit: PER_PAGE)
   end
 
   def keep
