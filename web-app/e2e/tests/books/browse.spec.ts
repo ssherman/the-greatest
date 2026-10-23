@@ -262,10 +262,10 @@ test.describe('Books browse pages', () => {
 
   test('the filter pane links out to the browse page', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Filters' }).click();
-    await page.getByRole('button', { name: /Category/ }).click();
+    await page.getByRole('button', { name: /Filter/ }).click();
+    await page.locator("[data-level-target='genre']").click();
 
-    await page.getByRole('link', { name: /Browse all categories/ }).click();
+    await page.getByRole('link', { name: /Browse all genres/ }).click();
 
     await expect(page).toHaveURL('/categories');
   });

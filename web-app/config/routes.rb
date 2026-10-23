@@ -1013,6 +1013,7 @@ Rails.application.routes.draw do
     get "filters", to: "books/filters#show", as: :books_filters
     get "filters/categories", to: "books/filters#categories", as: :books_filters_categories
     get "filters/countries", to: "books/filters#countries", as: :books_filters_countries
+    get "filters/count", to: "books/filters#count", as: :books_filters_count
 
     # The Global Canon. Settings live in the PATH, never a query string, so each
     # variant is its own Cloudflare edge-cache entry.
