@@ -16,9 +16,18 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
   # --- index ---
 
-  test "anonymous request to the index redirects to sign in" do
+  test "signed out, index renders the intro page" do
     get saved_searches_path
-    assert_redirected_to "/"
+
+    assert_response :success
+    assert_select "button[onclick*='login_modal']"
+  end
+
+  test "signed out, a later index page renders the intro page" do
+    get "/searches/page/2"
+
+    assert_response :success
+    assert_select "button[onclick*='login_modal']"
   end
 
   test "index lists only the current user's searches" do
@@ -385,10 +394,20 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_select "form[action=?]", saved_searches_path
   end
 
-  test "new redirects an anonymous visitor" do
+  test "signed out, new renders the intro page" do
     get new_saved_search_path
 
-    assert_response :redirect
+    assert_response :success
+    assert_select "button[onclick*='login_modal']"
+    assert_select "form#saved-search-form", count: 0
+  end
+
+  test "signed in, new renders the form rather than the intro" do
+    sign_in_as(@user, stub_auth: true)
+
+    get new_saved_search_path
+
+    assert_select "form#saved-search-form"
   end
 
   test "no link on new is trapped in a frame" do

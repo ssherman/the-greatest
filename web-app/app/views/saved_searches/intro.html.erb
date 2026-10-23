@@ -1,0 +1,28 @@
+<%
+  content_for :page_title, "Advanced Search | #{domain_name}"
+%>
+
+<div class="max-w-2xl space-y-6">
+  <h1 class="text-3xl font-bold">Advanced Search</h1>
+
+  <p>
+    Build a search the quick filters can't express, and keep it. You can narrow by:
+  </p>
+
+  <ul class="list-disc space-y-1 pl-6">
+    <li>Fiction or nonfiction</li>
+    <li>Book length</li>
+    <li>Publication years</li>
+    <li>Ranked books only, or just the top N</li>
+    <li>Genres, subjects and settings to include or exclude, matched with AND or OR</li>
+    <li>Languages to include or exclude</li>
+    <li>Countries of origin to include or exclude</li>
+    <li>Hiding books you've read</li>
+  </ul>
+
+  <p>
+    Save a search to come back to it later. Saving needs a free account.
+  </p>
+
+  <button type="button" class="btn btn-primary" onclick="login_modal.showModal()">Login</button>
+</div>

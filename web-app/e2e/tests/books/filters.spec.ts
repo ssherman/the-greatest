@@ -486,4 +486,16 @@ test.describe('Books filters', () => {
     await page.goto('/the-greatest/fiction/books/written-by/french/authors');
     await expect(page.locator('[data-testid="filter-count"]')).toHaveText('2');
   });
+
+  test('Advanced search shows a signed-out visitor an intro with a working Login button', async ({ page }) => {
+    await page.goto('/');
+    await openPanel(page);
+    await dialog(page).getByRole('link', { name: 'Advanced search' }).click();
+
+    await expect(page).toHaveURL(/\/searches\/new$/);
+    await expect(page.getByRole('heading', { name: 'Advanced Search' })).toBeVisible();
+
+    await page.getByRole('main').getByRole('button', { name: 'Login' }).click();
+    await expect(page.locator('dialog#login_modal')).toBeVisible();
+  });
 });
