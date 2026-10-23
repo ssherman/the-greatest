@@ -62,6 +62,17 @@ module Services
         assert_equal ["Plain Title"], book.reload.alternate_titles
       end
 
+      test "apply rewrites row titles" do
+        book = raw_book("Plain Title")
+        row = ::Books::AlternateTitle.create!(book: book, title: "L\u2019Etranger", source: :legacy, status: :kept)
+        book.update_columns(alternate_titles: ["L\u2019Etranger"])
+
+        NormalizeStoredNames.call(apply: true)
+
+        assert_equal "L'Etranger", row.reload.title
+        assert_equal ["L'Etranger"], book.reload.alternate_titles
+      end
+
       test "apply flags an author whose normalized name now equals another author's, as a bulk_verify pair" do
         existing = ::Books::Author.create!(name: "Kathleen Alcott")
         stray = raw_author("Kathleen#{NNBSP}Alcott")

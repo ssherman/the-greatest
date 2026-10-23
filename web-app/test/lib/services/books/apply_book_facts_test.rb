@@ -152,6 +152,17 @@ module Services
         assert_equal ["Frisch"], result.data[:facts]["alternate_titles"]["value"]
       end
 
+      test "alternate titles fill through the table" do
+        ::Books::AlternateTitle.create!(book: @book, title: "Frisch", source: :legacy, status: :removed)
+
+        result = apply(alternate_titles: {value: ["Neu", "Frisch"], confidence: "medium"})
+
+        row = ::Books::AlternateTitle.find_by!(book_id: @book.id, normalized_title: "neu")
+        assert row.from_ai_enrichment?
+        assert_equal ["Neu"], @book.reload.alternate_titles
+        assert_equal ["Neu"], result.data[:facts]["alternate_titles"]["value"]
+      end
+
       test "alternate titles with nothing new are already_set" do
         @book.update!(alternate_titles: ["Fresh"])
 

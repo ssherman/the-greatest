@@ -150,13 +150,10 @@ module Services
         return record(:alternate_titles, f, applied: false, reason: "null", value: []) if incoming.empty?
         return record(:alternate_titles, f, applied: false, reason: "human_cleared", value: []) if human_cleared?(:alternate_titles)
 
-        existing = Array(book.alternate_titles)
-        taken = (existing + [book.title]).map(&:downcase)
-        new_titles = incoming.reject { |t| taken.include?(t.downcase) }.uniq(&:downcase)
-        return record(:alternate_titles, f, applied: false, reason: "already_set", value: []) if new_titles.empty?
+        added = AlternateTitles::Writer.add(book: book, titles: incoming, source: :ai_enrichment).data[:added]
+        return record(:alternate_titles, f, applied: false, reason: "already_set", value: []) if added.empty?
 
-        book.alternate_titles = existing + new_titles
-        record(:alternate_titles, f, applied: true, reason: "filled", value: new_titles)
+        record(:alternate_titles, f, applied: true, reason: "filled", value: added)
       end
 
       def apply_origin_countries

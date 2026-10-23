@@ -40,6 +40,29 @@ class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
     assert_equal [], b2.alternate_titles
   end
 
+  test "new book gets legacy rows" do
+    run_migrator([{"id" => 90010, "title" => "Rows Book", "original_language_id" => nil,
+                   "alternate_titles" => ["Alt One"], "alternate_title_1" => "Alt Two"}])
+
+    book = ::Books::Book.find(90010)
+    rows = ::Books::AlternateTitle.where(book_id: book.id)
+    assert_equal ["Alt One", "Alt Two"], rows.order(:id).map(&:title)
+    assert rows.all?(&:from_legacy?)
+    assert_equal ["Alt One", "Alt Two"], book.alternate_titles
+  end
+
+  test "rerun does not readd a removed title" do
+    row = {"id" => 90011, "title" => "Rerun Book", "original_language_id" => nil, "alternate_titles" => ["Capítulo 22", "Keep"]}
+    run_migrator([row])
+    ::Books::AlternateTitle.find_by!(book_id: 90011, title: "Capítulo 22").update!(status: :removed)
+    ::Books::Book.find(90011).update!(alternate_titles: ["Keep"])
+
+    run_migrator([row])
+
+    assert ::Books::AlternateTitle.find_by!(book_id: 90011, title: "Capítulo 22").removed?
+    assert_equal ["Keep"], ::Books::Book.find(90011).alternate_titles
+  end
+
   test "suppresses search indexing during the load" do
     assert_no_difference -> { SearchIndexRequest.count } do
       run_migrator([{"id" => 90003, "title" => "Quiet Book", "original_language_id" => nil}])

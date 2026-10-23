@@ -141,7 +141,8 @@ module Services
             before = book.title
             after = normalize(before)
             stale_alternates = Array(book.alternate_titles)
-            book.alternate_titles = normalize_list(stale_alternates)
+            rewrite_alternate_title_rows(book)
+            book.alternate_titles = AlternateTitles::Writer.listed_titles(book)
             changed_alternates = book.alternate_titles - stale_alternates
             next unless save_row!(book)
 
@@ -153,6 +154,19 @@ module Services
             collision = first_collision(candidates) { |value| book_collision(book, value) }
             flag("Books::Book", book, collision, before: before) if collision
           end
+        end
+      end
+
+      # Rows are the truth for alternate titles. Check.normalize already folds
+      # what normalize folds, so a rewrite never changes a row's
+      # normalized_title; a rewrite that is blank is left alone.
+      def rewrite_alternate_title_rows(book)
+        AlternateTitles::Backfill.call(book)
+        ::Books::AlternateTitle.where(book_id: book.id).order(:id).each do |row|
+          rewritten = normalize(row.title)
+          next if rewritten == row.title || rewritten.blank?
+
+          row.update!(title: rewritten)
         end
       end
 

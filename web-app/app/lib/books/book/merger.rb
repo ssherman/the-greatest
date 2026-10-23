@@ -541,17 +541,9 @@ module Books
       # feeds as_indexed_json, so the search index picks this up on the target's
       # post-commit reindex.
       def absorb_alternate_titles
-        existing = Array(target_book.alternate_titles)
-        incoming = ([source_book.title] + Array(source_book.alternate_titles))
-          .map { |value| value.to_s.strip }
-          .compact_blank
-
-        merged = (existing + incoming).uniq - [target_book.title]
-        @stats[:alternate_titles_added] = []
-        return if merged == existing
-
-        @stats[:alternate_titles_added] = merged - existing
-        target_book.alternate_titles = merged
+        @stats[:alternate_titles_added] = ::Services::Books::AlternateTitles::Writer.move(
+          source_book: source_book, target_book: target_book
+        )
       end
 
       # Ordering constraint 1: runs first, before any association is touched. Once

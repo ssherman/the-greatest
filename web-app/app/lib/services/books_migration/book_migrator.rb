@@ -23,9 +23,14 @@ module Services
         return if sync && ::Books::Book.exists?(attrs["id"])
 
         book = ::Books::Book.find_or_initialize_by(id: attrs["id"])
-        book.assign_attributes(BookTransformer.call(attrs))
+        attributes = BookTransformer.call(attrs)
+        alternate_titles = attributes.delete(:alternate_titles)
+        book.assign_attributes(attributes)
         book.original_language_id = remap_language(attrs["original_language_id"])
         book.save!
+        # Rows are the truth; a title an editor removed stays removed on a re-run.
+        Services::Books::AlternateTitles::Writer.add(book: book, titles: alternate_titles, source: :legacy)
+        book.save! if book.changed?
       end
 
       def sync_filter
