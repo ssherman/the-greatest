@@ -114,13 +114,13 @@ module Books
       assert_no_frame_trapped_links "/filters/categories"
     end
 
-    test "the pane excludes an already-applied category from the browse list" do
+    test "the pane keeps an already-applied category in the browse list" do
       RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
 
       get "/filters/categories", params: {category_slugs: ["novels"]}
 
       assert_response :success
-      assert_select "input[name='category_slugs[]'][value=novels]", false
+      assert_select "input[name='category_slugs[]'][value=novels]"
     end
 
     test "searching returns only the results frame" do

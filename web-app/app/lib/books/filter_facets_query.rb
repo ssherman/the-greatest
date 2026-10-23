@@ -1,78 +1,70 @@
 module Books
-  # Facet counts for the filter modal. The category facet lists genres and
-  # audiences. The two axes are asymmetric on purpose:
-  # genres AND, so their facet keeps the category filter applied and reports the
-  # intersection you would actually get by drilling down; countries OR, so their
-  # facet drops the country filter and reports alternatives. Each axis omits
-  # what is already selected. Mirrors the legacy site's behaviour.
+  # Facet counts for the filter panel, one category type (or the countries) per
+  # call. The two axes are asymmetric on purpose: categories AND, so their facet
+  # keeps the category filter applied and reports the intersection you would
+  # actually get by drilling down; countries OR, so their facet drops the country
+  # filter and reports alternatives. Applied selections stay in the list -- the
+  # panel renders them as ticked checkboxes -- so a selection that matches no
+  # ranked book is appended with count 0 rather than silently vanishing.
   class FilterFacetsQuery
-    # One pane's worth. The modal searches the server rather than filtering a
-    # pre-rendered list, so this bounds what a pane shows, not what is reachable.
-    DEFAULT_LIMIT = 24
+    TYPES = %w[genre audience subject location].freeze
 
-    Result = Struct.new(:genres, :countries, keyword_init: true)
+    def self.categories(type:, ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, collection: nil, limit: nil)
+      raise ArgumentError, "unknown category type: #{type.inspect}" unless TYPES.include?(type.to_s)
 
-    def self.call(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT, collection: nil)
-      query = build(ranking_configuration, categories, countries, year_start, year_end, limit, collection)
-      Result.new(genres: query.genre_facet, countries: query.country_facet)
+      build(ranking_configuration, categories, countries, year_start, year_end, collection)
+        .category_facet(type.to_s, limit)
     end
 
-    def self.genres(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT, collection: nil)
-      build(ranking_configuration, categories, countries, year_start, year_end, limit, collection).genre_facet
+    def self.countries(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, collection: nil)
+      build(ranking_configuration, categories, countries, year_start, year_end, collection).country_facet
     end
 
-    def self.countries(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT, collection: nil)
-      build(ranking_configuration, categories, countries, year_start, year_end, limit, collection).country_facet
-    end
-
-    def self.build(ranking_configuration, categories, countries, year_start, year_end, limit, collection)
+    def self.build(ranking_configuration, categories, countries, year_start, year_end, collection)
       new(
         ranking_configuration: ranking_configuration,
         categories: Array(categories),
         countries: Array(countries),
         year_start: year_start,
         year_end: year_end,
-        limit: limit,
         collection: collection
       )
     end
     private_class_method :build
 
-    def initialize(ranking_configuration:, categories:, countries:, year_start:, year_end:, limit:, collection: nil)
+    def initialize(ranking_configuration:, categories:, countries:, year_start:, year_end:, collection: nil)
       @ranking_configuration = ranking_configuration
       @categories = categories
       @countries = countries
       @year_start = year_start
       @year_end = year_end
-      @limit = limit
       @collection = collection
     end
 
-    def genre_facet
+    def category_facet(type, limit)
       counts = CategoryItem
         .where(item_type: "Books::Book", item_id: book_ids(countries: @countries, categories: @categories))
         .joins(:category)
-        .where(categories: {deleted: false, category_type: Category.category_types.values_at("genre", "audience"), type: "Books::Category"})
-        .where.not(category_id: @categories.map(&:id))
+        .where(categories: {deleted: false, category_type: Category.category_types.fetch(type), type: "Books::Category"})
         .group(:category_id)
         .order(count_all: :desc, category_id: :asc)
-        .limit(@limit)
+        .limit(limit)
         .count
 
-      rows_for(Books::Category.where(id: counts.keys), counts)
+      rows = rows_for(Books::Category.where(id: counts.keys), counts)
+      rows + zero_rows(@categories.select { |category| category.category_type == type }, rows)
     end
 
     def country_facet
       counts = Books::BookCountry
         .where(book_id: book_ids(countries: [], categories: @categories))
-        .where.not(country_id: @countries.map(&:id))
         .where(country_id: Books::Country.filterable.select(:id))
         .group(:country_id)
         .order(count_all: :desc, country_id: :asc)
-        .limit(@limit)
         .count
 
-      rows_for(Books::Country.where(id: counts.keys), counts)
+      rows = rows_for(Books::Country.where(id: counts.keys), counts)
+      rows + zero_rows(@countries, rows)
     end
 
     private
@@ -94,6 +86,12 @@ module Books
     def rows_for(scope, counts)
       by_id = scope.index_by(&:id)
       counts.map { |id, count| {record: by_id[id], count: count} }.reject { |row| row[:record].nil? }
+    end
+
+    # Applied records the count query did not return: they still render, ticked.
+    def zero_rows(applied, rows)
+      listed = rows.map { |row| row[:record].id }
+      applied.reject { |record| listed.include?(record.id) }.map { |record| {record: record, count: 0} }
     end
   end
 end

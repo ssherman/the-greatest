@@ -65,7 +65,7 @@ class Books::FiltersController < ApplicationController
 
   def render_pane_body(axis, filters, rc)
     facet_rows = if axis == :category
-      Books::FilterFacetsQuery.genres(**facet_args(filters, rc))
+      Books::FilterFacetsQuery.categories(type: "genre", limit: 24, **facet_args(filters, rc))
     else
       Books::FilterFacetsQuery.countries(**facet_args(filters, rc))
     end
