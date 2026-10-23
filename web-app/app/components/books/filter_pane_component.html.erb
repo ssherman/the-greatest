@@ -1,6 +1,5 @@
 <%= helpers.turbo_frame_tag pane_frame_id, data: {"books--filter-target": "pane", type: type} do %>
   <% if results_src.present? %>
-    <h3 class="text-sm font-semibold text-base-content/70">Popular <%= noun %></h3>
     <%# turbo-frame has no default display, so its inline-flex .label children would
         flow sideways and wrap into columns without this. %>
     <%= helpers.turbo_frame_tag results_frame_id, class: "flex flex-col gap-1",
@@ -10,6 +9,10 @@
   <% if rows.empty? %>
     <p class="text-sm text-base-content/60" data-testid="filter-pane-empty">Nothing to show for these filters.</p>
   <% else %>
+    <%# Below the results frame, so search hits never sit under this heading. %>
+    <% if results_src.present? %>
+      <h3 class="text-sm font-semibold text-base-content/70">Popular <%= noun %></h3>
+    <% end %>
     <div class="flex flex-col gap-1" data-books--filter-target="browse" data-type="<%= type %>">
       <%= render Books::FilterOptionRowsComponent.new(axis: axis, type: type, rows: rows) %>
     </div>

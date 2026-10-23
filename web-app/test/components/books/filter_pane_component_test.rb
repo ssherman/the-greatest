@@ -22,10 +22,10 @@ module Books
       assert_no_selector "turbo-frame#books_filter_results_subject input"
     end
 
-    test "the results frame sits above the popular list" do
+    test "the results frame sits above the popular list and its heading" do
       render_pane(type: "location", results_src: "/filters/categories?type=location")
 
-      assert_selector "turbo-frame#books_filter_results_location + [data-books--filter-target='browse']"
+      assert_selector "turbo-frame#books_filter_results_location + h3 + [data-books--filter-target='browse']"
     end
 
     test "genre pane renders no results frame" do
