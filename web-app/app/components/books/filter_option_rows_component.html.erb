@@ -1,7 +1,7 @@
-<%# The checkbox has no name: the panel never submits a form field, Stimulus
-    builds the URL from data-axis/data-slug. data-filter-text on the label is
-    what the client-side list filter matches; data-name on the input stays the
-    display name. %>
+<%# The checkbox has no name: it is only a view of the selection. The form
+    submits the hidden inputs in the panel's store, which toggle() edits from
+    data-axis/data-slug. data-filter-text on the label is what the client-side
+    list filter matches; data-name on the input stays the display name. %>
 <% normalized_rows.each do |row| %>
   <% record = row[:record] %>
   <label class="label cursor-pointer justify-start gap-2" data-filter-row data-filter-text="<%= record.name.downcase %>">

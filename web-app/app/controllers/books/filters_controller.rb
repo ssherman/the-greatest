@@ -25,9 +25,12 @@ class Books::FiltersController < ApplicationController
     ), status: :see_other
   end
 
-  # One lazily loaded page per category type. A missing type means genre: pages
-  # served from the 6-hour edge-cached front page during a deploy still call
-  # this without one.
+  # One lazily loaded page per category type. A missing type means genre, but
+  # that buys no compatibility with the old panel: pages served from the 6-hour
+  # edge-cached front page during a deploy call this without a type and expect
+  # a frame named books_filter_pane_category, so that pane shows Turbo's
+  # "Content missing". Their applied filters still submit, since the old panel
+  # rendered those server-side. Books is pre-launch, so this is accepted.
   def categories
     type = params[:type].presence || "genre"
     raise ActiveRecord::RecordNotFound unless Books::FilterFacetsQuery::TYPES.include?(type)
