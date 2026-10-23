@@ -53,7 +53,7 @@
 
           <div class="max-h-72 overflow-y-auto pr-1">
             <div class="flex flex-col gap-1" data-books--filter-target="selected" data-axis="<%= axis %>">
-              <%= render Books::FilterOptionRowsComponent.new(axis: axis, rows: applied_for(axis), checked: true, show_counts: false) %>
+              <%= render Books::FilterOptionRowsComponent.new(axis: axis, type: axis, rows: applied_for(axis), show_counts: false) %>
             </div>
 
             <%# turbo:frame-load bubbles, so this one listener also catches the

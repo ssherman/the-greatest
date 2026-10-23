@@ -1,12 +1,14 @@
+<%# The checkbox has no name: the panel never submits a form field, Stimulus
+    builds the URL from data-axis/data-slug. data-filter-text on the label is
+    what the client-side list filter matches; data-name on the input stays the
+    display name. %>
 <% normalized_rows.each do |row| %>
   <% record = row[:record] %>
-  <label class="label cursor-pointer justify-start gap-2" data-option-value="<%= record.slug %>">
-    <%= check_box_tag input_name, record.slug, checked, id: nil, class: "checkbox checkbox-sm",
-          data: {axis: axis, action: "change->books--filter#toggle"} %>
+  <label class="label cursor-pointer justify-start gap-2" data-filter-row data-filter-text="<%= record.name.downcase %>">
+    <%= tag.input type: "checkbox", class: "checkbox checkbox-sm",
+          data: {filter_option: true, axis: axis, type: type, slug: record.slug, name: record.name,
+                 action: "change->books--filter#toggle"} %>
     <span data-option-label><%= record.name %></span>
-    <% if (badge = badge_for(record)) %>
-      <span class="badge badge-ghost badge-sm"><%= badge %></span>
-    <% end %>
     <% if (count = count_for(row)) %>
       <span class="text-base-content/60">(<%= number_with_delimiter(count) %>)</span>
     <% end %>

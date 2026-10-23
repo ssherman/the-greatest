@@ -87,49 +87,113 @@ module Books
       assert_match "no-store", response.headers["Cache-Control"].to_s
     end
 
-    test "the category pane renders its frame with facet rows" do
-      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+    def rank_book(book, rank = 1)
+      RankedItem.create!(item: book, ranking_configuration: @rc, rank: rank, score: 100 - rank)
+    end
+
+    test "the genre pane renders its frame with facet rows" do
+      rank_book(books_books(:war_and_peace))
 
       get "/filters/categories"
 
       assert_response :success
-      assert_select "turbo-frame#books_filter_pane_category"
-      assert_select "turbo-frame#books_filter_results_category"
+      assert_select "turbo-frame#books_filter_pane_genre"
+      assert_select "input[data-type='genre'][data-slug='novels']"
       assert_match "no-store", response.headers["Cache-Control"].to_s
     end
 
+    test "categories without a type renders genres" do
+      rank_book(books_books(:war_and_peace))
+
+      get "/filters/categories"
+
+      assert_select "turbo-frame#books_filter_pane_genre"
+      assert_select "input[data-type='genre']"
+    end
+
+    test "categories with an unknown type is a 404" do
+      get "/filters/categories", params: {type: "bogus"}
+
+      assert_response :not_found
+    end
+
+    test "categories with type=subject renders only subject rows" do
+      book = books_books(:war_and_peace)
+      rank_book(book)
+      CategoryItem.find_or_create_by!(category: categories(:books_politics_subject), item: book)
+
+      get "/filters/categories", params: {type: "subject"}
+
+      assert_response :success
+      assert_select "turbo-frame#books_filter_pane_subject"
+      assert_select "input[data-type='subject'][data-slug='politics']"
+      assert_select "input[data-type='genre']", false
+    end
+
+    test "the subject pane's results frame carries a source that keeps the type and applied filters" do
+      rank_book(books_books(:war_and_peace))
+
+      get "/filters/categories", params: {type: "subject", category_slugs: ["novels"], year_start: "1900"}
+
+      assert_response :success
+      src = css_select("turbo-frame#books_filter_results_subject").first["data-results-src"]
+      uri = URI.parse(src)
+      query = Rack::Utils.parse_nested_query(uri.query)
+      assert_equal "/filters/categories", uri.path
+      assert_equal ["subject", ["novels"], "1900"], [query["type"], query["category_slugs"], query["year_start"]]
+      assert_nil query["q"]
+    end
+
+    test "the genre pane is not capped" do
+      rank_book(books_books(:war_and_peace))
+
+      get "/filters/categories", params: {type: "genre"}
+
+      assert_select "turbo-frame[id^='books_filter_results_']", false
+    end
+
     test "the country pane renders its own frame" do
-      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+      rank_book(books_books(:war_and_peace))
 
       get "/filters/countries"
 
       assert_response :success
       assert_select "turbo-frame#books_filter_pane_country"
-      assert_select "turbo-frame#books_filter_results_country"
+      assert_select "input[data-axis='country'][data-slug='french']"
+    end
+
+    test "countries renders every country with ranked books" do
+      rank_book(books_books(:war_and_peace))
+      expected = Books::FilterFacetsQuery.countries(ranking_configuration: @rc).size
+
+      get "/filters/countries"
+
+      assert_select "input[data-axis='country']", expected
+    end
+
+    test "countries ignores q: origin filters in the browser" do
+      rank_book(books_books(:war_and_peace))
+
+      get "/filters/countries", params: {q: "zzz"}
+
+      assert_select "turbo-frame#books_filter_pane_country"
     end
 
     test "no link on a filter pane is trapped in a pane frame" do
-      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+      rank_book(books_books(:war_and_peace))
 
       assert_no_frame_trapped_links "/filters/categories"
+      assert_no_frame_trapped_links "/filters/categories?type=subject"
+      assert_no_frame_trapped_links "/filters/countries"
     end
 
     test "the pane keeps an already-applied category in the browse list" do
-      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+      rank_book(books_books(:war_and_peace))
 
       get "/filters/categories", params: {category_slugs: ["novels"]}
 
       assert_response :success
-      assert_select "input[name='category_slugs[]'][value=novels]"
-    end
-
-    test "searching returns only the results frame" do
-      get "/filters/categories", params: {q: "fict"}
-
-      assert_response :success
-      assert_select "turbo-frame#books_filter_results_category"
-      assert_select "turbo-frame#books_filter_pane_category", false
-      assert_select "input[name='category_slugs[]'][value=fiction]"
+      assert_select "input[data-slug='novels']"
     end
 
     # The public threshold counts book links, not item_count, so a fixture's
@@ -144,64 +208,43 @@ module Books
 
     teardown { @restore_minimum&.call }
 
-    test "a category search hides a location whose links are authors, not books" do
+    test "a subject search returns name matches scoped to subjects" do
+      link_a_book(:books_politics_subject)
+      rank_book(books_books(:war_and_peace))
+
+      get "/filters/categories", params: {q: "politics", type: "subject"}
+
+      assert_response :success
+      assert_select "turbo-frame#books_filter_results_subject"
+      assert_select "turbo-frame#books_filter_pane_subject", false
+      assert_select "input[data-slug='politics']"
+    end
+
+    test "a search does not return other types" do
+      link_a_book(:books_american_history_subject, :books_american_location)
+      rank_book(books_books(:war_and_peace))
+
+      get "/filters/categories", params: {q: "americ", type: "subject"}
+
+      assert_select "input[data-slug='american-history']"
+      assert_select "input[data-slug='american-setting']", false
+    end
+
+    test "a search hides a location whose links are authors, not books" do
       place = ::Books::Category.create!(name: "Authorland", category_type: :location)
       5.times { |n| CategoryItem.create!(category: place, item: ::Books::Author.create!(name: "Writer #{n}")) }
-      assert place.reload.item_count >= 5
 
-      get "/filters/categories", params: {q: "authorland"}
-
-      assert_response :success
-      assert_select "input[name='category_slugs[]'][value=?]", place.slug, false
-    end
-
-    test "search reaches subjects and locations, not only genres" do
-      link_a_book(:books_politics_subject)
-      get "/filters/categories", params: {q: "politics"}
+      get "/filters/categories", params: {q: "authorland", type: "location"}
 
       assert_response :success
-      assert_select "input[name='category_slugs[]'][value=politics]"
+      assert_select "input[data-slug=?]", place.slug, false
     end
 
-    test "country search returns the country results frame" do
-      get "/filters/countries", params: {q: "fren"}
-
-      assert_response :success
-      assert_select "turbo-frame#books_filter_results_country"
-      assert_select "input[name='country_slugs[]'][value=french]"
-    end
-
-    test "a blank search returns an empty results frame" do
+    test "a blank search returns the pane, not an empty results frame" do
       get "/filters/categories", params: {q: ""}
 
       assert_response :success
-      assert_select "turbo-frame#books_filter_results_category"
-      assert_select "input[name='category_slugs[]']", false
-    end
-
-    test "a category search result row tags its category type" do
-      get "/filters/categories", params: {q: "americ"}
-
-      assert_response :success
-      assert_select "label[data-option-value=americana] .badge", text: "Genre"
-    end
-
-    # The Category axis spans genres, subjects and settings deliberately.
-    # Scoping it here would break e2e/tests/books/filters.spec.ts.
-    test "a category search still returns every category type, each tagged" do
-      link_a_book(:books_american_history_subject, :books_american_location)
-      get "/filters/categories", params: {q: "americ"}
-
-      assert_select "label[data-option-value=american-history] .badge", text: "Subject"
-      assert_select "label[data-option-value=american-setting] .badge", text: "Setting"
-    end
-
-    test "a country search result row is not tagged with a category type" do
-      get "/filters/countries", params: {q: "fren"}
-
-      assert_response :success
-      assert_select "label[data-option-value=french]"
-      assert_select "label[data-option-value=french] .badge", false
+      assert_select "turbo-frame#books_filter_pane_genre"
     end
 
     test "the pane 404s on an unknown slug" do
@@ -285,13 +328,13 @@ module Books
       get "/filters/categories", params: {collection: "africa"}
 
       assert_response :success
-      assert_select "input[name='category_slugs[]'][value=classics]"
-      assert_select "input[name='category_slugs[]'][value=novels]", false
+      assert_select "input[data-slug='classics']"
+      assert_select "input[data-slug='novels']", false
 
       get "/filters/categories"
 
       assert_response :success
-      assert_select "input[name='category_slugs[]'][value=novels]"
+      assert_select "input[data-slug='novels']"
     end
 
     test "the filter modal for a private user-owned configuration 404s for a non-owner" do
@@ -315,7 +358,7 @@ module Books
     test "the public category search hides locations under the browse minimum" do
       ::Books::Category.create!(name: "Zzyzx Springs", category_type: :location, item_count: 1)
 
-      get "/filters/categories", params: {q: "Zzyzx"}
+      get "/filters/categories", params: {q: "Zzyzx", type: "location"}
 
       assert_response :success
       assert_no_match "Zzyzx Springs", response.body

@@ -3,6 +3,11 @@ class Books::FiltersController < ApplicationController
 
   layout "books/application"
 
+  # Subject and setting are long tails reached through search, so their pane
+  # shows only the popular head; genre and audience are short closed lists.
+  POPULAR_LIMIT = 25
+  POPULAR_LIMIT_TYPES = %w[subject location].freeze
+
   before_action :prevent_caching
   before_action :find_ranking_configuration
   before_action :find_collection
@@ -20,12 +25,38 @@ class Books::FiltersController < ApplicationController
     ), status: :see_other
   end
 
+  # One lazily loaded page per category type. A missing type means genre: pages
+  # served from the 6-hour edge-cached front page during a deploy still call
+  # this without one.
   def categories
-    render_pane(:category)
+    type = params[:type].presence || "genre"
+    raise ActiveRecord::RecordNotFound unless Books::FilterFacetsQuery::TYPES.include?(type)
+
+    filters = resolved_filters
+    rc = ranking_configuration_or_default
+
+    if params[:q].present?
+      rows = Books::FilterCategorySearchQuery.call(query: params[:q], type: type, **facet_args(filters, rc))
+      render partial: "books/filters/results", locals: {type: type, rows: rows}, layout: false
+    else
+      limit = POPULAR_LIMIT_TYPES.include?(type) ? POPULAR_LIMIT : nil
+      render Books::FilterPaneComponent.new(
+        type: type,
+        rows: Books::FilterFacetsQuery.categories(type: type, limit: limit, **facet_args(filters, rc)),
+        results_src: limit ? categories_pane_path(type) : nil
+      ), layout: false
+    end
   end
 
+  # Origin filters client-side, so the whole facet ships and there is no q branch.
   def countries
-    render_pane(:country)
+    filters = resolved_filters
+    rc = ranking_configuration_or_default
+
+    render Books::FilterPaneComponent.new(
+      type: "country",
+      rows: Books::FilterFacetsQuery.countries(**facet_args(filters, rc))
+    ), layout: false
   end
 
   # Backs the panel's live "Show N books" button. Counts the same set the
@@ -33,8 +64,7 @@ class Books::FiltersController < ApplicationController
   # number the page then contradicts.
   def count
     filters = resolved_filters
-    rc = @ranking_configuration || Books::RankingConfiguration.default_primary
-    raise ActiveRecord::RecordNotFound if rc.nil?
+    rc = ranking_configuration_or_default
 
     # except(:includes)/reorder(nil): the query eager-loads and orders for
     # display, which a COUNT neither needs nor wants.
@@ -45,51 +75,11 @@ class Books::FiltersController < ApplicationController
 
   private
 
-  def render_pane(axis)
-    filters = resolved_filters
+  def ranking_configuration_or_default
     rc = @ranking_configuration || Books::RankingConfiguration.default_primary
     raise ActiveRecord::RecordNotFound if rc.nil?
 
-    if params[:q].present?
-      render_pane_results(axis)
-    else
-      render_pane_body(axis, filters, rc)
-    end
-  end
-
-  def render_pane_results(axis)
-    # No types: -- the Category axis is defined as genres, subjects AND
-    # settings. Scoping it here would break the pane's own placeholder and two
-    # Playwright tests.
-    rows = if axis == :category
-      CategorySearchQuery.call(
-        params[:q],
-        scope: ::Books::Category,
-        min_items: Rails.configuration.x.books.browse_min_category_books,
-        min_items_types: %w[location subject],
-        min_items_item_type: "Books::Book"
-      )
-    else
-      ::Books::CountrySearchQuery.call(params[:q])
-    end
-
-    render partial: "books/filters/results",
-      locals: {axis: axis, rows: rows, results_src: pane_path(axis)},
-      layout: false
-  end
-
-  def render_pane_body(axis, filters, rc)
-    facet_rows = if axis == :category
-      Books::FilterFacetsQuery.categories(type: "genre", limit: 24, **facet_args(filters, rc))
-    else
-      Books::FilterFacetsQuery.countries(**facet_args(filters, rc))
-    end
-
-    render Books::FilterPaneComponent.new(
-      axis: axis,
-      facet_rows: facet_rows,
-      results_src: pane_path(axis)
-    ), layout: false
+    rc
   end
 
   def facet_args(filters, rc)
@@ -103,8 +93,11 @@ class Books::FiltersController < ApplicationController
     }
   end
 
-  def pane_path(axis)
-    (axis == :category) ? books_filters_categories_path : books_filters_countries_path
+  # The URL a subject/setting pane searches against: its own type plus the
+  # applied filters, never q (the client appends that).
+  def categories_pane_path(type)
+    permitted = params.permit(:year_start, :year_end, :ranking_configuration_id, :collection, category_slugs: [], country_slugs: [])
+    books_filters_categories_path(permitted.to_h.merge(type: type))
   end
 
   def resolved_filters

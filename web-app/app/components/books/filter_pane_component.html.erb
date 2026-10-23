@@ -1,15 +1,26 @@
-<%= helpers.turbo_frame_tag pane_frame_id, data: {"books--filter-target": "pane", axis: axis} do %>
-  <%# turbo-frame has no default display, so its inline-flex .label children would
-      flow sideways and wrap into columns without this. %>
-  <%= helpers.turbo_frame_tag results_frame_id, class: "flex flex-col gap-1",
-        data: {"books--filter-target": "results", axis: axis, results_src: results_src} %>
+<%= helpers.turbo_frame_tag pane_frame_id, data: {"books--filter-target": "pane", type: type} do %>
+  <% if results_src.present? %>
+    <h3 class="text-sm font-semibold text-base-content/70">Popular <%= noun %></h3>
+    <%# turbo-frame has no default display, so its inline-flex .label children would
+        flow sideways and wrap into columns without this. %>
+    <%= helpers.turbo_frame_tag results_frame_id, class: "flex flex-col gap-1",
+          data: {"books--filter-target": "results", type: type, results_src: results_src} %>
+  <% end %>
 
-  <div class="flex flex-col gap-1" data-books--filter-target="browse" data-axis="<%= axis %>">
-    <%= render Books::FilterOptionRowsComponent.new(axis: axis, rows: facet_rows) %>
-  </div>
+  <% if rows.empty? %>
+    <p class="text-sm text-base-content/60" data-testid="filter-pane-empty">Nothing to show for these filters.</p>
+  <% else %>
+    <div class="flex flex-col gap-1" data-books--filter-target="browse" data-type="<%= type %>">
+      <%= render Books::FilterOptionRowsComponent.new(axis: axis, type: type, rows: rows) %>
+    </div>
+  <% end %>
 
-  <%= link_to browse_label, browse_path, class: "link link-primary text-sm mt-2",
+  <% if client_filtered? %>
+    <p class="text-sm text-base-content/60" hidden data-filter-no-matches>No matches.</p>
+  <% end %>
+
+  <%= link_to "Browse all #{noun}", browse_path, class: "link link-primary text-sm mt-2",
         data: {turbo_frame: "_top"} %>
 
-  <p class="text-sm text-warning hidden" role="status" aria-live="polite" data-books--filter-target="capNotice" data-axis="<%= axis %>"></p>
+  <p class="text-sm text-warning hidden" role="status" aria-live="polite" data-books--filter-target="capNotice" data-type="<%= type %>"></p>
 <% end %>
