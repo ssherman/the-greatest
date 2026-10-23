@@ -37,10 +37,10 @@ module Services
 
           def system_message
             <<~SYSTEM
-              A book catalog keeps a list of alternate titles for each book. Many entries are wrong: they are the titles of other works. For each numbered title, decide whether it names the same work as the book described, and say why.
+              A book catalog keeps a list of alternate titles for each book. The list may hold correct alternate titles as well as the titles of other works. For each numbered title, decide whether it names the same work as the book described, and say why.
 
               Verdict "same_work", with one category:
-              - translation: a translation or transliteration of the same work
+              - translation: a translation or transliteration of the same work. A translation or regional edition is often published under a title that is not a literal translation of the original; it is still same_work. If you cannot tell whether a foreign-language title is this work, use a low confidence.
               - variant: a spelling or punctuation variant, or the title of another edition of the same text
               - fuller_title: the same title with a subtitle or series added
               - short_title: a shortened form of the title

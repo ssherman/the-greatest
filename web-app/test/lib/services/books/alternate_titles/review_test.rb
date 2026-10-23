@@ -103,6 +103,16 @@ module Services
           assert fresh.reload.review?
         end
 
+        test "review rows are not offered as accepted titles" do
+          row("Voyna i mir", verdict: :same_work, category: :translation, confidence: 0.9)
+          row("Doubtful", status: :review, verdict: :not_same_work, category: :other_work, confidence: 0.5)
+          row("Anna Karenina")
+          Task.expects(:new).with { |opts| opts[:accepted] == ["Voyna i mir"] }
+            .returns(stub(call: respond("1" => verdict(confidence: 0.5))))
+
+          Review.call(book: @book)
+        end
+
         test "missing keys are asked once more" do
           a = row("Anna Karenina")
           b = row("The Cossacks")

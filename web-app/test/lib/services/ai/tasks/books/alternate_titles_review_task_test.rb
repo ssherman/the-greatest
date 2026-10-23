@@ -53,6 +53,14 @@ module Services
             assert_includes prompt, "Guerre et paix"
           end
 
+          test "system message does not prime removal and allows non-literal translations" do
+            system = @task.send(:system_message)
+
+            assert_not_includes system, "Many entries are wrong"
+            assert_includes system, "not a literal translation"
+            assert_includes system, "use a low confidence"
+          end
+
           test "runs on the fast role" do
             assert_equal :fast, @task.send(:task_role)
             assert_equal AlternateTitlesReviewTask::ResponseSchema, @task.send(:response_schema)

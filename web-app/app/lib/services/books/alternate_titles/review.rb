@@ -26,7 +26,7 @@ module Services
           rows = ::AlternateTitle.where(titleable: @book).unjudged.order(:id).to_a
           return success(counts) if rows.empty?
 
-          accepted = ::AlternateTitle.where(titleable: @book).listed.where.not(verdict: nil).pluck(:title)
+          accepted = ::AlternateTitle.where(titleable: @book).where(status: :kept).where.not(verdict: nil).order(:id).pluck(:title)
           verdicts = {}
           rows.each_slice(CHUNK) do |chunk|
             failure = judge(chunk, accepted, verdicts)
