@@ -25,6 +25,14 @@
     <%= yield(:head_links) if content_for?(:head_links) %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="turbo-prefetch" content="false">
+    <%# Icons live in public/, not the asset pipeline: the manifest's relative icon
+        URLs need undigested paths, and a stable favicon URL helps search engines. %>
+    <link rel="icon" href="/icons/books/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" type="image/png" sizes="96x96" href="/icons/books/favicon-96x96.png">
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/icons/books/favicon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/books/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-title" content="Greatest Books">
+    <link rel="manifest" href="/icons/books/site.webmanifest">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
@@ -72,7 +80,7 @@
               </svg>
             </label>
             <%= link_to "/", class: "btn btn-ghost text-xl" do %>
-              <span class="text-2xl mr-2">📚</span>
+              <%= image_tag "/icons/books/logo.svg", width: 32, height: 32, alt: "", class: "mr-2" %>
               <%= domain_name %>
             <% end %>
           </div>
