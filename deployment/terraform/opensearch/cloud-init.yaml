@@ -1,0 +1,89 @@
+#cloud-config
+# The search server's first boot. Modelled on ../web-cloud-init.yaml. It hardens the host, closes
+# port 9200 BEFORE Docker is installed, and clones the repo. It does not start OpenSearch: the
+# server has no secrets until the deploy-opensearch workflow runs. Spec §6.3.
+users:
+  - name: deploy
+    groups: [sudo]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${primary_ssh_key}
+
+package_update: true
+package_upgrade: true
+ssh_pwauth: false
+disable_root: true
+packages:
+  - fail2ban
+  - ufw
+  - git
+  - ca-certificates
+  - curl
+  - age
+  - iptables
+  - python3
+  - openssl
+  - unattended-upgrades
+
+write_files:
+  # OpenSearch refuses to start below this.
+  - path: /etc/sysctl.d/90-opensearch.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      vm.max_map_count=262144
+
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root:root
+    permissions: '0644'
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+  - path: /usr/local/bin/gb-clone-or-pull.sh
+    owner: root:root
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      REPO_URL="https://github.com/ssherman/the-greatest.git"
+      APP_DIR="$HOME/apps/the-greatest"  # $HOME == /home/deploy when run as -u deploy -H
+
+      mkdir -p "$APP_DIR"
+      if [ -d "$APP_DIR/.git" ]; then
+        git -C "$APP_DIR" fetch --prune --tags
+        git -C "$APP_DIR" reset --hard origin/HEAD
+      else
+        git clone --depth=1 "$REPO_URL" "$APP_DIR"
+      fi
+
+runcmd:
+  - sysctl --system
+  # SSH only. Docker-published ports bypass ufw; 9200 is handled by opensearch-firewall.service.
+  - ufw default deny incoming && ufw allow OpenSSH && ufw --force enable
+  - systemctl enable --now fail2ban
+
+  # Clone as deploy (retry in case the network is not ready yet).
+  - install -d -o deploy -g deploy /home/deploy/apps
+  - bash -lc 'for i in 1 2 3; do sudo -u deploy -H /usr/local/bin/gb-clone-or-pull.sh && break || sleep 5; done'
+
+  # Close 9200 before Docker exists: with no allowlist yet, the unit drops every connection.
+  - /home/deploy/apps/the-greatest/deployment/opensearch/bin/install-firewall.sh
+
+  # Docker from Docker's own repository.
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"$${UBUNTU_CODENAME:-$$VERSION_CODENAME}\") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null'
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - usermod -aG docker deploy
+
+  # SOPS, same version as the web server.
+  - curl -LO https://github.com/getsops/sops/releases/download/v3.11.0/sops-v3.11.0.linux.amd64
+  - mv sops-v3.11.0.linux.amd64 /usr/local/bin/sops
+  - chmod +x /usr/local/bin/sops
+
+  - install -d -m 0750 -o root -g root /srv/opensearch
+  - chown -R deploy:deploy /home/deploy/apps

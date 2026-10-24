@@ -198,6 +198,10 @@ the sync never undoes them.
      "Finishing legacy imports".
 5. **The Firebase bulk import, one last time** (`docs/features/v1-user-migration.md`, "Running it"),
    then never again (section 8).
+6. **Let the new worker server reach search.** When web and worker move to separate servers, add the
+   worker server's IPv4 to `OPENSEARCH_ALLOWED_IPS` (`sops secrets/.env.opensearch`), merge, and run
+   the "Deploy OpenSearch" workflow before the worker starts using search. See
+   `docs/features/opensearch-server.md`, "Add or remove an app server".
 
 ## 7. Pointing thegreatestbooks.org at this app
 
@@ -228,6 +232,10 @@ the sync never undoes them.
   switch. It is not specced yet.
 - **Remove the `LEGACY_R2_*` credentials from production secrets** after the last replay load and
   the last cover-image run.
+- **Remove the old site's server from the search allowlist.** When the old site's web/worker server
+  is shut down, remove its IP from `OPENSEARCH_ALLOWED_IPS` and run the "Deploy OpenSearch"
+  workflow. Removing an IP does not cut connections it already has open; the runbook's "Add or remove
+  an app server" says how.
 - **Remove the stale `FIREBASE_PROJECT_ID`** from production secrets. The project id is hardcoded
   now, so the variable does nothing and could mislead someone later.
 

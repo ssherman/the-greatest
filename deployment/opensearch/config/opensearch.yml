@@ -1,0 +1,33 @@
+# deployment/opensearch/config/opensearch.yml -- the search server's node settings.
+# Spec: docs/superpowers/specs/2026-10-13-opensearch-server-design.md. Certificates come from
+# bin/generate-certs.sh; their subjects must match nodes_dn and admin_dn below.
+cluster.name: the-greatest-search
+node.name: search-1
+network.host: 0.0.0.0
+discovery.type: single-node
+bootstrap.memory_lock: true
+
+# Carried over from the old server, which never had performance problems.
+indices.breaker.total.limit: 70%
+indices.breaker.request.limit: 60%
+indices.breaker.fielddata.limit: 40%
+thread_pool.search.queue_size: 500
+
+plugins.security.ssl.transport.pemcert_filepath: certs/node.pem
+plugins.security.ssl.transport.pemkey_filepath: certs/node-key.pem
+plugins.security.ssl.transport.pemtrustedcas_filepath: certs/root-ca.pem
+plugins.security.ssl.transport.enforce_hostname_verification: false
+plugins.security.ssl.http.enabled: true
+plugins.security.ssl.http.pemcert_filepath: certs/node.pem
+plugins.security.ssl.http.pemkey_filepath: certs/node-key.pem
+plugins.security.ssl.http.pemtrustedcas_filepath: certs/root-ca.pem
+plugins.security.allow_unsafe_democertificates: false
+# The mounted security directory is ours (bin/render-security.sh), so first start loads our users,
+# never the image's demo ones.
+plugins.security.allow_default_init_securityindex: true
+plugins.security.authcz.admin_dn:
+  - "CN=admin,OU=search,O=the-greatest"
+plugins.security.nodes_dn:
+  - "CN=search-node,OU=search,O=the-greatest"
+plugins.security.restapi.roles_enabled: ["all_access"]
+plugins.security.system_indices.enabled: true

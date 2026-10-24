@@ -158,3 +158,18 @@ jobs:
       # main would stop the next fix from arriving. Test them before merge.
       - name: Shell tests and shellcheck
         run: deployment/home-server/test/run.sh
+
+  opensearch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The workflow default is web-app/; these paths are from the repo root.
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # The search server deploys these scripts from main, and the firewall ones run at boot.
+      - name: OpenSearch shell tests and shellcheck
+        run: deployment/opensearch/test/run.sh

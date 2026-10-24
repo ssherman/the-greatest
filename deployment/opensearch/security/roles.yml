@@ -1,0 +1,16 @@
+# One role per site, limited to that site's indexes. Neither can change cluster settings, roles or
+# the security index. Index names: web-app/app/lib/search/base/index.rb (<domain>_<model>_<env>)
+# and the old site's admin/app/lib/search/{books,authors}_index.rb.
+_meta:
+  type: "roles"
+  config_version: 2
+the_greatest_app:
+  cluster_permissions: ["cluster_composite_ops", "cluster_monitor"]
+  index_permissions:
+    - index_patterns: ["books_*_production", "music_*_production", "games_*_production"]
+      allowed_actions: ["indices_all"]
+tgb_legacy:
+  cluster_permissions: ["cluster_composite_ops", "cluster_monitor"]
+  index_permissions:
+    - index_patterns: ["books", "authors"]
+      allowed_actions: ["indices_all"]

@@ -1,0 +1,17 @@
+# Rendered by bin/render-security.sh: each @..._HASH@ becomes the bcrypt hash of a password from
+# secrets/.env.opensearch. The plain passwords never reach this file.
+_meta:
+  type: "internalusers"
+  config_version: 2
+admin:
+  hash: "@ADMIN_HASH@"
+  reserved: true
+  description: "Break-glass and setup only. No app uses it."
+the_greatest_app:
+  hash: "@APP_HASH@"
+  reserved: true
+  description: "The new app (web-app/)."
+tgb_legacy:
+  hash: "@LEGACY_HASH@"
+  reserved: true
+  description: "The old books site, until it shuts down."
