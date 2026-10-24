@@ -85,11 +85,13 @@ module Admin
       books: {
         theme: "books",
         stylesheet: "books",
-        favicon_dir: nil,
+        # A leading slash bypasses the asset pipeline: books' icons live in public/
+        # so the public layout's manifest can use relative, undigested icon URLs.
+        favicon_dir: "/icons/books",
         title: "The Greatest Books",
         section_label: "Books",
         section_icon: ICONS[:book],
-        logo: {type: :emoji, value: "📚"},
+        logo: {type: :image, value: "/icons/books/logo.svg"},
         root_path: -> { URL_HELPERS.admin_books_root_path },
         categories_search_path: -> { URL_HELPERS.search_admin_books_categories_path },
         items: [
