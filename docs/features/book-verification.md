@@ -454,8 +454,11 @@ It prints the reverted and failed counts. An unknown route name aborts with a us
 - A book a `second_chance` run settled (outcome `keyed`, `updated`, `replaced`, `confirmed` or
   `duplicate_pair`) goes back to what it was: `prior_outcome` (`unsure` or `removed`) and
   `prior_keys`. The key the route added is deleted, a prior key it confirmed returns to `legacy`
-  (a removed key stays removed), duplicate keys it saved go, and only the findings and edition
-  candidates created at or after `second_chance_at` are undone. The row clears its second-chance
+  (a removed key stays removed), duplicate keys it saved go, and only the findings written and edition
+  candidates created at or after `second_chance_at` are undone. Findings go by `updated_at`: a
+  finding is one row per verification, kind, type and value, so one the alternate-titles cleanup
+  undid and the second chance found again keeps its first-pass `created_at` (*Death in Venice* in
+  the 2026-10-24 rehearsal). Reverting it deletes the row, with the cleanup's undo record on it. The row clears its second-chance
   record, so a later `second_chance` run can take it fresh. Author keys it added (only a matcher
   settle adds them) are deleted, as the full revert does.
 - It does not bring back the first pass's `foreign_work` findings or its lump flag. Those are

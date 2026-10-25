@@ -62,7 +62,10 @@ module Services
             @book.identifiers.where(identifier_type: ApplyBook::DUPLICATE_KEY, value: row.duplicate_keys).destroy_all
             # A matcher settle (identifiers or resolve) may have given authors keys.
             revert_author_keys(row)
-            skipped = revert_findings(row, row.findings.where(created_at: row.second_chance_at..))
+            # updated_at, not created_at: Stamp reuses a finding row for the same
+            # identifier, so one the alternate-titles cleanup undid and the second
+            # chance found again is older than second_chance_at.
+            skipped = revert_findings(row, row.findings.where(updated_at: row.second_chance_at..))
             ::Books::EditionCandidate.where(book_id: @book.id, created_at: row.second_chance_at..).delete_all
             row.update!(work_outcome: row.prior_outcome, lookup: :resolve, new_key: nil, duplicate_keys: [], pair_book_id: nil,
               author_changes: {}, stage: :done, lump_suspect: false, second_chance_at: nil, prior_outcome: nil, prior_keys: [])

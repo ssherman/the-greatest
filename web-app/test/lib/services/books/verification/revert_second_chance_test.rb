@@ -26,7 +26,7 @@ module Services
           early = ::Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "11")
           late = ::Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "22")
           before = ::Books::VerificationFinding.create!(verification: row, book: @book, kind: :added, identifier_type: :books_work_oclc_id,
-            value: "11", identifier_id: early.id, created_at: @at - 1.day)
+            value: "11", identifier_id: early.id, created_at: @at - 1.day, updated_at: @at - 1.day)
           ::Books::VerificationFinding.create!(verification: row, book: @book, kind: :added, identifier_type: :books_work_oclc_id,
             value: "22", identifier_id: late.id, created_at: @at + 1.minute)
           ::Books::EditionCandidate.create!(book: @book, edition_key: "OL1M", created_at: @at - 1.day)
@@ -43,6 +43,25 @@ module Services
           assert_equal ["unsure", "resolve", nil, "done", nil, nil, []],
             [row.work_outcome, row.lookup, row.new_key, row.stage, row.second_chance_at, row.prior_outcome, row.prior_keys]
           assert_equal [], row.duplicate_keys
+        end
+
+        # Death in Venice in the dev rehearsal: the alternate-titles cleanup undid
+        # a first-pass finding, the second chance found the identifier again and
+        # Stamp reused the row (one row per verification, kind, type and value),
+        # so it is older than second_chance_at but was written after it.
+        test "a first-pass finding the second chance wrote again is reverted" do
+          row = settled_row
+          oclc = ::Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "33", source: :open_library)
+          isbn = ::Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: "9780141181738", source: :open_library)
+          ::Books::VerificationFinding.create!(verification: row, book: @book, kind: :added, identifier_type: :books_work_oclc_id,
+            value: "33", identifier_id: oclc.id, source: :open_library, created_at: @at - 1.day, updated_at: @at + 1.minute)
+          ::Books::VerificationFinding.create!(verification: row, book: @book, kind: :confirmed, identifier_type: :books_work_isbn13,
+            value: "9780141181738", identifier_id: isbn.id, source: :open_library, previous_source: :legacy,
+            created_at: @at - 1.day, updated_at: @at + 1.minute)
+
+          assert RevertSecondChance.call(book: @book).success?
+
+          assert_equal [[], ["legacy"]], [keys(:books_work_oclc_id), @book.identifiers.where(identifier_type: :books_work_isbn13, value: "9780141181738").pluck(:source)]
         end
 
         test "a confirmed key is kept under the same identifier and goes back to legacy" do
