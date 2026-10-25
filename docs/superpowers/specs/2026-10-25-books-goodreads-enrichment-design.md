@@ -304,7 +304,7 @@ defaults to `knowledge`. These rows carry that default; a cost report that count
 is unaffected. The row is shaped like the
 VIAF ledger rows:
 
-- one row per run, skips and failures included;
+- one row per execution that decides something: a match, a `no_match` or a `rejected`. A plan-time skip never runs the step, and a failure is a raise the coordinator retries. Both are recorded on the workflow step (outcome, last error), which the admin "Enrichment runs" card shows;
 - `citations` holds the page URL;
 - `facts` holds one entry per field with `value`, `applied` and `reason`, using the reasons
   `ApplyBookFacts` uses (`filled`, `already_set`, `human_cleared`, `invalid`, `no_match`).
