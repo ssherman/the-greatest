@@ -23,6 +23,9 @@ require "test_helper"
 #  matcher_version      :integer
 #  new_key              :string
 #  old_keys             :string           default([]), not null, is an Array
+#  prior_keys           :string           default([]), not null, is an Array
+#  prior_outcome        :integer
+#  second_chance_at     :datetime
 #  stage                :integer          default("work"), not null
 #  stage_error          :text
 #  work_outcome         :integer          not null
