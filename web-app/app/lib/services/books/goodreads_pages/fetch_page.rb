@@ -23,7 +23,8 @@ module Services
       # refresh: true refetches a found page whose row predates the enrichment
       # columns (a legacy row has no HTML at all) and fills them. Nothing the
       # import verified changes: a refetch that does not parse as found leaves
-      # the row alone and the answer stays :found.
+      # the row alone and the answer stays :found, except a blocked or
+      # unparseable refetch, which is reported so the caller can back off.
       #
       # The HTML is gzipped whole onto the private service (spec §6, "HTML
       # storage"): stripping it would be a parser decision of its own.
@@ -50,7 +51,8 @@ module Services
           return done(:unavailable) if parsed.outcome == :unavailable
 
           page = store(parsed, fetched)
-          done(page.outcome.to_sym, page)
+          outcome = (@refresh && %i[blocked unparseable].include?(parsed.outcome)) ? parsed.outcome : page.outcome.to_sym
+          done(outcome, page)
         rescue *FETCHER_DOWN => e
           Rails.logger.error("#{self.class.name}: Goodreads #{@goodreads_book_id}: #{e.class}: #{e.message}")
           done(:fetcher_down)

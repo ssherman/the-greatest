@@ -116,6 +116,18 @@ module Services
           assert_equal [:found, "found", 1, false], [result.data[:outcome], page.outcome, page.parser_version, page.html.attached?]
         end
 
+        test "a blocked or unparseable refresh leaves the found row alone but reports the verdict" do
+          page = books_goodreads_pages(:war_and_peace_page)
+          cases = {blocked: fetched(page_html("synthetic_challenge.html"), status: 403),
+                   unparseable: fetched("<html><body>nothing</body></html>")}
+
+          cases.each do |outcome, response|
+            result = FetchPage.call(goodreads_book_id: 656, refresh: true, client: client_returning(response))
+
+            assert_equal [outcome, "found", 1, false], [result.data[:outcome], page.reload.outcome, page.parser_version, page.html.attached?]
+          end
+        end
+
         test "without refresh a found page is not refetched" do
           client = mock("page_fetcher")
           client.stubs(:fetch).returns(fetched(page_html("war_and_peace_656.html.gz")))
