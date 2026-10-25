@@ -129,7 +129,12 @@ the sync never undoes them.
    ```bash
    bin/rails runner 'ranked = RankedItem.where(ranking_configuration_id: Books::RankingConfiguration.default_primary.id, item_type: "Books::Book").where.not(rank: nil).select(:item_id); rows = Books::Verification.stage_done.where(work_outcome: %i[unsure removed]); puts "all #{rows.count}, ranked pre_import #{rows.where(book_id: ranked).where.not(book_id: Services::Books::Verification::Cohort.post_import_range).count}"'
    ```
-   If the two numbers are equal, run `bin/rails "books:verify[all,second_chance]"`; if not, add
+   (2026-10-24: both 4,137.) Run the alternate-titles `undo_findings[apply]` (section 10) first,
+   so the second chance compares against the cleaned titles. Start with a batch of 50:
+   `bin/rails "books:verify[50,second_chance]"`, then `bin/rails books:verify_report`, and check the
+   books that settled (the dev rehearsal of 2026-10-24 settled 22 of 50, about 30 seconds a book).
+   Then, if the two numbers are equal, run `bin/rails "books:verify[all,second_chance]"` (about a
+   day and a half for 4,137 books); if not, add
    `unranked` and/or `post_import` to cover the rest. Settled books go on through stages 2-4, so the
    run makes more Open Library calls and writes than the lookups alone. Then
    `bin/rails books:verify_report`. Spot-check per route: read the "via <route>" samples for
