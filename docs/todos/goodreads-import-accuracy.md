@@ -216,6 +216,9 @@ check when designing this:
 `foreign_work`, `also_held`, `conflict`), `books_verifications.lump_suspect`, and
 `books_edition_candidates` (editions that did not agree with the book, kept out of `identifiers`).
 
+Books the first pass left `unsure` (or `removed`) get a second chance (`books:verify[all,second_chance]`,
+see "Second chance" in the feature doc), so fewer ranked books lack a settled Open Library work.
+
 ## Where things are
 
 - Spec: `docs/superpowers/specs/2026-10-03-goodreads-import-design.md` (§12 is the replay).

@@ -23,6 +23,9 @@ require "test_helper"
 #  matcher_version      :integer
 #  new_key              :string
 #  old_keys             :string           default([]), not null, is an Array
+#  prior_keys           :string           default([]), not null, is an Array
+#  prior_outcome        :integer
+#  second_chance_at     :datetime
 #  stage                :integer          default("work"), not null
 #  stage_error          :text
 #  work_outcome         :integer          not null
@@ -56,7 +59,8 @@ module Books
     test "outcome and lookup values are pinned" do
       assert_equal({"confirmed" => 0, "updated" => 1, "replaced" => 2, "keyed" => 3, "duplicate_pair" => 4,
                     "unsure" => 5, "failed" => 6, "reverted" => 7, "removed" => 8}, Verification.work_outcomes)
-      assert_equal({"identifiers" => 0, "resolve" => 1}, Verification.lookups)
+      assert_equal({"identifiers" => 0, "resolve" => 1, "resolve_candidate" => 2, "exact_title" => 3,
+                    "held_key" => 4, "worldcat_isbns" => 5}, Verification.lookups)
     end
 
     test "a row needs a book, an outcome and a run id" do

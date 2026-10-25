@@ -60,6 +60,13 @@ module Services
         assert AmazonBookCheck.same_book?(book, product(title: "Voina i mir"))
       end
 
+      test "same_book? matches by the verification title key: a leading article does not matter" do
+        book = books_books(:war_and_peace)
+        book.update!(title: "The Metamorphosis", alternate_titles: [])
+
+        assert AmazonBookCheck.same_book?(book, product(title: "Metamorphosis"))
+      end
+
       test "same_book? rejects a set, another title, an earlier year, another author, or no author" do
         book = books_books(:war_and_peace)
         refute AmazonBookCheck.same_book?(book, product(title: "War and Peace (Boxed Set)"))

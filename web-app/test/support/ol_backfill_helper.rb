@@ -7,11 +7,12 @@ module OlBackfillHelper
                     "pipeline_version" => 1, "matcher_version" => 3}.freeze
 
   # authors: [[author_key, name], ...]
-  def ol_work(key, title:, subtitle: nil, authors: [], redirected_from: [], source_version: SOURCE_VERSION)
+  def ol_work(key, title:, subtitle: nil, authors: [], redirected_from: [], editions: nil, source_version: SOURCE_VERSION)
     ::Books::OpenLibrary::Work.from_record({
       "key" => {"source" => "openlibrary", "key" => key}, "title" => title, "subtitle" => subtitle,
       "authors" => authors.map { |author_key, name| {"key" => {"source" => "openlibrary", "key" => author_key}, "name" => name} },
-      "subjects" => [], "redirected_from" => redirected_from.map { |old| {"source" => "openlibrary", "key" => old} }
+      "subjects" => [], "redirected_from" => redirected_from.map { |old| {"source" => "openlibrary", "key" => old} },
+      "popularity" => editions && {"edition_count" => editions}
     }, source_version: source_version)
   end
 
@@ -50,6 +51,26 @@ module OlBackfillHelper
         duplicates: duplicates, duplicate_redirect_sources: []
       ),
       candidates: candidates, guards_tripped: [], volume_guards_tripped: [],
+      source_version: source_version.deep_symbolize_keys
+    )
+  end
+
+  # A /resolve answer with several candidates, in rank order. Each candidate
+  # is {work:, verdict:, score:, conflicts: []}; `verdict` is the decision.
+  def ol_resolution_with(verdict:, candidates:, reason: "test", volume_guards_tripped: [], source_version: SOURCE_VERSION)
+    built = candidates.map do |candidate|
+      ::Books::OpenLibrary::Candidate.new(
+        work_key: candidate[:work].key, source: "openlibrary", score: candidate.fetch(:score, 0.9), rules: ["title_author"],
+        margin: 0.0, verdict: candidate.fetch(:verdict, "abstain"), evidence: {},
+        conflicting_features: candidate.fetch(:conflicts, []), diff: [], record: candidate[:work], redirect_sources: []
+      )
+    end
+    ::Books::OpenLibrary::Resolution.new(
+      decision: ::Books::OpenLibrary::Resolution::Decision.new(
+        verdict: verdict, key: ((verdict == "accept") ? built.first&.work_key : nil), score: 0.9, margin: 0.0, reason: reason,
+        duplicates: [], duplicate_redirect_sources: []
+      ),
+      candidates: built, guards_tripped: [], volume_guards_tripped: volume_guards_tripped,
       source_version: source_version.deep_symbolize_keys
     )
   end

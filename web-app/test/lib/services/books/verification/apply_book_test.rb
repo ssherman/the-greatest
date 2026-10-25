@@ -24,6 +24,8 @@ module Services
           FakeOlClient.new(resolution: resolution, works: works)
         end
 
+        def work_keys_with_source = @book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).pluck(:value, :source)
+
         def work_keys(book = @book) = book.identifiers.where(identifier_type: ApplyBook::WORK_KEY).order(:id).pluck(:value)
 
         def duplicate_keys(book = @book) = book.identifiers.where(identifier_type: ApplyBook::DUPLICATE_KEY).order(:id).pluck(:value)
@@ -425,7 +427,7 @@ module Services
           assert_equal [["OL5W"], "unsure"], [work_keys, row.work_outcome]
         end
 
-        test "removed: of two stored keys only the clearly different one goes, with one works_batch call" do
+        test "an unsure book settles on the passing one of two stored keys and the clearly different one goes, with one works_batch call" do
           add_key("OL5W")
           add_key("OL6W")
           wrong = ol_work("OL5W", title: "Anna Karenina", authors: [["OL9A", "Someone Else"]])
@@ -434,8 +436,21 @@ module Services
 
           row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
 
-          assert_equal [["OL6W"], "removed", ["OL5W", "OL6W"]], [work_keys, row.work_outcome, row.old_keys]
+          assert_equal [["OL6W"], "confirmed", ["OL5W", "OL6W"]], [work_keys, row.work_outcome, row.old_keys]
           assert_equal [[:works_batch, ["OL5W", "OL6W"]]], client.calls.select { |call| call.first == :works_batch }
+        end
+
+        test "removed with a survivor: neither stored key passes, only the clearly different one goes" do
+          add_key("OL5W")
+          add_key("OL6W")
+          wrong = ol_work("OL5W", title: "Anna Karenina", authors: [["OL9A", "Someone Else"]])
+          unknown_author = ol_work("OL6W", title: "War and Peace") # title agrees, no author to confirm: not verified, not clearly different
+          client = abstain_client(works: {"OL5W" => wrong, "OL6W" => unknown_author})
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal [["OL6W"], "removed", ["OL5W", "OL6W"]], [work_keys, row.work_outcome, row.old_keys]
+          assert_equal [[:works_batch, ["OL5W", "OL6W"]], [:works_batch, ["OL5W", "OL6W"]]], client.calls.select { |call| call.first == :works_batch }
         end
 
         test "an unsure book with no stored key makes no works_batch call" do
@@ -448,11 +463,102 @@ module Services
         end
 
         test "a removed row is settled: it is skipped and never overwritten" do
-          ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL5W"])
+          ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL5W"], stage: :done)
           client = fast_client
 
           assert_not ApplyBook.call(book: @book, client: client, run_id: "run-2").success?
           assert_empty client.calls
+        end
+
+        # --- second-chance answers ---
+
+        def stub_answer(lookup, work: @work)
+          Lookup.stubs(:call).returns(Lookup::Answer.new(work: work, lookup: lookup, duplicates: [], redirect_sources: [],
+            source_version: {dump_date: "2026-07-31", matcher_version: 3}))
+        end
+
+        test "a resolve_candidate answer settles the book and writes no author key" do
+          stub_answer(:resolve_candidate)
+
+          row = ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-1").data
+
+          assert_equal [["OL1W"], "keyed", "resolve_candidate", {}], [work_keys, row.work_outcome, row.lookup, row.author_changes]
+        end
+
+        test "a resolve accept still writes the author key" do
+          stub_answer(:resolve)
+
+          row = ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-1").data
+
+          assert_equal [[books_authors(:tolstoy).id, "OL26783A"]], row.author_changes["added"]
+        end
+
+        test "a held key that is also a candidate is confirmed through held_key and keeps its other passing exact-title held key as a duplicate" do
+          add_key("OL5W")
+          add_key("OL7W")
+          add_key("OL8W")
+          tolstoy = [["OL26783A", "Leo Tolstoy"]]
+          resolution = ol_resolution_with(verdict: "abstain", candidates: [
+            {work: ol_work("OL4W", title: "Anna Karenina", authors: tolstoy)}, {work: ol_work("OL5W", title: "War and Peace", authors: tolstoy)}
+          ])
+          client = resolve_client(resolution, works: {
+            "OL7W" => ol_work("OL7W", title: "War and Peace", authors: tolstoy),
+            "OL8W" => ol_work("OL8W", title: "War and Peace: A Novel", authors: tolstoy)
+          })
+
+          row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
+
+          assert_equal ["confirmed", "held_key", ["OL5W"], ["OL7W"], ["OL7W"]],
+            [row.work_outcome, row.lookup, work_keys, duplicate_keys, row.duplicate_keys]
+        end
+
+        test "a held_key answer for a held key is confirmed and the key becomes open_library" do
+          add_key("OL1W")
+          stub_answer(:held_key)
+
+          row = ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-1").data
+
+          assert_equal ["confirmed", "open_library", {}], [row.work_outcome, @book.identifiers.find_by!(value: "OL1W").source, row.author_changes]
+        end
+
+        test "a removed row reset to the work stage is reprocessed and keeps its old keys" do
+          ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL3W"], stage: :work)
+          add_key("OL1W")
+          stub_answer(:held_key)
+
+          result = ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-2")
+
+          assert result.success?
+          assert_equal ["OL3W", "OL1W"], result.data.old_keys
+          assert_equal 2, result.data.attempts
+        end
+
+        test "a removed row reset to work that finds nothing stays removed and can still be reverted" do
+          row = ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL3W"], stage: :work)
+          Lookup.stubs(:call).returns(Lookup::Answer.new(work: nil, lookup: :exact_title, duplicates: [], redirect_sources: [], source_version: nil))
+
+          ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-2")
+
+          assert_equal ["removed", ["OL3W"], "exact_title", "run-2"], row.reload.then { |r| [r.work_outcome, r.old_keys, r.lookup, r.run_id] }
+          assert Revert.call(book: @book).success?
+          assert_equal [["OL3W", "legacy"]], work_keys_with_source
+        end
+
+        test "record_failure keeps a removed row removed" do
+          row = ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL3W"], stage: :work)
+
+          ApplyBook.record_failure(book: @book, run_id: "run-2", error: StandardError.new("boom"))
+
+          assert_equal ["removed", "boom", 2], row.reload.then { |r| [r.work_outcome, r.error, r.attempts] }
+        end
+
+        test "a removed row with no held key is keyed by a worldcat_isbns answer, keeps its old keys, writes no author key" do
+          ::Books::Verification.create!(book: @book, work_outcome: :removed, run_id: "old", old_keys: ["OL3W"], stage: :work)
+          stub_answer(:worldcat_isbns)
+
+          row = ApplyBook.call(book: @book, client: FakeOlClient.new, run_id: "run-2").data
+
+          assert_equal ["keyed", ["OL3W"], {}], [row.work_outcome, row.old_keys, row.author_changes]
         end
 
         # --- pairs only for a holder that really looks like the same work ---

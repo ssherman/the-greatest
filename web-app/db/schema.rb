@@ -513,6 +513,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_031053) do
     t.boolean "lump_suspect", default: false, null: false
     t.string "worldcat_dump_date"
     t.datetime "checked_at"
+    t.datetime "second_chance_at"
+    t.integer "prior_outcome"
+    t.string "prior_keys", default: [], null: false, array: true
     t.index ["book_id"], name: "index_books_verifications_on_book_id", unique: true
     t.index ["lump_suspect"], name: "index_books_verifications_on_lump_suspect"
     t.index ["run_id"], name: "index_books_verifications_on_run_id"

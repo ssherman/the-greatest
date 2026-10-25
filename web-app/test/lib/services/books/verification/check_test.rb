@@ -33,6 +33,129 @@ module Services
           assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Dune", subtitle: "Part One"))
         end
 
+        test "a volume named in a colon subtitle or a subtitle field never agrees with the whole book" do
+          @book.title = "Le Comte de Monte-Cristo"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Le Comte de Monte-Cristo", subtitle: "Tome II"))
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Le Comte de Monte-Cristo: Tome 2"))
+          @book.title = "In Search of Lost Time"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "In Search of Lost Time: Volume 1"))
+          @book.title = "Persepolis"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Persepolis", subtitle: "Volume 1"))
+          @book.title = "Faust: Part One"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Faust"))
+          @book.title = "Faust"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Faust: II"))
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Faust", subtitle: "Teil 2"))
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Faust: Band Eins"))
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Faust: Livre premier"))
+          # Accepted recall cost: a numbered book in a subtitle is a volume too.
+          @book.title = "Dune"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Dune: Book One of the Dune Chronicles"))
+        end
+
+        test "a number alone does not make a dropped part a volume" do
+          @book.title = "War and Peace"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "War and Peace: 150th Anniversary Edition"))
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "War and Peace (150th Anniversary Edition)"))
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "War and Peace: 2nd Edition"))
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "War and Peace", subtitle: "1984 Printing"))
+          @book.title = "Atlas Shrugged"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "Atlas Shrugged (Centennial Ed. HC)"))
+        end
+
+        test "a bare or trailing number, a hash or a volume word in another language is a volume" do
+          @book.title = "Dune"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Dune: 2"))
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Dune (2008)"))
+          @book.title = "Mort"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Mort (Discworld, #4)"))
+          @book.title = "Les Misérables"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Les Misérables (II)"))
+          {
+            "Don Quijote" => ["Tomo I", "Primera parte", "Libro primero"],
+            "Also sprach Zarathustra" => ["Erstes Buch"],
+            "Pan Tadeusz" => ["Tom pierwszy"],
+            "O Primo Basílio" => ["Livro 1"]
+          }.each do |title, subtitles|
+            @book.title = title
+            subtitles.each do |subtitle|
+              assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "#{title}: #{subtitle}")), "#{title}: #{subtitle}"
+            end
+          end
+        end
+
+        test "a volume named in a colon subtitle survives a dropped edition parenthetical" do
+          @book.title = "In Search of Lost Time"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "In Search of Lost Time: Volume 1 (Penguin Classics)"))
+        end
+
+        test "an ordinary colon subtitle still agrees with the plain title" do
+          @book.title = "Dune: Messiah"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "Dune"))
+        end
+
+        test "title_key forgives punctuation, case, articles, diacritics and folded letters" do
+          assert_equal Check.title_key("From Russia, with love"), Check.title_key("From Russia with Love")
+          assert_equal Check.title_key("The Metamorphosis"), Check.title_key("Metamorphosis")
+          assert_equal Check.title_key("Le Mariage De Figaro"), Check.title_key("Mariage de Figaro")
+          assert_equal Check.title_key("L' huile sur le feu"), Check.title_key("L'huile sur le feu")
+          assert_equal Check.title_key("Émile"), Check.title_key("Emile")
+          assert_equal Check.title_key("Søren"), Check.title_key("Soren")
+        end
+
+        test "title_key keeps ordinary English words that are foreign articles" do
+          assert_equal "i claudius", Check.title_key("I, Claudius")
+          assert_equal "as i lay dying", Check.title_key("As I Lay Dying")
+          assert_equal "die hard", Check.title_key("Die Hard")
+        end
+
+        test "title_key never comes out empty and keeps non-Latin letters" do
+          assert_equal "мы", Check.title_key("Мы")
+          assert_equal "the", Check.title_key("The")
+          assert_equal "it", Check.title_key("It")
+        end
+
+        test "title_forms drops a trailing edition parenthetical but keeps a volume or set one" do
+          assert_equal ["atlas shrugged centennial ed hc", "atlas shrugged"], Check.title_forms("Atlas Shrugged (Centennial Ed. HC)")
+          [
+            "In Search of Lost Time (In Search of Lost Time 1)", "Guards! Guards! (Discworld, #4)",
+            "Capital (Volume 2)", "The Hobbit (Box Set)", "Wolf Hall (Book Two)"
+          ].each { |title| assert_nil Check.title_forms(title)[1], title }
+        end
+
+        test "a droppable parenthetical still lets the colon split apply to the head" do
+          long = "War and Peace: The Maude Translation (Oxford World Classics)"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: long))
+          @book.title = long
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "War and Peace"))
+        end
+
+        test "a bare Roman numeral parenthetical is a volume" do
+          assert_nil Check.title_forms("Les Misérables (II)")[1]
+          assert_nil Check.title_forms("Les Misérables (IV)")[1]
+        end
+
+        test "title_key keeps Indic spacing marks" do
+          assert_equal "किताब", Check.title_key("किताब")
+        end
+
+        test "title_forms splits a subtitle on the first colon" do
+          assert_equal ["dune messiah", "dune"], Check.title_forms("Dune: Messiah")
+        end
+
+        test "titles agree through the forgiving key" do
+          @book.title = "The Metamorphosis"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "Metamorphosis"))
+          @book.title = "Atlas Shrugged"
+          assert Check.titles_agree?(@book, ol_work("OL1W", title: "Atlas Shrugged (Centennial Ed. HC)"))
+          @book.title = "In Search of Lost Time"
+          assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "In Search of Lost Time (In Search of Lost Time 1)"))
+        end
+
+        test "compact folds letters NFKD leaves alone" do
+          assert_equal Check.compact("Søren Kierkegaard"), Check.compact("Soren Kierkegaard")
+        end
+
         test "an alternate title agrees, a different title does not" do
           assert Check.titles_agree?(@book, ol_work("OL1W", title: "Voyna i mir"))
           assert_not Check.titles_agree?(@book, ol_work("OL1W", title: "Anna Karenina"))

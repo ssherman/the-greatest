@@ -26,6 +26,53 @@ module Services
           assert_match(/pair with book #{war.id}/, text)
         end
 
+        test "the report counts each second-chance route and samples its books" do
+          war = books_books(:war_and_peace)
+          ::Books::Verification.create!(book: war, work_outcome: :keyed, run_id: "r", lookup: :resolve_candidate, new_key: "OL1W")
+          ::Books::Verification.create!(book: books_books(:crime_and_punishment), work_outcome: :keyed, run_id: "r", lookup: :worldcat_isbns, new_key: "OL2W")
+
+          text = Report.call.join("\n")
+
+          assert_match(/Settled via route:/, text)
+          assert_match(/resolve_candidate\s+1/, text)
+          assert_match(/worldcat_isbns\s+1/, text)
+          assert_match(/exact_title\s+0/, text)
+          assert_match(/held_key\s+0/, text)
+          assert_match(/via resolve_candidate \(keyed\):\n\s+book #{war.id} "War and Peace"/, text)
+        end
+
+        test "settled via route counts only settled rows, not reverted or unsure ones" do
+          ::Books::Verification.create!(book: books_books(:war_and_peace), work_outcome: :reverted, run_id: "r", lookup: :held_key, new_key: "OL1W")
+          ::Books::Verification.create!(book: books_books(:crime_and_punishment), work_outcome: :unsure, run_id: "r", lookup: :exact_title)
+          ::Books::Verification.create!(book: books_books(:got), work_outcome: :duplicate_pair, run_id: "r", lookup: :exact_title, new_key: "OL3W")
+
+          text = Report.call.join("\n")
+
+          assert_match(/Settled via route:\n\s+resolve_candidate\s+0\n\s+exact_title\s+1\n\s+held_key\s+0\n/, text)
+        end
+
+        test "settled via route has a line for the books a second chance settled through the matcher" do
+          at = 1.hour.ago
+          ::Books::Verification.create!(book: books_books(:war_and_peace), work_outcome: :keyed, run_id: "r", lookup: :resolve, new_key: "OL1W",
+            second_chance_at: at, prior_outcome: 5)
+          ::Books::Verification.create!(book: books_books(:crime_and_punishment), work_outcome: :confirmed, run_id: "r", lookup: :identifiers,
+            new_key: "OL2W", second_chance_at: at, prior_outcome: 5)
+          ::Books::Verification.create!(book: books_books(:got), work_outcome: :keyed, run_id: "r", lookup: :resolve, new_key: "OL3W")
+          ::Books::Verification.create!(book: books_books(:clash), work_outcome: :removed, run_id: "r", lookup: :resolve,
+            second_chance_at: at, prior_outcome: 8)
+
+          assert_match(/Settled via route:(\n\s+\w+\s+\d+)*\n\s+second_chance_matcher\s+2\n/, Report.call.join("\n"))
+        end
+
+        test "route samples show Open Library's title when a client is given" do
+          war = books_books(:war_and_peace)
+          ::Books::Verification.create!(book: war, work_outcome: :keyed, run_id: "r", lookup: :exact_title, new_key: "OL1W")
+          client = stub
+          client.stubs(:works_batch).with(["OL1W"]).returns({"OL1W" => stub(title: "Voyna i mir", author_names: ["Leo Tolstoy"])})
+
+          assert_match(/via exact_title \(keyed\):\n\s+book #{war.id} .*-> OL1W.*Voyna i mir/, Report.call(client: client).join("\n"))
+        end
+
         test "the latest failure shows the book, error and time; none when there is none" do
           assert_match(/Latest failure: none/, Report.call.join("\n"))
 

@@ -7,7 +7,7 @@ module Services
       # how many lists they are on, then id, stopping after `limit` (nil: all).
       # By default only ranked pre_import books are taken; flags widen that
       # (post_import, unranked) or pick books to redo (retry_unsure, recheck,
-      # reharvest).
+      # reharvest, second_chance).
       # Each book goes through VerifyBook, which resumes at its stored stage.
       # A book whose Open Library or WorldCat call raised waits and is tried
       # again; after the last wait the run stops (the book keeps its stage), so
@@ -16,7 +16,7 @@ module Services
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         RETRY_DELAYS = [15, 30, 60, 120, 240, 300].freeze
         BATCH = 100
-        FLAGS = %w[post_import unranked retry_unsure recheck reharvest].freeze
+        FLAGS = %w[post_import unranked retry_unsure recheck reharvest second_chance].freeze
         # Seconds to wait after a book that used /resolve. The service runs one at a
         # time and turns the others away busy, so this leaves the slot to the wizard,
         # the Goodreads replay and the legacy imports.
@@ -50,6 +50,7 @@ module Services
           @retry_unsure = flags.include?("retry_unsure")
           @recheck = flags.include?("recheck")
           @reharvest = flags.include?("reharvest")
+          @second_chance = flags.include?("second_chance")
           @client = client || ::Books::OpenLibrary::Client.new
           @wc_client = wc_client || ::Books::WorldCat::Client.new
           @sleeper = sleeper || ->(seconds) { sleep(seconds) }
@@ -190,15 +191,27 @@ module Services
           end
         end
 
-        # A done row picked up by retry_unsure starts over at stage 1; one picked
-        # up by recheck re-runs from the editions (settled work) or WorldCat
-        # (no settled work); one picked up by reharvest re-runs from the
-        # editions. Same predicates as next_ids.
+        # A done row picked up by second_chance starts over at stage 1 and keeps
+        # a record of what it was; that check comes first because its reset
+        # covers what retry_unsure and recheck would do. One picked up by
+        # retry_unsure also starts over at stage 1; one picked up by recheck
+        # re-runs from the editions (settled work) or WorldCat (no settled
+        # work); one picked up by reharvest re-runs from the editions. Same
+        # predicates as next_ids.
         def prepare(book)
           row = ::Books::Verification.stage_done.where.not(work_outcome: :reverted).find_by(book_id: book.id)
           return unless row
 
-          if @retry_unsure && @version && retryable_unsure(@version).where(book_id: book.id).exists?
+          if @second_chance && second_chanceable.where(book_id: book.id).exists?
+            # The earliest record stays: a row taken twice keeps its first
+            # second_chance_at, prior_outcome and prior_keys.
+            record = row.second_chance_at ? {} : {
+              second_chance_at: Time.current,
+              prior_outcome: ::Books::Verification.work_outcomes[row.work_outcome],
+              prior_keys: ::Identifier.where(identifiable: book, identifier_type: :books_work_openlibrary_id).pluck(:value)
+            }
+            row.update!(stage: :work, **record)
+          elsif @retry_unsure && @version && retryable_unsure(@version).where(book_id: book.id).exists?
             row.update!(stage: :work)
           elsif @recheck && recheckable.where(book_id: book.id).exists?
             row.update!(stage: ::Books::Verification::SETTLED_FOR_EDITIONS.include?(row.work_outcome) ? :identifiers : :worldcat)
@@ -224,6 +237,7 @@ module Services
           finished = finished.where.not(id: retryable_unsure(version)) if version
           finished = finished.where.not(id: recheckable) if @recheck
           finished = finished.where.not(id: reharvestable) if @reharvest
+          finished = finished.where.not(id: second_chanceable) if @second_chance
           config_id = ::Books::RankingConfiguration.default_primary&.id
 
           scope = @scope.where.not(id: finished.select(:book_id))
@@ -265,6 +279,12 @@ module Services
                 AND i.identifier_type = #{::Identifier.identifier_types[:books_work_openlibrary_duplicate_id]}
                 AND i.source = #{::Identifier.sources[:open_library]})
             SQL
+        end
+
+        # Done unsure or removed by an earlier run. A row this run already
+        # finished is not taken again, so a re-queued run does not redo it.
+        def second_chanceable
+          ::Books::Verification.stage_done.where(work_outcome: %i[unsure removed]).where.not(run_id: @run_id).select(:id)
         end
 
         def retryable_unsure(version)

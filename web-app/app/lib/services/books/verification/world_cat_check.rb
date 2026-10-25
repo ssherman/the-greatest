@@ -36,7 +36,6 @@ module Services
         EDITION_WORDS = %w[complete collected all volume volumes vol vols works edition unabridged annotated illustrated
           selected the a an and of in].to_set.freeze
         WORD = /[\p{L}\p{N}']+/
-        LEADING_ARTICLE = /\A(the|a|an) /
 
         # "Complete Essays" and "In Search of Lost Time (All 7 Volumes)" hold
         # our "Essays" and "In Search of Lost Time": for this recorded-only
@@ -45,12 +44,11 @@ module Services
         # an edition word or a number. One direction only: "Make it stick" does
         # not hold "It", and "Life : a user's manual" does not hold "Life of Pi".
         def title_contained?(book, work)
-          full = Check.normalize([work.title, work.subtitle].compact.map { |part| part.sub(%r{\s*/.*\z}, "") }.join(": "))
+          full = Check.title_key([work.title, work.subtitle].compact.map { |part| part.sub(%r{\s*/.*\z}, "") }.join(": "))
           return false if full.nil?
 
-          ours = ([book.title] + Array(book.alternate_titles)).filter_map { |title| Check.normalize(title) }
-          # "Brothers Karamazov" holds our "The Brothers Karamazov".
-          ours = ours.flat_map { |title| [title, title.sub(LEADING_ARTICLE, "")] }.reject(&:empty?).uniq
+          # Keys drop a leading article: "Brothers Karamazov" holds our "The Brothers Karamazov".
+          ours = ([book.title] + Array(book.alternate_titles)).filter_map { |title| Check.title_key(title) }.uniq
           ours.any? do |title|
             match = full.match(/(?<![\p{L}\p{N}])#{Regexp.escape(title)}(?![\p{L}\p{N}])/)
             match && (match.pre_match + " " + match.post_match).scan(WORD).all? { |word| EDITION_WORDS.include?(word) || word.match?(/\A\d+\z/) }

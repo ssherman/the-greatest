@@ -13,7 +13,7 @@ module Services
         # A whole series ("the complete series"), a run of books ("books 2-4",
         # "book 1 to 3") or a count of them ("7-book") names a set too; one
         # numbered book ("book 1 of the series") does not.
-        SET_WORDS = /\b(box(ed)?[\s-]?set|collection|omnibus|trilogy|volumes|books 1|complete series|books? \d+\s*(-|–|to|through)\s*\d+|\d+[\s-]books?)\b/i
+        SET_WORDS = /\b(box(ed)?[\s-]?set|collection|omnibus|trilogy|volumes|books 1|complete series|books? \d{1,2}\s*(-|–|to|through|\s)\s*\d{1,2}\b|\d+[\s-]books?)\b/i
         YEAR_SLACK = 1
 
         def agrees?(book, work, edition)
@@ -25,23 +25,26 @@ module Services
         end
 
         def title_agrees?(book, work, edition)
-          full, short = Check.their_titles(edition)
+          full, short = Check.their_title_keys(edition)
           return false if full.nil?
 
-          ours = our_titles(book, work)
-          return true if ours.include?(full)
-          return !full.delete_prefix(short).match?(SET_WORDS) if short && ours.include?(short)
+          ours_full, ours_short = our_titles(book, work)
+          return true if ours_full.include?(full)
+          return !full.delete_prefix(short).match?(SET_WORDS) if short && ours_full.include?(short)
 
           # Our title carries a subtitle the edition lacks: nothing was dropped from the edition.
-          ours.filter_map { |title| Check.short(title) }.include?(full)
+          ours_short.include?(full)
         end
 
+        # [full keys, short keys]. A volume parenthetical on our title gives no
+        # short key, so it agrees only with the same volume.
         def our_titles(book, work)
-          titles = ([book.title] + Array(book.alternate_titles)).filter_map { |title| Check.normalize(title) }
+          forms = ([book.title] + Array(book.alternate_titles)).map { |title| Check.title_forms(title) }.reject { |full, _| full.nil? }
+          fulls = forms.map(&:first)
           # Only the work's full title: its short form would drop a subtitle from both sides.
-          work_full = Check.their_titles(work).first if work
-          titles << work_full if work_full
-          titles.uniq
+          work_full = Check.their_title_keys(work).first if work
+          fulls << work_full if work_full
+          [fulls.uniq, forms.filter_map(&:last).uniq]
         end
       end
     end

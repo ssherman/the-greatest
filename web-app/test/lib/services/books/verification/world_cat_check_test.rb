@@ -102,6 +102,13 @@ module Services
           assert WorldCatCheck.clearly_different?(book.reload, record(title: "Brothers in arms / Someone Else", creator: "Someone Else"))
         end
 
+        test "punctuation and a trailing creator do not make a record clearly different" do
+          book = ::Books::Book.create!(title: "From Russia with Love")
+          book.book_authors.create!(author: ::Books::Author.create!(name: "Ian Lancaster Fleming"))
+
+          refute WorldCatCheck.clearly_different?(book.reload, record(title: "From Russia, with love / Ian Fleming", creator: "Fleming, Ian"))
+        end
+
         test "a different book with some shared words is still clearly different" do
           power = ::Books::Book.create!(title: "The Power and the Glory")
           power.book_authors.create!(author: ::Books::Author.create!(name: "Graham Greene"))

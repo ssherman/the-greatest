@@ -68,29 +68,17 @@ module Services
         # A title the book's own edition candidates already carry is a known
         # translation, whatever its language: Open Library keeps some as works.
         def known_translation?(work)
-          theirs = Check.their_titles(work).first
+          theirs = Check.their_title_keys(work).first
           theirs.present? && candidate_titles.include?(theirs)
         end
 
         def candidate_titles
           @candidate_titles ||= ::Books::EditionCandidate.where(book_id: @book.id).pluck(:title, :subtitle).flat_map { |title, subtitle|
-            [Check.normalize(title), Check.normalize([title, subtitle.presence].compact.join(": "))]
+            [Check.title_key(title), Check.title_key([title, subtitle.presence].compact.join(": "))]
           }.compact.to_set
         end
 
-        TitleLike = Data.define(:title, :alternate_titles)
-        WorkTitle = Data.define(:title, :subtitle)
-        LEADING_ARTICLE = /\A(the|a|an) /
-
-        # Check.titles_agree? with a leading article dropped from both sides.
-        def titles_agree?(work)
-          ours = TitleLike.new(title: drop_article(@book.title), alternate_titles: Array(@book.alternate_titles).map { |title| drop_article(title) })
-          Check.titles_agree?(ours, WorkTitle.new(title: drop_article(work.title), subtitle: work.subtitle))
-        end
-
-        def drop_article(title)
-          Check.normalize(title)&.sub(LEADING_ARTICLE, "")
-        end
+        def titles_agree?(work) = Check.titles_agree?(@book, work)
 
         # Legacy data holds junk under these types ("Twelfth Night" as an
         # ISBN-13). It cannot be a hit, so it is not worth a lookup slot. A

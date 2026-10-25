@@ -111,6 +111,13 @@ module Services
           assert_empty row.reload.findings.foreign_work
         end
 
+        test "a candidate title and a work title agree across an elided article" do
+          ::Books::EditionCandidate.create!(book: @book, edition_key: "OL5M", title: "L' huile sur le feu")
+          row = run_signals(hits: {["isbn13", "9780140447934"] => [ol_hit("OL7W")]}, works: {"OL7W" => ol_work("OL7W", title: "L'huile sur le feu")})
+
+          assert_empty row.findings.foreign_work
+        end
+
         test "a leading article does not make a work foreign" do
           book = ::Books::Book.create!(title: "The Bible")
           row = ::Books::Verification.create!(book: book, work_outcome: :keyed, new_key: "OL1W", run_id: "r", stage: :signals)
