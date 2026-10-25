@@ -1,7 +1,8 @@
 # Resolves a stored workflow name (WorkflowRun#workflow) to its definition
 # class. Built-in definitions are named by string so this file never holds a
 # class that a code reload has replaced; tests add and remove their own through
-# register/unregister.
+# register/unregister. Registering validates the definition; the built-in ones
+# are covered by the definition test.
 module Workflows
   module Registry
     DEFINITIONS = {
@@ -19,6 +20,7 @@ module Workflows
       end
 
       def register(workflow_name, klass)
+        klass.validate!
         @registered[workflow_name] = klass
       end
 

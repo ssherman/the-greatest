@@ -25,8 +25,24 @@ module Workflows
       end
 
       # Declares a step; arguments are those of Workflows::Step.build.
+      # A repeated key would make `step(key)` silently return the first one.
       def add_step(**attributes)
-        steps << Workflows::Step.build(**attributes)
+        step = Workflows::Step.build(**attributes)
+        raise ArgumentError, "duplicate step key #{step.key} in #{self}" if step(step.key)
+        steps << step
+      end
+
+      # Checks the whole step set once it is complete. A waits_on key is matched
+      # against every declared key, not only earlier ones, so it cannot run in
+      # add_step; a typo there would leave the step waiting forever.
+      def validate!
+        keys = steps.map(&:key)
+        steps.each do |step|
+          unknown = step.waits_on.keys.map(&:to_sym) - keys
+          next if unknown.empty?
+          raise ArgumentError, "step #{step.key} in #{self} waits on unknown step #{unknown.first}"
+        end
+        self
       end
 
       # The declared step with this key, or nil.
