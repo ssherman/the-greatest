@@ -143,12 +143,13 @@ module Services
           held = held_key(resolution, conflicted)
           return held if held
 
+          chance = nil
           if resolution.volume_guards_tripped.empty?
             usable = resolution.candidates.select { |candidate| candidate.record && candidate.conflicting_features.empty? }
             chance = resolve_candidate(resolution, usable) || exact_title(resolution, usable)
-            return chance if chance
           end
-          worldcat_isbns(resolution, conflicted)
+          chance ||= worldcat_isbns(resolution, conflicted)
+          chance unless chance && outweighed_by_held?(resolution, chance.work)
         end
 
         # The matcher's guards: a reject, an identifier conflict, a tripped volume guard.
@@ -177,14 +178,7 @@ module Services
 
         # Spec step 4: a legacy key the book holds whose live work passes our check.
         def held_key(resolution, conflicted)
-          keys = stored_keys.uniq - conflicted
-          return nil if keys.empty?
-
-          # A held key that is also a candidate already has its record.
-          works = resolution.candidates.select { |candidate| candidate.record && keys.include?(candidate.work_key) }.to_h { |candidate| [candidate.work_key, candidate.record] }
-          missing = keys - works.keys
-          works = works.merge(@client.works_batch(missing)) if missing.any?
-          passing = keys.filter_map { |key| works[key] }.select { |work| Check.verified?(@book, work, @client) }
+          passing = held_passing(resolution).except(*conflicted).values
           return nil if passing.empty?
 
           ours = Check.title_key(@book.title)
@@ -192,6 +186,31 @@ module Services
           Answer.new(work: chosen, lookup: :held_key, duplicates: passing.select { |work| exact_title?(work) }.map(&:key) - [chosen.key], redirect_sources: [],
             source_version: resolution.source_version, ol_pick: resolution.candidates.first&.work_key)
         end
+
+        # Held key => live work, for the held keys whose work passes our check,
+        # in stored order; conflicted ones included. A held key that is also a
+        # candidate already has its record.
+        def held_passing(resolution)
+          @held_passing ||= begin
+            keys = stored_keys.uniq
+            works = resolution.candidates.select { |candidate| candidate.record && keys.include?(candidate.work_key) }.to_h { |candidate| [candidate.work_key, candidate.record] }
+            missing = keys - works.keys
+            works = works.merge(@client.works_batch(missing)) if missing.any?
+            keys.filter_map { |key| [key, works[key]] if works[key] && Check.verified?(@book, works[key], @client) }.to_h
+          end
+        end
+
+        # A passing held work with at least as many editions as the pick, held
+        # under another key. Stage 2 harvests the settled work's editions, so
+        # moving there loses ISBNs. Conflicted held keys count: in the rehearsal,
+        # Dead Souls held a 218-edition work Open Library marked conflicted, and
+        # the book's WorldCat ISBNs led to a 2-edition duplicate.
+        def outweighed_by_held?(resolution, work)
+          editions = edition_count(work)
+          held_passing(resolution).any? { |key, held| key != work.key && held.key != work.key && edition_count(held) >= editions }
+        end
+
+        def edition_count(work) = work.popularity&.dig(:edition_count).to_i
 
         # Spec step 5: the book's WorldCat-confirmed ISBNs, looked up in Open
         # Library as ISBN-13s; the work most of them lead to, if it passes.

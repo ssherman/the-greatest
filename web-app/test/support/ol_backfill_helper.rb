@@ -7,11 +7,12 @@ module OlBackfillHelper
                     "pipeline_version" => 1, "matcher_version" => 3}.freeze
 
   # authors: [[author_key, name], ...]
-  def ol_work(key, title:, subtitle: nil, authors: [], redirected_from: [], source_version: SOURCE_VERSION)
+  def ol_work(key, title:, subtitle: nil, authors: [], redirected_from: [], editions: nil, source_version: SOURCE_VERSION)
     ::Books::OpenLibrary::Work.from_record({
       "key" => {"source" => "openlibrary", "key" => key}, "title" => title, "subtitle" => subtitle,
       "authors" => authors.map { |author_key, name| {"key" => {"source" => "openlibrary", "key" => author_key}, "name" => name} },
-      "subjects" => [], "redirected_from" => redirected_from.map { |old| {"source" => "openlibrary", "key" => old} }
+      "subjects" => [], "redirected_from" => redirected_from.map { |old| {"source" => "openlibrary", "key" => old} },
+      "popularity" => editions && {"edition_count" => editions}
     }, source_version: source_version)
   end
 

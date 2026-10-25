@@ -600,6 +600,32 @@ module Services
           assert_equal ["OL5W", :worldcat_isbns], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
         end
 
+        # Dead Souls in the dev rehearsal: the held work (218 editions) was a
+        # conflicted candidate, so held_key skipped it, and the book's WorldCat
+        # ISBNs led to a 2-edition duplicate. Moving there loses editions.
+        test "no route moves a book off a passing held work onto one with fewer editions" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          hold(:books_work_isbn13, "9780199232765", :worldcat)
+          held = ol_work("OL9W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 218)
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(held, verdict: "reject", score: 0.3, conflicts: ["identifier"])]),
+            hits: {["isbn13", "9780199232765"] => [ol_hit("OL5W"), ol_hit("OL5W"), ol_hit("OL7W")]},
+            works: {"OL9W" => held, "OL5W" => ol_work("OL5W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 2)})
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
+        # Tristram Shandy: the held work had 1 edition, the ISBNs' work 85.
+        test "a route may move a book off a passing held work onto one with more editions" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          hold(:books_work_isbn13, "9780199232765", :worldcat)
+          held = ol_work("OL9W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 1)
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(held, verdict: "reject", score: 0.3, conflicts: ["identifier"])]),
+            hits: {["isbn13", "9780199232765"] => [ol_hit("OL5W"), ol_hit("OL5W"), ol_hit("OL7W")]},
+            works: {"OL9W" => held, "OL5W" => ol_work("OL5W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 85)})
+
+          assert_equal ["OL5W", :worldcat_isbns], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
+        end
+
         test "a tripped volume guard still stops the candidate routes" do
           client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", volume_guards_tripped: ["author_shelf"],
             candidates: [candidate(tolstoy_work("OL5W", "War and Peace")), candidate(tolstoy_work("OL6W", "War and Peace"), verdict: "reject", score: 0.2)]))
