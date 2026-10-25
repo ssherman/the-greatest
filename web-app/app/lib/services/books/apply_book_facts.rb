@@ -95,12 +95,7 @@ module Services
       end
 
       def human_cleared_fields
-        @human_cleared_fields ||= CorrectionField.applied
-          .joins(:correction)
-          .where(corrections: {correctable_type: "Books::Book", correctable_id: book.id})
-          .pluck(:field_name, :new_value)
-          .select { |_name, value| value.blank? }
-          .map(&:first)
+        @human_cleared_fields ||= HumanClearedFields.for(book)
       end
 
       def apply_first_published_year
