@@ -178,8 +178,10 @@ every old key whose record passes the check (`ApplyBook#agreeing_old_keys`), exa
    (not an alternate title, not by dropping a subtitle) and that passes the check, so an author
    agrees. This is the English-titled work that Open Library ranks below the original-language one
    (*The Trial*, *Demons*, *We*).
-4. **`held_key`.** A work key the book already holds whose live record passes the check, preferring an
-   exact title key. The other passing held keys with our exact title are kept as duplicate keys.
+4. **`held_key`.** A work key the book already holds whose live record passes the check: the one with
+   the most editions, then an exact title key, then stored order (settling drops the book's other
+   work keys). A held key is skipped when it or the work it redirects to is a conflicted candidate.
+   The other passing held keys with our exact title are kept as duplicate keys.
 5. **`worldcat_isbns`.** Up to five of the book's WorldCat-confirmed ISBNs (source `worldcat`) looked
    up in Open Library as ISBN-13s (ISBN-10s are converted first); the work most of them lead to, if it
    passes the check. Other passing works with our exact title become duplicate keys. A book stage 3 has not yet run on has no

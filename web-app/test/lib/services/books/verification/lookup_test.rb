@@ -628,6 +628,41 @@ module Services
           assert_nil Lookup.call(book: @book, client: client).work
         end
 
+        # Codex on #418: works_batch keeps the requested key for a redirected work,
+        # so the conflict check must also look at the work's own key.
+        test "a held key that redirects to a conflicted candidate is not settled on" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          live = tolstoy_work("OL5W", "War and Peace")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain",
+            candidates: [candidate(live, verdict: "reject", score: 0.3, conflicts: ["identifier"])]), works: {"OL9W" => live})
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
+        # Codex on #418: settling drops the book's other work keys, so of several
+        # passing held works the one with the most editions is kept.
+        test "of several passing held works the one with the most editions wins over an exact title" do
+          hold(:books_work_openlibrary_id, "OL8W", :legacy)
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          client = FakeOlClient.new(resolution: abstain_with_nothing, works: {
+            "OL8W" => ol_work("OL8W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 2),
+            "OL9W" => ol_work("OL9W", title: "War and Peace: A Novel", authors: [["OL1A", "Leo Tolstoy"]], editions: 200)
+          })
+
+          assert_equal ["OL9W", :held_key], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
+        end
+
+        test "a held-key pick with fewer editions than another held work that fails our check is not taken" do
+          hold(:books_work_openlibrary_id, "OL8W", :legacy)
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          client = FakeOlClient.new(resolution: abstain_with_nothing, works: {
+            "OL8W" => ol_work("OL8W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 2),
+            "OL9W" => ol_work("OL9W", title: "Война и мир", authors: [["OL1A", "Leo Tolstoy"]], editions: 200)
+          })
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
         # Tristram Shandy: the held work had 1 edition, the ISBNs' work 85.
         test "a route may move a book off a passing held work onto one with more editions" do
           hold(:books_work_openlibrary_id, "OL9W", :legacy)

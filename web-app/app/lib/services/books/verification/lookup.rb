@@ -141,7 +141,7 @@ module Services
 
           conflicted = conflicted_keys(resolution)
           held = held_key(resolution, conflicted)
-          return held if held
+          return held if held && !outweighed_by_held?(resolution, held.work)
 
           chance = nil
           if resolution.volume_guards_tripped.empty?
@@ -177,12 +177,18 @@ module Services
         end
 
         # Spec step 4: a legacy key the book holds whose live work passes our check.
+        # The most editions wins, then an exact title, then stored order: settling
+        # drops the book's other work keys, and stage 2 harvests only the settled
+        # work. A held key is conflicted by its own key or by the key its work
+        # redirects to (works_batch keeps the requested key).
         def held_key(resolution, conflicted)
-          passing = held_passing(resolution).except(*conflicted).values
+          passing = held_passing(resolution).reject { |key, work| conflicted.include?(key) || conflicted.include?(work.key) }.values
           return nil if passing.empty?
 
           ours = Check.title_key(@book.title)
-          chosen = passing.find { |work| ours && Check.their_title_keys(work).first == ours } || passing.first
+          chosen = passing.each_with_index.max_by do |work, index|
+            [edition_count(work), (ours && Check.their_title_keys(work).first == ours) ? 1 : 0, -index]
+          end.first
           Answer.new(work: chosen, lookup: :held_key, duplicates: passing.select { |work| exact_title?(work) }.map(&:key) - [chosen.key], redirect_sources: [],
             source_version: resolution.source_version, ol_pick: resolution.candidates.first&.work_key)
         end
