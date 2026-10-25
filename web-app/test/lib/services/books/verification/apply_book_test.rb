@@ -493,7 +493,7 @@ module Services
           assert_equal [[books_authors(:tolstoy).id, "OL26783A"]], row.author_changes["added"]
         end
 
-        test "a resolve_candidate pick the book holds is confirmed and keeps its other passing exact-title held key as a duplicate" do
+        test "a held key that is also a candidate is confirmed through held_key and keeps its other passing exact-title held key as a duplicate" do
           add_key("OL5W")
           add_key("OL7W")
           add_key("OL8W")
@@ -508,7 +508,7 @@ module Services
 
           row = ApplyBook.call(book: @book, client: client, run_id: "run-1").data
 
-          assert_equal ["confirmed", "resolve_candidate", ["OL5W"], ["OL7W"], ["OL7W"]],
+          assert_equal ["confirmed", "held_key", ["OL5W"], ["OL7W"], ["OL7W"]],
             [row.work_outcome, row.lookup, work_keys, duplicate_keys, row.duplicate_keys]
         end
 

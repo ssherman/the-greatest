@@ -181,12 +181,16 @@ every old key whose record passes the check (`ApplyBook#agreeing_old_keys`), exa
    passes the check. Other passing works with our exact title become duplicate keys. A book stage 3 has not yet run on has no
    such ISBNs and skips this route.
 
-When a `resolve_candidate` or `exact_title` pick is a key the book already holds, the book is
-`confirmed`, which drops its other work keys; those whose live work passes the check and carries our
-exact title are kept as duplicate keys. (A `replaced` book keeps its agreeing old keys without the
-exact-title rule.)
+**`held_key` runs first**, then `resolve_candidate`, `exact_title` and `worldcat_isbns`. A candidate
+passing the same check is no reason to move a book off a key it holds. In the 2026-10-24 dev
+rehearsal, with candidates first, *One Hundred Years of Solitude* traded its held work (Spanish title,
+208 editions) for an English-titled stub with 2, and *A Hero of Our Time* its 26-edition work for one
+with a single edition. So a candidate pick is never a key the book holds, and a held key that is also a
+candidate settles as `held_key`. (A `replaced` book keeps its agreeing old keys without the exact-title
+rule.)
 
-(The route numbers follow the design's steps, where step 1 is the comparison key above.) A route settle is applied
+(The route numbers follow the design's steps, where step 1 is the comparison key above, not the order
+they run in.) A route settle is applied
 like an accept, with two differences: it writes **no Open Library author keys** (a weaker answer must
 not spread keys to authors), and it keeps the rest of the guards. A work another book holds still makes
 the book a `duplicate_pair`, and the route's work is not saved. A `removed` row that is reprocessed and

@@ -124,16 +124,19 @@ module Services
             ol_pick: accepted&.work_key || resolution.candidates.first&.work_key)
         end
 
-        # Spec steps 2-3: Open Library's own candidates, each held to our check.
-        # Returns an Answer or nil. Then the held keys (step 4) and the
-        # WorldCat-confirmed ISBNs (step 5), all behind the same guards.
+        # The held keys (spec step 4) first, then Open Library's own candidates
+        # (steps 2-3), then the WorldCat-confirmed ISBNs (step 5), all behind the
+        # same guards and each held to our check. Returns an Answer or nil. The
+        # held key goes first because a candidate passing the same check is no
+        # reason to move: in the dev rehearsal, One Hundred Years of Solitude
+        # traded its 208-edition work for a 2-edition English stub.
         def second_chance(resolution)
           return nil if guarded?(resolution)
 
           usable = resolution.candidates.select { |candidate| candidate.record && candidate.conflicting_features.empty? }
           conflicted = conflicted_keys(resolution)
-          resolve_candidate(resolution, usable, conflicted) || exact_title(resolution, usable, conflicted) ||
-            held_key(resolution, conflicted) || worldcat_isbns(resolution, conflicted)
+          held_key(resolution, conflicted) || resolve_candidate(resolution, usable) ||
+            exact_title(resolution, usable) || worldcat_isbns(resolution, conflicted)
         end
 
         # The matcher's guards: a reject, an identifier conflict, a tripped volume guard.
@@ -161,7 +164,10 @@ module Services
           keys = stored_keys.uniq - conflicted
           return nil if keys.empty?
 
-          works = @client.works_batch(keys)
+          # A held key that is also a candidate already has its record.
+          works = resolution.candidates.select { |candidate| candidate.record && keys.include?(candidate.work_key) }.to_h { |candidate| [candidate.work_key, candidate.record] }
+          missing = keys - works.keys
+          works = works.merge(@client.works_batch(missing)) if missing.any?
           passing = keys.filter_map { |key| works[key] }.select { |work| Check.verified?(@book, work, @client) }
           return nil if passing.empty?
 
@@ -192,43 +198,33 @@ module Services
             source_version: resolution.source_version, ol_pick: resolution.candidates.first&.work_key)
         end
 
-        def resolve_candidate(resolution, usable, conflicted)
+        def resolve_candidate(resolution, usable)
           passing = usable.reject(&:reject?).select { |candidate| Check.verified?(@book, candidate.record, @client) }
           return nil if passing.empty?
 
           wanted = ([@book.title] + Array(@book.alternate_titles)).filter_map { |title| Check.title_key(title) }
           chosen = passing.find { |candidate| wanted.include?(Check.their_title_keys(candidate.record).first) } || passing.first
           others = (passing - [chosen]).map(&:record).select { |work| exact_title?(work) }.map(&:key)
-          second_chance_answer(resolution, :resolve_candidate, chosen, others, conflicted)
+          second_chance_answer(resolution, :resolve_candidate, chosen, others)
         end
 
         # A reject-banded candidate whose full title is exactly ours.
-        def exact_title(resolution, usable, conflicted)
+        def exact_title(resolution, usable)
           ours = Check.title_key(@book.title)
           return nil if ours.nil?
 
           chosen = usable.select(&:reject?).sort_by { |candidate| -candidate.score.to_f }.find do |candidate|
             Check.their_title_keys(candidate.record).first == ours && Check.verified?(@book, candidate.record, @client)
           end
-          chosen && second_chance_answer(resolution, :exact_title, chosen, [], conflicted)
+          chosen && second_chance_answer(resolution, :exact_title, chosen, [])
         end
 
-        # A pick the book already holds settles as confirmed, which drops the
-        # book's other work keys: those whose live work passes and carries our
-        # exact title are kept as duplicates, the way a replaced key is.
-        def second_chance_answer(resolution, lookup, chosen, others, conflicted)
-          others += held_duplicates(chosen.work_key, conflicted) if stored_keys.include?(chosen.work_key)
+        # A candidate pick is never a key the book holds: held_key runs first and
+        # takes any held key that passes.
+        def second_chance_answer(resolution, lookup, chosen, others)
           Answer.new(work: chosen.record, lookup: lookup, duplicates: others.uniq - [chosen.work_key],
             redirect_sources: Array(chosen.redirect_sources), source_version: resolution.source_version,
             ol_pick: resolution.candidates.first&.work_key)
-        end
-
-        def held_duplicates(chosen_key, conflicted)
-          keys = stored_keys.uniq - [chosen_key] - conflicted
-          return [] if keys.empty?
-
-          works = @client.works_batch(keys)
-          keys.select { |key| (work = works[key]) && exact_title?(work) && Check.verified?(@book, work, @client) }
         end
 
         # Not an accept, but the top candidate is a key we hold and its record

@@ -291,7 +291,7 @@ module Services
           assert_equal ["OL5W", []], Lookup.call(book: @book, client: client).then { |answer| [answer.work.key, answer.duplicates] }
         end
 
-        test "a route pick the book already holds keeps its other passing exact-title held keys as duplicates" do
+        test "a held key that is a passing candidate settles through held_key and keeps its other passing exact-title held keys as duplicates" do
           hold(:books_work_openlibrary_id, "OL5W", :legacy)
           hold(:books_work_openlibrary_id, "OL7W", :legacy)
           hold(:books_work_openlibrary_id, "OL8W", :legacy)
@@ -305,10 +305,10 @@ module Services
 
           answer = Lookup.call(book: @book, client: client)
 
-          assert_equal ["OL5W", :resolve_candidate, ["OL7W"]], [answer.work.key, answer.lookup, answer.duplicates]
+          assert_equal ["OL5W", :held_key, ["OL7W"]], [answer.work.key, answer.lookup, answer.duplicates]
         end
 
-        test "an exact_title pick the book already holds keeps its other passing exact-title held keys as duplicates" do
+        test "a held key that is a reject-band candidate settles through held_key and keeps its other passing exact-title held keys as duplicates" do
           @book.update_columns(title: "Demons")
           hold(:books_work_openlibrary_id, "OL6W", :legacy)
           hold(:books_work_openlibrary_id, "OL7W", :legacy)
@@ -320,7 +320,7 @@ module Services
 
           answer = Lookup.call(book: @book, client: client)
 
-          assert_equal ["OL6W", :exact_title, ["OL7W"]], [answer.work.key, answer.lookup, answer.duplicates]
+          assert_equal ["OL6W", :held_key, ["OL7W"]], [answer.work.key, answer.lookup, answer.duplicates]
         end
 
         test "an accepted work that fails our check gives way to a passing candidate behind it" do
@@ -397,6 +397,21 @@ module Services
           answer = Lookup.call(book: @book, client: client)
 
           assert_equal ["OL9W", :held_key, [], false], [answer.work.key, answer.lookup, answer.duplicates, answer.confirm_only]
+        end
+
+        # One Hundred Years of Solitude: the book held Open Library's main work
+        # (Spanish title, 208 editions); the top passing candidate was an
+        # English-titled stub with 2. Both pass, so the key the book holds stays.
+        test "a passing held key wins over a passing candidate the book does not hold" do
+          @book.update_columns(alternate_titles: ["Voina i mir"])
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          stub = tolstoy_work("OL5W", "War and Peace")
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", candidates: [candidate(stub)]),
+            works: {"OL9W" => tolstoy_work("OL9W", "Voina i mir")})
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL9W", :held_key], [answer.work.key, answer.lookup]
         end
 
         test "of several passing held keys the exact title wins over stored order" do
