@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 
 // The books Playwright project runs Desktop Chrome, which is above the `lg`
 // breakpoint where the drawer is hidden. Every test here must set a phone
@@ -170,4 +170,41 @@ test.describe('Books header stays visible', () => {
     const card = await page.getByTestId('book-sidebar-card').boundingBox();
     expect(card!.y).toBeGreaterThanOrEqual(nav!.y + nav!.height);
   });
+});
+
+// daisyUI splits the navbar 50/50 with no navbar-center below lg, so the
+// brand used to spill under the search icon on phones, and under the first
+// menu link at 1024. Each group's right edge must clear the next group's left.
+test.describe('Books header fits without overlapping', () => {
+  const brand = (page: Page) => page.locator('nav.navbar .navbar-start a[href="/"]');
+  const right = async (locator: Locator) => {
+    const box = (await locator.boundingBox())!;
+    return box.x + box.width;
+  };
+  const left = async (locator: Locator) => (await locator.boundingBox())!.x;
+
+  for (const width of [320, 375, 393, 768]) {
+    test(`the brand clears the search and login buttons at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/');
+
+      const firstEndItem = page.locator('nav.navbar .navbar-end > :visible').first();
+      expect(await right(brand(page))).toBeLessThanOrEqual(await left(firstEndItem));
+      expect(await right(page.locator('#navbar_login_button'))).toBeLessThanOrEqual(width);
+      await expect(brand(page)).toHaveAccessibleName('The Greatest Books');
+    });
+  }
+
+  for (const width of [1024, 1280]) {
+    test(`the brand, menu and search clear each other at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/');
+
+      const menuItems = page.locator('nav.navbar .navbar-center > ul > li');
+      expect(await right(brand(page))).toBeLessThanOrEqual(await left(menuItems.first()));
+      expect(await right(menuItems.last())).toBeLessThanOrEqual(
+        await left(page.locator('nav.navbar .navbar-end form'))
+      );
+    });
+  }
 });
