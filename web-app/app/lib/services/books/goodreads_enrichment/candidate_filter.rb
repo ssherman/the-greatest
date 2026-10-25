@@ -15,12 +15,19 @@ module Services
         # The three title/author tests, shared with PageCheck so the search
         # stage and the page stage cannot disagree on what a derivative or a
         # set is.
+        # Words in the series parenthetical ("(The Border Trilogy, #1)") name the
+        # series, not this book, so they are scanned only after it is stripped.
+        # A numbered range there ("#1-3") is still an omnibus.
+        def self.strip_series(title) = title.to_s.sub(::Books::Goodreads::BookPage::SERIES_SUFFIX, "")
+
         def self.derivative_free?(book, title)
-          (AmazonBookCheck.derivative_words(title) - AmazonBookCheck.own_words(book, :derivative_words)).empty?
+          (AmazonBookCheck.derivative_words(strip_series(title)) - AmazonBookCheck.own_words(book, :derivative_words)).empty?
         end
 
         def self.set_free?(book, title)
-          (AmazonBookCheck.set_words(title) - AmazonBookCheck.own_words(book, :set_words)).empty?
+          return false if title.to_s.match?(AmazonBookCheck::NUMBER_RANGE)
+
+          (AmazonBookCheck.set_words(strip_series(title)) - AmazonBookCheck.own_words(book, :set_words)).empty?
         end
 
         def self.authors_agree?(book, names)
@@ -33,7 +40,7 @@ module Services
         # not mistaken for the book it belongs to.
         def self.title_contained?(book, row_title)
           ours = tokens(book.title.to_s.split(":").first)
-          theirs = tokens(row_title.to_s.sub(::Books::Goodreads::BookPage::SERIES_SUFFIX, ""))
+          theirs = tokens(strip_series(row_title))
           return false if ours.empty?
 
           theirs.each_cons(ours.size).include?(ours)

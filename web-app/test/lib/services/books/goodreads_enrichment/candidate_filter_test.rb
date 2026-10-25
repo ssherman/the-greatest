@@ -33,6 +33,25 @@ module Services
 
           assert_empty CandidateFilter.call(book: @book, rows: [row])
         end
+
+        def row_titled(title)
+          ::Books::Goodreads::SearchPage::Row.new(goodreads_book_id: 2, title: title,
+            author_names: ["Joseph Heller"], year: nil, ratings_count: 5, editions_count: 1)
+        end
+
+        test "set words in the series parenthetical do not drop the book" do
+          book = ::Books::Book.create!(title: "Pretty Horses")
+          book.authors << @book.authors.first
+
+          assert_equal [2], CandidateFilter.call(book: book, rows: [row_titled("Pretty Horses (The Border Trilogy, #1)")]).map(&:goodreads_book_id)
+        end
+
+        test "a numbered range in the series parenthetical is still an omnibus" do
+          book = ::Books::Book.create!(title: "Pretty Horses")
+          book.authors << @book.authors.first
+
+          assert_empty CandidateFilter.call(book: book, rows: [row_titled("Pretty Horses (The Border Trilogy, #1-3)")])
+        end
       end
     end
   end
