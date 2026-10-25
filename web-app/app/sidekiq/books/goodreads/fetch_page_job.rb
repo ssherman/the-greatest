@@ -21,21 +21,14 @@ class Books::Goodreads::FetchPageJob
     return settle(goodreads_book_id) if ::Books::GoodreadsPage.conclusive.exists?(goodreads_book_id: goodreads_book_id)
     return unless ::Books::GoodreadsEdition.awaiting_goodreads.exists?(goodreads_book_id: goodreads_book_id)
 
-    unless due
-      reservation = gate.reserve
-      return settle(goodreads_book_id) unless reservation.granted?
-      return self.class.perform_in(reservation.wait, goodreads_book_id, true, attempt) if reservation.wait.positive?
+    turn = ::Books::Goodreads::GateTurn.call(gate: gate, due: due)
+    case turn.action
+    when :refused then return settle(goodreads_book_id)
+    when :wait then return self.class.perform_in(turn.wait, goodreads_book_id, true, attempt)
     end
-    return settle(goodreads_book_id) if gate.blocked?
 
-    # A turn that came due late (a deploy, a slow fetch before it) still
-    # waits out the gap since the last fetch began, without a new turn.
-    spacing = gate.spacing_wait
-    return self.class.perform_in(spacing, goodreads_book_id, true, attempt) if spacing.positive?
-
-    gate.started!
     outcome = ::Services::Books::GoodreadsPages::FetchPage.call(goodreads_book_id: goodreads_book_id).data[:outcome]
-    gate.block! if %i[blocked unparseable].include?(outcome)
+    ::Books::Goodreads::GateTurn.after_fetch(gate: gate, outcome: outcome)
     if outcome == :unavailable && attempt < Rails.application.config.x.goodreads.fetch_attempts
       return self.class.perform_async(goodreads_book_id, false, attempt + 1)
     end
