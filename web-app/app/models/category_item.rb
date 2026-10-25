@@ -28,7 +28,7 @@ class CategoryItem < ApplicationRecord
   # specific location is linked to the same item; Categories::AncestorReconciler
   # owns them. prefix: true is required -- an unprefixed `inherited` scope would
   # override Ruby's Class#inherited hook.
-  enum :source, {legacy: 0, admin: 1, inherited: 2}, prefix: true
+  enum :source, {legacy: 0, admin: 1, inherited: 2, goodreads: 3}, prefix: true
 
   scope :direct, -> { where.not(source: :inherited) }
 

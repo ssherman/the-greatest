@@ -58,6 +58,9 @@ class Identifier < ApplicationRecord
     books_author_librarything_id: 35,
     books_author_lcnaf: 36,
 
+    # Books - Series level (Books::Series)
+    books_series_goodreads_id: 40,
+
     # Music - Artists
     music_musicbrainz_artist_id: 100,
     music_isni: 101,
@@ -92,7 +95,8 @@ class Identifier < ApplicationRecord
     goodreads_import: 3,
     amazon: 4,
     wikidata: 5,
-    viaf: 6
+    viaf: 6,
+    goodreads: 7
   }, prefix: true
 
   BOOKS_TYPES = %w[Books::Book Books::Edition Books::Author Books::Series].freeze
