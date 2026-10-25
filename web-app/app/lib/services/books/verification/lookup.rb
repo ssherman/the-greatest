@@ -130,20 +130,36 @@ module Services
         # held key goes first because a candidate passing the same check is no
         # reason to move: in the dev rehearsal, One Hundred Years of Solitude
         # traded its 208-edition work for a 2-edition English stub.
+        #
+        # A tripped volume guard (a refused search) stops only the candidate
+        # routes: the list may be short, but the held keys and the WorldCat
+        # ISBNs do not come from it. Every famous book in the rehearsal tripped
+        # author_shelf (Frankenstein, The Iliad, The Aeneid), and each held a
+        # passing work with hundreds of editions.
         def second_chance(resolution)
-          return nil if guarded?(resolution)
+          return nil if rejected?(resolution)
 
-          usable = resolution.candidates.select { |candidate| candidate.record && candidate.conflicting_features.empty? }
           conflicted = conflicted_keys(resolution)
-          held_key(resolution, conflicted) || resolve_candidate(resolution, usable) ||
-            exact_title(resolution, usable) || worldcat_isbns(resolution, conflicted)
+          held = held_key(resolution, conflicted)
+          return held if held
+
+          if resolution.volume_guards_tripped.empty?
+            usable = resolution.candidates.select { |candidate| candidate.record && candidate.conflicting_features.empty? }
+            chance = resolve_candidate(resolution, usable) || exact_title(resolution, usable)
+            return chance if chance
+          end
+          worldcat_isbns(resolution, conflicted)
         end
 
         # The matcher's guards: a reject, an identifier conflict, a tripped volume guard.
         def guarded?(resolution)
-          resolution.decision.verdict == "reject" ||
-            resolution.decision.reason.to_s.start_with?("identifier conflict") ||
-            !resolution.volume_guards_tripped.empty?
+          rejected?(resolution) || !resolution.volume_guards_tripped.empty?
+        end
+
+        # A reject or an identifier conflict: the matcher says no, or our own
+        # identifiers point elsewhere. No route at all.
+        def rejected?(resolution)
+          resolution.decision.verdict == "reject" || resolution.decision.reason.to_s.start_with?("identifier conflict")
         end
 
         def conflicted_keys(resolution)

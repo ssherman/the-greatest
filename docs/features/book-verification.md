@@ -153,10 +153,14 @@ leaves a right answer on the table. Before a book is left `unsure`, `Lookup` tri
 order, after the guards below. They run on every stage 1 pass, not only under the flag. Each ends in `Check.verified?` (title
 and an author agree); nothing settles on score alone. The row's `lookup` records the route.
 
-**Guards.** There is no second chance at all when the matcher's decision is `reject`, when its reason starts with
-"identifier conflict", or when a volume guard tripped (`volume_guards_tripped` not empty). A
-candidate with conflicting features is never taken, and a work that appears among the conflicted
-candidates is skipped by routes 4 and 5.
+**Guards.** There is no second chance at all when the matcher's decision is `reject` or its reason starts with
+"identifier conflict". A tripped volume guard (`volume_guards_tripped` not empty) is a refused
+search: Open Library's candidate list may be short. It stops only the candidate routes
+(`resolve_candidate`, `exact_title`); `held_key` and `worldcat_isbns` do not use that list and still
+run. In the 2026-10-24 dev rehearsal every famous book tripped `author_shelf` (*Frankenstein*, *The
+Iliad*, *The Aeneid*), and with the guard on every route none of them settled, though each held a
+passing work with hundreds of editions. A candidate with conflicting features is never taken, and a
+work that appears among the conflicted candidates is skipped by routes 4 and 5.
 
 **Second-chance duplicates are exact-title only.** A duplicate key (`books_work_openlibrary_duplicate_id`) is an
 identity lookup: the list wizard and the Open Library importer find a book by it. So a route saves a

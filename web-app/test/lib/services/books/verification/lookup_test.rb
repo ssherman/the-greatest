@@ -221,14 +221,16 @@ module Services
           assert_equal [nil, false], [answer.work, answer.confirm_only]
         end
 
-        test "a tripped volume guard never confirms the held top candidate" do
+        # A tripped volume guard is a refused search: Open Library's candidate
+        # list may be short. It says nothing about a key the book holds.
+        test "a tripped volume guard still settles on a held top candidate that passes, through held_key" do
           ::Identifier.create!(identifiable: @book, identifier_type: :books_work_openlibrary_id, value: "OL1W")
           client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", volume_guards_tripped: ["author_shelf"],
             candidates: [candidate(@work)]))
 
           answer = Lookup.call(book: @book, client: client)
 
-          assert_equal [nil, false], [answer.work, answer.confirm_only]
+          assert_equal ["OL1W", :held_key, false], [answer.work&.key, answer.lookup, answer.confirm_only]
         end
 
         test "a held top candidate with conflicting features is never confirmed" do
@@ -579,10 +581,28 @@ module Services
           assert_equal 1, client.calls.count([:identifier, "isbn13", "9780199232765"])
         end
 
-        test "a tripped volume guard stops the held-key route" do
+        # Frankenstein, The Iliad, The Aeneid in the dev rehearsal: every one
+        # tripped author_shelf, and each held a passing work with hundreds of editions.
+        test "a tripped volume guard does not stop the held-key route" do
           hold(:books_work_openlibrary_id, "OL9W", :legacy)
           client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", volume_guards_tripped: ["author_shelf"],
             candidates: []), works: {"OL9W" => tolstoy_work("OL9W", "War and Peace")})
+
+          assert_equal ["OL9W", :held_key], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
+        end
+
+        test "a tripped volume guard does not stop the WorldCat route" do
+          hold(:books_work_isbn13, "9780199232765", :worldcat)
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", volume_guards_tripped: ["author_shelf"], candidates: []),
+            # Two works, so the fast pass does not settle on its own.
+            hits: {["isbn13", "9780199232765"] => [ol_hit("OL5W"), ol_hit("OL5W"), ol_hit("OL7W")]}, works: {"OL5W" => tolstoy_work("OL5W", "War and Peace")})
+
+          assert_equal ["OL5W", :worldcat_isbns], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
+        end
+
+        test "a tripped volume guard still stops the candidate routes" do
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", volume_guards_tripped: ["author_shelf"],
+            candidates: [candidate(tolstoy_work("OL5W", "War and Peace")), candidate(tolstoy_work("OL6W", "War and Peace"), verdict: "reject", score: 0.2)]))
 
           assert_nil Lookup.call(book: @book, client: client).work
         end
