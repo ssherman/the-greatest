@@ -1,12 +1,14 @@
 # frozen_string_literal: true
 
-# books.book_enrichment (spec section 6.2): the book AI step and the Amazon
-# step of an import. Each wraps an existing service in an adapter under Steps.
+# books.book_enrichment (spec section 6.2): the Goodreads step, the book AI
+# step and the Amazon step of an import. Each wraps an existing service in an
+# adapter under Steps. Version 2 added goodreads, which book_facts and amazon
+# wait on (`waits_on: {goodreads: :finish}`); a run planned under version 1
+# has only the other two steps and still runs.
 #
-# book_facts waits for the AI step of every author the import created, but
-# those are other runs' steps, so the waits are passed at plan time (start)
-# rather than declared here. The Goodreads project adds its edges in this
-# file: `waits_on: {goodreads: :finish}` on both steps.
+# book_facts also waits for the AI step of every author the import created, but
+# those are other runs' steps, so those waits are passed at plan time (start)
+# rather than declared here.
 #
 # Run options read by the steps: "force_research" (default false) and
 # "author_names" (default []).
@@ -14,17 +16,21 @@ module Workflows
   module Books
     class BookEnrichment < Workflows::Definition
       workflow "books.book_enrichment"
-      version 1
+      version 2
       target_class ::Books::Book
 
-      add_step key: :book_facts, queue: :low, lease: 15.minutes,
+      # On the goodreads_fetch capsule, one job at a time: FetchGate pacing relies on it.
+      add_step key: :goodreads, queue: :goodreads_fetch, lease: 10.minutes,
+        adapter: Steps::Goodreads.new
+
+      add_step key: :book_facts, queue: :low, lease: 15.minutes, waits_on: {goodreads: :finish},
         adapter: Steps::BookFacts.new
 
       # Seven attempts: 30 s x 4^n backoff adds up to about 11 hours. The old job
       # retried for weeks, and amazon_enriched_at is stamped on the first pass, so
       # nothing but the ranked sweep (books:amazon_enrich_ranked) would ever try
       # a failed book again.
-      add_step key: :amazon, queue: :serial, lease: 10.minutes, max_attempts: 7,
+      add_step key: :amazon, queue: :serial, lease: 10.minutes, max_attempts: 7, waits_on: {goodreads: :finish},
         adapter: Steps::Amazon.new
 
       # Plans a book run and dispatches what is ready once the caller's
@@ -50,7 +56,7 @@ module Workflows
           result = Workflows::Planner.call(definition: self, enrichable: book, initiated_by: initiated_by,
             options: options.stringify_keys.merge("author_names" => author_names),
             waits: {book_facts: waited_on.map { |author_run| author_run.step(:author_facts) }},
-            skips: linked_ids.empty? ? {amazon: "no_authors"} : {})
+            skips: linked_ids.empty? ? {goodreads: "no_authors", amazon: "no_authors"} : {})
           raise ArgumentError, result.errors.join("; ") unless result.success?
 
           run = result.data[:run]

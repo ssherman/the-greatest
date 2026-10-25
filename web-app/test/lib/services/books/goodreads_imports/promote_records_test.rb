@@ -32,14 +32,14 @@ module Services
           author_run = run_for(@author, "books.author_enrichment")
           book_run = run_for(@book, "books.book_enrichment")
           assert_equal "goodreads_promote", book_run.initiated_by
-          assert_equal [author_run.step(:author_facts)], book_run.step(:book_facts).dependencies.map(&:prerequisite_step)
+          assert_equal [author_run.step(:author_facts)], book_run.step(:book_facts).dependencies.map(&:prerequisite_step).reject { it.key == "goodreads" }
           assert_equal 0, @book.enrichments.count
         end
 
         test "a book whose author was already in the catalog plans a run that waits on nothing" do
           PromoteRecords.call(books: [@plain], authors: [])
 
-          assert_equal 0, run_for(@plain, "books.book_enrichment").step(:book_facts).dependencies.count
+          assert_equal 0, run_for(@plain, "books.book_enrichment").step(:book_facts).dependencies.map(&:prerequisite_step).reject { it.key == "goodreads" }.size
           assert_equal 0, WorkflowRun.where(enrichable: books_authors(:tolstoy), initiated_by: "goodreads_promote").count
         end
 
@@ -66,7 +66,7 @@ module Services
 
           author_step = run_for(@author, "books.author_enrichment").step(:author_facts)
           [@book, second].each do |book|
-            assert_equal [author_step], run_for(book, "books.book_enrichment").step(:book_facts).dependencies.map(&:prerequisite_step)
+            assert_equal [author_step], run_for(book, "books.book_enrichment").step(:book_facts).dependencies.map(&:prerequisite_step).reject { it.key == "goodreads" }
           end
         end
 

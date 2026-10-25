@@ -436,7 +436,7 @@ module DataImporters
           # The author was created through Open Library, so the book's AI step waits on its run.
           author_run = WorkflowRun.find_by!(enrichable: author, workflow: "books.author_enrichment")
           book_facts = WorkflowRun.find_by!(enrichable: book, workflow: "books.book_enrichment").step(:book_facts)
-          assert_equal [author_run.step(:author_facts)], book_facts.dependencies.map(&:prerequisite_step)
+          assert_equal [author_run.step(:author_facts)], book_facts.dependencies.map(&:prerequisite_step).reject { it.key == "goodreads" }
         end
 
         test "a forced re-import of a book that has authors touches neither author step" do
@@ -496,17 +496,17 @@ module DataImporters
           assert_equal [author.id], result.created_author_ids
           author_run = WorkflowRun.find_by!(enrichable: author, workflow: "books.author_enrichment")
           book_run = WorkflowRun.find_by!(enrichable: result.item, workflow: "books.book_enrichment")
-          assert_equal [author_run.step(:author_facts)], book_run.step(:book_facts).dependencies.map(&:prerequisite_step)
+          assert_equal [author_run.step(:author_facts)], book_run.step(:book_facts).dependencies.map(&:prerequisite_step).reject { it.key == "goodreads" }
           assert_equal book_run.id, author_run.reload.parent_run_id
           assert_equal ["importer", "importer"], [author_run.initiated_by, book_run.initiated_by]
         end
 
-        test "a book with authors gets a book run whose amazon step is ready, not skipped" do
+        test "a book with authors gets a book run whose amazon step is planned behind goodreads, not skipped" do
           stub_resolve_down
 
           result = Importer.call(title: "Hadji Murat", author_names: ["Lev Tolstoy"])
 
-          assert_equal "ready", WorkflowRun.find_by!(enrichable: result.item, workflow: "books.book_enrichment").step(:amazon).state
+          assert_equal "blocked", WorkflowRun.find_by!(enrichable: result.item, workflow: "books.book_enrichment").step(:amazon).state
         end
 
         test "a book whose authors all exist plans a book run and no author run" do
@@ -516,7 +516,7 @@ module DataImporters
 
           assert_includes result.summary[:data_populated], :enrichment_planned
           assert_equal 0, WorkflowRun.where(enrichable: result.item.authors.first, workflow: "books.author_enrichment", initiated_by: "importer").count
-          assert_equal 0, WorkflowRun.find_by!(enrichable: result.item, workflow: "books.book_enrichment").step(:book_facts).dependencies.count
+          assert_equal 0, WorkflowRun.find_by!(enrichable: result.item, workflow: "books.book_enrichment").step(:book_facts).dependencies.map(&:prerequisite_step).reject { it.key == "goodreads" }.size
         end
 
         test "a new book is seeded with the query's subtitle, and the finder sends it to /resolve" do
