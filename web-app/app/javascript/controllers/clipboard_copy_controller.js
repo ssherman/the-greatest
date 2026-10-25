@@ -23,13 +23,14 @@ export default class extends Controller {
   }
 
   showFeedback(button = this.buttonTarget) {
-    const originalText = button.textContent
+    // innerHTML, not textContent: an icon-only button must get its icon back.
+    const original = button.innerHTML
     button.textContent = "Copied!"
     button.classList.add("btn-success")
     button.classList.remove("btn-primary")
 
     setTimeout(() => {
-      button.textContent = originalText
+      button.innerHTML = original
       button.classList.remove("btn-success")
       button.classList.add("btn-primary")
     }, 2000)

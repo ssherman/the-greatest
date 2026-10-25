@@ -5,7 +5,7 @@
 Rails.application.configure do
   # Subject and location categories are not listed on browse pages when they
   # have fewer ranked books than this, nor in the public filter search when
-  # their catalog item_count (all links, ranked or not) is below it (spec §6).
+  # they have fewer book links (ranked or not) than this (spec §6).
   # Their pages still render; genres are exempt.
   config.x.books.browse_min_category_books = 5
 

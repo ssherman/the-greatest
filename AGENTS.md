@@ -120,10 +120,11 @@ whether or not books has launched.
 - **The legacy books DB (`the_greatest_books_legacy`) is the same script with `--legacy`**
   (both databases) or `--legacy-only` (leave `the_greatest_development` alone). It comes from
   the `postgres_tgb_backup_*` files in the same bucket: ~5 GB down, ~65 GB restored, ~25 minutes.
-  Only the books data migration (`data_migration:*`) reads it. A missing legacy DB is harmless
-  otherwise — except that annotaterb's post-`db:migrate` hook tries to connect to every
-  development database in `database.yml` and errors on it; the script sets
-  `ANNOTATERB_SKIP_ON_DB_TASKS=1` for that reason, and so can you.
+  Only the books data migration (`data_migration:*`) reads it. Annotaterb's post-`db:migrate`
+  hook also connects to every development database in `database.yml`, so a missing legacy DB
+  makes it error. The restore script sets `ANNOTATERB_SKIP_ON_DB_TASKS=1` because a restore runs
+  no migration. Nothing else may set it (see "Schema annotations" below): if the hook errors on
+  a missing legacy DB, restore it with `--legacy-only`.
 
 **The test database is per-checkout.** `config/test_database_name.rb` names the test primary after
 the directory the checkout lives in, so each git worktree gets its own
@@ -177,6 +178,15 @@ checkout (`git worktree list --porcelain | head -1 | cut -d' ' -f2`) or the app 
   `Result = Struct.new(:success?, :data, :errors, keyword_init: true)` (`keyword_init` is kept on
   purpose — a Standard cop is disabled for it).
 - **Rails 8 enum syntax:** `enum :status, { active: 0 }` (colon prefix), never `enum status: {...}`.
+- **Schema annotations: ALWAYS run annotaterb.** Every migration and every new or changed model
+  ships with its annotation update in the same commit. `bin/rails db:migrate` runs annotaterb by
+  itself, and `bundle exec annotaterb models` runs it by hand. Never set
+  `ANNOTATERB_SKIP_ON_DB_TASKS`, never put it in a plan or a subagent brief, and never hand-write
+  a `# == Schema Information` block. Skipped runs pile up into huge one-off annotation PRs, which
+  is exactly what the tool exists to prevent. The dev database is shared between worktrees, so it
+  can hold another branch's columns (`bin/rails db:migrate:status` lists that branch's migrations
+  as `NO FILE`). Check the annotation diff and delete only the lines for columns your branch's
+  `schema.rb` does not have. Never skip the run to avoid them.
 - **Polymorphic associations** use the `_able` suffix (`reviewable`, `listable`). In fixtures use
   `listable: dark_side (Music::Album)` — never set `_type` manually.
 - **DataImporters:** for identifiers always `find_or_initialize_by`, never `build` (avoids dupes on

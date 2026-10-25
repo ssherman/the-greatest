@@ -5,8 +5,8 @@
 #  id                :bigint           not null, primary key
 #  identifiable_type :string           not null
 #  identifier_type   :integer          not null
-#  value             :string           not null
 #  source            :integer
+#  value             :string           not null
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
 #  identifiable_id   :bigint           not null

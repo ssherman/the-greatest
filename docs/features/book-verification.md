@@ -430,6 +430,10 @@ A book whose row a `second_chance` run settled (it has `second_chance_at` and a 
 dispatched to the second-chance revert instead (below): it goes back to `unsure` or `removed`, not to
 `reverted`, and the task says "reverted the second chance on book ...".
 
+Findings that agreed only through an alternate title the AI review later removed are undone by a
+separate step, `books:alternate_titles:undo_findings`, not by this task
+(`docs/features/books-alternate-titles.md`).
+
 A work key that arrived afterwards (a merge, an admin) stays. Another book processed later may have
 relied on an author key the pass added, so check those books. Pairs the run flagged stay in the
 Duplicates queue.

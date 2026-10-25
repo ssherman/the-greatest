@@ -19,7 +19,7 @@ module Admin
       assert_equal "books", books[:theme]
       assert_equal "books", books[:stylesheet]
       assert_equal "The Greatest Books", books[:title]
-      assert_nil books[:favicon_dir]
+      assert_equal "/icons/books", books[:favicon_dir]
     end
 
     test "chrome_for falls back to music chrome for domains with no admin" do

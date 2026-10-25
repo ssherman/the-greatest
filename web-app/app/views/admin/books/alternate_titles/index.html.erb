@@ -1,0 +1,23 @@
+<%= turbo_frame_tag "alternate_titles_list" do %>
+  <% if @rows.empty? %>
+    <p class="text-base-content/60 text-sm">No alternate titles.</p>
+  <% else %>
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Title</th><th>Source</th><th>Status</th><th>Verdict</th><th>Category</th>
+            <th>Confidence</th><th>Reason</th><th>AI chat</th><th>Decided</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <%= render partial: "admin/books/alternate_titles/row", collection: @rows, as: :row %>
+        </tbody>
+      </table>
+    </div>
+    <%# Page links stay inside this frame on purpose: paging swaps only the table. %>
+    <% if @pagy.pages > 1 %>
+      <div class="mt-4 flex justify-center"><%== @pagy.series_nav %></div>
+    <% end %>
+  <% end %>
+<% end %>

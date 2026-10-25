@@ -25,6 +25,14 @@
     <%= yield(:head_links) if content_for?(:head_links) %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="turbo-prefetch" content="false">
+    <%# Icons live in public/, not the asset pipeline: the manifest's relative icon
+        URLs need undigested paths, and a stable favicon URL helps search engines. %>
+    <link rel="icon" href="/icons/books/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" type="image/png" sizes="96x96" href="/icons/books/favicon-96x96.png">
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/icons/books/favicon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/books/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-title" content="Greatest Books">
+    <link rel="manifest" href="/icons/books/site.webmanifest">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
@@ -59,10 +67,13 @@
             padding-top on the body. z-30 sits under .drawer-side's z-40 so the
             open drawer and its dimmed overlay cover the header. %>
         <nav class="navbar bg-base-300 sticky top-0 z-30" aria-label="Main">
-          <div class="navbar-start">
+          <%# Below lg there is no navbar-center, and daisyUI's fixed 50/50 split
+              let the brand spill under the search icon. Start takes what end
+              leaves instead. %>
+          <div class="navbar-start max-lg:w-auto max-lg:flex-1 max-lg:min-w-0">
             <label for="books-nav-drawer"
                    id="books-nav-drawer-button"
-                   class="btn btn-ghost drawer-button lg:hidden"
+                   class="btn btn-ghost btn-square drawer-button lg:hidden"
                    data-books--nav-drawer-target="button"
                    aria-controls="books-nav-drawer-panel"
                    aria-expanded="false"
@@ -71,9 +82,11 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
               </svg>
             </label>
-            <%= link_to "/", class: "btn btn-ghost text-xl" do %>
-              <span class="text-2xl mr-2">📚</span>
-              <%= domain_name %>
+            <%# The name goes sr-only (not hidden) on the narrowest phones so the
+                link keeps an accessible name; the logo's alt is empty. %>
+            <%= link_to "/", class: "btn btn-ghost px-1 sm:px-4 text-base sm:text-xl" do %>
+              <%= image_tag "/icons/books/logo.svg", width: 32, height: 32, alt: "", class: "size-7 sm:size-8 sm:mr-1" %>
+              <span class="max-[374px]:sr-only"><%= domain_name %></span>
             <% end %>
           </div>
           <div class="navbar-center hidden lg:flex">
@@ -81,7 +94,7 @@
               <%= render "books/shared/nav_links", variant: :horizontal %>
             </ul>
           </div>
-          <div class="navbar-end">
+          <div class="navbar-end max-lg:w-auto max-lg:shrink-0">
             <%# Mobile: icon link to the search page %>
             <%= link_to books_search_path, class: "btn btn-ghost btn-square md:hidden", aria: { label: "Search" } do %>
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -97,7 +110,7 @@
                 <%= f.search_field :q,
                     value: (params[:q] if request.path == books_search_path),
                     placeholder: "Search books...",
-                    class: "input w-64",
+                    class: "input w-64 lg:w-44 xl:w-64",
                     autocomplete: "off",
                     "aria-label": "Search books" %>
                 <button type="submit" class="btn btn-square btn-ghost" aria-label="Search">

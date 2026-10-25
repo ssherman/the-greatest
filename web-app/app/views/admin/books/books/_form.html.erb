@@ -118,13 +118,30 @@
 
         <!-- Alternate Titles -->
         <div class="md:col-span-2">
-          <%= f.label :alternate_titles, class: "label" do %>
-            <span class="font-semibold">Alternate Titles</span>
-          <% end %>
-          <%= text_field_tag "books_book[alternate_titles_string]", @book.alternate_titles.join(", "), class: "input w-full" %>
-          <label class="label">
-            <span>Comma-separated</span>
-          </label>
+          <span class="font-semibold label">Alternate Titles</span>
+          <%# One input per title, never one comma-joined input: a joined input
+              cannot hold "Good Night, Mr. Tom" without splitting it in two. The
+              blank hidden input is always sent so removing every row still posts
+              the key and clears the list. %>
+          <div data-controller="shared--form-token">
+            <%= hidden_field_tag "books_book[alternate_titles][]", "", id: nil %>
+            <div data-shared--form-token-target="list"
+                 data-field="alternate_titles"
+                 data-input-name="books_book[alternate_titles][]"
+                 class="space-y-1">
+              <% (@submitted_titles || @book.alternate_titles).each do |value| %>
+                <div class="join w-full">
+                  <%= text_field_tag "books_book[alternate_titles][]", value, id: nil,
+                        class: "input join-item w-full", "aria-label": "Alternate title" %>
+                  <button type="button" class="btn join-item"
+                          data-action="shared--form-token#removeListItem">Remove</button>
+                </div>
+              <% end %>
+            </div>
+            <button type="button" class="btn btn-sm mt-2"
+                    data-field="alternate_titles"
+                    data-action="shared--form-token#addListItem">Add alternate title</button>
+          </div>
         </div>
       </div>
     </div>

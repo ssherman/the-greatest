@@ -9,12 +9,16 @@ module Books
       RankedItem.create!(item: books_books(:got), ranking_configuration: @rc, rank: 3, score: 80)
     end
 
-    def facets(**options)
-      Books::FilterFacetsQuery.call(ranking_configuration: @rc, **options)
+    def categories_for(type, **options)
+      Books::FilterFacetsQuery.categories(type: type, ranking_configuration: @rc, **options)
     end
 
-    test "genre facet counts ranked books per genre" do
-      counts = facets.genres.to_h { |row| [row[:record].slug, row[:count]] }
+    def countries_for(**options)
+      Books::FilterFacetsQuery.countries(ranking_configuration: @rc, **options)
+    end
+
+    test "categories facet counts ranked books per genre" do
+      counts = categories_for("genre").to_h { |row| [row[:record].slug, row[:count]] }
 
       # 3, not 2: war_and_peace, got, and crime_and_punishment (see
       # test/fixtures/category_items.yml) all carry novels_genre.
@@ -22,143 +26,115 @@ module Books
       assert_equal 1, counts["classics"]
     end
 
-    test "genre facet excludes non-genre category types" do
-      slugs = facets.genres.map { |row| row[:record].slug }
-
-      assert_not_includes slugs, "politics"
-      assert_not_includes slugs, "france"
+    test "categories facet returns only the requested type" do
+      slugs = categories_for("subject").map { |r| r[:record].slug }
+      assert_includes slugs, "politics"
+      assert_not_includes slugs, "novels"
     end
 
-    test "genre facet includes audience categories" do
-      audience = Books::Category.create!(name: "Young Adult", category_type: :audience)
-      CategoryItem.create!(category: audience, item: books_books(:crime_and_punishment))
-
-      slugs = facets.genres.map { |row| row[:record].slug }
-
-      assert_includes slugs, audience.slug
+    test "categories facet keeps applied categories in the list with their counts" do
+      novels = categories(:books_novels_genre)
+      rows = categories_for("genre", categories: [novels])
+      assert_equal 3, rows.find { |r| r[:record] == novels }[:count]
     end
 
-    test "genre facet keeps the category filter applied and drills down" do
-      counts = facets(categories: [categories(:books_novels_genre)])
-        .genres.to_h { |row| [row[:record].slug, row[:count]] }
+    test "categories facet keeps the category filter applied and drills down" do
+      counts = categories_for("genre", categories: [categories(:books_novels_genre)])
+        .to_h { |row| [row[:record].slug, row[:count]] }
 
       assert_equal 1, counts["classics"]
     end
 
-    test "genre facet excludes already-selected categories" do
-      slugs = facets(categories: [categories(:books_novels_genre)]).genres.map { |row| row[:record].slug }
-
-      assert_not_includes slugs, "novels"
+    test "applied categories are listed even with zero matching books" do
+      americana = categories(:books_americana_genre) # no ranked books carry it
+      rows = categories_for("genre", categories: [americana])
+      assert_equal [americana, 0], [rows.last[:record], rows.last[:count]]
     end
 
-    test "country facet counts ranked books per country" do
-      counts = facets.countries.to_h { |row| [row[:record].slug, row[:count]] }
+    test "an applied category cut off by the limit keeps its real count" do
+      novels = categories(:books_novels_genre)
+      classics = categories(:books_classics_genre)
+      # Both carry the one book that has both, so they tie at 1 and limit 1
+      # cuts one of them off whichever way the id tiebreak falls.
+      rows = categories_for("genre", categories: [novels, classics], limit: 1)
 
-      assert_equal 2, counts["french"]
+      assert_equal [[novels, 1], [classics, 1]].sort_by { |r| r[0].id }, rows.map { |r| [r[:record], r[:count]] }.sort_by { |r| r[0].id }
     end
 
-    test "country facet drops its own filter so alternatives remain visible" do
-      Books::BookCountry.create!(book: books_books(:crime_and_punishment), country: books_countries(:japanese))
-
-      slugs = facets(countries: [books_countries(:french)]).countries.map { |row| row[:record].slug }
-
-      assert_includes slugs, "japanese"
+    test "an applied category of another type is not listed" do
+      politics = categories(:books_politics_subject)
+      rows = categories_for("genre", categories: [politics])
+      assert_not_includes rows.map { |r| r[:record] }, politics
     end
 
-    test "country facet excludes already-selected countries" do
-      slugs = facets(countries: [books_countries(:french)]).countries.map { |row| row[:record].slug }
-
-      assert_not_includes slugs, "french"
+    test "categories facet limit caps the rows" do
+      assert_equal 1, categories_for("genre", limit: 1).size
     end
 
-    test "country facet excludes the unknown bucket" do
-      Books::BookCountry.create!(book: books_books(:crime_and_punishment), country: books_countries(:unknown))
-
-      slugs = facets.countries.map { |row| row[:record].slug }
-
-      assert_not_includes slugs, "unknown"
+    test "no limit returns every row" do
+      assert_operator categories_for("genre").size, :>, 1
     end
 
-    test "respects the limit" do
-      assert_operator facets(limit: 1).genres.size, :<=, 1
+    test "an unknown type raises" do
+      assert_raises(ArgumentError) { categories_for("theme") }
     end
 
     test "orders by count descending" do
-      counts = facets.genres.map { |row| row[:count] }
+      counts = categories_for("genre").map { |row| row[:count] }
 
       assert_equal counts.sort.reverse, counts
     end
 
-    test "DEFAULT_LIMIT is small enough for a phone-sized pane" do
-      assert_equal 24, Books::FilterFacetsQuery::DEFAULT_LIMIT
+    test "audience facet lists audiences" do
+      audience = Books::Category.create!(name: "Young Adult", category_type: :audience)
+      CategoryItem.create!(category: audience, item: books_books(:crime_and_punishment))
+      rows = categories_for("audience")
+      assert_equal [[audience, 1]], rows.map { |r| [r[:record], r[:count]] }
     end
 
-    test "genres can be queried on their own" do
-      rows = Books::FilterFacetsQuery.genres(ranking_configuration: @rc)
-      counts = rows.to_h { |row| [row[:record].slug, row[:count]] }
-
-      # 3, not 2: war_and_peace, got, and crime_and_punishment (see
-      # test/fixtures/category_items.yml) all carry novels_genre.
-      assert_equal 3, counts["novels"]
-      assert_equal 1, counts["classics"]
-    end
-
-    test "countries can be queried on their own" do
-      rows = Books::FilterFacetsQuery.countries(ranking_configuration: @rc)
-      counts = rows.to_h { |row| [row[:record].slug, row[:count]] }
+    test "countries facet counts ranked books per country" do
+      counts = countries_for.to_h { |row| [row[:record].slug, row[:count]] }
 
       assert_equal 2, counts["french"]
     end
 
-    test "the per-axis methods match what call returns" do
-      result = facets
-
-      assert_equal result.genres, Books::FilterFacetsQuery.genres(ranking_configuration: @rc)
-      assert_equal result.countries, Books::FilterFacetsQuery.countries(ranking_configuration: @rc)
+    test "countries facet keeps an applied country in the list" do
+      french = books_countries(:french)
+      rows = countries_for(countries: [french])
+      assert_equal 2, rows.find { |r| r[:record] == french }[:count]
     end
 
-    test "the per-axis genre method keeps the category filter applied" do
-      rows = Books::FilterFacetsQuery.genres(
-        ranking_configuration: @rc,
-        categories: [categories(:books_novels_genre)]
-      )
-      slugs = rows.map { |row| row[:record].slug }
-
-      assert_includes slugs, "classics"
-      assert_not_includes slugs, "novels"
-    end
-
-    test "the per-axis country method drops its own filter" do
+    test "countries facet drops its own filter so alternatives remain visible" do
       Books::BookCountry.create!(book: books_books(:crime_and_punishment), country: books_countries(:japanese))
 
-      rows = Books::FilterFacetsQuery.countries(
-        ranking_configuration: @rc,
-        countries: [books_countries(:french)]
-      )
-      slugs = rows.map { |row| row[:record].slug }
+      slugs = countries_for(countries: [books_countries(:french)]).map { |row| row[:record].slug }
 
       assert_includes slugs, "japanese"
-      assert_not_includes slugs, "french"
     end
 
-    test "the per-axis methods respect the limit" do
-      assert_operator Books::FilterFacetsQuery.genres(ranking_configuration: @rc, limit: 1).size, :<=, 1
-      assert_operator Books::FilterFacetsQuery.countries(ranking_configuration: @rc, limit: 1).size, :<=, 1
+    test "an applied country with no ranked books is listed with zero" do
+      japanese = books_countries(:japanese) # of_mice_and_men is not ranked here
+      rows = countries_for(countries: [japanese])
+      assert_equal [japanese, 0], [rows.last[:record], rows.last[:count]]
     end
 
-    test "genre facet counts are narrowed by the collection" do
+    test "countries facet excludes the unknown bucket" do
+      Books::BookCountry.create!(book: books_books(:crime_and_punishment), country: books_countries(:unknown))
+
+      slugs = countries_for.map { |row| row[:record].slug }
+
+      assert_not_includes slugs, "unknown"
+    end
+
+    test "category counts are narrowed by the collection" do
       # crime_and_punishment has no country, so it drops out of the western
       # collection; giving it a genre here (instead of in the shared fixture)
-      # is what makes that drop visible in the genre facet without perturbing
-      # crime_and_punishment's category state for every other test.
+      # is what makes that drop visible without perturbing every other test.
       CategoryItem.create!(category: categories(:books_fiction_genre), item: books_books(:crime_and_punishment))
       collection = ::Collections::Registry.find(:books, "western")
 
-      scoped = Books::FilterFacetsQuery.genres(ranking_configuration: @rc, collection: collection)
-      unscoped = Books::FilterFacetsQuery.genres(ranking_configuration: @rc)
-
-      scoped_total = scoped.sum { |row| row[:count] }
-      unscoped_total = unscoped.sum { |row| row[:count] }
+      scoped_total = categories_for("genre", collection: collection).sum { |row| row[:count] }
+      unscoped_total = categories_for("genre").sum { |row| row[:count] }
 
       assert_operator scoped_total, :>, 0, "western should still count some genres"
       assert_operator scoped_total, :<, unscoped_total

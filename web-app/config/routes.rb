@@ -708,6 +708,7 @@ Rails.application.routes.draw do
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
         resources :workflow_runs, only: [:index]
         resources :identifiers, only: [:index]
+        resources :alternate_titles, only: [:index]
         member do
           post :execute_action
         end
@@ -819,6 +820,16 @@ Rails.application.routes.draw do
         end
         collection do
           post :bulk_approve
+        end
+      end
+      resources :alternate_titles, only: [] do
+        collection do
+          get :review
+        end
+        member do
+          post :keep
+          post :remove
+          post :restore
         end
       end
       resources :repair_verdicts, only: [:index, :show] do
@@ -1002,6 +1013,7 @@ Rails.application.routes.draw do
     get "filters", to: "books/filters#show", as: :books_filters
     get "filters/categories", to: "books/filters#categories", as: :books_filters_categories
     get "filters/countries", to: "books/filters#countries", as: :books_filters_countries
+    get "filters/count", to: "books/filters#count", as: :books_filters_count
 
     # The Global Canon. Settings live in the PATH, never a query string, so each
     # variant is its own Cloudflare edge-cache entry.

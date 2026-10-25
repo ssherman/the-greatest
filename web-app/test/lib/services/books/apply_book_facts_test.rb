@@ -152,6 +152,25 @@ module Services
         assert_equal ["Frisch"], result.data[:facts]["alternate_titles"]["value"]
       end
 
+      test "alternate titles fill through the table" do
+        ::AlternateTitle.create!(titleable: @book, title: "Frisch", source: :legacy, status: :removed)
+
+        result = apply(alternate_titles: {value: ["Neu", "Frisch"], confidence: "medium"})
+
+        row = ::AlternateTitle.find_by!(titleable_type: "Books::Book", titleable_id: @book.id, normalized_title: "neu")
+        assert row.from_ai_enrichment?
+        assert_equal ["Neu"], @book.reload.alternate_titles
+        assert_equal ["Neu"], result.data[:facts]["alternate_titles"]["value"]
+      end
+
+      test "a failing save rolls back the alternate title rows" do
+        @book.stubs(:save!).raises(ActiveRecord::RecordInvalid)
+
+        assert_raises(ActiveRecord::RecordInvalid) { apply }
+
+        assert_equal 0, ::AlternateTitle.where(titleable_type: "Books::Book", titleable_id: @book.id, source: :ai_enrichment).count
+      end
+
       test "alternate titles with nothing new are already_set" do
         @book.update!(alternate_titles: ["Fresh"])
 

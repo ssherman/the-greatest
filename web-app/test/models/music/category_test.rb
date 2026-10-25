@@ -14,20 +14,23 @@
 #  type              :string           not null
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
+#  merged_into_id    :bigint
 #  parent_id         :bigint
 #
 # Indexes
 #
-#  index_categories_on_category_type  (category_type)
-#  index_categories_on_deleted        (deleted)
-#  index_categories_on_name           (name)
-#  index_categories_on_parent_id      (parent_id)
-#  index_categories_on_slug           (slug)
-#  index_categories_on_type           (type)
-#  index_categories_on_type_and_slug  (type,slug)
+#  index_categories_on_category_type   (category_type)
+#  index_categories_on_deleted         (deleted)
+#  index_categories_on_merged_into_id  (merged_into_id)
+#  index_categories_on_name            (name)
+#  index_categories_on_parent_id       (parent_id)
+#  index_categories_on_slug            (slug)
+#  index_categories_on_type            (type)
+#  index_categories_on_type_and_slug   (type,slug)
 #
 # Foreign Keys
 #
+#  fk_rails_...  (merged_into_id => categories.id)
 #  fk_rails_...  (parent_id => categories.id)
 #
 require "test_helper"

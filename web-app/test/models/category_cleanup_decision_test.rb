@@ -1,5 +1,46 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: category_cleanup_decisions
+#
+#  id                 :bigint           not null, primary key
+#  action             :integer          not null
+#  ambiguous          :boolean          default(FALSE), not null
+#  category_snapshot  :jsonb            not null
+#  decided_by         :integer          not null
+#  error              :text
+#  extra_target_ids   :bigint           default([]), not null, is an Array
+#  new_category_type  :integer
+#  new_name           :string
+#  parent_chain       :string           default([]), not null, is an Array
+#  place_kind         :string
+#  reason             :text
+#  run                :string           not null
+#  split_assignments  :jsonb            not null
+#  stage              :string           not null
+#  status             :integer          default("proposed"), not null
+#  created_at         :datetime         not null
+#  updated_at         :datetime         not null
+#  ai_chat_id         :bigint
+#  category_id        :bigint           not null
+#  target_category_id :bigint
+#
+# Indexes
+#
+#  index_category_cleanup_decisions_on_ai_chat_id           (ai_chat_id)
+#  index_category_cleanup_decisions_on_category_id          (category_id)
+#  index_category_cleanup_decisions_on_run_and_category_id  (run,category_id)
+#  index_category_cleanup_decisions_on_run_and_stage        (run,stage)
+#  index_category_cleanup_decisions_on_run_and_status       (run,status)
+#  index_category_cleanup_decisions_on_target_category_id   (target_category_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (ai_chat_id => ai_chats.id)
+#  fk_rails_...  (category_id => categories.id)
+#  fk_rails_...  (target_category_id => categories.id)
+#
 class CategoryCleanupDecisionTest < ActiveSupport::TestCase
   def decision(**attrs)
     CategoryCleanupDecision.new({category: categories(:books_france_location), run: "test", stage: "rules", action: :keep, decided_by: :rule}.merge(attrs))

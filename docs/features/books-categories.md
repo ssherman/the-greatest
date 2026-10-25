@@ -77,10 +77,11 @@ query per tree level. Subjects render as before.
 ## Browse threshold and alias search
 
 `config.x.books.browse_min_category_books` (5): subject and location categories are left out of
-browse listings when they have fewer ranked books, and out of the public filter modal's category
-search when `categories.item_count` (all catalog links, ranked or not) is below it. Their pages
-still render, since book-page links point at them. Genres are exempt. Category search also matches
-`alternative_names`, so `Calcutta` finds `Kolkata`.
+browse listings when they have fewer ranked books, and out of the filter panel's Subject and
+Setting search (`Books::FilterCategorySearchQuery`) when they have fewer book links, ranked or not.
+Author links do not count. Their pages still render, since book-page links point at them. Genres
+and audiences are exempt. Category search also matches `alternative_names`, so `Calcutta` finds
+`Kolkata`.
 
 The saved-search category picker has no threshold. That is deliberate.
 

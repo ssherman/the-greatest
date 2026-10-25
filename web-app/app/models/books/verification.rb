@@ -3,17 +3,27 @@
 # Table name: books_verifications
 #
 #  id                   :bigint           not null, primary key
+#  added_count          :integer          default(0), not null
 #  attempts             :integer          default(1), not null
 #  author_changes       :jsonb            not null
+#  candidate_count      :integer          default(0), not null
+#  checked_at           :datetime
+#  cohort               :integer          default("pre_import"), not null
+#  confirmed_count      :integer          default(0), not null
 #  confirmed_on_abstain :boolean          default(FALSE), not null
 #  dump_date            :string
 #  duplicate_keys       :string           default([]), not null, is an Array
 #  error                :text
 #  lookup               :integer
+#  lump_suspect         :boolean          default(FALSE), not null
 #  matcher_version      :integer
 #  new_key              :string
 #  old_keys             :string           default([]), not null, is an Array
+#  stage                :integer          default("work"), not null
+#  stage_error          :text
 #  work_outcome         :integer          not null
+#  worldcat_dump_date   :string
+#  wrong_count          :integer          default(0), not null
 #  created_at           :datetime         not null
 #  updated_at           :datetime         not null
 #  book_id              :bigint           not null
@@ -22,9 +32,11 @@
 #
 # Indexes
 #
-#  index_books_verifications_on_book_id          (book_id) UNIQUE
+#  index_books_verifications_on_book_id       (book_id) UNIQUE
+#  index_books_verifications_on_lump_suspect  (lump_suspect)
+#  index_books_verifications_on_run_id        (run_id)
+#  index_books_verifications_on_stage         (stage)
 #  index_books_verifications_on_work_outcome  (work_outcome)
-#  index_books_verifications_on_run_id           (run_id)
 #
 # Foreign Keys
 #
