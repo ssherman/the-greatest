@@ -8,7 +8,7 @@ this step's shape), `docs/features/enrichment-workflows.md` ("Adding a step to a
 ## 1. Intent
 
 When a book enters the catalog, look it up on Goodreads. If we are sure we found **the book**, take
-its first-publication year, page count, genres and identifiers, and hand its description to the book
+its first-publication year, page count, genres, series and identifiers, and hand its description to the book
 AI step as source material for our own house-style description.
 
 The reason is year-end "best of" lists. They are full of books published this year, which the AI
@@ -20,8 +20,8 @@ comes out thin. Goodreads has the facts for nearly every one of them.
 **Goals**
 
 - Every new book gets a Goodreads step automatically, in the book workflow, before book AI.
-- A confirmed match fills blank year and page count, links existing categories, and saves every
-  valid identifier on the page.
+- A confirmed match fills blank year and page count, links existing categories, puts the book in its
+  series (creating the series when it is new), and saves every valid identifier on the page.
 - Book AI writes the description from the Goodreads text, in house style, and **skips the research
   run** when Goodreads found the book.
 - Amazon can search by the ISBN Goodreads supplied.
@@ -30,10 +30,12 @@ comes out thin. Goodreads has the facts for nearly every one of them.
 
 **Non-goals (later specs)**
 
-- Backfilling existing books (a rake task that spawns runs). This spec only has to leave room for it.
+- Backfilling existing books (a rake task that spawns runs). Shane expects it, and expects to parse
+  more out of Goodreads pages later. §10 lists what this spec must do so that later work is cheap.
+- Public series pages. Only admin pages show series today; this spec fills the data.
 - A genre-mapping UI that adds Goodreads genres we lack, or maps them onto ours. This spec stores
   every genre name so that UI can work from the cache.
-- Ratings, reviews, covers, series, and author data from Goodreads.
+- Ratings, reviews, covers, and author data from Goodreads.
 
 **Anti-goals: these would make it a failure even if it works**
 
@@ -45,7 +47,8 @@ comes out thin. Goodreads has the facts for nearly every one of them.
   written.
 - **Using Goodreads' description text on the site.** It is publisher copy. It is never written to
   the `descriptions` table and never shown. It only reaches the site rewritten.
-- **Creating categories.** Only existing ones are linked.
+- **Creating categories.** Only existing ones are linked. (Series are different: a series is a
+  catalog record like an author, and a new one is created. See §5.4.)
 - **Overwriting data.** Fill blanks only. A field a human cleared stays cleared.
 - **Breaking Goodreads' patience.** Every fetch, search or book page, goes through the existing
   `FetchGate` (15 s between fetch starts, 1,500 a day, 6 h cooldown after a block), shared with the
@@ -314,10 +317,12 @@ two-form rule are new and apply to Goodreads only:
   `/\A[A-Z0-9]{10}\z/`.
 - **Collision.**
   - If a verified source (Open Library, WorldCat) gives any equivalent form of an ISBN or ASIN to
-    another book, write no identifiers. Flag both books with
+    another book, write no ISBN or ASIN. Flag both books with
     `Services::DuplicateCandidates::Flag` (`source: :identifier_collision`), as Amazon does.
-  - If any other book holds the same Goodreads id, from any source, treat it the same way. A
-    Goodreads id is strong duplicate evidence.
+  - The Goodreads id is still written in that case. It is the durable record of which page belongs to
+    which book, and the backfill and re-parse work in §10 depends on it.
+  - If any other book holds the same Goodreads id, from any source, write no identifiers at all and
+    flag both books. A Goodreads id is strong duplicate evidence.
 - Extract the shared collision and write logic from `AmazonBookIdentifiers` into one writer that
   takes `source:` and the value pairs. Amazon then calls it, and Amazon's behavior does not change:
   Amazon keeps building its own pairs, with no ASIN check and no second ISBN form.
@@ -325,24 +330,52 @@ two-form rule are new and apply to Goodreads only:
   stays the source for user-import data.
 - `find_or_initialize_by`, never `build`.
 
-A collision blocks only identifiers. Year, page count and categories are still written. The match
+A collision blocks only identifiers. Year, page count, categories and series are still written. The match
 passed the AI and the re-check; the collision says "possible duplicate book", which review settles.
 
-### 5.4 The step's result
+### 5.4 Series
 
-The step's `result` is what `book_facts` reads:
+Goodreads gives each series entry as a Goodreads series id (from the series URL), a title and a
+position as written ("1", "0.5", "3.5"). The parser already reads these and has stored them on 3,805
+of the 39,358 cached pages (dev, 2026-10-25). `books_series` and `books_series_books` are empty.
+
+- **Find or create the series by Goodreads series id.**
+  - Add an `Identifier` type `books_series_goodreads_id` on `Books::Series`, with source `goodreads`.
+  - Look the series up by that identifier. If none exists, create a `Books::Series` with the Goodreads
+    title and the identifier, in the step's transaction.
+  - Never match a series by title. Many series share names ("Foundation", "Dune"), so the Goodreads
+    series id is the only key.
+- **Link the book.** `Books::SeriesBook.find_or_initialize_by(series:, book:)`:
+  - `position` is the decimal value when the label is a plain number;
+  - `position_label` is the label as written;
+  - `numbered` is false when the label is blank or not a number.
+  - An existing link's position is never changed (fill blanks only).
+- A book in several series (a sub-series within a larger one) gets every link.
+- A range position ("1-3") never gets this far, because the re-check rejects it (§4.4).
+- A series title or position Goodreads changes later is not re-applied. The cached page keeps it, and
+  admin pages edit it.
+- **Side effect to expect.** `Recommendations::Books::Adapter#series_predecessors` begins to see data.
+  A numbered series book is then treated as having an earlier entry, which changes recommendations.
+  That is the intended effect of having series data, but recheck the recommendations acceptance page
+  (user 1141) after the first batch lands.
+- The ledger facts record each series as `filled` (`created` or `linked`) or `already_set`.
+
+### 5.5 The step's result
+
+The step's `result` tells `book_facts` (and the admin panel) what happened. It names the page and
+carries no page content:
 
 ```json
-{"matched": true, "goodreads_book_id": 123, "page_id": 456, "description": "…",
- "year": 2026, "page_count": 352, "genres": ["Fiction", "Literary Fiction"]}
+{"matched": true, "goodreads_book_id": 123, "page_id": 456}
 ```
 
-`matched: false` (with no other keys) on `no_match`, `rejected` or a skip.
+`{"matched": false}` on `no_match`, `rejected` or a skip. `book_facts` reads the description and facts
+from the `books_goodreads_pages` row that `page_id` names (§10).
 
 ## 6. Book AI with Goodreads source material
 
-`book_facts` reads `run.steps.find_by(key: "goodreads")&.result`. When `matched` is true and the
-book needs a description or facts:
+`book_facts` reads `run.steps.find_by(key: "goodreads")&.result`. When `matched` is true, it loads
+the page row by `page_id`, and when the book needs a description or facts:
 
 - **No research run (Shane's decision).** `EnrichBook` runs a new mode, `sourced`, in place of the
   knowledge run. A new `Enrichment.mode` value, `sourced: 2`, keeps cost reports honest.
@@ -421,8 +454,40 @@ Because it reads the book's identifiers, not the step result, the `books:amazon_
 9. A book with a human-cleared `page_range`. It stays blank, and the ledger says `human_cleared`.
 10. A Goodreads genre "Literary Fiction" whose category was merged into "Literary". The book links to
     "Literary".
+11. Two new books from the same new series, arriving one after the other. The first creates the
+    `Books::Series` and its Goodreads-id identifier. The second links to it, with no duplicate series.
+    Both have the right `position`.
+12. A Goodreads page whose ISBN collides with a verified holder. The ISBN is not written, the
+    Goodreads id is written, and both books are flagged.
 
-## 10. Left to the builder
+## 10. Built for a later backfill and re-parse
+
+Shane expects a backfill over existing books, and more fields parsed from Goodreads pages later. This
+spec builds neither, but it must leave them cheap. Requirements:
+
+- **Find and apply are separate services.**
+  - *Find* is the search, the pick, the page fetch and the re-check. It costs fetches.
+  - *Apply* takes a book and a cached page and writes year, page count, categories, series and
+    identifiers. It costs nothing but the database.
+  - The step calls both. A future rake task can call apply alone over books whose page is already
+    cached and matched, with no fetch.
+- **Apply is idempotent.** It fills blanks, uses `find_or_create` and links only. Running it twice, or
+  again after a parser upgrade, writes only what is newly available, and the ledger records that
+  run's facts. Test it by running apply twice on the same book and page and asserting that the second
+  run changes nothing.
+- **The match is durable.** The `books_work_goodreads_id` identifier with source `goodreads` records which
+  page belongs to which book (§5.3). A backfill finds "matched and cached" books by joining that
+  identifier to `books_goodreads_pages`.
+- **Parse from the cache.** A parser version bump re-parses stored HTML. No field may be readable only
+  at fetch time. The search cache keeps HTML for the same reason.
+- **Book AI reads the page, not the step.** `book_facts` takes its source material from the cached page
+  that the step's result names (`page_id`). A later re-enrichment run can then feed the same page
+  without a Goodreads step in its run. The description is read from the page row and never copied
+  into the step result.
+- **The backfill spec still owns:** its pacing against the shared gate, the order books are processed
+  in, and whether a book with an existing AI description gets a Goodreads-sourced rewrite.
+
+## 11. Left to the builder
 
 - The search URL details, the candidate parser, and the exact study-aid shelf names (from the
   fixtures).
