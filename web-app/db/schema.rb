@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_23_031053) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_25_231521) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -400,6 +400,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_031053) do
     t.string "asin"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "description"
+    t.integer "page_count"
+    t.string "format"
+    t.bigint "best_book_id"
+    t.jsonb "genres", default: [], null: false
     t.index ["goodreads_book_id"], name: "index_books_goodreads_pages_on_goodreads_book_id", unique: true
   end
 

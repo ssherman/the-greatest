@@ -4,10 +4,11 @@ require "json"
 
 module Books
   module Goodreads
-    # Reads the identity facts from one fetched Goodreads book page (Goodreads
-    # import spec §6): canonical title, series, contributors with their roles,
-    # original publication year, ISBN-13/10 and ASIN. Descriptions, genres and
-    # ratings are never read.
+    # Reads the facts from one fetched Goodreads book page (Goodreads import
+    # spec §6, enrichment spec §4.4): canonical title, series, contributors
+    # with their roles, original publication year, ISBN-13/10 and ASIN, plus
+    # the description, genres, page count, format and the work's main edition
+    # id that the enrichment step fills blanks from. Ratings are never read.
     #
     # Measured on 22 real fetches (2026-10-04):
     # - 19 of 20 book pages carry Next.js __NEXT_DATA__, whose Apollo state
@@ -18,7 +19,7 @@ module Books
     # - Goodreads' own error page ("page unavailable") came as a 503 and was
     #   gone on retry: it says nothing about the book.
     class BookPage
-      VERSION = 1
+      VERSION = 2
       # Roles that make a contributor a creator. Translators, illustrators,
       # editors and writers of an introduction or preface never are.
       CREATOR_ROLES = %w[Author Writer].freeze
@@ -39,7 +40,8 @@ module Books
       # ("6", "1-2"), nil when blank.
       Series = Data.define(:goodreads_series_id, :title, :position)
       Facts = Data.define(:goodreads_book_id, :title, :series, :contributors,
-        :original_publication_year, :isbn13, :isbn10, :asin)
+        :original_publication_year, :isbn13, :isbn10, :asin,
+        :description, :genres, :page_count, :format, :best_book_id)
       # outcome: :found (facts set), :not_found, :blocked, :unparseable, or
       # :unavailable (Goodreads' error page or a 5xx: try again later).
       Parsed = Data.define(:outcome, :facts) do
@@ -101,10 +103,30 @@ module Books
           original_publication_year: year_from_ms(apollo[book.dig("work", "__ref")].to_h.dig("details", "publicationTime")),
           isbn13: isbn13,
           isbn10: isbn10,
-          asin: (details["asin"].presence unless details["asin"] == isbn10)
+          asin: (details["asin"].presence unless details["asin"] == isbn10),
+          description: description(book),
+          genres: Array(book["bookGenres"]).filter_map { |entry| entry.to_h.dig("genre", "name").presence },
+          page_count: details["numPages"].to_i.positive? ? details["numPages"].to_i : nil,
+          format: details["format"].presence,
+          best_book_id: best_book_id(apollo, book)
         )
       rescue JSON::ParserError
         nil
+      end
+
+      # The key may carry arguments (description({"stripped":true})); either
+      # form is read, as plain text: Goodreads' HTML is markup, not prose.
+      def description(book)
+        key = book.keys.find { |name| name.start_with?("description") }
+        fragment = Nokogiri::HTML.fragment(book[key].to_s)
+        fragment.css("br").each { |br| br.replace(" ") }
+        fragment.text.gsub(/\s+/, " ").strip.presence
+      end
+
+      # The work's best book is the edition Goodreads treats as the main one.
+      def best_book_id(apollo, book)
+        work = apollo[book.dig("work", "__ref")].to_h
+        apollo[work.dig("bestBook", "__ref")].to_h["legacyId"]&.to_i
       end
 
       def next_data_series(apollo, book)
@@ -139,7 +161,8 @@ module Books
           original_publication_year: doc.at_css('[data-testid="publicationInfo"]')&.text.to_s[/First published.*?(\d{3,4})\s*\z/, 1]&.to_i,
           isbn13: isbn13,
           isbn10: isbn10,
-          asin: nil
+          asin: nil,
+          description: nil, genres: [], page_count: nil, format: nil, best_book_id: nil
         )
       end
 
