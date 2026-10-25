@@ -187,27 +187,32 @@ module Services
             source_version: resolution.source_version, ol_pick: resolution.candidates.first&.work_key)
         end
 
-        # Held key => live work, for the held keys whose work passes our check,
-        # in stored order; conflicted ones included. A held key that is also a
-        # candidate already has its record.
-        def held_passing(resolution)
-          @held_passing ||= begin
+        # Held key => live work, in stored order, conflicted ones included. A held
+        # key that is also a candidate already has its record.
+        def held_works(resolution)
+          @held_works ||= begin
             keys = stored_keys.uniq
             works = resolution.candidates.select { |candidate| candidate.record && keys.include?(candidate.work_key) }.to_h { |candidate| [candidate.work_key, candidate.record] }
             missing = keys - works.keys
             works = works.merge(@client.works_batch(missing)) if missing.any?
-            keys.filter_map { |key| [key, works[key]] if works[key] && Check.verified?(@book, works[key], @client) }.to_h
+            keys.filter_map { |key| [key, works[key]] if works[key] }.to_h
           end
         end
 
-        # A passing held work with at least as many editions as the pick, held
-        # under another key. Stage 2 harvests the settled work's editions, so
-        # moving there loses ISBNs. Conflicted held keys count: in the rehearsal,
-        # Dead Souls held a 218-edition work Open Library marked conflicted, and
-        # the book's WorldCat ISBNs led to a 2-edition duplicate.
+        def held_passing(resolution)
+          @held_passing ||= held_works(resolution).select { |_, work| Check.verified?(@book, work, @client) }
+        end
+
+        # A held work, under another key, with more editions than the pick.
+        # Stage 2 harvests the settled work's editions, so moving there loses
+        # ISBNs; the book stays as it is instead. Every held work counts, passing
+        # or not, conflicted or not. In the rehearsal the WorldCat route followed
+        # books' ISBNs into small duplicates: Dead Souls held a 218-edition work
+        # Open Library marked conflicted (2 editions), Oedipus the King its main
+        # work under a Greek title our check does not match (188 to 1).
         def outweighed_by_held?(resolution, work)
           editions = edition_count(work)
-          held_passing(resolution).any? { |key, held| key != work.key && held.key != work.key && edition_count(held) >= editions }
+          held_works(resolution).any? { |key, held| key != work.key && held.key != work.key && edition_count(held) > editions }
         end
 
         def edition_count(work) = work.popularity&.dig(:edition_count).to_i

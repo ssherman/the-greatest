@@ -614,6 +614,20 @@ module Services
           assert_nil Lookup.call(book: @book, client: client).work
         end
 
+        # Oedipus the King: the held work is Open Library's main one (188
+        # editions) under its Greek title, which our check does not match; the
+        # WorldCat ISBNs led to a 1-edition English work.
+        test "no route replaces a held work that fails our check with one that has fewer editions" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          hold(:books_work_isbn13, "9780199232765", :worldcat)
+          client = FakeOlClient.new(resolution: abstain_with_nothing,
+            hits: {["isbn13", "9780199232765"] => [ol_hit("OL5W"), ol_hit("OL5W"), ol_hit("OL7W")]},
+            works: {"OL9W" => ol_work("OL9W", title: "Война и мир", authors: [["OL1A", "Leo Tolstoy"]], editions: 188),
+                    "OL5W" => ol_work("OL5W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 1)})
+
+          assert_nil Lookup.call(book: @book, client: client).work
+        end
+
         # Tristram Shandy: the held work had 1 edition, the ISBNs' work 85.
         test "a route may move a book off a passing held work onto one with more editions" do
           hold(:books_work_openlibrary_id, "OL9W", :legacy)

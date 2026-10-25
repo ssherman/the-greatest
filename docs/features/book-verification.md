@@ -185,13 +185,17 @@ every old key whose record passes the check (`ApplyBook#agreeing_old_keys`), exa
    passes the check. Other passing works with our exact title become duplicate keys. A book stage 3 has not yet run on has no
    such ISBNs and skips this route.
 
-**No route moves a book off a passing held work onto one with fewer editions.** Every work record
-carries Open Library's `edition_count`. When the book holds a key whose work passes the check, and a
-route's pick has no more editions than it, the book is left as it is (`unsure`, its held key
-untouched). Held keys Open Library marked conflicted count here, though `held_key` will not settle
-on them. In the rehearsal the WorldCat route followed the book's ISBNs into small duplicates: *Dead
-Souls* 218 editions to 2, *The Ambassadors* 231 to 2 (*Los Embajadores*), *Oedipus the King* 188 to
-1. A move to a bigger work still happens (*Tristram Shandy*, 1 edition to 85).
+**No route replaces a held work with one that has fewer editions.** Every work record carries Open
+Library's `edition_count`. When any work the book holds has more editions than a route's pick, the
+book is left as it is (`unsure`, its held key untouched). Every held work counts: one that passes
+the check, one Open Library marked conflicted (which `held_key` will not settle on), and one that
+fails the check. In the rehearsal the WorldCat route followed books' ISBNs into small duplicates:
+*Dead Souls* 218 editions to 2 and *The Ambassadors* 231 to 2 (*Los Embajadores*), both from passing
+held works; *Oedipus the King* 188 to 1 and *The Complete Sherlock Holmes* 118 to 3, from held works
+that fail the check only on title (Open Library's main *Oedipus* work is titled in Greek). The cost:
+a book whose held key really is another, bigger work stays `unsure` rather than moving to the right
+one. A move to a bigger work still happens (*Tristram Shandy*, 1 edition to 85), and equal or unknown
+counts do not block.
 
 **`held_key` runs first**, then `resolve_candidate`, `exact_title` and `worldcat_isbns`. A candidate
 passing the same check is no reason to move a book off a key it holds. In the 2026-10-24 dev
