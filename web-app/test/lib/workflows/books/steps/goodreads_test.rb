@@ -6,7 +6,9 @@ module Workflows
       class GoodreadsTest < ActiveSupport::TestCase
         Decision = ::Books::Goodreads::GateTurn::Decision
         FETCH = Decision.new(action: :fetch, wait: nil, refusal: nil)
-        StoredStep = Struct.new(:result)
+        StoredStep = Struct.new(:result) do
+          def update_columns(result:) = (self.result = result)
+        end
         STRAY = 147719920
         MAIN = 168668
 
@@ -25,7 +27,12 @@ module Workflows
         # Plays the engine: runs the adapter on the stored result and merges
         # what a wait hands back, as Coordinator.finish_wait does.
         def execute
-          outcome = Goodreads.new.call(step: StoredStep.new(@stored), run: @run, target: @book)
+          step = StoredStep.new(@stored)
+          outcome = begin
+            Goodreads.new.call(step: step, run: @run, target: @book)
+          ensure
+            @stored = step.result # what update_columns wrote, kept even when the call raises
+          end
           @stored = @stored.merge(outcome.result || {})
           outcome
         end
@@ -100,6 +107,20 @@ module Workflows
           assert_equal ::Books::GoodreadsPage.find_by(goodreads_book_id: MAIN).id, done.result["page_id"]
           assert_equal MAIN, applied.goodreads_book_id
           assert_equal [false, true, false, true, false, true], @dues
+        end
+
+        test "a raise after a spent due turn is stored as spent, so the retry reserves again" do
+          @stored = {"progress" => {"phase" => "page", "goodreads_book_id" => MAIN, "origin" => "search", "due" => true,
+                                    "followed_best" => false, "searched_retry" => false}, "other" => 1}
+          gate_decisions(FETCH, waiting)
+          ::Services::Books::GoodreadsPages::FetchPage.stubs(:call).raises("fetch blew up")
+
+          assert_raises(RuntimeError) { execute }
+          assert_equal [false, 1], [@stored.dig("progress", "due"), @stored["other"]]
+
+          execute
+
+          assert_equal [true, false], @dues
         end
 
         test "after a wait the next execution takes its due turn instead of reserving again" do

@@ -34,6 +34,7 @@ module Workflows
         PAGE_VERSION = ::Books::Goodreads::BookPage::VERSION
 
         def call(step:, run:, target:)
+          @step = step
           @book = target
           @run = run
           @gate = ::Books::Goodreads::FetchGate.new
@@ -175,7 +176,19 @@ module Workflows
           when :refused
             wake = (decision.refusal == :daily_cap) ? Time.current.utc.tomorrow.beginning_of_day : blocked_until
             wait_until(wake, due: false)
+          else
+            spend_turn
           end
+        end
+
+        # The turn is used up the moment the fetch starts. A raise after it (a
+        # fetch that fails, the pick, a crash) goes through Coordinator.fail, which
+        # keeps no result, so the spent turn is written now: otherwise the retry
+        # would find due: true, skip the reservation and fetch uncounted.
+        def spend_turn
+          @progress["due"] = false
+          @step.update_columns(result: (@step.result || {}).merge("progress" => @progress))
+          nil
         end
 
         # What a fetch handed back: the stored row, or the Outcome that ends the

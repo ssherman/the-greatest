@@ -54,12 +54,7 @@ module Services
 
           ::Books::Series.transaction do
             series = ::Books::Series.create!(title: title)
-            series.identifiers.find_or_initialize_by(
-              identifier_type: :books_series_goodreads_id, value: goodreads_id.to_s
-            ).tap { |i|
-              i.source = :goodreads
-              i.save!
-            }
+            series.identifiers.create!(identifier_type: :books_series_goodreads_id, value: goodreads_id.to_s, source: :goodreads)
             [series, true]
           end
         end
