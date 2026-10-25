@@ -496,8 +496,8 @@ Because it reads the book's identifiers, not the step result, the `books:amazon_
    outcome is `no_match` or `rejected`, nothing is written, and book AI runs as today, research
    included.
 4. A page with a bad ISBN-13 checksum. The ISBN is dropped as `invalid`, and the rest is written.
-5. A page ISBN that Open Library gives to another book. No identifiers are written, both books are
-   flagged, and year and categories are still written.
+5. A page ISBN that Open Library gives to another book. No ISBN or ASIN is written, the Goodreads
+   id is written (§5.3), both books are flagged, and year and categories are still written.
 6. The gate's daily cap is reached. The step waits until the next UTC midnight with no attempt
    used, and `book_facts` waits with it.
 7. The fetcher is down for good. Three attempts fail, the step fails, and `book_facts` and `amazon`
