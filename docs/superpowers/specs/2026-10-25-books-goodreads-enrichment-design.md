@@ -110,16 +110,18 @@ the accepted risk; the backfill spec can revisit it.
 book has a Goodreads id already? ── yes ──► book page (cache or fetch)
         │ no                                       │
         ▼                                          ▼
-search (cache or fetch) ─► candidate rows ─► free filters ─► cheap AI picks one or none
-                                                   │ picked
-                                                   ▼
-                                         book page (cache or fetch)
-                                                   │
-                                     page re-check (free filters on page facts)
+title search (cache or fetch) ─► rows ─► free filters ─► rank by ratings ─► cheap AI picks one or none
+  (none survive → one retry: title + author surname)            │ picked
+                                                                ▼
+                                                  book page (cache or fetch)
+                                                                │
+                                   not the work's main edition? ─► main edition's page (cache or fetch)
+                                                                │
+                                         page re-check (free filters on page facts)
                                                    │ passes
                                                    ▼
                        write year, page count, categories, identifiers · one ledger row
-                       result: {matched, goodreads_book_id, description, …} for book_facts
+                       result: {matched, goodreads_book_id, page_id} for book_facts
 ```
 
 ### 4.1 Known id first
@@ -160,13 +162,37 @@ shorter than the 15 s spacing the next fetch has to wait anyway (my call).
 
 ### 4.2 Search
 
-- The query is the title plus the primary author name, in Goodreads search (`/search?q=`).
+**What Goodreads search actually does.** Measured 2026-10-25, with the pages saved as fixtures under
+`web-app/test/fixtures/files/goodreads/searches/` and `.../pages/`:
+
+- `?q=catch-22+Joseph+Heller` ranks by how well each **title** matches the query text. Study guides and
+  summaries carry the author's name in their titles ("Catch 22 by Joseph Heller", "Study Guide to
+  Catch-22 by Joseph Heller"), so adding the author to the query lifts them.
+  - The real book came third (907,547 ratings, 521 editions), behind a Novel Units guide (169
+    ratings) and a Bright Summaries guide (27).
+  - Rows 4-10 were all guides and summaries.
+- The real book's row showed a **stray edition's** title and id: "(Catch-22) By Joseph Heller (Author)
+  Paperback on (Dec , 2007)", `147719920`. The work's figures were attached to it. That edition's page
+  has 0 pages and no ISBN.
+- The row's author link said "Joseph Heller". Every guide's author link named the guide's maker
+  (Novel Units, SparkNotes, Ray Moore, SuperSummary, …).
+- `?q=catch-22` (title only) put the real book **first**, under its proper title and its main edition
+  id `168668`. "Closing Time (Catch-22, #2)", by the same author, came second.
+- The stray edition's page names the work's main edition in its Apollo state (`Work.bestBook` →
+  `168668`). Genres and series sit on the work, so they were present on the stray page too.
+
+So:
+
+- **The query is the title alone**: the main title, before any ":".
+- **If no row survives the free filters** (§4.3), one retry is allowed: the title plus the primary
+  author's surname. This is for a common title whose real book falls below the first page of results.
+  It costs a second search fetch, and only on a miss.
+- Results are never trusted in their listed order (see ranking, §4.3).
 - The search page is fetched through `PageFetcher::Client`, inside a gate turn (§4.1a). The fetcher
   error mapping is `FetchPage`'s (`FETCHER_DOWN` versus `:unavailable`).
-- The builder must capture real search pages as test fixtures before writing the parser:
-  - a famous book;
+- The builder adds fixtures beside the three already captured:
   - a this-year book;
-  - a title that returns a study guide above the real book;
+  - a common title (for example "Beloved" or "The Road") that needs the surname retry;
   - a no-results query.
 - **Search cache (new table).** One row per normalized query. It holds:
   - the outcome (`found`, `no_results`, `blocked`, `unparseable`);
@@ -175,21 +201,34 @@ shorter than the 15 s spacing the next fetch has to wait anyway (my call).
   - the gzipped HTML as a `private_imports` attachment, like `Books::GoodreadsPage`.
 - A cached search younger than 30 days is reused (my call). Older ones, and blocked or unparseable
   ones, are fetched again.
-- Each candidate row holds the Goodreads book id, title, author names, the published year as listed,
-  and the rating count. The search parser reads rows only; it follows no links.
+- Each candidate row holds:
+  - the Goodreads book id and the title as shown;
+  - the author-link names;
+  - the published year as listed (it is the work's first-publication year, when present);
+  - the rating count and the edition count.
+
+  The parser reads `tr[itemtype="http://schema.org/Book"]` rows (`a.bookTitle`, `a.authorName`, the
+  grey "avg rating — N ratings — published Y — N editions" line). It follows no links.
 
 ### 4.3 Free filters, then the cheap model
 
-1. **Free filters** drop candidates that clearly are not the book. Reuse the blocks
-   `AmazonBookCheck` is built from:
-   - `Verification::EditionCheck.title_agrees?`;
-   - `Verification::Check.authors_agree?`;
-   - the set and derivative word lists (`EditionCheck::SET_WORDS` and `AmazonBookCheck.derivative?`'s
-     words), applied to the candidate's title.
-   - A candidate whose listed year is earlier than the book's `first_published_year` is not
-     dropped: Goodreads lists an edition's year.
-2. If no candidate survives, the outcome is `no_match`, with no AI call.
-3. **The cheap model** gets the book and the surviving rows, at most 5, and picks one or none. Use
+1. **Free filters** drop candidates that clearly are not the book.
+   - **The author link must agree** with one of the book's authors (`Verification::Check.authors_agree?`).
+     This is the filter that removes guides and summaries: their author link names the guide's maker.
+   - The derivative and set word lists (`AmazonBookCheck.derivative?`'s words, `EditionCheck::SET_WORDS`)
+     drop a row whose title contains them.
+   - The title check is loose. The shown title may be a stray edition's ("(Catch-22) By Joseph Heller
+     (Author) Paperback…"), so the row passes when the book's normalized main title appears inside the
+     row's normalized title. `title_agrees?` is too strict here. "Closing Time (Catch-22, #2)" fails,
+     because "catch 22" appears there only in the series suffix; strip the trailing series
+     parenthetical before comparing.
+   - A listed year earlier than the book's `first_published_year` is not dropped.
+2. If no candidate survives, retry the search once with the surname (§4.2). If none survives that
+   either, the outcome is `no_match`, with no AI call.
+3. **Rank** the survivors by rating count, then edition count. The real work dwarfs everything else
+   (907,547 ratings against a few hundred).
+4. **The cheap model** gets the book and the top surviving rows, at most 5, each with its rating and
+   edition counts, and picks one or none. Use
    `Services::Ai::Tasks::Matching::SelectCandidateTask` (role `fast`) if its "same entity" framing
    fits. Otherwise write a Goodreads task beside `AmazonBookMatchTask`, carrying the same non-match
    criteria. In both cases:
@@ -198,6 +237,16 @@ shorter than the 15 s spacing the next fetch has to wait anyway (my call).
 
 ### 4.4 Book page and re-check
 
+- **Use the work's main edition.** A search row's id can be a stray edition, with no page count, no
+  ISBN and often no description.
+  - The parser reads `Work.bestBook`'s `legacyId` as `best_book_id` (§4.5).
+  - When the fetched page's id is not its work's `best_book_id`, the step fetches (or reuses) the
+    main edition's page and uses that page from then on. A stray pick costs one more fetch.
+  - Identifiers, page count and description come from the main edition.
+  - The Goodreads id written (§5.3) is the main edition's id.
+  - For a known id (§4.1) the same rule applies. A Goodreads-import book whose user shelved a
+    particular edition gets the main edition's facts, because the book record is the work, not the
+    user's copy.
 - The step reuses a cached page itself, when the row exists, holds HTML and parses under version 2.
   `FetchPage` always fetches; reusing a cached page is the caller's job.
 - Otherwise the step fetches through `Services::Books::GoodreadsPages::FetchPage`, inside a gate turn.
@@ -223,10 +272,14 @@ Read these from the Apollo state, as the existing fields are:
 - `description` (plain text, HTML stripped);
 - `genres` (all genre names, in page order);
 - `page_count` (`details.numPages`);
-- `format` (`details.format`, e.g. Hardcover, Kindle, Audiobook).
+- `format` (`details.format`, e.g. Hardcover, Kindle, Audiobook);
+- `best_book_id` (the work's `bestBook` → `legacyId`).
 
 Store them on `books_goodreads_pages` as new columns: `description` text, `genres` jsonb array,
-`page_count` integer and `format` string.
+`page_count` integer, `format` string and `best_book_id` bigint. A `numPages` of 0 is stored as nil.
+
+The fixture `catch_22_stray_edition_147719920.html.gz` holds every one of these (genres: Classics,
+Fiction, Historical Fiction, War, …).
 
 Remove the header comment that says descriptions and genres are never read. A version 1 page that
 has HTML is re-parsed from its attachment when the step needs it, with no refetch. A page with no
