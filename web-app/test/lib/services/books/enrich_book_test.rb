@@ -52,6 +52,11 @@ module Services
         end
       end
 
+      def page(description: "A publisher blurb about two rival cartographers charting an unmapped island archipelago.")
+        ::Books::GoodreadsPage.new(title: "A Fresh Book", authors: [{"name" => "Leo Tolstoy", "role" => "Author", "primary" => true}],
+          original_publication_year: 1999, page_count: 300, genres: ["Fiction"], description: description)
+      end
+
       def stub_review(spoilers:, style_violations:, rewritten:, success: true)
         review = mock
         result = if success
@@ -164,6 +169,71 @@ module Services
         expect_facts_runs([:research, success_result(facts)])
 
         result = EnrichBook.call(book: @book)
+
+        assert_equal %w[research], result.data[:enrichments].map(&:mode)
+      end
+
+      test "a Goodreads page on a 2026 book runs sourced and never researches" do
+        @book.update!(first_published_year: 2026)
+        expect_facts_runs([:sourced, success_result(facts)])
+
+        result = EnrichBook.call(book: @book, goodreads_page: page)
+
+        assert_equal %w[sourced], result.data[:enrichments].map(&:mode)
+        assert_equal 0, @book.enrichments.research.count
+      end
+
+      test "the page reaches the task as its source" do
+        pg = page
+        task = mock
+        task.stubs(:call).returns(success_result(facts))
+        Services::Ai::Tasks::Books::BookFactsTask.expects(:new).with { |args| args[:source] == pg && args[:mode] == :sourced }.returns(task)
+
+        EnrichBook.call(book: @book, goodreads_page: pg)
+      end
+
+      test "an unrecognized sourced run is recorded and does not fall back to research" do
+        expect_facts_runs([:sourced, success_result(facts(recognized: false))])
+
+        result = EnrichBook.call(book: @book, goodreads_page: page)
+
+        assert_equal %w[sourced], result.data[:enrichments].map(&:mode)
+        assert result.data[:enrichments].first.unrecognized?
+        assert_equal 0, @book.enrichments.research.count
+      end
+
+      test "a low-confidence sourced run applies its facts instead of deferring" do
+        expect_facts_runs([:sourced, success_result(facts(confidence: "low"))])
+
+        result = EnrichBook.call(book: @book, goodreads_page: page)
+
+        assert_equal 1, result.data[:enrichments].size
+        assert result.data[:enrichments].first.applied?
+      end
+
+      test "a sourced description copying 8 words from the page is rejected and not written" do
+        pg = page
+        copied = "#{pg.description} Then more of our own words follow here to pad it out into something longer."
+        expect_facts_runs([:sourced, success_result(facts(description: {value: copied, confidence: "high"}))])
+
+        result = EnrichBook.call(book: @book, goodreads_page: pg)
+
+        assert_equal "rejected", result.data[:enrichments].first.facts.dig("description", "reason")
+        assert_equal 0, @book.descriptions.count
+      end
+
+      test "a sourced description in our own words is written" do
+        expect_facts_runs([:sourced, success_result(facts)])
+
+        EnrichBook.call(book: @book, goodreads_page: page)
+
+        assert_equal 1, @book.descriptions.count
+      end
+
+      test "force_research with a page still researches" do
+        expect_facts_runs([:research, success_result(facts)])
+
+        result = EnrichBook.call(book: @book, goodreads_page: page, force_research: true)
 
         assert_equal %w[research], result.data[:enrichments].map(&:mode)
       end

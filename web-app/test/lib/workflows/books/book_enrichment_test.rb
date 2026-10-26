@@ -87,7 +87,7 @@ module Workflows
         run = WorkflowRun.create!(workflow: "books.book_enrichment", definition_version: 1, enrichable: @book, initiated_by: "test")
         facts = run.steps.create!(key: "book_facts", queue: "low", max_attempts: 3, lease_seconds: 900, state: :ready)
         amazon = run.steps.create!(key: "amazon", queue: "serial", max_attempts: 7, lease_seconds: 600, state: :ready)
-        ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: false, author_names: []).returns(stub(success?: true, errors: []))
+        ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: false, author_names: [], goodreads_page: nil).returns(stub(success?: true, errors: []))
         ::Services::Books::AmazonProductService.expects(:call).with(book: @book).returns({success: true, errors: [], data: {}})
 
         [facts, amazon].each do |step|

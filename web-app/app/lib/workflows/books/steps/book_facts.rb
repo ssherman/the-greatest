@@ -12,11 +12,23 @@ module Workflows
           result = ::Services::Books::EnrichBook.call(
             book: target,
             force_research: run.options.fetch("force_research", false),
-            author_names: Array(run.options.fetch("author_names", []))
+            author_names: Array(run.options.fetch("author_names", [])),
+            goodreads_page: goodreads_page(run)
           )
           raise StandardError, "Enrichment failed for book #{target.id}: #{result.errors.join("; ")}" unless result.success?
 
           Workflows::Outcome.succeeded("done")
+        end
+
+        private
+
+        # The page the goodreads step matched, or nil: no step (a version-1
+        # run), skipped, failed, unmatched, or a page row since deleted.
+        def goodreads_page(run)
+          step = run.steps.find_by(key: "goodreads")
+          return nil unless step&.succeeded? && step.result&.dig("matched")
+
+          ::Books::GoodreadsPage.find_by(id: step.result["page_id"])
         end
       end
     end
