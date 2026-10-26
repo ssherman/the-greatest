@@ -519,6 +519,21 @@ module Services
           assert_equal [true, true, true], [replaced.reload.stage_work?, reverted.reload.stage_work?, outside.reload.stage_done?]
         end
 
+        # The 2026-10-26 dev rehearsal: reverted rows went back to stage 1 but
+        # ApplyBook took them as settled and skipped all 219.
+        test "redo leaves each row one ApplyBook reprocesses: unsure, or removed for a removed row" do
+          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: true, data: VerifyBook::Outcome.new(row: nil, via_resolve: false), errors: []))
+          reverted = ::Books::Verification.create!(book: @war, work_outcome: :reverted, run_id: "old", stage: :done)
+          replaced = ::Books::Verification.create!(book: @crime, work_outcome: :replaced, run_id: "old", stage: :done)
+          removed = ::Books::Verification.create!(book: @got, work_outcome: :removed, run_id: "old", stage: :done)
+
+          run_backfill(flags: %w[redo unranked], scope: ::Books::Book.where(id: [@war.id, @crime.id, @got.id]))
+
+          rows = [reverted, replaced, removed].map(&:reload)
+          assert_equal %w[unsure unsure removed], rows.map(&:work_outcome)
+          assert rows.none? { |row| ApplyBook.settled?(row) }
+        end
+
         test "redo does not take a book this run already finished, so a re-queued run does not redo it" do
           ::Books::Verification.create!(book: @war, work_outcome: :replaced, run_id: "run-1", stage: :done)
           VerifyBook.expects(:call).never

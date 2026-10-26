@@ -202,9 +202,12 @@ module Services
         # predicates as next_ids.
         def prepare(book)
           # A redo starts over at stage 1, reverted rows included: the redo's
-          # caller reverted the book first (books:verify_keep_bigger).
+          # caller reverted the book first (books:verify_keep_bigger). The row
+          # becomes one ApplyBook reprocesses (unsure, or removed, which stays
+          # removed if nothing settles), not one it takes as settled.
           if @redo && redoable.where(book_id: book.id).exists?
-            ::Books::Verification.find_by(book_id: book.id).update!(stage: :work)
+            row = ::Books::Verification.find_by(book_id: book.id)
+            row.update!(stage: :work, work_outcome: row.removed? ? :removed : :unsure)
             return
           end
 
