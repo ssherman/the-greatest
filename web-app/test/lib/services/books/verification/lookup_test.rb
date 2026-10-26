@@ -675,6 +675,61 @@ module Services
           assert_equal ["OL5W", :worldcat_isbns], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
         end
 
+        # Production, 2026-10-26: Open Library's matcher moved 278 books off a held
+        # work that passes our check onto one with fewer editions (Seize the Day
+        # 30 to 1, Ethics 75 to 1), and stage 2 did not collect the old work's ISBNs.
+        test "a fast-pass pick with fewer editions than a passing held work settles on the held work" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          held = ol_work("OL9W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 75)
+          client = FakeOlClient.new(hits: {["isbn13", "9780140447934"] => [ol_hit("OL5W")]},
+            works: {"OL5W" => ol_work("OL5W", title: "War and Peace (Penguin Classics)", authors: [["OL1A", "Leo Tolstoy"]], editions: 1), "OL9W" => held})
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL9W", :held_key, "OL5W"], [answer.work&.key, answer.lookup, answer.ol_pick]
+        end
+
+        test "an accepted /resolve pick with fewer editions than a passing held work settles on the held work" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          accepted = ol_work("OL5W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 2)
+          client = FakeOlClient.new(resolution: ol_resolution(verdict: "accept", work: accepted),
+            works: {"OL9W" => ol_work("OL9W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 40)})
+
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal ["OL9W", :held_key, "OL5W"], [answer.work&.key, answer.lookup, answer.ol_pick]
+        end
+
+        # Women (Bukowski) held The Woman in White (653 editions): a bigger held
+        # work that fails our check is another book, and the matcher's pick stands.
+        test "a matcher pick stands against a bigger held work that fails our check" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          client = FakeOlClient.new(hits: {["isbn13", "9780140447934"] => [ol_hit("OL5W")]},
+            works: {"OL5W" => ol_work("OL5W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 16),
+                    "OL9W" => ol_work("OL9W", title: "Anna Karenina", authors: [["OL1A", "Leo Tolstoy"]], editions: 653)})
+
+          assert_equal ["OL5W", :identifiers], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
+        end
+
+        test "a matcher pick with more editions than the held work stands" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          client = FakeOlClient.new(hits: {["isbn13", "9780140447934"] => [ol_hit("OL5W")]},
+            works: {"OL5W" => ol_work("OL5W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 85),
+                    "OL9W" => ol_work("OL9W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 1)})
+
+          assert_equal ["OL5W", :identifiers], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
+        end
+
+        test "a bigger passing held work that /resolve marked conflicted does not displace the accepted pick" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          accepted = ol_work("OL5W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 2)
+          held = ol_work("OL9W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 40)
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "accept",
+            candidates: [candidate(accepted, verdict: "accept"), candidate(held, verdict: "reject", score: 0.3, conflicts: ["identifier"])]))
+
+          assert_equal ["OL5W", :resolve], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
+        end
+
         test "a tripped volume guard still stops the candidate routes" do
           client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "abstain", volume_guards_tripped: ["author_shelf"],
             candidates: [candidate(tolstoy_work("OL5W", "War and Peace")), candidate(tolstoy_work("OL6W", "War and Peace"), verdict: "reject", score: 0.2)]))

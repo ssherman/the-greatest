@@ -11,7 +11,36 @@ class BooksVerifyRakeTest < ActiveSupport::TestCase
       Rake::Task.define_task(:environment) {} unless Rake::Task.task_defined?(:environment)
       silence_warnings { load Rails.root.join("lib/tasks/books/verify.rake").to_s }
     end
-    %w[books:verify books:verify_report books:verify_revert books:verify_revert_route].each { |name| Rake::Task[name].reenable }
+    %w[books:verify books:verify_report books:verify_revert books:verify_revert_route books:verify_keep_bigger].each { |name| Rake::Task[name].reenable }
+  end
+
+  def keep_bigger_result(found:, reverted: 0, failed: [], run_id: nil)
+    Services::Books::Verification::KeepBiggerWork::Result.new(success?: true, errors: [],
+      data: {found: found, reverted: reverted, failed: failed, run_id: run_id, samples: ["book 1 \"Seize the Day\": OL5W (1 editions) -> OL9W (30 editions)"]})
+  end
+
+  test "keep_bigger with no argument is a dry run that prints what it found" do
+    Services::Books::Verification::KeepBiggerWork.expects(:call).with(apply: false).returns(keep_bigger_result(found: 278))
+
+    assert_output(/keep bigger work \(dry run\): 278 books.*Seize the Day/m) { Rake::Task["books:verify_keep_bigger"].invoke }
+  end
+
+  test "keep_bigger[apply] reverts and queues the redo, and says so" do
+    Services::Books::Verification::KeepBiggerWork.expects(:call).with(apply: true).returns(keep_bigger_result(found: 2, reverted: 2, run_id: "run-9"))
+
+    assert_output(/keep bigger work \(applied\): 2 books, reverted 2.*queued redo run run-9/m) { Rake::Task["books:verify_keep_bigger"].invoke("apply") }
+  end
+
+  test "keep_bigger with an unknown argument aborts with usage" do
+    Services::Books::Verification::KeepBiggerWork.expects(:call).never
+
+    assert_output(nil, /usage: books:verify_keep_bigger/) { assert_raises(SystemExit) { Rake::Task["books:verify_keep_bigger"].invoke("now") } }
+  end
+
+  test "books:verify refuses redo, which needs the books named" do
+    Books::VerificationJob.expects(:perform_async).never
+
+    assert_output(nil, /redo/) { assert_raises(SystemExit) { Rake::Task["books:verify"].invoke("all", "redo") } }
   end
 
   test "a count and flags queue one run" do

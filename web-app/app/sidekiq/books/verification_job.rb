@@ -8,8 +8,10 @@ class Books::VerificationJob
 
   sidekiq_options queue: :low, retry: false
 
-  def perform(limit, run_id, flags = [])
-    data = ::Services::Books::Verification::Run.call(limit: limit, run_id: run_id, flags: Array(flags)).data
+  # book_ids: the books a redo names (books:verify_keep_bigger); the run's scope.
+  def perform(limit, run_id, flags = [], book_ids = nil)
+    scope = book_ids && {scope: ::Books::Book.where(id: book_ids)}
+    data = ::Services::Books::Verification::Run.call(limit: limit, run_id: run_id, flags: Array(flags), **scope.to_h).data
     Rails.logger.info("Verification run #{run_id}: #{data[:processed]} books" \
       "#{" -- stopped: #{data[:error]}" if data[:stopped]}")
   end

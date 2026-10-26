@@ -508,6 +508,28 @@ module Services
           run_backfill(flags: %w[second_chance unranked], scope: ::Books::Book.where(id: @war.id))
         end
 
+        test "redo takes done books in its scope back to stage 1, reverted ones included, and leaves the rest" do
+          VerifyBook.stubs(:call).returns(VerifyBook::Result.new(success?: true, data: VerifyBook::Outcome.new(row: nil, via_resolve: false), errors: []))
+          replaced = ::Books::Verification.create!(book: @war, work_outcome: :replaced, run_id: "old", stage: :done)
+          reverted = ::Books::Verification.create!(book: @crime, work_outcome: :reverted, run_id: "old", stage: :done)
+          outside = ::Books::Verification.create!(book: @got, work_outcome: :replaced, run_id: "old", stage: :done)
+
+          run_backfill(flags: %w[redo unranked], scope: ::Books::Book.where(id: [@war.id, @crime.id]))
+
+          assert_equal [true, true, true], [replaced.reload.stage_work?, reverted.reload.stage_work?, outside.reload.stage_done?]
+        end
+
+        test "redo does not take a book this run already finished, so a re-queued run does not redo it" do
+          ::Books::Verification.create!(book: @war, work_outcome: :replaced, run_id: "run-1", stage: :done)
+          VerifyBook.expects(:call).never
+
+          run_backfill(flags: %w[redo unranked], scope: ::Books::Book.where(id: @war.id))
+        end
+
+        test "redo without a scope is refused" do
+          assert_raises(ArgumentError) { Run.call(limit: nil, run_id: "run-1", flags: %w[redo], client: @client, wc_client: FakeWcClient.new) }
+        end
+
         test "without second_chance a done unsure book is not taken" do
           ::Books::Verification.create!(book: @war, work_outcome: :unsure, run_id: "old", stage: :done)
           VerifyBook.expects(:call).never

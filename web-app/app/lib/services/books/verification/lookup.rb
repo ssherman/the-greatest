@@ -38,7 +38,7 @@ module Services
         end
 
         def call
-          fast || full
+          keep_bigger_held(fast || full)
         end
 
         private
@@ -98,8 +98,33 @@ module Services
           []
         end
 
+        # Open Library's matcher (the fast pass or an accept) settled on a work
+        # with fewer editions than one the book holds that passes our check: the
+        # book keeps the held work, the one with the most editions. Settling drops
+        # the other work keys and stage 2 harvests only the settled work. In
+        # production (2026-10-26) the matcher had moved 278 books this way (Seize
+        # the Day 30 editions to 1, Ethics 75 to 1). A bigger held work that fails
+        # our check is another book (Women held The Woman in White) and does not
+        # count; neither does one /resolve marked conflicted.
+        def keep_bigger_held(answer)
+          return answer unless answer.work && %i[identifiers resolve].include?(answer.lookup)
+
+          conflicted = @resolution ? conflicted_keys(@resolution) : []
+          editions = edition_count(answer.work)
+          # Editions first: our check can fetch author records.
+          bigger = held_works(@resolution).values
+            .reject { |work| work.key == answer.work.key || conflicted.include?(work.key) }
+            .select { |work| edition_count(work) > editions }
+            .sort_by { |work| -edition_count(work) }
+            .find { |work| Check.verified?(@book, work, @client) }
+          return answer unless bigger
+
+          Answer.new(work: bigger, lookup: :held_key, duplicates: [], redirect_sources: [],
+            source_version: answer.source_version, ol_pick: answer.work.key)
+        end
+
         def full
-          resolution = @client.resolve(
+          @resolution = resolution = @client.resolve(
             title: @book.title.to_s,
             author_names: @book.authors.map(&:name),
             year: @book.first_published_year,
@@ -195,10 +220,11 @@ module Services
 
         # Held key => live work, in stored order, conflicted ones included. A held
         # key that is also a candidate already has its record.
+        # The fast pass has no resolution: every held work is fetched.
         def held_works(resolution)
           @held_works ||= begin
             keys = stored_keys.uniq
-            works = resolution.candidates.select { |candidate| candidate.record && keys.include?(candidate.work_key) }.to_h { |candidate| [candidate.work_key, candidate.record] }
+            works = Array(resolution&.candidates).select { |candidate| candidate.record && keys.include?(candidate.work_key) }.to_h { |candidate| [candidate.work_key, candidate.record] }
             missing = keys - works.keys
             works = works.merge(@client.works_batch(missing)) if missing.any?
             keys.filter_map { |key| [key, works[key]] if works[key] }.to_h
