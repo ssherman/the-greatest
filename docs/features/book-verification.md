@@ -209,8 +209,11 @@ a `/resolve` accept) gets a narrower one in `Lookup#keep_bigger_held`: when the 
 that passes the check and has more editions than the matcher's pick, the book settles on that held
 work instead (`held_key`, with the matcher's pick as `ol_pick`). Of several, the one with the most
 editions. A bigger held work that fails the check does not count: it is often another book (*Women*,
-Bukowski, held *The Woman in White*, 653 editions), and the matcher's pick is the right move. Neither
-does one `/resolve` marked conflicted.
+Bukowski, held *The Woman in White*, 653 editions), and the matcher's pick is the right move. A bigger
+held work `/resolve` marked conflicted (the book's ISBNs disagree with it) is not settled on, but it
+still outweighs the pick: the book stays `unsure` with its held work, as a second-chance route leaves
+it. In the dev repair, *The Well-Beloved*'s ISBNs sat in a 1-edition duplicate, so `/resolve` accepted
+that and marked the held 71-edition work conflicted; 19 of the 278 books were like this.
 
 Why: in production (2026-10-26) the matcher had moved 278 books off a passing held work onto a
 smaller one, 219 on the first pass and 59 on the second chance (*Seize the Day* 30 editions to 1,
@@ -222,8 +225,8 @@ the 46 ISBNs of its old work.
 or prior keys include a passing work with more editions than `new_key`). With `[apply]` it reverts each
 (the second-chance revert for a row a second chance settled, the full revert otherwise) and queues one
 run with the `redo` flag over just those books, which puts their rows back to stage 1 and settles them
-again under the current rules. The redo takes about 30 seconds a book. A book the redo settles on the
-small work again (its bigger work was a conflicted candidate) is listed again by a later dry run.
+again under the current rules. A book whose bigger work is a conflicted candidate stays `unsure`,
+which the dry run does not list, so a second dry run should list none.
 
 **`held_key` runs first**, then `resolve_candidate`, `exact_title` and `worldcat_isbns`. A candidate
 passing the same check is no reason to move a book off a key it holds. In the 2026-10-24 dev

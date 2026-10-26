@@ -11,8 +11,9 @@ module Services
       # old and prior keys and, with apply, reverts each and queues one redo run
       # over them, which settles them again under the current rules.
       #
-      # A book the redo settles on the small work again (the bigger one was a
-      # conflicted /resolve candidate) is found again by a later run.
+      # The redo cannot settle a book on the small work again: when the bigger
+      # one is a conflicted /resolve candidate the book stays unsure, and an
+      # unsure row is not listed.
       class KeepBiggerWork
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         SETTLED = (::Books::Verification::KEYED_OUTCOMES + %w[duplicate_pair]).freeze

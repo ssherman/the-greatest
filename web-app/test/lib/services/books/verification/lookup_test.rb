@@ -720,14 +720,33 @@ module Services
           assert_equal ["OL5W", :identifiers], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
         end
 
-        test "a bigger passing held work that /resolve marked conflicted does not displace the accepted pick" do
+        # The Well-Beloved in the 2026-10-26 dev repair: the book's ISBNs sit in a
+        # 1-edition duplicate, so /resolve accepted it and marked the held
+        # 71-edition work conflicted. Neither is settled on: the book stays unsure
+        # with its held work, as a second-chance route would leave it.
+        test "a bigger passing held work that /resolve marked conflicted leaves the book unsure, not on the smaller pick" do
           hold(:books_work_openlibrary_id, "OL9W", :legacy)
           accepted = ol_work("OL5W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 2)
           held = ol_work("OL9W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 40)
           client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "accept",
             candidates: [candidate(accepted, verdict: "accept"), candidate(held, verdict: "reject", score: 0.3, conflicts: ["identifier"])]))
 
-          assert_equal ["OL5W", :resolve], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
+          answer = Lookup.call(book: @book, client: client)
+
+          assert_equal [nil, :resolve, "OL5W"], [answer.work, answer.lookup, answer.ol_pick]
+        end
+
+        test "a bigger held work that is not conflicted wins over a bigger conflicted one" do
+          hold(:books_work_openlibrary_id, "OL9W", :legacy)
+          hold(:books_work_openlibrary_id, "OL8W", :legacy)
+          accepted = ol_work("OL5W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 2)
+          conflicted = ol_work("OL9W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 40)
+          clean = ol_work("OL8W", title: "War and Peace", authors: [["OL1A", "Leo Tolstoy"]], editions: 10)
+          client = FakeOlClient.new(resolution: ol_resolution_with(verdict: "accept",
+            candidates: [candidate(accepted, verdict: "accept"), candidate(conflicted, verdict: "reject", score: 0.3, conflicts: ["identifier"])]),
+            works: {"OL8W" => clean})
+
+          assert_equal ["OL8W", :held_key], Lookup.call(book: @book, client: client).then { |answer| [answer.work&.key, answer.lookup] }
         end
 
         test "a tripped volume guard still stops the candidate routes" do

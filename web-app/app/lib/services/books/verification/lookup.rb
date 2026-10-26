@@ -105,7 +105,11 @@ module Services
         # production (2026-10-26) the matcher had moved 278 books this way (Seize
         # the Day 30 editions to 1, Ethics 75 to 1). A bigger held work that fails
         # our check is another book (Women held The Woman in White) and does not
-        # count; neither does one /resolve marked conflicted.
+        # count. One /resolve marked conflicted is not settled on (the book's
+        # ISBNs disagree with it), but it still outweighs the pick: the book
+        # stays unsure with its held work, as a second-chance route leaves it.
+        # The Well-Beloved: its ISBNs sit in a 1-edition duplicate, so /resolve
+        # accepted that and marked the held 71-edition work conflicted.
         def keep_bigger_held(answer)
           return answer unless answer.work && %i[identifiers resolve].include?(answer.lookup)
 
@@ -113,13 +117,14 @@ module Services
           editions = edition_count(answer.work)
           # Editions first: our check can fetch author records.
           bigger = held_works(@resolution).values
-            .reject { |work| work.key == answer.work.key || conflicted.include?(work.key) }
+            .reject { |work| work.key == answer.work.key }
             .select { |work| edition_count(work) > editions }
             .sort_by { |work| -edition_count(work) }
-            .find { |work| Check.verified?(@book, work, @client) }
-          return answer unless bigger
+            .select { |work| Check.verified?(@book, work, @client) }
+          return answer if bigger.empty?
 
-          Answer.new(work: bigger, lookup: :held_key, duplicates: [], redirect_sources: [],
+          clean = bigger.find { |work| conflicted.exclude?(work.key) }
+          Answer.new(work: clean, lookup: clean ? :held_key : answer.lookup, duplicates: [], redirect_sources: [],
             source_version: answer.source_version, ol_pick: answer.work.key)
         end
 
