@@ -22,6 +22,8 @@ module Services
       # ebook and audiobook.
       PHYSICAL_BINDINGS = %w[hardcover paperback mass_market].freeze
 
+      TRUSTED_ISBN_SOURCES = %w[open_library worldcat goodreads].freeze
+
       def self.call(book:)
         new(book).call
       end
@@ -44,10 +46,23 @@ module Services
       def search_param_sets
         keywords = [book.title, book.authors.map(&:name).join(" ")].join(" ").squeeze(" ").strip
 
-        [
+        sets = [
           {keywords: keywords, search_index: "Books"},
           {keywords: keywords, search_index: "Books", browse_node_id: AUDIBLE_BROWSE_NODE}
         ]
+        isbn = trusted_isbn13
+        sets.unshift({keywords: isbn, search_index: "Books"}) if isbn
+        sets
+      end
+
+      # An ISBN from an independent catalogue finds the exact work faster than a
+      # title search does. Legacy ISBNs are unverified and never count. One ISBN
+      # only: the best by trust rank (Open Library/WorldCat over Goodreads).
+      def trusted_isbn13
+        book.identifiers
+          .where(identifier_type: :books_work_isbn13, source: TRUSTED_ISBN_SOURCES)
+          .max_by { |identifier| [Identifier.trust_rank(identifier.source), -identifier.id] }
+          &.value
       end
 
       def match_task_class
