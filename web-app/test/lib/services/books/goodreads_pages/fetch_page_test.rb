@@ -99,11 +99,29 @@ module Services
 
           page = result.data[:page].reload
           assert_equal [:found, legacy.id], [result.data[:outcome], page.id]
-          assert_equal ["legacy", "found", "Legacy Title", "9780000000002", [{"name" => "Legacy Author", "role" => "Author", "primary" => true}]],
-            [page.source, page.outcome, page.title, page.isbn13, page.authors]
+          assert_equal ["legacy", "found", "Legacy Title", [{"name" => "Legacy Author", "role" => "Author", "primary" => true}]],
+            [page.source, page.outcome, page.title, page.authors]
           assert_equal 2, page.parser_version
           assert_predicate page.genres, :any?
           assert_equal html, Zlib.gunzip(page.html.download).force_encoding(Encoding::UTF_8)
+        end
+
+        test "refresh of a legacy row replaces its series and identifiers but keeps title, authors and outcome" do
+          legacy = ::Books::GoodreadsPage.create!(goodreads_book_id: 26067585, source: :legacy, outcome: :found,
+            fetched_at: Time.utc(2025, 1, 1), parser_version: nil, title: "Legacy Title", isbn13: "9780000000002",
+            isbn10: "0000000002", asin: "B000000002",
+            series: [{"goodreads_series_id" => nil, "title" => "Legacy Series", "position" => "1"}],
+            authors: [{"name" => "Legacy Author", "role" => "Author", "primary" => true}])
+          html = page_html("batman_writers_26067585.html.gz")
+
+          FetchPage.call(goodreads_book_id: 26067585, client: client_returning(fetched(html)), refresh: true)
+
+          page = legacy.reload
+          assert_equal [{"goodreads_series_id" => 130291, "title" => "Batman (2011)", "position" => nil}], page.series
+          assert_equal "9781401259693", page.isbn13
+          assert_not_equal ["0000000002", "B000000002"], [page.isbn10, page.asin]
+          assert_equal ["legacy", "found", "Legacy Title", [{"name" => "Legacy Author", "role" => "Author", "primary" => true}]],
+            [page.source, page.outcome, page.title, page.authors]
         end
 
         test "refresh never turns a found page into not found" do

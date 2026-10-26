@@ -81,7 +81,8 @@ module Services
 
           index.fetch(key, []).each do |row|
             resolved = row.canonical
-            return resolved if resolved
+            # A genre merged into a location must not tag a book with a setting.
+            return resolved if resolved && TYPE_ORDER.include?(resolved.category_type)
           end
           nil
         end

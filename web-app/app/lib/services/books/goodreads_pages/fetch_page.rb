@@ -26,6 +26,11 @@ module Services
       # the row alone and the answer stays :found, except a blocked or
       # unparseable refetch, which is reported so the caller can back off.
       #
+      # A refresh of a legacy row also replaces series, isbn13, isbn10 and asin.
+      # The legacy seed holds series entries with no Goodreads series id (which
+      # ApplySeries cannot use) and ISBNs scraped from the legacy site, which
+      # Apply would otherwise write under source goodreads.
+      #
       # The HTML is gzipped whole onto the private service (spec §6, "HTML
       # storage"): stripping it would be a parser decision of its own.
       class FetchPage
@@ -79,11 +84,9 @@ module Services
             source: :fetched, outcome: parsed.outcome, fetched_at: fetched.fetched_at, http_status: fetched.status,
             parser_version: ::Books::Goodreads::BookPage::VERSION,
             title: facts&.title,
-            series: Array(facts&.series).map { |s| {"goodreads_series_id" => s.goodreads_series_id, "title" => s.title, "position" => s.position} },
             authors: Array(facts&.contributors).map { |c| {"name" => c.name, "role" => c.role, "primary" => c.primary} },
             original_publication_year: facts&.original_publication_year,
-            isbn13: facts&.isbn13, isbn10: facts&.isbn10, asin: facts&.asin,
-            **enrichment(facts)
+            **identity(facts), **enrichment(facts)
           )
           attach_html(page, fetched)
           page.save!
@@ -91,14 +94,21 @@ module Services
         end
 
         # Only the enrichment columns, the HTML and the parser version: the
-        # verified title, authors and ISBNs stay as the import left them.
+        # verified title and authors stay as the import left them. A legacy row
+        # also takes the fresh series and identifiers (see the class comment).
         def refresh(page, parsed, fetched)
           return page unless parsed.outcome == :found
 
           page.assign_attributes(parser_version: ::Books::Goodreads::BookPage::VERSION, **enrichment(parsed.facts))
+          page.assign_attributes(identity(parsed.facts)) if page.legacy?
           attach_html(page, fetched)
           page.save!
           page
+        end
+
+        def identity(facts)
+          {series: Array(facts&.series).map { |s| {"goodreads_series_id" => s.goodreads_series_id, "title" => s.title, "position" => s.position} },
+           isbn13: facts&.isbn13, isbn10: facts&.isbn10, asin: facts&.asin}
         end
 
         def enrichment(facts)

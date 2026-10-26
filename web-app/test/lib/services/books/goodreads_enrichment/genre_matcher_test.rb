@@ -29,6 +29,12 @@ module Services
           assert_equal target, GenreMatcher.new.match("Literary Fiction")
         end
 
+        test "a genre merged into a location is no match" do
+          place = category("Paris", type: :location)
+          category("Paris Fiction", deleted: true, merged_into_id: place.id)
+          assert_nil GenreMatcher.new.match("Paris Fiction")
+        end
+
         test "a merged category whose target is deleted is no match" do
           target = category("Gone", deleted: true)
           category("Literary Fiction", deleted: true, merged_into_id: target.id)

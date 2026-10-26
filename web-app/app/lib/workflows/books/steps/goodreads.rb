@@ -19,6 +19,8 @@
 #                     reserved turn, so the next execution must not reserve again
 #   followed_best     the main edition's page has been followed; never follow twice
 #   searched_retry    the title-plus-surname search has been used
+#   bad_fetches       blocked or unparseable fetches so far; the second ends the
+#                     step as a miss
 #   stray_id          the page followed away from, to fall back to if the main
 #                     edition's page is not found (not in the spec's list)
 #
@@ -197,10 +199,22 @@ module Workflows
           @progress["due"] = false
           ::Books::Goodreads::GateTurn.after_fetch(gate: @gate, outcome: outcome)
           case outcome
-          when :blocked, :unparseable then wait_until(blocked_until, due: false)
+          when :blocked, :unparseable then bad_fetch(outcome)
           when :unavailable, :fetcher_down then raise StandardError, "Goodreads fetch for book #{@book.id} failed: #{outcome}"
           else record
           end
+        end
+
+        # A blocked or unparseable page waits out the gate's cooldown once. The
+        # same URL coming back bad a second time ends the step as a miss, so one
+        # page cannot keep closing the shared gate (and the user import with it)
+        # while book_facts and amazon wait. The count rides in progress.
+        def bad_fetch(outcome)
+          @progress["bad_fetches"] = @progress["bad_fetches"].to_i + 1
+          return wait_until(blocked_until, due: false) if @progress["bad_fetches"] < 2
+
+          ::Services::Books::GoodreadsEnrichment::Ledger.record(book: @book, outcome: "unrecognized", reason: outcome.to_s)
+          Workflows::Outcome.succeeded(outcome.to_s, {"matched" => false})
         end
 
         def blocked_until

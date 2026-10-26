@@ -51,7 +51,10 @@ module Services
         test "only the top five rows are offered and the book is the parent" do
           many = (1..8).map { |n| @rows.first.with(goodreads_book_id: n) }
           ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new)
-            .with(has_entries(entity_noun: "book", parent: @book)).with { |args| args[:candidate_lines].size == 5 }
+            .with { |args|
+              args[:entity_noun] == "book" && args[:parent] == @book && args[:candidate_lines].size == 5 &&
+                args[:guidance].include?("study guide") && args[:guidance].include?("omnibus")
+            }
             .returns(stub(call: ::Services::Ai::Result.new(success: true, data: {selected_index: 0, confidence: "high"})))
 
           assert_nil PickCandidate.call(book: @book, rows: many)

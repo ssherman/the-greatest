@@ -240,6 +240,21 @@ module Workflows
           outcome = execute
 
           assert_equal [:wait, Time.utc(2026, 10, 26, 6), "page", MAIN], [outcome.kind, outcome.run_after, @stored.dig("progress", "phase"), @stored.dig("progress", "goodreads_book_id")]
+          assert_equal 1, @stored.dig("progress", "bad_fetches")
+        end
+
+        test "a second unparseable fetch of the same page ends the step as a miss with one ledger row" do
+          search_row(row(MAIN, title: "Catch-22"))
+          pick(MAIN)
+          gate_decisions(FETCH)
+          stub_page_fetch([:unparseable, nil], [:unparseable, nil])
+
+          first = execute
+          second = execute
+
+          assert_equal :wait, first.kind
+          assert_equal [:succeeded, "unparseable", false], [second.kind, second.outcome, second.result["matched"]]
+          assert_equal [["unrecognized", "unparseable"]], ledger_rows.pluck(:outcome, :reason)
         end
 
         test "a fetcher that is down raises so the coordinator retries" do

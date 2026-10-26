@@ -96,6 +96,13 @@ module Services
           refute result.data[:enrichment].facts["page_range"]["applied"]
         end
 
+        test "an audiobook format writes no page_range and says format_not_paged" do
+          result = apply(format: "Audible Audio")
+
+          assert_nil @book.reload.page_range.presence
+          assert_equal "format_not_paged", result.data[:enrichment].facts["page_range"]["reason"]
+        end
+
         test "the default edition's blank page_count is filled with the page_range" do
           edition = ::Books::Edition.create!(book: @book, title: "Penguin", edition_type: :standard)
           @book.update_columns(default_edition_id: edition.id)
