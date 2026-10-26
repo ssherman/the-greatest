@@ -228,6 +228,13 @@ run with the `redo` flag over just those books, which puts their rows back to st
 again under the current rules. A book whose bigger work is a conflicted candidate stays `unsure`,
 which the dry run does not list, so a second dry run should list none.
 
+Dev rehearsal on the 2026-10-26 production copy: 278 books found and redone in 90 minutes (most
+settle through the fast identifier pass, not `/resolve`). 256 ended on the bigger work they held
+(*Kim* 935 editions, 1,309 ISBNs held after; *Ethics* 42 ISBNs, from 0) and 3 stayed `unsure`. The
+other 19 went back onto the small work under an earlier version of this rule that let a conflicted
+bigger work stand aside; a second apply over them left all 19 `unsure` with their held work, and the
+next dry run listed 0.
+
 **`held_key` runs first**, then `resolve_candidate`, `exact_title` and `worldcat_isbns`. A candidate
 passing the same check is no reason to move a book off a key it holds. In the 2026-10-24 dev
 rehearsal, with candidates first, *One Hundred Years of Solitude* traded its held work (Spanish title,
