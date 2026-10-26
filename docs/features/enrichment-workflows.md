@@ -192,15 +192,16 @@ step directly, and nothing in the import path writes that deferral any more.
 
 ## The book workflow
 
-`books.book_enrichment` (definition version 1) has two steps, each wrapping an existing service:
+`books.book_enrichment` (definition version 2) has three steps, each wrapping an existing service:
 
 | Step | Queue | Waits on | Runs when |
 |---|---|---|---|
-| `book_facts` | `low` | the `author_facts` step of the runs of authors **linked to the book** that the import created (**release**) | Always |
-| `amazon` | `serial` | - | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
+| `goodreads` | `goodreads_fetch` | - | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
+| `book_facts` | `low` | `goodreads` reaching a terminal state (**finish**), and the `author_facts` step of the runs of authors **linked to the book** that the import created (**release**) | Always |
+| `amazon` | `serial` | `goodreads` reaching a terminal state (**finish**) | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
 
-The waits cross runs, so they are passed at plan time rather than declared in the definition. The
-Goodreads project will add its edges to this file. `start` is
+The author waits cross runs, so they are passed at plan time rather than declared in the definition; the
+`goodreads` waits are in the definition (`waits_on: {goodreads: :finish}`). `start` is
 `Workflows::Books::BookEnrichment.start(book, initiated_by:, new_author_ids:, author_names:, options:)`.
 It starts an author run (or joins the active one) for each id in `new_author_ids`, whether or not the
 book is linked to it, and makes `book_facts` wait on those linked to the book. If the book already has
@@ -208,6 +209,44 @@ an active run, that run is returned untouched and the event is logged. A joined 
 `wikidata` step is a backfill-paced wait (`waiting`, never attempted, `run_after` in the future) is
 pulled forward to now, so the book is not held for days by the backfill's pacing. Dispatch happens after
 the outermost commit; the plan rows are written in the caller's transaction.
+
+### The goodreads step
+
+`goodreads` finds the book's Goodreads page and applies it (what a match writes is in
+[Books AI Enrichment](./books_enrichment.md) and [Goodreads import](./goodreads-import.md)). It runs
+first because both later steps are better for it: `book_facts` gets the page as source material, and
+`amazon` gets a trusted ISBN. Whatever the step ends with, a miss or a failure that exhausts its
+attempts included, is terminal and so frees them, so a Goodreads outage never holds a book's AI or Amazon step.
+
+- **Known id first.** A book that already holds `books_work_goodreads_id` (legacy data, the Goodreads
+  import) goes straight to its page. Most Goodreads-import books therefore cost no fetch at all: the
+  import already cached the page. A failed re-check retries once as a search.
+- **Otherwise search, filter, pick.** Search by title (then title plus the author's surname once), drop
+  rows free filters can tell are wrong (`CandidateFilter`), and let the cheap model pick; only a `high`
+  confidence pick counts. The page is then fetched and re-checked against the book, following the
+  work's main edition when the pick was a stray edition.
+- **One fetch per execution, one gate turn per fetch.** Every fetch takes a turn at the shared
+  `Books::Goodreads::FetchGate` through `GateTurn`. A turn that is not due yet ends the execution with
+  a wait whose result holds the step's progress (`result["progress"]`), so the step never sleeps on the
+  capsule. A cold match costs two turns (search, page), 15 s apart. The daily cap (1,500) and the block
+  cooldown are the gate's: a refusal waits until tomorrow or the cooldown's end. The Goodreads import
+  draws on the same budget and there is no sub-cap or priority: enrichment and import share it first
+  come, first served. The `goodreads_fetch` queue's concurrency of 1 is what makes the gate lock-free.
+- **Results.** `matched` with `{matched: true, goodreads_book_id, page_id}`, or `no_match` / `rejected`
+  with `{matched: false}` and one `books.goodreads` ledger row. `book_facts` reads the page named by
+  `page_id` and nothing else from the step, so a later re-enrichment can feed the same cached page without
+  a Goodreads step in its run.
+- **Find and apply are separate** (spec section 10). Find (search, pick, fetch, re-check) costs fetches.
+  `Services::Books::GoodreadsEnrichment::Apply` takes a book and a cached page and costs only the
+  database; it is idempotent, so a later backfill can run it alone over books whose page is cached and
+  matched (the `books_work_goodreads_id` identifier with source `goodreads` joined to
+  `books_goodreads_pages`) with no fetch.
+
+### Version tolerance
+
+A run planned under version 1 has only `book_facts` and `amazon`, and keeps running after the deploy:
+`book_facts` finds no `goodreads` step and runs as it always did (knowledge, then research), and
+`amazon` has no `goodreads` edge. Only runs planned after the deploy get the new step.
 
 Callers: `DataImporters::Books::Book::Providers::Enrichment` (importer with `enrich: true`, and the
 list wizard's text rows) and `Services::Books::GoodreadsImports::PromoteRecords` (admin approval of a
