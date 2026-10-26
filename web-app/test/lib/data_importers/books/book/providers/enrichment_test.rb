@@ -97,7 +97,7 @@ module DataImporters
             assert Enrichment.new(new_author_ids: [author.id]).populate(@book, query: @query).success?
 
             author_run = WorkflowRun.find_by!(enrichable: author, workflow: "books.author_enrichment")
-            assert_equal [author_run.step(:author_facts)], book_run(@book).step(:book_facts).dependencies.map(&:prerequisite_step)
+            assert_equal [author_run.step(:author_facts)], book_run(@book).step(:book_facts).dependencies.map(&:prerequisite_step).reject { it.key == "goodreads" }
           end
 
           test "a created author not linked to the book is enriched but not waited on" do
@@ -106,7 +106,7 @@ module DataImporters
             Enrichment.new(new_author_ids: [author.id]).populate(@book, query: @query)
 
             assert WorkflowRun.exists?(enrichable: author, workflow: "books.author_enrichment")
-            assert_equal 0, book_run(@book).step(:book_facts).dependencies.count
+            assert_equal 0, book_run(@book).step(:book_facts).dependencies.map(&:prerequisite_step).reject { it.key == "goodreads" }.size
           end
 
           test "the plan joins the caller's transaction: a rollback leaves no run and dispatches nothing" do

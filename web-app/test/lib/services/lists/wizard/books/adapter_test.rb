@@ -251,7 +251,7 @@ module Services
             author = book.authors.sole
             author_run = WorkflowRun.find_by!(enrichable: author, workflow: "books.author_enrichment")
             book_facts = WorkflowRun.find_by!(enrichable: book, workflow: "books.book_enrichment").step(:book_facts)
-            assert_equal [author_run.step(:author_facts)], book_facts.dependencies.map(&:prerequisite_step)
+            assert_equal [author_run.step(:author_facts)], book_facts.dependencies.map(&:prerequisite_step).reject { it.key == "goodreads" }
           end
 
           test "a rolled-back row leaves no run behind and dispatches nothing" do

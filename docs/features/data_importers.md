@@ -201,8 +201,12 @@ symbol is `:enrichment`, so `providers: [:enrichment]` selects it.
 - The plan rows are written immediately, in the caller's transaction, so a rolled-back import (the list
   wizard's `CreateFailed`, Goodreads' `CreateBook`) leaves no run. Only the dispatch waits for the
   outermost commit.
-- The `amazon` step waits for nothing, and is skipped `no_authors` for a book without `book_authors` rows
-  (the search is built from the author). Its matching rules are summarised below.
+- The `goodreads` step runs first and the `amazon` and `book_facts` steps wait for it to finish. It is
+  skipped `no_authors` for a book without `book_authors` rows, as is `amazon` (the searches are built from
+  the author). So a new book gets, in order: a Goodreads match (when one is found) that fills year, page
+  count, genre categories, series and identifiers; book AI in `sourced` mode from the matched page, with
+  no research run; and an Amazon search that tries the book's trusted ISBN-13 first. A book Goodreads does
+  not know goes on as before. Amazon's matching rules are summarised below.
 - A Goodreads member import (`enrich: false`) plans nothing; `PromoteRecords` plans the runs when an admin
   approves the import. List-wizard text rows use `Services::Lists::Wizard::Books::Adapter::TEXT_PROVIDERS`
   (`%i[authors enrichment]`).
@@ -211,6 +215,10 @@ symbol is `:enrichment`, so `providers: [:enrichment]` selects it.
 
 #### Amazon matching
 What the `amazon` step does to a book (`Services::Books::AmazonProductService`):
+
+- The search tries the book's trusted ISBN-13 first (an identifier from `open_library`, `worldcat` or
+  `goodreads`; legacy ISBNs are unverified and never count), because an ISBN finds the exact work faster
+  than a title search. The title-and-author searches follow as before.
 
 - Box sets and other multi-book products never become editions: `Services::Books::AmazonBookCheck` (`set?`,
   `same_book?`) filters them, `AmazonProductService#persist_match` refuses a set product, and

@@ -5,8 +5,8 @@ require "test_helper"
 # Whole book and author runs through the real engine: planner, coordinator,
 # WorkflowStepJob and the recovery sweep. Sidekiq runs inline and the dispatch is
 # NOT stubbed, so a finished step really dispatches what it readied. Only the
-# service boundary is stubbed (Wikidata, VIAF, the two AI steps, Amazon, and
-# Open Library, which is down so the importer falls back to the query's names).
+# service boundary is stubbed (Wikidata, VIAF, the two AI steps, Amazon, the
+# goodreads step itself, whose fetching has its own tests, and Open Library, which is down so the importer falls back to the query's names).
 module Workflows
   class BooksEnrichmentFlowTest < ActiveSupport::TestCase
     BASE_URL = "http://open-library.test:8080"
@@ -42,6 +42,12 @@ module Workflows
       viaf_result = success(::Services::Books::Authors::EnrichFromViaf, {outcome: :unmatched, wikidata_qid: nil, decision: nil})
       author_result = success(::Services::Books::Authors::EnrichAuthor)
       book_result = success(::Services::Books::EnrichBook)
+
+      # No match: the step ends and releases book_facts and amazon, as it would for a book Goodreads does not know.
+      Workflows::Books::Steps::Goodreads.any_instance.stubs(:call).with { |target:, **|
+        calls << [:goodreads, target.title]
+        true
+      }.returns(Workflows::Outcome.succeeded("no_match", {"matched" => false}))
 
       ::Services::Books::Authors::EnrichFromWikidata.stubs(:call).with { |**kwargs|
         calls << [:wikidata, kwargs[:author].name]
@@ -86,7 +92,7 @@ module Workflows
 
       assert_equal %w[completed completed], runs_of(book.authors).map(&:status)
       assert_equal %w[completed], runs_of(book).map(&:status)
-      assert_equal %w[succeeded succeeded], runs_of(book).first.steps.order(:id).map(&:state)
+      assert_equal %w[succeeded succeeded succeeded], runs_of(book).first.steps.order(:id).map(&:state)
     end
 
     # The order above also falls out of callback order (the author chains run
@@ -151,6 +157,10 @@ module Workflows
 
     test "a worker crash mid-step is recovered by the sweep" do
       run = Sidekiq::Testing.fake! { Workflows::Books::BookEnrichment.start(books_books(:got), initiated_by: "test") }
+      # The goodreads step finishes (its message is queued in the fake), releasing book_facts.
+      goodreads = run.step(:goodreads)
+      Workflows::Coordinator.claim(goodreads.id, token: "gr")
+      Workflows::Coordinator.finish(goodreads, token: "gr", outcome: Workflows::Outcome.succeeded("no_match", {"matched" => false}))
       WorkflowStepJob.clear
       step = run.step(:book_facts)
       assert_predicate step, :ready?
@@ -170,8 +180,10 @@ module Workflows
     test "a committed advance whose dispatch failed is recovered by the sweep" do
       chain = WorkflowStepJob.set(queue: "author_chain")
       serial = WorkflowStepJob.set(queue: "serial")
+      fetch = WorkflowStepJob.set(queue: "goodreads_fetch")
       WorkflowStepJob.stubs(:set).with(queue: "author_chain").returns(chain)
       WorkflowStepJob.stubs(:set).with(queue: "serial").returns(serial)
+      WorkflowStepJob.stubs(:set).with(queue: "goodreads_fetch").returns(fetch)
       WorkflowStepJob.expects(:set).with(queue: "low").raises(RedisClient::CannotConnectError.new("redis is down")).at_least_once
 
       book = import("Lost Message", "Edda Marlow")

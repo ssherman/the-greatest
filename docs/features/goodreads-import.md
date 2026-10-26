@@ -47,6 +47,27 @@ never refuses a row.
 - A value that does not parse is dropped and recorded in the row's `notes`.
 - `Private Notes` is never stored.
 
+## Book page parser v2 and enrichment
+
+`Books::Goodreads::BookPage` is at version 2. Beyond the identity facts the import reads, it reads the
+description, genres, page count, format and the id of the work's main edition (`best_book_id`), and each
+series with its Goodreads series id. Ratings are still never read. The HTML is kept, so a version bump is
+re-read from the cache (`GoodreadsPages::Reparse`) with no fetch; a page at an older version is re-read
+before the enrichment step uses it.
+
+The `goodreads` step of `books.book_enrichment` (see [Enrichment workflows](./enrichment-workflows.md))
+reuses this machinery for new books:
+
+- **One gate turn for every fetch.** The import's `FetchPageJob` and the enrichment step both take a turn
+  through `Books::Goodreads::GateTurn`, so the 15 s spacing, the 1,500-per-UTC-day cap and the 6 h block
+  cooldown are one budget, with no sub-cap and no priority. Books a user's import creates usually cost the
+  enrichment step no fetch, because they arrive with a Goodreads id and a cached page.
+- **The search cache.** `books_goodreads_searches` stores each title search (rows and HTML, `found` or
+  `no_results`) keyed by the normalized query and is fresh for 30 days, so a retried or repeated search
+  fetches nothing.
+- **A match is durable.** It is the `books_work_goodreads_id` identifier with source `goodreads`, which is
+  separate from the `goodreads_import` source of user-import data.
+
 ## Data model
 
 - `books_goodreads_imports`: one per upload. A partial unique index allows one import in progress

@@ -51,6 +51,42 @@ module Services
         assert_equal "18145289011", captured.last[:browse_node_id]
       end
 
+      test "a Goodreads ISBN is searched first, ahead of the keyword sets" do
+        @book.identifiers.where(identifier_type: :books_work_isbn13).delete_all
+        @book.identifiers.create!(identifier_type: :books_work_isbn13, value: "9780140447934", source: :goodreads)
+        captured = capture_searches
+
+        AmazonProductService.call(book: @book)
+
+        assert_equal 3, captured.size
+        assert_equal({keywords: "9780140447934", search_index: "Books"}, captured.first.slice(:keywords, :search_index))
+        assert_nil captured.first[:browse_node_id]
+        assert_nil captured.second[:keywords][/9780140447934/]
+      end
+
+      test "with an Open Library and a Goodreads ISBN the higher trust rank is searched" do
+        @book.identifiers.where(identifier_type: :books_work_isbn13).delete_all
+        @book.identifiers.create!(identifier_type: :books_work_isbn13, value: "9780140447934", source: :goodreads)
+        @book.identifiers.create!(identifier_type: :books_work_isbn13, value: "9781400079988", source: :open_library)
+        captured = capture_searches
+
+        AmazonProductService.call(book: @book)
+
+        assert_equal 3, captured.size
+        assert_equal "9781400079988", captured.first[:keywords]
+      end
+
+      test "a legacy ISBN alone adds no ISBN search" do
+        @book.identifiers.where(identifier_type: :books_work_isbn13).delete_all
+        @book.identifiers.create!(identifier_type: :books_work_isbn13, value: "9780140447934", source: :legacy)
+        captured = capture_searches
+
+        AmazonProductService.call(book: @book)
+
+        assert_equal 2, captured.size
+        assert_nil captured.first[:keywords][/9780140447934/]
+      end
+
       test "keywords combine the title and the author names" do
         captured = []
         ::Services::Amazon::Client.stubs(:search_items).with { |**kwargs|
@@ -337,6 +373,15 @@ module Services
       end
 
       private
+
+      def capture_searches
+        captured = []
+        ::Services::Amazon::Client.stubs(:search_items).with { |**kwargs|
+          captured << kwargs
+          true
+        }.returns([])
+        captured
+      end
 
       def with_identifiers
         amazon_product.deep_merge("itemInfo" => {

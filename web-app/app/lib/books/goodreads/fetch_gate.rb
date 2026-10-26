@@ -47,6 +47,12 @@ module Books
         read["blocked_until"].to_i > now
       end
 
+      # When the current block ends; nil when none was set or it has passed.
+      def blocked_until
+        epoch = read["blocked_until"].to_i
+        Time.at(epoch) if epoch > now
+      end
+
       # Seconds until fetch_interval has passed since the last fetch actually
       # began. A turn only promises a start time: jobs held up by a deploy or
       # a slow fetch come due together, and this keeps them apart.

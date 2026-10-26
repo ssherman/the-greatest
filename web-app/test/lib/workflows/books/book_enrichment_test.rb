@@ -38,29 +38,63 @@ module Workflows
                                                           lease_seconds: 900, state: :blocked}.merge(attributes))
       end
 
+      # The goodreads edge is on every book step; the tests below are about the others.
       def prerequisites_of(step)
-        WorkflowDependency.where(step: step).map(&:prerequisite_step)
+        WorkflowDependency.where(step: step).map(&:prerequisite_step).reject { it.key == "goodreads" }
       end
 
-      test "is registered as books.book_enrichment version 1 on books, with book_facts and amazon" do
-        assert_equal [BookEnrichment, "books.book_enrichment", 1, ::Books::Book], [
+      # Finishes the goodreads step as a worker would, releasing book_facts and amazon.
+      def finish_goodreads(run)
+        step = run.step(:goodreads)
+        claimed = Workflows::Coordinator.claim(step.id, token: "gr")
+        Workflows::Coordinator.finish(claimed, token: "gr", outcome: Workflows::Outcome.succeeded("no_match", {"matched" => false}))
+      end
+
+      test "is registered as books.book_enrichment version 2 on books, with goodreads, book_facts and amazon" do
+        assert_equal [BookEnrichment, "books.book_enrichment", 2, ::Books::Book], [
           Workflows::Registry.fetch("books.book_enrichment"), BookEnrichment.workflow, BookEnrichment.version, BookEnrichment.target_class
         ]
-        assert_equal %i[book_facts amazon], BookEnrichment.steps.map(&:key)
-        assert_equal [:low, :serial], BookEnrichment.steps.map(&:queue)
-        assert_equal [15.minutes, 10.minutes], BookEnrichment.steps.map(&:lease)
-        assert_equal [{}, {}], BookEnrichment.steps.map(&:waits_on)
+        assert_equal %i[goodreads book_facts amazon], BookEnrichment.steps.map(&:key)
+        assert_equal [:goodreads_fetch, :low, :serial], BookEnrichment.steps.map(&:queue)
+        assert_equal [10.minutes, 15.minutes, 10.minutes], BookEnrichment.steps.map(&:lease)
+        assert_equal [{}, {goodreads: :finish}, {goodreads: :finish}], BookEnrichment.steps.map(&:waits_on)
       end
 
       test "amazon gets seven attempts (about 11 hours of backoff) where the others get three" do
-        assert_equal [3, 7], BookEnrichment.steps.map(&:max_attempts)
-        assert_equal [3, 7], start.steps.order(:id).pluck(:max_attempts)
+        assert_equal [3, 3, 7], BookEnrichment.steps.map(&:max_attempts)
+        assert_equal [3, 3, 7], start.steps.order(:id).pluck(:max_attempts)
       end
 
-      test "a book with no new authors makes book_facts and amazon ready at once" do
+      test "a book with no new authors makes goodreads ready, and book_facts and amazon wait on it" do
         run = start
+        assert_equal %w[ready blocked blocked], %w[goodreads book_facts amazon].map { run.step(it).state }
 
-        assert_equal %w[ready ready], %w[book_facts amazon].map { run.step(it).state }
+        finish_goodreads(run)
+
+        assert_equal %w[ready ready], %w[book_facts amazon].map { run.step(it).reload.state }
+      end
+
+      test "a book with no authors plans goodreads skipped as no_authors" do
+        bare = books_books(:crime_and_punishment)
+
+        run = start(bare, author_names: ["Fyodor Dostoevsky"])
+
+        assert_equal ["skipped", "no_authors"], [run.step(:goodreads).state, run.step(:goodreads).outcome]
+        assert_equal "ready", run.step(:book_facts).state
+      end
+
+      test "a run planned under version 1 (book_facts and amazon only) still runs both steps" do
+        run = WorkflowRun.create!(workflow: "books.book_enrichment", definition_version: 1, enrichable: @book, initiated_by: "test")
+        facts = run.steps.create!(key: "book_facts", queue: "low", max_attempts: 3, lease_seconds: 900, state: :ready)
+        amazon = run.steps.create!(key: "amazon", queue: "serial", max_attempts: 7, lease_seconds: 600, state: :ready)
+        ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: false, author_names: [], goodreads_page: nil).returns(stub(success?: true, errors: []))
+        ::Services::Books::AmazonProductService.expects(:call).with(book: @book).returns({success: true, errors: [], data: {}})
+
+        [facts, amazon].each do |step|
+          WorkflowStepJob.new.tap { it.jid = "old" }.perform(step.id)
+        end
+
+        assert_equal %w[succeeded succeeded], [facts, amazon].map { it.reload.state }
       end
 
       test "start dispatches the ready steps after commit" do
@@ -68,7 +102,7 @@ module Workflows
         dispatched = false
         Workflows::Dispatcher.expects(:dispatch).once.with { |steps|
           dispatched = true
-          steps.map(&:key).sort == %w[amazon book_facts]
+          steps.map(&:key) == %w[goodreads]
         }
 
         ActiveRecord::Base.transaction do
@@ -93,7 +127,9 @@ module Workflows
 
       test "book_facts waits for every new linked author, in either completion order" do
         run = start(new_author_ids: [@a.id, @b.id])
-        assert_equal %w[blocked ready], %w[book_facts amazon].map { run.step(it).state }
+        assert_equal %w[blocked blocked], %w[book_facts amazon].map { run.step(it).state }
+        finish_goodreads(run)
+        assert_equal %w[blocked ready], %w[book_facts amazon].map { run.step(it).reload.state }
 
         finish_author_facts(@b)
         assert_equal "blocked", run.step(:book_facts).reload.state
@@ -104,6 +140,7 @@ module Workflows
 
       test "simultaneous author completion makes book_facts ready once" do
         run = start(new_author_ids: [@a.id, @b.id])
+        finish_goodreads(run)
         finish_author_facts(@a)
         finish_author_facts(@b)
 
@@ -120,6 +157,7 @@ module Workflows
       test "a created author not linked to the book gets a run but holds nothing" do
         unlinked = books_authors(:bachman)
         run = start(new_author_ids: [unlinked.id])
+        finish_goodreads(run)
 
         assert_equal "ready", run.step(:book_facts).state
         assert_equal run.id, author_run(unlinked).parent_run_id
@@ -167,8 +205,9 @@ module Workflows
         tolstoy_author_facts(state: :succeeded, outcome: "done", released_at: Time.current, finished_at: Time.current)
 
         run = start(books_books(:war_and_peace), new_author_ids: [books_authors(:tolstoy).id])
+        finish_goodreads(run)
 
-        assert_equal "ready", run.step(:book_facts).state
+        assert_equal "ready", run.step(:book_facts).reload.state
       end
 
       test "a book with no book_authors plans amazon skipped as no_authors" do
@@ -182,6 +221,7 @@ module Workflows
 
       test "book_facts still runs after an author's AI step failed" do
         run = start(new_author_ids: [@a.id])
+        finish_goodreads(run)
         step = author_run(@a).step(:author_facts)
         step.update_columns(state: WorkflowStep.states[:running], lease_token: "dead", attempts: 2, lease_expires_at: 1.minute.from_now)
 
@@ -192,6 +232,7 @@ module Workflows
 
       test "a deleted author releases the waiting book (via recovery)" do
         run = start(new_author_ids: [@a.id])
+        finish_goodreads(run)
         author_run(@a).update_columns(enrichable_id: 0)
 
         Workflows::Recovery.call

@@ -60,7 +60,17 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    has none from that source. That row outranks Goodreads, Wikipedia and Open Library text in
    the display resolver, so it becomes the displayed description unless a `manual` or preferred
    row exists.
-5. **Research fallback.** When `recognized` is false, or the overall confidence is `low`, or
+5. **Sourced mode (a Goodreads page).** When the `goodreads` step matched, `book_facts` runs the same
+   task once in `sourced` mode on the `standard` role, with the cached `Books::GoodreadsPage` (named by
+   the step's `page_id`) as source material, and it never runs research: no web search is spent on a
+   book Goodreads already described, and a book past the knowledge cutoff gets the same path. A low
+   confidence answer is applied rather than deferred, and an unrecognized one is recorded and ends the
+   run. The page's description is publisher copy: it is shown to the model as material and never written
+   to `descriptions`. The model writes its own words, and `DescriptionCheck` rejects any description
+   that copies 8 consecutive words from the page (the title and author names are exempt). Without a
+   page (a version 1 run, a miss, a skipped step, the admin button, the rake tasks) the run is the
+   knowledge-then-research flow above. The admin force-research option still researches.
+6. **Research fallback.** When `recognized` is false, or the overall confidence is `low`, or
    the book's year is at or past `config.x.ai.knowledge_cutoff_year` (in which case the
    knowledge call is skipped), the same task runs in `research` mode on the `research` role
    with the `web_search` tool forced. Citations land on the ledger row and the first becomes
@@ -70,8 +80,8 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 
 ## The ledger
 
-`Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`), `mode`
-(knowledge/research), `outcome` (applied, nothing_to_apply, unrecognized, skipped, failed),
+`Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts` or `books.goodreads`), `mode`
+(knowledge/research/sourced), `outcome` (applied, nothing_to_apply, unrecognized, skipped, failed),
 `recognized`, `confidence`, `facts` JSON, `citations`, `provider`, `model`, `ai_chat_id`,
 `error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (`origin_countries`
 also carries `unmatched`, and `description` carries `review`); reasons are `filled`,
@@ -87,6 +97,19 @@ Enrichment.research.today.count  # research rows today, including budget skips; 
 Enrichment.research.today.where.not(outcome: :skipped).count  # research calls actually made today
 Enrichment.skipped.where(reason: "budget_exhausted")  # the research backlog
 ```
+
+### The `books.goodreads` kind
+
+The `goodreads` step writes one row per run, from `Services::Books::GoodreadsEnrichment::Apply` (a match)
+or `Ledger` (a miss). It has no mode, model or AI chat. `facts` has an entry per field, each
+`{value, applied, reason}`: `first_published_year` and `page_range` (`filled`, `already_set`, `null`,
+`human_cleared`, and `format_not_paged` for audio and e-book formats), `genres` (matched entries linked
+as `CategoryItem`s with source `goodreads`, and `unmatched` names, since a category is never created),
+the series (`created` or `linked`, found by the Goodreads series id), and the identifiers. A miss is an
+`unrecognized` row with reason `no_match` or `rejected`. Applying the same page again records
+`nothing_to_apply`, which is what lets a later backfill re-run it safely. The ISBN-13 it writes (source
+`goodreads`, checksum-valid, and not held by another book from a verified source) is what the Amazon step
+searches by first.
 
 ## Tuning
 

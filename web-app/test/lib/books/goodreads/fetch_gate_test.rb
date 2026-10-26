@@ -70,6 +70,14 @@ module Books
         assert_equal [15, 1_500, 21_600, 3, "h1", 30_000], [config.fetch_interval, config.daily_fetch_cap,
           config.block_cooldown, config.fetch_attempts, config.wait_for_selector, config.fetch_timeout_ms]
       end
+
+      test "blocked_until is the end of the block, and nil when there is none" do
+        assert_nil @gate.blocked_until
+
+        @gate.block!
+
+        assert_equal Time.current.to_i + @config.block_cooldown, @gate.blocked_until.to_i
+      end
     end
   end
 end
