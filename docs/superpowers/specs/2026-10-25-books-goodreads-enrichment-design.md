@@ -315,7 +315,7 @@ Outcomes:
 |---|---|
 | `applied` | a matched page wrote at least one field |
 | `nothing_to_apply` | matched, all fields already set |
-| `unrecognized` | `no_match` or `rejected` |
+| `unrecognized` | `no_match`, `rejected`, or a second `blocked`/`unparseable` fetch in the same step (the step then gives up so the book proceeds; the first one blocks the gate and waits) |
 | `skipped` | reason given |
 | `failed` | error recorded |
 
