@@ -144,6 +144,13 @@ the sync never undoes them.
    run settled through Open Library's own matcher); undo one book with
    `bin/rails "books:verify_revert[<book id>]"`, which undoes only its second chance. Leave the flag
    off routine runs: a rerun repeats the same lookups.
+   (2026-10-26: second chance done in production, unsure 4,011 to 2,482.)
+   **Keep the bigger held work, once, after the deploy that carries it:** `bin/rails
+   books:verify_keep_bigger` (dry run: about 278 books on the 2026-10-26 copy, with samples), then
+   `bin/rails "books:verify_keep_bigger[apply]"`. It reverts those books and queues a redo run over
+   them (about 30 seconds a book, so roughly 2½ hours); nothing else may run verification meanwhile.
+   Then `books:verify_report`, and the dry run again: it should list almost none. Details:
+   `docs/features/book-verification.md`, "Keeping the bigger held work".
 4. **Duplicates.** Review the pairs the sweep found in the Duplicates queue and merge them. Every
    merge is recorded as a redirect, so the sync never brings the merged book back.
 5. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.

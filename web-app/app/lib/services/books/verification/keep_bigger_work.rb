@@ -31,7 +31,9 @@ module Services
         end
 
         def call
-          rows = ::Books::Verification.where(work_outcome: SETTLED).where.not(new_key: nil).includes(book: :authors).order(:book_id).to_a
+          # Only rows with another key to compare: most confirmed rows hold just the one.
+          rows = ::Books::Verification.where(work_outcome: SETTLED).where.not(new_key: nil).includes(book: :authors).order(:book_id)
+            .select { |row| old_keys(row).any? }
           works = fetch_works(rows.flat_map { |row| old_keys(row) + [row.new_key] }.uniq)
           found = rows.filter_map { |row| (bigger = bigger_work(row, works)) && [row, bigger] }
 

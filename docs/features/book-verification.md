@@ -30,11 +30,14 @@ bin/rails "books:verify[500,reharvest]"            # once: redo stages 2-4 for t
 bin/rails books:verify_report                      # counts, coverage, signals, latest run, samples
 bin/rails "books:verify_revert[123]"               # put book 123's keys and sources back
 bin/rails "books:verify_revert_route[held_key]"    # undo every book one second-chance route settled
+bin/rails books:verify_keep_bigger                 # list books the matcher moved onto a smaller work (see Keeping the bigger held work)
+bin/rails "books:verify_keep_bigger[apply]"        # revert them and queue a redo run over them
 ```
 
 Flags go after the count, in any order: `post_import`, `unranked`, `retry_unsure`, `recheck`,
 `reharvest`, `second_chance`. An
-unknown flag or count aborts with a usage line.
+unknown flag or count aborts with a usage line. `redo` is a run flag too, but only
+`books:verify_keep_bigger` uses it: it needs the run's books named, so `books:verify` refuses it.
 
 Each run is one `Books::VerificationJob` on the `low` queue. It holds one of Sidekiq's five threads
 for as long as it runs. It works through books one at a time: ranked books by rank, then (with
@@ -198,6 +201,29 @@ that fail the check only on title (Open Library's main *Oedipus* work is titled 
 a book whose held key really is another, bigger work stays `unsure` rather than moving to the right
 one. A move to a bigger work still happens (*Tristram Shandy*, 1 edition to 85), and equal or unknown
 counts do not block.
+
+### Keeping the bigger held work (Open Library's own matcher)
+
+The rule above covers the second-chance routes. Open Library's matcher (the fast identifier pass and
+a `/resolve` accept) gets a narrower one in `Lookup#keep_bigger_held`: when the book holds a work
+that passes the check and has more editions than the matcher's pick, the book settles on that held
+work instead (`held_key`, with the matcher's pick as `ol_pick`). Of several, the one with the most
+editions. A bigger held work that fails the check does not count: it is often another book (*Women*,
+Bukowski, held *The Woman in White*, 653 editions), and the matcher's pick is the right move. Neither
+does one `/resolve` marked conflicted.
+
+Why: in production (2026-10-26) the matcher had moved 278 books off a passing held work onto a
+smaller one, 219 on the first pass and 59 on the second chance (*Seize the Day* 30 editions to 1,
+*Ethics* 75 to 1). The forgiving comparison key let more small reprints pass ("Without My Cloak
+(Virago Modern Classics)"). Stage 2's duplicate harvest did not make up for it: *Ethics* held none of
+the 46 ISBNs of its old work.
+
+**Repair:** `bin/rails books:verify_keep_bigger` lists the books already moved (settled rows whose old
+or prior keys include a passing work with more editions than `new_key`). With `[apply]` it reverts each
+(the second-chance revert for a row a second chance settled, the full revert otherwise) and queues one
+run with the `redo` flag over just those books, which puts their rows back to stage 1 and settles them
+again under the current rules. The redo takes about 30 seconds a book. A book the redo settles on the
+small work again (its bigger work was a conflicted candidate) is listed again by a later dry run.
 
 **`held_key` runs first**, then `resolve_candidate`, `exact_title` and `worldcat_isbns`. A candidate
 passing the same check is no reason to move a book off a key it holds. In the 2026-10-24 dev
