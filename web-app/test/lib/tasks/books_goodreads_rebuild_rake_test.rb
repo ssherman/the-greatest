@@ -23,4 +23,25 @@ class BooksGoodreadsRebuildRakeTest < ActiveSupport::TestCase
       Rake::Task["books:goodreads_rebuild:cohorts"].invoke
     end
   end
+
+  def retire_result(applied:)
+    Struct.new(:success?, :data, :errors, keyword_init: true)
+      .new(success?: true, data: {counts: {"relink" => 2691, "strip_identifier" => 2091}, applied: applied}, errors: [])
+  end
+
+  test "retire_replay_proposals is a dry run without apply" do
+    REBUILD::RetireReplayProposals.expects(:call).with(apply: false).returns(retire_result(applied: false))
+
+    assert_output(/relink 2691, strip_identifier 2091.*dry run: nothing changed; run books:goodreads_rebuild:retire_replay_proposals\[apply\]/m) do
+      Rake::Task["books:goodreads_rebuild:retire_replay_proposals"].invoke
+    end
+  end
+
+  test "retire_replay_proposals[apply] retires them" do
+    REBUILD::RetireReplayProposals.expects(:call).with(apply: true).returns(retire_result(applied: true))
+
+    assert_output(/relink 2691, strip_identifier 2091.*retired/m) do
+      Rake::Task["books:goodreads_rebuild:retire_replay_proposals"].invoke("apply")
+    end
+  end
 end

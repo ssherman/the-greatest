@@ -124,6 +124,28 @@ module Admin
         assert_equal @admin.id, @relink.decided_by_user_id
       end
 
+      test "index hides superseded verdicts" do
+        superseded = verdict(:relink, "user:5:book:6:goodreads:7", status: :rejected)
+        superseded.update!(superseded_at: Time.current)
+        rejected = verdict(:relink, "user:5:book:6:goodreads:8", status: :rejected)
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_repair_verdicts_path(status: "rejected")
+
+        assert_equal [rejected.id], verdict_ids
+      end
+
+      test "bulk approve all matching never approves a superseded verdict" do
+        superseded = verdict(:relink, "user:5:book:6:goodreads:7")
+        superseded.update!(superseded_at: Time.current)
+        sign_in_as(@admin, stub_auth: true)
+
+        post bulk_approve_admin_books_repair_verdicts_path, params: {all_matching: "1", kind: "relink"}
+
+        assert_predicate @relink.reload, :approved?
+        assert_predicate superseded.reload, :proposed?
+      end
+
       test "bulk approve of all matching approves only proposed verdicts the filter selects" do
         ai = verdict(:relink, "user:2:book:3:goodreads:4", decided_by: :ai, confidence: :low)
         sign_in_as(@admin, stub_auth: true)

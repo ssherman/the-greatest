@@ -78,7 +78,8 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   end
 
   def filtered_scope
-    scope = ::Books::RepairVerdict.all
+    # Superseded verdicts are replay proposals the Goodreads rebuild retired.
+    scope = ::Books::RepairVerdict.current
     scope = scope.where(kind: params[:kind]) if KINDS.include?(params[:kind])
     scope = scope.where(decided_by: params[:decided_by]) if DECIDED_BY.include?(params[:decided_by])
     scope = scope.where(confidence: params[:confidence]) if CONFIDENCES.include?(params[:confidence])

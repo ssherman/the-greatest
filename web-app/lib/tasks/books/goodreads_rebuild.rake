@@ -9,5 +9,14 @@ namespace :books do
     task cohorts: :environment do
       puts "post-import books: #{tally.call(Services::Books::GoodreadsRebuild::Cohort.counts)}"
     end
+
+    desc "Retire the replay's proposed relinks and identifier strips (rejected and superseded). " \
+      "A dry run unless [apply]; a second apply finds 0."
+    task :retire_replay_proposals, [:apply] => :environment do |_task, args|
+      result = Services::Books::GoodreadsRebuild::RetireReplayProposals.call(apply: args[:apply] == "apply")
+      puts "proposed replay verdicts: #{tally.call(result.data[:counts])}"
+      puts(result.data[:applied] ? "retired" :
+        "dry run: nothing changed; run books:goodreads_rebuild:retire_replay_proposals[apply]")
+    end
   end
 end

@@ -13,6 +13,7 @@
 #  reviewed_at        :datetime
 #  status             :integer          default("proposed"), not null
 #  subject_key        :string           not null
+#  superseded_at      :datetime
 #  created_at         :datetime         not null
 #  updated_at         :datetime         not null
 #  ai_chat_id         :bigint
@@ -38,6 +39,11 @@ module Books
     validates :subject_key, presence: true, uniqueness: {scope: :kind}
 
     scope :unapplied, -> { where(applied_at: nil) }
+    # superseded_at: a replay proposal the Goodreads rebuild retired
+    # (Services::Books::GoodreadsRebuild::RetireReplayProposals). Only the
+    # rebuild may record over one.
+    scope :current, -> { where(superseded_at: nil) }
+    scope :superseded, -> { where.not(superseded_at: nil) }
     scope :newest_first, -> { order(updated_at: :desc, id: :desc) }
 
     def reviewed?
