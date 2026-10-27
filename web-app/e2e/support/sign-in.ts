@@ -16,11 +16,11 @@ export function credentials(account: Account): Credentials {
 
 // Drives the login modal, then waits for the one signal that means Rails has
 // issued a session: both the tg_uid and tg_session cookies exist.
-// The navbar label reads "Logout" as soon as Firebase resolves client-side,
-// ~100ms before Rails answers POST /auth/sign_in, and networkidle fires in the
-// quiet window BEFORE that POST is sent. Capturing storage state on either of
-// those signals saved a state with no session, which made every admin spec
-// fail as "element not found" on the public homepage.
+// networkidle fires in the quiet window BEFORE POST /auth/sign_in is sent, and
+// the navbar only reads "Logout" once that POST has answered (the widget renders
+// from tg_uid, not Firebase). Capturing storage state before the cookies exist
+// saved a state with no session, which made every admin spec fail as "element
+// not found" on the public homepage.
 export async function signIn(page: Page, { email, password }: Credentials): Promise<void> {
   await page.goto('/');
   await page.locator('#navbar_login_button').click();
