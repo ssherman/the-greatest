@@ -22,7 +22,7 @@ module Workflows
       end
 
       def prerequisites_of(step)
-        step.dependencies.map(&:prerequisite_step_id)
+        step.dependencies.map(&:prerequisite_step).reject { it.key == "goodreads" }.map(&:id)
       end
 
       test "plans a book_facts-only run for a deferred book, waiting on its author's active run" do

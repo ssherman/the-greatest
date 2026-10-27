@@ -37,7 +37,7 @@ module Services
 
           page = result.data[:page]
           assert_equal :found, result.data[:outcome]
-          assert_equal ["fetched", "found", 200, 1, FETCHED_AT], [page.source, page.outcome, page.http_status, page.parser_version, page.fetched_at]
+          assert_equal ["fetched", "found", 200, 2, FETCHED_AT], [page.source, page.outcome, page.http_status, page.parser_version, page.fetched_at]
           assert_equal ["Batman, Volume 8: Superheavy", "9781401259693"], [page.title, page.isbn13]
           assert_equal [{"goodreads_series_id" => 130291, "title" => "Batman (2011)", "position" => nil}], page.series
           assert_equal({"name" => "Scott Snyder", "role" => "Writer", "primary" => true}, page.authors.first)
@@ -77,6 +77,82 @@ module Services
           result = FetchPage.call(goodreads_book_id: 656, client: client)
 
           assert_equal [:found, "War and Peace"], [result.data[:outcome], books_goodreads_pages(:war_and_peace_page).reload.title]
+        end
+
+        test "a found page stores the enrichment columns under parser version 2" do
+          result = FetchPage.call(goodreads_book_id: 147719920,
+            client: client_returning(fetched(page_html("catch_22_stray_edition_147719920.html.gz"))))
+
+          page = result.data[:page]
+          assert_equal [2, "Paperback", 168668, nil], [page.parser_version, page.format, page.best_book_id, page.page_count]
+          assert_includes page.genres, "Satire"
+          assert_predicate page.description, :present?
+        end
+
+        test "refresh fills the enrichment columns and HTML of a found legacy row and keeps what the import verified" do
+          legacy = ::Books::GoodreadsPage.create!(goodreads_book_id: 26067585, source: :legacy, outcome: :found,
+            fetched_at: Time.utc(2025, 1, 1), parser_version: nil, title: "Legacy Title", isbn13: "9780000000002",
+            authors: [{"name" => "Legacy Author", "role" => "Author", "primary" => true}])
+          html = page_html("batman_writers_26067585.html.gz")
+
+          result = FetchPage.call(goodreads_book_id: 26067585, client: client_returning(fetched(html)), refresh: true)
+
+          page = result.data[:page].reload
+          assert_equal [:found, legacy.id], [result.data[:outcome], page.id]
+          assert_equal ["legacy", "found", "Legacy Title", [{"name" => "Legacy Author", "role" => "Author", "primary" => true}]],
+            [page.source, page.outcome, page.title, page.authors]
+          assert_equal 2, page.parser_version
+          assert_predicate page.genres, :any?
+          assert_equal html, Zlib.gunzip(page.html.download).force_encoding(Encoding::UTF_8)
+        end
+
+        test "refresh of a legacy row replaces its series and identifiers but keeps title, authors and outcome" do
+          legacy = ::Books::GoodreadsPage.create!(goodreads_book_id: 26067585, source: :legacy, outcome: :found,
+            fetched_at: Time.utc(2025, 1, 1), parser_version: nil, title: "Legacy Title", isbn13: "9780000000002",
+            isbn10: "0000000002", asin: "B000000002",
+            series: [{"goodreads_series_id" => nil, "title" => "Legacy Series", "position" => "1"}],
+            authors: [{"name" => "Legacy Author", "role" => "Author", "primary" => true}])
+          html = page_html("batman_writers_26067585.html.gz")
+
+          FetchPage.call(goodreads_book_id: 26067585, client: client_returning(fetched(html)), refresh: true)
+
+          page = legacy.reload
+          assert_equal [{"goodreads_series_id" => 130291, "title" => "Batman (2011)", "position" => nil}], page.series
+          assert_equal "9781401259693", page.isbn13
+          assert_not_equal ["0000000002", "B000000002"], [page.isbn10, page.asin]
+          assert_equal ["legacy", "found", "Legacy Title", [{"name" => "Legacy Author", "role" => "Author", "primary" => true}]],
+            [page.source, page.outcome, page.title, page.authors]
+        end
+
+        test "refresh never turns a found page into not found" do
+          page = books_goodreads_pages(:war_and_peace_page)
+
+          result = FetchPage.call(goodreads_book_id: 656, refresh: true,
+            client: client_returning(fetched(page_html("not_found_99999999999.html.gz"))))
+
+          page.reload
+          assert_equal [:found, "found", 1, false], [result.data[:outcome], page.outcome, page.parser_version, page.html.attached?]
+        end
+
+        test "a blocked or unparseable refresh leaves the found row alone but reports the verdict" do
+          page = books_goodreads_pages(:war_and_peace_page)
+          cases = {blocked: fetched(page_html("synthetic_challenge.html"), status: 403),
+                   unparseable: fetched("<html><body>nothing</body></html>")}
+
+          cases.each do |outcome, response|
+            result = FetchPage.call(goodreads_book_id: 656, refresh: true, client: client_returning(response))
+
+            assert_equal [outcome, "found", 1, false], [result.data[:outcome], page.reload.outcome, page.parser_version, page.html.attached?]
+          end
+        end
+
+        test "without refresh a found page is not refetched" do
+          client = mock("page_fetcher")
+          client.stubs(:fetch).returns(fetched(page_html("war_and_peace_656.html.gz")))
+
+          FetchPage.call(goodreads_book_id: 656, client: client)
+
+          assert_equal [1, false], [books_goodreads_pages(:war_and_peace_page).reload.parser_version, books_goodreads_pages(:war_and_peace_page).html.attached?]
         end
 
         test "a fetcher that cannot fetch stores nothing and says so; a timeout is worth another try" do

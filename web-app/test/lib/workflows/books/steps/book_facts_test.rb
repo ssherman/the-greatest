@@ -21,7 +21,7 @@ module Workflows
         end
 
         test "runs EnrichBook without forced research or extra names by default" do
-          ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: false, author_names: []).returns(enrich_result(true))
+          ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: false, author_names: [], goodreads_page: nil).returns(enrich_result(true))
 
           result = call
 
@@ -29,9 +29,42 @@ module Workflows
         end
 
         test "force_research and author_names travel from the run's options" do
-          ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: true, author_names: ["Stephen King"]).returns(enrich_result(true))
+          ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: true, author_names: ["Stephen King"], goodreads_page: nil).returns(enrich_result(true))
 
           call(options: {force_research: true}, author_names: ["Stephen King"])
+        end
+
+        test "passes the Goodreads page when the goodreads step matched" do
+          page = books_goodreads_pages(:war_and_peace_page)
+          run = BookEnrichment.start(@book, initiated_by: "test")
+          run.step(:goodreads).update_columns(state: WorkflowStep.states[:succeeded], result: {"matched" => true, "page_id" => page.id, "progress" => {}})
+          ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: false, author_names: [], goodreads_page: page).returns(enrich_result(true))
+
+          BookFacts.new.call(step: run.step(:book_facts), run: run, target: @book)
+        end
+
+        test "passes nil for a version-1 run with no goodreads step" do
+          run = BookEnrichment.start(@book, initiated_by: "test")
+          run.step(:goodreads).destroy!
+          ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: false, author_names: [], goodreads_page: nil).returns(enrich_result(true))
+
+          BookFacts.new.call(step: run.step(:book_facts), run: run.reload, target: @book)
+        end
+
+        test "passes nil when goodreads succeeded without a match" do
+          run = BookEnrichment.start(@book, initiated_by: "test")
+          run.step(:goodreads).update_columns(state: WorkflowStep.states[:succeeded], result: {"matched" => false})
+          ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: false, author_names: [], goodreads_page: nil).returns(enrich_result(true))
+
+          BookFacts.new.call(step: run.step(:book_facts), run: run, target: @book)
+        end
+
+        test "passes nil when the matched page row no longer exists" do
+          run = BookEnrichment.start(@book, initiated_by: "test")
+          run.step(:goodreads).update_columns(state: WorkflowStep.states[:succeeded], result: {"matched" => true, "page_id" => 0})
+          ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: false, author_names: [], goodreads_page: nil).returns(enrich_result(true))
+
+          BookFacts.new.call(step: run.step(:book_facts), run: run, target: @book)
         end
 
         test "a failed run raises so the coordinator retries it" do

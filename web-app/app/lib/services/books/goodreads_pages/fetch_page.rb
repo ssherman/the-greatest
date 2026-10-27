@@ -20,6 +20,17 @@ module Services
       #   open, it is not configured, or it refused the request); nothing
       #   stored.
       #
+      # refresh: true refetches a found page whose row predates the enrichment
+      # columns (a legacy row has no HTML at all) and fills them. Nothing the
+      # import verified changes: a refetch that does not parse as found leaves
+      # the row alone and the answer stays :found, except a blocked or
+      # unparseable refetch, which is reported so the caller can back off.
+      #
+      # A refresh of a legacy row also replaces series, isbn13, isbn10 and asin.
+      # The legacy seed holds series entries with no Goodreads series id (which
+      # ApplySeries cannot use) and ISBNs scraped from the legacy site, which
+      # Apply would otherwise write under source goodreads.
+      #
       # The HTML is gzipped whole onto the private service (spec §6, "HTML
       # storage"): stripping it would be a parser decision of its own.
       class FetchPage
@@ -28,13 +39,14 @@ module Services
         FETCHER_DOWN = [::PageFetcher::Exceptions::CircuitOpenError, ::PageFetcher::Exceptions::ConfigurationError,
           ::PageFetcher::Exceptions::ClientError].freeze
 
-        def self.call(goodreads_book_id:, client: nil)
-          new(goodreads_book_id: goodreads_book_id, client: client).call
+        def self.call(goodreads_book_id:, client: nil, refresh: false)
+          new(goodreads_book_id: goodreads_book_id, client: client, refresh: refresh).call
         end
 
-        def initialize(goodreads_book_id:, client:)
+        def initialize(goodreads_book_id:, client:, refresh:)
           @goodreads_book_id = goodreads_book_id.to_i
           @client = client
+          @refresh = refresh
         end
 
         def call
@@ -44,7 +56,8 @@ module Services
           return done(:unavailable) if parsed.outcome == :unavailable
 
           page = store(parsed, fetched)
-          done(page.outcome.to_sym, page)
+          outcome = (@refresh && %i[blocked unparseable].include?(parsed.outcome)) ? parsed.outcome : page.outcome.to_sym
+          done(outcome, page)
         rescue *FETCHER_DOWN => e
           Rails.logger.error("#{self.class.name}: Goodreads #{@goodreads_book_id}: #{e.class}: #{e.message}")
           done(:fetcher_down)
@@ -63,6 +76,7 @@ module Services
         # one is replaced, HTML included.
         def store(parsed, fetched)
           page = ::Books::GoodreadsPage.find_or_initialize_by(goodreads_book_id: @goodreads_book_id)
+          return refresh(page, parsed, fetched) if @refresh && page.persisted? && page.outcome_found?
           return page if page.persisted? && page.conclusive?
 
           facts = parsed.facts
@@ -70,15 +84,41 @@ module Services
             source: :fetched, outcome: parsed.outcome, fetched_at: fetched.fetched_at, http_status: fetched.status,
             parser_version: ::Books::Goodreads::BookPage::VERSION,
             title: facts&.title,
-            series: Array(facts&.series).map { |s| {"goodreads_series_id" => s.goodreads_series_id, "title" => s.title, "position" => s.position} },
             authors: Array(facts&.contributors).map { |c| {"name" => c.name, "role" => c.role, "primary" => c.primary} },
             original_publication_year: facts&.original_publication_year,
-            isbn13: facts&.isbn13, isbn10: facts&.isbn10, asin: facts&.asin
+            **identity(facts), **enrichment(facts)
           )
-          page.html.attach(io: StringIO.new(Zlib.gzip(fetched.html)), filename: "goodreads-#{@goodreads_book_id}.html.gz",
-            content_type: "application/gzip", identify: false, metadata: {analyzed: true})
+          attach_html(page, fetched)
           page.save!
           page
+        end
+
+        # Only the enrichment columns, the HTML and the parser version: the
+        # verified title and authors stay as the import left them. A legacy row
+        # also takes the fresh series and identifiers (see the class comment).
+        def refresh(page, parsed, fetched)
+          return page unless parsed.outcome == :found
+
+          page.assign_attributes(parser_version: ::Books::Goodreads::BookPage::VERSION, **enrichment(parsed.facts))
+          page.assign_attributes(identity(parsed.facts)) if page.legacy?
+          attach_html(page, fetched)
+          page.save!
+          page
+        end
+
+        def identity(facts)
+          {series: Array(facts&.series).map { |s| {"goodreads_series_id" => s.goodreads_series_id, "title" => s.title, "position" => s.position} },
+           isbn13: facts&.isbn13, isbn10: facts&.isbn10, asin: facts&.asin}
+        end
+
+        def enrichment(facts)
+          {description: facts&.description, genres: Array(facts&.genres), page_count: facts&.page_count,
+           format: facts&.format, best_book_id: facts&.best_book_id}
+        end
+
+        def attach_html(page, fetched)
+          page.html.attach(io: StringIO.new(Zlib.gzip(fetched.html)), filename: "goodreads-#{@goodreads_book_id}.html.gz",
+            content_type: "application/gzip", identify: false, metadata: {analyzed: true})
         end
 
         def done(outcome, page = nil)
