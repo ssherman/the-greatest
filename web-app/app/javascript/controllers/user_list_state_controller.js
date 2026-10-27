@@ -39,6 +39,10 @@ export default class extends Controller {
     // backfilled by /user_list_state). This prevents a previous user's cache
     // from rendering on a shared browser after sign-out / session expiry.
     if (this.cookieUid()) {
+      // The nav links follow the same signal as the navbar button (tg_uid), so
+      // a failed or throttled fetch never leaves "Logout" without its My link.
+      // Only a 401 or a sign-out hides them again.
+      this._updateMyListsNav(true)
       this._hydrateFromStorage()
       this.refresh()
     } else {
@@ -233,6 +237,7 @@ export default class extends Controller {
   }
 
   _onAuthSuccess() {
+    this._updateMyListsNav(true)
     this.refresh()
   }
 
