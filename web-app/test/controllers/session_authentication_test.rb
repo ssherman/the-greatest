@@ -107,4 +107,119 @@ class SessionAuthenticationTest < ActionDispatch::IntegrationTest
     assert_includes response.headers["Cache-Control"], "public"
     assert_empty set_cookie_lines
   end
+
+  test "tg_session is HttpOnly and tg_uid is JS-readable, both SameSite=Lax" do
+    sign_in_as(@user, stub_auth: true)
+
+    session_line = set_cookie_lines.find { |l| l.start_with?("tg_session=") }
+    uid_line = set_cookie_lines.find { |l| l.start_with?("tg_uid=") }
+    assert_match(/httponly/i, session_line)
+    assert_match(/samesite=lax/i, session_line)
+    assert_match(/samesite=lax/i, uid_line)
+    assert_no_match(/httponly/i, uid_line)
+  end
+
+  test "a tg_session pointing at a deleted row is cleared on an uncached request" do
+    sign_in_as(@user, stub_auth: true)
+    Session.delete_all
+
+    get "/user_list_state", as: :json
+
+    assert_response :unauthorized
+    %w[tg_session tg_uid].each do |name|
+      line = set_cookie_lines.find { |l| l.start_with?("#{name}=") }
+      assert line, "expected #{name} to be deleted"
+      assert Time.httpdate(line[/expires=([^;]+)/i, 1]) < Time.current
+    end
+  end
+
+  test "a tg_session pointing at a deleted row sets no cookie on a cacheable page" do
+    sign_in_as(@user, stub_auth: true)
+    Session.delete_all
+
+    get game_path(games_games(:breath_of_the_wild))
+
+    assert_response :success
+    assert_empty set_cookie_lines
+  end
+
+  test "signing in again on the same browser destroys the previous session row" do
+    sign_in_as(@user, stub_auth: true)
+    first = Session.find_by!(user: @user)
+
+    sign_in_as(@user, stub_auth: true)
+
+    assert_not Session.exists?(first.id)
+    assert_equal 1, @user.sessions.count
+  end
+
+  test "user_list_state renews a session last active more than a day ago" do
+    sign_in_as(@user, stub_auth: true)
+    row = Session.find_by!(user: @user)
+    created = row.created_at
+
+    travel 2.days do
+      get "/user_list_state", as: :json
+
+      assert_response :success
+      assert_in_delta Time.current.to_i, row.reload.last_active_at.to_i, 5
+      assert_equal created.to_i, row.created_at.to_i
+      %w[tg_session tg_uid].each do |name|
+        line = set_cookie_lines.find { |l| l.start_with?("#{name}=") }
+        assert line, "expected a renewed #{name} cookie"
+        expires = Time.httpdate(line[/expires=([^;]+)/i, 1])
+        assert_in_delta (Time.current + Session::IDLE_TIMEOUT).to_i, expires.to_i, 5
+      end
+    end
+  end
+
+  test "user_list_state does not renew a session active within the last day" do
+    sign_in_as(@user, stub_auth: true)
+    get "/user_list_state", as: :json
+    row = Session.find_by!(user: @user)
+    before = row.last_active_at
+
+    travel 1.hour do
+      get "/user_list_state", as: :json
+
+      assert_response :success
+      assert_equal before.to_i, row.reload.last_active_at.to_i
+      assert_nil set_cookie_lines.find { |l| l.start_with?("tg_session=") }
+    end
+  end
+
+  test "renewal never extends past the one-year hard limit" do
+    sign_in_as(@user, stub_auth: true)
+    limit = Session.find_by!(user: @user).created_at + Session::MAX_LIFETIME
+
+    travel_to Time.current do
+      5.times do
+        travel 80.days
+        get "/user_list_state", as: :json
+        break unless response.successful?
+
+        line = set_cookie_lines.find { |l| l.start_with?("tg_session=") }
+        assert line, "expected renewal at #{Time.current}"
+        assert_operator Time.httpdate(line[/expires=([^;]+)/i, 1]).to_i, :<=, limit.to_i
+      end
+
+      travel_to limit + 1.day
+      get "/user_list_state", as: :json
+      assert_response :unauthorized
+    end
+  end
+
+  test "an admin page renews a session last active more than a day ago" do
+    host! Rails.application.config.domains[:music]
+    admin = users(:admin_user)
+    sign_in_as(admin, stub_auth: true)
+    row = Session.find_by!(user: admin)
+
+    travel 2.days do
+      get admin_user_domain_roles_path(@user)
+
+      assert_response :success
+      assert_in_delta Time.current.to_i, row.reload.last_active_at.to_i, 5
+    end
+  end
 end

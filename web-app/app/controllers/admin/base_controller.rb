@@ -6,6 +6,9 @@ class Admin::BaseController < ApplicationController
 
   before_action :authenticate_admin!
   before_action :prevent_caching
+  # The admin layout does not hydrate /user_list_state, so an admin who only
+  # uses /admin would otherwise never renew.
+  before_action :renew_current_session
 
   private
 

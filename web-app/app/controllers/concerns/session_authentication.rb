@@ -31,6 +31,9 @@ module SessionAuthentication
   # reset_session first: a pre-authentication session id must not survive into
   # the authenticated state (fixation).
   def start_session_for(user)
+    # Re-signing in on a browser that already holds a session must not leave the
+    # old row alive and unreachable.
+    current_session&.destroy
     reset_session
     session = Session.create!(
       user: user,
@@ -48,6 +51,21 @@ module SessionAuthentication
     delete_session_cookies
     reset_session
     @current_session = nil
+  end
+
+  # Slides the idle window forward at most once a day, so the write is cheap.
+  # created_at is untouched: session_expires_at caps the new expiry at the
+  # one-year hard limit. Callers must be uncacheable (it may set cookies).
+  def renew_current_session
+    return unless current_session
+
+    if current_session.last_active_at < Time.current - Session::RENEW_AFTER
+      current_session.update!(last_active_at: Time.current)
+      write_session_cookies(current_session)
+    elsif cookies[AuthController::TG_UID_COOKIE] != current_session.user_id.to_s
+      # Backfills tg_uid for sessions that predate it or lost it to a cookie clear.
+      write_session_cookies(current_session)
+    end
   end
 
   def session_expires_at(session)
@@ -82,12 +100,12 @@ module SessionAuthentication
 
     # eager_load: one query for session and user, as the old User.find_by was.
     record = Session.eager_load(:user).find_by(id: id)
-    return nil unless record
 
-    if session_expires_at(record) <= Time.current
-      record.destroy
+    if record.nil? || session_expires_at(record) <= Time.current
+      record&.destroy
       # An edge-cacheable response must carry no Set-Cookie, or Cloudflare
-      # bypasses its cache. The stale cookie is cleared on the next uncached request.
+      # bypasses its cache. Skipped here, the stale cookies are cleared by the
+      # next request that is uncached (such as /user_list_state).
       delete_session_cookies unless request.session_options[:skip]
       return nil
     end
