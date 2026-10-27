@@ -258,6 +258,9 @@ task can run again after each migration pass.
 
 ## Legacy replay
 
+**Paused since 2026-10-14; the Goodreads rebuild replaces it** (`docs/features/goodreads-rebuild.md`). Its
+proposed relinks and identifier strips are retired there; `apply`, the loader and `repair_ratings` are reused.
+
 Spec §12. The legacy app's 803 imports are replayed against the new resolver to measure it and to find the bad data
 legacy left behind. Every finding is a `Books::RepairVerdict` (`books_repair_verdicts`, no foreign keys, keyed by
 preserved ids): **never truncate that table**, the launch sequence relies on it. Nothing changes the catalog except

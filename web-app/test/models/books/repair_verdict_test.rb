@@ -15,6 +15,7 @@ require "test_helper"
 #  reviewed_at        :datetime
 #  status             :integer          default("proposed"), not null
 #  subject_key        :string           not null
+#  superseded_at      :datetime
 #  created_at         :datetime         not null
 #  updated_at         :datetime         not null
 #  ai_chat_id         :bigint

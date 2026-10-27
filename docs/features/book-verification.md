@@ -22,6 +22,7 @@ is what `Identifier.verified` reads. See `docs/features/identifier-provenance.md
 bin/rails "books:verify[200]"                      # one run of 200 books: ranked, pre_import
 bin/rails "books:verify[all]"                      # everything not yet done (days to weeks)
 bin/rails "books:verify[all,post_import]"          # also the post_import cohort
+bin/rails "books:verify[all,post_import,trusted]"  # post_import books on a real list only (before the Goodreads rebuild)
 bin/rails "books:verify[all,unranked]"             # continue past the ranking into the rest
 bin/rails "books:verify[200,retry_unsure]"         # also retry unsure books from an older OL version
 bin/rails "books:verify[all,second_chance]"        # once: give done unsure and removed books another try (see Second chance)
@@ -34,7 +35,7 @@ bin/rails books:verify_keep_bigger                 # list books the matcher move
 bin/rails "books:verify_keep_bigger[apply]"        # revert them and queue a redo run over them
 ```
 
-Flags go after the count, in any order: `post_import`, `unranked`, `retry_unsure`, `recheck`,
+Flags go after the count, in any order: `post_import`, `unranked`, `trusted`, `retry_unsure`, `recheck`,
 `reharvest`, `second_chance`. An
 unknown flag or count aborts with a usage line. `redo` is a run flag too, but only
 `books:verify_keep_bigger` uses it: it needs the run's books named, so `books:verify` refuses it.
@@ -433,6 +434,10 @@ with no exceptions either side (measured on the legacy database 2026-10-16). Ids
 migration, and books created in the new app start at the reserved ceiling of 250,000 and count as
 `pre_import`. So the cohort needs no legacy query. The default run skips `post_import` books until
 the Goodreads rebuild has repaired their titles and authors; the `post_import` flag includes them.
+`trusted` narrows that to the post-import books on a real list (any list except the generated
+user-favorites list), which Shane added by hand, so their titles and authors can be trusted now. It
+leaves out the rebuild's derived books (`Services::Books::GoodreadsRebuild::Cohort`,
+`docs/features/goodreads-rebuild.md`). In dev that covers 9,245 of the 9,247 ranked post-import books.
 
 ## The log
 

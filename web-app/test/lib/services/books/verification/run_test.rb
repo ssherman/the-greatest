@@ -390,6 +390,20 @@ module Services
           assert_includes order, @got.id
         end
 
+        test "trusted leaves out the Goodreads rebuild's derived books" do
+          order = record_applies
+          rank(@war, 1)
+          rank(@crime, 2)
+          rank(@clash, 3)
+          ::Services::Books::GoodreadsRebuild::Cohort.stubs(:derived).returns(::Books::Book.where(id: @clash.id))
+
+          run_backfill(scope: nil, flags: %w[post_import trusted])
+
+          assert_includes order, @war.id
+          assert_includes order, @crime.id
+          refute_includes order, @clash.id
+        end
+
         test "a row stopped at a later stage is taken again; a done row is not" do
           order = record_applies
           ::Books::Verification.create!(book: @war, work_outcome: :keyed, run_id: "old", stage: :worldcat)
