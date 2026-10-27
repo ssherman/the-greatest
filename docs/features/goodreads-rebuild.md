@@ -48,8 +48,9 @@ The rebuild never changes a trusted book's title or authors (spec §12 call 2).
 
 The replay left 2,691 relinks and 2,091 identifier strips proposed, decided on legacy's stripped titles.
 `Services::Books::GoodreadsRebuild::RetireReplayProposals` marks every proposed `relink` and
-`strip_identifier` verdict rejected, and stamps `superseded_at`. Approved and applied verdicts, and other
-kinds, are untouched.
+`strip_identifier` verdict that was never applied rejected, and stamps `superseded_at`. Approved verdicts,
+applied ones (even one `RecordVerdict` returned to proposed, which keeps `applied_at`) and other kinds are
+untouched.
 
 - The admin repair-verdict pages hide superseded rows (`RepairVerdict.current`). Bulk "approve all
   matching" can't reach them.

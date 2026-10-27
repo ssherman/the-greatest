@@ -43,6 +43,19 @@ module Services
           assert_nil @merge.superseded_at
         end
 
+        # RecordVerdict can turn an unreviewed, auto-approved verdict that was
+        # already applied back to proposed while keeping applied_at.
+        test "a proposed verdict that was already applied is left alone" do
+          applied = verdict(:relink, "r4")
+          applied.update!(applied_at: 1.day.ago)
+
+          result = RetireReplayProposals.call(apply: true)
+
+          assert_equal({"relink" => 2, "strip_identifier" => 1}, result.data[:counts])
+          assert_predicate applied.reload, :proposed?
+          assert_nil applied.superseded_at
+        end
+
         test "a second apply finds nothing" do
           RetireReplayProposals.call(apply: true)
 

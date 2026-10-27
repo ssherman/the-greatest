@@ -23,7 +23,9 @@ module Services
         end
 
         def call
-          scope = ::Books::RepairVerdict.proposed.current.where(kind: KINDS)
+          # unapplied: RecordVerdict can return an applied, unreviewed verdict to
+          # proposed with applied_at kept; that one stays as it is.
+          scope = ::Books::RepairVerdict.proposed.current.unapplied.where(kind: KINDS)
           counts = KINDS.index_with(0).merge(scope.group(:kind).count)
           if @apply
             now = Time.current
