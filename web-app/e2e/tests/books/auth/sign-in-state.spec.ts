@@ -65,4 +65,15 @@ test.describe('Sign-in state (books)', () => {
     await expect(page.locator('#login_modal')).toBeVisible();
     await expect.poll(() => firebaseUserCount(page), { timeout: 15_000 }).toBe(0);
   });
+
+  test('a throttled /user_list_state with no cached state keeps the My link', async ({ page }) => {
+    await signIn(page, credentials('USER'));
+    await page.goto('/');
+    await expectSignedIn(page);
+
+    await page.route('**/user_list_state', (route) => route.fulfill({ status: 429, body: '' }));
+    await page.evaluate(() => localStorage.removeItem('tg:user_list_state:books'));
+    await page.reload();
+    await expectSignedIn(page);
+  });
 });

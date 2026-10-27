@@ -3,8 +3,12 @@ import { expect, type Page } from '@playwright/test';
 // Every visible sign-in indicator must agree, so each assertion checks the
 // navbar button's state attribute AND the signed-in nav link. Books renders its
 // link twice (desktop nav and drawer), hence the :visible filter and counts.
+// The selector comes from the page's own domain, never from sniffing for the
+// element, so a missing link fails the signed-in check instead of passing the
+// signed-out one.
 async function myLink(page: Page): Promise<string> {
-  return (await page.locator('#navbar_my_books').count()) > 0 ? '#navbar_my_books' : '#navbar_my_lists';
+  const domain = await page.evaluate(() => document.body.dataset.domain);
+  return domain === 'books' ? '#navbar_my_books' : '#navbar_my_lists';
 }
 
 export async function expectSignedIn(page: Page): Promise<void> {
