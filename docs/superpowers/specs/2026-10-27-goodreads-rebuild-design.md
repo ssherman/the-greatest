@@ -160,10 +160,45 @@ fetches nothing.**
 Measured: 2,576 books are lump suspects on year or author alone. Same-year lumps found through the
 work reference add to that.
 
+## 4a. Between the stages: verify the repaired books
+
+Shane, 2026-10-27: the replay comes last, and trusted, non-legacy identifiers come first. The
+trusted core is close to done already:
+
+- about 12,100 of the 12,493 pre-import books were verified in the ranked runs;
+- the 7,792 list-created post-import books are in the current production run.
+
+Derived books can't be verified before stage one. The verification pass finds a book's Open Library
+work by title and author, and legacy's stripped titles and guessed authors would hand "trusted"
+identifiers to the wrong books. That is why `docs/features/book-verification.md` holds the
+`post_import` cohort back.
+
+So the order is:
+
+1. stage one;
+2. the existing verification pass (`books:verify`) over the derived books stage one fixed;
+3. stage two.
+
+After step 2, most of stage two's matches become verified-identifier hits, needing less AI and fewer
+`/resolve` calls.
+
+- **Scope.** Derived books whose `fix_identity` has been applied, plus the volume books `split`
+  created. Lumps still awaiting a split decision wait. The verification pass needs a cohort, or
+  scope, for "derived and repaired". The builder adds it alongside the existing `post_import` and
+  `unranked` flags.
+- **Speed is the risk.** A book that needs `/resolve` costs about 30 s, and 148k books at that rate
+  would take weeks. Measure the share that settles in the fast identifier pass on a dev sample of a
+  few hundred repaired books. If `/resolve` would take more than a few days, run the fast pass only
+  (identifier pass, editions, WorldCat confirm). Books that would need `/resolve` stay unverified,
+  and stage two falls back to title matching for them.
+- **Ranked first.** Ranked derived books go before unranked ones, as the verification pass already
+  orders its work.
+
 ## 5. Stage two: put every edition on the right book
 
-Stage two runs after stage one, over every distinct Goodreads edition in the rows (210,121). That
-includes the 51,837 rows where legacy chose no book.
+Stage two runs after stage one and the verification run in §4a, over every distinct Goodreads edition
+in the rows (210,121). That includes the 51,837 rows where legacy chose no book. It is the last
+step, and the only one that writes to users' lists.
 
 1. **The blinded finder searches our catalog.** In order:
    1. identifiers from a verified source (a legacy identifier counts for nothing);
@@ -260,8 +295,9 @@ Books gets added as a fallback for just those.
 1. `data_migration:sync`, as now.
 2. `books:goodreads_replay:load` picks up the week's new legacy imports. It is already repeatable.
 3. Stage one runs over the books legacy created that week, which are derived.
-4. Stage two runs over the new editions.
-5. `apply` re-applies everything, including the moves and splits the sync undid.
+4. The §4a verification run covers those books (fast pass only).
+5. Stage two runs over the new editions.
+6. `apply` re-applies everything, including the moves and splits the sync undid.
 
 At cutover: the old site goes offline, then `FINAL=1 data_migration:sync`, one last catch-up, and
 `finish_legacy` (already planned for the final pass only).
@@ -343,9 +379,11 @@ Ordered by what is slow, not by what is easy.
    - the blinded finder mode;
    - the member-import guards.
 4. **Stage one.** Dev rehearsal, the labeled sample, then all imports.
-5. **Stage two.** Same order. Its `/resolve` tie-breaks wait for the production verification run
-   to finish, and it must not share `/resolve` with another long run.
-6. **The weekly catch-up rake task**, and the `docs/launch-todo.md` steps for every production run.
+5. **The verification run over repaired books (§4a).** Measure the fast-pass share in dev first,
+   then run it in production after the current production verification run frees `/resolve`.
+6. **Stage two, last.** Dev rehearsal, the labeled sample, then production. It must not share
+   `/resolve` with another long run.
+7. **The weekly catch-up rake task**, and the `docs/launch-todo.md` steps for every production run.
 
 ## 12. Calls made after the builder check
 
