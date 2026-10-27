@@ -111,11 +111,12 @@ and run in parallel.
   - *Trusted core:* legacy books created before 2024-09-09 03:22:31 UTC (12,493), plus books the new
     pipeline created or verified. Their identity is kept, and only the rows attached to them are
     checked.
-  - *Derived:* legacy books created inside an import window (about 148k). Their identity is rebuilt
-    from their rows.
+  - *Derived:* post-import books on no list (about 138k). Their identity is rebuilt from their rows.
 
-  Legacy `books.created_at` lives in the legacy database. The new app's timestamps are migration
-  times, so the cohort is recorded per book once, and again for each week's new books.
+  The rule (Shane, 2026-10-27; see §12 call 1): a post-import book on any list except the generated
+  user-favorites list is trusted, because Shane wouldn't have put an invalid book on a real list.
+  The rule is computed live from `list_items`, with nothing stored and no legacy read. A book added to
+  a list later becomes trusted on its own.
 
 ## 4. Stage one: identity repair, book by book
 
@@ -416,13 +417,19 @@ Ordered by what is slow, not by what is easy.
 
 These are my calls (Claude's), not Shane's. Each says what it costs if it's wrong.
 
-1. **"Derived" means import-created, not just "created in an import window".** A book that came in
-   with a list counts as trusted core: its first legacy list item is within a day of its legacy
-   `created_at` (7,792 of 9,247 ranked post-import books). The production verification run over
-   those books therefore counts as verified. Post-import books that didn't come in with a list stay
-   derived, and the verification pass skips them until this rebuild is done (1,455 ranked, as
-   already planned). *If wrong:* a list-created book with an import lump keeps its identity. The row
-   check in §4 still catches its wrong rows.
+1. **"Derived" means a post-import book on no real list.** This is Shane's rule, 2026-10-27,
+   replacing my earlier rule of "first listed within a day of creation".
+   - **Trusted:** a book on any list except the generated user-favorites list ("Our Users' Favorite
+     Books of All Time", `auto_generated_kind: user_favorites`). Pre-import books (id below 16,572)
+     and books created in the new app are trusted by id.
+   - **Measured in dev, 2026-10-27:** of 147,625 post-import books, 9,379 are on a real list, 2 are
+     only on the favorites list, and 138,244 are on no list. 9,245 of the 9,247 ranked post-import
+     books are on a real list.
+   - **Consequence:** the ranked post-import books are trusted, and can all be verified now, not
+     after the rebuild. That covers the 7,792 in the current production run and most of the 1,455
+     held back.
+   - *If wrong:* an imported book Shane later put on a list keeps its identity. The row check in §4
+     still catches its wrong rows.
 2. **The trusted core is protected.** The rebuild never changes a trusted-core book's title or
    authors. It adds an identifier from a row to a trusted-core book only when a corroborating
    source ties that identifier to the book. It never merges a trusted-core book into a derived one;
