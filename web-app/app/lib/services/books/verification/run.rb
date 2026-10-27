@@ -7,7 +7,7 @@ module Services
       # how many lists they are on, then id, stopping after `limit` (nil: all).
       # By default only ranked pre_import books are taken; flags widen that
       # (post_import, unranked) or pick books to redo (retry_unsure, recheck,
-      # reharvest, second_chance).
+      # reharvest, second_chance, redo).
       # Each book goes through VerifyBook, which resumes at its stored stage.
       # A book whose Open Library or WorldCat call raised waits and is tried
       # again; after the last wait the run stops (the book keeps its stage), so
@@ -16,7 +16,7 @@ module Services
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         RETRY_DELAYS = [15, 30, 60, 120, 240, 300].freeze
         BATCH = 100
-        FLAGS = %w[post_import unranked retry_unsure recheck reharvest second_chance].freeze
+        FLAGS = %w[post_import unranked retry_unsure recheck reharvest second_chance redo].freeze
         # Seconds to wait after a book that used /resolve. The service runs one at a
         # time and turns the others away busy, so this leaves the slot to the wizard,
         # the Goodreads replay and the legacy imports.
@@ -42,6 +42,7 @@ module Services
           flags = Array(flags).map(&:to_s)
           unknown = flags - FLAGS
           raise ArgumentError, "unknown flags: #{unknown.join(", ")}" if unknown.any?
+          raise ArgumentError, "redo needs a scope: the books to redo" if flags.include?("redo") && scope.nil?
 
           @limit = limit
           @run_id = run_id
@@ -51,6 +52,7 @@ module Services
           @recheck = flags.include?("recheck")
           @reharvest = flags.include?("reharvest")
           @second_chance = flags.include?("second_chance")
+          @redo = flags.include?("redo")
           @client = client || ::Books::OpenLibrary::Client.new
           @wc_client = wc_client || ::Books::WorldCat::Client.new
           @sleeper = sleeper || ->(seconds) { sleep(seconds) }
@@ -199,6 +201,16 @@ module Services
         # work); one picked up by reharvest re-runs from the editions. Same
         # predicates as next_ids.
         def prepare(book)
+          # A redo starts over at stage 1, reverted rows included: the redo's
+          # caller reverted the book first (books:verify_keep_bigger). The row
+          # becomes one ApplyBook reprocesses (unsure, or removed, which stays
+          # removed if nothing settles), not one it takes as settled.
+          if @redo && redoable.where(book_id: book.id).exists?
+            row = ::Books::Verification.find_by(book_id: book.id)
+            row.update!(stage: :work, work_outcome: row.removed? ? :removed : :unsure)
+            return
+          end
+
           row = ::Books::Verification.stage_done.where.not(work_outcome: :reverted).find_by(book_id: book.id)
           return unless row
 
@@ -238,6 +250,7 @@ module Services
           finished = finished.where.not(id: recheckable) if @recheck
           finished = finished.where.not(id: reharvestable) if @reharvest
           finished = finished.where.not(id: second_chanceable) if @second_chance
+          finished = finished.where.not(id: redoable) if @redo
           config_id = ::Books::RankingConfiguration.default_primary&.id
 
           scope = @scope.where.not(id: finished.select(:book_id))
@@ -283,6 +296,12 @@ module Services
 
         # Done unsure or removed by an earlier run. A row this run already
         # finished is not taken again, so a re-queued run does not redo it.
+        # redo: every done row in the run's scope (which is how a redo names its
+        # books), reverted ones included, that this run has not finished.
+        def redoable
+          ::Books::Verification.stage_done.where(book_id: @scope.select(:id)).where.not(run_id: @run_id).select(:id)
+        end
+
         def second_chanceable
           ::Books::Verification.stage_done.where(work_outcome: %i[unsure removed]).where.not(run_id: @run_id).select(:id)
         end

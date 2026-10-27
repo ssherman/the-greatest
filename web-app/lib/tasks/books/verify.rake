@@ -11,6 +11,7 @@ namespace :books do
     else abort usage
     end
     abort usage unless (flags - Services::Books::Verification::Run::FLAGS).empty?
+    abort "books:verify takes no redo: a redo names its books (books:verify_keep_bigger)" if flags.include?("redo")
 
     run_id = SecureRandom.uuid
     Books::VerificationJob.perform_async(limit, run_id, flags)
@@ -56,5 +57,20 @@ namespace :books do
 
     counts = Services::Books::Verification::RevertSecondChance.route(args[:lookup])
     puts "route #{args[:lookup]}: reverted #{counts[:reverted]}, failed #{counts[:failed]}"
+  end
+
+  desc "Verification pass: books Open Library's matcher moved off a held work that passes our check onto one with fewer editions; " \
+    "books:verify_keep_bigger lists them, books:verify_keep_bigger[apply] reverts them and queues a redo run"
+  task :verify_keep_bigger, [:mode] => :environment do |_task, args|
+    abort "usage: books:verify_keep_bigger[apply] -- unknown value #{args[:mode].inspect}" unless [nil, "apply"].include?(args[:mode])
+
+    apply = args[:mode] == "apply"
+    data = Services::Books::Verification::KeepBiggerWork.call(apply: apply).data
+    puts "keep bigger work (#{apply ? "applied" : "dry run"}): #{data[:found]} books" \
+      "#{", reverted #{data[:reverted]}, failed #{data[:failed].size}" if apply}"
+    data[:failed].each { |line| puts "  failed: #{line}" }
+    puts "samples:" if data[:samples].any?
+    data[:samples].each { |line| puts "  #{line}" }
+    puts "queued redo run #{data[:run_id]} over #{data[:reverted]} books. Progress: bin/rails books:verify_report" if data[:run_id]
   end
 end

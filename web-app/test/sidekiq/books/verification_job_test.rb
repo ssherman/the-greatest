@@ -11,4 +11,12 @@ class Books::VerificationJobTest < ActiveSupport::TestCase
 
     assert_equal ["low", false], Books::VerificationJob.get_sidekiq_options.values_at("queue", "retry").map { |value| value.is_a?(Symbol) ? value.to_s : value }
   end
+
+  test "book ids become the run's scope" do
+    book = books_books(:war_and_peace)
+    ::Services::Books::Verification::Run.expects(:call).with { |limit:, run_id:, flags:, scope:| [limit, run_id, flags, scope.pluck(:id)] == [nil, "run-1", %w[redo], [book.id]] }
+      .returns(::Services::Books::Verification::Run::Result.new(success?: true, data: {processed: 1, stopped: false, error: nil}, errors: []))
+
+    Books::VerificationJob.new.perform(nil, "run-1", %w[redo], [book.id])
+  end
 end
