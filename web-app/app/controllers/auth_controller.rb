@@ -2,9 +2,10 @@ class AuthController < ApplicationController
   include Cacheable
 
   # Non-HttpOnly companion cookie carrying the signed-in user's id. JS reads it
-  # to gate localStorage hydration of /user_list_state state on cached pages —
-  # the HttpOnly session cookie isn't visible to JS and the cached HTML can't
-  # carry per-user markers. Plain (not signed) since user_id is non-sensitive
+  # as the page's only signed-in signal (sign-in widget, nav links, and the gate
+  # on localStorage hydration of /user_list_state state) — the HttpOnly session
+  # cookie isn't visible to JS and the cached HTML can't carry per-user
+  # markers. It is never trusted server-side. Plain (not signed) since user_id is non-sensitive
   # and forging it doesn't grant access (the HttpOnly session is the real auth).
   TG_UID_COOKIE = :tg_uid
 

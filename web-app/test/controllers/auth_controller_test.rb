@@ -129,14 +129,9 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     refute_equal before, request.session.id.public_id, "session id must rotate to prevent fixation"
   end
 
-  # Comparing raw cookie bytes here has the same flaw the sign-in test above
-  # documents in detail: a mutation back to the pre-fix body
-  # (`session[:user_id] = nil; session[:provider] = nil`) still *writes* to
-  # `session`, so it still re-emits a freshly (re-)encrypted cookie and the
-  # raw-bytes comparison stays green even with fixation fully reopened.
-  # Comparing CookieStore's internal session id (only replaced by
-  # reset_session's delete_session, preserved by an ordinary write) is what
-  # actually distinguishes the two.
+  # Comparing raw cookie bytes would stay green even with fixation reopened:
+  # any write to `session` re-emits a freshly encrypted cookie. CookieStore's
+  # internal session id is only replaced by reset_session, so compare that.
   test "rotates the session id on sign out" do
     post auth_sign_in_path, params: {
       jwt: FirebaseTokenHelper.token({"sub" => "uid-fix-2", "email" => "fix.two@example.com"})

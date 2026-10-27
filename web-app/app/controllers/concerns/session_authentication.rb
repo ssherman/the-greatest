@@ -5,8 +5,10 @@
 # expiry, an admin) signs that browser out everywhere at once. The Rails
 # cookie-store session carries no identity any more.
 #
-# tg_uid is the JS-readable companion: it only gates localStorage hydration on
-# edge-cached pages and is never trusted server-side.
+# tg_uid is the JS-readable companion: it is the page's only signed-in signal
+# for JS (the sign-in widget and nav links render from it, and it gates
+# localStorage hydration on edge-cached pages), yet it is never trusted
+# server-side.
 module SessionAuthentication
   extend ActiveSupport::Concern
 
