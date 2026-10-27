@@ -69,6 +69,8 @@ sequenceDiagram
     FAS->>FB: auth.signOut()
 ```
 
+The logout button does not go through `FirebaseAuthService`. The other caller of `FirebaseAuthService.signOut()` is `redirect_handler.js` on the `auth/account-exists-with-different-credential` path: it signs Firebase out and POSTs `/auth/sign_out` too, which ends the Rails session as well.
+
 ### Provider Conflict Check
 
 When email/password sign-in fails, the frontend checks if the email is associated with an OAuth provider:
@@ -106,7 +108,7 @@ The Rails session is the one record of "signed in". Everything else derives from
 
 **Renewal.** `renew_current_session` bumps `last_active_at` and re-issues both cookies, at most once a day (`Session::RENEW_AFTER`); within the day it only backfills a missing `tg_uid`. Its callers are `/user_list_state` (fetched on every signed-in page view, so no extra request) and all admin pages. It is never called from an edge-cacheable response.
 
-**No `Set-Cookie` on cacheable responses.** Cloudflare bypasses its cache when a response sets a cookie, so a response with `request.session_options[:skip]` set never writes or deletes the session cookies. An expired or unknown `tg_session` seen there is cleared by the next uncached request.
+**No `Set-Cookie` on cacheable responses.** Cloudflare bypasses its cache when a response sets a cookie, so when `request.session_options[:skip]` is set, `find_current_session` skips its stale-cookie clearing, and the cookie writers (sign-in, sign-out, renewal) only run on uncached responses. An expired or unknown `tg_session` seen there is cleared by the next uncached request.
 
 **Logout** destroys only this browser's row; the user's other devices stay signed in.
 
@@ -178,7 +180,7 @@ token for any account.
 
 | File | Purpose |
 |------|---------|
-| `app/javascript/services/firebase_auth_service.js` | Central auth orchestrator (singleton). Initializes Firebase, manages auth state listeners, sends JWT to backend, dispatches custom events (`auth:success`, `auth:error`, `auth:signout`) |
+| `app/javascript/services/firebase_auth_service.js` | Central auth orchestrator (singleton). Initializes Firebase, manages auth state listeners, sends JWT to backend, dispatches custom events (`auth:success`, `auth:error`, `auth:signout`). Its `signOut()` signs Firebase out, POSTs `/auth/sign_out` (ending the Rails session) and dispatches `auth:signout`; the logout button does not use it (see the sign-out flow) |
 | `app/javascript/services/auth_providers/oauth_provider.js` | One class for every OAuth provider (singleton). Builds the Firebase provider from a registry entry — `PROVIDER_FACTORIES` maps `firebase_id` to constructor, scopes are added from config — and initiates `signInWithRedirect()` |
 | `app/javascript/services/auth_providers/email_provider.js` | Email/password provider (singleton). Handles sign-up, sign-in, password reset, email verification. Maps Firebase error codes to user-friendly messages |
 | `app/javascript/services/auth_handlers/redirect_handler.js` | Handles OAuth redirect results on page load (singleton). Processes redirect auth result, handles account conflict errors |
