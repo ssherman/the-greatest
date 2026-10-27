@@ -67,7 +67,12 @@ sequenceDiagram
     S->>S: Clear tg_uid, render signed out, dispatch 'auth:signout'
     S->>FAS: best-effort (loads Firebase if needed)
     FAS->>FB: auth.signOut()
+    S->>S: dispatch 'auth:signout-settled' (after cleanup, or after 5 s)
 ```
+
+`auth:signout` fires as soon as Rails answers, so every widget flips at once. Anything that
+navigates after logout listens for `auth:signout-settled` instead (the admin layout does): leaving
+the page mid-cleanup would abort the Firebase sign-out and keep its persisted identity.
 
 The logout button does not go through `FirebaseAuthService`. The other caller of `FirebaseAuthService.signOut()` is `redirect_handler.js` on the `auth/account-exists-with-different-credential` path: it signs Firebase out and POSTs `/auth/sign_out` too, which ends the Rails session as well.
 
@@ -273,7 +278,8 @@ export default firebaseAuthService
 The frontend uses `CustomEvent` to decouple auth state from UI updates:
 - `auth:success` - Backend confirmed authentication
 - `auth:error` - Auth failure (with error message in `detail`)
-- `auth:signout` - User signed out
+- `auth:signout` - User signed out (Rails session ended; widgets re-render)
+- `auth:signout-settled` - Logout's best-effort Firebase sign-out has finished or timed out; safe to navigate
 
 ### Navbar Button Convention
 All domain layouts include a button with `id="navbar_login_button"` that the Stimulus controller toggles between "Login" (opens modal) and "Logout" (calls `signOut()`). The choice is made from `tg_uid` alone, on connect and again on `auth:success`, `auth:signout` and `user-list-state:cleared`. Firebase's own auth state never drives it, and the modal no longer shows a Firebase-sourced user-info block.

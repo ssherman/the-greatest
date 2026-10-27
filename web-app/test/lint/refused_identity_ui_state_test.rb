@@ -156,12 +156,31 @@ class RefusedIdentityUiStateTest < ActiveSupport::TestCase
   test "sign-out ends the Rails session before touching Firebase" do
     body = method_body("async signOut(event) {")
     rails_at = body.index("fetch('/auth/sign_out'")
-    firebase_at = body.index("await this.firebase()")
+    firebase_at = body.index("this.firebase()")
 
     assert rails_at, "signOut must POST /auth/sign_out"
     assert firebase_at, "signOut must still sign Firebase out"
     assert rails_at < firebase_at,
       "the Rails session is the one that matters; a Firebase failure must not " \
       "be able to stop it ending"
+  end
+
+  # The admin layout navigates away after logout. Navigating on auth:signout,
+  # which fires before the Firebase step, aborts that step and leaves Firebase's
+  # persisted identity behind.
+  test "sign-out announces it has settled only after the Firebase step" do
+    body = method_body("async signOut(event) {")
+    firebase_at = body.index("this.firebase()")
+    settled_at = body.index("'auth:signout-settled'")
+
+    assert settled_at, "signOut must dispatch auth:signout-settled"
+    assert firebase_at < settled_at,
+      "auth:signout-settled must follow the Firebase sign-out it reports on"
+
+    admin_layout = File.read(Rails.root.join("app/views/layouts/admin.html.erb"))
+    assert_includes admin_layout, "addEventListener('auth:signout-settled'",
+      "the admin layout must navigate only once the Firebase sign-out has settled"
+    refute_includes admin_layout, "addEventListener('auth:signout',",
+      "navigating on auth:signout aborts the Firebase sign-out"
   end
 end

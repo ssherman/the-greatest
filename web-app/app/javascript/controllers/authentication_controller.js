@@ -11,6 +11,10 @@ import {
 } from "../services/firebase_loader"
 import { signedInUid, clearUidCookie } from "../services/session_cookie"
 
+// How long logout waits for the best-effort Firebase sign-out before
+// announcing auth:signout-settled anyway.
+const FIREBASE_SIGN_OUT_TIMEOUT_MS = 5000
+
 // Connects to data-controller="authentication"
 //
 // What this widget SHOWS comes from tg_uid alone, which mirrors the Rails
@@ -650,12 +654,22 @@ export default class extends Controller {
     // never opened the login modal has not downloaded the bundle yet, so this
     // may be the first load. Firebase only (see signOutFirebaseQuietly) --
     // /auth/sign_out has already run.
+    //
+    // Bounded, so a hung bundle fetch cannot strand the reader, and announced
+    // as auth:signout-settled once it is over. Anything that navigates after
+    // sign-out (the admin layout) listens for THAT, not auth:signout: leaving
+    // the page mid-cleanup would abort it and keep Firebase's persisted
+    // identity alive after the reader logged out.
     try {
-      const firebase = await this.firebase()
-      await firebase.firebaseAuthService.getAuth().signOut()
+      await Promise.race([
+        this.firebase().then((firebase) => firebase.firebaseAuthService.getAuth().signOut()),
+        new Promise((resolve) => setTimeout(resolve, FIREBASE_SIGN_OUT_TIMEOUT_MS))
+      ])
     } catch (error) {
       console.error('Firebase sign out error:', error)
     }
+
+    window.dispatchEvent(new CustomEvent('auth:signout-settled'))
   }
 
   // Handle successful authentication. /auth/sign_in has answered, so tg_uid is
