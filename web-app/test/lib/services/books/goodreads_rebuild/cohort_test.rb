@@ -44,6 +44,14 @@ module Services
           refute_includes Cohort.derived, @both
         end
 
+        test "an unmatched wizard row (a Books list item with no book) does not empty derived" do
+          ListItem.insert_all([{list_id: @real_list.id, listable_type: "Books::Book", listable_id: nil, position: 9,
+                                created_at: Time.current, updated_at: Time.current}])
+
+          assert_includes Cohort.derived, @unlisted
+          assert_operator Cohort.counts["derived"], :>=, 2
+        end
+
         test "derived is one query" do
           assert_kind_of ActiveRecord::Relation, Cohort.derived
           assert_queries_count(1) { Cohort.derived.ids }

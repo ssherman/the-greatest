@@ -47,7 +47,9 @@ module Services
 
         def favorites_items = book_items.where(lists: {auto_generated_kind: :user_favorites})
 
-        def book_items = ::ListItem.joins(:list).where(listable_type: "Books::Book")
+        # The list wizard keeps unmatched rows as Books items with no book; one
+        # NULL in a NOT IN subquery would make derived match nothing.
+        def book_items = ::ListItem.joins(:list).where(listable_type: "Books::Book").where.not(listable_id: nil)
       end
     end
   end
