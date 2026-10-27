@@ -22,7 +22,12 @@ class ApplicationController < ActionController::Base
   # JSON-only controllers can call this in a before_action; the JsonErrorResponses
   # concern provides the matching error body shape.
   def require_signed_in!
-    return if current_user
+    if current_user
+      # Heals a valid session whose tg_uid was cleared; the JS widget renders
+      # only from tg_uid. Skipped on edge-cacheable responses (no Set-Cookie).
+      renew_current_session unless request.session_options[:skip]
+      return
+    end
 
     if request.format.json?
       render json: {error: {code: "unauthenticated", message: "Sign in required"}},
