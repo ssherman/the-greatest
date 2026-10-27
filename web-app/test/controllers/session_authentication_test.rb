@@ -1,5 +1,17 @@
 require "test_helper"
 
+# Resolves current_user on a response the edge may cache, the way a cacheable
+# page does when something in it asks who is signed in. Layouts no longer do.
+class SessionGuardProbeController < ApplicationController
+  include Cacheable
+
+  def show
+    skip_session_for_caching
+    current_user
+    render plain: "ok"
+  end
+end
+
 class SessionAuthenticationTest < ActionDispatch::IntegrationTest
   setup do
     host! "dev.thegreatest.games"
@@ -101,11 +113,16 @@ class SessionAuthenticationTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
     Session.update_all(last_active_at: 91.days.ago)
 
-    get game_path(games_games(:breath_of_the_wild))
+    captured = cookies[:tg_session]
 
-    assert_response :success
-    assert_includes response.headers["Cache-Control"], "public"
-    assert_empty set_cookie_lines
+    with_routing do |set|
+      # with_routing starts a fresh integration session, so carry the cookie over.
+      cookies[:tg_session] = captured
+      set.draw { get "/session_guard_probe", to: "session_guard_probe#show" }
+      get "/session_guard_probe"
+      assert_response :success
+      assert_empty set_cookie_lines
+    end
   end
 
   test "tg_session is HttpOnly and tg_uid is JS-readable, both SameSite=Lax" do
@@ -137,10 +154,16 @@ class SessionAuthenticationTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
     Session.delete_all
 
-    get game_path(games_games(:breath_of_the_wild))
+    captured = cookies[:tg_session]
 
-    assert_response :success
-    assert_empty set_cookie_lines
+    with_routing do |set|
+      # with_routing starts a fresh integration session, so carry the cookie over.
+      cookies[:tg_session] = captured
+      set.draw { get "/session_guard_probe", to: "session_guard_probe#show" }
+      get "/session_guard_probe"
+      assert_response :success
+      assert_empty set_cookie_lines
+    end
   end
 
   test "signing in again on the same browser destroys the previous session row" do
