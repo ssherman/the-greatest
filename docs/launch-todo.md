@@ -386,3 +386,19 @@ re-judged only when another title on that book is later removed. `undone_finding
 book's undone findings for `redo_finding`.
 
 The unsure-books second-chance verification run follows this cleanup.
+
+## 11. Goodreads rebuild (repeats until cutover)
+
+Repairs the books legacy's Goodreads imports made, from the export rows. Design:
+`docs/superpowers/specs/2026-10-27-goodreads-rebuild-design.md`; how it works: `docs/features/goodreads-rebuild.md`.
+The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve or apply its proposals.
+
+1. **See which books are trusted.** `bin/rails books:goodreads_rebuild:cohorts` is read-only. It prints how
+   many post-import books are trusted (on a real list, so you added them by hand) and how many are
+   derived (import-made, to be rebuilt). Expect about 9,400 trusted and 138,000 derived.
+2. **Retire the replay's old proposals, once.** They were judged on legacy's stripped titles, so approving
+   any of them would apply a guess. `bin/rails books:goodreads_rebuild:retire_replay_proposals` is a dry run:
+   expect about 2,691 relinks and 2,091 strips. Then run
+   `bin/rails "books:goodreads_rebuild:retire_replay_proposals[apply]"`. They disappear from the admin
+   repair-verdict page. A second run prints 0s.
+3. Stage one: added by increment 2.
