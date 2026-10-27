@@ -45,6 +45,14 @@ export async function signIn(page: Page, { email, password }: Credentials): Prom
       { timeout: 15_000, message: 'Rails never issued a session after the Firebase sign-in' }
     )
     .toBe(true);
+
+  // Let the page finish rendering the signed-in state before the caller
+  // navigates; a goto issued mid-render intermittently failed with "interrupted
+  // by another navigation".
+  await expect(page.locator('#navbar_login_button')).toHaveAttribute('data-auth-state', 'signed-in', {
+    timeout: 15_000
+  });
+  await page.waitForLoadState('networkidle');
 }
 
 export async function signInAndSave(page: Page, creds: Credentials, authFile: string): Promise<void> {
