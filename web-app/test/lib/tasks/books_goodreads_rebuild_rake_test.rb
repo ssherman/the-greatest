@@ -1,0 +1,47 @@
+# frozen_string_literal: true
+
+require "test_helper"
+require "rake"
+
+class BooksGoodreadsRebuildRakeTest < ActiveSupport::TestCase
+  REBUILD = Services::Books::GoodreadsRebuild
+
+  setup do
+    # Load only this rake file (see penalties_rake_test.rb for why not
+    # Rails.application.load_tasks).
+    unless Rake::Task.task_defined?("books:goodreads_rebuild:cohorts")
+      Rake::Task.define_task(:environment) {} unless Rake::Task.task_defined?(:environment)
+      silence_warnings { load Rails.root.join("lib/tasks/books/goodreads_rebuild.rake").to_s }
+    end
+    Rake::Task.tasks.each(&:reenable)
+  end
+
+  test "cohorts prints the counts" do
+    REBUILD::Cohort.expects(:counts).returns({"trusted" => 2, "derived" => 3, "only_on_user_favorites" => 1})
+
+    assert_output(/post-import books: trusted 2, derived 3, only_on_user_favorites 1/) do
+      Rake::Task["books:goodreads_rebuild:cohorts"].invoke
+    end
+  end
+
+  def retire_result(applied:)
+    Struct.new(:success?, :data, :errors, keyword_init: true)
+      .new(success?: true, data: {counts: {"relink" => 2691, "strip_identifier" => 2091}, applied: applied}, errors: [])
+  end
+
+  test "retire_replay_proposals is a dry run without apply" do
+    REBUILD::RetireReplayProposals.expects(:call).with(apply: false).returns(retire_result(applied: false))
+
+    assert_output(/relink 2691, strip_identifier 2091.*dry run: nothing changed; run books:goodreads_rebuild:retire_replay_proposals\[apply\]/m) do
+      Rake::Task["books:goodreads_rebuild:retire_replay_proposals"].invoke
+    end
+  end
+
+  test "retire_replay_proposals[apply] retires them" do
+    REBUILD::RetireReplayProposals.expects(:call).with(apply: true).returns(retire_result(applied: true))
+
+    assert_output(/relink 2691, strip_identifier 2091.*retired/m) do
+      Rake::Task["books:goodreads_rebuild:retire_replay_proposals"].invoke("apply")
+    end
+  end
+end
