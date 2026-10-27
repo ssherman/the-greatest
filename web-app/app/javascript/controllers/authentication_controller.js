@@ -637,6 +637,14 @@ export default class extends Controller {
     clearUidCookie()
     clearPendingVerification()
 
+    // Flip the UI now: Rails has signed the reader out, and the Firebase
+    // bundle below may be a slow first fetch that would leave "Logout" showing.
+    this.showLoading(false)
+    this.renderSignInState()
+    window.dispatchEvent(new CustomEvent('auth:signout', {
+      detail: { success: true }
+    }))
+
     // Best-effort, and never an error to the reader: Rails has already signed
     // them out. On admin this is the only sign-out control, and a reader who
     // never opened the login modal has not downloaded the bundle yet, so this
@@ -648,14 +656,6 @@ export default class extends Controller {
     } catch (error) {
       console.error('Firebase sign out error:', error)
     }
-
-    this.showLoading(false)
-
-    window.dispatchEvent(new CustomEvent('auth:signout', {
-      detail: { success: true }
-    }))
-
-    this.renderSignInState()
   }
 
   // Handle successful authentication. /auth/sign_in has answered, so tg_uid is
