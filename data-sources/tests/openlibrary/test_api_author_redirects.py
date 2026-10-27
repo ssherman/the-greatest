@@ -28,7 +28,8 @@ _TABLES = {
             ('OL11W', 'Filed under both keys'),
             ('OL12W', 'Co-authored, redirect second'),
             ('OL13W', 'Dangling author only'),
-            ('OL14W', 'Redirect first, co-author second')
+            ('OL14W', 'Redirect first, co-author second'),
+            ('OL15W', 'A nameless co-author')
         ) t(work_key, title)
     """,
     "work_details": """
@@ -39,7 +40,8 @@ _TABLES = {
     "authors": """
         SELECT * FROM (VALUES
             ('OL1A', 'Jack London'),
-            ('OL2A', 'Co Author')
+            ('OL2A', 'Co Author'),
+            ('OL3A', NULL::VARCHAR)
         ) t(author_key, name)
     """,
     # OL9A is the merged-away key: absent from `authors`, present in
@@ -61,7 +63,9 @@ _TABLES = {
             ('OL13W', 'OL7A', 0::SMALLINT),
             ('OL13W', 'OL8A', 1::SMALLINT),
             ('OL14W', 'OL9A', 0::SMALLINT),
-            ('OL14W', 'OL2A', 1::SMALLINT)
+            ('OL14W', 'OL2A', 1::SMALLINT),
+            ('OL15W', 'OL3A', 0::SMALLINT),
+            ('OL15W', 'OL2A', 1::SMALLINT)
         ) t(work_key, author_key, position)
     """,
     "year_evidence": """
@@ -132,6 +136,14 @@ def test_a_cycle_or_dangling_author_redirect_yields_no_author(cur, synthetic_pat
     record = fetch_works(cur, synthetic_paths, ["OL13W"])["OL13W"]
     assert record is not None
     assert record.authors == []
+
+
+def test_an_author_with_no_name_is_left_out_instead_of_failing_the_request(cur, synthetic_paths):
+    # The 2026-09-30 dump holds author records with a NULL name; one on a
+    # candidate work made /resolve and the works batch answer 500.
+    record = fetch_works(cur, synthetic_paths, ["OL15W"])["OL15W"]
+    assert record is not None
+    assert _author_keys(record) == ["OL2A"]
 
 
 def test_the_shelf_reaches_works_filed_under_the_merged_away_key_and_dedupes(cur, synthetic_paths):
