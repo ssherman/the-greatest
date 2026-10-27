@@ -37,17 +37,21 @@ module Services
         # Token sequences, not strings: "Catch-22" and "(Catch-22) By ..." both
         # reduce to a "catch 22" run however the punctuation falls. The trailing
         # series parenthetical goes first, so "Closing Time (Catch-22, #2)" is
-        # not mistaken for the book it belongs to.
+        # not mistaken for the book it belongs to. Words are Check.title_key's:
+        # accents folded and one leading article dropped on both sides, so "The
+        # Lord of the Rings" finds "Lord of the Rings" and "Les Misérables" finds
+        # "Les Miserables". Any of our titles will do: a book held under its
+        # translated title still finds the row under the original.
         def self.title_contained?(book, row_title)
-          ours = tokens(book.title.to_s.split(":").first)
           theirs = tokens(strip_series(row_title))
-          return false if ours.empty?
-
-          theirs.each_cons(ours.size).include?(ours)
+          ([book.title] + Array(book.alternate_titles)).any? do |title|
+            ours = tokens(title.to_s.split(":").first)
+            ours.any? && theirs.each_cons(ours.size).include?(ours)
+          end
         end
 
         def self.tokens(text)
-          Verification::Check.normalize(text).to_s.gsub(/[^\p{L}\p{N}]+/, " ").split
+          Verification::Check.title_key(text).to_s.split
         end
 
         def initialize(book:)

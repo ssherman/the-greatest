@@ -52,6 +52,34 @@ module Services
 
           assert_empty CandidateFilter.call(book: book, rows: [row_titled("Pretty Horses (The Border Trilogy, #1-3)")])
         end
+
+        test "a leading article on our title does not drop a row without one" do
+          book = ::Books::Book.create!(title: "The Lord of the Rings")
+          book.authors << @book.authors.first
+
+          assert_equal [2], CandidateFilter.call(book: book, rows: [row_titled("Lord of the Rings")]).map(&:goodreads_book_id)
+        end
+
+        test "accents do not drop a row spelled without them" do
+          book = ::Books::Book.create!(title: "Les Misérables")
+          book.authors << @book.authors.first
+
+          assert_equal [2], CandidateFilter.call(book: book, rows: [row_titled("Les Miserables")]).map(&:goodreads_book_id)
+        end
+
+        test "a row under one of our alternate titles is kept" do
+          book = ::Books::Book.create!(title: "Der Prozess", alternate_titles: ["The Trial"])
+          book.authors << @book.authors.first
+
+          assert_equal [2], CandidateFilter.call(book: book, rows: [row_titled("The Trial")]).map(&:goodreads_book_id)
+        end
+
+        test "a title is matched word for word, never inside a longer word" do
+          book = ::Books::Book.create!(title: "The Road")
+          book.authors << @book.authors.first
+
+          assert_empty CandidateFilter.call(book: book, rows: [row_titled("Roadside Picnic")])
+        end
       end
     end
   end
