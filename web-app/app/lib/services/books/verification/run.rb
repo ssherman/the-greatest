@@ -7,7 +7,9 @@ module Services
       # how many lists they are on, then id, stopping after `limit` (nil: all).
       # By default only ranked pre_import books are taken; flags widen that
       # (post_import, unranked) or pick books to redo (retry_unsure, recheck,
-      # reharvest, second_chance, redo).
+      # reharvest, second_chance, redo). trusted leaves out the Goodreads
+      # rebuild's derived books (import-made, on no real list): their titles
+      # and authors are legacy's until the rebuild repairs them.
       # Each book goes through VerifyBook, which resumes at its stored stage.
       # A book whose Open Library or WorldCat call raised waits and is tried
       # again; after the last wait the run stops (the book keeps its stage), so
@@ -16,7 +18,7 @@ module Services
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         RETRY_DELAYS = [15, 30, 60, 120, 240, 300].freeze
         BATCH = 100
-        FLAGS = %w[post_import unranked retry_unsure recheck reharvest second_chance redo].freeze
+        FLAGS = %w[post_import unranked trusted retry_unsure recheck reharvest second_chance redo].freeze
         # Seconds to wait after a book that used /resolve. The service runs one at a
         # time and turns the others away busy, so this leaves the slot to the wizard,
         # the Goodreads replay and the legacy imports.
@@ -48,6 +50,7 @@ module Services
           @run_id = run_id
           @post_import = flags.include?("post_import")
           @unranked = flags.include?("unranked")
+          @trusted = flags.include?("trusted")
           @retry_unsure = flags.include?("retry_unsure")
           @recheck = flags.include?("recheck")
           @reharvest = flags.include?("reharvest")
@@ -256,6 +259,7 @@ module Services
           scope = @scope.where.not(id: finished.select(:book_id))
           scope = scope.where.not(id: @attempted.to_a) if @attempted.any?
           scope = scope.where.not(id: Cohort.post_import_range) unless @post_import
+          scope = scope.where.not(id: ::Services::Books::GoodreadsRebuild::Cohort.derived.select(:id)) if @trusted
           ranked_join = @unranked ? "LEFT JOIN" : "INNER JOIN"
           scope
             .joins("LEFT JOIN books_verifications prior ON prior.book_id = books_books.id")

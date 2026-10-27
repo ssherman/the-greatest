@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 namespace :books do
-  desc "Book verification pass: queue one run over <count> books or all; flags: post_import, unranked, retry_unsure, recheck, reharvest, second_chance"
+  desc "Book verification pass: queue one run over <count> books or all; flags: post_import, unranked, trusted (skip import-made books on no real list), retry_unsure, recheck, reharvest, second_chance"
   task :verify, [:limit] => :environment do |_task, args|
     flags = args.extras
     usage = "usage: books:verify[<count>|all(,#{Services::Books::Verification::Run::FLAGS.join("|")})...]"

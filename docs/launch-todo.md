@@ -112,7 +112,9 @@ the sync never undoes them.
 3. **Book verification pass.** Run `bin/rails "books:verify[200]"`, read `bin/rails books:verify_report`
    (hand-check the risky list and the samples), then `bin/rails "books:verify[all]"`. It settles each
    ranked book's Open Library work, takes identifiers from the work's editions, confirms held ISBNs
-   against WorldCat and records signals. After the Goodreads rebuild, run
+   against WorldCat and records signals. Next run
+   `bin/rails "books:verify[all,post_import,trusted]"`: the post-import books on a real list, which you
+   added by hand, so they don't wait for the rebuild. After the Goodreads rebuild, run
    `bin/rails "books:verify[all,post_import]"`; `unranked` is optional and takes the rest of the
    catalogue. The ranked `pre_import` books are estimated at 3-4 days. It shares Open Library's one
    `/resolve` slot with the wizard and the Goodreads replay, so all of them slow down while it
