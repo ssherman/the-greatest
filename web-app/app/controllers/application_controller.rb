@@ -7,18 +7,12 @@ class ApplicationController < ActionController::Base
   include Cacheable
   include RankingConfigurationGating
   include CurrentDomain
+  include SessionAuthentication
 
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
   rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
 
   helper_method :current_user, :signed_in?
-
-  def current_user
-    user_id = session[:user_id]
-    return nil if user_id.blank?
-
-    @current_user ||= User.find_by(id: user_id)
-  end
 
   def signed_in?
     !!current_user
@@ -28,7 +22,12 @@ class ApplicationController < ActionController::Base
   # JSON-only controllers can call this in a before_action; the JsonErrorResponses
   # concern provides the matching error body shape.
   def require_signed_in!
-    return if current_user
+    if current_user
+      # Heals a valid session whose tg_uid was cleared; the JS widget renders
+      # only from tg_uid. Skipped on edge-cacheable responses (no Set-Cookie).
+      renew_current_session unless request.session_options[:skip]
+      return
+    end
 
     if request.format.json?
       render json: {error: {code: "unauthenticated", message: "Sign in required"}},

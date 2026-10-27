@@ -3,8 +3,8 @@
 // would inject the script again on every Back navigation.
 let loadPromise = null
 
-const SIGNED_IN_KEY = "tg:auth:signed-in"
 const PENDING_REDIRECT_KEY = "tg:auth:pending-redirect"
+const PENDING_VERIFICATION_KEY = "tg:auth:pending-verification"
 
 export function loadFirebase(src) {
   if (loadPromise) return loadPromise
@@ -46,28 +46,11 @@ export function loadFirebase(src) {
   return loadPromise
 }
 
-// Any hint that this browser has a signed-in user, or is mid sign-in.
-//
-// The signals fail in opposite directions, so the union is safer than either:
-//   - tg_uid is a SESSION cookie, server-managed and authoritative, but it dies
-//     on browser restart while Firebase's IndexedDB persistence survives.
-//   - the localStorage flag survives restarts but is a client mirror that can
-//     drift (a sign-out in another tab does not clear it in tabs that never
-//     loaded Firebase).
-//
-// A false positive is cheap: load Firebase, get a null user, clear the flag,
-// render Login. A false negative shows "Login" to a signed-in reader, which is
-// the visible regression this exists to avoid. So: any hint wins.
-export function likelySignedIn() {
-  if (/(?:^|;\s*)tg_uid=/.test(document.cookie)) return true
-
-  try {
-    if (window.localStorage.getItem(SIGNED_IN_KEY)) return true
-  } catch {
-    // Storage blocked (private mode, site data disabled) -- fall through.
-  }
-
-  return pendingRedirect()
+// True once the bundle has been fetched by anyone on this page. Lets a caller
+// act on a Firebase that is already here without triggering the download for
+// a reader who never needed it.
+export function firebaseLoaded() {
+  return Boolean(window.__tgFirebase)
 }
 
 // True while a signInWithRedirect round trip is outstanding, so connect() knows
@@ -89,18 +72,45 @@ export function pendingRedirect() {
   return false
 }
 
-export function markSignedIn() {
-  try { window.localStorage.setItem(SIGNED_IN_KEY, "1") } catch { /* storage blocked */ }
-}
-
-export function clearSignedInHint() {
-  try { window.localStorage.removeItem(SIGNED_IN_KEY) } catch { /* storage blocked */ }
-}
-
 export function markPendingRedirect() {
   try { window.sessionStorage.setItem(PENDING_REDIRECT_KEY, "1") } catch { /* storage blocked */ }
 }
 
 export function clearPendingRedirect() {
   try { window.sessionStorage.removeItem(PENDING_REDIRECT_KEY) } catch { /* storage blocked */ }
+}
+
+// Set when Rails refuses an email/password sign-in with
+// email_verification_required. The Firebase user is deliberately kept so
+// resendVerification() has someone to send to, and this marker is what stops
+// the widget from signing that user out as a stranger on the next page (it has
+// a Firebase user and no tg_uid, which otherwise means "sign Firebase out").
+//
+// localStorage rather than sessionStorage because the reader is expected to go
+// to their inbox, click the link, and come back -- often in a new tab. It never
+// means signed in: there is no session and no tg_uid behind it.
+//
+// Mirrored in module memory so the same tab still behaves when storage is
+// blocked (private mode, site data disabled); only the cross-reload half is
+// lost then.
+let pendingVerificationInMemory = false
+
+export function markPendingVerification() {
+  pendingVerificationInMemory = true
+  try { window.localStorage.setItem(PENDING_VERIFICATION_KEY, "1") } catch { /* storage blocked */ }
+}
+
+export function clearPendingVerification() {
+  pendingVerificationInMemory = false
+  try { window.localStorage.removeItem(PENDING_VERIFICATION_KEY) } catch { /* storage blocked */ }
+}
+
+export function pendingVerification() {
+  if (pendingVerificationInMemory) return true
+
+  try {
+    return Boolean(window.localStorage.getItem(PENDING_VERIFICATION_KEY))
+  } catch {
+    return false
+  }
 }

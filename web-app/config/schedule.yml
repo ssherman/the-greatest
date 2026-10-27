@@ -40,3 +40,8 @@ workflow_recovery:
   class: WorkflowRecoveryJob
   cron: "0 * * * * *"
   description: "Redispatch lost or due workflow steps"
+
+sessions_prune_expired:
+  class: Sessions::PruneExpiredJob
+  cron: "15 3 * * *"
+  description: "Delete sign-in sessions past their idle timeout or hard limit"
