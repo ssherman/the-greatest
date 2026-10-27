@@ -12,6 +12,14 @@ class SessionGuardProbeController < ApplicationController
   end
 end
 
+# Writes the pre-migration identity key, to prove nothing reads it any more.
+class LegacySessionProbeController < ApplicationController
+  def show
+    session[:user_id] = params.require(:id)
+    render plain: "ok"
+  end
+end
+
 class SessionAuthenticationTest < ActionDispatch::IntegrationTest
   setup do
     host! "dev.thegreatest.games"
@@ -123,6 +131,31 @@ class SessionAuthenticationTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_empty set_cookie_lines
     end
+  end
+
+  test "a legacy session[:user_id] no longer signs anyone in" do
+    with_routing do |set|
+      set.draw do
+        get "/legacy_session_probe", to: "legacy_session_probe#show"
+        get "/user_list_state", to: "user_list_state#show"
+      end
+      get "/legacy_session_probe", params: {id: @user.id}
+      assert_response :success
+
+      get "/user_list_state", as: :json
+      assert_response :unauthorized
+    end
+  end
+
+  test "a signed-in page re-sets tg_uid when only tg_session survived" do
+    sign_in_as(@user, stub_auth: true)
+    cookies[:tg_uid] = ""
+    assert cookies[:tg_uid].blank?
+
+    get my_lists_path
+
+    assert_response :success
+    assert_equal @user.id.to_s, cookies[:tg_uid]
   end
 
   test "tg_session is HttpOnly and tg_uid is JS-readable, both SameSite=Lax" do
