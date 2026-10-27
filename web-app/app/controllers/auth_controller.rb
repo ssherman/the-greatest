@@ -73,16 +73,9 @@ class AuthController < ApplicationController
     user = result[:user]
 
     # Session fixation: a pre-authentication session id must not survive into
-    # the authenticated session. reset_session discards it, so the id an
-    # attacker could have planted is worthless.
-    reset_session
-    session[:user_id] = user.id
-    session[:provider] = user.external_provider
-    cookies[TG_UID_COOKIE] = {
-      value: user.id.to_s,
-      secure: Rails.env.production?,
-      same_site: :lax
-    }
+    # the authenticated session. start_session_for resets it first, so the id
+    # an attacker could have planted is worthless.
+    start_session_for(user)
 
     render json: {
       success: true,
@@ -99,10 +92,9 @@ class AuthController < ApplicationController
   end
 
   def sign_out
-    cookies.delete(TG_UID_COOKIE)
     # Same reasoning as sign_in: leaving the id intact lets a captured
     # pre-logout session id be reused against the next sign-in on this browser.
-    reset_session
+    end_current_session
 
     render json: {success: true}
   end

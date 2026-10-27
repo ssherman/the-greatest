@@ -60,11 +60,6 @@ class Admin::BaseController < ApplicationController
     end
   end
 
-  def current_user
-    @current_user ||= User.find_by(id: session[:user_id]) if session[:user_id].present?
-  end
-  helper_method :current_user
-
   # The execute_action / bulk_action endpoints resolve an action class by
   # interpolating params[:action_name] into a namespace and calling constantize.
   # That is attacker-influenced input: `const_get` cannot escape the namespace, so

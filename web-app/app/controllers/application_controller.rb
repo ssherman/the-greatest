@@ -7,18 +7,12 @@ class ApplicationController < ActionController::Base
   include Cacheable
   include RankingConfigurationGating
   include CurrentDomain
+  include SessionAuthentication
 
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
   rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
 
   helper_method :current_user, :signed_in?
-
-  def current_user
-    user_id = session[:user_id]
-    return nil if user_id.blank?
-
-    @current_user ||= User.find_by(id: user_id)
-  end
 
   def signed_in?
     !!current_user

@@ -6,6 +6,7 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     Services::JwtValidationService.reset_cert_cache!
     FirebaseTokenHelper.stub_certs
     stub_account_lookup_empty
+    Session.delete_all
   end
 
   # AuthenticationService now builds a real ProviderEmailResolver on every
@@ -375,7 +376,8 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unsupported_media_type
     assert_includes response.headers["Cache-Control"], "no-store"
-    assert_nil session[:user_id]
+    assert_equal 0, Session.count
+    assert_nil cookies[:tg_session]
   end
 
   test "sign_in refuses a text/plain body" do
@@ -384,7 +386,8 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
       headers: {"CONTENT_TYPE" => "text/plain"}
 
     assert_response :unsupported_media_type
-    assert_nil session[:user_id]
+    assert_equal 0, Session.count
+    assert_nil cookies[:tg_session]
   end
 
   test "sign_in accepts JSON with a charset parameter" do
@@ -393,20 +396,21 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
       headers: {"CONTENT_TYPE" => "application/json; charset=utf-8"}
 
     assert_response :success
-    assert session[:user_id]
+    assert_equal 1, Session.count
+    assert cookies[:tg_session].present?
   end
 
   test "sign_out refuses a form post and leaves the visitor signed in" do
     post auth_sign_in_path, params: {
       jwt: FirebaseTokenHelper.token({"sub" => "uid-l3-out", "email" => "l3.out@example.com"})
     }, as: :json
-    signed_in_id = session[:user_id]
-    assert signed_in_id
+    assert_equal 1, Session.count
 
     post auth_sign_out_path
 
     assert_response :unsupported_media_type
-    assert_equal signed_in_id, session[:user_id]
+    assert_equal 1, Session.count
+    assert cookies[:tg_session].present?
   end
 
   test "check_provider refuses a form-encoded body" do
