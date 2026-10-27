@@ -265,6 +265,31 @@ Reuse `Books::RepairVerdict` (unique per `kind` + `subject_key`), the admin revi
 - **Review page:** bulk approve by kind and confidence. It shows the full export title beside the
   book, never only legacy's stored title.
 
+## 6a. Final sweep: remove the import-made books nothing needs
+
+Shane, 2026-10-27: the invalid books the imports created have to go. Stage two empties most of them,
+because it moves every list item onto the book its row really names. So the sweep runs after stage
+two's `apply`.
+
+- **What qualifies.** A derived book that, after stage two, has none of these:
+  - user list items, reviews or reading goals;
+  - curated list items;
+  - a ranking.
+
+  Books the rebuild created don't qualify, and trusted-core books never do, even when empty.
+- **Merge when there's a destination, otherwise delete.** If all the book's former rows moved to one
+  book, the sweep merges it into that book with the existing book merger. The URL then redirects,
+  which matters for pages search engines already know. Otherwise the book is deleted. A book whose
+  only fault was its title or authors is never swept: stage one fixed it, and its items still point
+  at it.
+- **It sticks across the sync.** The legacy sync already records merges and deletes in
+  `record_redirects` and routes legacy data through them. *The builder confirms* in the dev rehearsal
+  that a swept book isn't re-added by the next `data_migration:sync`, and that a legacy user's item
+  on a merged book follows the redirect.
+- **Dry run first.** `books:goodreads_rebuild:sweep` prints counts to merge and to delete, with a
+  sample. `[apply]` does it, and is Shane's to run. It reruns after each weekly catch-up for that
+  week's books, and once at cutover.
+
 ## 7. Evidence services
 
 | Source | Gives | Limits | Use |
@@ -298,6 +323,7 @@ Books gets added as a fallback for just those.
 4. The §4a verification run covers those books (fast pass only).
 5. Stage two runs over the new editions.
 6. `apply` re-applies everything, including the moves and splits the sync undid.
+7. The §6a sweep over that week's books.
 
 At cutover: the old site goes offline, then `FINAL=1 data_migration:sync`, one last catch-up, and
 `finish_legacy` (already planned for the final pass only).
@@ -383,7 +409,8 @@ Ordered by what is slow, not by what is easy.
    then run it in production after the current production verification run frees `/resolve`.
 6. **Stage two, last.** Dev rehearsal, the labeled sample, then production. It must not share
    `/resolve` with another long run.
-7. **The weekly catch-up rake task**, and the `docs/launch-todo.md` steps for every production run.
+7. **The final sweep (§6a)**, with a dry run.
+8. **The weekly catch-up rake task**, and the `docs/launch-todo.md` steps for every production run.
 
 ## 12. Calls made after the builder check
 
