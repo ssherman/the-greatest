@@ -50,8 +50,9 @@ module Services
             books = batch.includes(:authors).to_a
             rows = ::Books::GoodreadsImportRow.where(legacy_book_id: map.all_legacy_ids_for(books.map(&:id)))
               .includes(:goodreads_edition).group_by(&:legacy_book_id)
+            evidence = ::Books::RebuildEditionEvidence.for_editions(rows.values.flatten.filter_map(&:goodreads_edition).uniq(&:id))
             books.each do |book|
-              SurveyBook.call(book: book, rows: map.legacy_ids_for(book.id).flat_map { |id| rows.fetch(id, []) })
+              SurveyBook.call(book: book, rows: map.legacy_ids_for(book.id).flat_map { |id| rows.fetch(id, []) }, evidence: evidence)
             end
             processed += books.size
             Rails.logger.info("Goodreads rebuild survey: #{processed} books")

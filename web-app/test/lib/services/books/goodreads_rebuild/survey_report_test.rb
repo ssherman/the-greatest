@@ -20,6 +20,15 @@ module Services
           assert_match(/wrong book: 1/, report)
           assert_includes report, %(##{book.id} "Hothouse" by Brian W. Aldiss | export: "The Hidden Harbor Mystery" by Franklin W. Dixon (2 rows))
         end
+
+        test "report shows evidence counts" do
+          ::Books::RebuildEditionEvidence.create!(goodreads_book_id: 1, signature: "a", world_cat: :disagrees, ol_work_keys: [], checked_at: Time.current)
+
+          report = SurveyReport.call
+
+          # The war_and_peace fixture agrees and has a work; this row disagrees with none.
+          assert_match(/evidence rows: 2; WorldCat agrees 1, disagrees 1, unclear 0, no record 0, no ISBN 0; with an Open Library work 1/, report)
+        end
       end
     end
   end
