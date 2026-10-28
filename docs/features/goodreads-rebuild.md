@@ -116,10 +116,64 @@ Commands:
   disagree on title or authors or are the wrong book, and 10 samples of each with our title and
   authors beside the export's.
 
+## Survey pass 2: WorldCat and Open Library evidence
+
+For every derived book's Goodreads editions (152,640 on dev, 129,935 of them with an ISBN), pass 2
+asks two services about the ISBN, and records the answers in `Books::RebuildEditionEvidence`
+(`books_rebuild_edition_evidences`):
+
+- **WorldCat** (`GET /isbns/{isbn}`): does a library record agree with the export on title and
+  creator? The column is `world_cat`: `agrees`, `disagrees` (neither agrees), `unclear`, `no_record`
+  or `no_isbn`.
+- **Open Library** (`GET /identifiers/isbn13/{isbn}`): which work keys the ISBN belongs to.
+
+The table is keyed by the edition's natural key, Goodreads id plus signature, and has no foreign key,
+because it's gathered on Shane's PC and copied to production. The survey then groups with it: two
+editions on one Open Library work join, whatever their author strings say.
+
+**It runs locally, never against the home-server services.** Their answers don't depend on our
+catalog, and the production runs need the home server. `EvidenceRun` refuses unless both service
+URLs are `localhost` or `127.0.0.1`. On this PC, WorldCat's single-ISBN route is the bottleneck (about
+1.4 s each at 16 DuckDB threads; Open Library answers in about 25 ms), so 8 Rails threads give about
+1.6 editions a second, and the full run takes about 22 hours. At 16 threads WorldCat exceeds its own
+25 s deadline and answers 504.
+
+A failed lookup is retried after 10, 30 and 90 seconds before the run stops. Evidence already written
+stays, and a re-run picks up the rest.
+
+### The local recipe (Shane's PC)
+
+1. **Data, once.** The local services must serve the home server's versions.
+   - Open Library: `scp -r debian@<ol-vm>:/srv/ol-data/versions/2026-09-30 /home/shane/ol-data/versions/`
+     (about 14 GB). The VM has no `rsync`.
+   - WorldCat `2025-09-04` is already in `/home/shane/wc-data/versions/`.
+2. **Start both services** from `data-sources/`.
+   - Use **one process each**: uvicorn `--workers` processes share DuckDB's spill directory and corrupt
+     each other's temp files (500s with "Could not read enough bytes").
+   - Requests already run on the process's thread pool.
+
+   ```
+   OL_DATA_ROOT=/home/shane/ol-data OL_DATA_VERSION=2026-09-30 OL_API_TEMP_DIR=/tmp/duck_ol OL_API_MEMORY_LIMIT=12GB \
+     OL_API_THREADS=16 uv run --locked uvicorn --factory openlibrary.api.main:factory --port 8101
+   WC_DATA_ROOT=/home/shane/wc-data WC_DATA_VERSION=2025-09-04 WC_API_TEMP_DIR=/tmp/duck_wc WC_API_MEMORY_LIMIT=12GB \
+     WC_API_THREADS=16 uv run --locked uvicorn --factory worldcat.api.main:factory --port 8102
+   ```
+
+   `WC_API_THREADS` defaults to 2, sized for the home server's small WorldCat VM. 16 roughly
+   doubles throughput here.
+3. **Gather**, from `web-app/`:
+   `OPEN_LIBRARY_SERVICE_URL=http://localhost:8101 WORLDCAT_SERVICE_URL=http://localhost:8102 bin/rails "books:goodreads_rebuild:gather_evidence[8]"`
+4. **Export:** `bin/rails books:goodreads_rebuild:export_evidence` writes
+   `tmp/rebuild_edition_evidence.jsonl.gz`. Copy it into the production container.
+5. **In production:** `bin/rails "books:goodreads_rebuild:import_evidence[<path>]"`, then
+   `bin/rails "books:goodreads_rebuild:survey[all,redo]"`, then `survey_report`.
+   - The import upserts, so it can be repeated.
+   - It counts rows for editions production doesn't hold (`no_edition_here`), and keeps them.
+   - The report gains a line of evidence counts.
+
 ## Later increments
 
-- **Survey pass 2:** WorldCat and Open Library per ISBN.
-- **Stage one fixes (2b):** identity repair and lump splits.
+- **Stage one fixes (2b):** the existence check, then reset and re-import in place (spec §4.1).
 - **Verification scope:** for repaired books.
 - **Stage two:** moves, `create_book`, `add_item`, dedupe, and the member-import guards.
 - **The sweep and the weekly catch-up.**
