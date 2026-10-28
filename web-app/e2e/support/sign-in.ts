@@ -15,12 +15,12 @@ export function credentials(account: Account): Credentials {
 }
 
 // Drives the login modal, then waits for the one signal that means Rails has
-// issued a session: both the tg_uid and _the_greatest_session cookies exist.
-// The navbar label reads "Logout" as soon as Firebase resolves client-side,
-// ~100ms before Rails answers POST /auth/sign_in, and networkidle fires in the
-// quiet window BEFORE that POST is sent. Capturing storage state on either of
-// those signals saved a state with no session, which made every admin spec
-// fail as "element not found" on the public homepage.
+// issued a session: both the tg_uid and tg_session cookies exist.
+// networkidle fires in the quiet window BEFORE POST /auth/sign_in is sent, and
+// the navbar only reads "Logout" once that POST has answered (the widget renders
+// from tg_uid, not Firebase). Capturing storage state before the cookies exist
+// saved a state with no session, which made every admin spec fail as "element
+// not found" on the public homepage.
 export async function signIn(page: Page, { email, password }: Credentials): Promise<void> {
   await page.goto('/');
   await page.locator('#navbar_login_button').click();
@@ -40,11 +40,19 @@ export async function signIn(page: Page, { email, password }: Credentials): Prom
     .poll(
       async () => {
         const names = (await page.context().cookies()).map((cookie) => cookie.name);
-        return names.includes('tg_uid') && names.includes('_the_greatest_session');
+        return names.includes('tg_uid') && names.includes('tg_session');
       },
       { timeout: 15_000, message: 'Rails never issued a session after the Firebase sign-in' }
     )
     .toBe(true);
+
+  // Let the page finish rendering the signed-in state before the caller
+  // navigates; a goto issued mid-render intermittently failed with "interrupted
+  // by another navigation".
+  await expect(page.locator('#navbar_login_button')).toHaveAttribute('data-auth-state', 'signed-in', {
+    timeout: 15_000
+  });
+  await page.waitForLoadState('networkidle');
 }
 
 export async function signInAndSave(page: Page, creds: Credentials, authFile: string): Promise<void> {

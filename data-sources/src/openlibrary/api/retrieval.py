@@ -320,7 +320,10 @@ def fetch_works(
     # R87: a `work_authors` row may name a merged-away author key, so the
     # join to `authors` goes through the redirect hop and lands on the
     # TERMINAL author. One work filed under both a stale key and its terminal
-    # collapses to one AuthorRef at the smaller position.
+    # collapses to one AuthorRef at the smaller position. An author record
+    # with a NULL name (the dump has some) is left out: AuthorRef needs a name
+    # and /resolve fingerprints every one, so one such author made the whole
+    # request a 500.
     authors_by_key: dict[str, list[AuthorRef]] = {}
     for work_key, author_key, name, _first_position in cur.execute(
         f"""
@@ -329,6 +332,7 @@ def fetch_works(
         JOIN '{paths.table("work_authors")}' wa ON wa.work_key = t.terminal
         {_terminal_join(paths, "wa.author_key", entity="author")}
         JOIN '{paths.table("authors")}' a ON a.author_key = COALESCE(r.terminal_key, wa.author_key)
+        WHERE a.name IS NOT NULL
         GROUP BY wa.work_key, a.author_key, a.name
         ORDER BY wa.work_key, first_position, a.author_key
         """

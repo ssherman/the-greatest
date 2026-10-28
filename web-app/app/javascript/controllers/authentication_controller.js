@@ -1,24 +1,38 @@
 import { Controller } from "@hotwired/stimulus"
 import {
   loadFirebase,
-  likelySignedIn,
-  markSignedIn,
-  clearSignedInHint,
+  firebaseLoaded,
+  pendingRedirect,
   markPendingRedirect,
-  clearPendingRedirect
+  clearPendingRedirect,
+  pendingVerification,
+  markPendingVerification,
+  clearPendingVerification
 } from "../services/firebase_loader"
+import { signedInUid, clearUidCookie } from "../services/session_cookie"
+
+// How long logout waits for the best-effort Firebase sign-out before
+// announcing auth:signout-settled anyway.
+const FIREBASE_SIGN_OUT_TIMEOUT_MS = 5000
 
 // Connects to data-controller="authentication"
+//
+// What this widget SHOWS comes from tg_uid alone, which mirrors the Rails
+// session (see services/session_cookie.js). Firebase is a credential exchange:
+// it produces the ID token Rails verifies at sign-in, and it is signed out at
+// logout. Its auth-state callback never decides signed-in vs signed-out
+// presentation -- when it did, the navbar could say Login on a page whose
+// server-rendered content said signed in, because Firebase and Rails forget
+// users independently.
 export default class extends Controller {
   static targets = [
-    "signInButton", "signOutButton", "userInfo", "errorMessage", "loading", "modal",
+    "signInButton", "signOutButton", "errorMessage", "loading", "modal",
     "emailInput", "passwordInput", "emailStep", "passwordStep", "emailDisplay",
     "submitButton", "authModeToggle", "forgotPasswordForm", "resetEmailInput",
     "infoMessage", "verificationMessage"
   ]
   static values = {
     reloadAfterAuth: Boolean,
-    currentUser: Object,
     firebaseSrc: String,
     // The enabled entries from config/auth_providers.json, handed over by the
     // widget. A Stimulus value rather than a JS import because there is no
@@ -30,18 +44,24 @@ export default class extends Controller {
   connect() {
     this.isSignUpMode = false
     this.storedEmail = null
-    this.pendingVerification = false
-    this.identityRefused = false
+    // A redirect round trip is a sign-in in flight that started on the
+    // previous page. On return Firebase reports the new user before
+    // /auth/sign_in has answered, while tg_uid is still absent -- exactly the
+    // shape handleAuthStateChange would otherwise sign out as a stranger.
+    // auth:success or auth:error ends it, as for a sign-in begun on this page.
+    this.signInInFlight = pendingRedirect()
     this.setupEventListeners()
     this.observeLoginModal()
+    this.renderSignInState()
 
-    // Anonymous readers never download the 32 KB Firebase SDK. Anyone with a
-    // hint of a session gets it eagerly, so the navbar Login/Logout swap and
-    // the post-redirect getRedirectResult still happen on page load.
-    if (likelySignedIn()) {
+    // Readers, signed in or not, never download the 32 KB Firebase SDK just
+    // to view a page: tg_uid answers what to show. It is fetched eagerly only
+    // when a sign-in is mid-flight (getRedirectResult has to run on the page
+    // the provider sent the reader back to) or a refused-but-kept Firebase
+    // user is waiting on email verification. Otherwise the login modal's
+    // observer or signOut() fetches it on demand.
+    if (pendingRedirect() || pendingVerification()) {
       this.firebase().catch((error) => console.error("Firebase eager load failed:", error))
-    } else {
-      this.showUnauthenticatedState()
     }
   }
 
@@ -50,6 +70,7 @@ export default class extends Controller {
     window.removeEventListener('auth:success', this.handleAuthSuccess)
     window.removeEventListener('auth:error', this.handleAuthError)
     window.removeEventListener('auth:signout', this.handleSignOut)
+    window.removeEventListener('user-list-state:cleared', this.handleStateCleared)
     this.modalObserver?.disconnect()
   }
 
@@ -96,9 +117,9 @@ export default class extends Controller {
 
     // FirebaseAuthService replays its constructor-initial null synchronously to
     // a newly registered listener, before it has read IndexedDB. That is "not
-    // known yet", not "signed out", so it must not wipe the localStorage hint --
-    // the only signal that survives a browser restart, since tg_uid is a session
-    // cookie. The replay is synchronous, so this flag brackets it exactly.
+    // known yet", not "signed out", so it must not clear the pending-redirect
+    // or pending-verification markers. The replay is synchronous, so this flag
+    // brackets it exactly.
     this._replayingInitialAuthState = true
     firebase.firebaseAuthService.onAuthStateChanged((user) => {
       this.handleAuthStateChange(user)
@@ -110,14 +131,32 @@ export default class extends Controller {
     this.handleAuthSuccess = this.handleAuthSuccess.bind(this)
     this.handleAuthError = this.handleAuthError.bind(this)
     this.handleSignOut = this.handleSignOut.bind(this)
+    this.handleStateCleared = this.handleStateCleared.bind(this)
 
     window.addEventListener('auth:success', this.handleAuthSuccess)
     window.addEventListener('auth:error', this.handleAuthError)
     window.addEventListener('auth:signout', this.handleSignOut)
+    // Dispatched by user_list_state_controller when /user_list_state answers
+    // 401 and it clears tg_uid, and after any sign-out it hears about.
+    window.addEventListener('user-list-state:cleared', this.handleStateCleared)
   }
 
-  // Handle authentication state changes
+  // Firebase's auth-state callback. It no longer renders anything; it only
+  // keeps the markers honest and signs out a Firebase user Rails does not
+  // have a session for.
   handleAuthStateChange(user) {
+    // FirebaseAuthService has no way to remove a listener, and the service
+    // outlives Turbo visits, so a controller whose element Turbo has replaced
+    // still hears every notification. Its signInInFlight is stale -- a sign-in
+    // started on the CURRENT page is invisible to it -- so letting it act
+    // would sign that sign-in out from under the live controller.
+    if (!this.element.isConnected) return
+
+    // Read before the clear below: on a redirect return, the very notification
+    // that ends the round trip carries the new user, and Rails has not seen
+    // its token yet.
+    const redirectWasPending = pendingRedirect()
+
     // Both markers clear only on a REAL notification, never on the synchronous
     // replay of FirebaseAuthService's constructor-initial null.
     //
@@ -126,105 +165,107 @@ export default class extends Controller {
     // after -- so clearing here unconditionally would drop the marker at the
     // START of that round trip rather than the end. Reload inside that window
     // and every signal is gone at once: tg_uid is unset (Rails has not seen the
-    // JWT yet), markSignedIn() has not run, our marker is cleared, and Firebase
-    // has already consumed its own firebase:pendingRedirect key. The next page
-    // would not load Firebase, getRedirectResult() would never run, and the
-    // sign-in would be silently lost.
+    // JWT yet), our marker is cleared, and Firebase has already consumed its
+    // own firebase:pendingRedirect key. The next page would not load Firebase,
+    // getRedirectResult() would never run, and the sign-in would be silently
+    // lost.
     //
     // A real notification means Firebase has settled, and it arrives on both
     // branches -- with a user on success, with null when the reader cancels at
     // the consent screen -- so the marker cannot outlive the redirect either way.
     if (!this._replayingInitialAuthState) {
       clearPendingRedirect()
+
+      // Firebase no longer holds the unverified user, so there is no one left
+      // for resendVerification() to send to.
+      if (!user && pendingVerification()) {
+        clearPendingVerification()
+        this.renderSignInState()
+      }
     }
 
-    if (user) {
-      // Rails refused this identity (see handleAuthError's
-      // email_verification_required branch) and we deliberately keep the
-      // Firebase user signed in so resendVerification() still has someone to
-      // send to. Firebase re-notifies on its own schedule -- a token refresh is
-      // enough -- so without this guard that later notification would silently
-      // re-present a refused identity as signed in.
-      // identityRefused covers the same hazard for account_lookup_failed. That
-      // branch signs the Firebase user out, but signOut() is async and a token
-      // refresh can land first, so the flag closes the window in between.
-      if (this.pendingVerification || this.identityRefused) return
-
-      markSignedIn()
-      this.showAuthenticatedState(user)
-    } else {
-      if (!this._replayingInitialAuthState) clearSignedInHint()
-      this.showUnauthenticatedState()
-    }
+    if (user && !redirectWasPending) this.reconcileFirebaseUser(user)
   }
 
-  // Show authenticated user state
-  showAuthenticatedState(user) {
-    this.currentUserValue = {
-      id: user.uid,
-      email: user.email,
-      name: user.displayName,
-      photo: user.photoURL
-    }
+  // Firebase remembers someone Rails does not (no tg_uid): a browser restart
+  // after the old session-cookie scheme, a session that expired or was ended
+  // elsewhere, a refused sign-in. The page already presents signed out, so
+  // this only signs the Firebase user out to match, quietly.
+  //
+  // Each guard below covers a moment when "Firebase user, no tg_uid" is a
+  // sign-in that has not finished, not a stranger. Getting one wrong cancels
+  // a real sign-in:
+  //   - signInInFlight: Firebase reports the user before /auth/sign_in has
+  //     answered and set tg_uid, for OAuth redirects and email/password alike.
+  //   - pendingRedirect(): the redirect round trip, until Firebase settles.
+  //   - pendingVerification(): Rails refused an unverified address and the
+  //     Firebase user is kept on purpose so the resend link works.
+  reconcileFirebaseUser(user) {
+    if (!user) return
+    if (signedInUid()) return
+    if (this.signInInFlight) return
+    if (pendingRedirect()) return
+    if (pendingVerification()) return
+
+    this.signOutFirebaseQuietly('no Rails session')
+  }
+
+  // Signs Firebase out and nothing else. Deliberately NOT
+  // firebaseAuthService.signOut(): that also POSTs /auth/sign_out and
+  // dispatches auth:signout. tg_uid can be missing while the server session
+  // is valid (a cleared cookie that /user_list_state would backfill), and a
+  // Firebase sign-in in another tab is reported here before that tab's
+  // /auth/sign_in answers -- so a reconciliation that also ended the Rails
+  // session could destroy a session it knows nothing about, and on admin
+  // auth:signout navigates away. Memoised so overlapping triggers (a replay
+  // and a real notification, say) sign out once.
+  signOutFirebaseQuietly(reason) {
+    if (this._quietSignOut) return this._quietSignOut
+
+    this._quietSignOut = this.firebase()
+      .then((firebase) => firebase.firebaseAuthService.getAuth().signOut())
+      .catch((error) => console.error(`Firebase sign out (${reason}) failed:`, error))
+      .finally(() => { this._quietSignOut = null })
+
+    return this._quietSignOut
+  }
+
+  // The widget's whole signed-in presentation, from tg_uid. Safe to call any
+  // time: it reads the cookie fresh, so it is also the response to every event
+  // that changes it.
+  renderSignInState() {
+    const signedIn = signedInUid() !== null
 
     if (this.hasSignInButtonTarget) {
-      this.signInButtonTarget.style.display = 'none'
+      this.signInButtonTarget.style.display = signedIn ? 'none' : 'block'
     }
 
     if (this.hasSignOutButtonTarget) {
-      this.signOutButtonTarget.style.display = 'block'
+      this.signOutButtonTarget.style.display = signedIn ? 'block' : 'none'
     }
 
-    if (this.hasUserInfoTarget) {
-      this.userInfoTarget.style.display = 'block'
-      this.userInfoTarget.replaceChildren(this.buildUserInfo(user))
-    }
-
-    if (this.hasErrorMessageTarget) {
+    if (signedIn && this.hasErrorMessageTarget) {
       this.errorMessageTarget.style.display = 'none'
     }
 
-    // Show resend verification for unverified email/password users
+    // Lives inside the sign-in controls, so it can only show while signed out.
+    // An unverified email/password reader is never signed in: Rails refused
+    // them, there is no session and no tg_uid.
     if (this.hasVerificationMessageTarget) {
-      const isEmailProvider = user.providerData?.some(p => p.providerId === 'password')
-      this.verificationMessageTarget.style.display = (isEmailProvider && !user.emailVerified) ? 'block' : 'none'
+      this.verificationMessageTarget.style.display = (!signedIn && pendingVerification()) ? 'block' : 'none'
     }
 
-    this.updateNavbarButton(user)
+    this.updateNavbarButton(signedIn)
   }
 
-  // Show unauthenticated state
-  showUnauthenticatedState() {
-    this.currentUserValue = null
-
-    if (this.hasSignInButtonTarget) {
-      this.signInButtonTarget.style.display = 'block'
-    }
-
-    if (this.hasSignOutButtonTarget) {
-      this.signOutButtonTarget.style.display = 'none'
-    }
-
-    if (this.hasUserInfoTarget) {
-      this.userInfoTarget.style.display = 'none'
-    }
-
-    if (this.hasVerificationMessageTarget) {
-      this.verificationMessageTarget.style.display = 'none'
-    }
-
-    this.updateNavbarButton(null)
-  }
-
-  // Update navbar button based on auth state. data-auth-state is written here
-  // and nowhere else, so it says "Firebase has resolved and the click is
-  // wired". The label alone does not: the hint script paints "Logout" before
-  // that, while the inline onclick still opens the login modal. E2E waits on
-  // the attribute.
-  updateNavbarButton(user) {
+  // Update navbar button based on sign-in state. data-auth-state is written
+  // here and nowhere else, so it says "the click is wired": until connect()
+  // runs, the layout's inline onclick opens the login modal whatever the
+  // label says. E2E waits on the attribute.
+  updateNavbarButton(signedIn) {
     const navbarButton = document.getElementById('navbar_login_button')
     if (navbarButton) {
-      if (user) {
+      if (signedIn) {
         navbarButton.textContent = 'Logout'
         navbarButton.onclick = () => this.signOut()
         navbarButton.className = 'btn btn-outline btn-error'
@@ -254,29 +295,6 @@ export default class extends Controller {
     if (modal) {
       modal.close()
     }
-  }
-
-  // Built with createElement/textContent rather than an HTML string:
-  // displayName and photoURL come from the identity provider, and the user
-  // sets both.
-  buildUserInfo(user) {
-    const container = document.createElement('div')
-    container.className = 'flex items-center'
-
-    if (user.photoURL) {
-      const photo = document.createElement('img')
-      photo.setAttribute('src', user.photoURL)
-      photo.setAttribute('alt', 'Profile')
-      photo.className = 'w-8 h-8 rounded-full mr-2'
-      container.append(photo)
-    }
-
-    const name = document.createElement('span')
-    name.className = 'text-sm font-medium'
-    name.textContent = user.displayName || user.email
-    container.append(name)
-
-    return container
   }
 
   // Step 1 → Step 2: validate email and transition
@@ -366,6 +384,11 @@ export default class extends Controller {
       return
     }
 
+    // Before the bundle loads: loading it registers the auth-state callback,
+    // and a Firebase user it reports from here on is this sign-in, not a
+    // stranger to sign out. auth:success / auth:error clear it, as do the two
+    // failure paths below that never reach either event.
+    this.signInInFlight = true
     this.showLoading(true)
     this.hideError()
     this.hideInfo()
@@ -381,6 +404,7 @@ export default class extends Controller {
       firebase = await this.firebase()
     } catch (error) {
       console.error("Firebase load failed:", error)
+      this.signInInFlight = false
       this.showError("Sign-in is temporarily unavailable. Please try again.")
       this.showLoading(false)
       return
@@ -394,6 +418,7 @@ export default class extends Controller {
     } catch (error) {
       console.error(`${config.label} sign in error:`, error)
       clearPendingRedirect()
+      this.signInInFlight = false
       this.showError(error.message)
       this.showLoading(false)
     }
@@ -408,16 +433,13 @@ export default class extends Controller {
 
     if (!email || !password) return
 
+    // Covers sign-in AND sign-up. Firebase reports the new user as soon as it
+    // has signed them in, before handleEmailAuthResult has sent the token to
+    // Rails, so tg_uid is still absent when the auth-state callback runs.
+    this.signInInFlight = true
     this.showLoading(true)
     this.hideError()
     this.hideInfo()
-
-    // A fresh attempt: whatever we refused last time is no longer what is being
-    // presented, so stop suppressing auth-state notifications. Without this the
-    // guard in handleAuthStateChange would outlive the refusal and a genuinely
-    // verified sign-in on the second try would never update the UI.
-    this.pendingVerification = false
-    this.identityRefused = false
 
     // Resolved before the try, not inside the catch. loadFirebase() nulls its
     // memo on a script-load error, so reaching for getUserFriendlyMessage from
@@ -428,6 +450,7 @@ export default class extends Controller {
       firebase = await this.firebase()
     } catch (error) {
       console.error("Firebase load failed:", error)
+      this.signInInFlight = false
       this.showError('Sign-in is temporarily unavailable. Please try again.')
       this.showLoading(false)
       return
@@ -448,6 +471,11 @@ export default class extends Controller {
         this.showError(firebase.emailProvider.getUserFriendlyMessage(error))
       }
     } finally {
+      // Both providers await the round trip to /auth/sign_in, so by here
+      // auth:success or auth:error has already fired and cleared this. What
+      // reaches here uncleared is a Firebase-side failure (a wrong password,
+      // say) that never got as far as Rails.
+      this.signInInFlight = false
       this.showLoading(false)
     }
   }
@@ -577,35 +605,16 @@ export default class extends Controller {
     }
   }
 
-  // Handle sign out
+  // Handle sign out. Rails first, because the Rails session is the one that
+  // matters: once it is gone this browser is signed out whatever happens to
+  // Firebase next. The old order (Firebase, then Rails) made a Firebase
+  // failure look like the whole sign-out failing.
   async signOut(event) {
     if (event) {
       event.preventDefault()
     }
 
     this.showLoading(true)
-
-    // Resolved in its own try, same shape as submitEmailForm. On admin this is
-    // the only sign-out control on the page, so a failure here (or in the
-    // client-side signOut() call below) must never prevent the Rails-side
-    // sign-out that follows -- leaving the reader signed in because a client
-    // bundle 404'd would be worse than skipping the client Firebase sign-out.
-    let firebase = null
-    try {
-      firebase = await this.firebase()
-    } catch (error) {
-      console.error('Firebase load failed during sign out:', error)
-    }
-
-    if (firebase) {
-      try {
-        await firebase.firebaseAuthService.signOut()
-      } catch (error) {
-        console.error('Firebase sign out error:', error)
-      }
-    }
-
-    clearSignedInHint()
 
     try {
       const response = await fetch('/auth/sign_out', {
@@ -620,23 +629,56 @@ export default class extends Controller {
       if (!response.ok) {
         throw new Error('Failed to clear session')
       }
-
-      this.showLoading(false)
-
-      window.dispatchEvent(new CustomEvent('auth:signout', {
-        detail: { success: true }
-      }))
-
     } catch (error) {
       console.error('Sign out error:', error)
       this.showError('Sign out failed. Please try again.')
       this.showLoading(false)
+      return
     }
+
+    // Rails deleted tg_uid in its response; clearing it here as well means a
+    // response that lost its Set-Cookie on the way still renders signed out.
+    clearUidCookie()
+    clearPendingVerification()
+
+    // Flip the UI now: Rails has signed the reader out, and the Firebase
+    // bundle below may be a slow first fetch that would leave "Logout" showing.
+    this.showLoading(false)
+    this.renderSignInState()
+    window.dispatchEvent(new CustomEvent('auth:signout', {
+      detail: { success: true }
+    }))
+
+    // Best-effort, and never an error to the reader: Rails has already signed
+    // them out. On admin this is the only sign-out control, and a reader who
+    // never opened the login modal has not downloaded the bundle yet, so this
+    // may be the first load. Firebase only (see signOutFirebaseQuietly) --
+    // /auth/sign_out has already run.
+    //
+    // Bounded, so a hung bundle fetch cannot strand the reader, and announced
+    // as auth:signout-settled once it is over. Anything that navigates after
+    // sign-out (the admin layout) listens for THAT, not auth:signout: leaving
+    // the page mid-cleanup would abort it and keep Firebase's persisted
+    // identity alive after the reader logged out.
+    try {
+      await Promise.race([
+        this.firebase().then((firebase) => firebase.firebaseAuthService.getAuth().signOut()),
+        new Promise((resolve) => setTimeout(resolve, FIREBASE_SIGN_OUT_TIMEOUT_MS))
+      ])
+    } catch (error) {
+      console.error('Firebase sign out error:', error)
+    }
+
+    window.dispatchEvent(new CustomEvent('auth:signout-settled'))
   }
 
-  // Handle successful authentication
+  // Handle successful authentication. /auth/sign_in has answered, so tg_uid is
+  // set and the widget can render from it.
   handleAuthSuccess(event) {
+    this.signInInFlight = false
+    clearPendingVerification()
     this.showLoading(false)
+    this.renderSignInState()
     this.closeModal()
 
     if (this.reloadAfterAuthValue) {
@@ -649,69 +691,65 @@ export default class extends Controller {
   // an account and Firebase has not confirmed they control it, so it gets the
   // resend-verification affordance rather than a red error box.
   handleAuthError(event) {
+    this.signInInFlight = false
     this.showLoading(false)
 
     if (event.detail.code === 'email_verification_required') {
-      // Firebase signed this reader in client-side before Rails ever saw the
-      // token, so its auth-state callback has ALREADY flipped the navbar to
-      // Logout, hidden the sign-in controls, and persisted the localStorage
-      // signed-in hint. Rails then refused the token, and there is no session
-      // behind any of it. Left alone the browser keeps presenting a signed-in
-      // identity -- and because the hint outlives the page, it does so across
-      // reloads too, on a page whose server-rendered content is anonymous.
+      // Rails refused the token, so there is no session and no tg_uid, and the
+      // widget is still showing signed out. The Firebase user is left in place
+      // on purpose: resendVerification() reads
+      // firebaseAuthService.getCurrentUser(), so signing it out would leave the
+      // resend link with no one to send to. The marker is what tells every
+      // later page not to treat that Firebase user as a stranger.
       //
-      // So roll the UI all the way back to anonymous, but leave the Firebase
-      // user in place: resendVerification() reads
-      // firebaseAuthService.getCurrentUser(), which is Firebase's user and not
-      // this controller's currentUserValue, so clearing our state costs the
-      // reader nothing and the resend link still works.
-      this.pendingVerification = true
-      clearSignedInHint()
-      this.showUnauthenticatedState()
-
-      // After showUnauthenticatedState, not before: it hides this same target.
+      // Marked before renderSignInState, which shows the resend link only
+      // while the marker is set.
+      markPendingVerification()
+      this.renderSignInState()
       this.showInfo(event.detail.error)
-      if (this.hasVerificationMessageTarget) {
-        this.verificationMessageTarget.style.display = 'block'
-      }
       return
     }
 
     if (event.detail.code === 'account_lookup_failed') {
-      // Same rollback as email_verification_required above, and for the same
-      // reason: Firebase already flipped the navbar to signed-in before Rails
-      // refused the token, and the signed-in hint outlives the page. Unlike
-      // that branch this is a genuine failure with no resend-verification
-      // affordance, so it keeps the ordinary red error box.
-      //
-      // Rolling the UI back is not enough on its own. Firebase re-notifies on
-      // its own schedule -- a token refresh is enough -- and that notification
-      // would call markSignedIn() and present this refused identity as
-      // authenticated again, with no Rails session behind it. So suppress
-      // those notifications AND sign the Firebase user out: the flag dies with
-      // the page, and without the sign-out a reload would re-present the same
-      // refused identity. Nothing here needs the Firebase user afterwards,
-      // unlike the verification branch above, which keeps it for resend.
-      this.identityRefused = true
-      clearSignedInHint()
-      this.showUnauthenticatedState()
+      // A genuine failure with no resend affordance, so it keeps the ordinary
+      // red error box. Firebase signed this reader in client-side before Rails
+      // refused the token, and nothing needs that Firebase user afterwards,
+      // unlike the verification branch above -- so sign it out rather than
+      // leave a refused identity in IndexedDB for the next page to reconcile.
+      this.renderSignInState()
       this.showError(event.detail.error)
-
-      // Best-effort and deliberately not awaited: the UI is already correct,
-      // and a Firebase load or sign-out failure must not turn a retriable
-      // error into an unhandled rejection. The flag covers this window.
-      this.firebase()
-        .then((firebase) => firebase.firebaseAuthService.signOut())
-        .catch((error) => console.error('Firebase sign out after refused lookup failed:', error))
+      this.signOutFirebaseQuietly('refused account lookup')
       return
     }
 
     this.showError(event.detail.error)
   }
 
-  // Handle sign out event
+  // Handle sign out event. Also dispatched by FirebaseAuthService.signOut()
+  // (the redirect handler's credential-conflict path), not only by signOut()
+  // above, so it re-renders rather than assuming the caller did.
   handleSignOut() {
     this.showLoading(false)
+    this.renderSignInState()
+  }
+
+  // /user_list_state answered 401 and tg_uid is gone, or a sign-out cleared
+  // the list state. Present signed out, and if Firebase is already on the page
+  // and still holds a user, sign that user out to match. Never fetches the
+  // bundle just for this: a reader who has not loaded Firebase has nothing to
+  // sign out until something else loads it, and handleAuthStateChange
+  // reconciles then.
+  async handleStateCleared() {
+    this.renderSignInState()
+
+    if (!firebaseLoaded()) return
+
+    try {
+      const firebase = await this.firebase()
+      this.reconcileFirebaseUser(firebase.firebaseAuthService.getCurrentUser())
+    } catch (error) {
+      console.error('Firebase reconcile after cleared state failed:', error)
+    }
   }
 
   // Show loading state
@@ -749,15 +787,5 @@ export default class extends Controller {
     if (this.hasInfoMessageTarget) {
       this.infoMessageTarget.style.display = 'none'
     }
-  }
-
-  // Get current user (for other controllers)
-  getCurrentUser() {
-    return this.currentUserValue
-  }
-
-  // Check if user is authenticated
-  isAuthenticated() {
-    return this.currentUserValue !== null
   }
 }

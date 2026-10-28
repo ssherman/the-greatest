@@ -107,7 +107,8 @@ class UserListStateControllerTest < ActionDispatch::IntegrationTest
 
   test "backfills tg_uid cookie for sessions established before the cookie shipped" do
     sign_in_as(@user, stub_auth: true)
-    cookies.delete(:tg_uid)
+    cookies[:tg_uid] = ""
+    assert cookies[:tg_uid].blank?
     get user_list_state_path, as: :json
     assert_response :success
     assert_equal @user.id.to_s, cookies[:tg_uid]

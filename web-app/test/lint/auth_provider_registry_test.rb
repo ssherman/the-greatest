@@ -112,7 +112,7 @@ class AuthProviderRegistryLintTest < ActiveSupport::TestCase
     assert action, "could not find signInWithOauth in #{CONTROLLER_JS}"
     assert_includes action, "markPendingRedirect()",
       "without this, a reload mid-redirect loses the sign-in silently: tg_uid " \
-      "is unset, markSignedIn has not run, and Firebase has consumed its own key"
+      "is unset and Firebase has consumed its own key"
     assert_includes action, "clearPendingRedirect()",
       "a failed redirect must clear the marker it set"
   end

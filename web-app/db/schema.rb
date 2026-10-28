@@ -1509,6 +1509,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_005414) do
     t.index ["parent_type", "parent_id"], name: "index_search_index_requests_on_parent_type_and_parent_id"
   end
 
+  create_table "sessions", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "user_agent"
+    t.string "ip_address"
+    t.datetime "last_active_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_sessions_on_user_id"
+  end
+
   create_table "stripe_events", force: :cascade do |t|
     t.string "stripe_event_id", null: false
     t.string "event_type", null: false
@@ -1756,6 +1766,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_005414) do
   add_foreign_key "recommendation_item_neighbors", "recommendation_models"
   add_foreign_key "reviews", "users"
   add_foreign_key "saved_searches", "users"
+  add_foreign_key "sessions", "users"
   add_foreign_key "user_list_items", "user_lists"
   add_foreign_key "user_lists", "users"
   add_foreign_key "workflow_dependencies", "workflow_steps", column: "prerequisite_step_id", on_delete: :cascade

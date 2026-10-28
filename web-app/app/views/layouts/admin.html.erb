@@ -21,7 +21,9 @@
   <%= yield :head %>
 
   <script>
-    window.addEventListener('auth:signout', function() {
+    // auth:signout-settled, not auth:signout: the latter fires before the
+    // Firebase cleanup runs, and navigating then would abort it.
+    window.addEventListener('auth:signout-settled', function() {
       window.location.href = '/';
     });
   </script>
