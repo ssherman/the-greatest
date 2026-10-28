@@ -13,7 +13,7 @@ module Services
       # - authors_agree: one of our authors is one of the group's export
       #   authors (Check.authors_agree?). A book with no authors disagrees.
       # - wrong_book: no group agrees with us even loosely, on title
-      #   (Check.titles_agree?, a dropped subtitle allowed) or on authors. The
+      #   (title stems: a dropped subtitle allowed) or on authors. The
       #   record is a different book from everything imported onto it.
       module CompareIdentity
         module_function
@@ -31,14 +31,27 @@ module Services
           }
         end
 
+        # Our title alone counts too: an export without the subtitle we hold has
+        # stripped nothing. An export longer than ours still disagrees.
         def exact_title?(book, editions)
-          ours = ([[book.title, book.subtitle].compact_blank.join(": ")] + Array(book.alternate_titles))
+          ours = ([[book.title, book.subtitle].compact_blank.join(": "), book.title] + Array(book.alternate_titles))
             .filter_map { |title| check.title_key(title) }
           editions.any? { |edition| ours.include?(check.title_key(edition.title)) }
         end
 
+        # Title stems: the full title and the text before its first ":" or
+        # "(", on both sides. Not Check.titles_agree?, which rightly keeps a
+        # subtitle naming a volume ("Book", "Vol.") when matching works, but
+        # here would call "An Unexpected Cookbook" a different book from
+        # "An Unexpected Cookbook: The Unofficial Book of Hobbit Cookery".
         def loose_title?(book, editions)
-          editions.any? { |edition| check.titles_agree?(book, WorkLike.new(title: edition.title, subtitle: nil, author_names: [], author_keys: [])) }
+          ours = ([book.title, [book.title, book.subtitle].compact_blank.join(": ")] + Array(book.alternate_titles))
+            .flat_map { |title| stems(title) }
+          editions.any? { |edition| ours.intersect?(stems(edition.title)) }
+        end
+
+        def stems(title)
+          [title, title.to_s.split(/[:(]/).first].filter_map { |text| check.title_key(text) }.uniq
         end
 
         def authors?(book, editions)

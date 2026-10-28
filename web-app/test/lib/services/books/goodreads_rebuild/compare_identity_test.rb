@@ -61,6 +61,25 @@ module Services
           assert result[:title_agrees]
         end
 
+        # Found on the first full dev run: our title held a subtitle the export
+        # lacks, and "title disagrees" was reported though nothing was stripped.
+        test "a subtitle we hold that the export lacks still agrees" do
+          ours = book("The Food Bible", "Judith Wills")
+          ours.update!(subtitle: "Everything You Need to Know")
+
+          assert compare(ours, [edition(1, "The Food Bible", "Judith Wills")])[:title_agrees]
+        end
+
+        # Also from the first dev run: a subtitle only the export has made the
+        # loose check fail, so a same-title book with a wrong author was called
+        # the wrong book.
+        test "a subtitle only the export has is a stripped title, not the wrong book" do
+          result = compare(book("An Unexpected Cookbook", "James Oseland"),
+            [edition(1, "An Unexpected Cookbook: The Unofficial Book of Hobbit Cookery", "Chris-Rachael Oseland")])
+
+          assert_equal({title_agrees: false, authors_agree: false, wrong_book: false}, result)
+        end
+
         test "a book with no authors does not agree on authors" do
           result = compare(book("Hothouse"), [edition(1, "Hothouse", "Brian W. Aldiss")])
 
