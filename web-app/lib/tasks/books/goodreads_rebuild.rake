@@ -33,6 +33,19 @@ namespace :books do
       puts "looked up #{data[:looked_up]} editions#{" -- stopped: #{data[:error]}" if data[:stopped]}"
     end
 
+    desc "Write the edition evidence to [path] (default tmp/rebuild_edition_evidence.jsonl.gz) for import in production"
+    task :export_evidence, [:path] => :environment do |_task, args|
+      path = args[:path] || "tmp/rebuild_edition_evidence.jsonl.gz"
+      puts "exported #{Services::Books::GoodreadsRebuild::EvidenceTransfer.export(path)} evidence rows to #{path}"
+    end
+
+    desc "Upsert edition evidence from [path], a file export_evidence wrote. Safe to re-run"
+    task :import_evidence, [:path] => :environment do |_task, args|
+      abort "usage: books:goodreads_rebuild:import_evidence[<path>]" if args[:path].blank?
+
+      puts "evidence: #{tally.call(Services::Books::GoodreadsRebuild::EvidenceTransfer.import(args[:path]))}"
+    end
+
     desc "Read-only: the stage one survey's counts and samples"
     task survey_report: :environment do
       puts Services::Books::GoodreadsRebuild::SurveyReport.call
