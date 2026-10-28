@@ -19,11 +19,21 @@ module Services
           lines << "by classification: #{tally(::Books::RebuildBookSurvey.classifications.keys.index_with { |key| surveys.where(classification: key).count })}"
           lines << "title disagrees: #{judged.title_disagrees.count}; authors disagree: #{judged.authors_disagree.count}; " \
             "wrong book: #{judged.where(wrong_book: true).count}"
+          lines << evidence_line
           section(lines, "wrong book", judged.where(wrong_book: true))
           section(lines, "wrong author", judged.authors_disagree.where(wrong_book: false))
           section(lines, "stripped or different title", judged.title_disagrees.where(wrong_book: false))
           lumps(lines, surveys.lump)
           lines.join("\n")
+        end
+
+        # Survey pass 2: what WorldCat and Open Library said about the editions.
+        def evidence_line
+          evidence = ::Books::RebuildEditionEvidence.all
+          said = evidence.group(:world_cat).count
+          "evidence rows: #{evidence.count}; WorldCat agrees #{said.fetch("agrees", 0)}, disagrees #{said.fetch("disagrees", 0)}, " \
+            "unclear #{said.fetch("unclear", 0)}, no record #{said.fetch("no_record", 0)}, no ISBN #{said.fetch("no_isbn", 0)}; " \
+            "with an Open Library work #{evidence.where("cardinality(ol_work_keys) > 0").count}"
         end
 
         def unsurveyed = Cohort.derived.where.not(id: ::Books::RebuildBookSurvey.select(:book_id)).count

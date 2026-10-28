@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_28_005414) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_28_154153) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -452,6 +452,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_005414) do
     t.index ["book_id"], name: "index_books_rebuild_book_surveys_on_book_id", unique: true
     t.index ["classification"], name: "index_books_rebuild_book_surveys_on_classification"
     t.index ["wrong_book"], name: "index_books_rebuild_book_surveys_on_wrong_book"
+  end
+
+  create_table "books_rebuild_edition_evidences", force: :cascade do |t|
+    t.bigint "goodreads_book_id", null: false
+    t.string "signature", null: false
+    t.string "isbn13"
+    t.integer "world_cat", null: false
+    t.string "world_cat_title"
+    t.string "world_cat_creator"
+    t.integer "world_cat_year"
+    t.string "ol_work_keys", default: [], null: false, array: true
+    t.datetime "checked_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["goodreads_book_id", "signature"], name: "index_books_rebuild_edition_evidences_on_natural_key", unique: true
   end
 
   create_table "books_repair_verdicts", force: :cascade do |t|

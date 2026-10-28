@@ -58,6 +58,36 @@ class BooksGoodreadsRebuildRakeTest < ActiveSupport::TestCase
     end
   end
 
+  def evidence_result(looked_up: 7, stopped: false, error: nil)
+    Struct.new(:success?, :data, :errors, keyword_init: true)
+      .new(success?: !stopped, data: {looked_up: looked_up, stopped: stopped, error: error}, errors: [error].compact)
+  end
+
+  test "gather_evidence passes the thread count" do
+    REBUILD::EvidenceRun.expects(:call).with(threads: 8).returns(evidence_result)
+    assert_output(/looked up 7 editions/) { Rake::Task["books:goodreads_rebuild:gather_evidence"].invoke("8") }
+  end
+
+  test "gather_evidence defaults to 4 threads and reports a stop" do
+    REBUILD::EvidenceRun.expects(:call).with(threads: 4).returns(evidence_result(looked_up: 2, stopped: true, error: "down"))
+    assert_output(/looked up 2 editions -- stopped: down/) { Rake::Task["books:goodreads_rebuild:gather_evidence"].invoke }
+  end
+
+  test "export_evidence writes to the default path" do
+    REBUILD::EvidenceTransfer.expects(:export).with("tmp/rebuild_edition_evidence.jsonl.gz").returns(12)
+    assert_output(/exported 12 evidence rows to tmp\/rebuild_edition_evidence.jsonl.gz/) do
+      Rake::Task["books:goodreads_rebuild:export_evidence"].invoke
+    end
+  end
+
+  test "import_evidence needs a path and prints the counts" do
+    REBUILD::EvidenceTransfer.expects(:import).with("/tmp/e.jsonl.gz").returns({"imported" => 5, "no_edition_here" => 1})
+    assert_output(/imported 5, no_edition_here 1/) { Rake::Task["books:goodreads_rebuild:import_evidence"].invoke("/tmp/e.jsonl.gz") }
+
+    Rake::Task["books:goodreads_rebuild:import_evidence"].reenable
+    assert_raises(SystemExit) { capture_io { Rake::Task["books:goodreads_rebuild:import_evidence"].invoke } }
+  end
+
   test "survey_report prints the report" do
     REBUILD::SurveyReport.expects(:call).returns("surveyed: 5")
     assert_output(/surveyed: 5/) { Rake::Task["books:goodreads_rebuild:survey_report"].invoke }

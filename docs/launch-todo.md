@@ -410,4 +410,13 @@ The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve o
      title or authors disagree with the Goodreads export, and the books that are the wrong book
      altogether, with samples of each. Read the samples: they are what the next step will fix.
    - If the job stops, run the same command again. It carries on from the books not yet surveyed.
-4. Survey pass 2 and the fixes: added by later increments.
+4. **Bring in survey pass 2's evidence.** This is read-only for books. The WorldCat and Open Library
+   lookups for every import-made edition run on Shane's PC, not in production. That's the recipe in
+   `docs/features/goodreads-rebuild.md`, "Survey pass 2", and it takes about 22 hours. It ends with a
+   file, `tmp/rebuild_edition_evidence.jsonl.gz`. Copy that file into the production container, then:
+   - `bin/rails "books:goodreads_rebuild:import_evidence[<path to the file>]"`. It prints how many
+     rows it imported. A second run is safe.
+   - `bin/rails "books:goodreads_rebuild:survey[all,redo]"`, and wait for the job.
+   - `bin/rails books:goodreads_rebuild:survey_report`. The lump count should drop: translations on
+     one Open Library work no longer count as lumps. The report now shows how often WorldCat agreed.
+5. The fixes: added by increment 2b.

@@ -1,0 +1,31 @@
+# == Schema Information
+#
+# Table name: books_rebuild_edition_evidences
+#
+#  id                :bigint           not null, primary key
+#  checked_at        :datetime         not null
+#  isbn13            :string
+#  ol_work_keys      :string           default([]), not null, is an Array
+#  signature         :string           not null
+#  world_cat         :integer          not null
+#  world_cat_creator :string
+#  world_cat_title   :string
+#  world_cat_year    :integer
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  goodreads_book_id :bigint           not null
+#
+# Indexes
+#
+#  index_books_rebuild_edition_evidences_on_natural_key  (goodreads_book_id,signature) UNIQUE
+#
+war_and_peace_evidence:
+  goodreads_book_id: 656
+  signature: ae5a8901c1ecb81ed9fe71c4bf64d33b958275d868816dbae66b3b92e45a35aa
+  isbn13: "9780140447934"
+  world_cat: agrees
+  world_cat_title: "War and peace /"
+  world_cat_creator: "Tolstoy, Leo, graf, 1828-1910."
+  world_cat_year: 2007
+  ol_work_keys: ["OL267933W"]
+  checked_at: <%= 1.day.ago.to_fs(:db) %>

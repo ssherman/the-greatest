@@ -161,6 +161,70 @@ fetches nothing.**
 Measured: 2,576 books are lump suspects on year or author alone. Same-year lumps found through the
 work reference add to that.
 
+### 4.1 How a book is fixed (revised 2026-10-28, replaces "identity fixed in place" above)
+
+**The survey's production numbers** (2026-10-28, 138,246 derived books):
+
+| | Books |
+|---|---|
+| Coherent | 131,828 |
+| Lump | 2,025 |
+| Unsupported | 4,393 |
+| Title differs from the export | 38,625 |
+| Authors differ | 15,080 |
+| Wrong book | 45 |
+
+**Why the fix changed.** Shane, 2026-10-28: when the title or author is wrong, *all* of the book's metadata is wrong. Measured on dev: every derived book holds categories, 13,096 hold a description, 17,916 a cover, and about 80,000 Amazon ASINs or EANs. Legacy's Amazon matching searched with the stripped title, so all of that came from legacy's guess. Some of it may be right where legacy fetched Goodreads by the export's own id. Re-importing keeps whatever a fresh lookup confirms, so nothing has to be judged field by field.
+
+**Which books are fixed:** every derived book whose `title_agrees` or `authors_agree` is false, or which is `wrong_book` (about 47,000). Each one, in order:
+
+1. **Does the right book already exist?** Run the blinded finder (§5) with the export query: the main group's full title, its authors and ISBNs, and its Goodreads ids. Exclude the book itself, and count verified identifiers only.
+   - About 240 are found on dev by exact title plus an export author alone. That's a floor.
+   - **Found:** a `merge_books` verdict. Apply resets the wrong record (step 2), then merges it into the existing book, so the old URL redirects, users' items move, and the merge sticks across the sync.
+   - Automatic only under the two-source rule (§12 call 4). Otherwise proposed.
+2. **Otherwise, reset and re-import in place** (a `fix_identity` verdict). Applying it does two things.
+   - **Keeps:** the record's id and URL, and everything users and lists hang on it: list items, user list items, reviews, reading goals and rankings.
+   - **Clears** legacy's derived data:
+     - `book_authors`, description, category items, images, `first_published_year`;
+     - alternate titles, series links, `amazon_enriched_at`;
+     - **every identifier**.
+   - **Re-imports** through `DataImporters::Books::Book::Importer` aimed at the existing book (`match:` with `force_providers: true`).
+     - The query is the main group's export facts.
+     - Providers: Authors (author finder from the export names, or import them), QueryIdentifiers (the export's Goodreads ids and ISBNs, source `goodreads_import`), and Enrichment (the new-book workflow: Goodreads → author chains → book AI → Amazon).
+     - **The importer's Open Library provider is skipped.** Its `/resolve` serves one book at a time, 12–30 s each. The work key and checked ISBNs come from the §4a verification run instead, which tries the fast ISBN lookup first.
+   - **Title and subtitle** are set from the export before the import (split at the first colon). The importer's Goodreads step fills them back in from the page.
+   - Automatic when WorldCat or Open Library agrees with the export (survey pass 2 evidence). Otherwise proposed.
+3. **Enrichment is queued by priority:** most user lists first. Goodreads fetches are capped at 1,500 a day, so about 47,000 books take about five weeks. It continues past launch.
+   - Before launch, the reset and the author and identifier fixes run.
+   - A book not yet enriched shows the right title and author, without a description or a cover. That's thin, not wrong.
+
+**A lump** is handled the same way. The main group's book is checked and rebuilt like any other. Each other group's book is found first (step 1), or created through the same importer.
+
+**Authors left with no books** after a fix are left for the sweep (§6a). A wrong author such as "Jim Baggott" keeps his own real books.
+
+### 4.2 Survey pass 2 runs locally and is copied to production (2026-10-28)
+
+Pass 2 looks up every derived edition's ISBN in WorldCat (agreement on title and creator) and Open Library (the work key). Its results depend only on the export editions and the two data dumps, not on our catalog. So it runs on Shane's PC, in dev, against a local Open Library and WorldCat instance at full speed, and leaves the shared home-server services to the production verification run.
+
+- Its table, `books_rebuild_edition_evidences`, is keyed by the Goodreads edition (Goodreads book id plus signature, the edition's natural key). The key is the same in dev and production.
+- A rake task exports it to a file, and another imports it in production.
+- The survey then re-groups with the evidence, through the Open Library work merge in `GroupEditions`.
+- **The local instance must serve the same dump versions as the home server** (Open Library 2026-09-30, WorldCat 2025-09-04), or work keys won't line up.
+
+### 4.3 A temporary second service instance for the production runs (2026-10-28)
+
+The verification run over repaired books (§4a) and the fixes in §4.1 write to the catalog, so they run in production.
+
+To go faster than one `/resolve` at a time, for the relaunch only:
+- run a second Open Library and WorldCat instance on Shane's PC (32 threads, about 45 GB in WSL), with `OL_API_RESOLVE_CONCURRENCY` at 2–3;
+- reach it from production through a Cloudflare tunnel and Access. That's Shane's to set up, with `cfzerotrust`.
+
+Rails needs:
+1. a way to point these runs at a second service URL;
+2. a sharded verification mode, N jobs over disjoint book sets, since today's run is one at a time under one advisory lock.
+
+This is its own small increment, built when the production-side runs need it.
+
 ## 4a. Between the stages: verify the repaired books
 
 Shane, 2026-10-27: the replay comes last, and trusted, non-legacy identifiers come first. The
@@ -412,6 +476,18 @@ Ordered by what is slow, not by what is easy.
    `/resolve` with another long run.
 7. **The final sweep (§6a)**, with a dry run.
 8. **The weekly catch-up rake task**, and the `docs/launch-todo.md` steps for every production run.
+
+**Build order as it stands on 2026-10-28.** Steps 1 and 2 above were replaced by the survey.
+
+- **Done:** increment 1 (#423, foundation) and increment 2 (#425, survey pass 1).
+- **Next, in order:**
+  1. Increment 2c: survey pass 2, local evidence copied to production (§4.2).
+  2. Increment 2b: the fixes (§4.1): the existence check, then reset and re-import.
+  3. The temporary second service instance (§4.3), when the production-side runs need it.
+  4. Verification over repaired books (§4a).
+  5. Stage two.
+  6. The sweep.
+  7. The weekly catch-up.
 
 ## 12. Calls made after the builder check
 

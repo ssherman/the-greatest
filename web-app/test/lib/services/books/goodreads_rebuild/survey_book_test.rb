@@ -50,6 +50,22 @@ module Services
           assert_equal 2, result.groups.size
         end
 
+        test "a shared Open Library work makes a transliterated pair coherent" do
+          leo = edition(1, "War and Peace", author: "Leo Tolstoy", year: 1869)
+          lev = edition(2, "Voina i mir", author: "Lev Tolstoy", year: 1869)
+          row(leo)
+          row(lev)
+
+          assert_predicate survey, :lump?
+
+          [leo, lev].each do |e|
+            ::Books::RebuildEditionEvidence.create!(goodreads_book_id: e.goodreads_book_id, signature: e.signature, world_cat: :no_record,
+              ol_work_keys: ["OL267933W"], checked_at: Time.current)
+          end
+
+          assert_predicate survey, :coherent?
+        end
+
         test "no rows is unsupported" do
           result = survey([])
 
