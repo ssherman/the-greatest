@@ -403,4 +403,11 @@ The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve o
    expect about 2,691 relinks and 2,091 strips. Then run
    `bin/rails "books:goodreads_rebuild:retire_replay_proposals[apply]"`. They disappear from the admin
    repair-verdict page. A second run prints 0s.
-3. Stage one: added by increment 2.
+3. **Survey the import-made books.** This is read-only: it changes no book. It only reads our own
+   database, so it's safe to run while a verification run is going.
+   - Run `bin/rails "books:goodreads_rebuild:survey[all]"`, then wait for the Sidekiq job to finish.
+   - Run `bin/rails books:goodreads_rebuild:survey_report`. It counts the lumps, the books whose
+     title or authors disagree with the Goodreads export, and the books that are the wrong book
+     altogether, with samples of each. Read the samples: they are what the next step will fix.
+   - If the job stops, run the same command again. It carries on from the books not yet surveyed.
+4. Survey pass 2 and the fixes: added by later increments.
