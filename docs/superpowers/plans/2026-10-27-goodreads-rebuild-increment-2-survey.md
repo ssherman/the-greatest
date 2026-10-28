@@ -1,260 +1,267 @@
-# Goodreads Rebuild Increment 2: Stage One Survey Implementation Plan
+# Goodreads Rebuild Increment 2: Stage One Survey, Pass 1 (local) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** For every derived (import-made) book, gather the Goodreads editions its export rows name, check each edition against WorldCat and Open Library by ISBN, group the editions into works, and record whether the book is coherent, a lump, or unsupported. This is read-only for the catalog.
+**Goal:** For every derived (import-made) book, read the Goodreads editions its export rows name and record five things:
+- whether the book is coherent, a lump or unsupported;
+- its edition groups;
+- whether our title agrees with the export;
+- whether our authors agree with the export;
+- whether it is the wrong book altogether.
 
-**Architecture:** Two new tables hold the results. `books_rebuild_edition_evidences` has one row per Goodreads edition, for what WorldCat and Open Library say about its ISBN. Stage two reuses it. `books_rebuild_book_surveys` has one row per derived book: its class and edition groups.
+It uses only our own database, with no Open Library or WorldCat calls, and is read-only for the catalog.
 
-A run service, `Survey`, works through `Cohort.derived` one book at a time under an advisory lock, with one Sidekiq job and a report rake task. It writes nothing to books, authors, identifiers or verdicts. The fixes (`fix_identity`, `split`) are increment 2b, built on the survey's stored results.
+**Architecture:**
+- **Results table:** `books_rebuild_book_surveys`, one row per derived book.
+- **Services:**
+  - `GroupEditions` sorts a book's editions into works.
+  - `CompareIdentity` checks our title and authors against the export, reusing the verification pass's `Check`.
+  - `SurveyBook` records one book.
+  - `Survey` runs over `Cohort.derived` in batches of 500, preloading rows and editions per batch.
+- **Running it:** a Sidekiq job and two rake tasks, `survey` and `survey_report`.
+- **New index:** `books_goodreads_import_rows.legacy_book_id`, so batch loads don't scan 498k rows.
 
 **Tech Stack:** Rails 8, PostgreSQL, Sidekiq, Minitest + fixtures + Mocha, standardrb.
 
-**Spec:** `docs/superpowers/specs/2026-10-27-goodreads-rebuild-design.md`:
-- §4 stage one;
-- §7 evidence services and the WorldCat timing;
-- §10, where the survey feeds the labeled sample.
+**Spec:** `docs/superpowers/specs/2026-10-27-goodreads-rebuild-design.md` (§4 stage one, §10 the labeled sample and acceptance).
 
-Increments: 1 foundation (merged, #423) · **2 survey (this plan)** · 2b identity fixes and splits · 3 verification scope · 4 stage two and member guards · 5 sweep and catch-up.
+Increments: 1 foundation (merged, #423) · **2 survey pass 1, local (this plan)** · 2-pass-2 evidence: WorldCat and Open Library per ISBN, run after the production verification run · 2b identity fixes and splits · 3 verification scope · 4 stage two and member guards · 5 sweep and catch-up.
 
-**Ruling recorded here:** the spec's stage one is split into a read-only survey (2) and the fixes (2b). The survey's report measures lumps, WorldCat agreement and lookup speed on real data before any rule edits a book, and settles §7's WorldCat timing question by itself. Cost if wrong: one extra increment.
+**Rulings recorded here** (Shane agreed to the split on 2026-10-27):
+
+1. **Stage one splits into a read-only survey and the fixes (2b).** Real counts come before any rule edits a book. Cost if wrong: one extra increment.
+2. **The survey splits into a local pass 1 and a service pass 2.** The production verification run holds Open Library and WorldCat for days. Pass 1 needs neither and can run now. Pass 2 adds the Open Library work merge, which joins transliterated authors, and the WorldCat check. Cost if wrong: pass 1 reports some translations whose Goodreads author string differs as lump suspects, until pass 2.
+3. **The survey also compares our title and authors with the export** (Shane, 2026-10-27: he suspects many wrong authors and wrong books). That count is the main output Shane wants.
 
 ## Global Constraints
 
-- **Read-only for the catalog.** Write only the two new tables. No changes to books, authors, identifiers, list items or `RepairVerdict`.
+- **Read-only for the catalog.** Write only `books_rebuild_book_surveys`, plus the one index migration. No changes to books, authors, identifiers, list items or `RepairVerdict`. No Open Library, WorldCat or AI calls.
 - **Where code lives:**
   - Services in `app/lib/services/books/goodreads_rebuild/`, returning `Result = Struct.new(:success?, :data, :errors, keyword_init: true)`.
   - The job via `bin/rails generate sidekiq:job books/goodreads_rebuild/survey`: queue `low`, `retry: false`.
-  - Models via `bin/rails generate model`.
-  - Migrations run annotaterb. Never set `ANNOTATERB_SKIP_ON_DB_TASKS`. Delete annotation and schema lines for tables that aren't this branch's: the shared dev DB holds another branch's `sessions` table.
-- **Enum syntax:** Rails 8, `enum :world_cat, {...}`.
-- **Which books:** `Services::Books::GoodreadsRebuild::Cohort.derived` (increment 1). Trusted books are never surveyed.
-- **An edition's rows** are `Books::GoodreadsImportRow`s, linked through `goodreads_edition_id`. A row names a book through `legacy_book_id`, which is legacy's choice. A `legacy_book_id` whose book no longer exists is followed with `Services::Books::GoodreadsReplay::Apply::MergedBook.call(id)`, which returns the book it was merged into, or nil.
-- **The edition facts used:** `Books::GoodreadsEdition` `title` (the series suffix is already split into `series_name` and `series_number`), `primary_author`, `additional_authors`, `original_publication_year`, `series_number`, `isbn13`, `isbn10` and `goodreads_book_id`.
-- **ISBNs:** `Books::Isbn.normalize(raw)` returns `isbn13`/`isbn10`, or nil for a bad checksum. Use `isbn13`, falling back to `isbn10`'s derived 13.
-- **WorldCat:** `Books::WorldCat::Client#record_by_isbn(isbn13)` returns an Array of `Record`s.
-  - **Agreement:** a record agrees when `Check.titles_agree?(edition_like, work)` and `Check.authors_agree?(edition_like, work)` both hold, with `work = WorldCatCheck.work_like(record)`.
-  - **Disagreement:** a record disagrees when neither holds.
-  - Anything else is `unclear`. Several records: `agrees` if any agrees, else `disagrees` if any disagrees, else `unclear`.
-  - (`Check` and `WorldCatCheck` are in `Services::Books::Verification`.)
-- **Open Library:** `Books::OpenLibrary::Client#identifier("isbn_13", isbn13)` returns an Array of `IdentifierHit`, with `work_key` on each. Keep every distinct `work_key`.
-- **Errors:** an `::Books::OpenLibrary::Exceptions::Error` or `::Books::WorldCat::Exceptions::Error` stops the run. The book keeps no survey row, so the next run retries it. That's the same rule as `Verification::Run`.
-- **One survey run at a time:** a `pg_try_advisory_lock` with a fixed `LOCK_KEY = 7_262_024_100_802`. The verification run uses `...801`.
-- **The services are shared.** Dev and production share the WorldCat and Open Library services. No dev run of more than 200 books while a production verification run is going. Shane runs production.
+  - The model via `bin/rails generate model`, and migrations via generators.
+  - `db:migrate` runs annotaterb. Never set `ANNOTATERB_SKIP_ON_DB_TASKS`. Strip schema and annotation lines for tables that aren't this branch's: the shared dev DB holds another branch's `sessions` table.
+- **Which books:** `Services::Books::GoodreadsRebuild::Cohort.derived` (increment 1).
+- **A book's rows** are `Books::GoodreadsImportRow`s whose `legacy_book_id` is in `LegacyBookMap#legacy_ids_for(book.id)`. That's the book itself, plus legacy ids merged into it, followed by `Services::Books::GoodreadsReplay::Apply::MergedBook.call(id)`. A row's edition is `row.goodreads_edition`, and rows with none are skipped.
+- **The edition facts used:** `Books::GoodreadsEdition` `title` (already without the series suffix), `primary_author`, `additional_authors`, `original_publication_year`, `series_number` and `goodreads_book_id`.
+- **The comparisons** reuse `Services::Books::Verification::Check`: `titles_agree?(book, work)`, `authors_agree?(book, work)` and `compact(name)`.
+  - `work` is a `Services::Books::Verification::WorldCatCheck::WorkLike.new(title:, subtitle: nil, author_names:, author_keys: [])`.
+  - `book` is the real `Books::Book`, whose `title`, `alternate_titles` and `authors` are what Check reads.
+- **One run at a time:** `pg_try_advisory_lock(7_262_024_100_802)`. The verification run uses `...801`.
 - Lint with `bundle exec standardrb`; the full `bin/rails test` must pass.
 
-## The grouping rule (Task 3), pinned here
+## The rules, pinned
 
-Each edition gets:
-
+**Grouping** (`GroupEditions`, Task 2). Each edition gets three fields:
 - `author_key`: `Check.compact(primary_author)`. Letters only, so "J.D. Salinger" equals "J. D. Salinger". Nil when blank or too short.
 - `year`: `original_publication_year`.
 - `volume`: `series_number` stripped, or nil when blank.
 
 Then:
-
 1. **Group** editions with the same `[author_key, year, volume]`, where all three are non-nil.
-2. **Merge by Open Library work.** Merge two groups when an edition in each shares an Open Library work key and both editions have the same `volume`, nil included. An Open Library work holds translations whose Goodreads author string may be transliterated.
+2. **Merge by Open Library work** (only when `evidence:` is given, which pass 2 does; pass 1 passes `{}`). Merge two groups when an edition in each shares an Open Library work key and both editions have the same `volume`, nil included.
 3. **Place editions with a nil field.** An edition with a nil `author_key` or nil `year` joins the group that matches it on every non-nil field. If several match, it joins the one with the most rows. If none match, it starts its own group.
-4. **Classify.** No editions: `unsupported`. One group: `coherent`. Two or more groups: `lump`.
+4. **Classify.** No editions: `unsupported`. One group: `coherent`. Two or more: `lump`.
 
-Groups are stored biggest first, by row count, then lowest Goodreads book id.
+Groups are stored biggest first, by row count, then lowest Goodreads book id. Each is a Hash:
+```
+{"edition_ids" => [..], "goodreads_book_ids" => [..sorted], "titles" => [up to 3 distinct],
+ "authors" => [distinct primary_author values, up to 3], "year" => Integer|nil,
+ "volume" => String|nil, "row_count" => Integer}
+```
+
+**Identity** (`CompareIdentity`, Task 3), against the main group (the first):
+- `title_agrees`: some edition in the main group gives `Check.titles_agree?(book, WorkLike(title: edition.title, author_names: []))`.
+- `authors_agree`: `Check.authors_agree?(book, WorkLike(title: nil, author_names: <every primary_author and additional_authors in the main group>))`. A book with no authors is `false`.
+- `wrong_book`: no edition in **any** group agrees on title, **and** no group agrees on authors. In plain words, the record is a different book from everything people imported onto it.
+- An `unsupported` book gets all three nil.
 
 ## Review Focus
 
-1. **A translation whose Goodreads author string differs** ("Lev Tolstoy" against "Leo Tolstoy"). It must not be called a lump when Open Library puts both ISBNs on one work. Test in Task 3.
-2. **Numbered volumes by one author in one year** (*V for Vendetta* #1 and #2, same year). They must be a lump. Test in Task 3.
+1. **A book whose title we store stripped** ("X Men" against the export's "X-Men: The Age of Apocalypse, Vol. 2"). `title_agrees` is false, and it isn't `wrong_book` while the authors agree. Test in Task 3.
+2. **A translation edition in the main group.** Our English title and a German edition title in the same group give `title_agrees` true, because any edition in the group may agree. Test in Task 3.
 3. **A row whose `legacy_book_id` was merged away.** Its editions count for the surviving book. Test in Task 4.
-4. **A service outage mid-run.** The run stops, the current book gets no survey row, and the next run picks it up. Evidence already gathered for other editions is kept. Test in Task 5.
-5. **An edition with no ISBN, or a bad checksum.** It gets `world_cat: :no_isbn` and no Open Library work, with no service call and no crash. Test in Task 2.
+4. **A batch boundary.** A book's rows are loaded with its batch, never another batch's, and a book merged into a book in a different batch still gets its rows. Test in Task 5.
+5. **A re-run.** `survey[all]` takes only books with no survey. `redo` re-surveys every derived book and updates the rows in place. Test in Task 5.
 
 ---
 
-### Task 1: The two tables
+### Task 1: Survey table and the row index
 
 **Files:**
-- Create (generators): migrations, `web-app/app/models/books/rebuild_edition_evidence.rb`, `web-app/app/models/books/rebuild_book_survey.rb`, and their tests and fixtures.
+- Create (generators): the model `web-app/app/models/books/rebuild_book_survey.rb`, its migration, test and fixture, and the migration `AddLegacyBookIdIndexToBooksGoodreadsImportRows`.
 
 **Interfaces:**
-- Produces `Books::RebuildEditionEvidence` (table `books_rebuild_edition_evidences`):
-  - `goodreads_edition_id` (bigint, not null, unique, FK `books_goodreads_editions` `on_delete: :cascade`);
-  - `isbn13` (string, nullable);
-  - `world_cat` (integer, not null; enum `no_isbn: 0, no_record: 1, agrees: 2, disagrees: 3, unclear: 4`);
-  - `world_cat_title`, `world_cat_creator` (string, nullable);
-  - `world_cat_year` (integer, nullable);
-  - `ol_work_keys` (string array, default `[]`, not null);
-  - `checked_at` (datetime, not null);
-  - `belongs_to :goodreads_edition, class_name: "Books::GoodreadsEdition"`.
 - Produces `Books::RebuildBookSurvey` (table `books_rebuild_book_surveys`):
   - `book_id` (bigint, not null, unique, FK `books_books` `on_delete: :cascade`);
   - `classification` (integer, not null; enum `coherent: 0, lump: 1, unsupported: 2`);
-  - `edition_count`, `row_count`, `world_cat_agreeing` (integers, not null, default 0);
+  - `edition_count`, `row_count` (integers, not null, default 0);
   - `groups` (jsonb, not null, default `[]`);
+  - `title_agrees`, `authors_agree` (boolean, nullable);
+  - `wrong_book` (boolean, not null, default false);
   - `surveyed_at` (datetime, not null);
   - `belongs_to :book, class_name: "Books::Book"`.
-  - Each `groups` element is `{"edition_ids" => [..], "goodreads_book_ids" => [..], "titles" => [up to 3], "author" => String, "year" => Integer|nil, "volume" => String|nil, "row_count" => Integer}`.
+  - Scopes: `title_disagrees` (`title_agrees: false`) and `authors_disagree` (`authors_agree: false`).
+- Produces an index on `books_goodreads_import_rows(legacy_book_id)`.
 
-- [ ] **Step 1: Generate both models.**
-  - `bin/rails generate model books/rebuild_edition_evidence goodreads_edition:references isbn13:string world_cat:integer world_cat_title:string world_cat_creator:string world_cat_year:integer ol_work_keys:string checked_at:datetime`
-  - `bin/rails generate model books/rebuild_book_survey book:references classification:integer edition_count:integer row_count:integer world_cat_agreeing:integer groups:jsonb surveyed_at:datetime`
+- [ ] **Step 1: Generate.**
+  - `bin/rails generate model books/rebuild_book_survey book:references classification:integer edition_count:integer row_count:integer groups:jsonb title_agrees:boolean authors_agree:boolean wrong_book:boolean surveyed_at:datetime`
+  - `bin/rails generate migration AddLegacyBookIdIndexToBooksGoodreadsImportRows`, containing `add_index :books_goodreads_import_rows, :legacy_book_id`.
 
-  Then edit the migrations:
-  - nulls and defaults as above, with `ol_work_keys` as `array: true, default: [], null: false`;
-  - the FKs with `to_table` and `on_delete: :cascade`;
-  - unique indexes on `goodreads_edition_id` and `book_id`;
-  - an index on `classification`.
+  Then edit the survey migration:
+  - nulls and defaults as above;
+  - `foreign_key: {to_table: :books_books, on_delete: :cascade}`;
+  - a unique index on `book_id`, replacing the one `references` adds;
+  - indexes on `classification` and `wrong_book`.
 
-  Fixtures: one evidence row (`agrees`) and two surveys (`coherent`, `lump`), on existing fixtures. Check `test/fixtures/books/goodreads_editions.yml` and `books.yml` for labels.
+  Fixtures: `coherent_survey` and `lump_survey`, on two existing `books_books` fixtures.
 - [ ] **Step 2: Write the failing model tests.**
-  - `test "an edition has one evidence row"`: a duplicate insert raises `ActiveRecord::RecordNotUnique`.
-  - `test "a book has one survey"`: the same, on `book_id`.
-  - `test "deleting the book deletes its survey"`: `book.delete`, and the survey is gone.
-  - `test "the enums"`: `assert_equal %w[no_isbn no_record agrees disagrees unclear], Books::RebuildEditionEvidence.world_cats.keys`, and the same for `classifications`.
-- [ ] **Step 3: Run them to see them fail.** `bin/rails test test/models/books/rebuild_edition_evidence_test.rb test/models/books/rebuild_book_survey_test.rb`. Expected: FAIL before the migrate.
-- [ ] **Step 4: Migrate and implement.** Run `bin/rails db:migrate` and `RAILS_ENV=test bin/rails db:schema:load`. Strip foreign tables from `schema.rb`. Add the enums, `belongs_to` and presence validations. Each class comment says the table is rebuild scratch data, safe to rebuild, and keyed so stage two can reuse it.
+  - `test "a book has one survey"`: a duplicate `book_id` raises `ActiveRecord::RecordNotUnique` (use `save!(validate: false)`).
+  - `test "deleting the book deletes its survey"`: `survey.book.delete` → the survey is gone.
+  - `test "classification enum"`: `%w[coherent lump unsupported]`.
+  - `test "disagreement scopes"`: a survey with `title_agrees: false` is in `title_disagrees`, and one with `true` isn't. The same for `authors_disagree`.
+- [ ] **Step 3: Run them to see them fail.** `bin/rails test test/models/books/rebuild_book_survey_test.rb`. Expected: FAIL.
+- [ ] **Step 4: Migrate and implement.** Run `bin/rails db:migrate` and `RAILS_ENV=test bin/rails db:schema:load`. Strip foreign tables. Implement the enum, `belongs_to`, presence validations and scopes. The class comment says it's rebuild scratch data, re-runnable, and that 2b reads it.
 - [ ] **Step 5: Run them to see them pass.** Expected: PASS.
-- [ ] **Step 6: Commit.** Message: "Goodreads rebuild: tables for edition evidence and book surveys".
+- [ ] **Step 6: Commit.** Message: "Goodreads rebuild: books_rebuild_book_surveys table; index import rows by legacy book".
 
-### Task 2: `GatherEvidence`
-
-**Files:** Create `web-app/app/lib/services/books/goodreads_rebuild/gather_evidence.rb` and `web-app/app/lib/services/books/goodreads_rebuild/edition_like.rb`. Test `web-app/test/lib/services/books/goodreads_rebuild/gather_evidence_test.rb`.
-
-**Interfaces:**
-- Produces:
-  - `EditionLike.from(edition) -> Data(title:, alternate_titles:, authors:, first_published_year:)`. `authors` holds `Data(name:, alternate_names: [], id: nil)` for `primary_author` plus each of `additional_authors`. It's shaped for `Verification::Check.titles_agree?`/`authors_agree?`.
-  - `GatherEvidence.call(editions:, world_cat:, open_library:) -> Result`, with `data` = `{evidence: Hash{edition_id => Books::RebuildEditionEvidence}, looked_up: Integer}`.
-    - It reuses an existing evidence row, so it never looks up again.
-    - It creates the missing ones.
-    - Service errors propagate.
-
-- [ ] **Step 1: Write the failing tests.** Stub the clients with `Mocha` (`world_cat.stubs(:record_by_isbn)`, `open_library.stubs(:identifier)`). Build `Books::WorldCat::Record`s with `Record.from_hash`, and `IdentifierHit`s with `new(...)`.
-  - `test "an agreeing WorldCat record and an Open Library work are stored"`:
-    - Edition: "The Remains of the Day", by Kazuo Ishiguro, ISBN 9780679731726.
-    - Record: title "The remains of the day /", creator "Ishiguro, Kazuo".
-    - OL hit: work_key "OL15936W".
-    - Expect: `world_cat == "agrees"`, `ol_work_keys == ["OL15936W"]`, `world_cat_title` and `world_cat_creator` stored, `looked_up == 1`.
-  - `test "a record for another book disagrees"`: record "Cooking for one /" by "Smith, Jane" → `disagrees`.
-  - `test "no record"`: an empty array → `no_record`.
-  - `test "no ISBN or a bad checksum makes no call"`:
-    - Editions with nil ISBNs, and one with ISBN `9780679731727` (bad checksum).
-    - Stub `record_by_isbn` and `identifier` with `.never`.
-    - Expect `world_cat == "no_isbn"` and `ol_work_keys == []`.
-  - `test "ISBN-10 only is looked up as its ISBN-13"`: `isbn10: "0679731725"` → `record_by_isbn` with `"9780679731726"`.
-  - `test "an existing evidence row is reused"`: a fixture row → no calls, `looked_up == 0`.
-  - `test "a service error propagates and stores nothing for that edition"`: `record_by_isbn` raises `::Books::WorldCat::Exceptions::Error` → `assert_raises`, and no evidence row for the edition.
-- [ ] **Step 2: Run them to see them fail.** `bin/rails test test/lib/services/books/goodreads_rebuild/gather_evidence_test.rb`. Expected: FAIL, uninitialized constant.
-- [ ] **Step 3: Implement** both classes, with the agreement rule from Global Constraints. Look up WorldCat first, then Open Library, then create the row, so a failure stores nothing.
-- [ ] **Step 4: Run them to see them pass.** Expected: PASS.
-- [ ] **Step 5: Commit.** Message: "Goodreads rebuild: GatherEvidence checks each edition's ISBN against WorldCat and Open Library".
-
-### Task 3: `GroupEditions`
+### Task 2: `GroupEditions`
 
 **Files:** Create `web-app/app/lib/services/books/goodreads_rebuild/group_editions.rb`. Test `web-app/test/lib/services/books/goodreads_rebuild/group_editions_test.rb`.
 
 **Interfaces:**
-- Produces `GroupEditions.call(editions:, evidence:, row_counts:) -> Array<Hash>`.
+- Produces `GroupEditions.call(editions:, row_counts:, evidence: {}) -> Array<Hash>`. The group hashes are as pinned above, biggest first.
   - `editions` is an Array of `Books::GoodreadsEdition`.
-  - `evidence` is a `Hash{edition_id => RebuildEditionEvidence}`.
   - `row_counts` is a `Hash{edition_id => Integer}`.
-  - It returns the group hashes in Task 1's shape, biggest first.
+  - `evidence` is a `Hash{edition_id => object responding to ol_work_keys}`. It's empty in pass 1.
 - Also produces `GroupEditions.classify(groups) -> :coherent | :lump | :unsupported`.
 
-Build editions with `Books::GoodreadsEdition.new(...)` (unsaved, with ids set), and evidence with `Books::RebuildEditionEvidence.new(ol_work_keys: [...])`. No database is needed.
+Build unsaved `Books::GoodreadsEdition.new(id:, ...)`. Stand in for evidence with `Struct.new(:ol_work_keys)`.
 
-- [ ] **Step 1: Write the failing tests**, one per rule:
-  - `test "editions agreeing on author, year and volume are one group"`: an English and a German title of one work, same author and year → 1 group, `classify == :coherent`.
-  - `test "initials spelled differently are one author"`: "J.D. Salinger" and "J. D. Salinger" → 1 group.
-  - `test "different original years are a lump"`: *Hothouse* (Brian W. Aldiss, 1962) and a Hardy Boys title (Franklin W. Dixon, 1927) → 2 groups, `:lump`. The bigger row count comes first.
-  - `test "numbered volumes by one author in one year are a lump"`: *V for Vendetta* volume "1" and "2", Alan Moore, 1988 → 2 groups.
-  - `test "a shared Open Library work joins a transliterated author"`: "Leo Tolstoy" 1869 and "Lev Tolstoy" 1869, both with evidence `ol_work_keys ["OL267933W"]` → 1 group.
-  - `test "a shared Open Library work does not join different volumes"`: volumes "1" and "2" sharing a work key → 2 groups.
-  - `test "an edition with no year joins the matching group with the most rows"`: two groups for one author (1950 with 5 rows, 1960 with 2 rows), plus that author with a nil year → it joins 1950.
+- [ ] **Step 1: Write the failing tests.**
+  - `test "one work's editions are one group"`: an English and a German title, same author and year → 1 group, `:coherent`.
+  - `test "initials spelled differently are one author"`: "J.D. Salinger" and "J. D. Salinger".
+  - `test "different original years are a lump, biggest group first"`:
+    - *Hothouse*: Brian W. Aldiss, 1962, 3 rows.
+    - A Hardy Boys title: Franklin W. Dixon, 1927, 1 row.
+    - Expect 2 groups, `:lump`, with *Hothouse* first.
+  - `test "numbered volumes by one author in one year are a lump"`: *V for Vendetta* volumes "1" and "2", Alan Moore, 1988.
+  - `test "a shared Open Library work joins a transliterated author"`: "Leo Tolstoy" and "Lev Tolstoy", 1869, both with evidence `["OL267933W"]` → 1 group. Without evidence → 2 groups.
+  - `test "a shared Open Library work does not join different volumes"`
+  - `test "an edition with no year joins the matching group with the most rows"`
   - `test "an edition matching no group starts its own"`
-  - `test "no editions is unsupported"`: `classify([]) == :unsupported`.
-  - `test "group hash shape"`: the keys are exactly the eight in Task 1, `titles` holds at most 3, and `goodreads_book_ids` is sorted.
+  - `test "classify with no groups is unsupported"`
+  - `test "group hash shape"`: exactly the seven keys, `titles` at most 3, and `goodreads_book_ids` sorted.
 - [ ] **Step 2: Run them to see them fail.** Expected: FAIL.
-- [ ] **Step 3: Implement** the pinned rule. The OL merge uses union-find over group indexes. Nil placement comes after the merge.
+- [ ] **Step 3: Implement** the pinned rule, with union-find for the Open Library merge and nil placement after it.
 - [ ] **Step 4: Run them to see them pass.** Expected: PASS.
 - [ ] **Step 5: Commit.** Message: "Goodreads rebuild: GroupEditions splits a book's editions into works".
 
-### Task 4: `SurveyBook` and the merged-book map
+### Task 3: `CompareIdentity`
 
-**Files:** Create `web-app/app/lib/services/books/goodreads_rebuild/survey_book.rb` and `web-app/app/lib/services/books/goodreads_rebuild/legacy_book_map.rb`. Test both under `web-app/test/lib/services/books/goodreads_rebuild/`.
+**Files:** Create `web-app/app/lib/services/books/goodreads_rebuild/compare_identity.rb`. Test `web-app/test/lib/services/books/goodreads_rebuild/compare_identity_test.rb`.
 
 **Interfaces:**
-- Consumes `GatherEvidence` (Task 2), `GroupEditions` (Task 3) and the models (Task 1).
-- Produces `LegacyBookMap.build -> LegacyBookMap`, with `#legacy_ids_for(book_id) -> Array<Integer>`.
-  - Build it once per run.
-  - It finds the distinct `legacy_book_id`s on rows whose book no longer exists, resolves each with `MergedBook.call`, and inverts that.
-  - `legacy_ids_for(b)` is `[b] + every vanished id that resolves to b`.
-- Produces `SurveyBook.call(book:, map:, world_cat:, open_library:) -> Result`, with `data` = `{survey: Books::RebuildBookSurvey, looked_up: Integer}`. It upserts the book's survey row:
-  - editions are the distinct `goodreads_edition` of rows `where(legacy_book_id: map.legacy_ids_for(book.id))`;
-  - `row_count` is those rows;
-  - `world_cat_agreeing` is the number of editions with `agrees`.
+- Consumes Task 2's group hashes, with each group's editions available. Signature: `CompareIdentity.call(book:, groups:, editions_by_id:) -> Hash{title_agrees:, authors_agree:, wrong_book:}`.
+  - `editions_by_id` is a `Hash{edition_id => Books::GoodreadsEdition}`.
+  - With no groups, it returns `{title_agrees: nil, authors_agree: nil, wrong_book: false}`.
+
+- [ ] **Step 1: Write the failing tests.** Use a real `Books::Book` created with authors, as in existing tests with `Books::Author`. Check `test/fixtures/books/authors.yml`.
+  - `test "matching title and author agree"`: book "The Remains of the Day", by Kazuo Ishiguro; edition "The Remains of the Day", by Kazuo Ishiguro → `{true, true, false}`.
+  - `test "a stripped title disagrees but is not the wrong book"`: book "X Men" by Chris Claremont; edition "X-Men: The Age of Apocalypse, Vol. 2" by Chris Claremont → `title_agrees: false`, `authors_agree: true`, `wrong_book: false`.
+  - `test "a wrong author"`: book "The Eyes of Darkness" by Beverley Nichols; edition by Dean Koontz → `authors_agree: false`, `title_agrees: true`, `wrong_book: false`.
+  - `test "the wrong book"`: book "Hothouse" by Brian W. Aldiss; its only group is a Hardy Boys title by Franklin W. Dixon → `wrong_book: true`.
+  - `test "a lump whose minor group matches is not the wrong book"`: the main group is the Hardy Boys, and a second group is *Hothouse* by Aldiss → `title_agrees: false`, `authors_agree: false`, `wrong_book: false`.
+  - `test "a translation in the main group lets the title agree"`: book "Tenth of December"; group editions "Dez de Dezembro" and "Tenth of December" → `title_agrees: true`.
+  - `test "a book with no authors does not agree on authors"`
+  - `test "no groups"`: all nil, and `wrong_book` false.
+- [ ] **Step 2: Run them to see them fail.** Expected: FAIL.
+- [ ] **Step 3: Implement** the pinned identity rule.
+- [ ] **Step 4: Run them to see them pass.** Expected: PASS.
+- [ ] **Step 5: Commit.** Message: "Goodreads rebuild: CompareIdentity checks our title and authors against the export".
+
+### Task 4: `LegacyBookMap` and `SurveyBook`
+
+**Files:** Create `web-app/app/lib/services/books/goodreads_rebuild/legacy_book_map.rb` and `web-app/app/lib/services/books/goodreads_rebuild/survey_book.rb`. Tests under `web-app/test/lib/services/books/goodreads_rebuild/`.
+
+**Interfaces:**
+- Produces `LegacyBookMap.build -> LegacyBookMap`.
+  - It takes the distinct non-null `legacy_book_id`s on rows whose book doesn't exist, resolves each with `MergedBook.call`, and inverts that.
+  - `#legacy_ids_for(book_id) -> Array<Integer>`: `[book_id] + vanished ids resolving to it`, sorted.
+  - `#all_legacy_ids_for(book_ids) -> Array<Integer>`: the union, for batch loading.
+- Produces `SurveyBook.call(book:, rows:) -> Result`, with `data` = `{survey: Books::RebuildBookSurvey}`.
+  - `rows` is this book's preloaded `GoodreadsImportRow`s, with `goodreads_edition` loaded.
+  - It upserts one survey: editions are the distinct non-nil `row.goodreads_edition`, `row_counts` are per edition id, and `GroupEditions.call(..., evidence: {})`, `classify` and `CompareIdentity` fill it in.
+  - It sets `edition_count`, `row_count` (rows with an edition), and `surveyed_at = Time.current`.
 
 - [ ] **Step 1: Write the failing tests.**
-  - `test "the map follows a merged-away legacy book"`: a row with `legacy_book_id` 999_999, which doesn't exist; stub `MergedBook.call(999_999)` to return the fixture book → `legacy_ids_for(book.id) == [book.id, 999_999]`.
-  - `test "a coherent book"`: two rows on two editions of one work. Stub `GatherEvidence` (or the clients) → survey `coherent`, `edition_count` 2, `row_count` 2, one group.
-  - `test "a lump"`: editions with different years → `lump`, 2 groups.
-  - `test "a book no row names is unsupported"`: no service calls, `row_count` 0.
-  - `test "rows on a merged-away legacy id count for the survivor"`
-  - `test "re-surveying replaces the row"`: call twice, one row, `surveyed_at` updated.
-- [ ] **Step 2: Run them to see them fail.** Expected: FAIL.
-- [ ] **Step 3: Implement both.** Upsert with `find_or_initialize_by(book:)` and then `update!`.
-- [ ] **Step 4: Run them to see them pass.** Expected: PASS.
-- [ ] **Step 5: Commit.** Message: "Goodreads rebuild: SurveyBook records a derived book's editions, evidence and groups".
+  - `test "the map follows a merged-away legacy book"`: a row with `legacy_book_id` 999_999, which doesn't exist; `MergedBook.stubs(:call).with(999_999).returns(book)` → `legacy_ids_for(book.id) == [book.id, 999_999].sort`.
+  - `test "a vanished id that resolves to nothing is dropped"`
+  - `test "a coherent book"`: two rows on two editions of one work → `coherent`, `edition_count` 2, `row_count` 2, 1 group, `title_agrees` true.
+  - `test "a lump"` → `lump`, 2 groups.
+  - `test "no rows is unsupported"` → `row_count` 0, and the identity fields are nil.
+  - `test "re-surveying updates the row in place"`: call twice → one row, with the newer `surveyed_at`.
 
-### Task 5: The `Survey` run, its job and rake tasks
+  Create rows with `Books::GoodreadsImportRow.create!` on an import fixture, and editions with `Books::GoodreadsEdition.create!`. Check the fixtures and the required columns (`signature`, `primary_author`, `title`, `goodreads_book_id`, `row_number`, `raw`).
+- [ ] **Step 2: Run them to see them fail.** Expected: FAIL.
+- [ ] **Step 3: Implement both.**
+- [ ] **Step 4: Run them to see them pass.** Expected: PASS.
+- [ ] **Step 5: Commit.** Message: "Goodreads rebuild: SurveyBook records a derived book's groups and identity check".
+
+### Task 5: `Survey` run, report, job and rake tasks
 
 **Files:**
-- Create: `web-app/app/lib/services/books/goodreads_rebuild/survey.rb`, `web-app/app/lib/services/books/goodreads_rebuild/survey_report.rb`, the job via `bin/rails generate sidekiq:job books/goodreads_rebuild/survey`.
+- Create: `web-app/app/lib/services/books/goodreads_rebuild/survey.rb`, `web-app/app/lib/services/books/goodreads_rebuild/survey_report.rb`, and the job via `bin/rails generate sidekiq:job books/goodreads_rebuild/survey`.
 - Modify: `web-app/lib/tasks/books/goodreads_rebuild.rake`.
-- Tests: `survey_test.rb`, `survey_report_test.rb`, `test/sidekiq/books/goodreads_rebuild/survey_job_test.rb`, `test/lib/tasks/books_goodreads_rebuild_rake_test.rb`.
+- Tests: `survey_test.rb`, `survey_report_test.rb`, `web-app/test/sidekiq/books/goodreads_rebuild/survey_job_test.rb`, `web-app/test/lib/tasks/books_goodreads_rebuild_rake_test.rb`.
 
 **Interfaces:**
-- Produces `Survey.call(limit:, world_cat: nil, open_library: nil) -> Result`, with `data` = `{processed:, looked_up:, stopped: Boolean, error: String|nil}`.
-  - It takes `Cohort.derived` books with no survey row, ordered by id, `limit` of them (nil means all), in batches of 100.
-  - It builds the `LegacyBookMap` once.
-  - It's under the advisory lock. When the lock is busy it returns `stopped: true` and `error: "another survey run is in progress"`.
-  - On a service error it returns `stopped: true` with the error message.
-- Produces `Books::GoodreadsRebuild::SurveyJob#perform(limit)`, which calls `Survey` and logs `"Goodreads rebuild survey: <processed> books -- stopped: <error>"`.
-- Produces `SurveyReport.call -> String`, a plain-text report:
-  - surveyed books and derived books left;
+- Produces `Survey.call(limit:, redo: false) -> Result`, with `data` = `{processed: Integer, stopped: Boolean, error: String|nil}`.
+  - It takes `Cohort.derived` ordered by id. Without `redo`, it leaves out books with a survey row. `limit` nil means all.
+  - It builds the `LegacyBookMap` once, then works in batches of 500 books. Per batch, it runs one `GoodreadsImportRow.where(legacy_book_id: map.all_legacy_ids_for(batch_ids)).includes(:goodreads_edition)` and groups those rows back per book through `legacy_ids_for`.
+  - It works under the advisory lock. When busy, it returns `stopped: true` and `error: "another survey run is in progress"`.
+  - It logs progress every batch (`Rails.logger.info`).
+- Produces `Books::GoodreadsRebuild::SurveyJob#perform(limit, redo = false)`. It calls `Survey` and logs `"Goodreads rebuild survey: <processed> books -- stopped: <error>"` when stopped.
+- Produces `SurveyReport.call -> String`, plain text with:
+  - surveyed books, and derived books not yet surveyed;
   - counts by classification;
-  - evidence counts by `world_cat`;
-  - the share of editions with an Open Library work;
-  - the lookup rate: evidence rows in the last hour, and over the whole run (`count / (max(checked_at) - min(checked_at))`);
-  - 10 random lumps, with each group's titles, author, year, volume and row count;
-  - 10 random coherent books.
+  - counts of `title_agrees` false, `authors_agree` false and `wrong_book` true, among `coherent` and `lump` books;
+  - 10 random samples of each of: wrong book, wrong author (`authors_agree` false, not `wrong_book`) and stripped or different title (`title_agrees` false, not `wrong_book`). Each sample line reads: `#<id> "<our title>" by <our authors> | export: "<main group titles>" by <main group authors> (<rows> rows)`.
+  - 10 random lumps, showing each group's titles, authors, year, volume and rows.
 - Rake tasks:
-  - `books:goodreads_rebuild:survey[limit]` takes a number or `all` (anything else aborts with usage), queues the job and prints `queued survey of <limit> books`.
+  - `books:goodreads_rebuild:survey[limit,redo]`: `limit` is a number or `all` (anything else aborts with usage), and the optional second argument is `redo`. It queues `SurveyJob.perform_async(limit_or_nil, redo)` and prints `queued survey of <limit> derived books`, adding ` (redo)` when redoing.
   - `books:goodreads_rebuild:survey_report` prints the report.
 
 - [ ] **Step 1: Write the failing tests.**
   - `survey_test.rb`:
-    - `test "surveys derived books without a survey, up to the limit"`: stub `Cohort.derived` to a relation of 3 fixture books, with `limit: 2` → 2 surveys.
-    - `test "skips books already surveyed"`
-    - `test "stops on a WorldCat error and keeps going next run"`: the first book's lookup raises → `stopped: true`, 0 surveys. Then a run with the stub fixed surveys it.
-    - `test "a second run while one holds the lock stops at once"`: take the lock in the test with `pg_try_advisory_lock(7_262_024_100_802)` → `error == "another survey run is in progress"`. Release it in `ensure`.
-  - `survey_report_test.rb`: `test "report lists counts and a lump sample"`, with fixture surveys → includes `lump 1` and the lump's group titles.
-  - Job test: `test "perform runs the survey with the limit"`. `Survey.expects(:call).with(limit: 50)` returns a Result.
-  - Rake tests: `test "survey queues the job"` (`SurveyJob.expects(:perform_async).with(200)` for `survey[200]`, and `.with(nil)` for `survey[all]`); `test "survey rejects a bad limit"` (`assert_raises(SystemExit)`); `test "survey_report prints the report"`.
+    - `test "surveys derived books without a survey, up to the limit"`: stub `Cohort.derived` to `Books::Book.where(id: [a, b, c])`, with `limit: 2` → 2 survey rows.
+    - `test "skips books already surveyed unless redo"`
+    - `test "a book's rows on a merged-away id are found across batches"`: stub `Survey::BATCH` to 1 (`stub_const` style, or make `BATCH` an overridable keyword `batch_size:`).
+    - `test "a second run while one holds the lock stops at once"`
+  - `survey_report_test.rb`: `test "report counts and samples"`, using fixtures with one `wrong_book` → it includes `wrong book: 1` and the sample line.
+  - Job test: `test "perform runs the survey"`: `Survey.expects(:call).with(limit: 50, redo: false)`.
+  - Rake tests:
+    - `survey[200]` → `perform_async(200, false)`;
+    - `survey[all]` → `perform_async(nil, false)`;
+    - `survey[all,redo]` → `perform_async(nil, true)`;
+    - `survey[bogus]` aborts;
+    - `survey_report` prints.
 - [ ] **Step 2: Run them to see them fail.** Expected: FAIL.
-- [ ] **Step 3: Implement.** The lock pattern copies `Verification::Run#call`, with `pg_try_advisory_lock` and `pg_advisory_unlock` in `ensure`, on one checked-out connection.
+- [ ] **Step 3: Implement.** The lock pattern copies `Verification::Run#call`. Give `Survey.call` a `batch_size: BATCH` keyword (BATCH = 500) for the batch test.
 - [ ] **Step 4: Run them to see them pass.** Expected: PASS.
 - [ ] **Step 5: Commit.** Message: "Goodreads rebuild: survey run, job, and survey/survey_report rake tasks".
 
-### Task 6: Docs, launch steps, and a dev smoke run
+### Task 6: Docs, launch steps and the full dev run
 
-**Files:** Modify `docs/features/goodreads-rebuild.md` (a "Stage one survey" section) and `docs/launch-todo.md` §11 (replace the step 3 placeholder).
+**Files:** Modify `docs/features/goodreads-rebuild.md` (a "Stage one survey, pass 1" section) and `docs/launch-todo.md` §11 (replace the step 3 placeholder).
 
 - [ ] **Step 1: Docs.**
-  - The feature doc covers the tables, the grouping rule, the lookup and stop rules, the commands, and that the fixes are increment 2b.
-  - The launch-todo step, in plain words:
-    1. `bin/rails "books:goodreads_rebuild:survey[200]"`, then `bin/rails books:goodreads_rebuild:survey_report`: read the lump sample and the lookup rate.
-    2. Then `bin/rails "books:goodreads_rebuild:survey[all]"`.
-    3. If it stops, run it again, and it resumes.
-    4. Don't run it while a verification run is going: they share the WorldCat and Open Library services.
+  - The feature doc covers the table, the grouping and identity rules, the commands, what pass 2 adds, and that 2b acts on it.
+  - The launch-todo step, in plain words: `bin/rails "books:goodreads_rebuild:survey[all]"`, wait for the job, then `bin/rails books:goodreads_rebuild:survey_report`, and check the samples by eye. It's local and safe to run alongside a verification run.
 - [ ] **Step 2: Verify.** `bin/rails test` and `bundle exec standardrb`. Expected: 0 failures, 0 offenses, no new warnings.
-- [ ] **Step 3: Dev smoke run, only if no production verification run is going** (ask Shane). From `web-app/`, run `bin/rails runner 'pp Services::Books::GoodreadsRebuild::Survey.call(limit: 50).data'`, then `bin/rails books:goodreads_rebuild:survey_report`. Record the lookup rate and classification counts in the PR body. This writes only the two rebuild tables.
-- [ ] **Step 4: Commit.** Message: "Docs: Goodreads rebuild stage one survey".
+- [ ] **Step 3: Full dev run.** It's local, and writes only the survey table. From `web-app/`:
+  1. `bin/rails runner 't=Time.now; pp Services::Books::GoodreadsRebuild::Survey.call(limit: nil).data; puts Time.now-t'`
+  2. `bin/rails books:goodreads_rebuild:survey_report > <workspace>/survey_report.txt`
+
+  Record the runtime and the counts in the PR body, and read the samples for rule mistakes. A mistake found here is fixed with a failing test first.
+- [ ] **Step 4: Commit.** Message: "Docs: Goodreads rebuild stage one survey, pass 1".
