@@ -50,8 +50,11 @@ module Services
           editions.any? { |edition| ours.intersect?(stems(edition.title)) }
         end
 
+        # Letters-only forms too: legacy's titleize split run-together words
+        # ("JoJo's" to "Jo Jo's", "iPhone" to "I Phone").
         def stems(title)
-          [title, title.to_s.split(/[:(]/).first].filter_map { |text| check.title_key(text) }.uniq
+          texts = [title, title.to_s.split(/[:(]/).first]
+          (texts.filter_map { |text| check.title_key(text) } + texts.filter_map { |text| check.compact(text) }).uniq
         end
 
         def authors?(book, editions)

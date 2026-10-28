@@ -28,6 +28,13 @@ module Services
           assert_equal @books.first(2).map(&:id), ::Books::RebuildBookSurvey.order(:book_id).pluck(:book_id) & @books.map(&:id)
         end
 
+        test "a limit larger than one batch still stops at the limit" do
+          result = Survey.call(limit: 2, batch_size: 1)
+
+          assert_equal 2, result.data[:processed]
+          assert_equal 2, ::Books::RebuildBookSurvey.where(book: @books).count
+        end
+
         test "skips books already surveyed unless resurvey" do
           Survey.call(limit: nil)
           surveyed_at = ::Books::RebuildBookSurvey.where(book: @books).maximum(:surveyed_at)

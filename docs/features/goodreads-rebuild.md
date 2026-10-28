@@ -83,9 +83,12 @@ For each book it records a `Books::RebuildBookSurvey` row (`books_rebuild_book_s
    - an original publication year;
    - a series volume.
 
-   Translations agree on author and year whatever their titles. An edition with no author or year
-   joins the biggest group it doesn't contradict. One group makes the book `coherent`, two or more
-   a `lump`, and no editions `unsupported`.
+   Translations agree on author and year whatever their titles. An edition with no author, year or
+   volume (most books have no volume) joins the biggest group it doesn't contradict, so "Hunter x
+   Hunter, Vol. 13" and its unnumbered printing are one work. One group makes the book `coherent`,
+   two or more a `lump`, and no editions `unsupported`. The lump count is an upper bound: an author
+   written two ways ("Mark R. Leary" and "Mark Leary") or a translation dated by its own year still
+   splits. Pass 2 and increment 2b's checks settle those.
 3. **Compare our identity** with the main group, the one with the most rows (`CompareIdentity`):
    - `title_agrees`: our full title, with subtitle, equals one of the group's export titles,
      normalized. It is exact on purpose. Legacy stored "X Men" for "X-Men: The Age of Apocalypse,

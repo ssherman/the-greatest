@@ -80,6 +80,15 @@ module Services
           assert_equal({title_agrees: false, authors_agree: false, wrong_book: false}, result)
         end
 
+        # Legacy's titleize split run-together words ("JoJo's" to "Jo Jo's"):
+        # the right book with a mangled title and a wrong author, not another book.
+        test "a title legacy split apart is still the same book" do
+          result = compare(book("Jo Jo's Bizarre Adventure", "Nobuyoshi Araki"),
+            [edition(1, "JoJo's Bizarre Adventure: Part 4—Diamond Is Unbreakable, Vol. 7", "Hirohiko Araki")])
+
+          assert_equal({title_agrees: false, authors_agree: false, wrong_book: false}, result)
+        end
+
         test "a book with no authors does not agree on authors" do
           result = compare(book("Hothouse"), [edition(1, "Hothouse", "Brian W. Aldiss")])
 

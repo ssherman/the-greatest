@@ -48,6 +48,22 @@ module Services
           assert_equal 2, groups.size
         end
 
+        test "an edition with no volume joins the same author and year's numbered group" do
+          groups = group([edition(1, title: "Hunter x Hunter, Vol. 13", author: "Yoshihiro Togashi", year: 2001, volume: "13"),
+            edition(2, title: "Hunter x Hunter, Vol. 13: September 10th", author: "Yoshihiro Togashi", year: 2001)])
+
+          assert_equal 1, groups.size
+        end
+
+        test "an edition with no volume between two numbered volumes joins the bigger" do
+          groups = group([edition(1, title: "V for Vendetta 1", author: "Alan Moore", year: 1988, volume: "1"),
+            edition(2, title: "V for Vendetta 2", author: "Alan Moore", year: 1988, volume: "2"),
+            edition(3, title: "V for Vendetta", author: "Alan Moore", year: 1988)], rows: {1 => 1, 2 => 4, 3 => 1})
+
+          assert_equal 2, groups.size
+          assert_equal [2, 3], groups.first["edition_ids"]
+        end
+
         test "a shared Open Library work joins a transliterated author" do
           editions = [edition(1, title: "War and Peace", author: "Leo Tolstoy", year: 1869),
             edition(2, title: "Voina i mir", author: "Lev Tolstoy", year: 1869)]

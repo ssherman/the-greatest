@@ -63,7 +63,9 @@ module Services
           books = Cohort.derived
           books = books.where.not(id: ::Books::RebuildBookSurvey.select(:book_id)) unless @resurvey
           books = books.order(:id)
-          @limit ? ::Books::Book.where(id: books.limit(@limit).select(:id)) : books
+          # Ids fixed up front: in_batches would re-run a LIMIT subquery per
+          # batch, after the last batch's surveys, and take the next N each time.
+          @limit ? ::Books::Book.where(id: books.limit(@limit).pluck(:id)) : books
         end
       end
     end
