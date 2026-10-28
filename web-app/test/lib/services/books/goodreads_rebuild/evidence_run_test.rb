@@ -62,10 +62,27 @@ module Services
           assert_equal [EvidenceRun::PAUSES.first], pauses
         end
 
-        test "a service error that persists stops the run" do
+        # Final review: both services' circuit breakers open for 60 s after 5
+        # failures, so a shorter pause only meets CircuitOpenError.
+        test "every pause outlasts the services' circuit breaker cooldown" do
+          assert_operator EvidenceRun::PAUSES.min, :>, EvidenceRun::BREAKER_COOLDOWN
+        end
+
+        test "a non-service error stops the run cleanly instead of killing one worker" do
+          GatherEvidence.stubs(:call).raises(ActiveRecord::ConnectionTimeoutError, "pool")
+
+          result = EvidenceRun.call(threads: 2, sleeper: ->(_) {})
+
+          assert result.data[:stopped]
+          assert_match(/ConnectionTimeoutError: pool/, result.data[:error])
+        end
+
+        test "a service error that persists stops the run after every pause" do
+          pauses = []
           GatherEvidence.stubs(:call).raises(::Books::OpenLibrary::Exceptions::Error, "down")
 
-          result = EvidenceRun.call(threads: 1, sleeper: ->(_) {})
+          result = EvidenceRun.call(threads: 1, sleeper: ->(seconds) { pauses << seconds })
+          assert_equal EvidenceRun::PAUSES, pauses
 
           assert result.data[:stopped]
           assert_match(/down/, result.data[:error])

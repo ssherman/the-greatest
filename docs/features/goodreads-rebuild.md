@@ -138,7 +138,7 @@ URLs are `localhost` or `127.0.0.1`. On this PC, WorldCat's single-ISBN route is
 1.6 editions a second, and the full run takes about 22 hours. At 16 threads WorldCat exceeds its own
 25 s deadline and answers 504.
 
-A failed lookup is retried after 10, 30 and 90 seconds before the run stops. Evidence already written
+A failed lookup is retried after 65, 120 and 240 seconds before the run stops (each pause outlasts the clients' 60-second circuit breaker). Any other error stops the whole run cleanly. Evidence already written
 stays, and a re-run picks up the rest.
 
 ### The local recipe (Shane's PC)

@@ -17,8 +17,11 @@ module Services
         PROGRESS_EVERY = 1_000
         # Seconds to wait before each retry of an edition whose lookup failed.
         # A saturated local WorldCat answers 504 past its own deadline; it
-        # recovers once the queue drains.
-        PAUSES = [10, 30, 90].freeze
+        # recovers once the queue drains. Each pause outlasts the clients'
+        # circuit breakers (open for 60 s after 5 failures, shared by every
+        # thread), or the retry would only meet CircuitOpenError.
+        BREAKER_COOLDOWN = 60
+        PAUSES = [65, 120, 240].freeze
         SERVICE_ERRORS = [::Books::OpenLibrary::Exceptions::Error, ::Books::WorldCat::Exceptions::Error].freeze
 
         def self.call(threads: 4, limit: nil, force: false, sleeper: ->(seconds) { sleep(seconds) })
@@ -64,7 +67,10 @@ module Services
               count
             end
           end
-        rescue *SERVICE_ERRORS => e
+        # Any error stops the whole run, not only a service's: a worker that
+        # died alone would leave the rest running for hours at reduced speed
+        # and the summary unprinted.
+        rescue => e
           @mutex.synchronize { @error ||= "#{e.class}: #{e.message}" }
           queue.clear
         end
