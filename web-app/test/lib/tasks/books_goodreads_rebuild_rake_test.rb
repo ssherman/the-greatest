@@ -37,6 +37,32 @@ class BooksGoodreadsRebuildRakeTest < ActiveSupport::TestCase
     end
   end
 
+  test "survey queues the job" do
+    Books::GoodreadsRebuild::SurveyJob.expects(:perform_async).with(200, false)
+    assert_output(/queued survey of 200 derived books\n/) { Rake::Task["books:goodreads_rebuild:survey"].invoke("200") }
+  end
+
+  test "survey all and redo" do
+    Books::GoodreadsRebuild::SurveyJob.expects(:perform_async).with(nil, false)
+    assert_output(/queued survey of all derived books/) { Rake::Task["books:goodreads_rebuild:survey"].invoke("all") }
+
+    Rake::Task["books:goodreads_rebuild:survey"].reenable
+    Books::GoodreadsRebuild::SurveyJob.expects(:perform_async).with(nil, true)
+    assert_output(/queued survey of all derived books \(redo\)/) { Rake::Task["books:goodreads_rebuild:survey"].invoke("all", "redo") }
+  end
+
+  test "survey rejects a bad limit" do
+    Books::GoodreadsRebuild::SurveyJob.expects(:perform_async).never
+    assert_raises(SystemExit) do
+      capture_io { Rake::Task["books:goodreads_rebuild:survey"].invoke("bogus") }
+    end
+  end
+
+  test "survey_report prints the report" do
+    REBUILD::SurveyReport.expects(:call).returns("surveyed: 5")
+    assert_output(/surveyed: 5/) { Rake::Task["books:goodreads_rebuild:survey_report"].invoke }
+  end
+
   test "retire_replay_proposals[apply] retires them" do
     REBUILD::RetireReplayProposals.expects(:call).with(apply: true).returns(retire_result(applied: true))
 

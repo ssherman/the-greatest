@@ -10,6 +10,26 @@ namespace :books do
       puts "post-import books: #{tally.call(Services::Books::GoodreadsRebuild::Cohort.counts)}"
     end
 
+    desc "Queue the stage one survey (local only) over <count> derived books or all; add redo to re-survey surveyed books"
+    task :survey, [:limit, :redo] => :environment do |_task, args|
+      usage = "usage: books:goodreads_rebuild:survey[<count>|all(,redo)]"
+      limit = case args[:limit]
+      when "all" then nil
+      when /\A[1-9]\d*\z/ then args[:limit].to_i
+      else abort usage
+      end
+      abort usage unless [nil, "redo"].include?(args[:redo])
+
+      resurvey = args[:redo] == "redo"
+      Books::GoodreadsRebuild::SurveyJob.perform_async(limit, resurvey)
+      puts "queued survey of #{limit || "all"} derived books#{" (redo)" if resurvey}"
+    end
+
+    desc "Read-only: the stage one survey's counts and samples"
+    task survey_report: :environment do
+      puts Services::Books::GoodreadsRebuild::SurveyReport.call
+    end
+
     desc "Retire the replay's proposed relinks and identifier strips (rejected and superseded). " \
       "A dry run unless [apply]; a second apply finds 0."
     task :retire_replay_proposals, [:apply] => :environment do |_task, args|
