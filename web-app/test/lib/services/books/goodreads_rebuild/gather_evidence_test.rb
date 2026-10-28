@@ -81,6 +81,20 @@ module Services
           assert_equal 0, ::Books::RebuildEditionEvidence.where(goodreads_book_id: 28921).count
         end
 
+        test "another thread writing the same edition first is retried as an update" do
+          @world_cat.stubs(:record_by_isbn).returns([])
+          @open_library.stubs(:identifier).returns([])
+          existing = ::Books::RebuildEditionEvidence.create!(goodreads_book_id: 28921, signature: "sig-28921", world_cat: :no_isbn,
+            checked_at: 1.day.ago)
+          stale = ::Books::RebuildEditionEvidence.new(goodreads_book_id: 28921, signature: "sig-28921")
+          ::Books::RebuildEditionEvidence.stubs(:find_or_initialize_by).returns(stale).then.returns(existing)
+
+          evidence = gather
+
+          assert_equal existing.id, evidence.id
+          assert_predicate existing.reload, :no_record?
+        end
+
         test "a second call updates the row" do
           @world_cat.stubs(:record_by_isbn).returns([]).then.returns([record("The remains of the day /", "Ishiguro, Kazuo")])
           @open_library.stubs(:identifier).returns([])

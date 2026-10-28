@@ -25,6 +25,14 @@ namespace :books do
       puts "queued survey of #{limit || "all"} derived books#{" (redo)" if resurvey}"
     end
 
+    desc "Survey pass 2: look up derived editions' ISBNs in WorldCat and Open Library with [threads] threads (default 4). " \
+      "LOCAL services only: run on Shane's PC with OPEN_LIBRARY_SERVICE_URL and WORLDCAT_SERVICE_URL set to localhost. " \
+      "Re-run to continue after a stop."
+    task :gather_evidence, [:threads] => :environment do |_task, args|
+      data = Services::Books::GoodreadsRebuild::EvidenceRun.call(threads: (args[:threads] || 4).to_i).data
+      puts "looked up #{data[:looked_up]} editions#{" -- stopped: #{data[:error]}" if data[:stopped]}"
+    end
+
     desc "Read-only: the stage one survey's counts and samples"
     task survey_report: :environment do
       puts Services::Books::GoodreadsRebuild::SurveyReport.call
