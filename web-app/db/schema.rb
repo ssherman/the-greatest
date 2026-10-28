@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_27_132859) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_28_005414) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -352,6 +352,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_132859) do
     t.bigint "legacy_book_id"
     t.index ["goodreads_edition_id"], name: "index_books_goodreads_import_rows_on_goodreads_edition_id"
     t.index ["import_id", "row_number"], name: "index_books_goodreads_import_rows_on_import_id_and_row_number", unique: true
+    t.index ["legacy_book_id"], name: "index_books_goodreads_import_rows_on_legacy_book_id"
     t.index ["replay_finding"], name: "index_books_goodreads_import_rows_on_replay_finding"
   end
 
@@ -434,6 +435,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_132859) do
     t.index ["user_id"], name: "index_books_reading_goals_on_user_id"
     t.check_constraint "ends_on >= starts_on", name: "books_reading_goals_dates_ordered"
     t.check_constraint "target_count > 0", name: "books_reading_goals_target_count_positive"
+  end
+
+  create_table "books_rebuild_book_surveys", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.integer "classification", null: false
+    t.integer "edition_count", default: 0, null: false
+    t.integer "row_count", default: 0, null: false
+    t.jsonb "groups", default: [], null: false
+    t.boolean "title_agrees"
+    t.boolean "authors_agree"
+    t.boolean "wrong_book", default: false, null: false
+    t.datetime "surveyed_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["book_id"], name: "index_books_rebuild_book_surveys_on_book_id", unique: true
+    t.index ["classification"], name: "index_books_rebuild_book_surveys_on_classification"
+    t.index ["wrong_book"], name: "index_books_rebuild_book_surveys_on_wrong_book"
   end
 
   create_table "books_repair_verdicts", force: :cascade do |t|
@@ -1665,6 +1683,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_132859) do
   add_foreign_key "books_goodreads_imports", "users"
   add_foreign_key "books_goodreads_imports", "users", column: "reviewed_by_id"
   add_foreign_key "books_reading_goals", "users"
+  add_foreign_key "books_rebuild_book_surveys", "books_books", column: "book_id", on_delete: :cascade
   add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
   add_foreign_key "books_series_books", "books_books", column: "book_id"
   add_foreign_key "books_series_books", "books_series", column: "series_id"
