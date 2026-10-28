@@ -18,7 +18,7 @@
 ## Global Constraints
 
 - **Read-only for the catalog.** Write only `books_rebuild_edition_evidences`, plus the existing `books_rebuild_book_surveys` on a re-survey.
-- **The services:** only `Books::WorldCat::Client#record_by_isbn(isbn13)` and `Books::OpenLibrary::Client#identifier("isbn_13", isbn13)`. Never `/resolve`, and never the batch routes.
+- **The services:** only `Books::WorldCat::Client#record_by_isbn(isbn13)` and `Books::OpenLibrary::Client#identifier("isbn13", isbn13)`. Never `/resolve`, and never the batch routes.
 - **The local services must serve the home server's versions:** Open Library `2026-09-30`, WorldCat `2025-09-04`. The Rails clients are pointed at them by env only, `OPEN_LIBRARY_SERVICE_URL` and `WORLDCAT_SERVICE_URL`, for the run's process. No code default changes.
 - **Never run the evidence run against the home-server services:**
   - `EvidenceRun` refuses to start unless both base URLs are `http://localhost` or `http://127.0.0.1`, or `force: true` is passed;

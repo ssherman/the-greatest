@@ -21,13 +21,13 @@ module Services
         end
 
         def hit(key) = ::Books::OpenLibrary::IdentifierHit.new(work_key: key, source: nil, redirected_from: [], edition_keys: [],
-          id_type: "isbn_13", value: "9780679731726")
+          id_type: "isbn13", value: "9780679731726")
 
         def gather(edition = self.edition) = GatherEvidence.call(edition: edition, world_cat: @world_cat, open_library: @open_library)
 
         test "an agreeing record and an Open Library work" do
           @world_cat.expects(:record_by_isbn).with("9780679731726").returns([record("The remains of the day /", "Ishiguro, Kazuo")])
-          @open_library.expects(:identifier).with("isbn_13", "9780679731726").returns([hit("OL15936W")])
+          @open_library.expects(:identifier).with("isbn13", "9780679731726").returns([hit("OL15936W")])
 
           evidence = gather
 
@@ -36,6 +36,15 @@ module Services
           assert_equal ["The remains of the day /", "Ishiguro, Kazuo", 1990],
             [evidence.world_cat_title, evidence.world_cat_creator, evidence.world_cat_year]
           assert_equal [28921, "sig-28921", "9780679731726"], [evidence.goodreads_book_id, evidence.signature, evidence.isbn13]
+        end
+
+        # The stubs above would accept any type; the real client raises on one
+        # it doesn't know, which the first dev run hit ("isbn_13").
+        test "the identifier type is one the Open Library client accepts" do
+          @world_cat.stubs(:record_by_isbn).returns([])
+          @open_library.expects(:identifier).with { |type, _| ::Books::OpenLibrary::Client::IDENTIFIER_TYPES.include?(type) }.returns([])
+
+          gather
         end
 
         test "a record for another book disagrees" do
@@ -69,7 +78,7 @@ module Services
 
         test "ISBN-10 only is looked up as ISBN-13" do
           @world_cat.expects(:record_by_isbn).with("9780679731726").returns([])
-          @open_library.expects(:identifier).with("isbn_13", "9780679731726").returns([])
+          @open_library.expects(:identifier).with("isbn13", "9780679731726").returns([])
 
           gather(edition(isbn13: nil, isbn10: "0679731725"))
         end

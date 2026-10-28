@@ -15,7 +15,7 @@ module Services
         def call(edition:, world_cat:, open_library:)
           isbn13 = isbn13_for(edition)
           records = isbn13 ? world_cat.record_by_isbn(isbn13) : []
-          hits = isbn13 ? open_library.identifier("isbn_13", isbn13) : []
+          hits = isbn13 ? open_library.identifier("isbn13", isbn13) : []
           verdicts = records.map { |record| [record, verdict(edition, record)] }
           shown = verdicts.find { |_, said| said == :agrees }&.first || records.first
 
