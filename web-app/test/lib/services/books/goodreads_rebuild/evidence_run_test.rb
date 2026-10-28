@@ -49,10 +49,23 @@ module Services
           assert_equal 1, EvidenceRun.call(threads: 1, limit: 1).data[:looked_up]
         end
 
-        test "a service error stops the run" do
+        # The first full-speed dev run got 504s from a saturated local WorldCat.
+        test "a busy service is retried after a pause" do
+          pauses = []
+          GatherEvidence.stubs(:call).raises(::Books::WorldCat::Exceptions::ServerError.new("Server error: 504", 504))
+            .then.returns(nil)
+
+          result = EvidenceRun.call(threads: 1, sleeper: ->(seconds) { pauses << seconds })
+
+          refute result.data[:stopped]
+          assert_equal 2, result.data[:looked_up]
+          assert_equal [EvidenceRun::PAUSES.first], pauses
+        end
+
+        test "a service error that persists stops the run" do
           GatherEvidence.stubs(:call).raises(::Books::OpenLibrary::Exceptions::Error, "down")
 
-          result = EvidenceRun.call(threads: 1)
+          result = EvidenceRun.call(threads: 1, sleeper: ->(_) {})
 
           assert result.data[:stopped]
           assert_match(/down/, result.data[:error])

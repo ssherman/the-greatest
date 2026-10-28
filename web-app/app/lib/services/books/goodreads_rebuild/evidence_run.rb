@@ -15,15 +15,21 @@ module Services
         NOT_LOCAL = "point OPEN_LIBRARY_SERVICE_URL and WORLDCAT_SERVICE_URL at local instances"
         LOCAL_HOSTS = %w[localhost 127.0.0.1].freeze
         PROGRESS_EVERY = 1_000
+        # Seconds to wait before each retry of an edition whose lookup failed.
+        # A saturated local WorldCat answers 504 past its own deadline; it
+        # recovers once the queue drains.
+        PAUSES = [10, 30, 90].freeze
+        SERVICE_ERRORS = [::Books::OpenLibrary::Exceptions::Error, ::Books::WorldCat::Exceptions::Error].freeze
 
-        def self.call(threads: 4, limit: nil, force: false)
-          new(threads: threads, limit: limit, force: force).call
+        def self.call(threads: 4, limit: nil, force: false, sleeper: ->(seconds) { sleep(seconds) })
+          new(threads: threads, limit: limit, force: force, sleeper: sleeper).call
         end
 
-        def initialize(threads:, limit:, force:)
+        def initialize(threads:, limit:, force:, sleeper:)
           @threads = threads
           @limit = limit
           @force = force
+          @sleeper = sleeper
           @looked_up = 0
           @mutex = Mutex.new
         end
@@ -54,13 +60,26 @@ module Services
               edition = ::Books::GoodreadsEdition.find_by(id: id)
               next unless edition
 
-              GatherEvidence.call(edition: edition, world_cat: world_cat, open_library: open_library)
+              gather(edition, world_cat, open_library)
               count
             end
           end
-        rescue ::Books::OpenLibrary::Exceptions::Error, ::Books::WorldCat::Exceptions::Error => e
+        rescue *SERVICE_ERRORS => e
           @mutex.synchronize { @error ||= "#{e.class}: #{e.message}" }
           queue.clear
+        end
+
+        def gather(edition, world_cat, open_library)
+          attempt = 0
+          begin
+            GatherEvidence.call(edition: edition, world_cat: world_cat, open_library: open_library)
+          rescue *SERVICE_ERRORS
+            raise if attempt >= PAUSES.size || @error
+
+            @sleeper.call(PAUSES[attempt])
+            attempt += 1
+            retry
+          end
         end
 
         def next_id(queue)
