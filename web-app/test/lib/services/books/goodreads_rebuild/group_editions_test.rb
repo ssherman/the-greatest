@@ -92,6 +92,16 @@ module Services
           assert_equal 6, groups.first["row_count"]
         end
 
+        # Codex on #425: an undated edition with the most rows was placed first
+        # and let two years that contradict each other join it.
+        test "an undated edition does not join editions that contradict each other" do
+          groups = group([edition(1, title: "A", author: "Jane Doe", year: nil), edition(2, title: "B", author: "Jane Doe", year: 1950),
+            edition(3, title: "C", author: "Jane Doe", year: 1960)], rows: {1 => 5, 2 => 2, 3 => 1})
+
+          assert_equal :lump, GroupEditions.classify(groups)
+          assert_equal [[1, 2], [3]], groups.map { |g| g["edition_ids"] }
+        end
+
         test "an edition matching no group starts its own" do
           groups = group([edition(1, title: "A", author: "Jane Doe", year: 1950),
             edition(2, title: "Z", author: "Someone Else", year: nil)])

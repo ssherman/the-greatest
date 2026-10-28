@@ -44,7 +44,9 @@ module Services
         def call
           complete, partial = @infos.partition { |info| info.author_key && info.year && info.volume }
           groups = complete.group_by { |info| [info.author_key, info.year, info.volume] }.values
-          partial.sort_by { |info| [-info.rows, info.edition.goodreads_book_id.to_i] }.each { |info| place(info, groups) }
+          # Most complete first, so dated editions form their groups before an
+          # undated one picks between them.
+          partial.sort_by { |info| [missing(info), -info.rows, info.edition.goodreads_book_id.to_i] }.each { |info| place(info, groups) }
           merge_by_open_library_work(groups).map { |members| to_hash(members) }
             .sort_by { |group| [-group["row_count"], group["goodreads_book_ids"].first.to_i] }
         end
@@ -81,10 +83,13 @@ module Services
           target ? target << info : groups << [info]
         end
 
-        # Every field the edition has must match a member's, where the member
-        # has it too; a missing one contradicts nothing.
+        def missing(info) = [info.author_key, info.year, info.volume].count(&:nil?)
+
+        # Every field the edition has must match every member that has it too;
+        # a missing one contradicts nothing. All members, not any: an undated
+        # edition must not let 1950 and 1960 join through it.
         def fits?(info, members)
-          members.any? do |member|
+          members.all? do |member|
             compatible?(member.volume, info.volume) && compatible?(member.author_key, info.author_key) &&
               compatible?(member.year, info.year)
           end
