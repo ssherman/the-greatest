@@ -1,18 +1,48 @@
 import { Controller } from "@hotwired/stimulus"
 
 // Bump when the persisted state shape changes (e.g. memberships went from
-// [list_id] to [{list_id, item_id}] tuples). On load, caches stamped with a
-// different schema are discarded so users don't render against stale shapes.
-const STATE_SCHEMA = 2
+// [list_id] to [{list_id, item_id}] tuples; 3 added etag, checkedAt, seenMark
+// and membership). On load, caches stamped with a different schema are
+// discarded so users don't render against stale shapes.
+const STATE_SCHEMA = 3
 
-// Singleton controller. Hydrates per-user list/membership state from
-// localStorage, then refreshes from /user_list_state. Broadcasts events on
-// window so per-card widgets and the singleton modal can re-render.
+// How long a cached entry is trusted before a page load re-checks it. Changes
+// made on this device are applied locally or flagged by tg_state_mark, so this
+// only bounds how late a change made elsewhere (another device, a membership
+// expiring) shows up.
+const RECHECK_AFTER_MS = 60 * 60 * 1000
+
+// Shared by every instance in this document. Turbo replaces <body> on each
+// visit, so each visit connects a fresh instance, and a visit that first shows
+// a cached snapshot connects two in quick succession. Holding the in-flight
+// request here is what stops that pair from making two requests; the response
+// is applied to whichever instance is live when it lands.
+let inflight = null // { conditional, promise }
+let liveInstance = null
+
+// Reads the plain tg_state_mark cookie. Rails changes its value on every write
+// that alters this visitor's lists or membership, so a value different from the
+// one the entry was checked against means the entry is out of date.
+function currentMark() {
+  const m = document.cookie.match(/(?:^|;\s*)tg_state_mark=([^;]+)/)
+  return m ? decodeURIComponent(m[1]) : null
+}
+
+// Singleton controller. Holds per-user list/membership state in localStorage
+// and broadcasts events on window so per-card widgets, the singleton modal and
+// the Members link can render from it.
 //
-// Storage shape: { version, domain, lists, memberships }
+// A page load makes at most one Rails request, and usually none: the entry is
+// re-checked (conditionally, so usually a 304) only when it is missing, older
+// than RECHECK_AFTER_MS, or tg_state_mark has moved, and never on a page that
+// already costs a request by loading (pageCostsRequest). Requests caused by a
+// click (opening the list modal, a write, Download CSV) are outside that budget.
+//
+// Storage shape: { version, domain, user_id, lists, memberships, membership,
+//                  etag, checkedAt, seenMark, _schema }
 // Event names emitted on window:
 //   - "user-list-state:loaded"  (cache hit, may be stale)
-//   - "user-list-state:updated" (network response superseded cache)
+//   - "user-list-state:updated" (network response or local write superseded cache)
 //   - "user-list-state:cleared" (sign-out detected)
 export default class extends Controller {
   static values = {
@@ -20,6 +50,7 @@ export default class extends Controller {
   }
 
   connect() {
+    liveInstance = this
     this.domain = document.body.dataset.domain || "books"
     this.storageKey = `tg:user_list_state:${this.domain}`
     this.signedIn = false
@@ -27,8 +58,12 @@ export default class extends Controller {
     // CSRF token is held in memory only — never persisted to localStorage.
     // The cached HTML's <meta name="csrf-token"> is unreliable on CDN-cached
     // pages, so mutations must use the token from the latest /user_list_state.
+    // A 304 carries none, so ensureCsrf() asks for the full payload.
     this.csrf = null
-    this._inflightRefresh = null
+    // Whether the entry reflects every write tg_state_mark has recorded. A
+    // local write may only advance seenMark when it does: otherwise it would
+    // hide an earlier change (made on a Rails page) that it never applied.
+    this._markInSync = false
 
     this._onAuthSuccess = this._onAuthSuccess.bind(this)
     this._onAuthSignout = this._onAuthSignout.bind(this)
@@ -44,7 +79,9 @@ export default class extends Controller {
       // Only a 401 or a sign-out hides them again.
       this._updateMyListsNav(true)
       this._hydrateFromStorage()
-      this.refresh()
+      // Turbo's restore of a snapshot re-runs connect() too; the same gate
+      // keeps Back from costing a request while the entry is fresh.
+      if (this.isStale() && !this.pageCostsRequest()) this.refresh({ conditional: true })
     } else {
       // No signed-in marker — discard any stale cache and stay anonymous.
       // We deliberately skip the network fetch: the endpoint requires auth
@@ -75,6 +112,7 @@ export default class extends Controller {
   }
 
   disconnect() {
+    if (liveInstance === this) liveInstance = null
     window.removeEventListener("auth:success", this._onAuthSuccess)
     window.removeEventListener("auth:signout", this._onAuthSignout)
   }
@@ -88,72 +126,167 @@ export default class extends Controller {
     return this.signedIn
   }
 
-  // Returns the in-memory CSRF token (only available after a successful fetch).
+  // Returns the in-memory CSRF token (only available after a full fetch).
   csrfToken() {
     return this.csrf
   }
 
+  // True when this page already cost a Rails request by loading: an uncached
+  // Rails page (the layout's tg-page-request meta) or a page whose own markup
+  // makes a state request on load (book show's review widget, a public reading
+  // goal). The re-check waits for the next page that costs nothing. Both
+  // markers are identical for every visitor, so cached HTML stays shareable.
+  pageCostsRequest() {
+    return !!document.querySelector('meta[name="tg-page-request"], [data-tg-page-request]')
+  }
+
+  // True when the entry is missing, was last checked more than an hour ago (or
+  // in the future: a clock that moved backwards must not freeze it), or a write
+  // since then moved tg_state_mark.
+  isStale() {
+    const entry = this.cache
+    if (!entry) return true
+    const age = Date.now() - entry.checkedAt
+    if (!(age >= 0 && age <= RECHECK_AFTER_MS)) return true
+    return currentMark() !== (entry.seenMark ?? null)
+  }
+
+  // For a widget or the modal on first interaction: fetches the state only
+  // when this page has none (e.g. a book page right after sign-in, which could
+  // not spend its request on it). Resolves to the refresh status, or "cached".
+  async ensureState() {
+    if (this.cache) return "cached"
+    if (!this.cookieUid()) return "unauthenticated"
+    return this.refresh({ conditional: false })
+  }
+
   // Ensures a fresh CSRF token is available before a mutation, fetching once
-  // if none. Coalesces concurrent calls onto a single in-flight request.
+  // if none. Unconditional, because a 304 carries no token. Concurrent calls
+  // share a single in-flight request.
   async ensureCsrf() {
     if (this.csrf) return this.csrf
-    await this.refresh()
+    await this.refresh({ conditional: false })
     return this.csrf
   }
 
-  // Re-fetch /user_list_state. If the response version is newer than the cached
-  // version, persist + dispatch updated. On 401, treat as signed out.
-  // Concurrent callers share a single in-flight promise.
-  refresh() {
-    if (this._inflightRefresh) return this._inflightRefresh
-    this._inflightRefresh = this._doRefresh().finally(() => {
-      this._inflightRefresh = null
-    })
-    return this._inflightRefresh
+  // Asks /user_list_state for this user's state. Conditional sends the entry's
+  // ETag, so an unchanged state costs a 304 with no body. Resolves to "updated"
+  // (200), "unchanged" (304), "unauthenticated" (401) or "failed"; the result
+  // is applied to the live instance before it resolves. Concurrent callers in
+  // this document share one request, except that a caller needing the full
+  // payload does not settle for a 304.
+  refresh({ conditional = false } = {}) {
+    if (inflight) {
+      const joined = inflight
+      if (conditional || !joined.conditional) return joined.promise
+      return joined.promise.then((status) => (status === "unchanged" ? this.refresh({ conditional }) : status))
+    }
+
+    const current = { conditional, promise: null }
+    current.promise = this._fetchState(conditional)
+      .then((outcome) => {
+        liveInstance?._adopt(outcome)
+        return outcome.status
+      })
+      .finally(() => {
+        if (inflight === current) inflight = null
+      })
+    inflight = current
+    return current.promise
   }
 
-  async _doRefresh() {
+  // Performs the request and updates storage and cookies; in-memory state and
+  // events are the live instance's business (_adopt).
+  async _fetchState(conditional) {
+    const uid = this.cookieUid()
+    const entry = conditional ? this._readEntry(uid) : null
+    // Read before the request, not after: a write landing while it is in
+    // flight moves the mark, and recording that newer value against this older
+    // response would hide the write.
+    const mark = currentMark()
+    const headers = { Accept: "application/json" }
+    if (entry?.etag) headers["If-None-Match"] = entry.etag
+
     let response
     try {
-      response = await fetch(this.urlValue, {
-        headers: { Accept: "application/json" },
-        credentials: "same-origin"
-      })
+      response = await fetch(this.urlValue, { headers, credentials: "same-origin" })
     } catch (err) {
       console.warn("user-list-state: network error", err)
-      return
+      return { status: "failed" }
+    }
+
+    if (response.status === 304) {
+      if (!entry) return { status: "failed" }
+      const next = { ...entry, checkedAt: Date.now(), seenMark: mark }
+      this._writeStorage(next)
+      return { status: "unchanged", entry: next }
     }
 
     if (response.status === 401) {
       this._clearStorage()
       this._clearCookieUid()
+      return { status: "unauthenticated" }
+    }
+
+    if (!response.ok) {
+      console.warn("user-list-state: unexpected status", response.status)
+      return { status: "failed" }
+    }
+
+    let data
+    try {
+      data = await response.json()
+    } catch (err) {
+      console.warn("user-list-state: unreadable response", err)
+      return { status: "failed" }
+    }
+
+    // Rails re-stamps tg_uid from the session on this response, so a mismatch
+    // here means a sign-out (or a different sign-in) landed while the request
+    // was in flight. Keep that user's data out of storage and off the page.
+    if (String(data.user_id) !== this.cookieUid()) return { status: "failed" }
+
+    // Strip csrf_token from the persisted shape so it never lands in localStorage.
+    const { csrf_token: csrf, ...persistable } = data
+    const next = {
+      ...persistable,
+      etag: response.headers.get("ETag"),
+      checkedAt: Date.now(),
+      seenMark: mark
+    }
+    this._writeStorage(next)
+    return { status: "updated", entry: next, csrf: csrf || null }
+  }
+
+  _adopt(outcome) {
+    switch (outcome.status) {
+    case "updated":
+      // The network response is authoritative — always replace the cache.
+      this.cache = outcome.entry
+      this.csrf = outcome.csrf
+      this.signedIn = true
+      this._markInSync = true
+      this._updateMyListsNav(true)
+      this._dispatch("user-list-state:updated", { state: this.cache })
+      break
+    case "unchanged": {
+      // Nothing new to render: only "last checked" moved. An instance that had
+      // no entry in memory still announces the one it now holds.
+      const hadEntry = !!this.cache
+      this.cache = outcome.entry
+      this.signedIn = true
+      this._markInSync = true
+      if (!hadEntry) this._dispatch("user-list-state:loaded", { state: this.cache })
+      break
+    }
+    case "unauthenticated":
       this.signedIn = false
       this.cache = null
       this.csrf = null
       this._updateMyListsNav(false)
       this._dispatch("user-list-state:cleared")
-      return
+      break
     }
-
-    if (!response.ok) {
-      console.warn("user-list-state: unexpected status", response.status)
-      return
-    }
-
-    const data = await response.json()
-    this.signedIn = true
-    this._updateMyListsNav(true)
-    this.csrf = data.csrf_token || null
-    // Strip csrf_token from the persisted shape so it never lands in localStorage.
-    const { csrf_token: _csrf, ...persistable } = data
-
-    // The network response is authoritative — always replace the cache.
-    // (We previously skipped the write when versions matched, but local
-    // optimistic mutations stamp the cache with Date.now(), which can be
-    // ahead of server `user.updated_at.to_i`, suppressing legitimate updates.)
-    this.cache = persistable
-    this._writeStorage(persistable)
-    this._dispatch("user-list-state:updated", { state: persistable })
   }
 
   // Optimistically apply a mutation result and rebroadcast. Called by the modal
@@ -180,36 +313,50 @@ export default class extends Controller {
     }
 
     next.version = Math.floor(Date.now() / 1000)
+    // The write's response just moved tg_state_mark, and this entry now holds
+    // that write, so the next page need not re-check for it. Only when the
+    // entry already held every earlier write (see _markInSync).
+    if (this._markInSync) next.seenMark = currentMark()
     this.cache = next
     this._writeStorage(next)
     this._dispatch("user-list-state:updated", { state: next })
   }
 
-  _hydrateFromStorage() {
+  // The stored entry, if it has the current shape and belongs to `uid`.
+  // Anything else is removed so it can never render.
+  _readEntry(uid) {
     try {
       const raw = window.localStorage.getItem(this.storageKey)
-      if (!raw) return
+      if (!raw) return null
       const parsed = JSON.parse(raw)
       if (parsed?._schema !== STATE_SCHEMA) {
         // Stored under an older shape — discard so we don't render bad UI.
         window.localStorage.removeItem(this.storageKey)
-        return
+        return null
       }
       // Bind cache to the current signed-in user. If cookie uid doesn't match
       // the cached user_id, this is a different user on a shared browser —
-      // discard the previous user's data instead of rendering it.
-      const cookieUid = this.cookieUid()
-      if (parsed.user_id != null && String(parsed.user_id) !== cookieUid) {
+      // discard the previous user's data instead of rendering it. An entry
+      // with no user_id is treated the same way.
+      if (uid == null || String(parsed.user_id) !== uid) {
         window.localStorage.removeItem(this.storageKey)
-        return
+        return null
       }
-      this.cache = parsed
-      this.signedIn = true
-      this._updateMyListsNav(true)
-      this._dispatch("user-list-state:loaded", { state: this.cache })
+      return parsed
     } catch (err) {
       console.warn("user-list-state: storage read failed", err)
+      return null
     }
+  }
+
+  _hydrateFromStorage() {
+    const entry = this._readEntry(this.cookieUid())
+    if (!entry) return
+    this.cache = entry
+    this.signedIn = true
+    this._markInSync = currentMark() === (entry.seenMark ?? null)
+    this._updateMyListsNav(true)
+    this._dispatch("user-list-state:loaded", { state: this.cache })
   }
 
   _writeStorage(state) {
@@ -236,9 +383,15 @@ export default class extends Controller {
     window.dispatchEvent(new CustomEvent(name, { detail }))
   }
 
+  // Every sign-in modal reloads the page on success (reload_after_auth), so
+  // there is nothing to fetch here: dropping the entry is enough for the next
+  // page to fetch the new user's state, and keeps any earlier user's out.
   _onAuthSuccess() {
+    this._clearStorage()
+    this.cache = null
+    this.csrf = null
+    this._markInSync = false
     this._updateMyListsNav(true)
-    this.refresh()
   }
 
   _onAuthSignout() {
@@ -246,6 +399,7 @@ export default class extends Controller {
     this.signedIn = false
     this.cache = null
     this.csrf = null
+    this._markInSync = false
     this._updateMyListsNav(false)
     this._dispatch("user-list-state:cleared")
   }

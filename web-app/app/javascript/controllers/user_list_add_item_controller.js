@@ -68,15 +68,15 @@ export default class extends Controller {
 
   // Optimistically record the new membership in the singleton user-list-state
   // cache (mirrors the modal's _afterMutation) so the per-item widget shows the
-  // item as "on this list". Falls back to a server refresh if the cache isn't
-  // ready yet (rare: first visit before /user_list_state has returned).
+  // item as "on this list". Falls back to fetching the state if this page has
+  // none: an uncached page like this one never fetches it on load.
   _syncState(item, removedItems = []) {
     if (!item) return
     const stateCtrl = this._stateController()
     if (!stateCtrl) return
 
     if (!stateCtrl.state?.()) {
-      stateCtrl.refresh?.()
+      stateCtrl.ensureState?.()
       return
     }
 
