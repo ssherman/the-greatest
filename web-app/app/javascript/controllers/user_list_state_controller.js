@@ -19,6 +19,12 @@ const RECHECK_AFTER_MS = 60 * 60 * 1000
 // is applied to whichever instance is live when it lands.
 let inflight = null // { conditional, promise }
 let liveInstance = null
+// Bumped whenever the entry is discarded for a sign-out, a sign-in or a 401. A
+// response to a request started before the bump belongs to whoever was signed
+// in then, so it may not write storage or reach the page. tg_uid alone cannot
+// tell: an in-page sign-out dispatches auth:signout before /auth/sign_out has
+// answered and deleted the cookie.
+let clearEpoch = 0
 
 // Reads the plain tg_state_mark cookie. Rails changes its value on every write
 // that alters this visitor's lists or membership, so a value different from the
@@ -162,7 +168,9 @@ export default class extends Controller {
 
   // Ensures a fresh CSRF token is available before a mutation, fetching once
   // if none. Unconditional, because a 304 carries no token. Concurrent calls
-  // share a single in-flight request.
+  // share a single in-flight request. Resolves to a token, or null only when
+  // the fetch definitely failed (network, 401, a response dropped as another
+  // user's): refresh() never settles for a 304 here (_refreshFull).
   async ensureCsrf() {
     if (this.csrf) return this.csrf
     await this.refresh({ conditional: false })
@@ -176,12 +184,24 @@ export default class extends Controller {
   // this document share one request, except that a caller needing the full
   // payload does not settle for a 304.
   refresh({ conditional = false } = {}) {
-    if (inflight) {
-      const joined = inflight
-      if (conditional || !joined.conditional) return joined.promise
-      return joined.promise.then((status) => (status === "unchanged" ? this.refresh({ conditional }) : status))
-    }
+    if (inflight && (conditional || !inflight.conditional)) return inflight.promise
+    if (inflight) return this._refreshFull()
+    return this._start(conditional)
+  }
 
+  // An unconditional caller behind a conditional request: a 200 from it is as
+  // good as our own, but a 304 has no token, so wait it out and fetch in full.
+  // Loops because by then another conditional request may have started, and
+  // joining that one could end in a 304 too.
+  async _refreshFull() {
+    while (inflight?.conditional) {
+      const status = await inflight.promise
+      if (status !== "unchanged") return status
+    }
+    return inflight ? inflight.promise : this._start(false)
+  }
+
+  _start(conditional) {
     const current = { conditional, promise: null }
     current.promise = this._fetchState(conditional)
       .then((outcome) => {
@@ -198,8 +218,10 @@ export default class extends Controller {
   // Performs the request and updates storage and cookies; in-memory state and
   // events are the live instance's business (_adopt).
   async _fetchState(conditional) {
+    const epoch = clearEpoch
     const uid = this.cookieUid()
     const entry = conditional ? this._readEntry(uid) : null
+    const snapshot = entry ? JSON.stringify(entry) : null
     // Read before the request, not after: a write landing while it is in
     // flight moves the mark, and recording that newer value against this older
     // response would hide the write.
@@ -215,14 +237,27 @@ export default class extends Controller {
       return { status: "failed" }
     }
 
+    // Signed out, signed in or 401'd while this was in flight: whatever it
+    // says belongs to the previous user. (A 401 still needs no handling: the
+    // clearing it would do has already happened.)
+    if (epoch !== clearEpoch) return { status: "failed" }
+
     if (response.status === 304) {
-      if (!entry) return { status: "failed" }
-      const next = { ...entry, checkedAt: Date.now(), seenMark: mark }
+      // Re-read rather than restore the snapshot: a local write applied while
+      // this was in flight is newer than the snapshot and must survive. The
+      // entry must still be there and still be this user's.
+      const current = this._readEntry(this.cookieUid())
+      if (!entry || !current || String(current.user_id) !== String(entry.user_id)) return { status: "failed" }
+      // The server only vouched for the snapshot. If a local write has since
+      // changed the entry, seenMark stays as that write left it.
+      const unchangedLocally = JSON.stringify(current) === snapshot
+      const next = { ...current, checkedAt: Date.now(), seenMark: unchangedLocally ? mark : current.seenMark }
       this._writeStorage(next)
       return { status: "unchanged", entry: next }
     }
 
     if (response.status === 401) {
+      clearEpoch++
       this._clearStorage()
       this._clearCookieUid()
       return { status: "unauthenticated" }
@@ -244,7 +279,8 @@ export default class extends Controller {
     // Rails re-stamps tg_uid from the session on this response, so a mismatch
     // here means a sign-out (or a different sign-in) landed while the request
     // was in flight. Keep that user's data out of storage and off the page.
-    if (String(data.user_id) !== this.cookieUid()) return { status: "failed" }
+    // The epoch is checked again because reading the body yielded.
+    if (epoch !== clearEpoch || String(data.user_id) !== this.cookieUid()) return { status: "failed" }
 
     // Strip csrf_token from the persisted shape so it never lands in localStorage.
     const { csrf_token: csrf, ...persistable } = data
@@ -259,6 +295,9 @@ export default class extends Controller {
   }
 
   _adopt(outcome) {
+    // Belt and braces for the checks in _fetchState: with no tg_uid there is
+    // no one to show a user's state to.
+    if ((outcome.status === "updated" || outcome.status === "unchanged") && !this.cookieUid()) return
     switch (outcome.status) {
     case "updated":
       // The network response is authoritative — always replace the cache.
@@ -387,6 +426,7 @@ export default class extends Controller {
   // there is nothing to fetch here: dropping the entry is enough for the next
   // page to fetch the new user's state, and keeps any earlier user's out.
   _onAuthSuccess() {
+    clearEpoch++
     this._clearStorage()
     this.cache = null
     this.csrf = null
@@ -395,6 +435,7 @@ export default class extends Controller {
   }
 
   _onAuthSignout() {
+    clearEpoch++
     this._clearStorage()
     this.signedIn = false
     this.cache = null
