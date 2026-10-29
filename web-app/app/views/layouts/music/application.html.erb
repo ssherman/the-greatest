@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html data-theme="light">
   <head>
+    <% unless request.session_options[:skip] %><meta name="tg-page-request" content="1"><% end %>
     <title><%= content_for?(:page_title) ? yield(:page_title) : "Greatest Songs & Albums Ranked | The Greatest Music" %></title>
     <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : "Discover definitive rankings of the greatest songs and albums of all time. Expert reviews, curated lists, and comprehensive music analysis." %>">
     <meta name="robots" content="<%= music_robots_content %>">
