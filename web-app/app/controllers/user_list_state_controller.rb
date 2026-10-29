@@ -27,10 +27,9 @@ class UserListStateController < ApplicationController
     end
 
     memberships = build_memberships(items)
-    # Runs before the freshness check: a 304 is still a request from a live
-    # session, and skipping this would let a tab that only re-checks expire.
-    renew_current_session
-
+    # No renew_current_session here: require_signed_in! already renews in the
+    # before_action, which runs ahead of the freshness check, so a 304 (a request
+    # from a live session) renews too.
     membership = current_user.granting_membership
 
     # Everything that identifies the user's state, and nothing that varies per
@@ -53,8 +52,10 @@ class UserListStateController < ApplicationController
       }
     }
 
-    # stale? strips no-store that prevent_caching set, so restate it here.
-    return unless stale?(etag: payload, cache_control: {no_store: true, private: true})
+    # stale? strips no-store that prevent_caching set, so restate it here. The
+    # etag is the serialized payload, not the hash: Rails flattens a hash key
+    # with "/" separators, so values containing "/" could collide.
+    return unless stale?(etag: payload.to_json, cache_control: {no_store: true, private: true})
 
     render json: payload.merge(
       version: current_user.updated_at.to_i,

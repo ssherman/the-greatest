@@ -155,6 +155,7 @@ class UserListStateControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_modified
     assert_empty response.body
     assert_match(/no-store/, response.headers["Cache-Control"])
+    assert_match(/private/, response.headers["Cache-Control"])
   end
 
   test "the ETag changes when an item is added, an item is removed, and a list is created" do
