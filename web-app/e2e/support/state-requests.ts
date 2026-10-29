@@ -40,3 +40,9 @@ export async function cachedEntry(page: Page): Promise<Record<string, any> | nul
     return key ? JSON.parse(localStorage.getItem(key)!) : null;
   });
 }
+
+// Lets in-flight requests finish so a count read afterwards is final, not a
+// snapshot taken while a state request was still about to be sent.
+export async function settle(page: Page): Promise<void> {
+  await page.waitForLoadState('networkidle');
+}

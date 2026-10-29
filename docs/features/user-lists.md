@@ -187,7 +187,7 @@ E2E: `e2e/tests/{books,music,games}/auth/state-requests.spec.ts` count requests 
 
 ### localStorage Schema Versioning
 
-The `user-list-state` controller stamps every persisted shape with `_schema: <N>`. On hydrate, mismatched entries are discarded and a fresh `/user_list_state` fetch wins. Bump `STATE_SCHEMA` in `user_list_state_controller.js` whenever the persisted shape changes (e.g. memberships went from `[list_id]` to `[{list_id, item_id}]` for 02a → schema 2). The network response is always authoritative — `_doRefresh` always replaces the cache; the version field is for client-side optimistic-update bookkeeping only.
+The `user-list-state` controller stamps every persisted shape with `_schema: <N>`. On hydrate, mismatched entries are discarded and a fresh `/user_list_state` fetch wins. Bump `STATE_SCHEMA` in `user_list_state_controller.js` whenever the persisted shape changes (e.g. memberships went from `[list_id]` to `[{list_id, item_id}]` for 02a → schema 2). A 200 response is authoritative and replaces the cache; a 304 keeps the cached entry (restamping `checkedAt`) and local writes made since; the version field is for client-side optimistic-update bookkeeping only.
 
 ### Mutation Endpoints
 

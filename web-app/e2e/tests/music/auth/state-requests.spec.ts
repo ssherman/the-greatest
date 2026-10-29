@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { credentials, signIn } from '../../../support/sign-in';
 import { expectSignedIn, expectSignedOut } from '../../../support/sign-in-state';
-import { ageCache, cachedEntry, countStateRequests } from '../../../support/state-requests';
+import { ageCache, cachedEntry, countStateRequests, settle } from '../../../support/state-requests';
 
 // A signed-in page load makes at most one Rails state request, and usually none:
 // the per-user state is cached in localStorage and re-checked hourly. Each test
@@ -9,7 +9,7 @@ import { ageCache, cachedEntry, countStateRequests } from '../../../support/stat
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const HOUR = 60 * 60 * 1000;
-const ORDINARY_PAGES = ['/rankings', '/songs', '/'];
+const ORDINARY_PAGES = ['/songs', '/albums', '/'];
 
 // Fills the cache entry: the first ordinary page after sign-in is the one that
 // has to ask. Waiting on the entry (not a sleep) is what makes later counts exact.
@@ -29,6 +29,7 @@ test.describe('Per-user state requests (music)', () => {
       await page.goto(path);
       await expectSignedIn(page);
     }
+    await settle(page);
     expect(requests.get()).toBe(0);
   });
 
@@ -42,6 +43,7 @@ test.describe('Per-user state requests (music)', () => {
     await expectSignedIn(page);
     const stateResponse = await response;
 
+    await settle(page);
     expect(requests.get()).toBe(1);
     expect(requests.requests('/user_list_state')[0].headers()['if-none-match']).toBeTruthy();
     // Nothing changed, so the server must say so rather than resend the body.
@@ -50,6 +52,7 @@ test.describe('Per-user state requests (music)', () => {
     // The re-check restamps the entry, so the next page is free again.
     await page.goto(ORDINARY_PAGES[1]);
     await expectSignedIn(page);
+    await settle(page);
     expect(requests.get()).toBe(1);
   });
 
@@ -65,6 +68,7 @@ test.describe('Per-user state requests (music)', () => {
     await page.goto(ORDINARY_PAGES[0]);
     await expectSignedIn(page);
     await expect(page.locator('#navbar_members').first()).toHaveClass(/hidden/);
+    await settle(page);
     expect(requests.get('/membership_state')).toBe(0);
     expect(requests.get()).toBe(0);
   });
@@ -88,5 +92,32 @@ test.describe('Per-user state requests (music)', () => {
     expect(second.user_id).not.toBe(first!.user_id);
     const secondListIds = (second.lists as { id: number }[]).map((l) => l.id);
     expect(secondListIds.filter((id) => firstListIds.includes(id))).toEqual([]);
+
+    // The DOM, not just the cache: B's list modal offers only B's own lists.
+    const modalListIds = async () => {
+      await page.locator('[data-controller="user-list-widget"] button:visible').first().click();
+      const modal = page.locator('#user_list_modal');
+      await expect(modal).toBeVisible();
+      const ids = await modal.locator('input[data-list-id]').evaluateAll((els) =>
+        els.map((el) => Number((el as HTMLElement).dataset.listId))
+      );
+      await page.keyboard.press('Escape');
+      return ids;
+    };
+    const shownIds = await modalListIds();
+    expect(shownIds.length).toBeGreaterThan(0);
+    expect(shownIds.filter((id) => firstListIds.includes(id))).toEqual([]);
+
+    // A cookie-only switch: A's entry is left in localStorage while tg_uid says
+    // B. The user_id guard (sign-out and sign-in clear storage, bypassing it)
+    // must discard it on the next load rather than render it.
+    await page.evaluate((entry) => {
+      localStorage.setItem(`tg:user_list_state:${document.body.dataset.domain}`, JSON.stringify(entry));
+    }, first);
+    await page.goto(ORDINARY_PAGES[1]);
+    await expectSignedIn(page);
+    await expect.poll(async () => (await cachedEntry(page))?.user_id).toBe(second.user_id);
+    const afterSwitch = (await cachedEntry(page))!;
+    expect((afterSwitch.lists as { id: number }[]).map((l) => l.id)).toEqual(secondListIds);
   });
 });
