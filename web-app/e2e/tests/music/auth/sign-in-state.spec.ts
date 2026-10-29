@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { credentials, signIn } from '../../../support/sign-in';
 import { expectSignedIn, expectSignedOut, firebaseUserCount } from '../../../support/sign-in-state';
+import { ageCache } from '../../../support/state-requests';
 
 // The Rails session is the single source of truth for sign-in state; Firebase's
 // IndexedDB is not in storage state, so each test signs in for real.
@@ -58,6 +59,10 @@ test.describe('Sign-in state (music)', () => {
     expect(await firebaseUserCount(page)).toBeGreaterThan(0);
 
     await context.clearCookies({ name: 'tg_session' });
+    // A page load only asks the server when its cached state is missing, an hour
+    // old or flagged by the change marker. Age the entry so this reload is the
+    // re-check that discovers the session is gone (the 401 is what signs out).
+    await ageCache(page, 61 * 60 * 1000);
     await page.reload();
     await expectSignedOut(page);
 

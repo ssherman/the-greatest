@@ -38,6 +38,10 @@ export default class extends Controller {
     this._resetCreateForm()
     this._render()
     this.element.showModal?.()
+    // A page that could not spend its one request on the state (a book page
+    // right after sign-in, say) has none yet; opening the modal is the click
+    // that fetches it. _onStateChange re-renders when it lands.
+    this._stateController()?.ensureState?.()
   }
 
   // Resets the inline create form between opens so the disclosure isn't
@@ -68,8 +72,8 @@ export default class extends Controller {
 
     const state = this._state()
     if (!state) {
-      // Cookie says signed in (widget gates this) but the bulk-state fetch
-      // hasn't returned yet. Show a loading hint and let _onStateChange
+      // Cookie says signed in (widget gates this) but the state fetched on
+      // open hasn't returned yet. Show a loading hint and let _onStateChange
       // re-render when the response arrives.
       const stateCtrl = this._stateController()
       const message = stateCtrl?.cookieUid?.()
@@ -150,7 +154,7 @@ export default class extends Controller {
     const itemId = this._findItemId(listId)
     if (!itemId) {
       // We have no record of this membership — refresh state and bail.
-      await this._stateController()?.refresh()
+      await this._stateController()?.refresh({ conditional: true })
       throw new Error("Couldn't find that item; please try again")
     }
     const headers = await this._headers()
@@ -277,6 +281,8 @@ export default class extends Controller {
   async _headers() {
     const stateCtrl = this._stateController()
     const token = await stateCtrl?.ensureCsrf?.()
+    // Every write asks for headers immediately before it is sent.
+    stateCtrl?.beginWrite?.()
     return {
       "Content-Type": "application/json",
       Accept: "application/json",

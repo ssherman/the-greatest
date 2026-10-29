@@ -27,19 +27,43 @@ class UserListStateController < ApplicationController
     end
 
     memberships = build_memberships(items)
-    renew_current_session
+    # No renew_current_session here: require_signed_in! already renews in the
+    # before_action, which runs ahead of the freshness check, so a 304 (a request
+    # from a live session) renews too.
+    membership = current_user.granting_membership
 
-    render json: {
-      version: current_user.updated_at.to_i,
+    # Everything that identifies the user's state, and nothing that varies per
+    # request. The ETag digests this, so the CSRF token (fresh per session) and
+    # version (updated_at, bumped by writes that change nothing shown here) stay
+    # out of it. Membership expiry changes the payload with no row write;
+    # reading granting_membership at request time is what covers it.
+    payload = {
       domain: domain.to_s,
       user_id: current_user.id,
       lists: lists.map { |l| serialize_list(l) },
       memberships: memberships,
+      membership: {
+        member: membership.present?,
+        # nil for a comp or a legacy grant: they have no billing interval.
+        plan: membership&.interval,
+        source: membership&.source,
+        # nil means "never expires", not "expired".
+        current_period_end: membership&.current_period_end&.iso8601
+      }
+    }
+
+    # stale? strips no-store that prevent_caching set, so restate it here. The
+    # etag is the serialized payload, not the hash: Rails flattens a hash key
+    # with "/" separators, so values containing "/" could collide.
+    return unless stale?(etag: payload.to_json, cache_control: {no_store: true, private: true})
+
+    render json: payload.merge(
+      version: current_user.updated_at.to_i,
       # The cached HTML's <meta name="csrf-token"> belongs to whoever rendered the
       # cache (or no one). Issue a fresh per-session token here for client-side
       # mutations to send back via X-CSRF-Token. This endpoint is never cached.
       csrf_token: form_authenticity_token
-    }
+    )
   end
 
   private

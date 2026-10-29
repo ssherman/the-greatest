@@ -111,7 +111,7 @@ The Rails session is the one record of "signed in". Everything else derives from
 | Expiry enforcement | On the server, per request, from the row. A copied cookie with a forged `expires` gains nothing; an expired row is destroyed on lookup |
 | Pruning | `Sessions::PruneExpiredJob`, nightly |
 
-**Renewal.** `renew_current_session` bumps `last_active_at` and re-issues both cookies, at most once a day (`Session::RENEW_AFTER`); within the day it only backfills a missing `tg_uid`. Its callers are `/user_list_state` (fetched on every signed-in page view, so no extra request) and all admin pages. It is never called from an edge-cacheable response.
+**Renewal.** `renew_current_session` bumps `last_active_at` and re-issues both cookies, at most once a day (`Session::RENEW_AFTER`); within the day it only backfills a missing `tg_uid`. Its callers are `/user_list_state` (re-checked at most hourly per browser, see `user-lists.md`, so a browser that never needs a re-check renews on the first one after the day is up) and all admin pages. It is never called from an edge-cacheable response.
 
 **No `Set-Cookie` on cacheable responses.** Cloudflare bypasses its cache when a response sets a cookie, so when `request.session_options[:skip]` is set, `find_current_session` skips its stale-cookie clearing, and the cookie writers (sign-in, sign-out, renewal) only run on uncached responses. An expired or unknown `tg_session` seen there is cleared by the next uncached request.
 

@@ -153,6 +153,9 @@ class MembershipController < ApplicationController
 
     Services::Billing::ReconcileCustomer.call(stripe_customer_id: current_user.stripe_customer_id)
     @membership = current_user.granting_membership
+    # Stripe was just reconciled for this visitor, which may have changed their
+    # membership: treat any cached copy of their per-user state as stale.
+    mark_user_state_changed
   end
 
   private

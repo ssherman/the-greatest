@@ -8,6 +8,7 @@ class ApplicationController < ActionController::Base
   include RankingConfigurationGating
   include CurrentDomain
   include SessionAuthentication
+  include UserStateChangeMarker
 
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
   rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
