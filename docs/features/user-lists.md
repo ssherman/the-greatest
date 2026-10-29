@@ -167,6 +167,24 @@ The standard `<meta name="csrf-token">` flow is unsafe on CDN-cached HTML — ev
 3. The modal's `_headers()` `await stateCtrl.ensureCsrf()`, which fetches once if no token is in memory.
 4. `JsonErrorResponses` rescues `ActionController::InvalidAuthenticityToken` so a racey first-fire-before-fetch returns the standard `{error: {code: "forbidden", ...}}` JSON shape rather than a Rails HTML page.
 
+### Browser cache and re-check policy
+
+A signed-in page load makes **at most one Rails request, and usually none**. The `user-list-state` controller keeps the response (lists, list memberships, `membership`, plus `etag`, `checkedAt`, `seenMark`) in `localStorage` and re-checks `/user_list_state` only when:
+
+- the entry is missing, or belongs to a different user than `tg_uid` (a different user on the same browser never renders the first user's state), or has an old `_schema`;
+- it is older than `RECHECK_AFTER_MS` (one hour); or
+- the `tg_state_mark` cookie differs from the entry's `seenMark`.
+
+**Budget rule.** A page that already costs a Rails request by loading never adds a second one: uncached pages carry `<meta name="tg-page-request">`, and the book review widget and public reading-goal page carry `data-tg-page-request` (the review widget's own `/review_state` is that page's one request). On those pages the re-check is deferred to the next ordinary page. Clicks (a write, opening the list modal, Download CSV) are outside the budget; Download CSV checks membership at click time.
+
+**Change marker.** Writes made on this device (list add/remove, membership changes) are applied to the cache locally. Rails also moves the plain `tg_state_mark` cookie on every write that alters a user's lists or membership, so a change made in another tab, or one the cache missed, forces one re-check. Both are presentation hints, never trusted server-side, and neither is set on an edge-cacheable response.
+
+**Conditional requests.** Re-checks send `If-None-Match` with the stored ETag; unchanged state answers `304` (no body, no CSRF token needed since one is fetched on demand before a write). The ETag digests the serialized payload, so it ignores the per-session CSRF token. In development rack-mini-profiler would strip the ETag, so `/user_list_state` is in its skip paths (`config/initializers/rack_mini_profiler.rb`).
+
+**`/membership_state` is legacy.** New JS does not call it: the Members link reads the cached `membership.member`. The endpoint stays, unchanged, for edge-cached pages built before this change that still call it during the deploy window.
+
+E2E: `e2e/tests/{books,music,games}/auth/state-requests.spec.ts` count requests per page via `e2e/support/state-requests.ts`.
+
 ### localStorage Schema Versioning
 
 The `user-list-state` controller stamps every persisted shape with `_schema: <N>`. On hydrate, mismatched entries are discarded and a fresh `/user_list_state` fetch wins. Bump `STATE_SCHEMA` in `user_list_state_controller.js` whenever the persisted shape changes (e.g. memberships went from `[list_id]` to `[{list_id, item_id}]` for 02a → schema 2). The network response is always authoritative — `_doRefresh` always replaces the cache; the version field is for client-side optimistic-update bookkeeping only.
