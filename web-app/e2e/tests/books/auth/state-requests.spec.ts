@@ -207,4 +207,65 @@ test.describe('Per-user state requests (books)', () => {
     const afterSwitch = (await cachedEntry(page))!;
     expect((afterSwitch.lists as { id: number }[]).map((l) => l.id)).toEqual(secondListIds);
   });
+
+  test("two tabs never hide each other's writes", async ({ page, context }) => {
+    await signInAndFillCache(page, 'USER');
+    // Both tabs load before either writes, so B's copy predates A's write.
+    const tabA = page;
+    const tabB = await context.newPage();
+    await tabA.goto('/');
+    await tabB.goto('/');
+    await expectSignedIn(tabB);
+
+    const cards = tabA.locator('[data-listable-type="Books::Book"]');
+    const ids = await cards.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.listableId!));
+    const [bookY, bookX, bookY2] = [...new Set(ids)];
+    expect(bookY2).toBeTruthy();
+
+    const modalRow = async (tab: Page, id: string, listId?: number) => {
+      await widgetFor(tab, id).first().getByRole('button').click();
+      const modal = tab.locator('#user_list_modal');
+      await expect(modal).toBeVisible();
+      const row = listId ? modal.locator(`input[data-list-id="${listId}"]`) : modal.locator('input[data-list-id]').first();
+      await expect(row).toBeVisible();
+      return row;
+    };
+    const setOnList = async (tab: Page, id: string, listId: number, on: boolean) => {
+      const row = await modalRow(tab, id, listId);
+      const done = tab.waitForResponse(
+        (res) =>
+          ['POST', 'DELETE'].includes(res.request().method()) && new URL(res.url()).pathname.startsWith(`/user_lists/${listId}/items`)
+      );
+      if (on) await row.check();
+      else await row.uncheck();
+      expect((await done).ok()).toBe(true);
+      await tab.keyboard.press('Escape');
+    };
+
+    const listId = Number(await (await modalRow(tabB, bookY)).getAttribute('data-list-id'));
+    await tabB.keyboard.press('Escape');
+    const onList = (entry: Record<string, any> | null, id: string) =>
+      ((entry?.memberships?.['Books::Book']?.[id] ?? []) as { list_id: number }[]).some((m) => m.list_id === listId);
+    // A book already on the list would make its add a no-op and the test vacuous.
+    for (const id of [bookY, bookX, bookY2]) expect(onList(await cachedEntry(tabB), id)).toBe(false);
+
+    // B writes first, so it holds a CSRF token and its next write sends at once.
+    await setOnList(tabB, bookY, listId, true);
+    await setOnList(tabA, bookX, listId, true);
+    await setOnList(tabB, bookY2, listId, true);
+
+    // A fresh page load shows all three, from the cache or after one re-check.
+    const fresh = await context.newPage();
+    const requests = countStateRequests(fresh);
+    await fresh.goto('/');
+    await expectSignedIn(fresh);
+    await settle(fresh);
+    expect(requests.get('/user_list_state')).toBeLessThanOrEqual(1);
+    const entry = await cachedEntry(fresh);
+    for (const id of [bookY, bookX, bookY2]) expect(onList(entry, id), `book ${id} on list ${listId}`).toBe(true);
+    await expect(widgetFor(fresh, bookX).first().getByRole('button', { name: /On \d+ list/i })).toBeVisible();
+
+    // Leave the account as we found it.
+    for (const id of [bookY, bookX, bookY2]) await setOnList(fresh, id, listId, false);
+  });
 });

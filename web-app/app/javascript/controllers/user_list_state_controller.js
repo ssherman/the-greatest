@@ -12,6 +12,11 @@ const STATE_SCHEMA = 3
 // expiring) shows up.
 const RECHECK_AFTER_MS = 60 * 60 * 1000
 
+// After a re-check fails (network error, 429, 5xx, a Cloudflare challenge),
+// how long page loads leave a struggling origin alone. Without it every
+// signed-in page view would retry. Clicks that need the state still ask.
+const RETRY_AFTER_FAILURE_MS = 5 * 60 * 1000
+
 // Shared by every instance in this document. Turbo replaces <body> on each
 // visit, so each visit connects a fresh instance, and a visit that first shows
 // a cached snapshot connects two in quick succession. Holding the in-flight
@@ -66,10 +71,10 @@ export default class extends Controller {
     // pages, so mutations must use the token from the latest /user_list_state.
     // A 304 carries none, so ensureCsrf() asks for the full payload.
     this.csrf = null
-    // Whether the entry reflects every write tg_state_mark has recorded. A
-    // local write may only advance seenMark when it does: otherwise it would
-    // hide an earlier change (made on a Rails page) that it never applied.
-    this._markInSync = false
+    // tg_state_mark as beginWrite() saw it just before the write in flight
+    // was sent; undefined when no write has announced itself (see
+    // applyMutation for why a write needs it).
+    this._preWriteMark = undefined
 
     this._onAuthSuccess = this._onAuthSuccess.bind(this)
     this._onAuthSignout = this._onAuthSignout.bind(this)
@@ -152,6 +157,10 @@ export default class extends Controller {
   isStale() {
     const entry = this.cache
     if (!entry) return true
+    // Backing off after a failed re-check outranks both other reasons. The
+    // upper bound keeps a clock moved backwards from stretching the wait.
+    const wait = (entry.retryAfter || 0) - Date.now()
+    if (wait > 0 && wait <= RETRY_AFTER_FAILURE_MS) return false
     const age = Date.now() - entry.checkedAt
     if (!(age >= 0 && age <= RECHECK_AFTER_MS)) return true
     return currentMark() !== (entry.seenMark ?? null)
@@ -234,6 +243,7 @@ export default class extends Controller {
       response = await fetch(this.urlValue, { headers, credentials: "same-origin" })
     } catch (err) {
       console.warn("user-list-state: network error", err)
+      this._backOff(epoch)
       return { status: "failed" }
     }
 
@@ -251,7 +261,8 @@ export default class extends Controller {
       // The server only vouched for the snapshot. If a local write has since
       // changed the entry, seenMark stays as that write left it.
       const unchangedLocally = JSON.stringify(current) === snapshot
-      const next = { ...current, checkedAt: Date.now(), seenMark: unchangedLocally ? mark : current.seenMark }
+      const { retryAfter: _retryAfter, ...rest } = current
+      const next = { ...rest, checkedAt: Date.now(), seenMark: unchangedLocally ? mark : current.seenMark }
       this._writeStorage(next)
       return { status: "unchanged", entry: next }
     }
@@ -265,6 +276,7 @@ export default class extends Controller {
 
     if (!response.ok) {
       console.warn("user-list-state: unexpected status", response.status)
+      this._backOff(epoch)
       return { status: "failed" }
     }
 
@@ -273,6 +285,7 @@ export default class extends Controller {
       data = await response.json()
     } catch (err) {
       console.warn("user-list-state: unreadable response", err)
+      this._backOff(epoch)
       return { status: "failed" }
     }
 
@@ -294,6 +307,20 @@ export default class extends Controller {
     return { status: "updated", entry: next, csrf: csrf || null }
   }
 
+  // Stamps the stored entry so page loads skip the re-check for
+  // RETRY_AFTER_FAILURE_MS. Only for a failure to get an answer: a 401 clears
+  // instead, and a response dropped as another user's (epoch, user_id) says
+  // nothing about the origin. Without an entry there is nothing to stamp.
+  _backOff(epoch) {
+    if (epoch !== clearEpoch) return
+    const uid = this.cookieUid()
+    const current = this._readEntry(uid)
+    if (!current) return
+    const next = { ...current, retryAfter: Date.now() + RETRY_AFTER_FAILURE_MS }
+    this._writeStorage(next)
+    if (liveInstance?.cache && String(liveInstance.cache.user_id) === uid) liveInstance.cache = next
+  }
+
   _adopt(outcome) {
     // Belt and braces for the checks in _fetchState: with no tg_uid there is
     // no one to show a user's state to.
@@ -304,7 +331,6 @@ export default class extends Controller {
       this.cache = outcome.entry
       this.csrf = outcome.csrf
       this.signedIn = true
-      this._markInSync = true
       this._updateMyListsNav(true)
       this._dispatch("user-list-state:updated", { state: this.cache })
       break
@@ -314,7 +340,6 @@ export default class extends Controller {
       const hadEntry = !!this.cache
       this.cache = outcome.entry
       this.signedIn = true
-      this._markInSync = true
       if (!hadEntry) this._dispatch("user-list-state:loaded", { state: this.cache })
       break
     }
@@ -328,12 +353,32 @@ export default class extends Controller {
     }
   }
 
+  // Called by every write path just before it sends the write (after any
+  // ensureCsrf). Records the mark the write starts from, and brings this tab's
+  // copy up to date with the stored entry, which another tab may have changed
+  // since this page loaded, so the write's caller computes from that.
+  beginWrite() {
+    this._preWriteMark = currentMark()
+    const stored = this._readEntry(this.cookieUid())
+    if (stored && JSON.stringify(stored) !== JSON.stringify(this.cache)) {
+      this.cache = stored
+      this._dispatch("user-list-state:updated", { state: stored })
+    }
+  }
+
   // Optimistically apply a mutation result and rebroadcast. Called by the modal
   // after a successful add/remove/create. `memberships` is the new full array
   // of {list_id, item_id} tuples for this (listableType, listableId).
   applyMutation({ listableType, listableId, memberships, addedList, removedListId }) {
-    if (!this.cache) return
-    const next = JSON.parse(JSON.stringify(this.cache))
+    // Rebase on the stored entry, not this tab's copy: another tab may have
+    // written to it since, and writing this tab's copy back would undo that.
+    // In-memory only when storage is unusable (quota) but the copy is this
+    // user's.
+    const uid = this.cookieUid()
+    const base = this._readEntry(uid) ??
+      (this.cache && uid != null && String(this.cache.user_id) === uid ? this.cache : null)
+    if (!base) return
+    const next = JSON.parse(JSON.stringify(base))
 
     if (addedList) {
       const exists = next.lists.find((l) => l.id === addedList.id)
@@ -352,10 +397,18 @@ export default class extends Controller {
     }
 
     next.version = Math.floor(Date.now() / 1000)
-    // The write's response just moved tg_state_mark, and this entry now holds
-    // that write, so the next page need not re-check for it. Only when the
-    // entry already held every earlier write (see _markInSync).
-    if (this._markInSync) next.seenMark = currentMark()
+    // The write's response just moved tg_state_mark, and the entry now holds
+    // that write. It may be marked seen only if the entry already held every
+    // change before it: its seenMark equals the mark this write started from.
+    // Otherwise some change it does not hold (another tab's widget write
+    // stored without being applied here, a Rails page like /membership/thanks)
+    // moved the mark first, and marking it seen would hide that change for up
+    // to an hour. Left unseen, the next page that can re-check will.
+    // The recorded mark is spent here, so of two overlapping writes only the
+    // first can mark anything seen: one extra re-check, never a hidden change.
+    const pre = this._preWriteMark
+    this._preWriteMark = undefined
+    if (pre !== undefined && (base.seenMark ?? null) === pre) next.seenMark = currentMark()
     this.cache = next
     this._writeStorage(next)
     this._dispatch("user-list-state:updated", { state: next })
@@ -393,7 +446,6 @@ export default class extends Controller {
     if (!entry) return
     this.cache = entry
     this.signedIn = true
-    this._markInSync = currentMark() === (entry.seenMark ?? null)
     this._updateMyListsNav(true)
     this._dispatch("user-list-state:loaded", { state: this.cache })
   }
@@ -430,7 +482,7 @@ export default class extends Controller {
     this._clearStorage()
     this.cache = null
     this.csrf = null
-    this._markInSync = false
+    this._preWriteMark = undefined
     this._updateMyListsNav(true)
   }
 
@@ -440,7 +492,7 @@ export default class extends Controller {
     this.signedIn = false
     this.cache = null
     this.csrf = null
-    this._markInSync = false
+    this._preWriteMark = undefined
     this._updateMyListsNav(false)
     this._dispatch("user-list-state:cleared")
   }

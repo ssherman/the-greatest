@@ -175,9 +175,19 @@ A signed-in page load makes **at most one Rails request, and usually none**. The
 - it is older than `RECHECK_AFTER_MS` (one hour); or
 - the `tg_state_mark` cookie differs from the entry's `seenMark`.
 
+None of these applies for five minutes (`RETRY_AFTER_FAILURE_MS`) after a re-check that got no answer (network error, 429, 5xx, a Cloudflare challenge): the entry is stamped `retryAfter`, so a struggling origin is not retried on every page view. A 401 clears the entry instead.
+
 **Budget rule.** A page that already costs a Rails request by loading never adds a second one: uncached pages carry `<meta name="tg-page-request">`, and the book review widget and public reading-goal page carry `data-tg-page-request` (the review widget's own `/review_state` is that page's one request). On those pages the re-check is deferred to the next ordinary page. Clicks (a write, opening the list modal, Download CSV) are outside the budget; Download CSV checks membership at click time.
 
-**Change marker.** Writes made on this device (list add/remove, membership changes) are applied to the cache locally. Rails also moves the plain `tg_state_mark` cookie on every write that alters a user's lists or membership, so a change made in another tab, or one the cache missed, forces one re-check. Both are presentation hints, never trusted server-side, and neither is set on an edge-cacheable response.
+**Change marker.** Writes made through the list widgets are applied to the cache locally. Rails also moves the plain `tg_state_mark` cookie on every write that alters a user's lists or membership, so a change the cache missed (a Rails page such as `/my/lists` or `/membership/thanks`, or another tab) forces one re-check. Both are presentation hints, never trusted server-side, and neither is set on an edge-cacheable response.
+
+Another tab's write never gets hidden. Every write calls `beginWrite()` just before it is sent, which records the mark it starts from and syncs the tab's copy with the stored entry. `applyMutation` then rebases on the stored entry (so it does not overwrite another tab's stored change) and marks the new mark as seen only if the stored entry's `seenMark` equals that starting mark, i.e. the entry already held every earlier change. Otherwise the mark is left unseen and the next ordinary page re-checks.
+
+**Accepted delays (up to the hourly re-check).** The marker is set only on the response to the request that made the change, on that host, so these show up at the next hourly re-check rather than at once:
+
+- a Goodreads import that finishes in the background after its pages were served;
+- a Stripe webhook that lands after the `/membership/thanks` return page (which reconciles with Stripe and moves the marker itself);
+- a membership bought on one site showing on the other sites: `tg_state_mark` is a per-host cookie.
 
 **Conditional requests.** Re-checks send `If-None-Match` with the stored ETag; unchanged state answers `304` (no body, no CSRF token needed since one is fetched on demand before a write). The ETag digests the serialized payload, so it ignores the per-session CSRF token. In development rack-mini-profiler would strip the ETag, so `/user_list_state` is in its skip paths (`config/initializers/rack_mini_profiler.rb`).
 

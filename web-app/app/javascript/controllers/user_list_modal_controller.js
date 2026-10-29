@@ -281,6 +281,8 @@ export default class extends Controller {
   async _headers() {
     const stateCtrl = this._stateController()
     const token = await stateCtrl?.ensureCsrf?.()
+    // Every write asks for headers immediately before it is sent.
+    stateCtrl?.beginWrite?.()
     return {
       "Content-Type": "application/json",
       Accept: "application/json",

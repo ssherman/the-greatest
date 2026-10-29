@@ -22,6 +22,7 @@ export default class extends Controller {
 
   async _create(listableId, label) {
     try {
+      this._stateController()?.beginWrite?.()
       const res = await fetch(`/user_lists/${this.userListIdValue}/items`, {
         method: "POST",
         headers: {
