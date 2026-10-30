@@ -7,6 +7,9 @@ module Services
     module GoodreadsRebuild
       class FixesReportTest < ActiveSupport::TestCase
         setup do
+          # The report reads the Goodreads fetch gate; CI has no Redis server.
+          gate = ::Books::Goodreads::FetchGate.new(redis: ::Books::OpenLibrary::FakeRedis.new)
+          ::Books::Goodreads::FetchGate.stubs(:new).returns(gate)
           @source = ::Books::Book.create!(title: "Wrong Title")
           @target = ::Books::Book.create!(title: "Tenth of December")
           @fixed = ::Books::Book.create!(title: "Muddled")
