@@ -171,9 +171,82 @@ stays, and a re-run picks up the rest.
    - It counts rows for editions production doesn't hold (`no_edition_here`), and keeps them.
    - The report gains a line of evidence counts.
 
+## Fixes (increment 2b)
+
+Fixes the import-made books whose title or authors disagree with the Goodreads export, or whose
+editions are a lump of several works. On dev (2026-10-29) that is about 47,400 books. They are taken
+from the survey rows, most-listed first, so a stop part way leaves the least important ones undone. A
+trusted book (on a real list before the rebuild) is never touched.
+
+Each book gets one of two verdicts, stored as a repair verdict (`subject_key` `rebuild:<book id>`) that
+you review in Admin, Repair verdicts:
+
+- **Merge** (`merge_books`): the right book already exists in the catalog, so this one is merged into
+  it. The merge also clears the leftover wrong data from the book being merged away.
+- **Fix** (`fix_identity`): no right book exists, so this book is reset and imported again in place
+  with the export's title, authors and identifiers. It keeps its id, slug, and everything members hung
+  on it (list items, reviews, Goodreads editions).
+
+Deciding (`DecideFix`) only records a verdict; it changes no book. To find an existing book it runs the
+normal book finder **blinded**: no Open Library, no legacy evidence, and a book that is itself waiting
+for a fix is never a target. The search is built from the export's facts for the book's main work
+(`ExportFacts`: title, authors, year, identifiers and Open Library hints from the biggest edition group).
+
+**When each is automatic.** The bar is zero wrong merges.
+
+- A merge is applied by itself only when the target carries a verified Open Library work that the
+  export's evidence names, the target's title equals one of the export titles exactly, and the work has
+  no volume number. Every other merge is proposed and waits for an admin. (A proposed target is still
+  only a trusted book or a book whose own survey agrees with its export.)
+- A fix is applied by itself only when WorldCat confirmed the export. Otherwise it is proposed.
+- A merge an admin rejected is never proposed again; the book gets a fix proposal instead.
+
+**A failed finder run decides nothing.** If the finder fell back or lost one of its sources, "found
+nothing" would be a guess, so the book stays undecided (counted as `retry` in the run log) and the next
+`decide_fixes` run tries it again. A book that already has a live verdict is left as it is (`kept`).
+
+**What a reset clears and keeps** (`ResetBook`). It clears the description, subtitle, sort title,
+original year, language, length figures, alternate titles and the Amazon-enriched mark, and deletes the
+book's authors, credits, descriptions, categories, images, editions, identifiers, alternate-title rows,
+series links, countries and external links. It keeps the book row, its id and slug, and everything
+members hung on it (list items, reviews, Goodreads editions).
+
+**It saves a copy of what it removed.** Before deleting, the reset stores the old title and authors,
+every identifier, every edition with its identifiers, and every link (Amazon ASINs and product links
+included) on the verdict as `payload["removed"]`. The first copy is kept for good: a retry of a failed
+apply finds nothing left to copy, and it never overwrites the saved one.
+
+**Applying.** `books:goodreads_replay:apply` re-runs every pass, but a fix is applied only once
+(`applied_at` is set). A book put on a real list since the verdict was recorded is left alone. The
+reset and the new title commit together; the author and identifier import runs after, so a failed
+author import leaves the right title with no authors and the next pass finishes it.
+
+**Enrichment.** Once a fix is applied, the book needs its Goodreads page, authors and the rest. The job
+`Books::GoodreadsRebuild::QueueEnrichmentJob` runs every 10 minutes (`config/schedule.yml`,
+`goodreads_rebuild_enrichment`) and starts the normal new-book enrichment for fixed books, most-listed
+first. At most `GOODREADS_REBUILD_IN_FLIGHT` (default 300) books wait for their Goodreads fetch at
+once, so other books keep their share of fetches. While Goodreads has blocked us, no new book starts. A
+book with any enrichment run since its fix was applied is done.
+
+The speed is set by the Goodreads fetch cap, not by this job: `GOODREADS_DAILY_FETCH_CAP` (default
+1,500 a day) and `GOODREADS_FETCH_INTERVAL` (default 15 seconds). To go faster, raise the cap in the
+production env (SOPS) and restart the worker, after a day or two with no failures and no blocks (read
+`fixes_report`'s enrichment section). Above 5,760 a day, 15 seconds apart cannot fit the cap, so lower
+`GOODREADS_FETCH_INTERVAL` too.
+
+Commands:
+
+- `bin/rails "books:goodreads_rebuild:decide_fixes[<count>|all]"` queues the decide run
+  (`DecideFixesJob`, `low` queue, 100 books a batch) over the most-listed books that need a fix. It
+  calls the AI for books it cannot settle by rule. Run it again to pick up `retry` books.
+- `bin/rails books:goodreads_rebuild:fixes_report`: read-only. Counts of merges and fixes by status and
+  confidence, how many applied or failed, 10 samples of each with our title beside the export's, and an
+  enrichment section (runs, Goodreads pages found, missed and failed, fetches used against the cap, and
+  whether the gate is blocked).
+- `bin/rails books:goodreads_rebuild:queue_enrichment`: one top-up now; the cron job does this alone.
+
 ## Later increments
 
-- **Stage one fixes (2b):** the existence check, then reset and re-import in place (spec §4.1).
 - **Verification scope:** for repaired books.
 - **Stage two:** moves, `create_book`, `add_item`, dedupe, and the member-import guards.
 - **The sweep and the weekly catch-up.**

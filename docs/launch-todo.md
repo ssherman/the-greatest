@@ -419,4 +419,21 @@ The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve o
    - `bin/rails "books:goodreads_rebuild:survey[all,redo]"`, and wait for the job.
    - `bin/rails books:goodreads_rebuild:survey_report`. The lump count should drop: translations on
      one Open Library work no longer count as lumps. The report now shows how often WorldCat agreed.
-5. The fixes: added by increment 2b.
+5. **The fixes.** About 47,400 books on dev; see `docs/features/goodreads-rebuild.md`, "Fixes (increment 2b)".
+   All of these runs are yours; do them in this order.
+   1. `bin/rails "books:goodreads_rebuild:decide_fixes[200]"`, wait for the Sidekiq jobs, then
+      `bin/rails books:goodreads_rebuild:fixes_report`. Hand-check the samples against the export.
+      Nothing is changed yet; it only records proposals.
+   2. `bin/rails "books:goodreads_rebuild:decide_fixes[all]"`. It calls the AI on undecided books, about
+      47,000 of them, on Sidekiq `low`, so it takes a while. Run it again for any books reported as
+      `retry`, then `fixes_report` again.
+   3. In Admin, Repair verdicts: review and bulk-approve the `fix_identity` proposals, then the
+      `merge_books` ones.
+   4. `bin/rails books:goodreads_replay:apply`, then `bin/rails books:goodreads_replay:repair_ratings`.
+      `apply` re-runs every pass but applies each fix only once, and leaves alone any book put on a real
+      list since. Each reset saves what it removed (Amazon ASINs and links too) on the verdict.
+   5. From then on the 10-minute job enriches the fixed books nonstop, at the Goodreads fetch cap
+      (300 waiting at once).
+   6. After a day or two, read `fixes_report`'s enrichment section. If nothing failed and the gate never
+      blocked, raise `GOODREADS_DAILY_FETCH_CAP` in the production env (SOPS) and restart the worker.
+      Above 5,760 a day, lower `GOODREADS_FETCH_INTERVAL` too.
