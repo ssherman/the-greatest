@@ -26,7 +26,31 @@ module Services
           failed.order(:id).limit(ERRORS_SHOWN).each { |verdict| lines << "  #{verdict.subject_key}: #{verdict.error.to_s.lines.first.to_s.strip}" }
           merges(lines, verdicts.merge_books)
           fixes(lines, verdicts.fix_identity)
+          enrichment(lines)
           lines.join("\n")
+        end
+
+        # Plain facts for deciding whether it is safe to raise the daily Goodreads cap.
+        def enrichment(lines)
+          runs = WorkflowRun.where(workflow: "books.book_enrichment", initiated_by: "goodreads_rebuild")
+          steps = WorkflowStep.where(key: "goodreads", workflow_run_id: runs.select(:id))
+          since = Time.current.utc.beginning_of_day
+          gate = ::Books::Goodreads::FetchGate.new
+          number = ActiveSupport::NumberHelper
+          lines << "" << "enrichment of fixed books:"
+          lines << "  runs started: #{runs.count}, finished: #{runs.where(status: %i[completed completed_with_failures]).count}, " \
+            "failed: #{runs.completed_with_failures.count}"
+          outcomes = {
+            "found" => steps.where(outcome: "matched"),
+            "missed" => steps.where(outcome: %w[no_match rejected blocked unparseable]),
+            "failed" => steps.failed
+          }
+          counts = outcomes.map { |name, scope| "#{name}: #{scope.count} (today #{scope.where("finished_at >= ?", since).count})" }
+          lines << "  Goodreads pages #{counts.join(", ")}"
+          blocked = gate.blocked_until
+          lines << "  Goodreads fetches today: #{number.number_to_delimited(gate.fetches_today)} of " \
+            "#{number.number_to_delimited(Rails.application.config.x.goodreads.daily_fetch_cap)} " \
+            "(#{blocked ? "blocked until #{blocked.utc.strftime("%Y-%m-%d %H:%M UTC")}" : "gate not blocked"})"
         end
 
         def sample(scope) = scope.order(Arel.sql("random()")).limit(SAMPLE)

@@ -39,6 +39,31 @@ module Services
           assert_match(/with an error: 1/, report)
           assert_includes report, "boom: it broke"
         end
+
+        test "reports enrichment runs, Goodreads outcomes, the gate's daily count and a block" do
+          stub_workflow_dispatch
+          ::Books::Goodreads::FetchGate.any_instance.stubs(:fetches_today).returns(812)
+          ::Books::Goodreads::FetchGate.any_instance.stubs(:blocked_until).returns(Time.utc(2026, 10, 29, 18, 30))
+          Rails.application.config.x.goodreads.stubs(:daily_fetch_cap).returns(1_500)
+          run = ->(status, outcome, state, created_at = Time.current) do
+            book = ::Books::Book.create!(title: "Enriched #{outcome}#{status}")
+            WorkflowRun.create!(workflow: "books.book_enrichment", definition_version: 2, enrichable: book, status: status,
+              initiated_by: "goodreads_rebuild", options: {}, created_at: created_at).tap do |r|
+              r.steps.create!(key: "goodreads", queue: "goodreads_fetch", lease_seconds: 600, state: state, outcome: outcome, finished_at: created_at)
+            end
+          end
+          run.call(:completed, "matched", :succeeded)
+          run.call(:completed, "no_match", :succeeded, 2.days.ago)
+          run.call(:completed_with_failures, nil, :failed)
+          run.call(:running, nil, :waiting)
+
+          report = FixesReport.call
+
+          assert_includes report, "runs started: 4, finished: 3, failed: 1"
+          assert_includes report, "Goodreads pages found: 1 (today 1), missed: 1 (today 0), failed: 1 (today 1)"
+          assert_includes report, "Goodreads fetches today: 812 of 1,500"
+          assert_includes report, "blocked until 2026-10-29 18:30 UTC"
+        end
       end
     end
   end

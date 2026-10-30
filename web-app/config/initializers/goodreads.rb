@@ -4,10 +4,13 @@
 # config, not an admin UI. Measured 2026-10-04 on 22 fetches: 4-8 s each,
 # 25-180 KB gzipped.
 Rails.application.config.x.goodreads = ActiveSupport::OrderedOptions.new.merge(
-  # Seconds from one fetch start to the next: at most 240 an hour.
-  fetch_interval: 15,
-  # Fetches reserved per UTC day.
-  daily_fetch_cap: 1_500,
+  # Seconds from one fetch start to the next: at most 240 an hour. Set
+  # GOODREADS_FETCH_INTERVAL to change it without a deploy. The interval bounds
+  # the cap: 86,400 / interval is the most fetches a day can hold, 5,760 at 15 s,
+  # so raising the cap past that needs a shorter interval too.
+  fetch_interval: Integer(ENV.fetch("GOODREADS_FETCH_INTERVAL", 15)),
+  # Fetches reserved per UTC day. GOODREADS_DAILY_FETCH_CAP overrides it.
+  daily_fetch_cap: Integer(ENV.fetch("GOODREADS_DAILY_FETCH_CAP", 1_500)),
   # How long a 403, a challenge page or a page the parser cannot recognize
   # stops every fetch.
   block_cooldown: 6.hours.to_i,

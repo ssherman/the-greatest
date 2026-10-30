@@ -51,6 +51,12 @@ namespace :books do
       puts Services::Books::GoodreadsRebuild::SurveyReport.call
     end
 
+    desc "Run one enrichment top-up for the fixed books now (the 10-minute job does this on its own)"
+    task queue_enrichment: :environment do
+      data = Services::Books::GoodreadsRebuild::QueueEnrichment.call(in_flight: Rails.application.config.x.goodreads_rebuild.in_flight).data
+      puts "started #{data[:started]}, in flight #{data[:in_flight]}, still waiting #{data[:waiting]}"
+    end
+
     desc "Queue the decide run over the <count> most-listed derived books that need a fix, or all. It only records verdicts; nothing changes."
     task :decide_fixes, [:limit] => :environment do |_task, args|
       usage = "usage: books:goodreads_rebuild:decide_fixes[<count>|all]"

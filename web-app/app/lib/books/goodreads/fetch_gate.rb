@@ -47,6 +47,13 @@ module Books
         read["blocked_until"].to_i > now
       end
 
+      # Fetches reserved for the current UTC day (a line running past midnight
+      # counts on the day each fetch starts, so tomorrow's may already be taken).
+      def fetches_today
+        state = read
+        (state["day"] == Time.at(now).utc.strftime("%Y%m%d")) ? state["day_count"].to_i : 0
+      end
+
       # When the current block ends; nil when none was set or it has passed.
       def blocked_until
         epoch = read["blocked_until"].to_i
