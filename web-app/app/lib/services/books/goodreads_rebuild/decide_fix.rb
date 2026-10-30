@@ -63,7 +63,7 @@ module Services
           return done(:retry) unless authors.success?
 
           @author_links = authors.data[:links]
-          return record_same_author if @survey.title_agrees && @survey.coherent? && authors.data[:all_matched]
+          return record_same_author if @survey.title_agrees && @survey.coherent? && authors.data[:all_matched] && own_title_agrees?
 
           unless rejected_merge?
             match = (@finder || self.class.default_finder).call(query: @facts.to_query, verify: true, subject: @book, exclude: @book)
@@ -81,6 +81,16 @@ module Services
           args = {book: @book, facts: @facts}
           args[:task_class] = @task_class if @task_class
           MatchAuthors.call(**args)
+        end
+
+        # survey.title_agrees also counts a legacy alternate title, which is a guess and never evidence:
+        # the shortcut needs the book's own title, or an alternate title someone trusted, to equal the export's.
+        def own_title_agrees?
+          return true if derived_title_matches?(@book)
+
+          trusted = @book.alternate_title_records.kept.where(source: ::DataImporters::Books::Book::Finder::TRUSTED_ALTERNATE_TITLE_SOURCES).pluck(:title)
+          wanted = export_titles.flat_map { |title| [title, title.sub(ExportFacts::SERIES_SUFFIX, "")] }.filter_map { |t| ::Services::Books::Verification::Check.title_key(t) }
+          (trusted.filter_map { |t| ::Services::Books::Verification::Check.title_key(t) } & wanted).any?
         end
 
         # The right book with the right title and the same people under other spellings: nothing is

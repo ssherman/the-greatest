@@ -385,6 +385,7 @@ module Services
         def decide_with(survey, task_class) = DecideFix.call(book: @book, survey: survey, finder: @finder, task_class: task_class)
 
         test "the right title with the same author under another spelling records nothing and keeps the export spelling" do
+          @book.update!(title: "Tenth of December")
           author = ::Books::Author.create!(name: "George Saunders Jr.")
           @book.book_authors.create!(author: author, position: 1)
           survey = survey_for(@book, group_for(title: "Tenth of December"), title_agrees: true, wrong_book: false)
@@ -398,6 +399,7 @@ module Services
         end
 
         test "a second run matches the kept spelling without asking the AI again" do
+          @book.update!(title: "Tenth of December")
           author = ::Books::Author.create!(name: "George Saunders Jr.")
           @book.book_authors.create!(author: author, position: 1)
           survey = survey_for(@book, group_for(title: "Tenth of December"), title_agrees: true, wrong_book: false)
@@ -449,6 +451,7 @@ module Services
         end
 
         test "an author whose alternate names hold the export spelling in normalised form is not updated" do
+          @book.update!(title: "Tenth of December")
           author = ::Books::Author.create!(name: "George Saunders Jr.", alternate_names: ["george saunders"])
           @book.book_authors.create!(author: author, position: 1)
           survey = survey_for(@book, group_for(title: "Tenth of December"), title_agrees: true, wrong_book: false)
@@ -458,6 +461,30 @@ module Services
 
           assert_equal :same_author, result.data[:outcome]
           assert_equal stamp, author.reload.updated_at
+        end
+
+        test "a legacy alternate title does not earn the same-author shortcut" do
+          author = ::Books::Author.create!(name: "George Saunders Jr.")
+          @book.book_authors.create!(author: author, position: 1)
+          @book.update!(alternate_titles: ["Tenth of December"])
+          ::AlternateTitle.create!(titleable: @book, title: "Tenth of December", normalized_title: "tenth of december", source: :legacy, status: :kept)
+          survey = survey_for(@book, group_for(title: "Tenth of December"), title_agrees: true, wrong_book: false)
+          @finder.expects(:call).returns(unmatched)
+
+          result = decide_with(survey, ai_task_class(saunders_match))
+
+          assert_equal :fix, result.data[:outcome]
+          assert_equal [], author.reload.alternate_names
+        end
+
+        test "a trusted alternate title earns the same-author shortcut" do
+          author = ::Books::Author.create!(name: "George Saunders Jr.")
+          @book.book_authors.create!(author: author, position: 1)
+          ::AlternateTitle.create!(titleable: @book, title: "Tenth of December", normalized_title: "tenth of december", source: :ai_enrichment, status: :kept)
+          survey = survey_for(@book, group_for(title: "Tenth of December"), title_agrees: true, wrong_book: false)
+          @finder.expects(:call).never
+
+          assert_equal :same_author, decide_with(survey, ai_task_class(saunders_match)).data[:outcome]
         end
 
         test "needs_fix? is a pure function of the survey row" do
