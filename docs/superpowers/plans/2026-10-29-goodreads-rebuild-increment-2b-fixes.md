@@ -171,16 +171,24 @@
 - Test: `web-app/test/lib/services/books/goodreads_rebuild/reset_book_test.rb`
 
 **Interfaces:**
-- Produces: `Services::Books::GoodreadsRebuild::ResetBook.call(book:)`, which returns a Result. `data` is `{book:}`.
+- Produces: `Services::Books::GoodreadsRebuild::ResetBook.call(book:)`, which returns a Result. `data` is `{book:, removed:}`.
   - It clears exactly the Reset clears list in Global Constraints, in one transaction.
   - It does not save a new title; callers set the title after.
   - It raises `ArgumentError` when `Cohort.trusted?(book.id)`.
+  - `removed` is a JSON-safe, string-keyed archive of what was cleared that could be commercially useful later (Shane, 2026-10-29: the Amazon data must be stored, not lost). It contains:
+    - `"identifiers"`: `[[identifier_type, value, source], ...]`;
+    - `"editions"`: for each edition, its `title`, its identifiers (as `[type, value]` pairs), and its external links' `url`/`source`;
+    - `"external_links"`: the book's own links, as `[[url, source], ...]`;
+    - the old `title`, `subtitle` and author names.
+
+    Callers store it on the verdict, so a later step can recover any Amazon ASIN or link the reset removed.
 
 - [ ] **Step 1: Write the failing tests**
   - "clears every legacy-derived association and column". Give a derived book (id inside `Cohort.post_import_range`, on no list) one row of each association in the clears list and a value in each column. Assert each association `count == 0` and each column is nil (`alternate_titles == []`).
   - "keeps the book's id, slug, user list items, reviews and goodreads editions". Each is unchanged after the call.
   - "refuses a trusted book". A pre-import id raises `ArgumentError`, and nothing is deleted.
   - "running it twice is harmless". The second call succeeds with nothing left to clear.
+  - "returns an archive of the cleared identifiers, editions and links". A book with a legacy `books_work_asin` `B00TEST123` and an edition holding `books_edition_asin` `B00EDIT456` has both values in `data[:removed]`, and the archive survives `JSON.parse(removed.to_json)`.
 - [ ] **Step 2: Run them.**
   - Expected: FAIL (`NameError`).
 - [ ] **Step 3: Implement.**
@@ -257,7 +265,7 @@
   - `match:` is a `DataImporters::Match` built here with `outcome: :matched, record: book, confidence: :certain, decided_by: :rule, reason: "goodreads rebuild fix_identity", candidates: []`.
   - The query comes from the payload: rebuild `ExportFacts` fields with `ImportQuery.new`, where the payload's `goodreads_ids` maps to `goodreads_id:`.
 - Produces: `Apply::FixIdentity.call(verdict:)`, which returns a Result with `data[:outcome]` of `:applied` or `:noop`.
-  - On `:applied` it writes `payload["created_author_ids"]` (from `ImportResult#created_author_ids`) onto the verdict with `update_columns`.
+  - On `:applied` it writes `payload["created_author_ids"]` (from `ImportResult#created_author_ids`) and `payload["removed"]` (ResetBook's archive) onto the verdict with `update_columns`. `MergeBooks` does the same with the source's archive when `reset_source` is set. A test asserts the archive is on the verdict after apply.
   - It raises `Apply::Failed` when the Authors provider fails, so the error is recorded and `applied_at` stays nil.
 - `ApplyVerdicts::HANDLERS` gains `"fix_identity" => Apply::FixIdentity` as its first entry.
 
