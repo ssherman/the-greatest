@@ -83,5 +83,18 @@ namespace :books do
       puts(result.data[:applied] ? "retired" :
         "dry run: nothing changed; run books:goodreads_rebuild:retire_replay_proposals[apply]")
     end
+
+    desc "Retire the unapplied fix and merge verdicts recorded on lump records (rejected and superseded; the split step " \
+      "handles lumps). A dry run unless [apply]; a second apply finds 0."
+    task :retire_lump_verdicts, [:apply] => :environment do |_task, args|
+      result = Services::Books::GoodreadsRebuild::RetireLumpVerdicts.call(apply: args[:apply] == "apply")
+      puts "unapplied lump verdicts: #{tally.call(result.data[:counts])}"
+      puts "already applied on a lump (left alone): #{result.data[:already_applied]}"
+      puts "applied, survey gone (look at these): #{result.data[:applied_unknown]}"
+      result.data[:applied_unknown_keys].each { |key| puts "  #{key}" }
+      result.data[:samples].each { |line| puts "  #{line}" }
+      puts(result.data[:applied] ? "retired" :
+        "dry run: nothing changed; run books:goodreads_rebuild:retire_lump_verdicts[apply]")
+    end
   end
 end

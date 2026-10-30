@@ -110,12 +110,17 @@ module Services
           assert_match(/not a duplicate/i, verdict.reason)
         end
 
-        test "proposes the merge when the survey is a lump" do
-          target = trusted_target
+        test "a lump is skipped without a verdict or a finder call" do
           survey = survey_for(@book, group_for(title: "Tenth of December", ol_work_keys: ["OL1W"]), classification: :lump)
-          @finder.expects(:call).returns(match(target))
+          @finder.expects(:call).never
+          ai = mock("task_class")
+          ai.expects(:new).never
 
-          assert_equal "proposed", decide(survey).data[:verdict].status
+          result = DecideFix.call(book: @book, survey: survey, finder: @finder, task_class: ai)
+
+          assert_equal :skipped, result.data[:outcome]
+          assert_nil result.data[:verdict]
+          assert_equal 0, ::Books::RepairVerdict.where(subject_key: "rebuild:#{@book.id}").count
         end
 
         test "proposes the merge when the main group has a volume" do
@@ -322,6 +327,16 @@ module Services
           assert_equal :fix, decide(survey).data[:outcome]
         end
 
+        # A merge retired while the record was a lump (rejected and superseded) is not an admin's "no".
+        test "a retired merge does not stop the finder" do
+          survey = survey_for(@book, group_for(title: "Tenth of December"))
+          ::Books::RepairVerdict.create!(kind: :merge_books, subject_key: "rebuild:#{@book.id}", decided_by: :rule, status: :rejected,
+            superseded_at: Time.current, payload: {})
+          @finder.expects(:call).returns(unmatched)
+
+          assert_equal :fix, decide(survey).data[:outcome]
+        end
+
         test "a trusted book is skipped" do
           trusted = ::Books::Book.create!(id: Cohort.post_import_range.first - 60, title: "Trusted")
           survey = survey_for(trusted, group_for(title: "Tenth of December"))
@@ -491,7 +506,7 @@ module Services
           build = ->(**a) { ::Books::RebuildBookSurvey.new({classification: :coherent, groups: [{"titles" => []}], title_agrees: false, authors_agree: false, wrong_book: false}.merge(a)) }
 
           assert DecideFix.needs_fix?(build.call)
-          assert DecideFix.needs_fix?(build.call(classification: :lump, title_agrees: true, authors_agree: true, wrong_book: true))
+          refute DecideFix.needs_fix?(build.call(classification: :lump, title_agrees: false, authors_agree: false, wrong_book: true))
           assert DecideFix.needs_fix?(build.call(title_agrees: true, authors_agree: false))
           refute DecideFix.needs_fix?(build.call(title_agrees: true, authors_agree: true))
           refute DecideFix.needs_fix?(build.call(classification: :unsupported))

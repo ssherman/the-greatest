@@ -27,7 +27,8 @@ module Services
 
         test "candidates order the most-listed book first and leave out trusted, agreeing and unsupported books" do
           few = survey_for(derived_book).book
-          many = survey_for(derived_book, classification: :lump).book
+          many = survey_for(derived_book).book
+          survey_for(derived_book, classification: :lump)
           list(many, 2)
           list(few, 1)
           survey_for(derived_book, title_agrees: true, authors_agree: true)
@@ -56,6 +57,10 @@ module Services
 
           assert_equal expected.sort, DecideFixes.candidates.pluck(:id).sort
           assert_operator expected.size, :>=, 3
+          lumps = surveys.select(&:lump?).map(&:book_id)
+          assert_equal 2, lumps.size
+          assert_empty lumps & DecideFixes.candidates.pluck(:id)
+          assert_empty lumps & expected
         end
 
         test "enqueue slices into batches of 100 and respects limit" do
