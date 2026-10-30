@@ -2,12 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** For every derived book whose title or authors disagree with its Goodreads export rows (47,387 on dev, 2026-10-29), decide whether the right book already exists. If it does, record a merge into it. If not, record a reset and re-import of the book in place. `apply` carries both out, and enrichment of the fixed books is queued daily, most-listed first.
+**Goal:** For every derived book whose title or authors disagree with its Goodreads export rows (47,387 on dev, 2026-10-29), decide whether the right book already exists. If it does, record a merge into it. If not, record a reset and re-import of the book in place. `apply` carries both out, and the fixed books are enriched nonstop at the Goodreads fetch cap, most-listed first.
 
 **Architecture:**
 - **Decide.** A per-book service builds the export facts from the survey's main edition group and its pass-2 evidence. It runs the importer's finder in a new *blinded* configuration: no Open Library, only trusted-source identifiers, the book itself excluded. It records one `Books::RepairVerdict`: `merge_books` (with `reset_source`) when an eligible book is found, otherwise the new kind `fix_identity`.
 - **Apply.** The existing `books:goodreads_replay:apply` gains a `FixIdentity` handler. It wipes the book's legacy-derived data, sets title, subtitle and year from the export, and re-imports authors and identifiers through `DataImporters::Books::Book::Importer`. The `MergeBooks` handler resets the source first when the verdict says so.
-- **Enrich.** A daily cron job starts the existing book-enrichment workflow for applied fixes, in priority order.
+- **Enrich.** A job every 10 minutes keeps up to 300 fixed books in the existing book-enrichment workflow, most-listed first.
 
 **Tech Stack:** Rails 8, Sidekiq + sidekiq-cron, Minitest + Mocha, PostgreSQL.
 
@@ -32,7 +32,7 @@
 - **Reset clears:**
   - associations: `book_authors`, `credits`, `descriptions`, `category_items`, `images`, `editions`, `identifiers`, `alternate_title_records`, `series_books`, `book_countries`, `external_links`;
   - columns: `description`, `subtitle`, `sort_title`, `first_published_year`, `original_language_id`, `default_edition_id`, `book_length`, `page_range`, `word_count`, `amazon_enriched_at`, and `alternate_titles` (to `[]`).
-- **The importer's Open Library provider never runs here** (§4.1). Enrichment never runs inside `apply`; it is queued by the daily job.
+- **The importer's Open Library provider never runs here** (§4.1). Enrichment never runs inside `apply`; it is queued by the 10-minute top-up job.
 - Rails 8 enum syntax; services return `Result = Struct.new(:success?, :data, :errors, keyword_init: true)`; jobs via `bin/rails generate sidekiq:job`; `bundle exec standardrb`; ALWAYS run annotaterb, and never set `ANNOTATERB_SKIP_ON_DB_TASKS`.
 - **No destructive commands against development.** The dev rehearsal in Task 8 is Shane's call, and a snapshot goes first.
 
@@ -58,7 +58,10 @@
    *If wrong:* a sync-undone fix is not re-done automatically.
 5. **Pending duplicate pairs** (834 touch the fix set) are left alone. The merger re-keys pairs on merge, and stage two re-judges every pair fresh (§5 step 3).
 6. **First published year** is set from the main group's export original year, because the importer's Open Library provider is skipped.
-7. **Enrichment budget:** 1,200 books a day by default (`config.x.goodreads_rebuild.daily_enrichments`). That leaves 300 of the 1,500-a-day Goodreads fetch cap for new books.
+7. **Enrichment runs continuously** (Shane, 2026-10-29: "enrich nonstop until it's done"). Every 10 minutes a job tops up the rebuild's books waiting for a Goodreads fetch to `config.x.goodreads_rebuild.in_flight` (default 300). The Goodreads fetch cap paces it, so the whole cap is used and priority order holds.
+   - A new book from anywhere else joins a short line, not a line of 45,000.
+   - The cap and the spacing become ENV-overridable, so Shane can raise 1,500 a day after a day or two with no failures, without a deploy.
+   - *If wrong:* the rebuild books get fewer fetches than the cap allows; raise `in_flight`.
 
 ## File structure
 
@@ -77,8 +80,8 @@
 | `app/lib/services/books/goodreads_replay/apply_verdicts.rb` (modify) | `fix_identity` first in `HANDLERS` |
 | `app/lib/services/books/goodreads_rebuild/queue_enrichment.rb` (create) | start enrichment workflows by priority |
 | `app/sidekiq/books/goodreads_rebuild/decide_fixes_job.rb` (create) | one batch of book ids |
-| `app/sidekiq/books/goodreads_rebuild/queue_enrichment_job.rb` (create) | daily cron driver |
-| `config/initializers/goodreads_rebuild.rb` (create), `config/schedule.yml` (modify) | budget setting, cron entry |
+| `app/sidekiq/books/goodreads_rebuild/queue_enrichment_job.rb` (create) | 10-minute top-up driver |
+| `config/initializers/goodreads_rebuild.rb` (create), `config/schedule.yml` (modify) | in-flight setting, cron entry; ENV fetch cap in `config/initializers/goodreads.rb` |
 | `lib/tasks/books/goodreads_rebuild.rake` (modify) | `decide_fixes`, `fixes_report`, `queue_enrichment` |
 | `docs/features/goodreads-rebuild.md`, `docs/launch-todo.md` §11 (modify) | docs and production steps |
 
@@ -328,33 +331,46 @@ Steps 2 and 3 run in one transaction; the import runs after it.
   - Expected: PASS.
 - [ ] **Step 5: Commit.** `git commit -m "Goodreads rebuild: decide_fixes run, job and fixes_report"`
 
-### Task 7: Daily enrichment of fixed books
+### Task 7: Continuous enrichment of fixed books
 
 **Files:**
 - Create: `web-app/app/lib/services/books/goodreads_rebuild/queue_enrichment.rb`, `web-app/config/initializers/goodreads_rebuild.rb`
 - Create via generator: `bin/rails generate sidekiq:job books/goodreads_rebuild/queue_enrichment`
-- Modify: `web-app/config/schedule.yml`, `web-app/lib/tasks/books/goodreads_rebuild.rake`
-- Test: `.../queue_enrichment_test.rb`, `web-app/test/sidekiq/books/goodreads_rebuild/queue_enrichment_job_test.rb`
+- Modify: `web-app/config/initializers/goodreads.rb`, `web-app/config/schedule.yml`, `web-app/lib/tasks/books/goodreads_rebuild.rake`, `web-app/app/lib/services/books/goodreads_rebuild/fixes_report.rb` (from Task 6)
+- Test: `.../queue_enrichment_test.rb`, `web-app/test/sidekiq/books/goodreads_rebuild/queue_enrichment_job_test.rb`, `.../fixes_report_test.rb`
 
 **Interfaces:**
 - Consumes: `Workflows::Books::BookEnrichment.start(book, initiated_by:, new_author_ids: [], author_names: [], options: {})`.
 - Produces:
-  - `QueueEnrichment.call(limit:)` returns a Result. `data` is `{started:, waiting:}`. It picks books with an applied `fix_identity` verdict that have no `WorkflowRun` (`workflow: "books.book_enrichment"`) created at or after the verdict's `applied_at`. They are ordered by user-list-item count descending, then id, and each is started with `initiated_by: "goodreads_rebuild"`, `new_author_ids: payload["created_author_ids"] || []` and `author_names: payload["author_names"]`.
-  - `config.x.goodreads_rebuild.daily_enrichments`, default `1200`, overridable with ENV `GOODREADS_REBUILD_DAILY_ENRICHMENTS`.
-  - The job's `perform(limit = nil)` uses the config when `limit` is nil.
-  - In `schedule.yml`: `goodreads_rebuild_enrichment`, cron `"0 6 * * *"`.
-  - Rake: `books:goodreads_rebuild:queue_enrichment[limit]`.
+  - `QueueEnrichment.call(in_flight:)` returns a Result. `data` is `{started:, in_flight:, waiting:}`.
+    - **In flight** means `WorkflowRun`s with `workflow: "books.book_enrichment"`, `initiated_by: "goodreads_rebuild"` and status running, whose `goodreads` step is not finished.
+    - It starts `in_flight - current` more. They are taken from books with an applied `fix_identity` verdict that have no `books.book_enrichment` run created at or after the verdict's `applied_at`, ordered by user-list-item count descending, then id.
+    - Each is started with `initiated_by: "goodreads_rebuild"`, `new_author_ids: payload["created_author_ids"] || []` and `author_names: payload["author_names"]`.
+    - It does nothing while `Books::Goodreads::FetchGate.new.blocked?`: a block means Goodreads refused us, so no new books join until it clears.
+  - `config.x.goodreads_rebuild.in_flight`, default `300`, overridable with ENV `GOODREADS_REBUILD_IN_FLIGHT`.
+  - `config.x.goodreads.daily_fetch_cap` and `fetch_interval` read ENV `GOODREADS_DAILY_FETCH_CAP` and `GOODREADS_FETCH_INTERVAL`, falling back to 1,500 and 15. The initializer comment says the interval bounds the cap: 86,400 ÷ interval is the most a day can hold, 5,760 at 15 s.
+  - The job's `perform` calls `QueueEnrichment.call(in_flight: config)`.
+  - In `schedule.yml`: `goodreads_rebuild_enrichment`, cron `"*/10 * * * *"`.
+  - Rake: `books:goodreads_rebuild:queue_enrichment` runs one top-up now.
+  - `FixesReport` gains an enrichment section, so Shane can tell whether it's safe to raise the cap. It shows:
+    - rebuild runs started, finished and failed;
+    - Goodreads step outcomes (found, missed, failed), today and in total;
+    - today's fetch count against the cap;
+    - whether the gate is blocked, and until when.
 - [ ] **Step 1: Write the failing tests**
-  - "starts the most-listed applied fix first, up to the limit".
+  - "tops up to in_flight, most-listed applied fix first".
+  - "starts nothing when already at in_flight".
   - "skips a book already enriched since its fix, and an unapplied fix".
   - "passes the fix's created author ids".
-  - "the job reads the daily budget from config".
+  - "starts nothing while the fetch gate is blocked".
+  - "the fetch cap and interval read ENV, falling back to 1,500 and 15". Reload the initializer in the test with `load`, restoring the config after.
+  - `fixes_report_test`: "reports the gate's daily count and a block".
 - [ ] **Step 2: Run them.**
   - Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run them.**
   - Expected: PASS.
-- [ ] **Step 5: Commit.** `git commit -m "Goodreads rebuild: daily enrichment of fixed books, most-listed first"`
+- [ ] **Step 5: Commit.** `git commit -m "Goodreads rebuild: continuous enrichment of fixed books, most-listed first; ENV fetch cap"`
 
 ### Task 8: Docs, launch steps and the full suite
 
@@ -373,7 +389,8 @@ Steps 2 and 3 run in one transaction; the import runs after it.
   2. `[all]` (it calls the AI on undecided books; about 47k books, on Sidekiq `low`);
   3. review and bulk-approve proposals in Admin → Repair verdicts (kind `fix_identity`, then `merge_books`);
   4. `bin/rails books:goodreads_replay:apply` then `books:goodreads_replay:repair_ratings`;
-  5. the cron job enriches 1,200 books a day from then on.
+  5. from then on, the 10-minute job enriches nonstop at the Goodreads fetch cap;
+  6. after a day or two, read `fixes_report`'s enrichment section. If nothing failed and the gate never blocked, raise `GOODREADS_DAILY_FETCH_CAP` in the production env (SOPS) and restart the worker. Above 5,760, lower `GOODREADS_FETCH_INTERVAL` too.
 
   Note that `apply` re-applies every pass, but a fix only once.
 - [ ] **Step 3: Run the full suite and lint.**
