@@ -33,8 +33,8 @@ module Services
           assert_includes report, "fix_identity proposed medium 1"
           assert_includes report, "fix_identity approved high 1"
           refute_includes report, "relink"
-          assert_includes report, %(book ##{@source.id} "Wrong Title" -> ##{@target.id} "Tenth of December" | export: "Tenth of December: Stories")
-          assert_includes report, %(##{@fixed.id} "Muddled" by Someone Else -> "The Real Title" by George Saunders)
+          assert_includes report, %(book ##{@source.id} "Wrong Title" -> ##{@target.id} "Tenth of December" | export: "Tenth of December: Stories" [approved certain])
+          assert_includes report, %(##{@fixed.id} "Muddled" by Someone Else -> "The Real Title" by George Saunders [proposed medium])
           assert_match(/applied: 1/, report)
           assert_match(/with an error: 1/, report)
           assert_includes report, "boom: it broke"
@@ -73,7 +73,7 @@ module Services
           ::Books::Goodreads::FetchGate.any_instance.stubs(:blocked_until).returns(nil)
           ::Books::Goodreads::FetchGate.any_instance.stubs(:usage).returns(usage.new(day: today + 1, count: 37))
 
-          assert_includes FixesReport.call, "Goodreads fetches today: all 1,500 used; 37 of tomorrow's already reserved (gate not blocked)"
+          assert_includes FixesReport.call, "Goodreads fetches today: the line has reached tomorrow: 37 of tomorrow's fetches already reserved (gate not blocked)"
 
           ::Books::Goodreads::FetchGate.any_instance.stubs(:usage).returns(usage.new(day: today - 1, count: 900))
 

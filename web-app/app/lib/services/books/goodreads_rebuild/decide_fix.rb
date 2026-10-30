@@ -14,7 +14,8 @@ module Services
       # The bar is zero wrong merges, so a merge is approved on its own only
       # when the target holds a verified Open Library work that the group's
       # evidence names, its title matches one of the group's export titles
-      # exactly, and the group has no volume. Everything else waits for an
+      # exactly, the group has no volume, the survey is not a lump, and nobody has marked
+      # the pair as not a duplicate. Everything else waits for an
       # admin. The finder runs blinded (no Open Library, no legacy evidence),
       # and a match that is itself a book waiting for a fix is never a target.
       class DecideFix
@@ -90,6 +91,8 @@ module Services
         def record_merge(match)
           target = match.record
           auto = auto_merge?(target)
+          reason = match.reason.presence || "an existing book matches the export"
+          reason = "#{reason} (held back: an admin earlier marked these two as not a duplicate)" if marked_not_duplicate?(target)
           recorded = ::Services::Books::GoodreadsReplay::RecordVerdict.call(
             kind: :merge_books, subject_key: @key,
             payload: @facts.to_payload.merge("source_id" => @book.id, "target_id" => target.id, "reset_source" => true,
@@ -100,14 +103,20 @@ module Services
                           ((match.decided_by == :ai) ? :ai : :rule)
                         end,
             confidence: auto ? :certain : match.confidence,
-            reason: match.reason.presence || "an existing book matches the export",
+            reason: reason,
             auto: auto, replace_superseded: true
           )
           done(:merge, recorded.data[:verdict])
         end
 
         def auto_merge?(target)
-          @facts.volume.blank? && verified_work_key?(target) && title_agrees_exactly?(target)
+          @survey.coherent? && @facts.volume.blank? && !marked_not_duplicate?(target) &&
+            verified_work_key?(target) && title_agrees_exactly?(target)
+        end
+
+        # A person already judged these two books different; that stands over any rule.
+        def marked_not_duplicate?(target)
+          ::DuplicateCandidate.not_duplicate?(item_type: "Books::Book", ids: [@book.id, target.id])
         end
 
         def verified_work_key?(target)
@@ -115,7 +124,7 @@ module Services
         end
 
         def title_agrees_exactly?(target)
-          theirs = Array(@survey.groups.first["titles"]).push(@facts.full_title).filter_map { |t| ::Services::Books::Verification::Check.title_key(t) }
+          theirs = (Array(@survey.groups.first["titles"]) + [@facts.full_title]).filter_map { |t| ::Services::Books::Verification::Check.title_key(t) }
           ours = [target.title, ("#{target.title}: #{target.subtitle}" if target.subtitle.present?)].filter_map { |t| ::Services::Books::Verification::Check.title_key(t) }
           (ours & theirs).any?
         end

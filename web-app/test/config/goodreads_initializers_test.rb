@@ -32,4 +32,22 @@ class GoodreadsInitializersTest < ActiveSupport::TestCase
       assert_equal [3_000, 10, 50], [config.goodreads.daily_fetch_cap, config.goodreads.fetch_interval, config.goodreads_rebuild.in_flight]
     end
   end
+
+  test "a number with a leading zero is read as decimal, not octal" do
+    reload_with("GOODREADS_FETCH_INTERVAL" => "010") do |config|
+      assert_equal 10, config.goodreads.fetch_interval
+    end
+  end
+
+  test "a value that is not a whole number falls back to the default and warns, never raises" do
+    warnings = []
+    Rails.logger.stubs(:warn).with { |message| warnings << message.to_s }
+
+    reload_with("GOODREADS_DAILY_FETCH_CAP" => "1,500", "GOODREADS_FETCH_INTERVAL" => "", "GOODREADS_REBUILD_IN_FLIGHT" => "08x") do |config|
+      assert_equal [1_500, 15, 300], [config.goodreads.daily_fetch_cap, config.goodreads.fetch_interval, config.goodreads_rebuild.in_flight]
+    end
+    %w[GOODREADS_DAILY_FETCH_CAP GOODREADS_REBUILD_IN_FLIGHT].each do |name|
+      assert warnings.any? { |w| w.include?(name) }, "expected a warning naming #{name}"
+    end
+  end
 end

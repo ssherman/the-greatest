@@ -97,6 +97,27 @@ module Services
           assert_equal ["merge_books", "proposed", target.id], [verdict.kind, verdict.status, verdict.payload["target_id"]]
         end
 
+        test "proposes the merge when an admin already said these two are not the same book" do
+          target = trusted_target
+          survey = survey_for(@book, group_for(title: "Tenth of December", ol_work_keys: ["OL1W"]))
+          a, b = [@book.id, target.id].minmax
+          ::DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: a, item_b_id: b, source: :human, status: :not_duplicate)
+          @finder.expects(:call).returns(match(target))
+
+          verdict = decide(survey).data[:verdict]
+
+          assert_equal ["merge_books", "proposed"], [verdict.kind, verdict.status]
+          assert_match(/not a duplicate/i, verdict.reason)
+        end
+
+        test "proposes the merge when the survey is a lump" do
+          target = trusted_target
+          survey = survey_for(@book, group_for(title: "Tenth of December", ol_work_keys: ["OL1W"]), classification: :lump)
+          @finder.expects(:call).returns(match(target))
+
+          assert_equal "proposed", decide(survey).data[:verdict].status
+        end
+
         test "proposes the merge when the main group has a volume" do
           target = trusted_target
           survey = survey_for(@book, group_for(title: "Tenth of December", ol_work_keys: ["OL1W"], volume: "2"))

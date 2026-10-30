@@ -56,6 +56,19 @@ module Services
             assert_includes v.reload.payload["removed"]["identifiers"], ["books_work_asin", "B00LEGACY1", "legacy"]
           end
 
+          test "a failure right after the reset rolls back the reset and the archive together" do
+            source = ::Books::Book.create!(id: GoodreadsRebuild::Cohort.post_import_range.first + 5_000, title: "Derived")
+            source.identifiers.create!(identifier_type: :books_work_asin, value: "B00LEGACY1", source: :legacy)
+            v = verdict(source_id: source.id)
+            v.update!(payload: v.payload.merge("reset_source" => true))
+            v.class.any_instance.stubs(:update_columns).raises(ActiveRecord::StatementInvalid, "boom")
+
+            assert_raises(ActiveRecord::StatementInvalid) { MergeBooks.call(verdict: v) }
+
+            assert source.reload.identifiers.exists?(value: "B00LEGACY1")
+            refute v.reload.payload.key?("removed")
+          end
+
           test "refuses a reset_source merge from a trusted source" do
             ::Books::Book::Merger.expects(:new).never
             v = verdict

@@ -28,12 +28,15 @@ module Services
           ) list_counts ON list_counts.listable_id = books_books.id
         SQL
 
+        # Not enriched since the fix, and not in the middle of an older run: starting
+        # a book that already has a running run returns that run untouched, so
+        # such a book would be picked again every round and never start.
         NOT_ENRICHED_SQL = <<~SQL.squish
           NOT EXISTS (
             SELECT 1 FROM workflow_runs
             WHERE workflow_runs.workflow = :workflow AND workflow_runs.enrichable_type = 'Books::Book'
               AND workflow_runs.enrichable_id = books_books.id
-              AND workflow_runs.created_at >= books_repair_verdicts.applied_at
+              AND (workflow_runs.created_at >= books_repair_verdicts.applied_at OR workflow_runs.status = :running)
           )
         SQL
 
@@ -67,7 +70,7 @@ module Services
           ::Books::RepairVerdict.fix_identity.where.not(applied_at: nil)
             .where("books_repair_verdicts.subject_key LIKE 'rebuild:%'")
             .joins(JOINS_SQL)
-            .where(NOT_ENRICHED_SQL, workflow: WORKFLOW)
+            .where(NOT_ENRICHED_SQL, workflow: WORKFLOW, running: WorkflowRun.statuses.fetch("running"))
             .reorder(Arel.sql("COALESCE(list_counts.item_count, 0) DESC, books_books.id"))
         end
 

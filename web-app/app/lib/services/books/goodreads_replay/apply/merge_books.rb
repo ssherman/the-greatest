@@ -31,15 +31,15 @@ module Services
 
           # A rebuild merge (reset_source): the source is a derived book whose
           # legacy data is a guess, so it is cleared before its users' data moves
-          # to the target. Its archive goes on the verdict, only the first time:
-          # a retry's reset finds nothing left to archive.
+          # to the target. Its archive goes on the verdict in the same transaction as the
+          # reset, only the first time: a retry's reset finds nothing left to archive.
           def self.reset_source(verdict, source)
             raise Failed, "source is trusted now" if GoodreadsRebuild::Cohort.trusted?(source.id)
 
-            archive = GoodreadsRebuild::ResetBook.call(book: source).data[:removed]
-            return if verdict.payload.key?("removed")
-
-            verdict.update_columns(payload: verdict.payload.merge("removed" => archive))
+            ::Books::Book.transaction do
+              archive = GoodreadsRebuild::ResetBook.call(book: source).data[:removed]
+              verdict.update_columns(payload: verdict.payload.merge("removed" => archive)) unless verdict.payload.key?("removed")
+            end
           end
 
           def self.noop(reason)

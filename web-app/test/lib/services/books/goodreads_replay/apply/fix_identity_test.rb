@@ -120,6 +120,17 @@ module Services
             assert_equal [@author], @book.reload.authors.to_a
           end
 
+          test "a failure right after the reset rolls back the reset and the archive together" do
+            verdict
+            verdict.class.any_instance.stubs(:update_columns).raises(ActiveRecord::StatementInvalid, "boom")
+
+            assert_raises(ActiveRecord::StatementInvalid) { FixIdentity.call(verdict: verdict) }
+
+            assert @book.reload.identifiers.exists?(value: "B00LEGACY1")
+            assert_equal 1, @book.book_authors.count
+            refute verdict.reload.payload.key?("removed")
+          end
+
           test "a retried apply keeps the first archive" do
             verdict
             AUTHOR_IMPORTER.stubs(:call).raises(StandardError, "boom")

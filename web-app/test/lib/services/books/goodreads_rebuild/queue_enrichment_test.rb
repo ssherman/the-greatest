@@ -85,6 +85,17 @@ module Services
           assert_equal({started: 1, in_flight: 1, waiting: 0}, result.data)
         end
 
+        test "skips a book whose older enrichment run is still running" do
+          book = fixed_book
+          WorkflowRun.create!(workflow: "books.book_enrichment", definition_version: 2, enrichable: book, status: :running,
+            initiated_by: "test", options: {}, created_at: 2.hours.ago)
+          ::Workflows::Books::BookEnrichment.expects(:start).never
+
+          result = QueueEnrichment.call(in_flight: 5)
+
+          assert_equal({started: 0, in_flight: 0, waiting: 0}, result.data)
+        end
+
         test "passes the fix's created author ids" do
           book = fixed_book(payload: {"created_author_ids" => [@author.id]})
           other = fixed_book

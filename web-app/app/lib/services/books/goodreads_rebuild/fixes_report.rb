@@ -57,7 +57,7 @@ module Services
         # is tomorrow: then today's cap is used up and the count is tomorrow's.
         def fetch_usage(usage, cap, number)
           today = Time.current.utc.to_date
-          return "all #{cap} used; #{number.number_to_delimited(usage.count)} of tomorrow's already reserved" if usage.day && usage.day > today
+          return "the line has reached tomorrow: #{number.number_to_delimited(usage.count)} of tomorrow's fetches already reserved" if usage.day && usage.day > today
 
           "#{number.number_to_delimited((usage.day == today) ? usage.count : 0)} of #{cap}"
         end
@@ -70,7 +70,7 @@ module Services
             source = ::Books::Book.find_by(id: verdict.payload["source_id"])
             target = ::Books::Book.find_by(id: verdict.payload["target_id"])
             lines << %(  book ##{verdict.payload["source_id"]} "#{source&.title}" -> ##{verdict.payload["target_id"]} "#{target&.title}" | ) +
-              %(export: "#{verdict.payload["full_title"]}")
+              %(export: "#{verdict.payload["full_title"]}" [#{verdict.status} #{verdict.confidence}])
           end
         end
 
@@ -79,7 +79,7 @@ module Services
           sample(scope).each do |verdict|
             book = ::Books::Book.includes(:authors).find_by(id: verdict.payload["book_id"])
             lines << %(  ##{verdict.payload["book_id"]} "#{book&.title}" by #{book&.authors&.map(&:name)&.join(", ").presence || "nobody"} -> ) +
-              %("#{verdict.payload["full_title"]}" by #{Array(verdict.payload["author_names"]).join(", ")})
+              %("#{verdict.payload["full_title"]}" by #{Array(verdict.payload["author_names"]).join(", ")} [#{verdict.status} #{verdict.confidence}])
           end
         end
       end

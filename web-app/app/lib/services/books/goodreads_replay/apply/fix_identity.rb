@@ -14,11 +14,11 @@ module Services
         # left alone. Passes after the first are no-ops once applied_at is set,
         # so data added after the fix is never wiped again.
         #
-        # The reset and the new title commit together; the import runs after, so
-        # a failed author import leaves a book with the right title and no
-        # authors, and the next pass finishes it. ResetBook's archive is saved on
-        # the verdict before the import, and a retry (whose reset finds nothing
-        # left to archive) never overwrites it.
+        # The reset, the new title and ResetBook's archive (saved on the verdict)
+        # commit together, so a crash cannot lose the archive; the import runs
+        # after, so a failed author import leaves a book with the right title and
+        # no authors, and the next pass finishes it. A retry (whose reset finds
+        # nothing left to archive) never overwrites the archive.
         class FixIdentity
           Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -35,12 +35,11 @@ module Services
             return noop("book #{book.id} is trusted") if GoodreadsRebuild::Cohort.trusted?(book.id)
 
             payload = verdict.payload
-            removed = ::Books::Book.transaction do
+            ::Books::Book.transaction do
               archive = GoodreadsRebuild::ResetBook.call(book: book).data[:removed]
+              save_payload(verdict, "removed" => archive) unless verdict.payload.key?("removed")
               book.update!(title: payload["title"], subtitle: payload["subtitle"], first_published_year: payload["year"])
-              archive
             end
-            save_payload(verdict, "removed" => removed) unless verdict.payload.key?("removed")
 
             imported = import(book, payload)
             save_payload(verdict, "created_author_ids" => (Array(verdict.payload["created_author_ids"]) | imported.created_author_ids).sort)

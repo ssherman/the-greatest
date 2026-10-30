@@ -187,7 +187,8 @@ you review in Admin, Repair verdicts:
   with the export's title, authors and identifiers. It keeps its id, slug, and everything members hung
   on it (list items, reviews, Goodreads editions).
 
-Deciding (`DecideFix`) only records a verdict; it changes no book. To find an existing book it runs the
+Deciding (`DecideFix`) changes no book. It writes one match decision per book and can add pairs to the
+admin Duplicates queue. To find an existing book it runs the
 normal book finder **blinded**: no Open Library, no legacy evidence, and a book that is itself waiting
 for a fix is never a target. The search is built from the export's facts for the book's main work
 (`ExportFacts`: title, authors, year, identifiers and Open Library hints from the biggest edition group).
@@ -196,10 +197,12 @@ for a fix is never a target. The search is built from the export's facts for the
 
 - A merge is applied by itself only when the target carries a verified Open Library work that the
   export's evidence names, the target's title equals one of the export titles exactly, and the work has
-  no volume number. Every other merge is proposed and waits for an admin. (A proposed target is still
+  no volume number. A lump (one book standing for several works) is never merged automatically, and
+  neither is a pair an admin already marked "not a duplicate". Every other merge is proposed and waits for an admin. (A proposed target is still
   only a trusted book or a book whose own survey agrees with its export.)
 - A fix is applied by itself only when WorldCat confirmed the export. Otherwise it is proposed.
-- A merge an admin rejected is never proposed again; the book gets a fix proposal instead.
+- A merge an admin rejected is never proposed again; the book is given a fix instead (applied by itself
+  or proposed, by the fix rule above).
 
 **A failed finder run decides nothing.** If the finder fell back or lost one of its sources, "found
 nothing" would be a guess, so the book stays undecided (counted as `retry` in the run log) and the next
