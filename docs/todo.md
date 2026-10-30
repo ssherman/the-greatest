@@ -145,7 +145,8 @@ categories across genre, theme, game mode and player perspective.
   (dev, 2026-10-17). They sit on lists and in rankings, so decide per record whether it becomes a
   `Books::Series`, merges into its first volume, or stays. Its own spec.
 
-- new books added are not automatically enriched
 - category importer
 - import from storygraph
 - series import (use goodreads data)
+- about page
+- backfill goodreads task
