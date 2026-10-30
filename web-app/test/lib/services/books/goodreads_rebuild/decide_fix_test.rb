@@ -159,6 +159,50 @@ module Services
           assert_equal ["merge_books", "approved", "certain"], decide(survey).data[:verdict].then { |v| [v.kind, v.status, v.confidence] }
         end
 
+        def volume_case(export:, target_title:, **opts)
+          target = trusted_target(title: target_title)
+          survey = survey_for(@book, group_for(title: export, ol_work_keys: ["OL1W"]))
+          @finder.expects(:call).returns(match(target, **opts))
+          decide(survey)
+        end
+
+        test "a volume mismatch refuses the merge" do
+          result = volume_case(export: "Saga of the Swamp Thing: Book Five", target_title: "Saga Of The Swamp Thing, Book 1")
+
+          assert_equal :fix, result.data[:outcome]
+          assert_match(/merge refused.*volume or set/, result.data[:verdict].reason)
+        end
+
+        test "a set against a volume refuses the merge" do
+          assert_equal :fix, volume_case(export: "Nausicaa of the Valley of the Wind: The Complete Series",
+            target_title: "Nausicaa of the Valley of the Wind, Vol. 7").data[:outcome]
+        end
+
+        test "a numbered volume against the whole work refuses the merge" do
+          assert_equal :fix, volume_case(export: "1Q84 Book 1", target_title: "1Q84").data[:outcome]
+        end
+
+        test "the same volume merges" do
+          assert_equal :merge, volume_case(export: "Death Note, Vol. 1", target_title: "Death Note, Vol. 1").data[:outcome]
+        end
+
+        test "no volume on either side still merges across a translation" do
+          result = volume_case(export: "Fundacion", target_title: "Foundation", decided_by: :ai, confidence: :medium)
+
+          assert_equal [:merge, "proposed"], [result.data[:outcome], result.data[:verdict].status]
+        end
+
+        test "the default finder is blinded on identifiers and alternate titles" do
+          finder_class = ::DataImporters::Books::Book::Finder
+          finder_class.expects(:new).with(
+            open_library: :none,
+            identifier_sources: finder_class::TRUSTED_IDENTIFIER_SOURCES,
+            alternate_title_sources: finder_class::TRUSTED_ALTERNATE_TITLE_SOURCES
+          ).returns(:finder)
+
+          assert_equal :finder, DecideFix.default_finder
+        end
+
         test "a failed finder run records nothing and asks for a retry" do
           survey = survey_for(@book, group_for(title: "Tenth of December", world_cat: :agrees))
           @finder.expects(:call).twice.returns(

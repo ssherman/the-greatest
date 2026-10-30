@@ -31,7 +31,8 @@ module Services
         def self.default_finder
           ::DataImporters::Books::Book::Finder.new(
             open_library: :none,
-            identifier_sources: ::DataImporters::Books::Book::Finder::TRUSTED_IDENTIFIER_SOURCES
+            identifier_sources: ::DataImporters::Books::Book::Finder::TRUSTED_IDENTIFIER_SOURCES,
+            alternate_title_sources: ::DataImporters::Books::Book::Finder::TRUSTED_ALTERNATE_TITLE_SOURCES
           )
         end
 
@@ -82,10 +83,32 @@ module Services
 
           target = match.record
           return false if target.provisional?
+          return false if volume_mismatch?(target)
           return true if Cohort.trusted?(target.id)
 
           other = ::Books::RebuildBookSurvey.find_by(book_id: target.id)
           other.present? && other.title_agrees && other.authors_agree && !other.wrong_book
+        end
+
+        # The AI matched across volumes ("Book Five" to "Book 1", a complete series
+        # to Vol. 7, "1Q84 Book 1" to the whole novel). Once either side names a
+        # volume or a set, only an exact title agreement makes it the same book.
+        def volume_mismatch?(target)
+          check = ::Services::Books::Verification::Check
+          titles = export_titles + [target.title, target_full_title(target)].compact
+          return false unless titles.any? { |title| check.names_volume?(title) }
+          return false if title_agrees_exactly?(target)
+
+          @refused = "the matched book and the export differ on a volume or set"
+          true
+        end
+
+        def export_titles
+          (Array(@survey.groups.first["titles"]) + [@facts.full_title]).compact_blank
+        end
+
+        def target_full_title(target)
+          "#{target.title}: #{target.subtitle}" if target.subtitle.present?
         end
 
         def record_merge(match)
@@ -124,17 +147,19 @@ module Services
         end
 
         def title_agrees_exactly?(target)
-          theirs = (Array(@survey.groups.first["titles"]) + [@facts.full_title]).filter_map { |t| ::Services::Books::Verification::Check.title_key(t) }
-          ours = [target.title, ("#{target.title}: #{target.subtitle}" if target.subtitle.present?)].filter_map { |t| ::Services::Books::Verification::Check.title_key(t) }
+          theirs = export_titles.filter_map { |t| ::Services::Books::Verification::Check.title_key(t) }
+          ours = [target.title, target_full_title(target)].filter_map { |t| ::Services::Books::Verification::Check.title_key(t) }
           (ours & theirs).any?
         end
 
         def record_fix
           auto = @facts.world_cat_agrees
+          reason = auto ? "no existing book found; WorldCat agrees" : "no existing book found; WorldCat does not confirm"
+          reason = "merge refused: #{@refused}; #{reason}" if @refused
           recorded = ::Services::Books::GoodreadsReplay::RecordVerdict.call(
             kind: :fix_identity, subject_key: @key, payload: @facts.to_payload.merge("book_id" => @book.id),
             decided_by: :rule, confidence: auto ? :high : :medium,
-            reason: auto ? "no existing book found; WorldCat agrees" : "no existing book found; WorldCat does not confirm",
+            reason: reason,
             auto: auto, replace_superseded: true
           )
           return done(:kept, recorded.data[:verdict]) if recorded.data[:outcome] == :suppressed

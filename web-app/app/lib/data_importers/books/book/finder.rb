@@ -29,17 +29,26 @@ module DataImporters
         # stamped wrong ISBNs and Goodreads ids onto books, so rows from any
         # other source are ignored when this is passed as identifier_sources.
         TRUSTED_IDENTIFIER_SOURCES = (Identifier::VERIFIED_SOURCES + ["goodreads_import"]).freeze
+        # Alternate-title sources a "blinded" lookup trusts. Legacy stored wrong
+        # alternate titles on derived books (a "Concise" edition holding the full
+        # title), so a legacy row is never evidence. The others are ours: a merge,
+        # an AI enrichment, an admin or a correction wrote them.
+        TRUSTED_ALTERNATE_TITLE_SOURCES = (AlternateTitle.sources.keys - ["legacy"]).freeze
 
         # open_library_client: injected by tests; nil builds the real client
         # lazily inside the Open Library sources. identifier_sources: restricts
         # the identifier lookup to rows from these Identifier sources; nil
-        # trusts every row.
-        def initialize(open_library_client: nil, open_library: :resolve, identifier_sources: nil)
+        # trusts every row. alternate_title_sources: does the same for alternate
+        # titles: given, only kept AlternateTitle rows from these sources count,
+        # for the title rules and for what the AI is shown; nil keeps the
+        # books_books.alternate_titles array as it is.
+        def initialize(open_library_client: nil, open_library: :resolve, identifier_sources: nil, alternate_title_sources: nil)
           raise ArgumentError, "unknown open_library mode: #{open_library.inspect}" unless OPEN_LIBRARY_MODES.include?(open_library)
 
           @open_library_client = open_library_client
           @open_library = open_library
           @identifier_sources = identifier_sources
+          @alternate_title_sources = alternate_title_sources
         end
 
         def describe_candidate(candidate)
@@ -109,7 +118,15 @@ module DataImporters
         def record_year(record) = record.first_published_year
 
         def record_extra_evidence(record)
-          {book_kind: record.book_kind, alternate_titles: Array(record.alternate_titles)}
+          {book_kind: record.book_kind, alternate_titles: record_alternate_titles(record)}
+        end
+
+        def record_alternate_titles(record)
+          return Array(record.alternate_titles) unless @alternate_title_sources
+
+          record.alternate_title_records
+            .select { |row| row.status == "kept" && @alternate_title_sources.include?(row.source) }
+            .map(&:title)
         end
 
         private
