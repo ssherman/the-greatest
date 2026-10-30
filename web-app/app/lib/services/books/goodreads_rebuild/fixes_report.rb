@@ -48,9 +48,18 @@ module Services
           counts = outcomes.map { |name, scope| "#{name}: #{scope.count} (today #{scope.where("finished_at >= ?", since).count})" }
           lines << "  Goodreads pages #{counts.join(", ")}"
           blocked = gate.blocked_until
-          lines << "  Goodreads fetches today: #{number.number_to_delimited(gate.fetches_today)} of " \
-            "#{number.number_to_delimited(Rails.application.config.x.goodreads.daily_fetch_cap)} " \
-            "(#{blocked ? "blocked until #{blocked.utc.strftime("%Y-%m-%d %H:%M UTC")}" : "gate not blocked"})"
+          cap = number.number_to_delimited(Rails.application.config.x.goodreads.daily_fetch_cap)
+          state = blocked ? "blocked until #{blocked.utc.strftime("%Y-%m-%d %H:%M UTC")}" : "gate not blocked"
+          lines << "  Goodreads fetches today: #{fetch_usage(gate.usage, cap, number)} (#{state})"
+        end
+
+        # The gate keeps the day of its newest reservation, which late in the day
+        # is tomorrow: then today's cap is used up and the count is tomorrow's.
+        def fetch_usage(usage, cap, number)
+          today = Time.current.utc.to_date
+          return "all #{cap} used; #{number.number_to_delimited(usage.count)} of tomorrow's already reserved" if usage.day && usage.day > today
+
+          "#{number.number_to_delimited((usage.day == today) ? usage.count : 0)} of #{cap}"
         end
 
         def sample(scope) = scope.order(Arel.sql("random()")).limit(SAMPLE)

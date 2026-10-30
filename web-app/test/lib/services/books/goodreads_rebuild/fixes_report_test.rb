@@ -42,7 +42,8 @@ module Services
 
         test "reports enrichment runs, Goodreads outcomes, the gate's daily count and a block" do
           stub_workflow_dispatch
-          ::Books::Goodreads::FetchGate.any_instance.stubs(:fetches_today).returns(812)
+          ::Books::Goodreads::FetchGate.any_instance.stubs(:usage)
+            .returns(::Books::Goodreads::FetchGate::Usage.new(day: Time.current.utc.to_date, count: 812))
           ::Books::Goodreads::FetchGate.any_instance.stubs(:blocked_until).returns(Time.utc(2026, 10, 29, 18, 30))
           Rails.application.config.x.goodreads.stubs(:daily_fetch_cap).returns(1_500)
           run = ->(status, outcome, state, created_at = Time.current) do
@@ -63,6 +64,20 @@ module Services
           assert_includes report, "Goodreads pages found: 1 (today 1), missed: 1 (today 0), failed: 1 (today 1)"
           assert_includes report, "Goodreads fetches today: 812 of 1,500"
           assert_includes report, "blocked until 2026-10-29 18:30 UTC"
+        end
+
+        test "says plainly when the line has run into tomorrow's fetches, and when nothing is stored" do
+          Rails.application.config.x.goodreads.stubs(:daily_fetch_cap).returns(1_500)
+          usage = ::Books::Goodreads::FetchGate::Usage
+          today = Time.current.utc.to_date
+          ::Books::Goodreads::FetchGate.any_instance.stubs(:blocked_until).returns(nil)
+          ::Books::Goodreads::FetchGate.any_instance.stubs(:usage).returns(usage.new(day: today + 1, count: 37))
+
+          assert_includes FixesReport.call, "Goodreads fetches today: all 1,500 used; 37 of tomorrow's already reserved (gate not blocked)"
+
+          ::Books::Goodreads::FetchGate.any_instance.stubs(:usage).returns(usage.new(day: today - 1, count: 900))
+
+          assert_includes FixesReport.call, "Goodreads fetches today: 0 of 1,500 (gate not blocked)"
         end
       end
     end

@@ -71,6 +71,25 @@ module Books
           config.block_cooldown, config.fetch_attempts, config.wait_for_selector, config.fetch_timeout_ms]
       end
 
+      test "usage is the stored UTC day and its count, and nothing when nothing is stored" do
+        assert_equal [nil, 0], @gate.usage.deconstruct
+
+        2.times { @gate.reserve }
+
+        assert_equal [Time.current.utc.to_date, 2], @gate.usage.deconstruct
+      end
+
+      test "usage reports the day of the newest reservation, which can be tomorrow or an older day" do
+        redis = ::Books::OpenLibrary::FakeRedis.new
+        gate = FetchGate.new(redis: redis, config: @config)
+        redis.hset(FetchGate::KEY, "day", Time.current.utc.tomorrow.strftime("%Y%m%d"))
+        redis.hset(FetchGate::KEY, "day_count", "37")
+        assert_equal [Time.current.utc.to_date + 1, 37], gate.usage.deconstruct
+
+        redis.hset(FetchGate::KEY, "day", Time.current.utc.yesterday.strftime("%Y%m%d"))
+        assert_equal [Time.current.utc.to_date - 1, 37], gate.usage.deconstruct
+      end
+
       test "blocked_until is the end of the block, and nil when there is none" do
         assert_nil @gate.blocked_until
 
