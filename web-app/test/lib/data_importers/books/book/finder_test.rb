@@ -69,6 +69,27 @@ module DataImporters
           stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: body.to_json)
         end
 
+        # ---- blinded mode -----------------------------------------------------
+
+        test "blinded finder ignores a legacy-held ISBN" do
+          @war_and_peace.identifiers.create!(identifier_type: :books_work_isbn13, value: "9780000000001", source: :legacy)
+          client = mock("open_library_client")
+          client.expects(:resolve).never
+          client.expects(:identifier).never
+          expect_no_ai
+          finder = Finder.new(open_library_client: client, open_library: :none,
+            identifier_sources: Finder::TRUSTED_IDENTIFIER_SOURCES)
+          query = ImportQuery.new(title: "Zzyzx Unrelated Title", author_names: ["Nobody Known"], isbn13: ["9780000000001"])
+
+          match = finder.call(query: query)
+
+          assert match.unmatched?
+        end
+
+        test "unknown open_library mode still raises" do
+          assert_raises(ArgumentError) { Finder.new(open_library: :bogus) }
+        end
+
         # ---- AI context (Goodreads import spec §4) ----------------------------
 
         test "the AI is shown the query's series and its other credited names" do
