@@ -89,6 +89,17 @@ module Services
           assert_equal ["Peter C. Brown"], call("Peter C. Brown", "Pete Brown").data[:links].keys
         end
 
+        test "two different high answers for one name link neither author" do
+          add_author("Daniel Dennett")
+          add_author("Daniel Clement Dennett", position: 2)
+          @task_class.expects(:new).returns(ai(match("Daniel C. Dennett", 1), match("Daniel C. Dennett", 2)))
+
+          result = call("Daniel C. Dennett")
+
+          assert_equal({}, result.data[:links])
+          refute result.data[:all_matched]
+        end
+
         test "a task failure fails the result" do
           add_author("Roy Heath")
           @task_class.expects(:new).returns(ai(success: false))

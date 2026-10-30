@@ -78,8 +78,8 @@ module Services
 
             links.each do |name, author|
               book.book_authors.find_or_create_by!(author: author)
-              spellings = [author.name, *Array(author.alternate_names)]
-              author.update!(alternate_names: Array(author.alternate_names) + [name]) unless spellings.include?(name)
+              held = ::Services::Text::PersonNameKey.all([author.name, *Array(author.alternate_names)])
+              author.update!(alternate_names: Array(author.alternate_names) + [name]) unless held.include?(::Services::Text::PersonNameKey.call(name))
             end
             imported = book.book_authors.reload.reject { |row| links.values.any? { |author| author.id == row.author_id } }.sort_by { |row| [row.position.to_i, row.id] }
             order = Array(payload["author_names"]).filter_map { |name| links[name]&.id || imported.shift&.author_id }.uniq

@@ -5,7 +5,8 @@ module Services
     module GoodreadsRebuild
       # For one derived book whose title or authors disagree with its Goodreads
       # export, decides what to do and records it as a repair verdict; nothing
-      # is changed here (rebuild spec §4.1, §12). Either the right book already
+      # is reset or merged here (rebuild spec §4.1, §12); the one thing written besides the verdict is
+      # a same-person export spelling, kept as an author's alternate name. Either the right book already
       # exists, and the verdict is a merge of this book into it (keeping the
       # reset_source flag so the leftover wrong data is cleared), or it does
       # not, and the verdict is a fix_identity: reset this book and import it
@@ -88,7 +89,8 @@ module Services
         def record_same_author
           ::Books::Author.where(id: @author_links.values).find_each do |author|
             spellings = @author_links.select { |_, id| id == author.id }.keys
-            missing = spellings - [author.name, *Array(author.alternate_names)]
+            held = ::Services::Text::PersonNameKey.all([author.name, *Array(author.alternate_names)])
+            missing = spellings.reject { |spelling| held.include?(::Services::Text::PersonNameKey.call(spelling)) }
             author.update!(alternate_names: (Array(author.alternate_names) + missing).uniq) if missing.any?
           end
           done(:same_author)

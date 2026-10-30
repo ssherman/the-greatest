@@ -1,6 +1,6 @@
 # Decides a batch of derived books for the Goodreads rebuild's fixes
 # (Services::Books::GoodreadsRebuild::DecideFixes queues them, 100 at a time).
-# Records verdicts only; nothing is changed. One book failing is logged and the
+# Records verdicts and changes no book, except that a same-person export spelling is added to the author's alternate names. One book failing is logged and the
 # batch carries on; a book whose finder run failed is counted as "retry" and
 # simply comes up again in the next run.
 class Books::GoodreadsRebuild::DecideFixesJob

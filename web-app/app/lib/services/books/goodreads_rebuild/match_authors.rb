@@ -54,14 +54,16 @@ module Services
         end
 
         def ai_links(matches, authors, taken)
-          Array(matches).each_with_object({}) do |match, links|
-            next unless match[:confidence] == "high" && match[:author_number]
+          highs = Array(matches).select { |match| match[:confidence] == "high" && match[:author_number] }.group_by { |match| match[:export_name] }
+          highs.each_with_object({}) do |(name, answers), links|
+            # Two different authors for one name is an ambiguous answer: link neither.
+            next if answers.map { |answer| answer[:author_number] }.uniq.size > 1
 
-            author = authors[match[:author_number] - 1]
+            author = authors[answers.first[:author_number] - 1]
             next if author.nil? || taken.include?(author.id)
 
             taken << author.id
-            links[match[:export_name]] = author.id
+            links[name] = author.id
           end
         end
       end

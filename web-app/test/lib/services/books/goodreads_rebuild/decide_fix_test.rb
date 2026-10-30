@@ -448,6 +448,18 @@ module Services
           assert_equal [], author.reload.alternate_names
         end
 
+        test "an author whose alternate names hold the export spelling in normalised form is not updated" do
+          author = ::Books::Author.create!(name: "George Saunders Jr.", alternate_names: ["george saunders"])
+          @book.book_authors.create!(author: author, position: 1)
+          survey = survey_for(@book, group_for(title: "Tenth of December"), title_agrees: true, wrong_book: false)
+          stamp = author.reload.updated_at
+
+          result = decide_with(survey, ai_task_class(saunders_match))
+
+          assert_equal :same_author, result.data[:outcome]
+          assert_equal stamp, author.reload.updated_at
+        end
+
         test "needs_fix? is a pure function of the survey row" do
           build = ->(**a) { ::Books::RebuildBookSurvey.new({classification: :coherent, groups: [{"titles" => []}], title_agrees: false, authors_agree: false, wrong_book: false}.merge(a)) }
 

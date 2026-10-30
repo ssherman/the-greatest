@@ -86,6 +86,27 @@ module Services
             assert_equal ["Daniel C. Dennett"], existing.reload.alternate_names
           end
 
+          test "a linked author listed first in the export stays ahead of the imported one" do
+            existing = ::Books::Author.create!(name: "Linked Author")
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Linked Author", "Right Author"],
+              "author_links" => {"Linked Author" => existing.id}))
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal [existing, @author], @book.reload.authors.to_a
+          end
+
+          test "an author whose alternate names already hold the export spelling in normalised form is not updated" do
+            existing = ::Books::Author.create!(name: "Daniel Dennett", alternate_names: ["daniel c. dennett"])
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Daniel C. Dennett"],
+              "author_links" => {"Daniel C. Dennett" => existing.id}))
+            stamp = existing.reload.updated_at
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal stamp, existing.reload.updated_at
+          end
+
           test "linked and imported authors take their places in the export's order" do
             existing = ::Books::Author.create!(name: "Second Author")
             verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Right Author", "Second Author"],
