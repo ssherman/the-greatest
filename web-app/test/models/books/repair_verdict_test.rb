@@ -59,6 +59,14 @@ module Books
         verdict(kind: :mark_provisional, subject_key: "book:7", payload: {"book_id" => 7, "reason" => "authorless"}).summary
     end
 
+    test "fix_identity summary and book_ids" do
+      fix = verdict(kind: :fix_identity, subject_key: "rebuild:7",
+        payload: {"book_id" => 7, "full_title" => "Tenth of December: Stories", "author_names" => ["George Saunders", "Other"]})
+
+      assert_equal "Fix #7: \"Tenth of December: Stories\" by George Saunders, Other", fix.summary
+      assert_equal [7], fix.book_ids
+    end
+
     test "unapplied excludes applied verdicts" do
       applied = verdict(applied_at: Time.current)
       pending = verdict(kind: :merge_books, subject_key: "books:1:2")
