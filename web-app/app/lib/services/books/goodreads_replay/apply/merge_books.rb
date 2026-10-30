@@ -39,6 +39,9 @@ module Services
             ::Books::Book.transaction do
               archive = GoodreadsRebuild::ResetBook.call(book: source).data[:removed]
               verdict.update_columns(payload: verdict.payload.merge("removed" => archive)) unless verdict.payload.key?("removed")
+              # The merger copies the source's title onto the target as an alternate
+              # title; for a derived book that is legacy's guess. Give it the export's.
+              source.update_columns(title: verdict.payload["title"], subtitle: verdict.payload["subtitle"]) if verdict.payload["title"].present?
             end
           end
 

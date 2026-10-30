@@ -56,6 +56,18 @@ module Services
             assert_includes v.reload.payload["removed"]["identifiers"], ["books_work_asin", "B00LEGACY1", "legacy"]
           end
 
+          test "a reset_source merge leaves the source's legacy title off the target and carries the export's" do
+            source = ::Books::Book.create!(id: GoodreadsRebuild::Cohort.post_import_range.first + 5_000, title: "Legacy Guessed Title")
+            v = verdict(source_id: source.id)
+            v.update!(payload: v.payload.merge("reset_source" => true, "title" => "Export Title", "subtitle" => nil))
+
+            MergeBooks.call(verdict: v)
+
+            titles = @target.alternate_title_records.reload.map(&:title)
+            refute_includes titles, "Legacy Guessed Title"
+            assert_includes titles, "Export Title"
+          end
+
           test "a failure right after the reset rolls back the reset and the archive together" do
             source = ::Books::Book.create!(id: GoodreadsRebuild::Cohort.post_import_range.first + 5_000, title: "Derived")
             source.identifiers.create!(identifier_type: :books_work_asin, value: "B00LEGACY1", source: :legacy)

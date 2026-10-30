@@ -192,6 +192,26 @@ module Services
           assert_equal [:merge, "proposed"], [result.data[:outcome], result.data[:verdict].status]
         end
 
+        test "a title that only looks like a volume to a loose check still merges across a translation" do
+          [
+            ["Harry Potter and the Sorcerer's Stone (Harry Potter, #1)", "Harry Potter Y La Piedra Filosofal"],
+            ["The Adventures of Tom Sawyer", "Las Aventuras De Tom Sawyer"],
+            ["Fahrenheit 451", "Farenheit 451"],
+            ["The Book Thief", "La Ladrona De Libros"],
+            ["Band of Brothers", "Hermanos de Sangre"]
+          ].each_with_index do |(export, target_title), index|
+            book = ::Books::Book.create!(id: Cohort.post_import_range.first + 7_100 + index, title: "Wrong #{index}")
+            target = ::Books::Book.create!(id: Cohort.post_import_range.first - 100 - index, title: target_title)
+            survey = survey_for(book, group_for(title: export))
+            finder = mock("finder#{index}")
+            finder.expects(:call).returns(match(target, decided_by: :ai, confidence: :medium))
+
+            outcome = DecideFix.call(book: book, survey: survey, finder: finder).data[:outcome]
+
+            assert_equal :merge, outcome, export
+          end
+        end
+
         test "the default finder is blinded on identifiers and alternate titles" do
           finder_class = ::DataImporters::Books::Book::Finder
           finder_class.expects(:new).with(

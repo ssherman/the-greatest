@@ -127,6 +127,15 @@ module DataImporters
           assert_equal ["The Test Strategies"], match.candidates.first.evidence[:alternate_titles]
         end
 
+        test "blinded finder ignores an alternate title written by a merge" do
+          book_with_alternate_title("The Test Strategies", source: :merge)
+          ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).raises("AI unavailable")
+
+          match = blinded_finder.call(query: ImportQuery.new(title: "The Test Strategies", author_names: ["Robert Greene"]))
+
+          assert_equal :unmatched, match.outcome
+        end
+
         test "blinded finder ignores a removed alternate title" do
           book_with_alternate_title("The Test Strategies", source: :admin, status: :removed)
           ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).raises("AI unavailable")

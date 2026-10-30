@@ -31,9 +31,11 @@ module DataImporters
         TRUSTED_IDENTIFIER_SOURCES = (Identifier::VERIFIED_SOURCES + ["goodreads_import"]).freeze
         # Alternate-title sources a "blinded" lookup trusts. Legacy stored wrong
         # alternate titles on derived books (a "Concise" edition holding the full
-        # title), so a legacy row is never evidence. The others are ours: a merge,
-        # an AI enrichment, an admin or a correction wrote them.
-        TRUSTED_ALTERNATE_TITLE_SOURCES = (AlternateTitle.sources.keys - ["legacy"]).freeze
+        # title), so a legacy row is never evidence. A merge row is not either: the
+        # merger copies the absorbed book's own title across, which for a derived
+        # book is legacy's guess. An AI enrichment, an admin or a correction wrote
+        # the rest.
+        TRUSTED_ALTERNATE_TITLE_SOURCES = (AlternateTitle.sources.keys - %w[legacy merge]).freeze
 
         # open_library_client: injected by tests; nil builds the real client
         # lazily inside the Open Library sources. identifier_sources: restricts

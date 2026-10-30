@@ -21,6 +21,11 @@ module Services
       class DecideFix
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
+        # A volume word followed by its number ("Book Five", "Vol. 7", "Part II"). Check.names_volume?
+        # is too loose for whole titles ("The Book Thief", "Band of Brothers", "1984").
+        NUMBER_WORDS = %w[one two three four five six seven eight nine ten eleven twelve first second third].join("|")
+        VOLUME_SHAPE = /\b(?:vols?|volumes?|books?|parts?|tome|teil|band|livre|tomo|parte|libro|buch|tom|livro)\b\.?\s*(?:#?\d+|[ivxlcdm]+|#{NUMBER_WORDS})\b|#\s*\d/i
+
         # The one "needs a fix" rule; the batch job's SQL scope mirrors it and a test keeps them equal.
         def self.needs_fix?(survey)
           return false unless survey.coherent? || survey.lump?
@@ -94,13 +99,16 @@ module Services
         # to Vol. 7, "1Q84 Book 1" to the whole novel). Once either side names a
         # volume or a set, only an exact title agreement makes it the same book.
         def volume_mismatch?(target)
-          check = ::Services::Books::Verification::Check
-          titles = export_titles + [target.title, target_full_title(target)].compact
-          return false unless titles.any? { |title| check.names_volume?(title) }
+          titles = export_titles.map { |title| title.sub(ExportFacts::SERIES_SUFFIX, "") } + [target.title, target_full_title(target)].compact
+          return false unless titles.any? { |title| volume_shaped?(title) }
           return false if title_agrees_exactly?(target)
 
           @refused = "the matched book and the export differ on a volume or set"
           true
+        end
+
+        def volume_shaped?(title)
+          title.match?(VOLUME_SHAPE) || title.match?(::Services::Books::Verification::EditionCheck::SET_WORDS)
         end
 
         def export_titles
