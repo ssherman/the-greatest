@@ -48,7 +48,8 @@ module Services
           editions = ::Books::GoodreadsEdition.where(id: ids).to_a
           rows = ::Books::GoodreadsImportRow.where(goodreads_edition_id: ids).group(:goodreads_edition_id).count
           by_rows = editions.sort_by { |e| [-rows.fetch(e.id, 0), e.goodreads_book_id.to_i] }
-          evidence = ::Books::RebuildEditionEvidence.for_editions(editions).values
+          found = ::Books::RebuildEditionEvidence.for_editions(editions)
+          evidence = by_rows.filter_map { |e| found[e.id] }
           main = by_rows.first
 
           full_title = main.title.to_s.sub(SERIES_SUFFIX, "").strip

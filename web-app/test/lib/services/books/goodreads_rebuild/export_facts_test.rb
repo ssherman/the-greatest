@@ -112,12 +112,13 @@ module Services
         test "ol_work_keys are ordered by how many main-group editions name them" do
           a = edition(1)
           b = edition(2)
-          c = edition(3)
+          c = edition(3, rows: 3)
           evidence(a, ol_work_keys: ["OL1W", "OL2W"])
           evidence(b, ol_work_keys: ["OL2W"])
           evidence(c, ol_work_keys: ["OL2W", "OL3W"])
 
-          assert_equal %w[OL2W OL1W OL3W], facts(group(a, b, c)).ol_work_keys
+          # OL1W and OL3W tie on one edition each; the most-rowed edition's key wins, though its evidence was saved last.
+          assert_equal %w[OL2W OL3W OL1W], facts(group(a, b, c)).ol_work_keys
         end
 
         test "query_attributes round-trips to_payload" do
