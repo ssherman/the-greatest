@@ -35,10 +35,22 @@ module Services
             now = Time.current
             scope.update_all(status: ::Books::RepairVerdict.statuses[:rejected], superseded_at: now, reviewed_at: now, reason: REASON, updated_at: now)
           end
-          Result.new(success?: true, data: {counts: counts, already_applied: lump_verdicts.where.not(applied_at: nil).count, samples: samples, applied: @apply}, errors: [])
+          gone = applied_survey_gone
+          Result.new(success?: true, data: {counts: counts, already_applied: lump_verdicts.where.not(applied_at: nil).count, samples: samples,
+                                            applied_unknown: gone.count, applied_unknown_keys: gone.order(:id).limit(SAMPLES).pluck(:subject_key),
+                                            applied: @apply}, errors: [])
         end
 
         private
+
+        # An applied merge destroys its source book and the survey cascades with it, so lump_verdicts
+        # cannot see it. These are reported, never touched: they may have been lump merges.
+        def applied_survey_gone
+          surveyed = ::Books::RebuildBookSurvey.select(:book_id)
+          ::Books::RepairVerdict.where(kind: KINDS).where.not(applied_at: nil)
+            .where("CAST(NULLIF(substring(subject_key FROM '^rebuild:([0-9]+)$'), '') AS bigint) NOT IN (?)", surveyed)
+            .where("subject_key ~ '^rebuild:[0-9]+$'")
+        end
 
         # The subject_key is "rebuild:<book id>" for both kinds, so the book id comes from it.
         def lump_verdicts

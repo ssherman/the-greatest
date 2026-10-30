@@ -91,6 +91,23 @@ module Services
           assert_nil into_lump.superseded_at
         end
 
+        # An applied merge destroys its source book and the survey with it, so "already applied" cannot see it.
+        test "an applied verdict whose subject book and survey are gone is counted apart and left alone" do
+          gone = @base + 500
+          applied = ::Books::RepairVerdict.create!(kind: :merge_books, subject_key: "rebuild:#{gone}", status: :approved, decided_by: :rule,
+            payload: {"source_id" => gone}, applied_at: 1.day.ago)
+          pending = ::Books::RepairVerdict.create!(kind: :merge_books, subject_key: "rebuild:#{gone + 1}", status: :proposed, decided_by: :rule,
+            payload: {"source_id" => gone + 1})
+          before = [applied, pending].map { |v| v.reload.attributes }
+
+          result = RetireLumpVerdicts.call(apply: true)
+
+          assert_equal 1, result.data[:applied_unknown]
+          assert_equal ["rebuild:#{gone}"], result.data[:applied_unknown_keys]
+          assert_equal before, [applied, pending].map { |v| v.reload.attributes }
+          assert_equal 1, result.data[:already_applied]
+        end
+
         test "a second apply finds nothing" do
           RetireLumpVerdicts.call(apply: true)
           before = snapshot
