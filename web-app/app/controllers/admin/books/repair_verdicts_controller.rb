@@ -23,6 +23,7 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
     scope = filtered_scope
     @counts = scope.group(:status).count
     @pagy, @verdicts = pagy(scope.where(status: @status).newest_first, limit: PER_PAGE)
+    load_row_context
   end
 
   def show
@@ -72,6 +73,17 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   end
 
   private
+
+  # What the page's verdicts point at, loaded once for all rows (the row
+  # component queries nothing): books with authors, authors, and the number
+  # of list items on each merge target.
+  def load_row_context
+    book_ids = @verdicts.flat_map(&:book_ids).uniq
+    @books = ::Books::Book.where(id: book_ids).includes(:authors).index_by(&:id)
+    @authors = ::Books::Author.where(id: @verdicts.flat_map(&:author_ids).uniq).index_by(&:id)
+    target_ids = @verdicts.select(&:merge_books?).filter_map { |verdict| verdict.payload["target_id"] }.uniq
+    @list_counts = ::ListItem.where(listable_type: "Books::Book", listable_id: target_ids).group(:listable_id).count
+  end
 
   def set_verdict
     @verdict = ::Books::RepairVerdict.find(params[:id])

@@ -1,0 +1,23 @@
+<div class="[overflow-wrap:anywhere]">
+  <%= link_to label, admin_books_repair_verdict_path(verdict), class: "link font-semibold" %>
+  <% case verdict.kind %>
+  <% when "merge_books" %>
+    <%= book_ref(payload["source_id"]) %>
+    <div class="pl-4">&rarr; <%= book_ref(payload["target_id"], with_lists: true) %></div>
+    <% if export_title %>
+      <div class="text-xs text-base-content/70">Goodreads export: "<%= export_title %>" by <%= export_authors %></div>
+    <% end %>
+  <% when "fix_identity" %>
+    <%= book_ref(payload["book_id"]) %>
+    <div class="pl-4">&rarr; "<%= export_title %>" by <%= export_authors %></div>
+  <% when "merge_authors" %>
+    <%= author_ref(payload["source_id"]) %> &rarr; <%= author_ref(payload["target_id"]) %>
+  <% else %>
+    <%# strip_identifier, mark_provisional and relink keep their summary, with the book's title beside its id %>
+    <% ids = verdict.book_ids %>
+    <%= verdict.summary %>
+    <% if ids.any? %>
+      <div class="text-xs text-base-content/70"><%= ids.map { |id| "##{id} #{book_title(id)}" }.join("; ") %></div>
+    <% end %>
+  <% end %>
+</div>
