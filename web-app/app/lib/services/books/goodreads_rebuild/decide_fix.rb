@@ -41,12 +41,13 @@ module Services
           )
         end
 
-        def self.call(book:, survey:, finder: nil) = new(book: book, survey: survey, finder: finder).call
+        def self.call(book:, survey:, finder: nil, task_class: nil) = new(book: book, survey: survey, finder: finder, task_class: task_class).call
 
-        def initialize(book:, survey:, finder:)
+        def initialize(book:, survey:, finder:, task_class: nil)
           @book = book
           @survey = survey
           @finder = finder
+          @task_class = task_class
           @key = "rebuild:#{book.id}"
         end
 
@@ -57,6 +58,12 @@ module Services
           return done(:kept, kept) if kept
 
           @facts = ExportFacts.call(survey: @survey)
+          authors = match_authors
+          return done(:retry) unless authors.success?
+
+          @author_links = authors.data[:links]
+          return record_same_author if @survey.title_agrees && @survey.coherent? && authors.data[:all_matched]
+
           unless rejected_merge?
             match = (@finder || self.class.default_finder).call(query: @facts.to_query, verify: true, subject: @book, exclude: @book)
             return done(:retry) if failed?(match)
@@ -66,6 +73,26 @@ module Services
         end
 
         private
+
+        # Whether the export's author names are the book's own authors, spelled differently
+        # ("Kurt Vonnegut" for "Kurt Vonnegut Jr."), is a question of who the person is, so the AI answers it.
+        def match_authors
+          args = {book: @book, facts: @facts}
+          args[:task_class] = @task_class if @task_class
+          MatchAuthors.call(**args)
+        end
+
+        # The right book with the right title and the same people under other spellings: nothing is
+        # recorded or reset. The export spelling is kept as an alternate name, which also lets
+        # the next run match the names without asking again.
+        def record_same_author
+          ::Books::Author.where(id: @author_links.values).find_each do |author|
+            spellings = @author_links.select { |_, id| id == author.id }.keys
+            missing = spellings - [author.name, *Array(author.alternate_names)]
+            author.update!(alternate_names: (Array(author.alternate_names) + missing).uniq) if missing.any?
+          end
+          done(:same_author)
+        end
 
         def existing_verdict
           ::Books::RepairVerdict.where(subject_key: @key).find do |verdict|
@@ -182,7 +209,7 @@ module Services
           reason = auto ? "no existing book found; WorldCat agrees" : "no existing book found; WorldCat does not confirm"
           reason = "merge refused: #{@refused}; #{reason}" if @refused
           recorded = ::Services::Books::GoodreadsReplay::RecordVerdict.call(
-            kind: :fix_identity, subject_key: @key, payload: @facts.to_payload.merge("book_id" => @book.id),
+            kind: :fix_identity, subject_key: @key, payload: @facts.to_payload.merge("book_id" => @book.id, "author_links" => @author_links),
             decided_by: :rule, confidence: auto ? :high : :medium,
             reason: reason,
             auto: auto, replace_superseded: true

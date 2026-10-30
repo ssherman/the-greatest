@@ -372,6 +372,82 @@ module Services
           assert_equal [:kept, existing.id], [result.data[:outcome], result.data[:verdict].id]
         end
 
+        def ai_task_class(*matches, success: true)
+          task = mock("author task")
+          task.stubs(:call).returns(Services::Ai::Result.new(success: success, error: ("down" unless success), data: {matches: matches, reasoning: ""}))
+          klass = mock("author task class")
+          klass.stubs(:new).returns(task)
+          klass
+        end
+
+        def saunders_match(number = 1, confidence = "high") = {export_name: "George Saunders", author_number: number, confidence: confidence}
+
+        def decide_with(survey, task_class) = DecideFix.call(book: @book, survey: survey, finder: @finder, task_class: task_class)
+
+        test "the right title with the same author under another spelling records nothing and keeps the export spelling" do
+          author = ::Books::Author.create!(name: "George Saunders Jr.")
+          @book.book_authors.create!(author: author, position: 1)
+          survey = survey_for(@book, group_for(title: "Tenth of December"), title_agrees: true, wrong_book: false)
+          @finder.expects(:call).never
+
+          result = decide_with(survey, ai_task_class(saunders_match))
+
+          assert_equal [:same_author, nil], [result.data[:outcome], result.data[:verdict]]
+          assert_equal 0, ::Books::RepairVerdict.where(subject_key: "rebuild:#{@book.id}").count
+          assert_equal ["George Saunders"], author.reload.alternate_names
+        end
+
+        test "a second run matches the kept spelling without asking the AI again" do
+          author = ::Books::Author.create!(name: "George Saunders Jr.")
+          @book.book_authors.create!(author: author, position: 1)
+          survey = survey_for(@book, group_for(title: "Tenth of December"), title_agrees: true, wrong_book: false)
+          decide_with(survey, ai_task_class(saunders_match))
+          never = mock("task class")
+          never.expects(:new).never
+
+          result = decide_with(survey, never)
+
+          assert_equal :same_author, result.data[:outcome]
+          assert_equal ["George Saunders"], author.reload.alternate_names
+        end
+
+        test "a different title with every author matched is a fix carrying the author links" do
+          author = ::Books::Author.create!(name: "George Saunders Jr.")
+          @book.book_authors.create!(author: author, position: 1)
+          survey = survey_for(@book, group_for(title: "Tenth of December"))
+          @finder.expects(:call).returns(unmatched)
+
+          result = decide_with(survey, ai_task_class(saunders_match))
+
+          assert_equal :fix, result.data[:outcome]
+          assert_equal({"George Saunders" => author.id}, result.data[:verdict].payload["author_links"])
+          assert_equal [], author.reload.alternate_names
+        end
+
+        test "a book whose authors are a different person is fixed, not treated as the same author" do
+          @book.book_authors.create!(author: ::Books::Author.create!(name: "Roy Heath"), position: 1)
+          survey = survey_for(@book, group_for(title: "Tenth of December"), title_agrees: true, wrong_book: false)
+          @finder.expects(:call).returns(unmatched)
+
+          result = decide_with(survey, ai_task_class(saunders_match(nil)))
+
+          assert_equal :fix, result.data[:outcome]
+          assert_equal({}, result.data[:verdict].payload["author_links"])
+        end
+
+        test "an AI failure retries the book and records nothing" do
+          author = ::Books::Author.create!(name: "George Saunders Jr.")
+          @book.book_authors.create!(author: author, position: 1)
+          survey = survey_for(@book, group_for(title: "Tenth of December"), title_agrees: true, wrong_book: false)
+          @finder.expects(:call).never
+
+          result = decide_with(survey, ai_task_class(success: false))
+
+          assert_equal :retry, result.data[:outcome]
+          assert_equal 0, ::Books::RepairVerdict.where(subject_key: "rebuild:#{@book.id}").count
+          assert_equal [], author.reload.alternate_names
+        end
+
         test "needs_fix? is a pure function of the survey row" do
           build = ->(**a) { ::Books::RebuildBookSurvey.new({classification: :coherent, groups: [{"titles" => []}], title_agrees: false, authors_agree: false, wrong_book: false}.merge(a)) }
 

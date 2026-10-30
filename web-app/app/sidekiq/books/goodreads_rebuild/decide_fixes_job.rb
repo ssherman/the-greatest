@@ -8,7 +8,7 @@ class Books::GoodreadsRebuild::DecideFixesJob
 
   sidekiq_options queue: :low, retry: 3
 
-  OUTCOMES = %i[merge fix kept skipped retry].freeze
+  OUTCOMES = %i[merge fix same_author kept skipped retry].freeze
 
   def perform(book_ids)
     counts = OUTCOMES.index_with(0).merge(errors: 0)

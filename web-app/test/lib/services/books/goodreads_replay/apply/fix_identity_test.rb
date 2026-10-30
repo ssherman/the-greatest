@@ -71,6 +71,62 @@ module Services
             FixIdentity.call(verdict: verdict)
           end
 
+          test "an author link ties the existing author to the book; the importer is given only the unlinked names" do
+            existing = ::Books::Author.create!(name: "Daniel Dennett")
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Daniel C. Dennett", "Right Author"],
+              "author_links" => {"Daniel C. Dennett" => existing.id}))
+            ::DataImporters::Books::Book::Importer.expects(:call).with { |args| args[:author_names] == ["Right Author"] && args[:providers] == %i[authors query_identifiers] }
+              .returns(::DataImporters::ImportResult.new(item: @book, provider_results: [], success: true, created: false)).once
+
+            assert_no_difference "::Books::Author.count" do
+              FixIdentity.call(verdict: verdict)
+            end
+
+            assert_equal [existing], @book.reload.authors.to_a
+            assert_equal ["Daniel C. Dennett"], existing.reload.alternate_names
+          end
+
+          test "linked and imported authors take their places in the export's order" do
+            existing = ::Books::Author.create!(name: "Second Author")
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Right Author", "Second Author"],
+              "author_links" => {"Second Author" => existing.id}))
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal [@author, existing], @book.reload.authors.to_a
+            assert_equal [1, 2], @book.book_authors.order(:position).pluck(:position)
+          end
+
+          test "when every author is linked the importer skips the authors provider" do
+            existing = ::Books::Author.create!(name: "Right Author")
+            verdict.update_columns(payload: verdict.payload.merge("author_links" => {"Right Author" => existing.id}))
+            AUTHOR_IMPORTER.expects(:call).never
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal [existing], @book.reload.authors.to_a
+            assert_equal [], existing.alternate_names
+          end
+
+          test "a linked author that has vanished falls back to importing the name" do
+            verdict.update_columns(payload: verdict.payload.merge("author_links" => {"Right Author" => 0}))
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal [@author], @book.reload.authors.to_a
+          end
+
+          test "a never-applied apply stays idempotent for links" do
+            existing = ::Books::Author.create!(name: "Right Author")
+            verdict.update_columns(payload: verdict.payload.merge("author_links" => {"Right Author" => existing.id}))
+            FixIdentity.call(verdict: verdict)
+            verdict.update_columns(applied_at: nil)
+
+            FixIdentity.call(verdict: verdict.reload)
+
+            assert_equal [existing], @book.reload.authors.to_a
+          end
+
           test "a second apply is a no-op and leaves data added since in place" do
             verdict
             ApplyVerdicts.call(auto_apply: true)

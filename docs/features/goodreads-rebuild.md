@@ -206,6 +206,10 @@ The rebuild merges only into a book on a real list or one with exactly the expor
 - A merge an admin rejected is never proposed again; the book is given a fix instead (applied by itself
   or proposed, by the fix rule above).
 
+**Same person, different spelling.** For every book that reaches the fix or merge decision, `MatchAuthors` first checks each export author name against the book's current authors by the finder's name key (initials folded), and asks the AI (`MatchExportAuthorsTask`, which sees each author's other books, never the surname alone) about the rest; only a "high" answer counts. When the title agrees and every export name is one of the book's own authors ("Kurt Vonnegut" for "Kurt Vonnegut Jr."), nothing is reset: the export spelling is added to the author's alternate names and the book is counted as `same_author`.
+
+When the book is fixed anyway, the matched authors travel in the verdict as `author_links`, and the apply links those existing authors instead of importing duplicates ("Daniel C. Dennett" beside "Daniel Dennett"); only the unmatched names are imported. A failed AI call decides nothing (`retry`), like a failed finder run.
+
 **A failed finder run decides nothing.** If the finder fell back or lost one of its sources, "found
 nothing" would be a guess, so the book stays undecided (counted as `retry` in the run log) and the next
 `decide_fixes` run tries it again. A book that already has a live verdict is left as it is (`kept`).
