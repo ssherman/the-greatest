@@ -114,8 +114,10 @@ module Services
           end
         end
 
+        # Only a current rejection is an admin's "no"; one retired while the record was a lump
+        # (rejected and superseded, RetireLumpVerdicts) says nothing about the right book.
         def rejected_merge?
-          ::Books::RepairVerdict.exists?(kind: :merge_books, subject_key: @key, status: :rejected)
+          ::Books::RepairVerdict.current.exists?(kind: :merge_books, subject_key: @key, status: :rejected)
         end
 
         # A finder that fell back or lost a source did not search properly; "nothing found"

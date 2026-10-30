@@ -431,7 +431,7 @@ The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve o
       Lump records (Goodreads rows of several different books) are skipped; they wait for a later
       split step. The first runs recorded some lump verdicts, so once, before approving anything:
       `bin/rails books:goodreads_rebuild:retire_lump_verdicts` (a dry run; check the counts and
-      samples, and that "already applied" is 0), then `bin/rails "books:goodreads_rebuild:retire_lump_verdicts[apply]"`.
+      samples, and that "already applied" is 0; if it is not, stop and look at those books before going on), then `bin/rails "books:goodreads_rebuild:retire_lump_verdicts[apply]"`.
    3. In Admin, Repair verdicts: review and bulk-approve the `fix_identity` proposals, then the
       `merge_books` ones.
    4. `bin/rails books:goodreads_replay:apply`, then `bin/rails books:goodreads_replay:repair_ratings`.

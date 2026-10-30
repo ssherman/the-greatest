@@ -174,7 +174,8 @@ stays, and a re-run picks up the rest.
 ## Fixes (increment 2b)
 
 Fixes the import-made books whose title or authors disagree with the Goodreads export. On dev
-(2026-10-29) that is about 47,400 books. They are taken
+(2026-10-29) that was about 47,400 books, of which about 1,000 are lumps and are now skipped (below), so
+about 46,400 are decided. They are taken
 from the survey rows, most-listed first, so a stop part way leaves the least important ones undone. A
 trusted book (on a real list before the rebuild) is never touched.
 
@@ -186,7 +187,7 @@ end on the book their own row names, which needs a per-reader split step that do
 it does, `DecideFix` and `DecideFixes` leave lumps alone (no verdict, no finder or AI call), and
 `books:goodreads_rebuild:retire_lump_verdicts` retires any unapplied lump verdicts the earlier runs
 recorded (rejected and superseded; a dry run unless `[apply]`; verdicts already applied are never
-touched, only counted). About 1,000 of the 47,400 are lumps.
+touched, only counted; a verdict an admin already rejected is left as it is).
 
 Each book gets one of two verdicts, stored as a repair verdict (`subject_key` `rebuild:<book id>`) that
 you review in Admin, Repair verdicts:
@@ -209,7 +210,7 @@ The rebuild merges only into a book on a real list or one with exactly the expor
 
 - A merge is applied by itself only when the target carries a verified Open Library work that the
   export's evidence names, the target's title equals one of the export titles exactly, and the work has
-  no volume number. A pair an admin already marked "not a duplicate". Every other merge is proposed and waits for an admin. (A proposed target is still
+  no volume number. A pair an admin already marked "not a duplicate" is never merged automatically. Every other merge is proposed and waits for an admin. (A proposed target is still
   only a trusted book or a book whose own survey agrees with its export.)
 - A fix is applied by itself only when WorldCat confirmed the export. Otherwise it is proposed.
 - A merge an admin rejected is never proposed again; the book is given a fix instead (applied by itself

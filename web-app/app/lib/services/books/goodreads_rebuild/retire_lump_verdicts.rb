@@ -26,9 +26,10 @@ module Services
         end
 
         def call
-          # unapplied: a verdict already applied to a lump stays as it is.
-          scope = lump_verdicts.unapplied.current
-          counts = KINDS.index_with(0).merge(scope.group(:kind).count)
+          # unapplied: a verdict already applied to a lump stays as it is. Rejected ones (an admin's call) stay too;
+          # approved ones are retired because an auto-approved verdict would otherwise be applied.
+          scope = lump_verdicts.unapplied.current.where(status: [:proposed, :approved])
+          counts = scope.group(:kind, :status).count.transform_keys { |kind, status| "#{kind} #{status}" }
           samples = sample_lines(scope)
           if @apply
             now = Time.current

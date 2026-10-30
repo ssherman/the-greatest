@@ -30,13 +30,18 @@ module Services
             payload: {key => book.id}, applied_at: applied_at)
         end
 
+        def lump_with(kind:, status:, key:)
+          book = book(:lump)
+          ::Books::RepairVerdict.create!(kind: kind, subject_key: "rebuild:#{book.id}", status: status, decided_by: :rule, payload: {key => book.id})
+        end
+
         def snapshot = ::Books::RepairVerdict.order(:id).pluck(:status, :superseded_at, :reviewed_at, :reason)
 
         test "dry run counts the lump verdicts and changes nothing" do
           before = snapshot
           result = RetireLumpVerdicts.call
 
-          assert_equal({"fix_identity" => 1, "merge_books" => 1}, result.data[:counts])
+          assert_equal({"fix_identity proposed" => 1, "merge_books proposed" => 1}, result.data[:counts])
           assert_equal 1, result.data[:already_applied]
           assert_equal 2, result.data[:samples].size
           assert_match(/"Psychology of Money" \(57\) \| "The Price of Salt" \(19\)/, result.data[:samples].first)
@@ -62,11 +67,35 @@ module Services
           end
         end
 
+        test "an approved unapplied lump verdict is retired, an admin-rejected one is left as it is" do
+          approved = lump_with(kind: :fix_identity, status: :approved, key: "book_id")
+          rejected = lump_with(kind: :merge_books, status: :rejected, key: "source_id")
+          rejected_before = rejected.reload.attributes
+
+          result = RetireLumpVerdicts.call(apply: true)
+
+          assert_equal({"fix_identity proposed" => 1, "fix_identity approved" => 1, "merge_books proposed" => 1}, result.data[:counts])
+          assert_predicate approved.reload, :rejected?
+          assert_not_nil approved.superseded_at
+          assert_equal rejected_before, rejected.reload.attributes
+        end
+
+        test "a merge from a coherent book into a lump target is not retired" do
+          source = book(:coherent)
+          into_lump = ::Books::RepairVerdict.create!(kind: :merge_books, subject_key: "rebuild:#{source.id}", status: :proposed, decided_by: :rule,
+            payload: {"source_id" => source.id, "target_id" => book(:lump).id})
+
+          RetireLumpVerdicts.call(apply: true)
+
+          assert_predicate into_lump.reload, :proposed?
+          assert_nil into_lump.superseded_at
+        end
+
         test "a second apply finds nothing" do
           RetireLumpVerdicts.call(apply: true)
           before = snapshot
 
-          assert_equal({"fix_identity" => 0, "merge_books" => 0}, RetireLumpVerdicts.call(apply: true).data[:counts])
+          assert_equal({}, RetireLumpVerdicts.call(apply: true).data[:counts])
           assert_equal before, snapshot
         end
       end

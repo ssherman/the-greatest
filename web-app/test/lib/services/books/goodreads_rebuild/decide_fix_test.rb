@@ -327,6 +327,16 @@ module Services
           assert_equal :fix, decide(survey).data[:outcome]
         end
 
+        # A merge retired while the record was a lump (rejected and superseded) is not an admin's "no".
+        test "a retired merge does not stop the finder" do
+          survey = survey_for(@book, group_for(title: "Tenth of December"))
+          ::Books::RepairVerdict.create!(kind: :merge_books, subject_key: "rebuild:#{@book.id}", decided_by: :rule, status: :rejected,
+            superseded_at: Time.current, payload: {})
+          @finder.expects(:call).returns(unmatched)
+
+          assert_equal :fix, decide(survey).data[:outcome]
+        end
+
         test "a trusted book is skipped" do
           trusted = ::Books::Book.create!(id: Cohort.post_import_range.first - 60, title: "Trusted")
           survey = survey_for(trusted, group_for(title: "Tenth of December"))
