@@ -69,6 +69,86 @@ module DataImporters
           stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: body.to_json)
         end
 
+        # ---- blinded mode -----------------------------------------------------
+
+        test "blinded finder ignores a legacy-held ISBN" do
+          @war_and_peace.identifiers.create!(identifier_type: :books_work_isbn13, value: "9780000000001", source: :legacy)
+          client = mock("open_library_client")
+          client.expects(:resolve).never
+          client.expects(:identifier).never
+          expect_no_ai
+          finder = Finder.new(open_library_client: client, open_library: :none,
+            identifier_sources: Finder::TRUSTED_IDENTIFIER_SOURCES)
+          query = ImportQuery.new(title: "Zzyzx Unrelated Title", author_names: ["Nobody Known"], isbn13: ["9780000000001"])
+
+          match = finder.call(query: query)
+
+          assert match.unmatched?
+        end
+
+        def book_with_alternate_title(alternate, source:, status: :kept)
+          author = ::Books::Author.create!(name: "Robert Greene")
+          book = ::Books::Book.create!(title: "The Concise Test Strategies", alternate_titles: [alternate])
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          AlternateTitle.create!(titleable: book, title: alternate, source: source, status: status)
+          SEARCH.stubs(:call).returns([hit(book)])
+          book
+        end
+
+        def blinded_finder
+          Finder.new(open_library: :none, identifier_sources: Finder::TRUSTED_IDENTIFIER_SOURCES,
+            alternate_title_sources: Finder::TRUSTED_ALTERNATE_TITLE_SOURCES)
+        end
+
+        test "blinded finder ignores a legacy alternate title" do
+          book = book_with_alternate_title("The Test Strategies", source: :legacy)
+          ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).raises("AI unavailable")
+          query = ImportQuery.new(title: "The Test Strategies", author_names: ["Robert Greene"])
+
+          match = blinded_finder.call(query: query)
+
+          # No rule match; the AI is down here, so the finder falls back to unmatched.
+          assert_equal [:unmatched, :fallback], [match.outcome, match.decided_by]
+          assert_empty match.candidates.first.evidence[:alternate_titles]
+
+          # The default finder still trusts the legacy array: behaviour unchanged.
+          expect_no_ai
+          legacy = Finder.new(open_library: :none).call(query: query)
+          assert_equal [book, :rule], [legacy.record, legacy.decided_by]
+        end
+
+        test "blinded finder still counts a kept alternate title from a trusted source" do
+          book = book_with_alternate_title("The Test Strategies", source: :admin)
+          expect_no_ai
+
+          match = blinded_finder.call(query: ImportQuery.new(title: "The Test Strategies", author_names: ["Robert Greene"]))
+
+          assert_equal [book, :rule], [match.record, match.decided_by]
+          assert_equal ["The Test Strategies"], match.candidates.first.evidence[:alternate_titles]
+        end
+
+        test "blinded finder ignores an alternate title written by a merge" do
+          book_with_alternate_title("The Test Strategies", source: :merge)
+          ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).raises("AI unavailable")
+
+          match = blinded_finder.call(query: ImportQuery.new(title: "The Test Strategies", author_names: ["Robert Greene"]))
+
+          assert_equal :unmatched, match.outcome
+        end
+
+        test "blinded finder ignores a removed alternate title" do
+          book_with_alternate_title("The Test Strategies", source: :admin, status: :removed)
+          ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).raises("AI unavailable")
+
+          match = blinded_finder.call(query: ImportQuery.new(title: "The Test Strategies", author_names: ["Robert Greene"]))
+
+          assert_equal :unmatched, match.outcome
+        end
+
+        test "unknown open_library mode still raises" do
+          assert_raises(ArgumentError) { Finder.new(open_library: :bogus) }
+        end
+
         # ---- AI context (Goodreads import spec §4) ----------------------------
 
         test "the AI is shown the query's series and its other credited names" do

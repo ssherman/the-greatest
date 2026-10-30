@@ -20,6 +20,7 @@ module Services
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         POSTGRES_ERRORS = [ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished].freeze
         HANDLERS = {
+          fix_identity: Apply::FixIdentity,
           merge_authors: Apply::MergeAuthors,
           merge_books: Apply::MergeBooks,
           relink: Apply::Relink,

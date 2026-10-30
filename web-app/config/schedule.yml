@@ -45,3 +45,8 @@ sessions_prune_expired:
   class: Sessions::PruneExpiredJob
   cron: "15 3 * * *"
   description: "Delete sign-in sessions past their idle timeout or hard limit"
+
+goodreads_rebuild_enrichment:
+  class: Books::GoodreadsRebuild::QueueEnrichmentJob
+  cron: "*/10 * * * *"
+  description: "Start enrichment for the Goodreads rebuild fixed books, most-listed first, a few hundred at a time"

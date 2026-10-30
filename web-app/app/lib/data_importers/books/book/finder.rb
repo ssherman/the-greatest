@@ -8,7 +8,7 @@ module DataImporters
       # Library work key, ISBN-13, ISBN-10, ASIN, Goodreads id), an exact
       # normalized title-plus-author lookup, the OpenSearch title-plus-
       # authors query, and the Open Library resolve service (or, by mode, its
-      # identifier lookup, or both).
+      # identifier lookup, both, or neither).
       class Finder < DataImporters::FinderBase
         IDENTIFIER_LOOKUPS = [
           [:open_library_work_key, :books_work_openlibrary_id],
@@ -22,16 +22,35 @@ module DataImporters
         EXACT_LIMIT = 5
         # Which Open Library sources run: :resolve (the /resolve service, the
         # default), :identifiers (the fast identifier lookup only; the Goodreads
-        # replay's pass one) or :all (both; its pass two).
-        OPEN_LIBRARY_MODES = %i[resolve identifiers all].freeze
+        # replay's pass one), :all (both; its pass two) or :none (no Open Library
+        # source at all).
+        OPEN_LIBRARY_MODES = %i[resolve identifiers all none].freeze
+        # Identifier sources a "blinded" lookup trusts. Legacy's Goodreads import
+        # stamped wrong ISBNs and Goodreads ids onto books, so rows from any
+        # other source are ignored when this is passed as identifier_sources.
+        TRUSTED_IDENTIFIER_SOURCES = (Identifier::VERIFIED_SOURCES + ["goodreads_import"]).freeze
+        # Alternate-title sources a "blinded" lookup trusts. Legacy stored wrong
+        # alternate titles on derived books (a "Concise" edition holding the full
+        # title), so a legacy row is never evidence. A merge row is not either: the
+        # merger copies the absorbed book's own title across, which for a derived
+        # book is legacy's guess. An AI enrichment, an admin or a correction wrote
+        # the rest.
+        TRUSTED_ALTERNATE_TITLE_SOURCES = (AlternateTitle.sources.keys - %w[legacy merge]).freeze
 
         # open_library_client: injected by tests; nil builds the real client
-        # lazily inside the Open Library sources.
-        def initialize(open_library_client: nil, open_library: :resolve)
+        # lazily inside the Open Library sources. identifier_sources: restricts
+        # the identifier lookup to rows from these Identifier sources; nil
+        # trusts every row. alternate_title_sources: does the same for alternate
+        # titles: given, only kept AlternateTitle rows from these sources count,
+        # for the title rules and for what the AI is shown; nil keeps the
+        # books_books.alternate_titles array as it is.
+        def initialize(open_library_client: nil, open_library: :resolve, identifier_sources: nil, alternate_title_sources: nil)
           raise ArgumentError, "unknown open_library mode: #{open_library.inspect}" unless OPEN_LIBRARY_MODES.include?(open_library)
 
           @open_library_client = open_library_client
           @open_library = open_library
+          @identifier_sources = identifier_sources
+          @alternate_title_sources = alternate_title_sources
         end
 
         def describe_candidate(candidate)
@@ -70,7 +89,8 @@ module DataImporters
 
         def candidate_sources(query)
           [
-            DataImporters::Sources::Identifiers.new(model_class: ::Books::Book, lookups: identifier_lookups(query)),
+            DataImporters::Sources::Identifiers.new(model_class: ::Books::Book, lookups: identifier_lookups(query),
+              sources: @identifier_sources),
             DataImporters::Sources::Exact.new(scope: exact_scope(query), limit: EXACT_LIMIT),
             DataImporters::Sources::OpenSearch.new(
               model_class: ::Books::Book,
@@ -100,12 +120,22 @@ module DataImporters
         def record_year(record) = record.first_published_year
 
         def record_extra_evidence(record)
-          {book_kind: record.book_kind, alternate_titles: Array(record.alternate_titles)}
+          {book_kind: record.book_kind, alternate_titles: record_alternate_titles(record)}
+        end
+
+        def record_alternate_titles(record)
+          return Array(record.alternate_titles) unless @alternate_title_sources
+
+          record.alternate_title_records
+            .select { |row| row.status == "kept" && @alternate_title_sources.include?(row.source) }
+            .map(&:title)
         end
 
         private
 
         def open_library_sources(query)
+          return [] if @open_library == :none
+
           sources = []
           sources << OpenLibraryIdentifierSource.new(query: query, client: @open_library_client) unless @open_library == :resolve
           sources << OpenLibrarySource.new(query: query, client: @open_library_client, limit: OPEN_LIBRARY_LIMIT) unless @open_library == :identifiers

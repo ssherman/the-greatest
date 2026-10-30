@@ -31,7 +31,7 @@ module Books
   # truncate this table. decided_by says who made the finding; an admin's
   # review is decided_by_user_id and reviewed_at.
   class RepairVerdict < ApplicationRecord
-    enum :kind, {relink: 0, merge_books: 1, merge_authors: 2, strip_identifier: 3, mark_provisional: 4}
+    enum :kind, {relink: 0, merge_books: 1, merge_authors: 2, strip_identifier: 3, mark_provisional: 4, fix_identity: 5}
     enum :decided_by, {rule: 0, ai: 1, admin: 2}, prefix: true
     enum :status, {proposed: 0, approved: 1, rejected: 2}
     enum :confidence, {certain: 0, high: 1, medium: 2, low: 3}, prefix: true
@@ -54,7 +54,7 @@ module Books
       ids = case kind
       when "relink" then [payload["from_book_id"], payload["to_book_id"]]
       when "merge_books" then [payload["source_id"], payload["target_id"]]
-      when "strip_identifier", "mark_provisional" then [payload["book_id"]]
+      when "strip_identifier", "mark_provisional", "fix_identity" then [payload["book_id"]]
       else []
       end
       ids.compact
@@ -76,6 +76,8 @@ module Books
           "#{verb} #{Array(pairs).map { |type, value| "#{type} #{value}" }.join(", ")}" if Array(pairs).any?
         end
         "On book ##{payload["book_id"]}: #{changes.join("; ")}"
+      when "fix_identity"
+        "Fix ##{payload["book_id"]}: \"#{payload["full_title"]}\" by #{Array(payload["author_names"]).join(", ")}"
       when "mark_provisional" then "Mark book ##{payload["book_id"]} provisional (#{payload["reason"]})"
       end
     end

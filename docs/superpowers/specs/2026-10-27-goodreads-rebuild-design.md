@@ -291,6 +291,9 @@ step, and the only one that writes to users' lists.
    wrong author, so the author is fixed first, then the books merge with Koontz's. *Winnie the Pooh* /
    *The Book* is not a duplicate.
    - Merge automatically only under §12 call 4. Otherwise the AI proposes.
+   - 2026-10-29: when an English edition exists, the surviving page is the English one, never a
+     translated duplicate (Shane: "our Work/Book should always be the English translation if an
+     English translation exists"). Stage one leaves translated derived duplicates unmerged for this.
    - A pair that isn't a duplicate gets a `close_pair` verdict, and the queue row is marked
      `not_duplicate`. A legacy identifier the two share goes to the identifier check, and the book
      the rows contradict loses it.

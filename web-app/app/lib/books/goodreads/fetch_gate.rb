@@ -21,6 +21,8 @@ module Books
         def granted? = refusal.nil?
       end
 
+      Usage = Data.define(:day, :count)
+
       def initialize(redis: nil, config: nil)
         @redis = redis || REDIS_POOL
         @config = config || Rails.application.config.x.goodreads
@@ -45,6 +47,16 @@ module Books
 
       def blocked?
         read["blocked_until"].to_i > now
+      end
+
+      # The UTC day of the newest reservation and how many fetches that day holds;
+      # [nil, 0] when nothing is stored. The day can be tomorrow: a long line
+      # reserves turns that start past midnight.
+      def usage
+        state = read
+        return Usage.new(day: nil, count: 0) if state["day"].blank?
+
+        Usage.new(day: Date.strptime(state["day"], "%Y%m%d"), count: state["day_count"].to_i)
       end
 
       # When the current block ends; nil when none was set or it has passed.

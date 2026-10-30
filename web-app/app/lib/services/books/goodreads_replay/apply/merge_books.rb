@@ -19,6 +19,8 @@ module Services
             target = ::Books::Book.find_by(id: verdict.payload["target_id"])
             return noop("book #{verdict.payload["target_id"]} no longer exists") unless target
 
+            reset_source(verdict, source) if verdict.payload["reset_source"]
+
             merger = ::Books::Book::Merger.new(source: source, target: target, defer_rankings: true)
             result = merger.call
             raise Failed, result.errors.join("; ") unless result.success?
@@ -27,11 +29,27 @@ module Services
             Result.new(success?: true, data: data, errors: [])
           end
 
+          # A rebuild merge (reset_source): the source is a derived book whose
+          # legacy data is a guess, so it is cleared before its users' data moves
+          # to the target. Its archive goes on the verdict in the same transaction as the
+          # reset, only the first time: a retry's reset finds nothing left to archive.
+          def self.reset_source(verdict, source)
+            raise Failed, "source is trusted now" if GoodreadsRebuild::Cohort.trusted?(source.id)
+
+            ::Books::Book.transaction do
+              archive = GoodreadsRebuild::ResetBook.call(book: source).data[:removed]
+              verdict.update_columns(payload: verdict.payload.merge("removed" => archive)) unless verdict.payload.key?("removed")
+              # The merger copies the source's title onto the target as an alternate
+              # title; for a derived book that is legacy's guess. Give it the export's.
+              source.update_columns(title: verdict.payload["title"], subtitle: verdict.payload["subtitle"]) if verdict.payload["title"].present?
+            end
+          end
+
           def self.noop(reason)
             Result.new(success?: true, data: {outcome: :noop, reason: reason}, errors: [])
           end
 
-          private_class_method :noop
+          private_class_method :reset_source, :noop
         end
       end
     end

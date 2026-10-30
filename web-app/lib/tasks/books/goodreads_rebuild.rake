@@ -51,6 +51,30 @@ namespace :books do
       puts Services::Books::GoodreadsRebuild::SurveyReport.call
     end
 
+    desc "Run one enrichment top-up for the fixed books now (the 10-minute job does this on its own)"
+    task queue_enrichment: :environment do
+      data = Services::Books::GoodreadsRebuild::QueueEnrichment.call(in_flight: Rails.application.config.x.goodreads_rebuild.in_flight).data
+      puts "started #{data[:started]}, in flight #{data[:in_flight]}, still waiting #{data[:waiting]}"
+    end
+
+    desc "Queue the decide run over the <count> most-listed derived books that need a fix, or all. It only records verdicts; nothing changes."
+    task :decide_fixes, [:limit] => :environment do |_task, args|
+      usage = "usage: books:goodreads_rebuild:decide_fixes[<count>|all]"
+      limit = case args[:limit]
+      when "all" then nil
+      when /\A[1-9]\d*\z/ then args[:limit].to_i
+      else abort usage
+      end
+
+      queued = Services::Books::GoodreadsRebuild::DecideFixes.enqueue(limit: limit)
+      puts "queued #{queued} books in #{(queued.to_f / Services::Books::GoodreadsRebuild::DecideFixes::BATCH_SIZE).ceil} batches"
+    end
+
+    desc "Read-only: what the decide run found (merges and fixes, how sure, applied, failed) with samples"
+    task fixes_report: :environment do
+      puts Services::Books::GoodreadsRebuild::FixesReport.call
+    end
+
     desc "Retire the replay's proposed relinks and identifier strips (rejected and superseded). " \
       "A dry run unless [apply]; a second apply finds 0."
     task :retire_replay_proposals, [:apply] => :environment do |_task, args|

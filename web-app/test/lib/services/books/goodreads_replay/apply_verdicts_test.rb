@@ -46,6 +46,18 @@ module Services
           assert_nil relink.reload.applied_at
         end
 
+        test "fix_identity applies before merge_books" do
+          order = sequence("rebuild order")
+          fix = verdict(:fix_identity, "rebuild:1", {"book_id" => 1})
+          merge = verdict(:merge_books, "rebuild:2", {"source_id" => 2, "target_id" => 3})
+          Apply::FixIdentity.expects(:call).with(verdict: fix).in_sequence(order).returns(answer(:applied))
+          Apply::MergeBooks.expects(:call).with(verdict: merge).in_sequence(order).returns(answer(:applied))
+
+          result = ApplyVerdicts.call(auto_apply: true)
+
+          assert_equal({"fix_identity applied" => 1, "merge_books applied" => 1}, result.data[:tally])
+        end
+
         test "queues each follow-up once per run, however many merges asked for it" do
           first = verdict(:merge_books, "books:1:2")
           second = verdict(:merge_books, "books:3:4")
