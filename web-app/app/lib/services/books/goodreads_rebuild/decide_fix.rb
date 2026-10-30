@@ -52,6 +52,7 @@ module Services
           @facts = ExportFacts.call(survey: @survey)
           unless rejected_merge?
             match = (@finder || self.class.default_finder).call(query: @facts.to_query, verify: true, subject: @book, exclude: @book)
+            return done(:retry) if failed?(match)
             return record_merge(match) if eligible?(match)
           end
           record_fix
@@ -67,6 +68,12 @@ module Services
 
         def rejected_merge?
           ::Books::RepairVerdict.exists?(kind: :merge_books, subject_key: @key, status: :rejected)
+        end
+
+        # A finder that fell back or lost a source did not search properly; "nothing found"
+        # would be a guess, so record nothing and let the next run try again.
+        def failed?(match)
+          match.present? && (match.decided_by == :fallback || Array(match.sources_failed).any?)
         end
 
         def eligible?(match)

@@ -113,6 +113,45 @@ module Services
           assert_equal "proposed", decide(survey).data[:verdict].status
         end
 
+        test "proposes the merge when the target's verified Open Library work is a different work" do
+          target = trusted_target(key: "OL2W")
+          survey = survey_for(@book, group_for(title: "Tenth of December", ol_work_keys: ["OL1W"]))
+          @finder.expects(:call).returns(match(target))
+
+          assert_equal ["merge_books", "proposed"], decide(survey).data[:verdict].then { |v| [v.kind, v.status] }
+        end
+
+        test "proposes the merge when the main group has no Open Library evidence" do
+          target = trusted_target
+          survey = survey_for(@book, group_for(title: "Tenth of December"))
+          @finder.expects(:call).returns(match(target))
+
+          assert_equal ["merge_books", "proposed"], decide(survey).data[:verdict].then { |v| [v.kind, v.status] }
+        end
+
+        test "auto-merges when the target's title plus subtitle equals the export title" do
+          target = trusted_target(title: "Tenth")
+          target.update!(subtitle: "of December")
+          survey = survey_for(@book, group_for(title: "Tenth: of December", ol_work_keys: ["OL1W"]))
+          @finder.expects(:call).returns(match(target))
+
+          assert_equal ["merge_books", "approved", "certain"], decide(survey).data[:verdict].then { |v| [v.kind, v.status, v.confidence] }
+        end
+
+        test "a failed finder run records nothing and asks for a retry" do
+          survey = survey_for(@book, group_for(title: "Tenth of December", world_cat: :agrees))
+          @finder.expects(:call).twice.returns(
+            DataImporters::Match.new(outcome: :unmatched, decided_by: :fallback),
+            DataImporters::Match.new(outcome: :unmatched, decided_by: :rule, sources_failed: [:opensearch])
+          )
+
+          2.times do
+            result = decide(survey)
+            assert_equal [:retry, nil], [result.data[:outcome], result.data[:verdict]]
+          end
+          assert_equal 0, ::Books::RepairVerdict.where(subject_key: "rebuild:#{@book.id}").count
+        end
+
         test "a proposed merge keeps the match's confidence and an AI decision stays AI" do
           target = trusted_target(source: "legacy")
           survey = survey_for(@book, group_for(title: "Tenth of December"))
