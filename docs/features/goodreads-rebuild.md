@@ -173,10 +173,20 @@ stays, and a re-run picks up the rest.
 
 ## Fixes (increment 2b)
 
-Fixes the import-made books whose title or authors disagree with the Goodreads export, or whose
-editions are a lump of several works. On dev (2026-10-29) that is about 47,400 books. They are taken
+Fixes the import-made books whose title or authors disagree with the Goodreads export. On dev
+(2026-10-29) that is about 47,400 books. They are taken
 from the survey rows, most-listed first, so a stop part way leaves the least important ones undone. A
 trusted book (on a real list before the rebuild) is never touched.
+
+**Lump records are skipped (2026-10-30).** A lump is one record that holds Goodreads rows of several
+different books: record 18026 "Carol" has 57 rows of *The Psychology of Money* and 19 of *The Price of
+Salt* (Highsmith's *Carol*). Deciding it from its biggest group would move all 76 readers onto
+*Psychology of Money* (a merge) or rename the record out from under the 19 (a fix). Each reader has to
+end on the book their own row names, which needs a per-reader split step that does not exist yet. Until
+it does, `DecideFix` and `DecideFixes` leave lumps alone (no verdict, no finder or AI call), and
+`books:goodreads_rebuild:retire_lump_verdicts` retires any unapplied lump verdicts the earlier runs
+recorded (rejected and superseded; a dry run unless `[apply]`; verdicts already applied are never
+touched, only counted). About 1,000 of the 47,400 are lumps.
 
 Each book gets one of two verdicts, stored as a repair verdict (`subject_key` `rebuild:<book id>`) that
 you review in Admin, Repair verdicts:
@@ -199,8 +209,7 @@ The rebuild merges only into a book on a real list or one with exactly the expor
 
 - A merge is applied by itself only when the target carries a verified Open Library work that the
   export's evidence names, the target's title equals one of the export titles exactly, and the work has
-  no volume number. A lump (one book standing for several works) is never merged automatically, and
-  neither is a pair an admin already marked "not a duplicate". Every other merge is proposed and waits for an admin. (A proposed target is still
+  no volume number. A pair an admin already marked "not a duplicate". Every other merge is proposed and waits for an admin. (A proposed target is still
   only a trusted book or a book whose own survey agrees with its export.)
 - A fix is applied by itself only when WorldCat confirmed the export. Otherwise it is proposed.
 - A merge an admin rejected is never proposed again; the book is given a fix instead (applied by itself

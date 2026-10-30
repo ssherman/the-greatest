@@ -110,12 +110,17 @@ module Services
           assert_match(/not a duplicate/i, verdict.reason)
         end
 
-        test "proposes the merge when the survey is a lump" do
-          target = trusted_target
+        test "a lump is skipped without a verdict or a finder call" do
           survey = survey_for(@book, group_for(title: "Tenth of December", ol_work_keys: ["OL1W"]), classification: :lump)
-          @finder.expects(:call).returns(match(target))
+          @finder.expects(:call).never
+          ai = mock("task_class")
+          ai.expects(:new).never
 
-          assert_equal "proposed", decide(survey).data[:verdict].status
+          result = DecideFix.call(book: @book, survey: survey, finder: @finder, task_class: ai)
+
+          assert_equal :skipped, result.data[:outcome]
+          assert_nil result.data[:verdict]
+          assert_equal 0, ::Books::RepairVerdict.where(subject_key: "rebuild:#{@book.id}").count
         end
 
         test "proposes the merge when the main group has a volume" do
@@ -491,7 +496,7 @@ module Services
           build = ->(**a) { ::Books::RebuildBookSurvey.new({classification: :coherent, groups: [{"titles" => []}], title_agrees: false, authors_agree: false, wrong_book: false}.merge(a)) }
 
           assert DecideFix.needs_fix?(build.call)
-          assert DecideFix.needs_fix?(build.call(classification: :lump, title_agrees: true, authors_agree: true, wrong_book: true))
+          refute DecideFix.needs_fix?(build.call(classification: :lump, title_agrees: false, authors_agree: false, wrong_book: true))
           assert DecideFix.needs_fix?(build.call(title_agrees: true, authors_agree: false))
           refute DecideFix.needs_fix?(build.call(title_agrees: true, authors_agree: true))
           refute DecideFix.needs_fix?(build.call(classification: :unsupported))

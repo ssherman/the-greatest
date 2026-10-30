@@ -15,7 +15,7 @@ module Services
       # The bar is zero wrong merges, so a merge is approved on its own only
       # when the target holds a verified Open Library work that the group's
       # evidence names, its title matches one of the group's export titles
-      # exactly, the group has no volume, the survey is not a lump, and nobody has marked
+      # exactly, the group has no volume, and nobody has marked
       # the pair as not a duplicate. Everything else waits for an
       # admin. The finder runs blinded (no Open Library, no legacy evidence),
       # and a match that is itself a book waiting for a fix is never a target.
@@ -28,8 +28,10 @@ module Services
         VOLUME_SHAPE = /\b(?:vols?|volumes?|books?|parts?|tome|teil|band|livre|tomo|parte|libro|buch|tom|livro)\b\.?\s*(?:#?\d+|[ivxlcdm]+|#{NUMBER_WORDS})\b|#\s*\d/i
 
         # The one "needs a fix" rule; the batch job's SQL scope mirrors it and a test keeps them equal.
+        # A lump (Goodreads rows of several different books) never needs one here: deciding it from its
+        # biggest group would move every other group's readers onto that book, so it waits for the split step.
         def self.needs_fix?(survey)
-          return false unless survey.coherent? || survey.lump?
+          return false unless survey.coherent?
 
           !(survey.title_agrees && survey.authors_agree && !survey.wrong_book)
         end
@@ -63,7 +65,7 @@ module Services
           return done(:retry) unless authors.success?
 
           @author_links = authors.data[:links]
-          return record_same_author if @survey.title_agrees && @survey.coherent? && authors.data[:all_matched] && own_title_agrees?
+          return record_same_author if @survey.title_agrees && authors.data[:all_matched] && own_title_agrees?
 
           unless rejected_merge?
             match = (@finder || self.class.default_finder).call(query: @facts.to_query, verify: true, subject: @book, exclude: @book)
@@ -197,7 +199,7 @@ module Services
         end
 
         def auto_merge?(target)
-          @survey.coherent? && @facts.volume.blank? && !marked_not_duplicate?(target) &&
+          @facts.volume.blank? && !marked_not_duplicate?(target) &&
             verified_work_key?(target) && title_agrees_exactly?(target)
         end
 

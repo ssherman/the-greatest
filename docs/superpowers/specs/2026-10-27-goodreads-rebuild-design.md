@@ -200,6 +200,8 @@ work reference add to that.
 
 **A lump** is handled the same way. The main group's book is checked and rebuilt like any other. Each other group's book is found first (step 1), or created through the same importer.
 
+- **2026-10-30: 2b skips lumps.** Deciding a lump from its main group moves every reader onto that one book, so 2b leaves lump records alone until a split step exists. The split step moves each group's readers individually, to the book their own row names. A group that is a combo or omnibus book becomes, or finds, a book marked `book_kind: collection`: combo books are real books that readers keep, and later they get linked to the works they cover (not now).
+
 **Authors left with no books** after a fix are left for the sweep (§6a). A wrong author such as "Jim Baggott" keeps his own real books.
 
 ### 4.2 Survey pass 2 runs locally and is copied to production (2026-10-28)
