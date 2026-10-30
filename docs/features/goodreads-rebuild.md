@@ -193,6 +193,8 @@ normal book finder **blinded**: no Open Library, no legacy evidence, and a book 
 for a fix is never a target. The search is built from the export's facts for the book's main work
 (`ExportFacts`: title, authors, year, identifiers and Open Library hints from the biggest edition group).
 
+The rebuild merges only into a book on a real list or one with exactly the export's title; a translated duplicate is left for stage two, and stage two's dedupe must keep the English page when an English edition exists (Shane, 2026-10-29).
+
 **When each is automatic.** The bar is zero wrong merges.
 
 - A merge is applied by itself only when the target carries a verified Open Library work that the

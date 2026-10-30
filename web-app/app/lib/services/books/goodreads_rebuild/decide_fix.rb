@@ -92,7 +92,24 @@ module Services
           return true if Cohort.trusted?(target.id)
 
           other = ::Books::RebuildBookSurvey.find_by(book_id: target.id)
-          other.present? && other.title_agrees && other.authors_agree && !other.wrong_book
+          return false unless other.present? && other.title_agrees && other.authors_agree && !other.wrong_book
+
+          # Our page should be the English one when an English edition exists. A derived record
+          # (made by legacy, on no list) can be titled in another language while its own survey
+          # still agrees, so only an exact title match lets readers merge into it; otherwise the
+          # book is fixed in place and stage two's dedupe keeps the English page.
+          return true if derived_title_matches?(target)
+
+          @refused = "the existing book has a different (possibly translated) title"
+          false
+        end
+
+        def derived_title_matches?(target)
+          return true if title_agrees_exactly?(target)
+
+          stripped = export_titles.map { |title| title.sub(ExportFacts::SERIES_SUFFIX, "") }.filter_map { |t| ::Services::Books::Verification::Check.title_key(t) }
+          ours = [target.title, target_full_title(target)].filter_map { |t| ::Services::Books::Verification::Check.title_key(t) }
+          (ours & stripped).any?
         end
 
         # The AI matched across volumes ("Book Five" to "Book 1", a complete series

@@ -267,6 +267,37 @@ module Services
           assert_equal :merge, decide(survey).data[:outcome]
         end
 
+        test "a derived target with a translated title gets a fix, not a merge" do
+          other = ::Books::Book.create!(id: Cohort.post_import_range.first + 7_001, title: "Visul Numărul 9")
+          survey_for(other, group_for(title: "Number9Dream"), title_agrees: true, authors_agree: true, wrong_book: false)
+          survey = survey_for(@book, group_for(title: "Number9Dream"))
+          @finder.expects(:call).returns(match(other, decided_by: :ai, confidence: :medium))
+
+          result = decide(survey)
+
+          assert_equal [:fix, "fix_identity"], [result.data[:outcome], result.data[:verdict].kind]
+          assert_match(/different.*title/, result.data[:verdict].reason)
+        end
+
+        test "a derived target with the export's exact title still merges" do
+          other = ::Books::Book.create!(id: Cohort.post_import_range.first + 7_001, title: "Of Test Mainframes")
+          survey_for(other, group_for(title: "Of Test Mainframes"), title_agrees: true, authors_agree: true, wrong_book: false)
+          survey = survey_for(@book, group_for(title: "Of Test Mainframes"))
+          @finder.expects(:call).returns(match(other))
+
+          assert_equal :merge, decide(survey).data[:outcome]
+        end
+
+        test "a trusted target with a different title can still be proposed" do
+          target = trusted_target(title: "Foundation")
+          survey = survey_for(@book, group_for(title: "Fundación", ol_work_keys: ["OL1W"]))
+          @finder.expects(:call).returns(match(target, decided_by: :ai, confidence: :medium))
+
+          result = decide(survey)
+
+          assert_equal [:merge, "proposed"], [result.data[:outcome], result.data[:verdict].status]
+        end
+
         test "a provisional match gives a fix" do
           target = trusted_target
           target.update!(provisional: true)
