@@ -53,7 +53,7 @@ gem "thruster", require: false
 
 gem "countries"
 gem "openai"
-gem "stripe", "~> 19.5"
+gem "stripe", "~> 20.1"
 gem "opensearch-ruby"
 gem "sidekiq"
 gem "sidekiq-cron"
@@ -63,7 +63,7 @@ gem "pagy", "~> 43.5"
 # gem "dotenv-rails"
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
-gem "image_processing", "~> 1.2"
+gem "image_processing", "~> 2.2"
 
 # AWS SDK for S3 compatible storage (Cloudflare R2)
 gem "aws-sdk-s3", require: false
@@ -108,7 +108,7 @@ group :test do
   gem "ostruct"
   # Validates every API integration test's request and response against
   # config/api/v1/openapi.yaml. Not committee: 5.6.3 pins minitest ~> 5.3.
-  gem "openapi_first", "~> 3.4"
+  gem "openapi_first", "~> 4.2"
 end
 gem "faraday"
 gem "faraday-follow_redirects"
