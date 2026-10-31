@@ -34,7 +34,9 @@ module DataImporters
           ["Animal Farm (Graphic Novel)", "Animal Farm"],
           ["Watership Down - A Graphic Novel", "Watership Down"],
           ["Hamlet – The Manga", "Hamlet"],
-          ["Hamlet — The Manga", "Hamlet"]
+          ["Hamlet — The Manga", "Hamlet"],
+          ["SparkNotes Hamlet", "Hamlet"],
+          ["CliffsNotes on Hamlet", "Hamlet"]
         ].freeze
 
         # Translations and editions of the same work.

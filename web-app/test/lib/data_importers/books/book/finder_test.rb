@@ -593,6 +593,17 @@ module DataImporters
           assert_equal [], match.candidates.select(&:external?)
         end
 
+        test "an external Open Library work whose subtitle field says graphic novel is dropped" do
+          key = "OL98W"
+          record = work_record(key: key, title: "Watership Down", authors: ["James Sturm"]).merge("subtitle" => "The Graphic Novel")
+          stub_resolve(resolve_response(verdict: "accept", key: key, candidates: [ol_candidate(key: key, verdict: "accept", score: 0.95, record: record)]))
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(title: "Watership Down", author_names: ["Richard Adams"]))
+
+          assert_equal [], match.candidates.select(&:external?)
+        end
+
         test "the AI is told an adaptation is a different book" do
           assert_match(/adaptation.*different book/i, @finder.send(:domain_guidance))
         end

@@ -37,6 +37,9 @@ module DataImporters
         # ("Pop-Up", "Psycho-Analysis") is not a separator.
         SUBTITLE_SEPARATOR = /:|\s[-–—]\s/
 
+        # Brand names that never occur in a real work's name, so they count anywhere in a title.
+        BRANDS = %w[sparknotes cliffsnotes].freeze
+
         PATTERNS = MARKERS.to_h { |marker| [marker, /(?<![[:alnum:]])#{Regexp.escape(marker)}(?![[:alnum:]])/] }.freeze
 
         module_function
@@ -48,9 +51,8 @@ module DataImporters
 
         def markers(text)
           normalized = normalize(descriptive_part(text))
-          return [] if normalized.empty?
-
-          PATTERNS.select { |_marker, pattern| normalized.match?(pattern) }.keys.sort
+          whole = normalize(text)
+          PATTERNS.select { |marker, pattern| normalized.match?(pattern) || (BRANDS.include?(marker) && whole.match?(pattern)) }.keys.sort
         end
 
         # True when the text itself names a derivative work, wherever the marker
