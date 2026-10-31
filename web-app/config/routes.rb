@@ -418,10 +418,6 @@ Rails.application.routes.draw do
   post "membership/donate", to: "membership#donate", as: :membership_donate
   post "membership/portal", to: "membership#portal", as: :membership_portal
 
-  # Per-user membership state for edge-cached pages, following
-  # UserListStateController: never cached, JSON only.
-  get "membership_state", to: "membership_state#show", as: :membership_state
-
   # The members' area -- the first thing behind the paywall.
   get "members", to: "members#show", as: :members
 
