@@ -34,6 +34,15 @@ export async function signIn(page: Page, { email, password }: Credentials): Prom
   const passwordInput = modal.getByPlaceholder('Password');
   await expect(passwordInput).toBeVisible();
   await passwordInput.fill(password);
+  // Every public layout renders the sign-in widget with reload_after_auth, so a
+  // successful sign-in ends in window.location.reload(). Listen before clicking
+  // so the reload cannot be missed, and wait for it below: returning before it
+  // let the caller's next goto race the reload and fail with "interrupted by
+  // another navigation".
+  const reloaded = page.waitForEvent('framenavigated', {
+    predicate: (frame) => frame === page.mainFrame(),
+    timeout: 30_000
+  });
   await modal.getByRole('button', { name: 'Sign In' }).click();
 
   await expect
@@ -46,13 +55,11 @@ export async function signIn(page: Page, { email, password }: Credentials): Prom
     )
     .toBe(true);
 
-  // Let the page finish rendering the signed-in state before the caller
-  // navigates; a goto issued mid-render intermittently failed with "interrupted
-  // by another navigation".
+  await reloaded;
+  await page.waitForLoadState('load');
   await expect(page.locator('#navbar_login_button')).toHaveAttribute('data-auth-state', 'signed-in', {
     timeout: 15_000
   });
-  await page.waitForLoadState('networkidle');
 }
 
 export async function signInAndSave(page: Page, creds: Credentials, authFile: string): Promise<void> {
