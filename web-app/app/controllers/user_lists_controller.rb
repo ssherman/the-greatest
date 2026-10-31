@@ -35,8 +35,8 @@ class UserListsController < ApplicationController
       end
     end
 
-    mark_user_state_changed
-    body = {user_list: serialize_list(list)}
+    mark = mark_user_state_changed
+    body = {user_list: serialize_list(list), state_mark: mark, state_mark_was: incoming_state_mark}
     body[:user_list_item] = serialize_item(item) if item
     render json: body, status: :created
   end

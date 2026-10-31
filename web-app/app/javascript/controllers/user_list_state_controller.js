@@ -374,7 +374,9 @@ export default class extends Controller {
   // Optimistically apply a mutation result and rebroadcast. Called by the modal
   // after a successful add/remove/create. `memberships` is the new full array
   // of {list_id, item_id} tuples for this (listableType, listableId).
-  applyMutation({ listableType, listableId, memberships, addedList, removedListId }) {
+  // `marks` echoes the write's response: `now` is the marker it set
+  // (`state_mark`), `was` the one the request arrived with (`state_mark_was`).
+  applyMutation({ listableType, listableId, memberships, addedList, removedListId, marks }) {
     // Rebase on the stored entry, not this tab's copy: another tab may have
     // written to it since, and writing this tab's copy back would undo that.
     // In-memory only when storage is unusable (quota) but the copy is this
@@ -424,7 +426,16 @@ export default class extends Controller {
     // first can mark anything seen: one extra re-check, never a hidden change.
     const pre = this._preWriteMark
     this._preWriteMark = undefined
-    if (pre !== undefined && (base.seenMark ?? null) === pre) next.seenMark = currentMark()
+    // Marks are random, so the client cannot order them; the server's echo
+    // pins the write in place instead. The request must have arrived carrying
+    // the mark this write started from (nothing moved it before the write
+    // reached the server), and the cookie read now must still be the one this
+    // write set (nothing moved it after). Either way, another tab or a Rails
+    // page changed something this entry does not hold, and marking the newer
+    // mark seen would hide it for up to an hour.
+    const mark = currentMark()
+    const pinned = marks?.now != null && mark === marks.now && (marks.was ?? null) === (pre ?? null)
+    if (pre !== undefined && (base.seenMark ?? null) === pre && pinned) next.seenMark = mark
     this.cache = next
     this._writeStorage(next)
     this._dispatch("user-list-state:updated", { state: next })
