@@ -52,12 +52,16 @@ module DataImporters
         module_function
 
         # True when exactly one side names a derivative, or both do and they name
-        # different kinds (a graphic novel against a study guide). The generic
-        # "adaptation" is dropped from a side that also names a specific kind.
+        # different SPECIFIC kinds (a graphic novel against a study guide). The generic
+        # "adaptation" says nothing about the kind: it is dropped from a side that also
+        # names a specific one, and a side with only the generic one cannot contradict
+        # the other.
         def differ?(title_a, title_b)
           a = categories(title_a)
           b = categories(title_b)
           return a.any? != b.any? if a.empty? || b.empty?
+
+          return false if a == [:adaptation] || b == [:adaptation]
 
           (a & b).empty?
         end

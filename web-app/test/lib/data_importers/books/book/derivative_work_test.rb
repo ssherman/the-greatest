@@ -62,7 +62,8 @@ module DataImporters
           ["Brideshead Revisited", "Brideshead Revisited"],
           ["Psycho-Analysis", "Psychoanalysis"],
           ["Alice: A Pop-Up Adaptation", "Alice: A Pop-Up Book"],
-          ["Don Quijote: Graphic Novel", "Don Quijote: Novela gráfica"]
+          ["Don Quijote: Graphic Novel", "Don Quijote: Novela gráfica"],
+          ["Alice: A Retelling", "Alice: A Pop-Up Book"]
         ].freeze
 
         DIFFERENT.each do |query, candidate|
