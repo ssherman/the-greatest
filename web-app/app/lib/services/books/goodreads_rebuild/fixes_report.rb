@@ -22,6 +22,8 @@ module Services
             lines << "  #{kind} #{status} #{confidence || "no confidence"} #{count}"
           end
           lines << "applied: #{verdicts.where.not(applied_at: nil).count}"
+          scopes = verdicts.fix_identity.where.not(applied_at: nil).group(Arel.sql("COALESCE(payload->>'fix_scope', 'full')")).count
+          lines << "applied fixes by scope: #{scopes.sort.map { |scope, count| "#{scope} #{count}" }.join(", ").presence || "none"}"
           lines << "with an error: #{failed.count}"
           failed.order(:id).limit(ERRORS_SHOWN).each { |verdict| lines << "  #{verdict.subject_key}: #{verdict.error.to_s.lines.first.to_s.strip}" }
           merges(lines, verdicts.merge_books)

@@ -10,6 +10,9 @@ module Services
       # those finish. The most-listed books go first. A fix is picked up once: a
       # book with any enrichment run created since its fix was applied is done.
       #
+      # A title-only fix kept the book's data, so it has nothing to rebuild and is never queued;
+      # a fix without a recorded scope (applied before scopes existed) was a full reset.
+      #
       # While the fetch gate is blocked Goodreads has refused us, so no new book
       # joins until it clears.
       class QueueEnrichment
@@ -69,6 +72,7 @@ module Services
         def eligible
           ::Books::RepairVerdict.fix_identity.where.not(applied_at: nil)
             .where("books_repair_verdicts.subject_key LIKE 'rebuild:%'")
+            .where("COALESCE(books_repair_verdicts.payload->>'fix_scope', 'full') = 'full'")
             .joins(JOINS_SQL)
             .where(NOT_ENRICHED_SQL, workflow: WORKFLOW, running: WorkflowRun.statuses.fetch("running"))
             .reorder(Arel.sql("COALESCE(list_counts.item_count, 0) DESC, books_books.id"))

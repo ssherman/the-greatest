@@ -43,6 +43,15 @@ module Services
           assert_includes report, "boom: it broke"
         end
 
+        test "counts applied fixes by scope, an applied fix without a scope counting as full" do
+          verdict(:fix_identity, "rebuild:1", {"book_id" => 1, "fix_scope" => "title_only"}, applied_at: Time.current)
+          verdict(:fix_identity, "rebuild:2", {"book_id" => 2, "fix_scope" => "full"}, applied_at: Time.current)
+          verdict(:fix_identity, "rebuild:3", {"book_id" => 3}, applied_at: Time.current)
+          verdict(:fix_identity, "rebuild:4", {"book_id" => 4, "fix_scope" => "title_only"})
+
+          assert_includes FixesReport.call, "applied fixes by scope: full 2, title_only 1"
+        end
+
         test "reports enrichment runs, Goodreads outcomes, the gate's daily count and a block" do
           stub_workflow_dispatch
           ::Books::Goodreads::FetchGate.any_instance.stubs(:usage)

@@ -434,6 +434,10 @@ The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve o
       samples, and that "already applied" and "applied, survey gone" are both 0; if either is not, stop and look at those books before going on), then `bin/rails "books:goodreads_rebuild:retire_lump_verdicts[apply]"`.
    3. In Admin, Repair verdicts: review and bulk-approve the `fix_identity` proposals, then the
       `merge_books` ones.
+   3b. Before `apply`, retire the fixes whose book is already right (only Goodreads series/edition noise
+      differs): `bin/rails books:goodreads_rebuild:retire_unneeded_fixes` (a dry run; check the counts and
+      samples), then `bin/rails "books:goodreads_rebuild:retire_unneeded_fixes[apply]"`. Of the fixes that
+      remain, those whose only difference is a missing subtitle change just the title and subtitle on apply.
    4. `bin/rails books:goodreads_replay:apply`, then `bin/rails books:goodreads_replay:repair_ratings`.
       `apply` re-runs every pass but applies each fix only once, and leaves alone any book put on a real
       list since. Each reset saves what it removed (Amazon ASINs and links too) on the verdict.

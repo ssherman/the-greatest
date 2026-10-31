@@ -37,6 +37,11 @@ module Services
             return noop("book #{book.id} is trusted") if GoodreadsRebuild::Cohort.trusted?(book.id)
 
             payload = verdict.payload
+            scope = recorded_scope(verdict) || GoodreadsRebuild::FixScope.call(book: book, survey: ::Books::RebuildBookSurvey.find_by(book_id: book.id), payload: payload)
+            return noop("book #{book.id} is already right") if scope == :none
+            return apply_title_only(verdict, book, scope) if scope == :title_only
+
+            save_payload(verdict, "fix_scope" => scope.to_s)
             ::Books::Book.transaction do
               archive = GoodreadsRebuild::ResetBook.call(book: book).data[:removed]
               save_payload(verdict, "removed" => archive) unless verdict.payload.key?("removed")
@@ -51,6 +56,23 @@ module Services
             raise Failed, "author import failed: #{failed.errors.join("; ")}" if failed
 
             link_authors(book, payload, links)
+            Result.new(success?: true, data: {outcome: :applied}, errors: [])
+          end
+
+          # The scope a first attempt decided and wrote before it changed anything. A retry must use it: after a
+          # full reset has renamed the book and then failed, recomputing would see a book that "already matches".
+          def self.recorded_scope(verdict)
+            verdict.payload["fix_scope"]&.to_sym
+          end
+
+          # Only the title and subtitle are wrong (ours lacks the export's subtitle): everything else the
+          # book holds is kept. applied_at is set by the caller's bookkeeping like any other apply.
+          def self.apply_title_only(verdict, book, scope)
+            payload = verdict.payload
+            ::Books::Book.transaction do
+              book.update!(title: GoodreadsRebuild::ExportFacts.clean_title(payload["title"]), subtitle: GoodreadsRebuild::ExportFacts.clean_title(payload["subtitle"]))
+              save_payload(verdict, "fix_scope" => scope.to_s)
+            end
             Result.new(success?: true, data: {outcome: :applied}, errors: [])
           end
 
@@ -98,7 +120,7 @@ module Services
             Result.new(success?: true, data: {outcome: :noop, reason: reason}, errors: [])
           end
 
-          private_class_method :linked_authors, :unlinked_names, :import, :link_authors, :save_payload, :noop
+          private_class_method :recorded_scope, :apply_title_only, :linked_authors, :unlinked_names, :import, :link_authors, :save_payload, :noop
         end
       end
     end
