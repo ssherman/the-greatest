@@ -96,5 +96,15 @@ namespace :books do
       puts(result.data[:applied] ? "retired" :
         "dry run: nothing changed; run books:goodreads_rebuild:retire_lump_verdicts[apply]")
     end
+
+    desc "Retire the unapplied fix verdicts whose book is already right (only Goodreads series/edition noise differs; " \
+      "rejected and superseded). A dry run unless [apply]; a second apply finds 0."
+    task :retire_unneeded_fixes, [:apply] => :environment do |_task, args|
+      result = Services::Books::GoodreadsRebuild::RetireUnneededFixes.call(apply: args[:apply] == "apply")
+      puts "unneeded fix verdicts: #{tally.call(result.data[:counts])}"
+      result.data[:samples].each { |line| puts "  #{line}" }
+      puts(result.data[:applied] ? "retired" :
+        "dry run: nothing changed; run books:goodreads_rebuild:retire_unneeded_fixes[apply]")
+    end
   end
 end

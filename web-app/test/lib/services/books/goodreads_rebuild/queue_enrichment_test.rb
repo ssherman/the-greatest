@@ -34,6 +34,18 @@ module Services
 
         def runs = WorkflowRun.where(workflow: "books.book_enrichment", initiated_by: "goodreads_rebuild")
 
+        test "a title-only fix keeps its data and is not queued; a full one and one without a recorded scope are" do
+          title_only = fixed_book(payload: {"fix_scope" => "title_only"})
+          full = fixed_book(payload: {"fix_scope" => "full"})
+          older = fixed_book
+
+          result = QueueEnrichment.call(in_flight: 10)
+
+          assert_equal({started: 2, in_flight: 2, waiting: 0}, result.data)
+          assert_equal [full.id, older.id].sort, runs.pluck(:enrichable_id).sort
+          refute_includes runs.pluck(:enrichable_id), title_only.id
+        end
+
         test "tops up to in_flight, most-listed applied fix first" do
           none = fixed_book
           one = fixed_book

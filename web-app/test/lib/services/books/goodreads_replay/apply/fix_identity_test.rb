@@ -25,7 +25,7 @@ module Services
 
           def verdict
             @verdict ||= ::Books::RepairVerdict.create!(kind: :fix_identity, subject_key: "rebuild:#{@book.id}", decided_by: :rule,
-              status: :approved, payload: {"book_id" => @book.id, "title" => "Right Title", "subtitle" => "A Subtitle",
+              status: :approved, payload: {"book_id" => @book.id, "title" => "Right Title", "subtitle" => "A Subtitle", "full_title" => "Right Title: A Subtitle",
                                            "author_names" => ["Right Author"], "year" => 1999, "isbn13" => ["9781234567897"],
                                            "isbn10" => [], "goodreads_ids" => ["4242"], "ol_work_keys" => ["OL1W"]})
           end
@@ -226,6 +226,53 @@ module Services
             ApplyVerdicts.call(auto_apply: true)
 
             assert_includes verdict.reload.payload["removed"]["identifiers"], ["books_work_asin", "B00LEGACY1", "legacy"]
+          end
+
+          def survey_for_book(authors_agree: true)
+            ::Books::RebuildBookSurvey.create!(book: @book, classification: :coherent, groups: [], title_agrees: false,
+              authors_agree: authors_agree, wrong_book: false, surveyed_at: Time.current)
+          end
+
+          test "a fix with no survey is a full reset and records its scope" do
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal "full", verdict.reload.payload["fix_scope"]
+          end
+
+          test "a title-only fix rewrites the title and subtitle and keeps everything else" do
+            survey_for_book
+            @book.update!(title: "Right Title", description: "Kept description")
+            @book.book_authors.destroy_all
+            @book.book_authors.create!(author: @wrong_author, position: 1)
+            ::Books::Book.where(id: @book.id).update_all(subtitle: nil)
+            ::DataImporters::Books::Book::Importer.expects(:call).never
+            GoodreadsRebuild::ResetBook.expects(:call).never
+            verdict
+
+            result = ApplyVerdicts.call(auto_apply: true)
+
+            assert result.success?
+            book = ::Books::Book.find(@book.id)
+            assert_equal ["Right Title", "A Subtitle", "Kept description"], [book.title, book.subtitle, book.description]
+            assert_equal [@wrong_author], book.authors.to_a
+            assert_equal 1, book.category_items.count
+            assert book.identifiers.exists?(value: "B00LEGACY1")
+            verdict.reload
+            assert_equal "title_only", verdict.payload["fix_scope"]
+            assert_not_nil verdict.applied_at
+            refute verdict.payload.key?("removed")
+          end
+
+          test "a fix that would change nothing is a no-op and is never marked applied" do
+            survey_for_book
+            @book.update!(title: "Right Title", subtitle: "A Subtitle")
+            GoodreadsRebuild::ResetBook.expects(:call).never
+
+            result = FixIdentity.call(verdict: verdict.tap { |v| v.update_columns(payload: v.payload.merge("full_title" => "Right Title (Series)")) })
+
+            assert_equal :noop, result.data[:outcome]
+            assert_nil verdict.reload.applied_at
+            assert_equal ["Right Title", "A Subtitle"], ::Books::Book.find(@book.id).then { |b| [b.title, b.subtitle] }
           end
         end
       end
