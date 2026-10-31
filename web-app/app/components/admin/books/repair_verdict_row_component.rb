@@ -50,6 +50,17 @@ class Admin::Books::RepairVerdictRowComponent < ViewComponent::Base
     "on #{count} #{"list".pluralize(count)}" if count > 0
   end
 
+  # The export names none of the target's people (name or alternate name). Pen names and
+  # translator-credited classics are flagged legitimately; the reviewer decides.
+  def author_differs?
+    target = books[payload["target_id"]]
+    wanted = ::Services::Text::PersonNameKey.all(payload["author_names"])
+    return false unless target && wanted.any?
+
+    held = ::Services::Text::PersonNameKey.all(target.authors.flat_map { |author| [author.name, *Array(author.alternate_names)] })
+    (wanted & held).empty?
+  end
+
   def export_authors = Array(payload["author_names"]).join(", ")
 
   def export_title = payload["full_title"].presence

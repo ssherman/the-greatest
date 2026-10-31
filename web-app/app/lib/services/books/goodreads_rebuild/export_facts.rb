@@ -21,7 +21,36 @@ module Services
         # A final parenthetical holding "#<number>", e.g. " (Crosstime (aka) Blake Walker #1)".
         SERIES_SUFFIX = /\s*\((?:[^()]|\([^()]*\))*\#\d+(?:[^()]|\([^()]*\))*\)\s*\z/
 
+        # A trailing parenthetical (one level of nesting allowed).
+        TRAILING_PARENTHETICAL = /\s*\((?:[^()]|\([^()]*\))*\)\s*\z/
+
+        # A trailing parenthetical that says which book this is stays: an adaptation or guide
+        # ("(Manga Classics)", "(SparkNotes Literature Guide)") or a volume or set ("(Volume 1)",
+        # "(Box Set)"). Dropping it would turn a different book into the original.
+        def self.informative?(parenthetical)
+          ::DataImporters::Books::Book::DerivativeWork.marker?(parenthetical) ||
+            parenthetical.match?(DecideFix::VOLUME_SHAPE) ||
+            parenthetical.match?(::Services::Books::Verification::EditionCheck::SET_WORDS)
+        end
+
         def self.call(survey:) = new(survey).call
+
+        # On Goodreads a parenthetical at the END of a title is series, publisher-series or edition
+        # information ("(Little Golden Book)", "(Spanish Edition)", "(Saddlewire) (Books of American
+        # Wisdom)"), so every trailing one goes. One in the middle is part of the title ("How to Work with
+        # (Almost) Anyone"). A title that is nothing but a parenthetical is returned as it was.
+        def self.clean_title(text)
+          return text if text.nil?
+
+          cleaned = text.to_s
+          while (trailing = cleaned[TRAILING_PARENTHETICAL])
+            break if informative?(trailing) && !trailing.match?(SERIES_SUFFIX)
+
+            cleaned = cleaned.delete_suffix(trailing)
+          end
+          cleaned = cleaned.strip
+          cleaned.empty? ? text : cleaned
+        end
 
         # Payload hash (string keys, as it comes back from jsonb) to ImportQuery keyword arguments.
         def self.query_attributes(payload)
@@ -52,7 +81,7 @@ module Services
           evidence = by_rows.filter_map { |e| found[e.id] }
           main = by_rows.first
 
-          full_title = main.title.to_s.sub(SERIES_SUFFIX, "").strip
+          full_title = self.class.clean_title(main.title.to_s.sub(SERIES_SUFFIX, "").strip)
           title, subtitle = split_title(full_title)
           Facts.new(
             title: title, subtitle: subtitle, full_title: full_title,

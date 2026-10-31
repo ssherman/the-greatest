@@ -158,6 +158,13 @@ module DataImporters
       ""
     end
 
+    # A candidate that can never be the query's record, however well it
+    # matches, is dropped before the rules or the AI see it. A domain with
+    # such a deterministic rule overrides this.
+    def incompatible?(_query, _candidate)
+      false
+    end
+
     def creators_required?
       false
     end
@@ -257,7 +264,7 @@ module DataImporters
         run.external_resolution ||= source.resolution if source.respond_to?(:resolution)
 
         found.each do |candidate|
-          next if excluded?(run, candidate)
+          next if excluded?(run, candidate) || incompatible?(run.query, candidate)
 
           candidate.evidence = evidence_for(candidate.record).merge(candidate.evidence) { |_key, base, given| given.nil? ? base : given } if candidate.local?
           set.add(candidate)

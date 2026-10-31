@@ -7,7 +7,9 @@ module Services
         # Applies a fix_identity verdict from the Goodreads rebuild: a derived
         # book whose legacy title and authors were a guess gets the export's
         # title, authors and identifiers instead. The book keeps its id, slug and
-        # everything users hang on it; ResetBook clears the rest.
+        # everything users hang on it; ResetBook clears the rest. The title is cleaned of
+        # Goodreads' trailing series/edition parentheticals here too, so verdicts recorded before that
+        # cleaning existed get a clean title without being decided again.
         #
         # Re-checked at apply time, not only when the verdict was decided: a
         # book that has become trusted since (a user put it on a real list) is
@@ -38,7 +40,8 @@ module Services
             ::Books::Book.transaction do
               archive = GoodreadsRebuild::ResetBook.call(book: book).data[:removed]
               save_payload(verdict, "removed" => archive) unless verdict.payload.key?("removed")
-              book.update!(title: payload["title"], subtitle: payload["subtitle"], first_published_year: payload["year"])
+              book.update!(title: GoodreadsRebuild::ExportFacts.clean_title(payload["title"]), subtitle: GoodreadsRebuild::ExportFacts.clean_title(payload["subtitle"]),
+                first_published_year: payload["year"])
             end
 
             links = linked_authors(payload)

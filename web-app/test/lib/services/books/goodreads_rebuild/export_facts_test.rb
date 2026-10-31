@@ -63,6 +63,42 @@ module Services
           assert_equal "How to Work with (Almost) Anyone", facts(group(one)).title
         end
 
+        {
+          "U.S. Constitution (Saddlewire) (Books of American Wisdom)" => "U.S. Constitution",
+          "Just Like Dad (Little Golden Book)" => "Just Like Dad",
+          "Pinocchio in Venice (Coover, Robert)" => "Pinocchio in Venice",
+          "Dante: Poet of the Secular World (New York Review Books Classics)" => "Dante: Poet of the Secular World",
+          "Die Verwandlung (Spanish Edition)" => "Die Verwandlung",
+          "The Crossroads of Time (Crosstime (aka) Blake Walker #1)" => "The Crossroads of Time",
+          "How to Work with (Almost) Anyone" => "How to Work with (Almost) Anyone",
+          "(Untitled)" => "(Untitled)",
+          "Pride and Prejudice (Manga Classics)" => "Pride and Prejudice (Manga Classics)",
+          "Hamlet (Manga Shakespeare)" => "Hamlet (Manga Shakespeare)",
+          "The Great Gatsby (SparkNotes Literature Guide)" => "The Great Gatsby (SparkNotes Literature Guide)",
+          "Animal Farm (Graphic Novel)" => "Animal Farm (Graphic Novel)",
+          "Remembrance of Things Past (Volume 1)" => "Remembrance of Things Past (Volume 1)",
+          "Collected Stories (Vol. 2)" => "Collected Stories (Vol. 2)",
+          "The Gulag Archipelago (Volumes 1-2)" => "The Gulag Archipelago (Volumes 1-2)",
+          "Foundation (Box Set)" => "Foundation (Box Set)",
+          "Pride and Prejudice (Manga Classics) (Spanish Edition)" => "Pride and Prejudice (Manga Classics)"
+        }.each do |raw, clean|
+          test "clean_title turns #{raw.inspect} into #{clean.inspect}" do
+            assert_equal clean, ExportFacts.clean_title(raw)
+          end
+        end
+
+        test "clean_title leaves nil alone" do
+          assert_nil ExportFacts.clean_title(nil)
+        end
+
+        test "every trailing parenthetical is dropped from the title, subtitle and full title" do
+          one = edition(1, title: "Dante: Poet of the Secular World (New York Review Books Classics) (Spanish Edition)")
+
+          result = facts(group(one))
+
+          assert_equal ["Dante", "Poet of the Secular World", "Dante: Poet of the Secular World"], [result.title, result.subtitle, result.full_title]
+        end
+
         test "ties on row count go to the lowest goodreads book id" do
           later = edition(9, title: "Later", rows: 2)
           earlier = edition(3, title: "Earlier", rows: 2)

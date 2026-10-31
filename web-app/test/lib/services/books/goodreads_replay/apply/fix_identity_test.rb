@@ -43,6 +43,15 @@ module Services
             assert_equal "goodreads_import", book.identifiers.find_by!(identifier_type: :books_work_goodreads_id, value: "4242").source
           end
 
+          test "trailing series and edition parentheticals recorded on an older verdict are cleaned before they are written" do
+            v = verdict
+            v.update!(payload: v.payload.merge("title" => "Right Title (Little Golden Book)", "subtitle" => "A Subtitle (Spanish Edition)"))
+
+            FixIdentity.call(verdict: v)
+
+            assert_equal ["Right Title", "A Subtitle"], ::Books::Book.find(@book.id).then { |b| [b.title, b.subtitle] }
+          end
+
           test "keeps the book's id, slug, user list items and reviews" do
             user = users(:regular_user)
             item = UserListItem.create!(user_list: user_lists(:regular_user_books_favorites), listable: @book, position: 1)

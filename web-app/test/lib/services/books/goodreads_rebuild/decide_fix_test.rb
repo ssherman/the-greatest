@@ -187,6 +187,24 @@ module Services
           assert_equal :fix, volume_case(export: "1Q84 Book 1", target_title: "1Q84").data[:outcome]
         end
 
+        test "a Russian volume word refuses the merge into the whole work" do
+          result = volume_case(export: "1Q84. Книга 1. Апрель-июнь", target_title: "1Q84")
+
+          assert_equal :fix, result.data[:outcome]
+          assert_match(/volume or set/, result.data[:verdict].reason)
+        end
+
+        test "other languages' volume words are volume-shaped" do
+          ["Band 2", "Teil II", "Tome 3", "Tomo 4", "Libro 1", "Livro 2", "Buch 3", "Deel 4", "Volumen 5", "Partie 1", "Часть 2", "Том 3", "Книга первая", "Книга вторая", "Том третий"].each do |title|
+            assert_match DecideFix::VOLUME_SHAPE, "Title #{title}", title
+          end
+        end
+
+        test "a volume word with no number is not volume-shaped" do
+          refute_match DecideFix::VOLUME_SHAPE, "Der Buchhändler"
+          refute_match DecideFix::VOLUME_SHAPE, "Libro de arena"
+        end
+
         test "the same volume merges" do
           assert_equal :merge, volume_case(export: "Death Note, Vol. 1", target_title: "Death Note, Vol. 1").data[:outcome]
         end

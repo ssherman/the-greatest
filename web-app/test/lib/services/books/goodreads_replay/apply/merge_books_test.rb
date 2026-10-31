@@ -68,6 +68,18 @@ module Services
             assert_includes titles, "Export Title"
           end
 
+          test "a reset_source merge carries the export title without its trailing parentheticals" do
+            source = ::Books::Book.create!(id: GoodreadsRebuild::Cohort.post_import_range.first + 5_000, title: "Legacy Guessed Title")
+            v = verdict(source_id: source.id)
+            v.update!(payload: v.payload.merge("reset_source" => true, "title" => "Export Title (Series Name) (Spanish Edition)", "subtitle" => nil))
+
+            MergeBooks.call(verdict: v)
+
+            titles = @target.alternate_title_records.reload.map(&:title)
+            assert_includes titles, "Export Title"
+            refute_includes titles, "Export Title (Series Name) (Spanish Edition)"
+          end
+
           test "a failure right after the reset rolls back the reset and the archive together" do
             source = ::Books::Book.create!(id: GoodreadsRebuild::Cohort.post_import_range.first + 5_000, title: "Derived")
             source.identifiers.create!(identifier_type: :books_work_asin, value: "B00LEGACY1", source: :legacy)

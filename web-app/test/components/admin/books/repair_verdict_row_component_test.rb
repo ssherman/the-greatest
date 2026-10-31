@@ -29,6 +29,30 @@ class Admin::Books::RepairVerdictRowComponentTest < ViewComponent::TestCase
     assert_includes text, "Goodreads export: \"The Export Title\" by Ann Author, Bo Author"
   end
 
+  def author_flag_text(author_names)
+    verdict = build(:merge_books, {"source_id" => @source.id, "target_id" => @target.id, "author_names" => author_names})
+    render_inline(Admin::Books::RepairVerdictRowComponent.new(verdict: verdict, books: @books)).text.squish
+  end
+
+  test "merge_books is tagged when no export author is one of the target's authors" do
+    assert_includes author_flag_text(["Somebody Else"]), "author differs"
+  end
+
+  test "merge_books is not tagged when the export author is the target's, however initials are spaced" do
+    author = @target.authors.first
+    author.update!(name: "J.D. Salinger")
+    @books = ::Books::Book.where(id: [@source.id, @target.id]).includes(:authors).index_by(&:id)
+
+    assert_not_includes author_flag_text(["J. D. Salinger"]), "author differs"
+  end
+
+  test "merge_books is not tagged when the export author is one of the target's alternate names" do
+    @target.authors.first.update!(alternate_names: ["Pen Name"])
+    @books = ::Books::Book.where(id: [@source.id, @target.id]).includes(:authors).index_by(&:id)
+
+    assert_not_includes author_flag_text(["Pen Name"]), "author differs"
+  end
+
   test "merge_books omits the list count and export line when there is nothing to say" do
     text = text_of(build(:merge_books, {"source_id" => @source.id, "target_id" => @target.id}))
 

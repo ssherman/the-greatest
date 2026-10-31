@@ -3,7 +3,9 @@
   <% case verdict.kind %>
   <% when "merge_books" %>
     <%= book_ref(payload["source_id"]) %>
-    <div class="pl-4">&rarr; <%= book_ref(payload["target_id"], with_lists: true) %></div>
+    <div class="pl-4">&rarr; <%= book_ref(payload["target_id"], with_lists: true) %>
+      <% if author_differs? %><span class="badge badge-warning badge-sm">author differs</span><% end %>
+    </div>
     <% if export_title %>
       <div class="text-xs text-base-content/70">Goodreads export: "<%= export_title %>" by <%= export_authors %></div>
     <% end %>

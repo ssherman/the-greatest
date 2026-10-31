@@ -105,7 +105,29 @@ module DataImporters
         def domain_guidance
           "A translation, a retitled edition or an alternate spelling of the same work is the same book. " \
             "A collection or omnibus is not the same as one of the works inside it, and one volume of a series is not the series. " \
+            "An adaptation (a graphic novel, manga, pop-up book, play or screenplay, retelling), a study guide, a summary or a commentary is a different book from the work it is based on. " \
             "Two books with the same title by different authors are different books."
+        end
+
+        # An adaptation or a guide is a different book from its source, whatever
+        # the title match, search score or AI says (DerivativeWork). Applies to
+        # external works too, so a member import does not create the original
+        # from an Open Library adaptation record.
+        def incompatible?(query, candidate)
+          # A Goodreads id names one edition, so a book holding it is that edition
+          # whatever its title says; dropping it would make a member's import
+          # create a duplicate every time.
+          return false if candidate.evidence.dig(:matched_identifier, :type).to_s == "books_work_goodreads_id"
+
+          # An identifier-only query has nothing to compare, so it must reach its holder.
+          return false if query.title.blank? && query.subtitle.blank?
+
+          theirs = if candidate.local?
+            [candidate.record.title, candidate.record.subtitle]
+          else
+            [candidate.evidence[:title], candidate.evidence[:subtitle]]
+          end
+          DerivativeWork.differ?([query.title, query.subtitle].compact_blank.join(": "), theirs.compact_blank.join(": "))
         end
 
         def query_creators(query) = query.author_names
