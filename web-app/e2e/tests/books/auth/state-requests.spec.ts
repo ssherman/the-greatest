@@ -208,6 +208,41 @@ test.describe('Per-user state requests (books)', () => {
     expect((afterSwitch.lists as { id: number }[]).map((l) => l.id)).toEqual(secondListIds);
   });
 
+  // Tab A starts a write as user A; before its response lands, another tab
+  // signs out and in as user B, so tg_uid and the stored entry are now B's.
+  // A's response must not be merged into B's entry. Driven through the
+  // controller directly: the race needs the switch to land between
+  // beginWrite() and applyMutation(), which real clicks cannot time.
+  test("a write that started as another user is never merged into the current user's state", async ({ page }) => {
+    await signInAndFillCache(page, 'USER');
+    const first = (await cachedEntry(page))!;
+    const otherUid = String(Number(first.user_id) + 1);
+
+    const stored = await page.evaluate(({ otherUid }) => {
+      const ctrl = (window as any).Stimulus.getControllerForElementAndIdentifier(document.body, 'user-list-state');
+      ctrl.beginWrite();
+
+      // "Another tab": B signs in, so tg_uid is B and storage holds B's entry.
+      const key = `tg:user_list_state:${document.body.dataset.domain}`;
+      const entry = JSON.parse(localStorage.getItem(key)!);
+      const bEntry = { ...entry, user_id: Number(otherUid), lists: [], memberships: {} };
+      localStorage.setItem(key, JSON.stringify(bEntry));
+      document.cookie = `tg_uid=${otherUid}; path=/; SameSite=Lax`;
+
+      // A's write response arrives.
+      ctrl.applyMutation({
+        listableType: 'Books::Book',
+        listableId: 987654321,
+        memberships: [{ list_id: 1, item_id: 1 }]
+      });
+      return JSON.parse(localStorage.getItem(key)!);
+    }, { otherUid });
+
+    expect(String(stored.user_id)).toBe(otherUid);
+    expect(stored.lists).toEqual([]);
+    expect(stored.memberships).toEqual({});
+  });
+
   test("two tabs never hide each other's writes", async ({ page, context }) => {
     await signInAndFillCache(page, 'USER');
     // Both tabs load before either writes, so B's copy predates A's write.
