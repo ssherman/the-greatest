@@ -382,8 +382,8 @@ of them:
 `User#granting_membership` (`app/models/user.rb`) returns the actual row —
 `memberships.granting_access.order(:source, current_period_end: :desc).first` — for anywhere the
 UI needs to *show* the membership (plan, renewal date), not just gate on its existence. Both
-`/membership` and `/members` call it; `GET /membership_state` (§12) returns its `interval` and
-`current_period_end` as JSON for edge-cached pages.
+`/membership` and `/members` call it; `GET /user_list_state` returns its `interval` and
+`current_period_end` (under `membership`) as JSON for edge-cached pages.
 
 **A user can hold more than one granting row** (§3's Stripe+legacy overlap is the production
 example) — `member?` only cares whether *any* row grants, and `granting_membership` picks the most

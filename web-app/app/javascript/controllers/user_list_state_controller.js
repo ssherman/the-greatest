@@ -75,6 +75,10 @@ export default class extends Controller {
     // was sent; undefined when no write has announced itself (see
     // applyMutation for why a write needs it).
     this._preWriteMark = undefined
+    // tg_uid as beginWrite() saw it: the user the write in flight belongs to.
+    // Another tab can sign out and in as someone else before the response
+    // lands, and this tab's clearEpoch never hears of it.
+    this._writeUid = undefined
 
     this._onAuthSuccess = this._onAuthSuccess.bind(this)
     this._onAuthSignout = this._onAuthSignout.bind(this)
@@ -359,6 +363,7 @@ export default class extends Controller {
   // since this page loaded, so the write's caller computes from that.
   beginWrite() {
     this._preWriteMark = currentMark()
+    this._writeUid = this.cookieUid()
     const stored = this._readEntry(this.cookieUid())
     if (stored && JSON.stringify(stored) !== JSON.stringify(this.cache)) {
       this.cache = stored
@@ -375,6 +380,17 @@ export default class extends Controller {
     // In-memory only when storage is unusable (quota) but the copy is this
     // user's.
     const uid = this.cookieUid()
+    const writeUid = this._writeUid
+    this._writeUid = undefined
+    // The write belongs to whoever was signed in when it started. If another
+    // tab has since signed in as someone else, this response describes that
+    // earlier user's lists and must not be merged into the new user's entry.
+    // Dropping it costs nothing: the earlier user's server state already has
+    // the write.
+    if (writeUid !== undefined && writeUid !== uid) {
+      this._preWriteMark = undefined
+      return
+    }
     const base = this._readEntry(uid) ??
       (this.cache && uid != null && String(this.cache.user_id) === uid ? this.cache : null)
     if (!base) return
@@ -483,6 +499,7 @@ export default class extends Controller {
     this.cache = null
     this.csrf = null
     this._preWriteMark = undefined
+    this._writeUid = undefined
     this._updateMyListsNav(true)
   }
 
@@ -493,6 +510,7 @@ export default class extends Controller {
     this.cache = null
     this.csrf = null
     this._preWriteMark = undefined
+    this._writeUid = undefined
     this._updateMyListsNav(false)
     this._dispatch("user-list-state:cleared")
   }

@@ -191,7 +191,7 @@ Another tab's write never gets hidden. Every write calls `beginWrite()` just bef
 
 **Conditional requests.** Re-checks send `If-None-Match` with the stored ETag; unchanged state answers `304` (no body, no CSRF token needed since one is fetched on demand before a write). The ETag digests the serialized payload, so it ignores the per-session CSRF token. In development rack-mini-profiler would strip the ETag, so `/user_list_state` is in its skip paths (`config/initializers/rack_mini_profiler.rb`).
 
-**`/membership_state` is legacy.** New JS does not call it: the Members link reads the cached `membership.member`. The endpoint stays, unchanged, for edge-cached pages built before this change that still call it during the deploy window.
+**There is no `/membership_state` endpoint any more.** The Members link reads the cached `membership.member`; membership status comes from `/user_list_state`. The old endpoint was kept for one edge-cache window after the switch and then removed.
 
 E2E: `e2e/tests/{books,music,games}/auth/state-requests.spec.ts` count requests per page via `e2e/support/state-requests.ts`.
 
