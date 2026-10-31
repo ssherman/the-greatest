@@ -11,9 +11,10 @@ module Services
       # series noise ("Euthydemus" / "Euthydemus (Hackett Classics)") or in a
       # subtitle our title lacks.
       #
-      #   :none        the export's title says what ours already says, or ours is the more complete
-      #   :title_only  the authors agree and ours is a prefix of the export's (it lacks the subtitle):
-      #                only the title and subtitle are rewritten
+      #   :none        the export's title equals our title, or our "title: subtitle"
+      #   :title_only  the authors agree and one title is a whole-word prefix of the other (ours lacks the
+      #                subtitle, or carries junk like "New Edition ... Paperback" or "Silo 1"): only the
+      #                title and subtitle are rewritten
       #   :full        anything else, including every author difference and every book without a survey
       module FixScope
         module_function
@@ -25,8 +26,8 @@ module Services
           ours = [book.title, ("#{book.title}: #{book.subtitle}" if book.subtitle.present?)].filter_map { |text| key(text) }
           return :full if export.nil? || ours.empty?
 
-          return :none if ours.include?(export) || ours.any? { |ours_key| prefix?(ours_key, export) }
-          return :title_only if ours.any? { |ours_key| prefix?(export, ours_key) }
+          return :none if ours.include?(export)
+          return :title_only if ours.any? { |ours_key| prefix?(export, ours_key) || prefix?(ours_key, export) }
 
           :full
         end

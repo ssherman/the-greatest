@@ -200,10 +200,11 @@ you review in Admin, Repair verdicts:
 
   How much a fix changes depends on `FixScope`, worked out at apply time from the book's survey and the
   verdict (the scope used is recorded as `fix_scope` in the verdict payload):
-  - **none**: our title already says what the export's does (only Goodreads series or edition noise
-    differs, or ours is the more complete). Nothing changes. `retire_unneeded_fixes` retires these
+  - **none**: the export's title equals our title, or our "title: subtitle" (only Goodreads series or
+    edition noise differs). Nothing changes. `retire_unneeded_fixes` retires these
     verdicts before apply.
-  - **title only**: the authors agree and our title lacks the export's subtitle. Only the title and
+  - **title only**: the authors agree and one title is a whole-word prefix of the other (ours lacks the
+    export's subtitle, or carries junk the export lacks, like "Silo 1" for "Silo"). Only the title and
     subtitle are rewritten; the book keeps everything else and is not queued for enrichment.
   - **full**: the author differs, the title really differs, or there is no survey. The reset described
     above, then enrichment.
