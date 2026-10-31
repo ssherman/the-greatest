@@ -565,6 +565,15 @@ module DataImporters
           assert match.unmatched?
         end
 
+        test "an identifier-only query still reaches a holder whose title says graphic novel" do
+          book = book_by("Watership Down", "Richard Adams", subtitle: "The Graphic Novel")
+          book.identifiers.create!(identifier_type: :books_work_isbn13, value: "9780000000123", source: :goodreads_import)
+
+          match = @finder.call(query: ImportQuery.new(title: nil, isbn13: ["9780000000123"]))
+
+          assert_equal book, match.record
+        end
+
         test "two graphic novels of the same title still match" do
           book = book_by("Watership Down", "Richard Adams", subtitle: "The Graphic Novel")
 

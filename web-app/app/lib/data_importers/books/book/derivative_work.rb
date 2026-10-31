@@ -24,14 +24,21 @@ module DataImporters
       # "edition", "translation" and "critical edition" are deliberately NOT
       # markers: those are the same work in another form.
       module DerivativeWork
-        MARKERS = [
-          "graphic novel", "manga", "pop up", "stage adaptation", "the play", "screenplay",
-          "retelling", "retold", "revisited", "adapted", "adaptation",
-          "study guide", "literature guide", "reading guide", "guide to reading",
-          "summary", "analysis", "sparknotes", "cliffsnotes", "commentary", "companion", "workbook",
-          # German, Spanish and French forms that are not already the English words.
-          "novela grafica", "roman graphique", "bande dessinee", "adaptacion"
-        ].freeze
+        # Markers by kind of derivative. Two titles that name the same kind are the same
+        # description in other words ("Graphic Novel" and "Novela gráfica"). German, Spanish
+        # and French forms are listed where they are not already the English word.
+        CATEGORIES = {
+          comic: ["graphic novel", "manga", "novela grafica", "roman graphique", "bande dessinee"],
+          pop_up: ["pop up"],
+          dramatization: ["stage adaptation", "the play", "screenplay"],
+          guide: ["study guide", "literature guide", "reading guide", "guide to reading", "summary", "analysis",
+            "sparknotes", "cliffsnotes", "workbook"],
+          commentary: ["commentary", "companion"],
+          # Says "made from" without saying how; it yields to a specific kind on the same title.
+          adaptation: ["retelling", "retold", "revisited", "adapted", "adaptation", "adaptacion"]
+        }.freeze
+        MARKERS = CATEGORIES.values.flatten.freeze
+        CATEGORY_OF = CATEGORIES.flat_map { |category, words| words.map { |word| [word, category] } }.to_h.freeze
 
         # The first colon, or a dash with spaces round it. A hyphen inside a word
         # ("Pop-Up", "Psycho-Analysis") is not a separator.
@@ -44,9 +51,20 @@ module DataImporters
 
         module_function
 
-        # True when exactly one side carries a marker the other does not.
+        # True when exactly one side names a derivative, or both do and they name
+        # different kinds (a graphic novel against a study guide). The generic
+        # "adaptation" is dropped from a side that also names a specific kind.
         def differ?(title_a, title_b)
-          markers(title_a) != markers(title_b)
+          a = categories(title_a)
+          b = categories(title_b)
+          return a.any? != b.any? if a.empty? || b.empty?
+
+          (a & b).empty?
+        end
+
+        def categories(text)
+          found = markers(text).map { |marker| CATEGORY_OF.fetch(marker) }.uniq
+          (found.size > 1) ? found - [:adaptation] : found
         end
 
         def markers(text)

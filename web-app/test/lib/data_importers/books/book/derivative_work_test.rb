@@ -36,7 +36,8 @@ module DataImporters
           ["Hamlet – The Manga", "Hamlet"],
           ["Hamlet — The Manga", "Hamlet"],
           ["SparkNotes Hamlet", "Hamlet"],
-          ["CliffsNotes on Hamlet", "Hamlet"]
+          ["CliffsNotes on Hamlet", "Hamlet"],
+          ["Hamlet: The Graphic Novel", "Hamlet: Study Guide"]
         ].freeze
 
         # Translations and editions of the same work.
@@ -59,7 +60,9 @@ module DataImporters
           ["Retour à Brideshead", "Brideshead Revisited"],
           ["Manifeste des espèces compagnes", "The Companion Species Manifesto"],
           ["Brideshead Revisited", "Brideshead Revisited"],
-          ["Psycho-Analysis", "Psychoanalysis"]
+          ["Psycho-Analysis", "Psychoanalysis"],
+          ["Alice: A Pop-Up Adaptation", "Alice: A Pop-Up Book"],
+          ["Don Quijote: Graphic Novel", "Don Quijote: Novela gráfica"]
         ].freeze
 
         DIFFERENT.each do |query, candidate|

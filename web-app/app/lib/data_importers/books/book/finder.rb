@@ -119,6 +119,9 @@ module DataImporters
           # create a duplicate every time.
           return false if candidate.evidence.dig(:matched_identifier, :type).to_s == "books_work_goodreads_id"
 
+          # An identifier-only query has nothing to compare, so it must reach its holder.
+          return false if query.title.blank? && query.subtitle.blank?
+
           theirs = if candidate.local?
             [candidate.record.title, candidate.record.subtitle]
           else
