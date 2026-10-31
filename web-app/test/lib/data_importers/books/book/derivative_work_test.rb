@@ -31,7 +31,10 @@ module DataImporters
           ["Sapiens: Une bande dessinée", "Sapiens"],
           ["Don Quijote: Novela gráfica", "Don Quijote"],
           ["Pride and Prejudice (Manga Classics)", "Pride and Prejudice"],
-          ["Animal Farm (Graphic Novel)", "Animal Farm"]
+          ["Animal Farm (Graphic Novel)", "Animal Farm"],
+          ["Watership Down - A Graphic Novel", "Watership Down"],
+          ["Hamlet – The Manga", "Hamlet"],
+          ["Hamlet — The Manga", "Hamlet"]
         ].freeze
 
         # Translations and editions of the same work.
@@ -53,7 +56,8 @@ module DataImporters
           ["Introductory Lectures on Psychoanalysis", "Introductory Lectures on Psycho-Analysis"],
           ["Retour à Brideshead", "Brideshead Revisited"],
           ["Manifeste des espèces compagnes", "The Companion Species Manifesto"],
-          ["Brideshead Revisited", "Brideshead Revisited"]
+          ["Brideshead Revisited", "Brideshead Revisited"],
+          ["Psycho-Analysis", "Psychoanalysis"]
         ].freeze
 
         DIFFERENT.each do |query, candidate|

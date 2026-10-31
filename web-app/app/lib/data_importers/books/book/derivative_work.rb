@@ -12,7 +12,7 @@ module DataImporters
       # deterministic rule is the only thing that holds across every mode.
       #
       # A marker counts only where a title states what the book IS rather than
-      # what it is called: after the first colon (the subtitle) or inside a
+      # what it is called: after the first colon or spaced dash (the subtitle) or inside a
       # parenthetical. In the main title the same word is part of the work's
       # name ("Brideshead Revisited", "The Companion Species Manifesto",
       # "Psycho-Analysis"), and translations of those names would otherwise be
@@ -32,6 +32,10 @@ module DataImporters
           # German, Spanish and French forms that are not already the English words.
           "novela grafica", "roman graphique", "bande dessinee", "adaptacion"
         ].freeze
+
+        # The first colon, or a dash with spaces round it. A hyphen inside a word
+        # ("Pop-Up", "Psycho-Analysis") is not a separator.
+        SUBTITLE_SEPARATOR = /:|\s[-–—]\s/
 
         PATTERNS = MARKERS.to_h { |marker| [marker, /(?<![[:alnum:]])#{Regexp.escape(marker)}(?![[:alnum:]])/] }.freeze
 
@@ -60,7 +64,7 @@ module DataImporters
         # The subtitle (after the first colon) and every parenthetical.
         def descriptive_part(text)
           text = text.to_s
-          [text.split(":", 2)[1], *text.scan(/\(([^()]*)\)/).flatten].compact.join(" ")
+          [text.split(SUBTITLE_SEPARATOR, 2)[1], *text.scan(/\(([^()]*)\)/).flatten].compact.join(" ")
         end
 
         # Lowercase, accents removed, every run of punctuation (hyphens included)
