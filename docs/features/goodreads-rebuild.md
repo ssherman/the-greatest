@@ -204,6 +204,10 @@ normal book finder **blinded**: no Open Library, no legacy evidence, and a book 
 for a fix is never a target. The search is built from the export's facts for the book's main work
 (`ExportFacts`: title, authors, year, identifiers and Open Library hints from the biggest edition group).
 
+**An adaptation or a guide is never the book it is based on.** The book finder drops (before the rules or the AI see it, in every mode, member imports included) a local candidate when exactly one side's title and subtitle carries a derivative marker the other lacks: graphic novel, manga, pop-up, stage adaptation, the play, screenplay, retelling, adapted, study or literature guide, summary, analysis, commentary, companion, workbook, and the German, Spanish and French forms (`DataImporters::Books::Book::DerivativeWork`). Annotated, illustrated, translation and edition are not markers. The first rebuild run proposed 28 such wrong merges ("Watership Down: The Graphic Novel" into *Watership Down*). The volume check in `DecideFix` knows volume words in several languages (Книга 1, Band, Tome, Tomo, Libro, Deel...), so "1Q84. Книга 1" is not merged into *1Q84*.
+
+**Titles are cleaned.** On Goodreads a parenthetical at the end of a title is series or edition noise ("(Little Golden Book)", "(Spanish Edition)", "(Saddlewire) (Books of American Wisdom)"). `ExportFacts.clean_title` strips every trailing one (never a mid-title one, never to blank) from the facts, and `Apply::FixIdentity` and the `reset_source` path of `Apply::MergeBooks` run it again on the payload before writing, so verdicts recorded before the cleaning still land clean.
+
 The rebuild merges only into a book on a real list or one with exactly the export's title; a translated duplicate is left for stage two, and stage two's dedupe must keep the English page when an English edition exists (Shane, 2026-10-29).
 
 **When each is automatic.** The bar is zero wrong merges.

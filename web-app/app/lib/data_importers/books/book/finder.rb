@@ -105,7 +105,21 @@ module DataImporters
         def domain_guidance
           "A translation, a retitled edition or an alternate spelling of the same work is the same book. " \
             "A collection or omnibus is not the same as one of the works inside it, and one volume of a series is not the series. " \
+            "An adaptation (a graphic novel, manga, pop-up book, play or screenplay, retelling), a study guide, a summary or a commentary is a different book from the work it is based on. " \
             "Two books with the same title by different authors are different books."
+        end
+
+        # An adaptation or a guide is a different book from its source, whatever
+        # the title match, search score or AI says (DerivativeWork). Local
+        # candidates only: an external one is not a catalog book to merge into.
+        def incompatible?(query, candidate)
+          return false unless candidate.local?
+
+          record = candidate.record
+          DerivativeWork.differ?(
+            [query.title, query.subtitle].compact_blank.join(": "),
+            [record.title, record.subtitle].compact_blank.join(": ")
+          )
         end
 
         def query_creators(query) = query.author_names

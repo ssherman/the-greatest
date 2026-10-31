@@ -166,7 +166,7 @@ module DataImporters
           @task.stubs(:call).returns(::Services::Ai::Result.new(success: true, ai_chat: ai_chats(:general_chat),
             data: {selected_index: 0, confidence: "high", reasoning: "no", same_entity_groups: []}))
 
-          @finder.call(query: ImportQuery.new(title: "War and Peace Retold", author_names: ["Leo Tolstoy"],
+          @finder.call(query: ImportQuery.new(title: "War and Peace Reconsidered", author_names: ["Leo Tolstoy"],
             series_name: "Epics", series_number: "2"))
         end
 
@@ -525,6 +525,56 @@ module DataImporters
           match = @finder.call(query: ImportQuery.new(title: "War and Peace", author_names: ["Leo Tolstoy"]), subject: subject)
 
           assert_equal subject, match.decision.subject
+        end
+
+        # ---- adaptations and guides are different books ------------------------
+
+        def book_by(title, author_name, subtitle: nil)
+          author = ::Books::Author.find_or_create_by!(name: author_name)
+          book = ::Books::Book.create!(title: title, subtitle: subtitle)
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          book
+        end
+
+        test "a graphic novel is never offered as the plain book it adapts, and the AI is not asked" do
+          book_by("Watership Down", "Richard Adams")
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(title: "Watership Down", subtitle: "The Graphic Novel", author_names: ["James Sturm"]))
+
+          assert match.unmatched?
+          assert_equal [], match.candidates.select(&:local?)
+        end
+
+        test "a plain query never matches the graphic-novel edition of the same title" do
+          book_by("Watership Down", "Richard Adams", subtitle: "The Graphic Novel")
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(title: "Watership Down", author_names: ["Richard Adams"]))
+
+          assert match.unmatched?
+        end
+
+        test "a search hit that is an adaptation is dropped too" do
+          adaptation = book_by("Hamlet", "William Shakespeare", subtitle: "Screenplay, Introduction And Film Diary")
+          SEARCH.stubs(:call).returns([hit(adaptation)])
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(title: "Hamlet", author_names: ["William Shakespeare"]))
+
+          assert match.unmatched?
+        end
+
+        test "two graphic novels of the same title still match" do
+          book = book_by("Watership Down", "Richard Adams", subtitle: "The Graphic Novel")
+
+          match = @finder.call(query: ImportQuery.new(title: "Watership Down", subtitle: "A Graphic Novel", author_names: ["Richard Adams"]))
+
+          assert_equal book, match.record
+        end
+
+        test "the AI is told an adaptation is a different book" do
+          assert_match(/adaptation.*different book/i, @finder.send(:domain_guidance))
         end
 
         # ---- summarize ----------------------------------------------------------

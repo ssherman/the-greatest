@@ -21,7 +21,23 @@ module Services
         # A final parenthetical holding "#<number>", e.g. " (Crosstime (aka) Blake Walker #1)".
         SERIES_SUFFIX = /\s*\((?:[^()]|\([^()]*\))*\#\d+(?:[^()]|\([^()]*\))*\)\s*\z/
 
+        # A trailing parenthetical (one level of nesting allowed).
+        TRAILING_PARENTHETICAL = /\s*\((?:[^()]|\([^()]*\))*\)\s*\z/
+
         def self.call(survey:) = new(survey).call
+
+        # On Goodreads a parenthetical at the END of a title is series, publisher-series or edition
+        # information ("(Little Golden Book)", "(Spanish Edition)", "(Saddlewire) (Books of American
+        # Wisdom)"), so every trailing one goes. One in the middle is part of the title ("How to Work with
+        # (Almost) Anyone"). A title that is nothing but a parenthetical is returned as it was.
+        def self.clean_title(text)
+          return text if text.nil?
+
+          cleaned = text.to_s
+          cleaned = cleaned.sub(TRAILING_PARENTHETICAL, "") while cleaned.match?(TRAILING_PARENTHETICAL)
+          cleaned = cleaned.strip
+          cleaned.empty? ? text : cleaned
+        end
 
         # Payload hash (string keys, as it comes back from jsonb) to ImportQuery keyword arguments.
         def self.query_attributes(payload)
@@ -52,7 +68,7 @@ module Services
           evidence = by_rows.filter_map { |e| found[e.id] }
           main = by_rows.first
 
-          full_title = main.title.to_s.sub(SERIES_SUFFIX, "").strip
+          full_title = self.class.clean_title(main.title.to_s.sub(SERIES_SUFFIX, "").strip)
           title, subtitle = split_title(full_title)
           Facts.new(
             title: title, subtitle: subtitle, full_title: full_title,
