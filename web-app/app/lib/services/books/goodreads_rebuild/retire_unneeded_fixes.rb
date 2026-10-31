@@ -7,7 +7,8 @@ module Services
       # edition noise (FixScope says :none). Applying one would reset a right book and rebuild it
       # through enrichment, so they are retired before apply the way RetireLumpVerdicts retires
       # lump verdicts: rejected and superseded, hidden from the admin queue and never applied.
-      # Only unapplied, current, proposed or approved rebuild verdicts are looked at. A dry run
+      # A verdict whose apply has started (it recorded a scope or an archive) is never retired: its book may
+      # have been reset and renamed by a failed attempt, which would make it look right. Only unapplied, current, proposed or approved rebuild verdicts are looked at. A dry run
       # unless apply.
       class RetireUnneededFixes
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
@@ -51,6 +52,7 @@ module Services
         def candidates
           ::Books::RepairVerdict.fix_identity.unapplied.current.where(status: [:proposed, :approved])
             .where("subject_key ~ '^rebuild:[0-9]+$'")
+            .where("payload->'fix_scope' IS NULL AND payload->'removed' IS NULL")
         end
 
         # The subject_key is "rebuild:<book id>".

@@ -228,9 +228,29 @@ module Services
             assert_includes verdict.reload.payload["removed"]["identifiers"], ["books_work_asin", "B00LEGACY1", "legacy"]
           end
 
+          # The export names the book's own author, linked: what FixScope needs to call the fix a same-book one.
           def survey_for_book(authors_agree: true)
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Wrong Author"], "author_links" => {"Wrong Author" => @wrong_author.id}))
             ::Books::RebuildBookSurvey.create!(book: @book, classification: :coherent, groups: [], title_agrees: false,
               authors_agree: authors_agree, wrong_book: false, surveyed_at: Time.current)
+          end
+
+          test "a same-author full fix whose author import fails is retried as a full fix, not mistaken for a book that is already right" do
+            survey_for_book
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Wrong Author", "Right Author"]))
+            # The first attempt sees a full fix; once it has renamed the book, a recomputed scope would say :none.
+            GoodreadsRebuild::FixScope.stubs(:call).returns(:full).then.returns(:none)
+            AUTHOR_IMPORTER.stubs(:call).raises(StandardError, "boom")
+            ApplyVerdicts.call(auto_apply: true)
+            assert_nil verdict.reload.applied_at
+            assert_equal "full", verdict.payload["fix_scope"]
+            assert_empty GoodreadsRebuild::RetireUnneededFixes.call.data[:counts]
+
+            stub_author_import
+            ApplyVerdicts.call(auto_apply: true)
+
+            assert_not_nil verdict.reload.applied_at
+            assert_equal ["Right Title", "A Subtitle"], ::Books::Book.find(@book.id).then { |b| [b.title, b.subtitle] }
           end
 
           test "a fix with no survey is a full reset and records its scope" do
@@ -266,6 +286,7 @@ module Services
           test "a title-only fix keeps our subtitle when the export has none" do
             survey_for_book
             @book.update!(title: "The 33 Strategies Of War New Edition Paperback", subtitle: "The Modern Machiavellian Guide")
+            GoodreadsRebuild::FixScope.stubs(:call).returns(:title_only)
             verdict.update_columns(payload: verdict.payload.merge("title" => "The 33 Strategies of War", "subtitle" => nil,
               "full_title" => "The 33 Strategies of War"))
 

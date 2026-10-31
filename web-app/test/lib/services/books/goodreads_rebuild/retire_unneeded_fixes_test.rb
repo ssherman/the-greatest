@@ -16,12 +16,15 @@ module Services
           @rejected = fix("Euthydemus", "Euthydemus (Series)", status: :rejected)
         end
 
-        def fix(title, export_title, status: :proposed, applied_at: nil)
+        def fix(title, export_title, status: :proposed, applied_at: nil, extra: {})
           book = ::Books::Book.create!(id: @base + (@next_id += 1), title: title)
+          author = ::Books::Author.create!(name: "Someone")
+          book.book_authors.create!(author: author, position: 1)
           ::Books::RebuildBookSurvey.create!(book: book, classification: :coherent, groups: [], title_agrees: false,
             authors_agree: true, wrong_book: false, surveyed_at: Time.current)
           ::Books::RepairVerdict.create!(kind: :fix_identity, subject_key: "rebuild:#{book.id}", status: status, decided_by: :rule,
-            applied_at: applied_at, payload: {"book_id" => book.id, "full_title" => export_title})
+            applied_at: applied_at, payload: {"book_id" => book.id, "full_title" => export_title, "title" => export_title.split(": ", 2).first,
+                                              "subtitle" => export_title.split(": ", 2)[1], "author_names" => ["Someone"], "author_links" => {"Someone" => author.id}}.merge(extra))
         end
 
         def snapshot = ::Books::RepairVerdict.order(:id).pluck(:status, :superseded_at, :reviewed_at, :reason)
@@ -57,6 +60,15 @@ module Services
 
           assert_equal({"proposed" => 1, "approved" => 1}, result.data[:counts])
           assert_predicate approved.reload, :rejected?
+        end
+
+        test "a verdict whose apply has started is never retired" do
+          started = fix("Euthydemus", "Euthydemus (Series)", extra: {"fix_scope" => "full"})
+          archived = fix("Euthydemus", "Euthydemus (Series)", extra: {"removed" => {}})
+
+          RetireUnneededFixes.call(apply: true)
+
+          assert_equal %w[proposed proposed], [started, archived].map { |v| v.reload.status }
         end
 
         test "a second apply finds nothing" do

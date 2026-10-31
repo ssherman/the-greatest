@@ -200,14 +200,19 @@ you review in Admin, Repair verdicts:
 
   How much a fix changes depends on `FixScope`, worked out at apply time from the book's survey and the
   verdict (the scope used is recorded as `fix_scope` in the verdict payload):
-  - **none**: the export's title equals our title, or our "title: subtitle" (only Goodreads series or
-    edition noise differs). Nothing changes. `retire_unneeded_fixes` retires these
-    verdicts before apply.
-  - **title only**: the authors agree and one title is a whole-word prefix of the other (ours lacks the
-    export's subtitle, or carries junk the export lacks, like "Silo 1" for "Silo"). Only the title and
-    subtitle are rewritten; the book keeps everything else and is not queued for enrichment.
-  - **full**: the author differs, the title really differs, or there is no survey. The reset described
-    above, then enrichment.
+  - **none**: the authors are the same and the export's title equals our title, or our "title: subtitle"
+    (only Goodreads series or edition noise differs). Nothing changes. `retire_unneeded_fixes` retires
+    these verdicts before apply.
+  - **title only**: the authors are the same, the export's own title is ours, and it has a subtitle ours
+    lacks ("Destination" / "Destination: Void"). Only the title and subtitle are rewritten: no
+    identifiers, year, authors or enrichment, and the book is not queued for enrichment. A later
+    `survey[all,redo]` marks these books as agreeing with their export.
+  - **full**: anything else: the authors differ in any way (the same set is required, not just one
+    shared name), the title really differs, one title merely extends the other ("Dune" / "Dune
+    Messiah", "Silo 1" / "Silo", which may be a different book), or there is no survey. The reset
+    described above, then enrichment.
+  The scope is decided once and recorded as `fix_scope` before anything changes, so a retry after a
+  failed apply uses the same scope, and `retire_unneeded_fixes` leaves started verdicts alone.
 
 Deciding (`DecideFix`) changes no book. It writes one match decision per book and can add pairs to the
 admin Duplicates queue. To find an existing book it runs the
