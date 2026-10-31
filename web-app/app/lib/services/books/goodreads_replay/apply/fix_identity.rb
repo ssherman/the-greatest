@@ -64,7 +64,9 @@ module Services
           def self.apply_title_only(verdict, book, scope)
             payload = verdict.payload
             ::Books::Book.transaction do
-              book.update!(title: GoodreadsRebuild::ExportFacts.clean_title(payload["title"]), subtitle: GoodreadsRebuild::ExportFacts.clean_title(payload["subtitle"]))
+              # The export's subtitle only replaces ours when it has one: a book whose title carried junk keeps its real subtitle.
+              subtitle = GoodreadsRebuild::ExportFacts.clean_title(payload["subtitle"]).presence
+              book.update!(title: GoodreadsRebuild::ExportFacts.clean_title(payload["title"]), subtitle: subtitle || book.subtitle)
               save_payload(verdict, "fix_scope" => scope.to_s)
             end
             Result.new(success?: true, data: {outcome: :applied}, errors: [])

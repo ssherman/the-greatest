@@ -16,6 +16,11 @@ module Services
           assert_equal :none, scope("Euthydemus", "Euthydemus (Hackett Classics)")
         end
 
+        test "our title and real subtitle against the export's title with series noise is none" do
+          assert_equal :none, scope("The Red Indians", "The Red Indians (Semaphore)",
+            subtitle: "An Episodic, Informal Collection of Essays on Indigenous Peoples in Canada")
+        end
+
         test "junk after our title that the export lacks is title_only" do
           assert_equal :title_only, scope("The 33 Strategies Of War New Edition By Robert Greene Paperback", "The 33 Strategies of War")
           assert_equal :title_only, scope("Silo 1", "Silo")
