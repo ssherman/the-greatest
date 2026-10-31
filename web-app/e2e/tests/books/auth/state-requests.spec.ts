@@ -243,6 +243,38 @@ test.describe('Per-user state requests (books)', () => {
     expect(stored.memberships).toEqual({});
   });
 
+  // A change made elsewhere while a write is in flight moves tg_state_mark
+  // either before the write reaches the server or after its response. The
+  // write's entry holds neither, so it must not mark the newer mark seen.
+  // Driven through the controller: the timing cannot be produced by clicks.
+  test('a write never marks seen a change that landed while it was in flight', async ({ page }) => {
+    await signInAndFillCache(page, 'USER');
+
+    const seenAfter = (await page.evaluate(() => {
+      const ctrl = (window as any).Stimulus.getControllerForElementAndIdentifier(document.body, 'user-list-state');
+      const key = `tg:user_list_state:${document.body.dataset.domain}`;
+      const setMark = (v: string) => { document.cookie = `tg_state_mark=${v}; path=/; SameSite=Lax`; };
+      const run = (cookieAtApply: string, marks: { now: string; was: string }) => {
+        setMark('start');
+        const entry = JSON.parse(localStorage.getItem(key)!);
+        localStorage.setItem(key, JSON.stringify({ ...entry, seenMark: 'start' }));
+        ctrl.beginWrite();
+        setMark(cookieAtApply);
+        ctrl.applyMutation({ listableType: 'Books::Book', listableId: 987654321, memberships: [], marks });
+        return JSON.parse(localStorage.getItem(key)!).seenMark;
+      };
+      return {
+        clean: run('mine', { now: 'mine', was: 'start' }),
+        changedBefore: run('mine', { now: 'mine', was: 'other' }),
+        changedAfter: run('other', { now: 'mine', was: 'start' })
+      };
+    }));
+
+    expect(seenAfter.clean).toBe('mine');
+    expect(seenAfter.changedBefore).toBe('start');
+    expect(seenAfter.changedAfter).toBe('start');
+  });
+
   test("two tabs never hide each other's writes", async ({ page, context }) => {
     await signInAndFillCache(page, 'USER');
     // Both tabs load before either writes, so B's copy predates A's write.
