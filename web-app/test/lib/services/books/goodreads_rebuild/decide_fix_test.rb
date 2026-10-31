@@ -195,7 +195,7 @@ module Services
         end
 
         test "other languages' volume words are volume-shaped" do
-          ["Band 2", "Teil II", "Tome 3", "Tomo 4", "Libro 1", "Livro 2", "Buch 3", "Deel 4", "Volumen 5", "Partie 1", "Часть 2", "Том 3"].each do |title|
+          ["Band 2", "Teil II", "Tome 3", "Tomo 4", "Libro 1", "Livro 2", "Buch 3", "Deel 4", "Volumen 5", "Partie 1", "Часть 2", "Том 3", "Книга первая", "Книга вторая", "Том третий"].each do |title|
             assert_match DecideFix::VOLUME_SHAPE, "Title #{title}", title
           end
         end

@@ -573,6 +573,26 @@ module DataImporters
           assert_equal book, match.record
         end
 
+        test "a Goodreads-id hit is kept even when the titles carry different markers" do
+          book = book_by("Watership Down", "Richard Adams", subtitle: "The Graphic Novel")
+          book.identifiers.create!(identifier_type: :books_work_goodreads_id, value: "777", source: :goodreads_import)
+
+          match = @finder.call(query: ImportQuery.new(title: "Watership Down", author_names: ["Richard Adams"], goodreads_id: ["777"]))
+
+          assert_equal book, match.record
+        end
+
+        test "an external Open Library work that is an adaptation is dropped" do
+          key = "OL99W"
+          record = work_record(key: key, title: "Watership Down: The Graphic Novel", authors: ["James Sturm"])
+          stub_resolve(resolve_response(verdict: "accept", key: key, candidates: [ol_candidate(key: key, verdict: "accept", score: 0.95, record: record)]))
+          expect_no_ai
+
+          match = @finder.call(query: ImportQuery.new(title: "Watership Down", author_names: ["Richard Adams"]))
+
+          assert_equal [], match.candidates.select(&:external?)
+        end
+
         test "the AI is told an adaptation is a different book" do
           assert_match(/adaptation.*different book/i, @finder.send(:domain_guidance))
         end

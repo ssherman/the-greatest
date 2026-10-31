@@ -71,7 +71,16 @@ module Services
           "Die Verwandlung (Spanish Edition)" => "Die Verwandlung",
           "The Crossroads of Time (Crosstime (aka) Blake Walker #1)" => "The Crossroads of Time",
           "How to Work with (Almost) Anyone" => "How to Work with (Almost) Anyone",
-          "(Untitled)" => "(Untitled)"
+          "(Untitled)" => "(Untitled)",
+          "Pride and Prejudice (Manga Classics)" => "Pride and Prejudice (Manga Classics)",
+          "Hamlet (Manga Shakespeare)" => "Hamlet (Manga Shakespeare)",
+          "The Great Gatsby (SparkNotes Literature Guide)" => "The Great Gatsby (SparkNotes Literature Guide)",
+          "Animal Farm (Graphic Novel)" => "Animal Farm (Graphic Novel)",
+          "Remembrance of Things Past (Volume 1)" => "Remembrance of Things Past (Volume 1)",
+          "Collected Stories (Vol. 2)" => "Collected Stories (Vol. 2)",
+          "The Gulag Archipelago (Volumes 1-2)" => "The Gulag Archipelago (Volumes 1-2)",
+          "Foundation (Box Set)" => "Foundation (Box Set)",
+          "Pride and Prejudice (Manga Classics) (Spanish Edition)" => "Pride and Prejudice (Manga Classics)"
         }.each do |raw, clean|
           test "clean_title turns #{raw.inspect} into #{clean.inspect}" do
             assert_equal clean, ExportFacts.clean_title(raw)

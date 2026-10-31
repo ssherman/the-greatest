@@ -11,6 +11,13 @@ module DataImporters
       # kind (Watership Down: The Graphic Novel into Watership Down). A
       # deterministic rule is the only thing that holds across every mode.
       #
+      # A marker counts only where a title states what the book IS rather than
+      # what it is called: after the first colon (the subtitle) or inside a
+      # parenthetical. In the main title the same word is part of the work's
+      # name ("Brideshead Revisited", "The Companion Species Manifesto",
+      # "Psycho-Analysis"), and translations of those names would otherwise be
+      # refused.
+      #
       # The test is symmetric and only about markers: when one side carries a
       # marker the other lacks, the two are different books. Two titles that both
       # say "Graphic Novel" are not told apart here. "Annotated", "illustrated",
@@ -36,10 +43,24 @@ module DataImporters
         end
 
         def markers(text)
-          normalized = normalize(text)
+          normalized = normalize(descriptive_part(text))
           return [] if normalized.empty?
 
           PATTERNS.select { |_marker, pattern| normalized.match?(pattern) }.keys.sort
+        end
+
+        # True when the text itself names a derivative work, wherever the marker
+        # sits. For a text already known to be descriptive, such as the inside of
+        # a trailing parenthetical.
+        def marker?(text)
+          normalized = normalize(text)
+          PATTERNS.each_value.any? { |pattern| normalized.match?(pattern) }
+        end
+
+        # The subtitle (after the first colon) and every parenthetical.
+        def descriptive_part(text)
+          text = text.to_s
+          [text.split(":", 2)[1], *text.scan(/\(([^()]*)\)/).flatten].compact.join(" ")
         end
 
         # Lowercase, accents removed, every run of punctuation (hyphens included)

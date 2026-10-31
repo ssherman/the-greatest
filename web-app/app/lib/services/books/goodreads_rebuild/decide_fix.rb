@@ -24,7 +24,7 @@ module Services
 
         # A volume word followed by its number ("Book Five", "Vol. 7", "Part II"). Check.names_volume?
         # is too loose for whole titles ("The Book Thief", "Band of Brothers", "1984").
-        NUMBER_WORDS = %w[one two three four five six seven eight nine ten eleven twelve first second third].join("|")
+        NUMBER_WORDS = %w[one two three four five six seven eight nine ten eleven twelve first second third первая вторая третья первый второй третий].join("|")
         VOLUME_SHAPE = /\b(?:vols?|volumes?|books?|parts?|tome|teil|band|livre|tomo|parte|libro|buch|tom|livro|partie|deel|volumen|книга|том|часть)\b\.?\s*(?:#?\d+|[ivxlcdm]+|#{NUMBER_WORDS})\b|#\s*\d/i
 
         # The one "needs a fix" rule; the batch job's SQL scope mirrors it and a test keeps them equal.

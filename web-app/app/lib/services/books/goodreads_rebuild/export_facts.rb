@@ -24,6 +24,15 @@ module Services
         # A trailing parenthetical (one level of nesting allowed).
         TRAILING_PARENTHETICAL = /\s*\((?:[^()]|\([^()]*\))*\)\s*\z/
 
+        # A trailing parenthetical that says which book this is stays: an adaptation or guide
+        # ("(Manga Classics)", "(SparkNotes Literature Guide)") or a volume or set ("(Volume 1)",
+        # "(Box Set)"). Dropping it would turn a different book into the original.
+        def self.informative?(parenthetical)
+          ::DataImporters::Books::Book::DerivativeWork.marker?(parenthetical) ||
+            parenthetical.match?(DecideFix::VOLUME_SHAPE) ||
+            parenthetical.match?(::Services::Books::Verification::EditionCheck::SET_WORDS)
+        end
+
         def self.call(survey:) = new(survey).call
 
         # On Goodreads a parenthetical at the END of a title is series, publisher-series or edition
@@ -34,7 +43,11 @@ module Services
           return text if text.nil?
 
           cleaned = text.to_s
-          cleaned = cleaned.sub(TRAILING_PARENTHETICAL, "") while cleaned.match?(TRAILING_PARENTHETICAL)
+          while (trailing = cleaned[TRAILING_PARENTHETICAL])
+            break if informative?(trailing) && !trailing.match?(SERIES_SUFFIX)
+
+            cleaned = cleaned.delete_suffix(trailing)
+          end
           cleaned = cleaned.strip
           cleaned.empty? ? text : cleaned
         end

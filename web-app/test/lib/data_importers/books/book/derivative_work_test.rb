@@ -29,7 +29,9 @@ module DataImporters
           ["Sense and Sensibility: A Guide to Reading and Reflecting", "Sense and Sensibility"],
           ["Elucidating Alice: A Textual Commentary on Alice's Adventures in Wonderland", "Alice's Adventures in Wonderland"],
           ["Sapiens: Une bande dessinée", "Sapiens"],
-          ["Don Quijote: Novela gráfica", "Don Quijote"]
+          ["Don Quijote: Novela gráfica", "Don Quijote"],
+          ["Pride and Prejudice (Manga Classics)", "Pride and Prejudice"],
+          ["Animal Farm (Graphic Novel)", "Animal Farm"]
         ].freeze
 
         # Translations and editions of the same work.
@@ -46,7 +48,12 @@ module DataImporters
           ["Poor Charlie's Almanack: The Wit and Wisdom of Charles T. Munger, Expanded Third Edition", "Poor Charlie's Almanack"],
           ["1Q84 3 Volume Box", "1Q84"],
           ["The Illustrated Hobbit", "The Hobbit"],
-          ["Watership Down: A Graphic Novel", "Watership Down: The Graphic Novel"]
+          ["Watership Down: A Graphic Novel", "Watership Down: The Graphic Novel"],
+          # A marker inside the work's own name is not a derivative marker.
+          ["Introductory Lectures on Psychoanalysis", "Introductory Lectures on Psycho-Analysis"],
+          ["Retour à Brideshead", "Brideshead Revisited"],
+          ["Manifeste des espèces compagnes", "The Companion Species Manifesto"],
+          ["Brideshead Revisited", "Brideshead Revisited"]
         ].freeze
 
         DIFFERENT.each do |query, candidate|

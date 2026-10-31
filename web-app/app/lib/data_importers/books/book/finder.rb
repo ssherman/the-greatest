@@ -110,16 +110,21 @@ module DataImporters
         end
 
         # An adaptation or a guide is a different book from its source, whatever
-        # the title match, search score or AI says (DerivativeWork). Local
-        # candidates only: an external one is not a catalog book to merge into.
+        # the title match, search score or AI says (DerivativeWork). Applies to
+        # external works too, so a member import does not create the original
+        # from an Open Library adaptation record.
         def incompatible?(query, candidate)
-          return false unless candidate.local?
+          # A Goodreads id names one edition, so a book holding it is that edition
+          # whatever its title says; dropping it would make a member's import
+          # create a duplicate every time.
+          return false if candidate.evidence.dig(:matched_identifier, :type).to_s == "books_work_goodreads_id"
 
-          record = candidate.record
-          DerivativeWork.differ?(
-            [query.title, query.subtitle].compact_blank.join(": "),
-            [record.title, record.subtitle].compact_blank.join(": ")
-          )
+          theirs = if candidate.local?
+            [candidate.record.title, candidate.record.subtitle]
+          else
+            [candidate.evidence[:title], candidate.evidence[:subtitle]]
+          end
+          DerivativeWork.differ?([query.title, query.subtitle].compact_blank.join(": "), theirs.compact_blank.join(": "))
         end
 
         def query_creators(query) = query.author_names
