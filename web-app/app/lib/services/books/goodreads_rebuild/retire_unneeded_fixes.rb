@@ -8,8 +8,8 @@ module Services
       # through enrichment, so they are retired before apply the way RetireLumpVerdicts retires
       # lump verdicts: rejected and superseded, hidden from the admin queue and never applied.
       # A verdict whose apply has started (it recorded a scope or an archive) is never retired: its book may
-      # have been reset and renamed by a failed attempt, which would make it look right. Only unapplied, current, proposed or approved rebuild verdicts are looked at. A dry run
-      # unless apply.
+      # have been reset and renamed by a failed attempt, which would make it look right. Only unapplied,
+      # current, proposed or approved rebuild verdicts are looked at. A dry run unless apply.
       class RetireUnneededFixes
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         SAMPLES = 10

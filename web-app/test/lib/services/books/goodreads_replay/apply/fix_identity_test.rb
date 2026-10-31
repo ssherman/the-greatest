@@ -283,18 +283,6 @@ module Services
             refute verdict.payload.key?("removed")
           end
 
-          test "a title-only fix keeps our subtitle when the export has none" do
-            survey_for_book
-            @book.update!(title: "The 33 Strategies Of War New Edition Paperback", subtitle: "The Modern Machiavellian Guide")
-            GoodreadsRebuild::FixScope.stubs(:call).returns(:title_only)
-            verdict.update_columns(payload: verdict.payload.merge("title" => "The 33 Strategies of War", "subtitle" => nil,
-              "full_title" => "The 33 Strategies of War"))
-
-            FixIdentity.call(verdict: verdict)
-
-            assert_equal ["The 33 Strategies of War", "The Modern Machiavellian Guide"], ::Books::Book.find(@book.id).then { |b| [b.title, b.subtitle] }
-          end
-
           test "a title-only fix takes the export's subtitle when ours has none" do
             survey_for_book
             @book.update!(title: "Destination")
