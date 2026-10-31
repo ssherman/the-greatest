@@ -20,6 +20,12 @@ export default class extends Controller {
     window.addEventListener("user-list-state:updated", this._onStateChange)
     window.addEventListener("user-list-state:cleared", this._onStateChange)
     this.openContext = null
+    // Checkbox writes in flight. A state change that lands meanwhile (beginWrite
+    // syncing another tab's write, say) would rebuild the rows under the
+    // disabled checkbox the user just clicked; the rebuild waits until they
+    // settle instead.
+    this._writesInFlight = 0
+    this._renderPending = false
   }
 
   disconnect() {
@@ -30,7 +36,12 @@ export default class extends Controller {
   }
 
   _onStateChange() {
-    if (this.element.open && this.openContext) this._render()
+    if (!this.element.open || !this.openContext) return
+    if (this._writesInFlight > 0) {
+      this._renderPending = true
+      return
+    }
+    this._render()
   }
 
   _onOpen(event) {
@@ -119,6 +130,7 @@ export default class extends Controller {
   async _toggle(list, input) {
     const wantOn = input.checked
     input.disabled = true
+    this._writesInFlight++
     try {
       if (wantOn) {
         await this._add(list.id)
@@ -130,6 +142,11 @@ export default class extends Controller {
       this._toast("error", err.message || "Something went wrong")
     } finally {
       input.disabled = false
+      this._writesInFlight--
+      if (this._writesInFlight === 0 && this._renderPending) {
+        this._renderPending = false
+        if (this.element.open && this.openContext) this._render()
+      }
     }
   }
 
@@ -145,7 +162,8 @@ export default class extends Controller {
     if (!res.ok) throw new Error(data.error?.message || "Failed to add")
     this._afterMutation({
       added: {list_id: data.user_list_item.user_list_id, item_id: data.user_list_item.id},
-      removedListIds: (data.removed_user_list_items || []).map((item) => item.user_list_id)
+      removedListIds: (data.removed_user_list_items || []).map((item) => item.user_list_id),
+      marks: {now: data.state_mark, was: data.state_mark_was}
     })
     this._toast("success", data.message)
   }
@@ -166,7 +184,8 @@ export default class extends Controller {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error?.message || "Failed to remove")
     this._afterMutation({
-      removedListIds: [data.removed_user_list_item?.user_list_id || listId]
+      removedListIds: [data.removed_user_list_item?.user_list_id || listId],
+      marks: {now: data.state_mark, was: data.state_mark_was}
     })
     this._toast("success", data.message)
   }
@@ -204,7 +223,8 @@ export default class extends Controller {
         listableType: this.openContext.listableType,
         listableId: this.openContext.listableId,
         memberships: next,
-        addedList: data.user_list
+        addedList: data.user_list,
+        marks: {now: data.state_mark, was: data.state_mark_was}
       })
       this._render()
       this._resetCreateForm()
@@ -217,7 +237,7 @@ export default class extends Controller {
   }
 
   // `added`: {list_id, item_id} | `removedListIds`: integer[]
-  _afterMutation({added, removedListIds = []}) {
+  _afterMutation({added, removedListIds = [], marks}) {
     const stateCtrl = this._stateController()
     const cur = stateCtrl.state()
     const current = (cur?.memberships?.[this.openContext.listableType] || {})[String(this.openContext.listableId)] || []
@@ -227,7 +247,8 @@ export default class extends Controller {
     stateCtrl.applyMutation({
       listableType: this.openContext.listableType,
       listableId: this.openContext.listableId,
-      memberships: next
+      memberships: next,
+      marks
     })
   }
 

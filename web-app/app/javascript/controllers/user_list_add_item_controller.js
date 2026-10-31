@@ -39,7 +39,7 @@ export default class extends Controller {
       // Update the shared user-list-state cache BEFORE reloading the frame, so
       // the new item's "on these lists" widget renders correctly the moment it
       // connects (the widget reads the cache synchronously on connect).
-      this._syncState(data.user_list_item, data.removed_user_list_items || [])
+      this._syncState(data.user_list_item, data.removed_user_list_items || [], {now: data.state_mark, was: data.state_mark_was})
       this._toast("success", data.message)
       this._resetInput()
       this._refreshList()
@@ -71,7 +71,7 @@ export default class extends Controller {
   // cache (mirrors the modal's _afterMutation) so the per-item widget shows the
   // item as "on this list". Falls back to fetching the state if this page has
   // none: an uncached page like this one never fetches it on load.
-  _syncState(item, removedItems = []) {
+  _syncState(item, removedItems = [], marks) {
     if (!item) return
     const stateCtrl = this._stateController()
     if (!stateCtrl) return
@@ -95,7 +95,8 @@ export default class extends Controller {
     stateCtrl.applyMutation({
       listableType: type,
       listableId: id,
-      memberships: next
+      memberships: next,
+      marks
     })
   }
 

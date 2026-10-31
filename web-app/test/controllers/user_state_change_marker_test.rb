@@ -35,6 +35,46 @@ class UserStateChangeMarkerTest < ActionDispatch::IntegrationTest
     assert add_item.present?
   end
 
+  test "a JSON write echoes the marker it set" do
+    sign_in_as(@user, stub_auth: true)
+    mark = add_item
+
+    assert_equal mark, response.parsed_body["state_mark"]
+  end
+
+  test "a JSON write echoes the marker it arrived with" do
+    sign_in_as(@user, stub_auth: true)
+    first = add_item
+    delete user_list_item_path(@list, UserListItem.find_by!(user_list: @list, listable: @album)), as: :json
+
+    assert_equal first, response.parsed_body["state_mark_was"]
+    assert_not_equal first, response.parsed_body["state_mark"]
+  end
+
+  test "a failed write sets no tg_state_mark" do
+    sign_in_as(@user, stub_auth: true)
+    mark = add_item
+
+    # Adding the same item again is rejected as a duplicate.
+    post user_list_items_path(@list), params: {user_list_item: {listable_id: @album.id}}, as: :json
+
+    assert_response :conflict
+    assert_equal mark, cookies[:tg_state_mark]
+    assert_not_includes Array(response.headers["Set-Cookie"]).join("\n"), "tg_state_mark"
+    assert_nil response.parsed_body["state_mark"]
+  end
+
+  test "a completion update sets tg_state_mark" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    item = user_list_items(:regular_user_books_item_3)
+
+    patch user_list_item_completion_path(item), params: {user_list_item: {completed_on: "2025-03-04"}}
+
+    assert_response :see_other
+    assert cookies[:tg_state_mark].present?
+  end
+
   test "each write sets a different value" do
     sign_in_as(@user, stub_auth: true)
     first = add_item
@@ -74,14 +114,18 @@ class UserStateChangeMarkerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "an uncached page carries the tg-page-request meta and a cacheable page does not" do
-    sign_in_as(@user, stub_auth: true)
-    get my_lists_path
-    assert_response :success
-    assert_select "meta[name='tg-page-request']"
+  # Each site has its own layout, so each is checked.
+  %i[books music games].each do |domain|
+    test "an uncached #{domain} page carries the tg-page-request meta and a cacheable one does not" do
+      host! Rails.application.config.domains[domain]
+      sign_in_as(@user, stub_auth: true)
+      get my_lists_path
+      assert_response :success
+      assert_select "meta[name='tg-page-request']"
 
-    get "/"
-    assert_response :success
-    assert_select "meta[name='tg-page-request']", count: 0
+      get "/"
+      assert_response :success
+      assert_select "meta[name='tg-page-request']", count: 0
+    end
   end
 end
