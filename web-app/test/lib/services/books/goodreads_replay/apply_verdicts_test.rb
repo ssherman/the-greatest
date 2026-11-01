@@ -101,6 +101,47 @@ module Services
           assert_raises(ActiveRecord::StatementInvalid) { ApplyVerdicts.call(auto_apply: true) }
         end
 
+        # Enrichment jobs running alongside apply update the same countries' book counts, so Postgres
+        # occasionally kills apply's transaction to break a deadlock. The attempt rolled back, so it is retried.
+        test "a deadlocked verdict is retried and the run carries on" do
+          stuck = verdict(:merge_books, "books:1:2")
+          after = verdict(:merge_books, "books:3:4")
+          ApplyVerdicts.any_instance.stubs(:sleep)
+          Apply::MergeBooks.stubs(:call).with(verdict: stuck)
+            .raises(ActiveRecord::Deadlocked, "PG::TRDeadlockDetected").then.returns(answer(:applied))
+          Apply::MergeBooks.stubs(:call).with(verdict: after).returns(answer(:applied))
+
+          result = ApplyVerdicts.call(auto_apply: true)
+
+          assert_equal 2, result.data[:tally]["merge_books applied"]
+          refute_nil stuck.reload.applied_at
+          refute_nil after.reload.applied_at
+        end
+
+        test "a retry reads the verdict afresh, not the rolled-back attempt's in-memory payload" do
+          verdict(:fix_identity, "rebuild:1", {"book_id" => 1})
+          ApplyVerdicts.any_instance.stubs(:sleep)
+          seen = []
+          Apply::FixIdentity.stubs(:call).with do |verdict:|
+            seen << verdict.payload.dup
+            next true if seen.size > 1
+            verdict.payload = verdict.payload.merge("removed" => {"title" => "rolled back"})
+            raise ActiveRecord::Deadlocked, "PG::TRDeadlockDetected"
+          end.returns(answer(:applied))
+
+          ApplyVerdicts.call(auto_apply: true)
+
+          assert_equal [{"book_id" => 1}, {"book_id" => 1}], seen
+        end
+
+        test "a verdict still deadlocked after three attempts stops the run" do
+          verdict(:merge_books, "books:1:2")
+          ApplyVerdicts.any_instance.stubs(:sleep)
+          Apply::MergeBooks.expects(:call).times(3).raises(ActiveRecord::Deadlocked, "PG::TRDeadlockDetected")
+
+          assert_raises(ActiveRecord::Deadlocked) { ApplyVerdicts.call(auto_apply: true) }
+        end
+
         test "an author merge chain applies in id order, and a link whose author is gone is a harmless no-op" do
           ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
           a = ::Books::Author.create!(name: "Chain Author")
