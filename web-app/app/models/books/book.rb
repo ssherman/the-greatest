@@ -163,6 +163,22 @@ class Books::Book < ApplicationRecord
   # another.
   scope :catalog, -> { where(provisional: false) }
 
+  # Ranked books first, best rank at the top, then the unranked by title. The rank
+  # is the default primary configuration's and is exposed as `primary_rank`. With
+  # no primary configuration the join matches nothing, so every book sorts as
+  # unranked rather than raising.
+  scope :ordered_by_primary_rank, -> {
+    rank_join = sanitize_sql_array([<<~SQL.squish, Books::RankingConfiguration.default_primary&.id])
+      LEFT JOIN ranked_items primary_ranks
+        ON primary_ranks.item_type = 'Books::Book'
+        AND primary_ranks.item_id = books_books.id
+        AND primary_ranks.ranking_configuration_id = ?
+    SQL
+    joins(rank_join)
+      .select("books_books.*, primary_ranks.rank AS primary_rank")
+      .order(Arel.sql("primary_ranks.rank ASC NULLS LAST, lower(books_books.title), books_books.id"))
+  }
+
   def release_year
     first_published_year
   end

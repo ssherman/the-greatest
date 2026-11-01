@@ -723,6 +723,7 @@ Rails.application.routes.draw do
         resources :author_relationships, only: [:create]
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
         resources :workflow_runs, only: [:index]
+        resources :books, only: [:index], controller: "author_books"
         member do
           post :execute_action
         end
@@ -749,6 +750,7 @@ Rails.application.routes.draw do
         member do
           post :merge
         end
+        resources :books, only: [:index], controller: "category_books"
       end
 
       resources :lists do
