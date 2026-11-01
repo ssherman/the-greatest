@@ -81,6 +81,15 @@
 
   <div class="card bg-base-100 shadow">
     <div class="card-body">
+      <h2 class="card-title text-base">Books <span class="badge badge-ghost"><%= @author.book_authors.count %></span></h2>
+      <%= turbo_frame_tag "author_books_list", loading: :lazy, src: admin_books_author_books_path(@author) do %>
+        <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
       <div class="flex items-center justify-between">
         <h2 class="card-title text-base">Relationships <span class="badge badge-ghost"><%= @author.author_relationships.count %></span></h2>
         <% if current_user_can_write? %>
