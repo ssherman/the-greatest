@@ -46,6 +46,15 @@ module Api
           end
         end
 
+        # The live category a public slug names: an active books category, or
+        # the target of a merged / renamed one. A deleted, unmerged category
+        # names nothing -- 404, never a leak.
+        def public_category!(slug)
+          ::Books::Category.active.find_by(slug: slug) ||
+            ::Books::CategorySlugResolver.call(slug) ||
+            raise(ActiveRecord::RecordNotFound.new(nil, "Books::Category"))
+        end
+
         # The list items the API serves and counts: rows whose listable is a
         # Books::Book that exists -- importers can leave listable_id null,
         # write another listable_type, or leave an id whose book is gone -- or

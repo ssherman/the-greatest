@@ -75,7 +75,23 @@ module Api
         ["GET", "/api/v1/lists/{id}/items", "401"] => -> { get "/api/v1/lists/#{@list.id}/items" },
         ["GET", "/api/v1/lists/{id}/items", "403"] => -> { get "/api/v1/lists/#{@list.id}/items", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
         ["GET", "/api/v1/lists/{id}/items", "404"] => -> { get "/api/v1/lists/999999999/items", headers: bearer(ApiTokenSecrets::MEMBER) },
-        ["GET", "/api/v1/lists/{id}/items", "429"] => -> { with_exhausted_limit { get "/api/v1/lists/#{@list.id}/items", headers: bearer(ApiTokenSecrets::MEMBER) } }
+        ["GET", "/api/v1/lists/{id}/items", "429"] => -> { with_exhausted_limit { get "/api/v1/lists/#{@list.id}/items", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/categories", "200"] => -> { get "/api/v1/categories", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/categories", "400"] => -> { get "/api/v1/categories?type=settings", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/categories", "401"] => -> { get "/api/v1/categories" },
+        ["GET", "/api/v1/categories", "403"] => -> { get "/api/v1/categories", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/categories", "429"] => -> { with_exhausted_limit { get "/api/v1/categories", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/categories/{slug}", "200"] => -> { get "/api/v1/categories/novels", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/categories/{slug}", "401"] => -> { get "/api/v1/categories/novels" },
+        ["GET", "/api/v1/categories/{slug}", "403"] => -> { get "/api/v1/categories/novels", headers: bearer(ApiTokenSecrets::NON_MEMBER) },
+        ["GET", "/api/v1/categories/{slug}", "404"] => -> { get "/api/v1/categories/no-such-category", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/categories/{slug}", "429"] => -> { with_exhausted_limit { get "/api/v1/categories/novels", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/categories/{slug}/books", "200"] => -> { get "/api/v1/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/categories/{slug}/books", "400"] => -> { get "/api/v1/categories/novels/books?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/categories/{slug}/books", "401"] => -> { get "/api/v1/categories/novels/books" },
+        ["GET", "/api/v1/categories/{slug}/books", "403"] => -> { get "/api/v1/categories/novels/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/categories/{slug}/books", "404"] => -> { get "/api/v1/categories/no-such-category/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/categories/{slug}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) } }
       }.freeze
 
       setup do
