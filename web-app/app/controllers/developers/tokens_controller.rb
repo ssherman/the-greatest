@@ -3,7 +3,7 @@
 module Developers
   # /developers/tokens -- where a member mints and revokes API tokens.
   #
-  # Members only (MembershipGate :api) and never cached: it is per-user by
+  # Members, or anyone holding a mintable scope (an admin needs no membership), and never cached: it is per-user by
   # definition. Global route with a per-domain layout, the MembersController
   # shape. The write actions answer with a Turbo Stream in BOTH outcomes:
   # Turbo Drive rejects a 200 HTML page as a form response, a redirect would
@@ -18,7 +18,7 @@ module Developers
     layout :resolve_layout
 
     before_action :prevent_caching
-    before_action -> { require_membership!(:api) }
+    before_action :require_api_access!
 
     # Days a token may live, as the form offers them; blank is "never". Any
     # other value is a tampered request and is refused rather than silently
@@ -60,6 +60,14 @@ module Developers
     end
 
     private
+
+    # Anyone who can mint at least one scope may use the page (an admin needs
+    # no membership); everyone else keeps today's membership redirect.
+    def require_api_access!
+      return if current_user && ::Api::Scopes.mintable_by(current_user).any?
+
+      require_membership!(:api)
+    end
 
     def tokens = current_user.api_tokens.order(:created_at, :id)
 

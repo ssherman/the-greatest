@@ -27,7 +27,7 @@ module Developers
     end
 
     test "a signed-in non-member is redirected to the membership page" do
-      sign_in_as(users(:books_viewer_user), stub_auth: true)
+      sign_in_as(users(:user_with_expired_membership), stub_auth: true)
 
       get developers_tokens_path
 
@@ -132,6 +132,41 @@ module Developers
     end
 
     def secret_in_body = response.body[/tg_[A-Za-z0-9]{40}/]
+
+    test "an admin with no membership sees the page" do
+      admin = users(:admin_user)
+      admin.memberships.destroy_all
+      sign_in_as(admin, stub_auth: true)
+
+      get developers_tokens_path
+
+      assert_response :success
+    end
+
+    test "a non-member with no role is still redirected" do
+      sign_in_as(users(:user_with_expired_membership), stub_auth: true)
+
+      get developers_tokens_path
+
+      assert_redirected_to membership_path
+    end
+
+    test "an admin cannot create an admin-scoped token without an expiry" do
+      assert_no_difference -> { ApiToken.count } do
+        create_token({name: "ops", scopes: ["books:admin:merge"], expires_in: ""}, user: users(:admin_user))
+      end
+
+      assert_response :unprocessable_entity
+      assert_includes response.body, "must be set for tokens with admin scopes"
+    end
+
+    test "an admin creates an admin-scoped token with an expiry" do
+      assert_difference -> { ApiToken.count }, 1 do
+        create_token({name: "ops", scopes: ["books:admin:merge"], expires_in: "30"}, user: users(:admin_user))
+      end
+
+      assert_response :success
+    end
 
     test "a member creates a token and the secret is in the stream exactly once" do
       assert_difference -> { users(:editor_user).api_tokens.count }, 1 do
@@ -240,7 +275,7 @@ module Developers
 
     test "a non-member cannot create a token" do
       assert_no_difference -> { ApiToken.count } do
-        create_token({name: "nope", scopes: ["books:read"], expires_in: ""}, user: users(:books_viewer_user))
+        create_token({name: "nope", scopes: ["books:read"], expires_in: ""}, user: users(:user_with_expired_membership))
       end
 
       assert_redirected_to membership_path

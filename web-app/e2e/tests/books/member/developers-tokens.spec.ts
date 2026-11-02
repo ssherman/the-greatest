@@ -120,6 +120,13 @@ test.describe('Books API tokens, as a member', () => {
     expect(gone.headers()['www-authenticate']).toContain('error="invalid_token"');
   });
 
+  test('admin scopes are not offered to a member', async ({ page }) => {
+    await page.goto('/developers/tokens');
+
+    await expect(page.getByLabel(/^\s*books:read/)).toBeVisible();
+    await expect(page.getByLabel(/^\s*books:admin:merge/)).toHaveCount(0);
+  });
+
   test('a submission with no scopes is refused in place and keeps the name', async ({ page }) => {
     await page.goto('/developers/tokens');
 
