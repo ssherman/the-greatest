@@ -577,7 +577,7 @@ components:
         name: {type: string}
     AdminCategory:
       type: object
-      required: [id, slug, name, category_type, description, parent, alternative_names, deleted, merged_into, item_count, book_link_count, author_link_count, children_count, import_source, created_at, updated_at]
+      required: [id, slug, name, category_type, description, parent, book_count, alternative_names, deleted, merged_into, item_count, book_link_count, author_link_count, children_count, import_source, created_at, updated_at]
       properties:
         id: {type: integer}
         slug: {type: [string, "null"]}
@@ -591,6 +591,7 @@ components:
           oneOf:
             - {type: "null"}
             - $ref: "#/components/schemas/CategoryRef"
+        book_count: {type: integer, minimum: 0, description: Books in the site's primary ranking that carry this category.}
         alternative_names:
           type: array
           items: {type: string}

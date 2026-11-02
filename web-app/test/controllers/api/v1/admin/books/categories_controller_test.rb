@@ -50,6 +50,40 @@ module Api
             assert_equal ["Fiction", "Fiction Extra", "Great Fiction"], names.first(3)
           end
 
+          test "q ranks a word-start match above a mere contains match" do
+            ::Books::Category.create!(name: "Scapocalypse", category_type: :genre)
+            ::Books::Category.create!(name: "Post-Apocalyptic", category_type: :genre)
+
+            get "/api/v1/admin/categories", params: {q: "apoc"}, headers: bearer(READ)
+            assert_equal ["Post-Apocalyptic", "Scapocalypse"], names
+          end
+
+          test "book_count is the ranked books on the primary configuration" do
+            rc = ranking_configurations(:books_global)
+            RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: rc, rank: 1, score: 100)
+            RankedItem.create!(item: books_books(:crime_and_punishment), ranking_configuration: rc, rank: 2, score: 90)
+            CategoryItem.where(category: categories(:books_politics_subject)).delete_all
+            [:war_and_peace, :crime_and_punishment, :of_mice_and_men].each do |book|
+              CategoryItem.create!(category: categories(:books_politics_subject), item: books_books(book))
+            end
+
+            get "/api/v1/admin/categories", params: {q: "Politics"}, headers: bearer(READ)
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal [2], json[:data].map { |c| c[:book_count] }
+
+            get "/api/v1/admin/categories/#{categories(:books_politics_subject).id}", headers: bearer(READ)
+            assert_equal 2, json[:data][:book_count]
+          end
+
+          test "the number of queries does not grow with the page size" do
+            get "/api/v1/admin/categories", params: {per_page: 1}, headers: bearer(READ)
+            small = capture_sql { get "/api/v1/admin/categories", params: {per_page: 1}, headers: bearer(READ) }.size
+            large = capture_sql { get "/api/v1/admin/categories", params: {per_page: 100}, headers: bearer(READ) }.size
+
+            assert_operator ::Books::Category.active.count, :>, 5
+            assert_equal small, large
+          end
+
           test "q is treated literally, not as a LIKE pattern" do
             get "/api/v1/admin/categories", params: {q: "%"}, headers: bearer(READ)
             assert_empty json[:data]

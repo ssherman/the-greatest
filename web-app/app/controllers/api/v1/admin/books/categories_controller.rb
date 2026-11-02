@@ -23,11 +23,12 @@ module Api
             query = params[:q].to_s.strip.presence
 
             relation = scoped_by_status(status).includes(:parent, :merged_into)
-            relation = relation.where(category_type: ::Category.category_types.fetch(type)) if type
+            relation = relation.where(category_type: type) if type
             relation = search(relation, query)
 
             render_page(relation, path: "/api/v1/admin/categories", query: {q: query, type: type, status: status}.compact) do |rows|
-              rows.map { |category| CategoryResource.new(category, params: counts_for(rows.map(&:id))).to_h }
+              counts = counts_for(rows.map(&:id))
+              rows.map { |category| CategoryResource.new(category, params: counts).to_h }
             end
           end
 
@@ -63,8 +64,17 @@ module Api
             {
               book_links: link_counts("Books::Book", ids),
               author_links: link_counts("Books::Author", ids),
-              children: ::Category.where(parent_id: ids).group(:parent_id).count
+              children: ::Category.where(parent_id: ids).group(:parent_id).count,
+              ranked_books: ranked_counts(ids)
             }
+          end
+
+          # Ranked books on the primary configuration, as the public show counts them.
+          def ranked_counts(ids)
+            configuration = ::Books::RankingConfiguration.default_primary
+            return {} unless configuration
+
+            ::Books::RankedBooksQuery.counts_by_category(ranking_configuration: configuration, category_ids: ids)
           end
 
           def link_counts(item_type, ids)

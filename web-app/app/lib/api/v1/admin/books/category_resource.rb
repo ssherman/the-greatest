@@ -8,7 +8,8 @@ module Api
         # and provenance. `parent` is the raw parent (a deleted or merged one
         # shows, unlike the public resource). `params` carries the page's grouped
         # counts: :book_links and :author_links ({category_id => n}) and :children
-        # ({parent_id => n}); a missing key is 0. Key order here IS the order in
+        # ({parent_id => n}) and :ranked_books ({category_id => n}, the public
+        # book_count); a missing key is 0. Key order here IS the order in
         # config/api/v1/admin_openapi.yaml. Root-anchor every ::Books:: reference.
         class CategoryResource
           include Alba::Resource
@@ -18,6 +19,10 @@ module Api
           attribute :parent do |category|
             parent = category.parent
             parent && {id: parent.id, slug: parent.slug, name: parent.name}
+          end
+
+          attribute :book_count do |category|
+            params.fetch(:ranked_books, {}).fetch(category.id, 0)
           end
 
           attributes :alternative_names, :deleted
