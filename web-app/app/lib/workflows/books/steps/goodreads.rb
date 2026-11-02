@@ -19,8 +19,9 @@
 #                     reserved turn, so the next execution must not reserve again
 #   followed_best     the main edition's page has been followed; never follow twice
 #   searched_retry    the title-plus-surname search has been used
-#   bad_fetches       blocked or unparseable fetches so far; the second ends the
-#                     step as a miss
+#   bad_fetches       blocked fetches in a row; the second ends the step as a
+#                     miss, a usable search or page clears it (an unparseable
+#                     fetch ends the step at once)
 #   stray_id          the page followed away from, to fall back to if the main
 #                     edition's page is not found (not in the spec's list)
 #
@@ -72,6 +73,7 @@ module Workflows
             search = fetched(result.data[:outcome], result.data[:search])
             return search if search.is_a?(Workflows::Outcome)
           end
+          clear_bad_fetches
 
           survivors = ::Services::Books::GoodreadsEnrichment::CandidateFilter.call(book: @book, rows: search.candidate_rows)
           if survivors.empty?
@@ -102,6 +104,7 @@ module Workflows
             page = fetched(result.data[:outcome], result.data[:page])
             return page if page.is_a?(Workflows::Outcome)
           end
+          clear_bad_fetches
 
           return follow_best(page) if follow_best?(page)
           return fall_back_to_stray if !page.outcome_found? && @progress["followed_best"] && @progress["stray_id"]
@@ -124,8 +127,14 @@ module Workflows
           (page.parser_version.to_i >= PAGE_VERSION) ? page : nil
         end
 
+        # A fresh found or no-results search. An unparseable one stored under an
+        # older SearchPage is re-read first: after a parser fix the search
+        # already fetched is used, not fetched again.
         def cached_search
-          ::Books::GoodreadsSearch.fresh.find_by(query: ::Books::GoodreadsSearch.normalize_value_for(:query, @progress["query"]))
+          query = ::Books::GoodreadsSearch.normalize_value_for(:query, @progress["query"])
+          stored = ::Books::GoodreadsSearch.find_by(query: query)
+          ::Services::Books::GoodreadsPages::ReparseSearch.call(search: stored) if stored&.outcome_unparseable?
+          ::Books::GoodreadsSearch.fresh.find_by(query: query)
         end
 
         # A search pick can be a stray edition; the work's main edition has the
@@ -199,16 +208,17 @@ module Workflows
           @progress["due"] = false
           ::Books::Goodreads::GateTurn.after_fetch(gate: @gate, outcome: outcome)
           case outcome
-          when :blocked, :unparseable then bad_fetch(outcome)
+          when :blocked then bad_fetch(outcome)
+          when :unparseable then unreadable
           when :unavailable, :fetcher_down then raise StandardError, "Goodreads fetch for book #{@book.id} failed: #{outcome}"
           else record
           end
         end
 
-        # A blocked or unparseable page waits out the gate's cooldown once. The
-        # same URL coming back bad a second time ends the step as a miss, so one
-        # page cannot keep closing the shared gate (and the user import with it)
-        # while book_facts and amazon wait. The count rides in progress.
+        # A blocked page waits out the gate's cooldown once. The same URL coming
+        # back blocked a second time ends the step as a miss, so one page cannot
+        # keep closing the shared gate (and the user import with it) while
+        # book_facts and amazon wait. The count rides in progress.
         def bad_fetch(outcome)
           @progress["bad_fetches"] = @progress["bad_fetches"].to_i + 1
           return wait_until(blocked_until, due: false) if @progress["bad_fetches"] < 2
@@ -216,6 +226,19 @@ module Workflows
           ::Services::Books::GoodreadsEnrichment::Ledger.record(book: @book, outcome: "unrecognized", reason: outcome.to_s)
           Workflows::Outcome.succeeded(outcome.to_s, {"matched" => false})
         end
+
+        # A page Goodreads served but the parser cannot read ends this book's
+        # step at once, without closing the gate: every other book keeps
+        # fetching. The HTML is stored; a search is re-read by cached_search
+        # once the parser changes, and the ledger reason names the miss so the
+        # books can be run again.
+        def unreadable
+          ::Services::Books::GoodreadsEnrichment::Ledger.record(book: @book, outcome: "unrecognized", reason: "unparseable")
+          Workflows::Outcome.succeeded("unparseable", {"matched" => false})
+        end
+
+        # The count is of one URL coming back blocked; a usable answer ends it.
+        def clear_bad_fetches = @progress.delete("bad_fetches")
 
         def blocked_until
           @gate.blocked_until || (Time.current + Rails.application.config.x.goodreads.block_cooldown)

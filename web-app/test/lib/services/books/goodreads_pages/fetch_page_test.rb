@@ -137,7 +137,7 @@ module Services
         test "a blocked or unparseable refresh leaves the found row alone but reports the verdict" do
           page = books_goodreads_pages(:war_and_peace_page)
           cases = {blocked: fetched(page_html("synthetic_challenge.html"), status: 403),
-                   unparseable: fetched("<html><body>nothing</body></html>")}
+                   unparseable: fetched("<html><head><title>War and Peace by Leo Tolstoy | Goodreads</title></head><body>nothing</body></html>")}
 
           cases.each do |outcome, response|
             result = FetchPage.call(goodreads_book_id: 656, refresh: true, client: client_returning(response))

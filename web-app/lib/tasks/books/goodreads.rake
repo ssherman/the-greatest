@@ -22,6 +22,14 @@ namespace :books do
       puts "queued Books::Goodreads::VerifyUnverifiedJob#{" (limit #{limit})" if limit}"
     end
 
+    desc "After a Goodreads parser fix: queue a fresh enrichment run for books whose Goodreads step ended " \
+      "unparseable. Usage: books:goodreads:rerun_unparseable[limit] (default 500)"
+    task :rerun_unparseable, [:limit] => :environment do |_task, args|
+      limit = args[:limit].presence&.to_i
+      Books::Goodreads::RerunUnparseableJob.perform_async(*[limit].compact)
+      puts "queued Books::Goodreads::RerunUnparseableJob#{" (limit #{limit})" if limit}"
+    end
+
     desc "Load the legacy app's scraped Goodreads rows (page lookups and search results) into the page " \
       "cache. Idempotent; never overwrites a cached page. Reads the legacy_books database."
     task seed_legacy_pages: :environment do
