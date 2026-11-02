@@ -147,13 +147,17 @@ test.describe("Books admin — categories", () => {
       await expect(modal).toBeVisible();
       await modal.getByPlaceholder("Search for category...").fill(name);
       await modal.locator("li.cursor-pointer").first().click();
+      const added = page.waitForResponse(
+        (r) => r.request().method() === "POST" && r.url().includes("/category_items")
+      );
       await modal.getByRole("button", { name: "Add Category" }).click();
+      return added;
     };
 
     await addCategory(city);
 
     const list = page.locator("turbo-frame#category_items_list");
-    const cityRow = list.locator("tr", { hasText: city });
+    const cityRow = list.locator("tr").filter({ has: page.getByRole("cell", { name: city, exact: true }) });
     const countryRow = list.locator("tr", { hasText: country });
     await expect(cityRow.getByRole("button", { name: "Remove" })).toBeVisible();
     await expect(countryRow).toContainText(`via ${city}`);
@@ -162,7 +166,8 @@ test.describe("Books admin — categories", () => {
     // Tagging the inherited country directly upgrades it; tagging it again is a success.
     await addCategory(country);
     await expect(countryRow.getByRole("button", { name: "Remove" })).toBeVisible();
-    await addCategory(country);
+    const readd = await addCategory(country);
+    expect(readd.status()).toBeLessThan(400);
     await expect(page.getByText("Category added successfully")).toBeVisible();
     await expect(list.locator("tr", { hasText: country })).toHaveCount(1);
   });

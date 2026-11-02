@@ -36,6 +36,10 @@ module Categories
     def soft_delete
       book_ids = @category.category_items.where(item_type: "Books::Book").pluck(:item_id)
       Category.transaction do
+        # Re-read under the lock: a concurrent delete or merge may have won.
+        @category.lock!
+        raise Refused, "That category has already been deleted." if @category.deleted?
+
         # update! rather than update_column: update_column fires no callbacks, which
         # would silently skip Category#queue_items_for_reindexing and reintroduce the
         # stale-index defect this service is meant to be safe for.

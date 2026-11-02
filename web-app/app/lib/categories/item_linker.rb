@@ -27,6 +27,12 @@ module Categories
         # A concurrent tag of the same category won the race: the end state is what was asked for.
         reconcile(item)
         success(item)
+      rescue ActiveRecord::RecordInvalid => e
+        # The uniqueness validation loses the same race before the index does.
+        raise unless e.record.errors.of_kind?(:category_id, :taken) || e.record.errors.of_kind?(:item_id, :taken)
+
+        reconcile(item)
+        success(item)
       end
 
       def unlink(item:, category:)
@@ -34,8 +40,14 @@ module Categories
         return failure("That item doesn't have that category.") if row.nil?
 
         if row.source_inherited?
-          names = inherited_from(item: item, category: category).map(&:name).join(", ")
-          return failure("#{category.name} comes from #{names}; remove that instead.")
+          from = inherited_from(item: item, category: category)
+          if from.empty?
+            # No direct location produces it: an orphan. The reconcile deletes it.
+            reconcile(item)
+            return success(item)
+          end
+
+          return failure("#{category.name} comes from #{from.map(&:name).join(", ")}; remove that instead.")
         end
 
         row.destroy!
@@ -54,12 +66,26 @@ module Categories
         return {} unless item.is_a?(::Books::Book)
 
         direct = item.category_items.direct.includes(:category).map(&:category)
-        direct.select { |c| c.is_a?(::Books::Category) && c.location? }.each_with_object({}) do |location, map|
-          location.ancestors.each { |ancestor| (map[ancestor.id] ||= []) << location }
+        live = direct.select { |c| c.is_a?(::Books::Category) && c.location? && !c.deleted? }
+        live.each_with_object({}) do |location, map|
+          live_ancestors(location).each { |ancestor| (map[ancestor.id] ||= []) << location }
         end
       end
 
       private
+
+      # Mirrors AncestorReconciler's CTE: a deleted or non-location parent ends the chain.
+      def live_ancestors(location)
+        result = []
+        parent = location.parent
+        ::Books::Category::MAX_DEPTH.times do
+          break unless parent.is_a?(::Books::Category) && parent.location? && !parent.deleted?
+
+          result << parent
+          parent = parent.parent
+        end
+        result
+      end
 
       def refusal_for(item, category)
         item_domain = ::Admin::DomainRouting.domain_for(item)&.to_s

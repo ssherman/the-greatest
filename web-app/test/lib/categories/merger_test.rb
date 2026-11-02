@@ -437,5 +437,25 @@ module Categories
       error = assert_raises(Categories::Refused) { Categories::Merger.new(category: source, category_to_merge_with: fiction).merge }
       assert_equal message, error.message
     end
+
+    test "refuses when the source was soft-deleted after it was loaded, and moves nothing" do
+      stale = Music::Category.find(@source_category.id)
+      Music::Category.find(@source_category.id).update_columns(deleted: true)
+
+      assert_raises(Categories::Refused) do
+        Categories::Merger.new(category: stale, category_to_merge_with: @rock_category).merge
+      end
+      assert_equal 1, CategoryItem.where(category_id: @source_category.id).count
+    end
+
+    test "refuses when the source was merged elsewhere after it was loaded" do
+      stale = Music::Category.find(@source_category.id)
+      Categories::Merger.new(category: @source_category, category_to_merge_with: @progressive_category).merge
+
+      assert_raises(Categories::Refused) do
+        Categories::Merger.new(category: stale, category_to_merge_with: @rock_category).merge
+      end
+      assert_equal 0, CategoryItem.where(category_id: @rock_category.id, item_id: music_albums(:animals).id).count
+    end
   end
 end

@@ -607,7 +607,7 @@ paths:
     x-domain: books
     post:
       operationId: tagAuthor
-      summary: Tag a author with a category
+      summary: Tag an author with a category
       description: |
         Links the category in `category_id` to the author. Tagging twice is a success and changes nothing; tagging with a category that was inferred from a more specific location makes the link direct.
         Refused (422) when the category belongs to another section, was deleted, or was merged (the message names the category it was merged into).
@@ -656,7 +656,7 @@ paths:
     x-domain: books
     delete:
       operationId: untagAuthor
-      summary: Remove a category from a author
+      summary: Remove a category from an author
       description: |
         Removes a direct link. A link inferred from a more specific location cannot be removed directly (422, the message names the location to remove instead); a category the author does not have is 404.
         Requires `books:admin:write`, and the token's owner must be allowed to change both the author and the category.

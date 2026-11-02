@@ -161,5 +161,37 @@ module Categories
       assert ItemLinker.unlink(item: album, category: genre).success?
       assert_empty CategoryItem.where(item: album)
     end
+
+    test "link treats a uniqueness RecordInvalid from a concurrent tag as success" do
+      row = CategoryItem.new(category: @chicago, item: @book)
+      row.errors.add(:category_id, :taken)
+      @book.category_items.stubs(:create!).raises(ActiveRecord::RecordInvalid.new(row))
+
+      assert ItemLinker.link(item: @book, category: @chicago).success?
+    end
+
+    test "unlink of an orphaned inherited row reconciles it away and succeeds" do
+      CategoryItem.create!(category: @il, item: @book, source: :inherited)
+
+      assert ItemLinker.unlink(item: @book, category: @il).success?
+      assert_nil CategoryItem.find_by(item: @book, category: @il)
+    end
+
+    test "inherited_map does not name a location behind a deleted intermediate" do
+      ItemLinker.link(item: @book, category: @chicago)
+      @il.update_columns(deleted: true)
+
+      map = ItemLinker.inherited_map(item: @book)
+
+      assert_nil map[@us.id]
+      assert_nil map[@na.id]
+    end
+
+    test "inherited_map ignores a deleted direct location" do
+      ItemLinker.link(item: @book, category: @chicago)
+      @chicago.update_columns(deleted: true)
+
+      assert_empty ItemLinker.inherited_map(item: @book)
+    end
   end
 end

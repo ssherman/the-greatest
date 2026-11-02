@@ -124,7 +124,7 @@ module Api
     end
 
     test "write implies admin read and books read" do
-      assert_equal ["books:admin:read", "books:read"], Scopes.send(:expand, "books:admin:write").sort
+      assert_equal ["books:admin:read", "books:admin:write", "books:read"], Scopes.effective(["books:admin:write"], users(:admin_user)).sort
     end
 
     test "effective drops scopes the user no longer qualifies for and unknown scopes" do

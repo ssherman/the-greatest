@@ -60,7 +60,7 @@ module Api
       ),
       "books:admin:merge" => Scope.new(
         name: "books:admin:merge",
-        description: "Merge books and authors. This permanently deletes the merged-away records",
+        description: "Merge books, authors and categories, and delete categories. Merging and deleting are permanent, and deleting a category removes every link to it. Includes create, edit and tag.",
         admin: true,
         implies: ["books:admin:write"],
         eligible: ->(user, _member) { !user.service? && ::Books::BookPolicy.new(user, ::Books::Book).destroy? }

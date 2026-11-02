@@ -42,10 +42,13 @@ module Categories
     end
 
     def merge
-      refuse_invalid!
       moved = []
 
       ::Category.transaction do
+        # Lock in id order (no deadlock between opposite merges), then re-check
+        # against the fresh rows: a concurrent merge or delete may have run since load.
+        [source, target].sort_by(&:id).each(&:lock!)
+        refuse_invalid!
         moved = move_items
         ::Category.where(merged_into_id: source.id).update_all(merged_into_id: target.id)
         ::Category.where(parent_id: source.id).update_all(parent_id: target.id)
