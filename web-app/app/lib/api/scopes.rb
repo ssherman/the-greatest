@@ -49,14 +49,14 @@ module Api
         description: "Read the books admin data: search, and the records behind merges",
         admin: true,
         implies: ["books:read"],
-        eligible: ->(user, _member) { ::Books::BookPolicy.new(user, ::Books::Book).index? }
+        eligible: ->(user, _member) { !user.service? && ::Books::BookPolicy.new(user, ::Books::Book).index? }
       ),
       "books:admin:merge" => Scope.new(
         name: "books:admin:merge",
         description: "Merge books and authors. This permanently deletes the merged-away records",
         admin: true,
         implies: ["books:admin:read"],
-        eligible: ->(user, _member) { ::Books::BookPolicy.new(user, ::Books::Book).destroy? }
+        eligible: ->(user, _member) { !user.service? && ::Books::BookPolicy.new(user, ::Books::Book).destroy? }
       )
     }.freeze
 

@@ -65,6 +65,28 @@ module Api
       assert_equal ["books:read", "music:read", "games:read"], Scopes.eligible_for(users(:agent_runner_service_account))
     end
 
+    test "a service account with a global admin role is still not eligible for admin scopes" do
+      service = users(:agent_runner_service_account)
+      service.update_columns(role: User.roles[:admin])
+      eligible = Scopes.eligible_for(service)
+      refute_includes eligible, "books:admin:read"
+      refute_includes eligible, "books:admin:merge"
+    end
+
+    test "a books domain editor may read admin data but not merge" do
+      user = users(:user_with_expired_membership)
+      DomainRole.create!(user: user, domain: :books, permission_level: :editor)
+      eligible = Scopes.eligible_for(user)
+      assert_includes eligible, "books:admin:read"
+      refute_includes eligible, "books:admin:merge"
+    end
+
+    test "a books domain moderator may merge, as can_delete? allows" do
+      user = users(:user_with_expired_membership)
+      DomainRole.create!(user: user, domain: :books, permission_level: :moderator)
+      assert_includes Scopes.eligible_for(user), "books:admin:merge"
+    end
+
     test "mintable_by is eligible_for" do
       user = users(:books_viewer_user)
       assert_equal Scopes.eligible_for(user), Scopes.mintable_by(user)

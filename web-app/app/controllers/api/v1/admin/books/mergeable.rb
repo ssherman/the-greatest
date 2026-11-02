@@ -21,13 +21,16 @@ module Api
             return render_problem(::Api::Problem.new(:invalid_parameter, detail: "source_id must be a positive integer")) if source_id.nil?
 
             dry_run = ActiveModel::Type::Boolean.new.cast(params[:dry_run]) || false
-            target = model_class.find(params[:id])
-            source = model_class.find(source_id)
+            noun = model_class.name.demodulize.downcase
+            target = model_class.find_by(id: params[:id])
+            return render_problem(::Api::Problem.new(:not_found, detail: "No target #{noun} #{params[:id]}")) if target.nil?
+
+            source = model_class.find_by(id: source_id)
+            return render_problem(::Api::Problem.new(:not_found, detail: "No source #{noun} #{source_id}")) if source.nil?
 
             {"source" => source, "target" => target}.each do |role, record|
               next if policy_class.new(current_principal.user, record).destroy?
 
-              noun = model_class.name.demodulize.downcase
               return render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not delete the #{role} #{noun}"))
             end
 
@@ -35,10 +38,11 @@ module Api
             deleted = resource_for(source)
             result = ::Services::Books::AdminMerge.call(source:, target:, dry_run:)
             unless result.success?
+              log_merge(source:, target:, outcome: "failed", errors: result.errors) unless dry_run
               return render_problem(::Api::Problem.new(:unprocessable, detail: result.errors.join(", ")))
             end
 
-            log_merge(source:, target:) unless dry_run
+            log_merge(source:, target:, outcome: "succeeded") unless dry_run
             render json: {
               data: {survivor: resource_for(target), deleted: deleted},
               meta: {dry_run: dry_run},
@@ -58,11 +62,12 @@ module Api
             (id && id >= 1) ? id : nil
           end
 
-          def log_merge(source:, target:)
-            Rails.logger.info(
-              "event=api_admin_merge token_id=#{current_principal.token.id} user_id=#{current_principal.user.id} " \
-              "record_type=#{model_class.name} source_id=#{source.id} target_id=#{target.id}"
-            )
+          def log_merge(source:, target:, outcome:, errors: nil)
+            line = "event=api_admin_merge outcome=#{outcome} token_id=#{current_principal.token.id} " \
+              "user_id=#{current_principal.user.id} record_type=#{model_class.name} " \
+              "source_id=#{source.id} target_id=#{target.id}"
+            line += " errors=#{Array(errors).join("; ").inspect}" if errors
+            Rails.logger.info(line)
           end
         end
       end

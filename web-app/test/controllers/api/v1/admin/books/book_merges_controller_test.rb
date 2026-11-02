@@ -63,6 +63,8 @@ module Api
             merge({source_id: @source.id}, token: ApiTokenSecrets::MEMBER)
             assert_api_response_conform(status: 403, api: :admin)
 
+            assert_equal "insufficient_scope", json[:code]
+
             assert ::Books::Book.exists?(@source.id)
           end
 
@@ -83,12 +85,16 @@ module Api
             merge({source_id: 999_999_999})
             assert_api_response_conform(status: 404, api: :admin)
 
+            assert_equal "No source book 999999999", json[:detail]
+
             assert ::Books::Book.exists?(@target.id)
           end
 
           test "a missing target is a 404" do
             merge({source_id: @source.id}, id: 0)
             assert_api_response_conform(status: 404, api: :admin)
+
+            assert_equal "No target book 0", json[:detail]
 
             assert ::Books::Book.exists?(@source.id)
           end
@@ -188,10 +194,20 @@ module Api
 
           test "a real merge writes exactly one merge log line" do
             Rails.logger.stubs(:info)
-            Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_merge .*record_type=Books::Book .*source_id=#{@source.id} target_id=#{@target.id}/)).once
+            Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_merge outcome=succeeded .*record_type=Books::Book .*source_id=#{@source.id} target_id=#{@target.id}/)).once
 
             merge({source_id: @source.id})
             assert_response :ok
+          end
+
+          test "a failing merger writes exactly one merge log line with outcome failed" do
+            merger = stub(call: ::Books::Book::Merger::Result.new(success?: false, data: nil, errors: ["boom"]), stats: {})
+            ::Books::Book::Merger.expects(:new).returns(merger)
+            Rails.logger.stubs(:info)
+            Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_merge outcome=failed .*source_id=#{@source.id} target_id=#{@target.id} errors="boom"/)).once
+
+            merge({source_id: @source.id})
+            assert_response :unprocessable_entity
           end
 
           test "a dry run writes no merge log line" do

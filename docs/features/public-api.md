@@ -19,7 +19,7 @@ Members mint tokens at `/developers/tokens`: a name (≤60 chars), any of the th
 
 ## Scopes
 
-`Api::Scopes` — `books:read`, `music:read`, `games:read`. Members may mint the three reads; service accounts get whatever an admin assigns. `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy (`x:write` implies `x:read`) is already honoured for when write scopes exist.
+`Api::Scopes` — `books:read`, `music:read`, `games:read`. Members may mint the three reads; service accounts get the read scopes only (never an admin scope, even if the account holds an admin role). `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy (`x:write` implies `x:read`) is already honoured for when write scopes exist.
 
 ## Admin permissions
 
