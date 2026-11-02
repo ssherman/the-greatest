@@ -23,6 +23,11 @@ module Api
       include ::Api::RateLimited
 
       class_attribute :required_scope, instance_writer: false
+      class_attribute :action_scopes, instance_writer: false
+
+      # A controller whose actions need different scopes maps each action to
+      # one. An action missing from the map fails closed, like no declaration.
+      def self.require_scopes(map) = self.action_scopes = map.transform_keys(&:to_s).freeze
 
       before_action :require_scope!
 
@@ -31,8 +36,8 @@ module Api
       private
 
       def require_scope!
-        scope = required_scope
-        raise "#{self.class.name} declares no required_scope" if scope.nil?
+        scope = action_scopes ? action_scopes[action_name] : required_scope
+        raise "#{self.class.name} declares no required scope for #{action_name}" if scope.nil?
         return if current_principal.scope?(scope)
 
         render_problem(

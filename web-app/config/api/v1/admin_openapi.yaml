@@ -191,6 +191,47 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    post:
+      operationId: createAdminCategory
+      summary: Create a category
+      description: |
+        Creates a books category. `name` is required; `category_type` defaults to `genre`. Refused (422) when an active category of the same type already uses the name, as its name or as an alias. Requires `books:admin:write`, and the token's owner must be allowed to write books categories.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryWrite"
+      responses:
+        "201":
+          description: The category was created.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCategoryDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/categories/{id}:
     x-domain: books
     get:
@@ -225,6 +266,51 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    patch:
+      operationId: updateAdminCategory
+      summary: Edit a category
+      description: |
+        Changes only the keys sent. A rename keeps the id, and the old slug still resolves. Deleted and merged categories cannot be edited (422). Refused (422) when the new name belongs to another active category of the same type, as its name or as an alias; changing only the case of its own name is allowed. Requires `books:admin:write`, and the token's owner must be allowed to write books categories.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryWrite"
+      responses:
+        "200":
+          description: The category after the change.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCategoryDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/books/{id}/merge:
@@ -392,7 +478,7 @@ components:
       schema: {type: string}
   responses:
     BadRequest:
-      description: A query parameter is malformed or out of range.
+      description: A query parameter or body field is malformed or out of range.
       headers:
         X-RateLimit-Limit:
           $ref: "#/components/headers/X-RateLimit-Limit"
@@ -455,7 +541,7 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     Unprocessable:
-      description: The request was understood but the merge is not allowed or failed (`unprocessable`), for example merging a record into itself.
+      description: The request was understood but is not allowed or failed (`unprocessable`), for example merging a record into itself, or giving a category a name another one already uses.
       headers:
         X-RateLimit-Limit:
           $ref: "#/components/headers/X-RateLimit-Limit"
@@ -668,6 +754,24 @@ components:
           $ref: "#/components/schemas/PaginationMeta"
         links:
           $ref: "#/components/schemas/PaginationLinks"
+    CategoryWrite:
+      type: object
+      description: Only the keys sent are used; unknown keys are ignored.
+      properties:
+        name: {type: string, description: Required on create.}
+        category_type:
+          type: string
+          enum: [genre, location, subject, theme, audience]
+        description: {type: [string, "null"]}
+        alternative_names:
+          type: array
+          items: {type: string}
+        parent_id:
+          description: The parent category's id (a books location, for a location), or null for none. A JSON integer, or a string of plain decimal digits.
+          oneOf:
+            - {type: integer, minimum: 1}
+            - {type: string, pattern: "^0*[1-9][0-9]*$"}
+            - {type: "null"}
     MergeRequest:
       type: object
       required: [source_id]

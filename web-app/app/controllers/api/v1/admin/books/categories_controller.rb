@@ -6,9 +6,16 @@ module Api
       module Books
         # GET /api/v1/admin/categories     -- search; q optional
         # GET /api/v1/admin/categories/:id -- detail, any status
+        # POST /api/v1/admin/categories     -- create
+        # PATCH /api/v1/admin/categories/:id -- edit (name, type, description, aliases, parent)
         #
         # Root-anchor every ::Books:: / ::Category reference in this namespace.
         class CategoriesController < BaseController
+          include ::Api::V1::Admin::StrictIds
+
+          require_scopes index: "books:admin:read", show: "books:admin:read",
+            create: "books:admin:write", update: "books:admin:write"
+
           STATUSES = %w[active deleted merged all].freeze
 
           # The Category enum also holds music and game types; these are the ones
@@ -38,7 +45,94 @@ module Api
             render json: {data: CategoryResource.new(category, params: counts_for([category.id]), with_traits: :full).to_h}
           end
 
+          def create
+            category = ::Books::Category.new
+            return render_forbidden unless ::Books::CategoryPolicy.new(current_principal.user, category).create?
+
+            attributes = writable_attributes
+            return if performed?
+
+            save(category, attributes, status: :created)
+          end
+
+          def update
+            category = ::Books::Category.find(params[:id])
+            return render_forbidden unless ::Books::CategoryPolicy.new(current_principal.user, category).update?
+
+            attributes = writable_attributes
+            return if performed?
+            if category.deleted?
+              state = category.merged_into_id ? "merged" : "deleted"
+              return render_problem(::Api::Problem.new(:unprocessable, detail: "This category is #{state} and cannot be edited"))
+            end
+
+            save(category, attributes, status: :ok)
+          end
+
           private
+
+          def render_forbidden
+            render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not change categories"))
+          end
+
+          def save(category, attributes, status:)
+            category.assign_attributes(attributes)
+            twin = ::Categories::NameGuard.conflict(category)
+            if twin
+              kind = twin.name.casecmp?(category.name.to_s.strip) ? "name" : "alias"
+              return render_problem(::Api::Problem.new(:unprocessable, detail: "Another category already uses that name: #{twin.id} (#{kind})"))
+            end
+
+            result = ::Categories::Editor.call(category: category, attributes: attributes)
+            return render_problem(::Api::Problem.new(:unprocessable, detail: result.errors.join(", "))) unless result.success?
+
+            render status: status, json: {data: CategoryResource.new(category.reload, params: counts_for([category.id]), with_traits: :full).to_h}
+          end
+
+          # The keys present in the body, validated; unknown keys are ignored.
+          # Renders the 400/422 itself (callers check performed?).
+          def writable_attributes
+            attributes = {}
+            attributes[:name] = params[:name].to_s if params.key?(:name)
+            attributes[:description] = params[:description]&.to_s if params.key?(:description)
+
+            if params.key?(:category_type)
+              type = params[:category_type].to_s
+              return bad_parameter("category_type must be one of #{TYPES.join(", ")}") unless TYPES.include?(type)
+
+              attributes[:category_type] = type
+            end
+
+            if params.key?(:alternative_names)
+              names = params[:alternative_names]
+              unless names.is_a?(Array) && names.all?(String)
+                return bad_parameter("alternative_names must be an array of strings")
+              end
+
+              attributes[:alternative_names] = names.map(&:strip).reject(&:blank?)
+            end
+
+            if params.key?(:parent_id)
+              if params[:parent_id].nil?
+                attributes[:parent_id] = nil
+              else
+                parent_id = parse_id(params[:parent_id])
+                return bad_parameter("parent_id must be a positive integer or null") if parent_id.nil?
+                unless ::Books::Category.exists?(parent_id)
+                  return render_problem(::Api::Problem.new(:unprocessable, detail: "No parent category #{parent_id}"))
+                end
+
+                attributes[:parent_id] = parent_id
+              end
+            end
+
+            attributes
+          end
+
+          def bad_parameter(detail)
+            render_problem(::Api::Problem.new(:invalid_parameter, detail: detail))
+            nil
+          end
 
           def scoped_by_status(status)
             scope = ::Books::Category.all

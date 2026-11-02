@@ -11,6 +11,7 @@ module Api
         # Root-anchor every ::Books:: reference in this namespace.
         module Mergeable
           extend ActiveSupport::Concern
+          include ::Api::V1::Admin::StrictIds
 
           included do
             require_scope "books:admin:merge"
@@ -51,16 +52,6 @@ module Api
           end
 
           private
-
-          # A JSON integer, or a string of plain decimal digits. Never Integer(str):
-          # it honours radix prefixes ("010" is 8, "0x1A" is 26, "1_0" is 10), and
-          # this id names a record that is about to be deleted.
-          def parse_id(value)
-            id = value if value.is_a?(Integer)
-            id = Integer(value, 10) if value.is_a?(String) && value.match?(/\A\d+\z/)
-
-            (id && id >= 1) ? id : nil
-          end
 
           def log_merge(source:, target:, outcome:, errors: nil)
             line = "event=api_admin_merge outcome=#{outcome} token_id=#{current_principal.token.id} " \

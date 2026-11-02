@@ -209,6 +209,143 @@ module Api
             get "/api/v1/admin/categories/#{@novels.id}", headers: bearer(ApiTokenSecrets::MEMBER)
             assert_api_response_conform(status: 403, api: :admin)
           end
+
+          WRITE_BODY = {name: "Magic Realism", category_type: "genre", description: "Fabulist", alternative_names: ["Magical Realism"]}.freeze
+
+          def write_token_for(user)
+            ::Services::Api::Tokens.generate(user: user, name: "writer", scopes: ["books:admin:write"], expires_at: 30.days.from_now).data[:secret]
+          end
+
+          def write_token
+            @write_token ||= begin
+              user = User.create!(email: "cat-editor@example.com", name: "Cat Editor")
+              user.domain_roles.create!(domain: :books, permission_level: :editor)
+              write_token_for(user)
+            end
+          end
+
+          def create_category(body, token: write_token) = post("/api/v1/admin/categories", params: body, as: :json, headers: bearer(token))
+
+          def update_category(id, body, token: write_token) = patch("/api/v1/admin/categories/#{id}", params: body, as: :json, headers: bearer(token))
+
+          test "create returns 201 with the full shape" do
+            assert_difference -> { ::Books::Category.count }, 1 do
+              create_category(WRITE_BODY.merge(ignored_key: "x"))
+            end
+            assert_api_response_conform(status: 201, api: :admin)
+
+            assert_equal "Magic Realism", json[:data][:name]
+            assert_equal ["Magical Realism"], json[:data][:alternative_names]
+            assert_equal "genre", json[:data][:category_type]
+          end
+
+          test "a merge-scoped token can also write" do
+            create_category(WRITE_BODY, token: ApiTokenSecrets::ADMIN)
+            assert_api_response_conform(status: 201, api: :admin)
+          end
+
+          test "a duplicate name is 422 naming the existing id" do
+            create_category({name: "novels"})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert_includes json[:detail], "Another category already uses that name: #{@novels.id} (name)"
+          end
+
+          test "a duplicate alias is 422 naming the id and kind" do
+            @novels.update!(alternative_names: ["Prose Fiction"])
+
+            create_category({name: "Prose fiction"})
+            assert_includes json[:detail], "#{@novels.id} (alias)"
+          end
+
+          test "a case-only rename is allowed" do
+            update_category(@novels.id, {name: "NOVELS"})
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal "NOVELS", @novels.reload.name
+          end
+
+          test "update keeps the id and changes only the keys sent" do
+            update_category(@novels.id, {description: "New words"})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal @novels.id, json[:data][:id]
+            assert_equal "New words", @novels.reload.description
+            assert_equal "Novels", @novels.name
+          end
+
+          test "a parent that makes a cycle is 422 with the model message" do
+            france = categories(:books_france_location)
+            child = ::Books::Category.create!(name: "Paris", category_type: :location, parent: france)
+
+            update_category(france.id, {parent_id: child.id})
+            assert_api_response_conform(status: 422, api: :admin)
+            assert_includes json[:detail], "cycle"
+          end
+
+          test "editing a merged or deleted category is 422" do
+            update_category(merged_category.id, {description: "x"})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            update_category(categories(:books_deleted_genre).id, {description: "x"})
+            assert_response :unprocessable_entity
+          end
+
+          test "bad bodies are 400" do
+            create_category({name: "Zed", category_type: "player_perspective"})
+            assert_api_response_conform(status: 400, api: :admin)
+
+            create_category({name: "Zed", alternative_names: "nope"})
+            assert_response :bad_request
+
+            update_category(@novels.id, {parent_id: "0x1A"})
+            assert_response :bad_request
+
+            update_category(@novels.id, {parent_id: 0})
+            assert_response :bad_request
+          end
+
+          test "a missing parent is 422" do
+            update_category(@novels.id, {parent_id: 999_999_999})
+            assert_response :unprocessable_entity
+          end
+
+          test "an unknown id is 404" do
+            update_category(999_999_999, {description: "x"})
+            assert_api_response_conform(status: 404, api: :admin)
+          end
+
+          test "a read-only or member token cannot write" do
+            create_category(WRITE_BODY, token: READ)
+            assert_api_response_conform(status: 403, api: :admin)
+            update_category(@novels.id, {description: "x"}, token: ApiTokenSecrets::MEMBER)
+            assert_response :forbidden
+            assert_not_equal "x", @novels.reload.description
+          end
+
+          test "a write-scoped token also reads" do
+            get "/api/v1/admin/categories", headers: bearer(write_token)
+            assert_response :ok
+          end
+
+          test "a write token whose owner was demoted to viewer is 403" do
+            secret = write_token
+            User.find_by!(email: "cat-editor@example.com").domain_roles.find_by!(domain: :books).update!(permission_level: :viewer)
+
+            create_category(WRITE_BODY, token: secret)
+            assert_response :forbidden
+            assert_not ::Books::Category.exists?(name: "Magic Realism")
+          end
+
+          test "an action with no mapped scope fails closed" do
+            klass = Class.new(::Api::V1::BaseController) do
+              require_scopes show: "books:admin:read"
+            end
+            controller = klass.new
+            controller.stubs(:action_name).returns("index")
+            controller.stubs(:current_principal).returns(stub(scope?: true))
+
+            assert_raises(RuntimeError) { controller.send(:require_scope!) }
+          end
         end
       end
     end
