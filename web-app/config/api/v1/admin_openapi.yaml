@@ -132,6 +132,101 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/categories:
+    x-domain: books
+    get:
+      operationId: searchAdminCategories
+      summary: Search categories
+      description: |
+        Books categories of every status, by name. `q` is optional and matches the name and the alternative names as a case-insensitive substring; without it every category of the given filters is listed by name. With `q`, an exact name match comes first, then a name that starts with it, then a word that starts with it, then the rest. Requires `books:admin:read`.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: The search text.
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          description: Only categories of this type.
+          schema:
+            type: string
+            enum: [genre, location, subject, theme, audience]
+        - name: status
+          in: query
+          required: false
+          description: "`active` (default) excludes deleted and merged categories; `deleted` is soft-deleted and not merged; `merged` is those folded into another."
+          schema:
+            type: string
+            enum: [active, deleted, merged, all]
+            default: active
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of matching categories.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCategoryCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/categories/{id}:
+    x-domain: books
+    get:
+      operationId: getAdminCategory
+      summary: One category, any status
+      description: The category with its children and, for a location, its ancestors from the top down. Deleted and merged categories answer too. Requires `books:admin:read`.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The category.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCategoryDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/books/{id}/merge:
     x-domain: books
     post:
@@ -473,6 +568,81 @@ components:
           type: [integer, "null"]
           description: Position in the site's primary author ranking; null when unranked.
         book_count: {type: integer, minimum: 0, description: Books credited to this author, provisional included.}
+    CategoryRef:
+      type: object
+      required: [id, slug, name]
+      properties:
+        id: {type: integer}
+        slug: {type: [string, "null"]}
+        name: {type: string}
+    AdminCategory:
+      type: object
+      required: [id, slug, name, category_type, description, parent, alternative_names, deleted, merged_into, item_count, book_link_count, author_link_count, children_count, import_source, created_at, updated_at]
+      properties:
+        id: {type: integer}
+        slug: {type: [string, "null"]}
+        name: {type: string}
+        category_type:
+          type: string
+          enum: [genre, location, subject, theme, audience]
+        description: {type: [string, "null"]}
+        parent:
+          description: The raw parent, even when it is deleted or merged.
+          oneOf:
+            - {type: "null"}
+            - $ref: "#/components/schemas/CategoryRef"
+        alternative_names:
+          type: array
+          items: {type: string}
+        deleted: {type: boolean, description: True for a soft-deleted category and for one merged into another.}
+        merged_into:
+          type: [object, "null"]
+          required: [id, name]
+          properties:
+            id: {type: integer}
+            name: {type: string}
+        item_count: {type: integer, minimum: 0, description: The catalog counter cache, all item types.}
+        book_link_count: {type: integer, minimum: 0, description: Books carrying the category, any source.}
+        author_link_count: {type: integer, minimum: 0, description: Authors carrying the category, any source.}
+        children_count: {type: integer, minimum: 0}
+        import_source:
+          type: [string, "null"]
+          enum: [amazon, open_library, openai, goodreads, musicbrainz, igdb, null]
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AdminCategoryFull:
+      allOf:
+        - $ref: "#/components/schemas/AdminCategory"
+        - type: object
+          required: [children, ancestors]
+          properties:
+            children:
+              type: array
+              items:
+                $ref: "#/components/schemas/CategoryRef"
+            ancestors:
+              type: array
+              description: A location's parents, root first. Empty for every other type.
+              items:
+                $ref: "#/components/schemas/CategoryRef"
+    AdminCategoryDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminCategoryFull"
+    AdminCategoryCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminCategory"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
     AdminBookCollection:
       type: object
       required: [data, meta, links]
