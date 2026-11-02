@@ -10,7 +10,7 @@ module Api
     end
 
     test "registers the admin scopes" do
-      assert_equal ["books:read", "music:read", "games:read", "books:admin:read", "books:admin:merge"], Scopes.all
+      assert_equal ["books:read", "music:read", "games:read", "books:admin:read", "books:admin:write", "books:admin:merge"], Scopes.all
       assert Scopes.admin?("books:admin:merge")
       refute Scopes.admin?("books:read")
     end
@@ -37,7 +37,7 @@ module Api
     test "a global admin without a membership is eligible for every books scope, but not other sites' reads" do
       admin = users(:admin_user)
       admin.memberships.destroy_all
-      assert_equal ["books:read", "books:admin:read", "books:admin:merge"].sort, Scopes.eligible_for(admin).sort
+      assert_equal ["books:read", "books:admin:read", "books:admin:write", "books:admin:merge"].sort, Scopes.eligible_for(admin).sort
     end
 
     test "a global editor is eligible for merge" do
@@ -95,6 +95,36 @@ module Api
     test "effective expands implied scopes before intersecting" do
       viewer = users(:books_viewer_user)
       assert_equal ["books:read", "books:admin:read"].sort, Scopes.effective(["books:admin:merge"], viewer).sort
+    end
+
+    test "effective merge for an admin includes write, read and books:read" do
+      effective = Scopes.effective(["books:admin:merge"], users(:admin_user))
+      assert_equal ["books:read", "books:admin:read", "books:admin:write", "books:admin:merge"].sort, effective.sort
+    end
+
+    test "write is eligible for global admin and global editor" do
+      assert_includes Scopes.eligible_for(users(:admin_user)), "books:admin:write"
+      assert_includes Scopes.eligible_for(users(:editor_user)), "books:admin:write"
+    end
+
+    test "write is eligible for books domain editor, moderator and admin" do
+      %i[editor moderator admin].each do |level|
+        user = User.create!(email: "write-#{level}@example.com", name: "W #{level}")
+        DomainRole.create!(user: user, domain: :books, permission_level: level)
+        assert_includes Scopes.eligible_for(user), "books:admin:write", level.to_s
+      end
+    end
+
+    test "write is not eligible for a books viewer, a member or a service account" do
+      refute_includes Scopes.eligible_for(users(:books_viewer_user)), "books:admin:write"
+      refute_includes Scopes.eligible_for(users(:regular_user)), "books:admin:write"
+      service = users(:agent_runner_service_account)
+      service.update_columns(role: User.roles[:admin])
+      refute_includes Scopes.eligible_for(service), "books:admin:write"
+    end
+
+    test "write implies admin read and books read" do
+      assert_equal ["books:admin:read", "books:admin:write", "books:read"], Scopes.effective(["books:admin:write"], users(:admin_user)).sort
     end
 
     test "effective drops scopes the user no longer qualifies for and unknown scopes" do

@@ -649,6 +649,9 @@ Rails.application.routes.draw do
           resources :books, only: [:index, :show], param: :slug
           get "books/:slug/lists", to: "book_lists#index", as: :book_lists
           resources :authors, only: [:index, :show], param: :slug
+          get "categories", to: "categories#index"
+          get "categories/:slug", to: "categories#show", as: :category
+          get "categories/:slug/books", to: "category_books#index", as: :category_books
           resources :ranking_configurations, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/books", to: "books#index",
             as: :ranking_configuration_books, constraints: {ranking_configuration_id: /\d+/}
@@ -666,8 +669,18 @@ Rails.application.routes.draw do
           scope module: :books do
             get "books", to: "books#index"
             get "authors", to: "authors#index"
+            get "categories", to: "categories#index"
+            get "categories/:id", to: "categories#show", constraints: {id: /\d+/}
+            post "categories", to: "categories#create"
+            patch "categories/:id", to: "categories#update", constraints: {id: /\d+/}
+            post "categories/:id/merge", to: "categories#merge", constraints: {id: /\d+/}
+            delete "categories/:id", to: "categories#destroy", constraints: {id: /\d+/}
             post "books/:id/merge", to: "book_merges#create", constraints: {id: /\d+/}
             post "authors/:id/merge", to: "author_merges#create", constraints: {id: /\d+/}
+            post "books/:id/categories", to: "book_categories#create", constraints: {id: /\d+/}
+            delete "books/:id/categories/:category_id", to: "book_categories#destroy", constraints: {id: /\d+/, category_id: /\d+/}
+            post "authors/:id/categories", to: "author_categories#create", constraints: {id: /\d+/}
+            delete "authors/:id/categories/:category_id", to: "author_categories#destroy", constraints: {id: /\d+/, category_id: /\d+/}
           end
         end
       end

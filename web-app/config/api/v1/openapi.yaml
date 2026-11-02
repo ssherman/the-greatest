@@ -476,6 +476,135 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/categories:
+    x-domain: books
+    get:
+      operationId: listCategories
+      summary: Categories of one type
+      description: |
+        The categories of one `type` that have ranked books, in the site's primary ranking. `type` is one of `genre`, `audience`, `location` or `subject` and defaults to `genre`; the site calls locations "settings", but the API only accepts `location`. `sort` is `book_count` (most ranked books first, the default) or `name`. Subjects and locations with only a handful of ranked books are left out, as on the site. Empty until a primary ranking has been calculated. Any other `type` or `sort` is a 400.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [genre, audience, location, subject]
+            default: genre
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [book_count, name]
+            default: book_count
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of categories.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/categories/{slug}:
+    x-domain: books
+    get:
+      operationId: getCategory
+      summary: One category
+      description: |
+        One category by slug. A slug the category used to have, or the slug of a category that was merged into another, resolves to the category it now lives under, so the returned `slug` may differ from the one you asked for. Any kind of category answers here, themes included. `book_count` is the number of books in the site's primary ranking that carry the category (0 when none, or when no ranking exists yet), not the size of the whole catalogue.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+      responses:
+        "200":
+          description: The category.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/categories/{slug}/books:
+    x-domain: books
+    get:
+      operationId: listCategoryBooks
+      summary: Books in a category
+      description: The same ranked books as `GET /api/v1/books` (same fields, same `rank`, best first), limited to the books that carry the category. Old and merged slugs resolve as they do on `GET /api/v1/categories/{slug}`, and the `links` point at the category's current slug.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the category's ranked books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -715,7 +844,7 @@ components:
                   id: {type: integer}
                   slug: {type: [string, "null"]}
                   name: {type: string}
-                  category_type: {type: string, description: "genre, audience (Children's, Middle Grade, Young Adult), subject or location"}
+                  category_type: {type: string, description: "genre, audience (Children's, Middle Grade, Young Adult), subject, location or theme"}
             countries:
               type: array
               items:
@@ -926,6 +1055,44 @@ components:
           description: The book's place on this list as published; null when the list is unordered.
         list:
           $ref: "#/components/schemas/List"
+    Category:
+      type: object
+      required: [id, slug, name, category_type, description, parent, book_count]
+      properties:
+        id: {type: integer}
+        slug: {type: [string, "null"]}
+        name: {type: string}
+        category_type: {type: string, description: "genre, audience (Children's, Middle Grade, Young Adult), subject, location or theme"}
+        description: {type: [string, "null"]}
+        parent:
+          type: [object, "null"]
+          required: [id, slug, name]
+          properties:
+            id: {type: integer}
+            slug: {type: [string, "null"]}
+            name: {type: string}
+        book_count:
+          type: integer
+          minimum: 0
+          description: Books in the site's primary ranking that carry this category.
+    CategoryCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    CategoryItem:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Category"
     BookListingCollection:
       type: object
       required: [data, meta, links]

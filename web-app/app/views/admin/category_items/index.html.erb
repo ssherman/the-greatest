@@ -1,6 +1,7 @@
 <%
   item = local_assigns.fetch(:item, @item)
   category_items = local_assigns.fetch(:category_items, @category_items)
+  inherited_map = ::Categories::ItemLinker.inherited_map(item: item)
 %>
 <%= turbo_frame_tag "category_items_list" do %>
   <% if category_items.any? %>
@@ -23,17 +24,23 @@
                       class: "link link-primary",
                       data: { turbo_frame: "_top" } %>
                 </div>
+                <% via = inherited_map[category_item.category_id] || [] %>
+                <% if category_item.source_inherited? && via.any? %>
+                  <div class="text-xs text-base-content/70">via <%= via.map(&:name).join(", ") %></div>
+                <% end %>
               </td>
               <td>
                 <span class="badge badge-ghost badge-sm"><%= category_item.category.category_type&.titleize %></span>
               </td>
               <td>
                 <div class="flex gap-2">
+                  <% if !category_item.source_inherited? || via.empty? %>
                   <%= button_to "Remove",
                       admin_category_item_path(category_item),
                       method: :delete,
                       class: "btn btn-xs btn-error btn-outline",
                       form: { data: { turbo_confirm: "Remove #{category_item.category.name} from this #{item.class.name.demodulize.downcase}?" } } %>
+                  <% end %>
                 </div>
               </td>
             </tr>
