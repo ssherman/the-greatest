@@ -5,7 +5,9 @@ require "test_helper"
 module Books
   module Goodreads
     # catch_22_* are real searches, no_results and beloved_title_only were
-    # fetched 2026-10-25; redesigned.html is synthetic.
+    # fetched 2026-10-25; redesigned.html is synthetic. The *_redesign_2026_11
+    # pages are real searches in the card layout Goodreads moved to in
+    # November 2026, trimmed to three results (scripts, styles and images out).
     class SearchPageTest < ActiveSupport::TestCase
       def search_html(name)
         path = file_fixture("goodreads/searches/#{name}")
@@ -43,6 +45,29 @@ module Books
 
       test "Goodreads' no-results page is no_results with no rows" do
         parsed = SearchPage.parse(html: search_html("no_results.html.gz"), status: 200)
+
+        assert_equal [:no_results, []], [parsed.outcome, parsed.rows]
+      end
+
+      test "the November 2026 card layout yields each result once, with the series in the old suffix form" do
+        parsed = SearchPage.parse(html: search_html("jojo_redesign_2026_11.html.gz"), status: 200)
+
+        assert_equal [:found, [22545983, 7698607, 25398914]], [parsed.outcome, parsed.rows.map(&:goodreads_book_id)]
+        first, second, third = parsed.rows
+        assert_equal ["JoJo's Bizarre Adventure: Part 1—Phantom Blood, Vol. 1 (Phantom Blood Deluxe, #1)", ["Hirohiko Araki"], 2015, 27],
+          [first.title, first.author_names, first.year, first.editions_count]
+        assert_equal [6677, 5, 2004], [second.ratings_count, second.editions_count, second.year]
+        assert_equal ["Hirohiko Araki", "Evan Galloway"], third.author_names
+      end
+
+      test "an abbreviated ratings count reads as its whole number" do
+        parsed = SearchPage.parse(html: search_html("jojo_redesign_2026_11.html.gz"), status: 200)
+
+        assert_equal 12_000, parsed.rows.first.ratings_count
+      end
+
+      test "the card layout's no-results page is no_results" do
+        parsed = SearchPage.parse(html: search_html("no_results_redesign_2026_11.html.gz"), status: 200)
 
         assert_equal [:no_results, []], [parsed.outcome, parsed.rows]
       end

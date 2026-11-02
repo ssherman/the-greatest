@@ -13,7 +13,7 @@ module Services
       # data[:outcome]:
       # - :found, :not_found: stored, and the answer from now on;
       # - :blocked, :unparseable: stored with the HTML for a later look, and
-      #   fetched again later; the caller stops all fetches for a while;
+      #   fetched again later; a blocked one stops all fetches for a while;
       # - :unavailable: Goodreads' error page, a timeout or a network failure;
       #   nothing stored, worth another try;
       # - :fetcher_down: the page fetcher cannot fetch at all (its breaker is
@@ -24,7 +24,7 @@ module Services
       # columns (a legacy row has no HTML at all) and fills them. Nothing the
       # import verified changes: a refetch that does not parse as found leaves
       # the row alone and the answer stays :found, except a blocked or
-      # unparseable refetch, which is reported so the caller can back off.
+      # unparseable refetch, which is reported so the caller can act on it.
       #
       # A refresh of a legacy row also replaces series, isbn13, isbn10 and asin.
       # The legacy seed holds series entries with no Goodreads series id (which

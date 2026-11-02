@@ -232,8 +232,18 @@ attempts included, is terminal and so frees them, so a Goodreads outage never ho
   cooldown are the gate's: a refusal waits until tomorrow or the cooldown's end. The Goodreads import
   draws on the same budget and there is no sub-cap or priority: enrichment and import share it first
   come, first served. The `goodreads_fetch` queue's concurrency of 1 is what makes the gate lock-free.
+- **A page it cannot read ends only that book.** A blocked fetch (401/403/429 or a challenge page)
+  closes the gate for the cooldown and the step waits it out once; a second block on the same page
+  ends the step as `blocked`. A page Goodreads served that the parser cannot read (`unparseable`, a
+  search or a book page) ends the step at once and leaves the gate open, so every other book keeps
+  fetching. It used to close the gate too, and when Goodreads redesigned its search page (2026-11-01)
+  that froze all enrichment for 30 hours. The HTML is kept. After a parser fix, an `unparseable`
+  search stored under an older `SearchPage::VERSION` is re-read (`GoodreadsPages::ReparseSearch`)
+  before the step fetches it again, and `bin/rails books:goodreads:rerun_unparseable[limit]`
+  queues a fresh run for each book whose latest run ended `unparseable` (default 500, oldest first;
+  a second run of the task skips books already re-run).
 - **Results.** `matched` with `{matched: true, goodreads_book_id, page_id}`, or `no_match` / `rejected`
-  with `{matched: false}` and one `books.goodreads` ledger row. `book_facts` reads the page named by
+  / `blocked` / `unparseable` with `{matched: false}` and one `books.goodreads` ledger row. `book_facts` reads the page named by
   `page_id` and nothing else from the step, so a later re-enrichment can feed the same cached page without
   a Goodreads step in its run.
 - **Find and apply are separate** (spec section 10). Find (search, pick, fetch, re-check) costs fetches.

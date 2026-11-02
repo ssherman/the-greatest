@@ -64,7 +64,9 @@ reuses this machinery for new books:
   enrichment step no fetch, because they arrive with a Goodreads id and a cached page.
 - **The search cache.** `books_goodreads_searches` stores each title search (rows and HTML, `found` or
   `no_results`) keyed by the normalized query and is fresh for 30 days, so a retried or repeated search
-  fetches nothing.
+  fetches nothing. `Books::Goodreads::SearchPage` (version 2) reads the card layout Goodreads moved to
+  in November 2026 and falls back to the older table layout. Card ratings counts are abbreviated
+  ("12k ratings") and read as round numbers; they only order the candidates.
 - **A match is durable.** It is the `books_work_goodreads_id` identifier with source `goodreads`, which is
   separate from the `goodreads_import` source of user-import data.
 
@@ -138,8 +140,9 @@ for it. Matched editions never touch Goodreads.
   `daily_fetch_cap` (1,500), each fetch counted against the day it starts on, so a line that runs
   past midnight fills the next day's cap. A job waits for its turn by rescheduling itself, and a turn that came
   due late (after a deploy or a slow fetch) still waits out `fetch_interval` since the last fetch
-  actually began. A page with no title or no contributors is unparseable, never found. A 403, a challenge or
-  an unrecognizable page blocks all fetching for `block_cooldown` (6 h). Goodreads' own 503 page
+  actually began. A page with no title or no contributors is unparseable, never found. A 401/403/429 or a
+  challenge page blocks all fetching for `block_cooldown` (6 h); an unrecognizable page does not, and
+  its editions settle as if no page came back. Goodreads' own 503 page
   and timeouts are retried through the line up to `fetch_attempts` (3). Settings:
   `config/initializers/goodreads.rb`.
 - **Reading.** `Books::Goodreads::BookPage` reads `__NEXT_DATA__`, or the markup and `ld+json`

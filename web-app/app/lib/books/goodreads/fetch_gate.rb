@@ -77,7 +77,7 @@ module Books
       end
 
       def block!
-        Rails.logger.warn("#{self.class.name}: Goodreads blocked a fetch or served an unrecognizable page; " \
+        Rails.logger.warn("#{self.class.name}: Goodreads blocked a fetch; " \
           "no fetches for #{@config.block_cooldown}s")
         write("blocked_until" => now + @config.block_cooldown)
       end
