@@ -73,6 +73,8 @@ query per tree level. Subjects render as before.
 - Saved searches and recommendation settings store category ids. They resolve merged ids through `replace_merged_ids` at query time and in their labels; stored ids are not rewritten.
 - The weekly sync links a new legacy item to the merge target. A link to a category deleted without a merge is still dropped.
 - Admin: the category page has a merge form (target picked by autocomplete, plus a confirm checkbox; needs destroy permission). Alternative names are edited one per line, because names such as "Oakland, California" contain commas.
+- The admin UI and the admin API (`docs/features/public-api.md`, "Admin permissions") share their logic: create and edit go through `Categories::Editor` with `Categories::NameGuard` for the twin-name check, and tagging a book or author goes through `Categories::ItemLinker`. The linker refuses a category from another site and a deleted or merged one (the message names the merge target), and tagging a category the item already has is a no-op success, not a uniqueness error.
+- Inherited location tags (the ancestors `AncestorReconciler` adds) show "via <location>" on the tagging screen and have no Remove button. Removing one directly is refused with a message naming the more specific location; remove that and the ancestor goes with it. Re-adding an inherited tag directly upgrades it to a direct link.
 
 ## Browse threshold and alias search
 
