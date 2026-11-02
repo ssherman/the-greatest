@@ -52,7 +52,7 @@ module Api
             attributes = writable_attributes
             return if performed?
 
-            save(category, attributes, status: :created)
+            persist_and_render(category, attributes, status: :created)
           end
 
           def update
@@ -66,7 +66,7 @@ module Api
               return render_problem(::Api::Problem.new(:unprocessable, detail: "This category is #{state} and cannot be edited"))
             end
 
-            save(category, attributes, status: :ok)
+            persist_and_render(category, attributes, status: :ok)
           end
 
           private
@@ -75,7 +75,7 @@ module Api
             render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not change categories"))
           end
 
-          def save(category, attributes, status:)
+          def persist_and_render(category, attributes, status:)
             category.assign_attributes(attributes)
             twin = ::Categories::NameGuard.conflict(category)
             if twin
@@ -93,8 +93,19 @@ module Api
           # Renders the 400/422 itself (callers check performed?).
           def writable_attributes
             attributes = {}
-            attributes[:name] = params[:name].to_s if params.key?(:name)
-            attributes[:description] = params[:description]&.to_s if params.key?(:description)
+            if params.key?(:name)
+              return bad_parameter("name must be a string") unless params[:name].is_a?(String)
+
+              attributes[:name] = params[:name].strip
+            end
+            if params.key?(:description)
+              unless params[:description].nil? || params[:description].is_a?(String)
+                return bad_parameter("description must be a string or null")
+              end
+
+              attributes[:description] = params[:description]
+            end
+            return bad_parameter("name is required") if creating? && attributes[:name].blank?
 
             if params.key?(:category_type)
               type = params[:category_type].to_s
@@ -128,6 +139,8 @@ module Api
 
             attributes
           end
+
+          def creating? = action_name == "create"
 
           def bad_parameter(detail)
             render_problem(::Api::Problem.new(:invalid_parameter, detail: detail))

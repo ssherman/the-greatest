@@ -758,7 +758,7 @@ components:
       type: object
       description: Only the keys sent are used; unknown keys are ignored.
       properties:
-        name: {type: string, description: Required on create.}
+        name: {type: string, description: "Required on create (a blank name is a 400); stored without surrounding space."}
         category_type:
           type: string
           enum: [genre, location, subject, theme, audience]

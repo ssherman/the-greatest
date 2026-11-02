@@ -16,7 +16,7 @@ module Categories
       ::Category.active
         .where(type: category.type)
         .where.not(id: category.id)
-        .where("LOWER(categories.name) = LOWER(:name) OR EXISTS (SELECT 1 FROM unnest(categories.alternative_names) AS alias WHERE LOWER(alias) = LOWER(:name))", name: name)
+        .where("LOWER(TRIM(categories.name)) = LOWER(:name) OR EXISTS (SELECT 1 FROM unnest(categories.alternative_names) AS alias WHERE LOWER(TRIM(alias)) = LOWER(:name))", name: name)
         .order(:id)
         .first
     end

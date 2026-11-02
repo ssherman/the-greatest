@@ -304,6 +304,35 @@ module Api
             assert_response :bad_request
           end
 
+          test "names are stored stripped, so a padded name cannot mint a twin" do
+            create_category({name: "Zed "})
+            assert_equal "Zed", ::Books::Category.find(json[:data][:id]).name
+
+            create_category({name: "Zed"})
+            assert_response :unprocessable_entity
+          end
+
+          test "a legacy row with stray whitespace blocks the same name" do
+            ::Books::Category.create!(name: "Zed", category_type: :genre).update_columns(name: "Zed ")
+
+            create_category({name: "zed"})
+            assert_response :unprocessable_entity
+          end
+
+          test "non-string name or description is 400" do
+            create_category({name: ["a"]})
+            assert_response :bad_request
+            update_category(@novels.id, {description: {a: 1}})
+            assert_response :bad_request
+          end
+
+          test "create without a name is 400" do
+            create_category({category_type: "genre"})
+            assert_api_response_conform(status: 400, api: :admin)
+            create_category({name: "  "})
+            assert_response :bad_request
+          end
+
           test "a missing parent is 422" do
             update_category(@novels.id, {parent_id: 999_999_999})
             assert_response :unprocessable_entity
