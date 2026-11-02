@@ -2,10 +2,10 @@ require "test_helper"
 
 module Api
   class ScopesTest < ActiveSupport::TestCase
-    Account = Struct.new(:service?)
-
-    test "the three read scopes are registered" do
-      assert_equal ["books:read", "music:read", "games:read"], Scopes.all
+    test "registers the admin scopes" do
+      assert_equal ["books:read", "music:read", "games:read", "books:admin:read", "books:admin:merge"], Scopes.all
+      assert Scopes.admin?("books:admin:merge")
+      refute Scopes.admin?("books:read")
     end
 
     test "known? and description" do
@@ -19,12 +19,57 @@ module Api
       assert_raises(Scopes::UnknownScope) { Scopes.description("nope:read") }
     end
 
-    test "a person may mint only the member-mintable scopes" do
-      assert_equal ["books:read", "music:read", "games:read"], Scopes.mintable_by(Account.new(false))
+    test "a member is eligible for the read scopes only" do
+      assert_equal ["books:read", "music:read", "games:read"], Scopes.eligible_for(users(:regular_user)).sort_by { Scopes.all.index(it) }
     end
 
-    test "a service account may mint every registered scope" do
-      assert_equal Scopes.all, Scopes.mintable_by(Account.new(true))
+    test "a non-member with no role is eligible for nothing" do
+      assert_empty Scopes.eligible_for(users(:user_with_expired_membership))
+    end
+
+    test "a global admin without a membership is eligible for every books scope, but not other sites' reads" do
+      admin = users(:admin_user)
+      admin.memberships.destroy_all
+      assert_equal ["books:read", "books:admin:read", "books:admin:merge"].sort, Scopes.eligible_for(admin).sort
+    end
+
+    test "a global editor is eligible for merge" do
+      assert_includes Scopes.eligible_for(users(:editor_user)), "books:admin:merge"
+    end
+
+    test "a books domain admin is eligible for merge" do
+      user = users(:user_with_expired_membership)
+      DomainRole.create!(user: user, domain: :books, permission_level: :admin)
+      assert_includes Scopes.eligible_for(user), "books:admin:merge"
+    end
+
+    test "a books viewer may read admin data but not merge" do
+      eligible = Scopes.eligible_for(users(:books_viewer_user))
+      assert_includes eligible, "books:admin:read"
+      assert_includes eligible, "books:read"
+      refute_includes eligible, "books:admin:merge"
+    end
+
+    test "a games-only editor gains no books admin scope" do
+      refute_includes Scopes.eligible_for(users(:games_editor_user)), "books:admin:read"
+    end
+
+    test "a service account gets the read scopes and no admin scope" do
+      assert_equal ["books:read", "music:read", "games:read"], Scopes.eligible_for(users(:agent_runner_service_account))
+    end
+
+    test "mintable_by is eligible_for" do
+      user = users(:books_viewer_user)
+      assert_equal Scopes.eligible_for(user), Scopes.mintable_by(user)
+    end
+
+    test "effective expands implied scopes before intersecting" do
+      viewer = users(:books_viewer_user)
+      assert_equal ["books:read", "books:admin:read"].sort, Scopes.effective(["books:admin:merge"], viewer).sort
+    end
+
+    test "effective drops scopes the user no longer qualifies for and unknown scopes" do
+      assert_equal ["books:read"], Scopes.effective(["books:read", "books:admin:merge", "retired:scope"], users(:regular_user))
     end
 
     test "satisfies? is true when the exact scope is granted" do
@@ -34,7 +79,7 @@ module Api
     end
 
     test "satisfies? honours hierarchy: a scope covers what it implies" do
-      write = Scopes::Scope.new(name: "books:write", description: "Write", member_mintable: false, implies: ["books:read"])
+      write = Scopes::Scope.new(name: "books:write", description: "Write", admin: false, implies: ["books:read"], eligible: ->(_) { true })
       Scopes.stubs(:registry).returns(Scopes::ALL.merge("books:write" => write))
 
       assert Scopes.satisfies?(["books:write"], "books:read")

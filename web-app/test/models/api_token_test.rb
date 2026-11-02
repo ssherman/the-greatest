@@ -111,7 +111,7 @@ class ApiTokenTest < ActiveSupport::TestCase
   end
 
   test "destroying a user destroys their tokens" do
-    user = User.create!(email: "temp-token-owner@example.com", role: :user, email_verified: false, display_name: "Temp")
+    user = User.create!(email: "temp-token-owner@example.com", role: :user, account_kind: :service, email_verified: false, display_name: "Temp")
     ApiToken.create!(user: user, name: "t", scopes: ["books:read"],
       token_digest: Digest::SHA256.hexdigest("tg_#{SecureRandom.alphanumeric(40)}"), token_prefix: "tg_abcdefghi")
 

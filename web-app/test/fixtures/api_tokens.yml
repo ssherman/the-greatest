@@ -50,7 +50,7 @@ regular_user_expired_token:
   expires_at: <%= 1.day.ago.iso8601 %>
 
 non_member_token:
-  user: books_viewer_user
+  user: user_with_expired_membership
   name: laptop
   token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::NON_MEMBER) %>
   token_prefix: <%= ApiTokenSecrets::NON_MEMBER[0, 12] %>
