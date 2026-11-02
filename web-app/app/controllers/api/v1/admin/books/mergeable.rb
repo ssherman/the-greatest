@@ -17,15 +17,18 @@ module Api
           end
 
           def create
-            source_id = Integer(params.require(:source_id).to_s, exception: false)
+            source_id = parse_id(params.require(:source_id))
             return render_problem(::Api::Problem.new(:invalid_parameter, detail: "source_id must be an integer")) if source_id.nil?
 
             dry_run = ActiveModel::Type::Boolean.new.cast(params[:dry_run]) || false
             target = model_class.find(params[:id])
             source = model_class.find(source_id)
 
-            unless [source, target].all? { |record| policy_class.new(current_principal.user, record).destroy? }
-              return render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not delete this record"))
+            {"source" => source, "target" => target}.each do |role, record|
+              next if policy_class.new(current_principal.user, record).destroy?
+
+              noun = model_class.name.demodulize.downcase
+              return render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not delete the #{role} #{noun}"))
             end
 
             # Captured before the merge: the source row does not exist afterwards.
@@ -44,6 +47,16 @@ module Api
           end
 
           private
+
+          # A JSON integer, or a string of plain decimal digits. Never Integer(str):
+          # it honours radix prefixes ("010" is 8, "0x1A" is 26, "1_0" is 10), and
+          # this id names a record that is about to be deleted.
+          def parse_id(value)
+            return value if value.is_a?(Integer)
+            return Integer(value, 10) if value.is_a?(String) && value.match?(/\A\d+\z/)
+
+            nil
+          end
 
           def log_merge(source:, target:)
             Rails.logger.info(

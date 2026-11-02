@@ -119,6 +119,40 @@ module Api
               .returns(stub_everything(destroy?: false))
           end
 
+          def victim(id) = ::Books::Book.find_by(id: id) || ::Books::Book.create!(title: "Victim", id: id)
+
+          test "a zero-padded decimal source_id is read as decimal, never octal" do
+            octal_victim = victim(8)
+            merge({source_id: "010"})
+
+            assert_response :not_found
+            assert ::Books::Book.exists?(octal_victim.id)
+            assert ::Books::Book.exists?(@source.id)
+          end
+
+          test "radix and underscore forms of source_id are a 400 and delete nothing" do
+            victims = [26, 10, 8].map { |id| victim(id) }
+            ["0x1A", "1_0", "0b1010", "010x", 5.5, true].each do |bad|
+              merge({source_id: bad})
+              assert_response :bad_request, bad.inspect
+              assert_equal "invalid_parameter", json[:code]
+            end
+            victims.each { |v| assert ::Books::Book.exists?(v.id) }
+            assert ::Books::Book.exists?(@source.id)
+          end
+
+          test "a failing merger is a 422 with its errors and deletes nothing" do
+            merger = stub(call: ::Books::Book::Merger::Result.new(success?: false, data: nil, errors: ["boom"]), stats: {})
+            ::Books::Book::Merger.expects(:new).returns(merger)
+
+            merge({source_id: @source.id})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert_equal "unprocessable", json[:code]
+            assert_includes json[:detail], "boom"
+            assert ::Books::Book.exists?(@source.id)
+          end
+
           test "a policy refusal on the source is a 403 forbidden and deletes nothing" do
             refuse_delete_of(@source)
 
@@ -126,6 +160,7 @@ module Api
             assert_api_response_conform(status: 403, api: :admin)
 
             assert_equal "forbidden", json[:code]
+            assert_includes json[:detail], "the source book"
             assert ::Books::Book.exists?(@source.id)
             assert ::Books::Book.exists?(@target.id)
           end
@@ -137,10 +172,11 @@ module Api
             assert_api_response_conform(status: 403, api: :admin)
 
             assert_equal "forbidden", json[:code]
+            assert_includes json[:detail], "the target book"
             assert ::Books::Book.exists?(@source.id)
           end
 
-          test "a real merge logs once and a dry run does not" do
+          test "a real merge writes exactly one merge log line" do
             Rails.logger.stubs(:info)
             Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_merge .*record_type=Books::Book .*source_id=#{@source.id} target_id=#{@target.id}/)).once
 
