@@ -89,7 +89,7 @@ module Books
         pages = [book.except("primaryContributorEdge"), book.merge("title" => "", "titleComplete" => nil)].map do |variant|
           apollo = {"ROOT_QUERY" => {%(getBookByLegacyId({"legacyId":"7"})) => {"__ref" => "Book:1"}}, "Book:1" => variant,
                     "Contributor:1" => {"name" => "Lei Xu"}}
-          %(<script id="__NEXT_DATA__" type="application/json">#{{props: {pageProps: {apolloState: apollo}}}.to_json}</script>)
+          %(<title>Quiet by Lei Xu | Goodreads</title><script id="__NEXT_DATA__" type="application/json">#{{props: {pageProps: {apolloState: apollo}}}.to_json}</script>)
         end
 
         assert_equal [:unparseable, :unparseable], pages.map { |html| BookPage.parse(html: html, status: 200).outcome }
@@ -117,10 +117,19 @@ module Books
         assert_equal [:blocked] * 3, [401, 403, 429].map { |status| BookPage.parse(html: html, status: status).outcome }
       end
 
-      test "a page it cannot recognize is unparseable" do
-        pages = [page_html("synthetic_challenge.html"), "", %(<script id="__NEXT_DATA__">{not json</script>)]
+      test "a Goodreads page it cannot read is unparseable" do
+        html = %(<title>Quiet by Lei Xu | Goodreads</title><script id="__NEXT_DATA__">{not json</script>)
 
-        assert_equal [:unparseable] * 3, pages.map { |html| BookPage.parse(html: html, status: 200).outcome }
+        assert_equal :unparseable, BookPage.parse(html: html, status: 200).outcome
+      end
+
+      # Only an unreadable page Goodreads itself served may end one book without
+      # closing the gate; anything else stands in for a challenge.
+      test "a page that is not Goodreads', or any other status it cannot read, is blocked" do
+        challenge = page_html("synthetic_challenge.html")
+        statuses = [[challenge, 200], ["", 200], [challenge, 202], [challenge, 405]]
+
+        assert_equal [:blocked] * 4, statuses.map { |html, status| BookPage.parse(html: html, status: status).outcome }
       end
 
       # Measured once from the fixture's description with tags stripped: 493

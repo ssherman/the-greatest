@@ -101,15 +101,20 @@ class Books::Goodreads::FetchPageJobTest < ActiveSupport::TestCase
     Books::Goodreads::FetchPageJob.new.perform(@id, true)
   end
 
-  test "a challenge or an unrecognizable page stops all fetching for the cooldown" do
-    [:blocked, :unparseable].each do |outcome|
-      travel 15.seconds
-      @gate.stubs(:blocked?).returns(false)
-      FETCH.stubs(:call).returns(fetched(outcome))
-      @gate.expects(:block!)
+  test "a challenge page stops all fetching for the cooldown" do
+    FETCH.stubs(:call).returns(fetched(:blocked))
+    @gate.expects(:block!)
 
-      Books::Goodreads::FetchPageJob.new.perform(@id, true)
-    end
+    Books::Goodreads::FetchPageJob.new.perform(@id, true)
+  end
+
+  test "an unrecognizable page settles its editions and leaves the gate open" do
+    FETCH.stubs(:call).returns(fetched(:unparseable))
+    Books::Goodreads::SettleEditionsJob.expects(:perform_async).with(@id)
+
+    Books::Goodreads::FetchPageJob.new.perform(@id, true)
+
+    assert_not @gate.blocked?
   end
 
   test "no answer tries again through the line, then leaves the edition to be created unverified" do

@@ -8,8 +8,9 @@
 # A job first takes a turn in the gate's line and reschedules itself for it;
 # it never sleeps. A cached answer, nothing left waiting, a spent daily cap
 # or a block means no fetch: the editions settle with what there is, which
-# without a page is a book created unverified for the sweep. A challenge or
-# an unrecognizable page blocks every fetch for the cooldown. No answer at
+# without a page is a book created unverified for the sweep. A challenge page
+# blocks every fetch for the cooldown; an unrecognizable one settles like no
+# page at all and leaves the gate open. No answer at
 # all (Goodreads' 503 page, a timeout) is tried again through the line, up to
 # fetch_attempts.
 class Books::Goodreads::FetchPageJob

@@ -35,7 +35,7 @@ module Services
 
           search = result.data[:search]
           assert_equal [true, :found], [result.success?, result.data[:outcome]]
-          assert_equal ["catch-22 joseph heller", "found", 200, 1, FETCHED_AT],
+          assert_equal ["catch-22 joseph heller", "found", 200, ::Books::Goodreads::SearchPage::VERSION, FETCHED_AT],
             [search.query, search.outcome, search.http_status, search.parser_version, search.fetched_at]
           assert_equal 168668, search.candidate_rows.first.goodreads_book_id
           assert_equal ["private_imports", "application/gzip"], [search.html.blob.service_name, search.html.blob.content_type]

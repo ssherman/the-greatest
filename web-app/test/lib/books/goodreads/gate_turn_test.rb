@@ -49,9 +49,9 @@ module Books
         assert_equal :fetch, GateTurn.call(gate: g, due: false).action
       end
 
-      test "after_fetch blocks the gate on an unparseable page" do
+      test "after_fetch leaves the gate open on an unparseable page" do
         g = mock
-        g.expects(:block!).once
+        g.expects(:block!).never
 
         GateTurn.after_fetch(gate: g, outcome: :unparseable)
       end
