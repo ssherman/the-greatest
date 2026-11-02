@@ -16,7 +16,9 @@ module Api
         attributes :id, :slug, :name, :category_type, :description
 
         attribute :parent do |category|
-          parent = category.parent
+          # Only a followable parent: a deleted one is null, a merged one is
+          # its live target, so the slug always resolves on the public endpoints.
+          parent = category.parent&.canonical
           parent && {id: parent.id, slug: parent.slug, name: parent.name}
         end
 

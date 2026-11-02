@@ -18,7 +18,7 @@ module Api
           configuration = ::Books::RankingConfiguration.default_primary
           relation = configuration && ::Books::BrowseQuery
             .categories(ranking_configuration: configuration, type: type, sort: sort)
-            .includes(:parent)
+            .includes(parent: :merged_into)
 
           render_ranked_page(relation, path: "/api/v1/categories") do |row|
             CategoryResource.new(row, params: {book_count: row.ranked_count}).to_h

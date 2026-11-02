@@ -79,9 +79,40 @@ module Api
           get "/api/v1/categories?sort=name", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)
 
-          names = json[:data].map { |c| c[:name] }
-          assert_operator names.size, :>, 1
-          assert_equal names.sort, names
+          expected = ::Books::BrowseQuery.categories(ranking_configuration: @rc, type: "genre", sort: "name").map(&:name)
+          assert_operator expected.size, :>, 1
+          assert_equal expected, json[:data].map { |c| c[:name] }
+        end
+
+        test "a parent that was soft-deleted is null on list and show" do
+          parent = ::Books::Category.create!(name: "Old Region", category_type: :location, deleted: true)
+          categories(:books_novels_genre).update_columns(parent_id: parent.id)
+
+          get "/api/v1/categories", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_nil json[:data].find { |c| c[:slug] == "novels" }[:parent]
+          get "/api/v1/categories/novels", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_nil json[:data][:parent]
+        end
+
+        test "a parent that was merged is its live target on list and show" do
+          target = categories(:books_classics_genre)
+          parent = ::Books::Category.create!(name: "Merged Parent", category_type: :genre, deleted: true, merged_into: target)
+          categories(:books_novels_genre).update_columns(parent_id: parent.id)
+          expected = {id: target.id, slug: target.slug, name: target.name}
+
+          get "/api/v1/categories", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_equal expected, json[:data].find { |c| c[:slug] == "novels" }[:parent]
+          get "/api/v1/categories/novels", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_equal expected, json[:data][:parent]
+        end
+
+        test "show of a merged slug whose target is deleted is a 404" do
+          junk = ::Books::Category.create!(name: "Junk", category_type: :genre, deleted: true)
+          ::Books::Category.create!(name: "Junk Twin", slug: "junk-twin", category_type: :genre, deleted: true, merged_into: junk)
+
+          get "/api/v1/categories/junk-twin", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+          assert_response :not_found
         end
 
         test "index is empty without a primary configuration" do

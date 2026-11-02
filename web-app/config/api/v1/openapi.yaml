@@ -844,7 +844,7 @@ components:
                   id: {type: integer}
                   slug: {type: [string, "null"]}
                   name: {type: string}
-                  category_type: {type: string, description: "genre, audience (Children's, Middle Grade, Young Adult), subject or location"}
+                  category_type: {type: string, description: "genre, audience (Children's, Middle Grade, Young Adult), subject, location or theme"}
             countries:
               type: array
               items:

@@ -50,8 +50,7 @@ module Api
         # the target of a merged / renamed one. A deleted, unmerged category
         # names nothing -- 404, never a leak.
         def public_category!(slug)
-          ::Books::Category.active.find_by(slug: slug) ||
-            ::Books::CategorySlugResolver.call(slug) ||
+          ::Books::CategorySlugResolver.call(slug) ||
             raise(ActiveRecord::RecordNotFound.new(nil, "Books::Category"))
         end
 
