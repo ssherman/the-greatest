@@ -80,7 +80,7 @@ module Api
           end
 
           test "a missing source is a 404" do
-            merge({source_id: 0})
+            merge({source_id: 999_999_999})
             assert_api_response_conform(status: 404, api: :admin)
 
             assert ::Books::Author.exists?(@target.id)
@@ -139,6 +139,16 @@ module Api
             end
             victims.each { |v| assert ::Books::Author.exists?(v.id) }
             assert ::Books::Author.exists?(@source.id)
+          end
+
+          test "a source_id below 1 is a 400 and deletes nothing" do
+            [0, -5, "0", "000"].each do |bad|
+              merge({source_id: bad})
+              assert_response :bad_request, bad.inspect
+              assert_equal "invalid_parameter", json[:code]
+            end
+            assert ::Books::Author.exists?(@source.id)
+            assert ::Books::Author.exists?(@target.id)
           end
 
           test "a failing merger is a 422 with its errors and deletes nothing" do

@@ -505,7 +505,7 @@ components:
           description: The duplicate to fold in and delete. A JSON integer, or a string of plain decimal digits (no sign, prefix or separators).
           oneOf:
             - {type: integer, minimum: 1}
-            - {type: string, pattern: "^[0-9]+$"}
+            - {type: string, pattern: "^0*[1-9][0-9]*$"}
         dry_run: {type: boolean, default: false, description: Validate and report without merging.}
     MergeWarning:
       type: object
