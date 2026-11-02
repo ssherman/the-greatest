@@ -501,7 +501,11 @@ components:
       type: object
       required: [source_id]
       properties:
-        source_id: {type: integer, minimum: 1, description: The duplicate to fold in and delete.}
+        source_id:
+          description: The duplicate to fold in and delete. A JSON integer, or a string of plain decimal digits (no sign, prefix or separators).
+          oneOf:
+            - {type: integer, minimum: 1}
+            - {type: string, pattern: "^[0-9]+$"}
         dry_run: {type: boolean, default: false, description: Validate and report without merging.}
     MergeWarning:
       type: object
