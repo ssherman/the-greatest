@@ -666,6 +666,8 @@ Rails.application.routes.draw do
           scope module: :books do
             get "books", to: "books#index"
             get "authors", to: "authors#index"
+            post "books/:id/merge", to: "book_merges#create", constraints: {id: /\d+/}
+            post "authors/:id/merge", to: "author_merges#create", constraints: {id: /\d+/}
           end
         end
       end

@@ -17,8 +17,10 @@ module Api
       invalid_token: [401, "Invalid token"],
       membership_required: [403, "Membership required"],
       insufficient_scope: [403, "Insufficient scope"],
+      forbidden: [403, "Forbidden"],
       not_found: [404, "Not found"],
       invalid_parameter: [400, "Invalid parameter"],
+      unprocessable: [422, "Unprocessable"],
       rate_limited: [429, "Rate limit exceeded"]
     }.freeze
 

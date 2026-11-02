@@ -4,10 +4,11 @@ module Api
   module V1
     # The admin document's twin of ContractCoverageTest: every documented
     # response of config/api/v1/admin_openapi.yaml must be reachable and
-    # conform. Task 5 adds the merge operations to EXERCISES.
+    # conform. The merge operations are exercised with a dry run for 200, so the shared fixtures survive.
     class AdminContractCoverageTest < ActionDispatch::IntegrationTest
       READ = ApiTokenSecrets::ADMIN_READ
       MEMBER = ApiTokenSecrets::MEMBER
+      MERGE = ApiTokenSecrets::ADMIN
 
       EXERCISES = {
         ["GET", "/api/v1/admin/openapi.json", "200"] => -> { get "/api/v1/admin/openapi.json", headers: bearer(READ) },
@@ -23,7 +24,21 @@ module Api
         ["GET", "/api/v1/admin/authors", "400"] => -> { get "/api/v1/admin/authors?q=", headers: bearer(READ) },
         ["GET", "/api/v1/admin/authors", "401"] => -> { get "/api/v1/admin/authors?q=tol" },
         ["GET", "/api/v1/admin/authors", "403"] => -> { get "/api/v1/admin/authors?q=tol", headers: bearer(MEMBER) },
-        ["GET", "/api/v1/admin/authors", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/authors?q=tol", headers: bearer(READ) } }
+        ["GET", "/api/v1/admin/authors", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/authors?q=tol", headers: bearer(READ) } },
+        ["POST", "/api/v1/admin/books/{id}/merge", "200"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: books_books(:crime_and_punishment).id, dry_run: true}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/merge", "400"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: "abc"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/merge", "401"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: books_books(:crime_and_punishment).id}, as: :json },
+        ["POST", "/api/v1/admin/books/{id}/merge", "403"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: books_books(:crime_and_punishment).id}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/books/{id}/merge", "404"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: 0}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/merge", "422"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: books_books(:war_and_peace).id}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/merge", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: books_books(:crime_and_punishment).id}, as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "200"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:king).id, dry_run: true}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "400"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: "abc"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "401"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:king).id}, as: :json },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "403"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:king).id}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "404"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: 0}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "422"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:tolstoy).id}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:king).id}, as: :json, headers: bearer(MERGE) } }
       }.freeze
 
       setup do

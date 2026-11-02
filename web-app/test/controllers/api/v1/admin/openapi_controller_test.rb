@@ -12,7 +12,7 @@ module Api
 
           body = response.parsed_body
           assert_equal [{"url" => "https://dev-new.thegreatestbooks.org"}], body["servers"]
-          assert_equal %w[/api/v1/admin/openapi.json /api/v1/admin/books /api/v1/admin/authors], body["paths"].keys
+          assert_equal %w[/api/v1/admin/openapi.json /api/v1/admin/books /api/v1/admin/authors /api/v1/admin/books/{id}/merge /api/v1/admin/authors/{id}/merge], body["paths"].keys
           assert_match(/no-store/, response.headers["Cache-Control"])
         end
 
