@@ -7,7 +7,8 @@
 # Scope strings are OAuth-style (`books:read`) on purpose: when Doorkeeper
 # arrives for the MCP server, these exact strings become OAuth scopes.
 #
-# Each scope carries its own eligibility rule: who may hold it. Read scopes
+# Each scope carries its own eligibility rule, `->(user, member)`: who may
+# hold it. `member` is `user.member?` computed once by `eligible_for`. Read scopes
 # are for members and service accounts; the `books:admin:*` scopes defer to the
 # Books policies so the API never decides admin power differently from the
 # admin UI. `implies:` names the scopes a scope covers, and `satisfies?` and
@@ -19,7 +20,7 @@ module Api
 
     Scope = Struct.new(:name, :description, :admin, :implies, :eligible, keyword_init: true)
 
-    READER = ->(user) { user.member? || user.service? }
+    READER = ->(user, member) { member || user.service? }
 
     ALL = {
       "books:read" => Scope.new(
@@ -48,14 +49,14 @@ module Api
         description: "Read the books admin data: search, and the records behind merges",
         admin: true,
         implies: ["books:read"],
-        eligible: ->(user) { ::Books::BookPolicy.new(user, ::Books::Book).index? }
+        eligible: ->(user, _member) { ::Books::BookPolicy.new(user, ::Books::Book).index? }
       ),
       "books:admin:merge" => Scope.new(
         name: "books:admin:merge",
         description: "Merge books and authors. This permanently deletes the merged-away records",
         admin: true,
         implies: ["books:admin:read"],
-        eligible: ->(user) { ::Books::BookPolicy.new(user, ::Books::Book).destroy? }
+        eligible: ->(user, _member) { ::Books::BookPolicy.new(user, ::Books::Book).destroy? }
       )
     }.freeze
 
@@ -76,7 +77,8 @@ module Api
     # Every scope this account may hold: those whose own rule passes, plus
     # everything those imply.
     def self.eligible_for(user)
-      passing = registry.values.select { |scope| scope.eligible.call(user) }.map(&:name)
+      member = user.member? # one query per call, not one per read scope
+      passing = registry.values.select { |scope| scope.eligible.call(user, member) }.map(&:name)
       held = passing.flat_map { |name| [name, *expand(name)] }.uniq
       registry.keys & held
     end

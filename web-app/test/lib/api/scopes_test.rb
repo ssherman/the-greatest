@@ -2,6 +2,13 @@ require "test_helper"
 
 module Api
   class ScopesTest < ActiveSupport::TestCase
+    test "eligible_for asks the membership question once" do
+      user = users(:regular_user)
+      queries = capture_sql { Scopes.eligible_for(user) }.grep(/memberships/)
+
+      assert_equal 1, queries.size
+    end
+
     test "registers the admin scopes" do
       assert_equal ["books:read", "music:read", "games:read", "books:admin:read", "books:admin:merge"], Scopes.all
       assert Scopes.admin?("books:admin:merge")
