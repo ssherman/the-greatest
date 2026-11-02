@@ -51,11 +51,18 @@ module Api
         implies: ["books:read"],
         eligible: ->(user, _member) { !user.service? && ::Books::BookPolicy.new(user, ::Books::Book).index? }
       ),
+      "books:admin:write" => Scope.new(
+        name: "books:admin:write",
+        description: "Create and edit book categories and tag books and authors",
+        admin: true,
+        implies: ["books:admin:read"],
+        eligible: ->(user, _member) { !user.service? && ::Books::BookPolicy.new(user, ::Books::Book).update? }
+      ),
       "books:admin:merge" => Scope.new(
         name: "books:admin:merge",
         description: "Merge books and authors. This permanently deletes the merged-away records",
         admin: true,
-        implies: ["books:admin:read"],
+        implies: ["books:admin:write"],
         eligible: ->(user, _member) { !user.service? && ::Books::BookPolicy.new(user, ::Books::Book).destroy? }
       )
     }.freeze

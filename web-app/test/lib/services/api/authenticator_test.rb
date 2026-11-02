@@ -85,7 +85,7 @@ module Services
 
         assert result.success?
         assert_equal :admin, result.data.tier
-        assert_equal ["books:read", "books:admin:read", "books:admin:merge"].sort, result.data.scopes.sort
+        assert_equal ["books:read", "books:admin:read", "books:admin:write", "books:admin:merge"].sort, result.data.scopes.sort
       end
 
       test "demotion takes effect on the next request" do
