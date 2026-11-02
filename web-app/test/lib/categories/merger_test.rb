@@ -421,5 +421,21 @@ module Categories
 
       assert CategoryItem.exists?(category: us, item: book, source: :inherited)
     end
+
+    test "refusal returns the message merge would raise, and nil when allowed" do
+      source = ::Books::Category.create!(name: "Hope", category_type: :subject)
+      target = ::Books::Category.create!(name: "Despair", category_type: :subject)
+
+      assert_nil Categories::Merger.refusal(source: source, target: target)
+      assert_equal "A category can't be merged into itself.", Categories::Merger.refusal(source: source, target: source)
+
+      fiction = categories(:books_fiction_genre)
+      ::Books::Category.stubs(:protected_ids).returns([fiction.id])
+      message = Categories::Merger.refusal(source: source, target: fiction)
+      assert_match(/Fiction, Nonfiction, Poetry/, message)
+
+      error = assert_raises(Categories::Refused) { Categories::Merger.new(category: source, category_to_merge_with: fiction).merge }
+      assert_equal message, error.message
+    end
   end
 end

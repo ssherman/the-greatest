@@ -8,13 +8,18 @@ module Api
         # GET /api/v1/admin/categories/:id -- detail, any status
         # POST /api/v1/admin/categories     -- create
         # PATCH /api/v1/admin/categories/:id -- edit (name, type, description, aliases, parent)
+        # POST /api/v1/admin/categories/:id/merge -- fold up to 50 sources into :id
+        # DELETE /api/v1/admin/categories/:id -- soft delete (removes every link)
         #
         # Root-anchor every ::Books:: / ::Category reference in this namespace.
         class CategoriesController < BaseController
           include ::Api::V1::Admin::StrictIds
 
           require_scopes index: "books:admin:read", show: "books:admin:read",
-            create: "books:admin:write", update: "books:admin:write"
+            create: "books:admin:write", update: "books:admin:write",
+            merge: "books:admin:merge", destroy: "books:admin:merge"
+
+          MAX_MERGE_SOURCES = 50
 
           STATUSES = %w[active deleted merged all].freeze
 
@@ -69,7 +74,147 @@ module Api
             persist_and_render(category, attributes, status: :ok)
           end
 
+          # The target is the path category. Nothing merges until the body, every
+          # record, the policy and the merger's own preconditions have passed for
+          # ALL sources; a merge is permanent. Never wrap the loop in a
+          # transaction: each merge manages its own and queues work after commit.
+          def merge
+            source_ids = parse_source_ids
+            return if performed?
+
+            target = ::Books::Category.find_by(id: params[:id])
+            return render_problem(::Api::Problem.new(:not_found, detail: "No target category #{params[:id]}")) if target.nil?
+
+            sources = []
+            source_ids.each do |id|
+              source = ::Books::Category.find_by(id: id)
+              return render_problem(::Api::Problem.new(:not_found, detail: "No source category #{id}")) if source.nil?
+
+              sources << source
+            end
+
+            ([["target", target]] + sources.map { |source| ["source", source] }).each do |role, record|
+              next if ::Books::CategoryPolicy.new(current_principal.user, record).destroy?
+
+              return render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not delete the #{role} category #{record.id}"))
+            end
+
+            refused = sources.filter_map do |source|
+              message = ::Categories::Merger.refusal(source: source, target: target)
+              "#{source.id}: #{message}" if message
+            end
+            return render_problem(::Api::Problem.new(:unprocessable, detail: refused.join("; "))) if refused.any?
+
+            dry_run = ActiveModel::Type::Boolean.new.cast(params[:dry_run]) || false
+            return render_merge_dry_run(target, sources) if dry_run
+
+            run_merges(target, sources)
+          end
+
+          def destroy
+            category = ::Books::Category.find(params[:id])
+            unless ::Books::CategoryPolicy.new(current_principal.user, category).destroy?
+              return render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not delete category #{category.id}"))
+            end
+            return render_problem(::Api::Problem.new(:unprocessable, detail: "Category #{category.id} is already deleted")) if category.deleted?
+
+            refusal = ::Categories::Deleter.refusal(category: category)
+            return render_problem(::Api::Problem.new(:unprocessable, detail: refusal)) if refusal
+
+            dry_run = ActiveModel::Type::Boolean.new.cast(params[:dry_run]) || false
+            counts = counts_for([category.id])
+            removed = {
+              book_links_removed: counts[:book_links].fetch(category.id, 0),
+              author_links_removed: counts[:author_links].fetch(category.id, 0)
+            }
+            unless dry_run
+              begin
+                ::Categories::Deleter.new(category: category, soft: true).delete
+              rescue ::Categories::Refused => e
+                return render_problem(::Api::Problem.new(:unprocessable, detail: e.message))
+              end
+              log_delete(category, removed)
+              category.reload
+            end
+
+            render json: {
+              data: {category: CategoryResource.new(category, params: counts_for([category.id])).to_h, **removed},
+              meta: {dry_run: dry_run}
+            }
+          end
+
           private
+
+          # 1..50 strict, distinct ids that do not include the target. Renders
+          # the 400 itself and returns nil (callers check performed?).
+          def parse_source_ids
+            raw = params[:source_ids]
+            unless raw.is_a?(Array) && raw.size.between?(1, MAX_MERGE_SOURCES)
+              return bad_parameter("source_ids must be an array of 1 to #{MAX_MERGE_SOURCES} ids")
+            end
+
+            ids = raw.map { |value| parse_id(value) }
+            return bad_parameter("source_ids must be positive integers") if ids.any?(&:nil?)
+            return bad_parameter("source_ids must not repeat an id") if ids.uniq.size != ids.size
+            return bad_parameter("source_ids must not include the target category") if ids.include?(params[:id].to_i)
+
+            ids
+          end
+
+          def render_merge_dry_run(target, sources)
+            ids = sources.map(&:id)
+            book_links = link_counts("Books::Book", ids)
+            author_links = link_counts("Books::Author", ids)
+            render json: {
+              data: {
+                target: CategoryResource.new(target, params: counts_for([target.id])).to_h,
+                sources: sources.map do |source|
+                  {
+                    id: source.id,
+                    name: source.name,
+                    book_link_count: book_links.fetch(source.id, 0),
+                    author_link_count: author_links.fetch(source.id, 0)
+                  }
+                end
+              },
+              meta: {dry_run: true}
+            }
+          end
+
+          def run_merges(target, sources)
+            merged = []
+            sources.each_with_index do |source, index|
+              ::Categories::Merger.new(category: source, category_to_merge_with: target).merge
+              log_merge(source, target, "succeeded")
+              merged << source.id
+            rescue => e
+              log_merge(source, target, "failed", e.message)
+              body = ::Api::Problem.new(:unprocessable, detail: "Merged #{merged.size} of #{sources.size}; #{source.id} failed: #{e.message}").to_h
+              body.merge!(merged: merged, failed: {id: source.id, message: e.message}, not_attempted: sources[(index + 1)..].map(&:id))
+              return render(json: body, status: :unprocessable_entity, content_type: ::Api::Problem::CONTENT_TYPE)
+            end
+
+            target.reload
+            render json: {
+              data: {target: CategoryResource.new(target, params: counts_for([target.id])).to_h, merged: merged},
+              meta: {dry_run: false}
+            }
+          end
+
+          def log_merge(source, target, outcome, error = nil)
+            line = "event=api_admin_category_merge outcome=#{outcome} #{log_actor} source_id=#{source.id} target_id=#{target.id}"
+            line += " errors=#{error.inspect}" if error
+            Rails.logger.info(line)
+          end
+
+          def log_delete(category, removed)
+            Rails.logger.info("event=api_admin_category_delete outcome=succeeded #{log_actor} category_id=#{category.id} " \
+              "book_links_removed=#{removed[:book_links_removed]} author_links_removed=#{removed[:author_links_removed]}")
+          end
+
+          def log_actor
+            "token_id=#{current_principal.token.id} user_id=#{current_principal.user.id}"
+          end
 
           def render_forbidden
             render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not change categories"))

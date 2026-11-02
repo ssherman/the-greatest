@@ -313,6 +313,102 @@ paths:
           $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    delete:
+      operationId: deleteAdminCategory
+      summary: Soft-delete a category
+      description: |
+        Marks the category deleted AND REMOVES EVERY ONE OF ITS LINKS to books and authors. The category row stays, but deleting it cannot be undone with the links intact: restoring it would not bring them back.
+        Fiction, Nonfiction, Poetry and Religion & Spirituality cannot be deleted (422), and neither can a category that is already deleted (422).
+        Send `dry_run=true` to see the category and how many book and author links would be removed without changing anything.
+        Requires `books:admin:merge`, and the token's owner must be allowed to delete the category.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - name: dry_run
+          in: query
+          required: false
+          description: "`true` reports what would be removed and changes nothing. Default `false`."
+          schema: {type: boolean, default: false}
+      responses:
+        "200":
+          description: The category was deleted (or, for a dry run, would be).
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCategoryDelete"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/categories/{id}/merge:
+    x-domain: books
+    post:
+      operationId: mergeCategories
+      summary: Merge categories into this one
+      description: |
+        Folds each category in `source_ids` (1 to 50, no repeats, never the target) into the category in the path, one at a time in the order given. Every source's links move to the target, the source is soft-deleted with `merged_into` pointing at the target, and its slug keeps resolving to the target. There is no undelete.
+        Everything is checked before any merge runs: each id must exist (404 names the first missing one), the token's owner must be allowed to delete the target and every source (403 names it), and no source may be refused by the merger (422 lists every refused source as `id: reason`). Fiction, Nonfiction, Poetry and Religion & Spirituality cannot be merged.
+        If a merge still fails part way, the request stops and answers 422 with `merged`, `failed` and `not_attempted`; the sources already merged stay merged.
+        Send `dry_run: true` to run every check and see each source's link counts without changing anything.
+        Requires `books:admin:merge`.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryMergeRequest"
+      responses:
+        "200":
+          description: The sources were merged (or, for a dry run, would be).
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCategoryMerge"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/books/{id}/merge:
     x-domain: books
     post:
@@ -783,6 +879,21 @@ components:
           enum: [unauthenticated, invalid_token, membership_required, insufficient_scope, forbidden, not_found, invalid_parameter, unprocessable, rate_limited]
         detail:
           type: string
+        merged:
+          description: Category merge only, on a 422 that came part way. Ids already merged; they stay merged.
+          type: array
+          items: {type: integer}
+        failed:
+          description: Category merge only, on a 422 that came part way. The source that failed.
+          type: object
+          required: [id, message]
+          properties:
+            id: {type: integer}
+            message: {type: string}
+        not_attempted:
+          description: Category merge only, on a 422 that came part way. Ids never tried.
+          type: array
+          items: {type: integer}
     PaginationMeta:
       type: object
       required: [page, per_page, total_count, total_pages]
@@ -972,6 +1083,68 @@ components:
             - {type: integer, minimum: 1}
             - {type: string, pattern: "^0*[1-9][0-9]*$"}
         dry_run: {type: boolean, default: false, description: Validate and report without merging.}
+    CategoryMergeRequest:
+      type: object
+      required: [source_ids]
+      properties:
+        source_ids:
+          description: The categories to fold into the one in the path and soft-delete. 1 to 50 distinct ids, none the target. Each is a JSON integer, or a string of plain decimal digits.
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            oneOf:
+              - {type: integer, minimum: 1}
+              - {type: string, pattern: "^0*[1-9][0-9]*$"}
+        dry_run: {type: boolean, default: false, description: Run every check and report without merging.}
+    AdminCategoryMerge:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [target]
+          properties:
+            target:
+              description: The surviving category, as it is after the merges (as it is now, for a dry run).
+              $ref: "#/components/schemas/AdminCategory"
+            merged:
+              description: Ids merged, in order. Absent on a dry run.
+              type: array
+              items: {type: integer}
+            sources:
+              description: Present on a dry run only. What each source would carry over.
+              type: array
+              items:
+                type: object
+                required: [id, name, book_link_count, author_link_count]
+                properties:
+                  id: {type: integer}
+                  name: {type: string}
+                  book_link_count: {type: integer, minimum: 0}
+                  author_link_count: {type: integer, minimum: 0}
+        meta:
+          type: object
+          required: [dry_run]
+          properties:
+            dry_run: {type: boolean}
+    AdminCategoryDelete:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [category, book_links_removed, author_links_removed]
+          properties:
+            category:
+              $ref: "#/components/schemas/AdminCategory"
+            book_links_removed: {type: integer, minimum: 0, description: Book links removed (or, on a dry run, that would be).}
+            author_links_removed: {type: integer, minimum: 0, description: Author links removed (or, on a dry run, that would be).}
+        meta:
+          type: object
+          required: [dry_run]
+          properties:
+            dry_run: {type: boolean}
     CategoryLinkRequest:
       type: object
       required: [category_id]

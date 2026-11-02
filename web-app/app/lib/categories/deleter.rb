@@ -4,6 +4,14 @@ module Categories
   class Deleter
     attr_reader :category, :soft
 
+    # The message delete would refuse with, or nil when it would go ahead.
+    def self.refusal(category:)
+      return unless category.is_a?(::Books::Category)
+      return unless ::Books::Category.protected_ids.include?(category.id)
+
+      "Fiction, Nonfiction, Poetry and Religion & Spirituality can't be deleted."
+    end
+
     def initialize(category:, soft: true)
       @category = category
       @soft = soft
@@ -21,10 +29,8 @@ module Categories
     private
 
     def refuse_protected!
-      return unless @category.is_a?(::Books::Category)
-      return unless ::Books::Category.protected_ids.include?(@category.id)
-
-      raise Refused, "Fiction, Nonfiction, Poetry and Religion & Spirituality can't be deleted."
+      message = self.class.refusal(category: @category)
+      raise Refused, message if message
     end
 
     def soft_delete

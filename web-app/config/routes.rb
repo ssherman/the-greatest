@@ -673,6 +673,8 @@ Rails.application.routes.draw do
             get "categories/:id", to: "categories#show", constraints: {id: /\d+/}
             post "categories", to: "categories#create"
             patch "categories/:id", to: "categories#update", constraints: {id: /\d+/}
+            post "categories/:id/merge", to: "categories#merge", constraints: {id: /\d+/}
+            delete "categories/:id", to: "categories#destroy", constraints: {id: /\d+/}
             post "books/:id/merge", to: "book_merges#create", constraints: {id: /\d+/}
             post "authors/:id/merge", to: "author_merges#create", constraints: {id: /\d+/}
             post "books/:id/categories", to: "book_categories#create", constraints: {id: /\d+/}
