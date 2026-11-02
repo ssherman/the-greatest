@@ -8,19 +8,6 @@ module Api
         class CategoryDestructiveTest < ActionDispatch::IntegrationTest
           MERGE = ApiTokenSecrets::ADMIN
 
-          # Lets one test make a chosen source's real merge raise, while the
-          # others run the real code.
-          module FailOn
-            mattr_accessor :category_id
-
-            def merge
-              raise "boom" if category.id == FailOn.category_id
-
-              super
-            end
-          end
-          ::Categories::Merger.prepend(FailOn)
-
           setup do
             host! "dev-new.thegreatestbooks.org"
             ::Books::Category.stubs(:protected_ids).returns([categories(:books_fiction_genre).id])
@@ -29,8 +16,6 @@ module Api
             @books = [:war_and_peace, :crime_and_punishment, :of_mice_and_men].map { |b| books_books(b) }
             @sources.zip(@books).each { |category, book| CategoryItem.create!(category: category, item: book, source: :admin) }
           end
-
-          teardown { FailOn.category_id = nil }
 
           def json = response.parsed_body.deep_symbolize_keys
 
@@ -158,7 +143,9 @@ module Api
           end
 
           test "a failure part way stops, reports the split, and keeps the first merge" do
-            FailOn.category_id = @sources.second.id
+            # The counter runs inside each merge's transaction: the second raises
+            # and rolls back, the first is real.
+            ::Categories::ItemCounter.stubs(:call).returns(nil).then.raises(RuntimeError, "boom")
 
             merge({source_ids: source_ids})
             assert_api_response_conform(status: 422, api: :admin)
@@ -171,6 +158,52 @@ module Api
             assert_not @sources.third.reload.deleted?
           end
 
+          test "a post-commit error leaves the source merged and reported as such" do
+            ::Categories::ItemReindexer.stubs(:queue_items).raises(RuntimeError, "queue down")
+            Rails.logger.stubs(:info)
+            Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_category_merge outcome=succeeded .*post_commit_error="queue down"/)).times(3)
+
+            merge({source_ids: source_ids})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal source_ids, json[:data][:merged]
+            assert_equal source_ids, json[:data][:post_commit_errors].map { |e| e[:id] }
+            assert_equal "queue down", json[:data][:post_commit_errors].first[:message]
+            @sources.each { |s| assert s.reload.deleted? }
+          end
+
+          test "a post-commit error then a genuine failure reports both" do
+            ::Categories::ItemReindexer.stubs(:queue_items).raises(RuntimeError, "queue down")
+            ::Categories::ItemCounter.stubs(:call).returns(nil).then.raises(RuntimeError, "boom")
+
+            merge({source_ids: source_ids})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert_equal [@sources.first.id], json[:merged]
+            assert_equal @sources.first.id, json[:post_commit_errors].first[:id]
+            assert_equal @sources.second.id, json[:failed][:id]
+            assert_equal [@sources.third.id], json[:not_attempted]
+          end
+
+          test "dry_run must be strictly true or false on merge and delete" do
+            ["", "yes", "False", "1", 1, nil].each do |bad|
+              merge({source_ids: source_ids, dry_run: bad})
+              assert_response :bad_request, "merge dry_run=#{bad.inspect}"
+            end
+            ["", "yes", "False", "1"].each do |bad|
+              destroy_category(@sources.first.id, "?dry_run=#{bad}")
+              assert_response :bad_request, "delete dry_run=#{bad.inspect}"
+            end
+            assert_not @sources.first.reload.deleted?
+
+            merge({source_ids: source_ids, dry_run: "true"})
+            assert_equal true, json[:meta][:dry_run]
+            destroy_category(@sources.first.id, "?dry_run=true")
+            assert_equal true, json[:meta][:dry_run]
+            merge({source_ids: source_ids, dry_run: false})
+            assert_equal false, json[:meta][:dry_run]
+          end
+
           test "a real merge logs one line per source" do
             Rails.logger.stubs(:info)
             Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_category_merge outcome=succeeded .*source_id=\d+ target_id=#{@target.id}/)).times(3)
@@ -179,7 +212,7 @@ module Api
           end
 
           test "a failed merge logs the failure" do
-            FailOn.category_id = @sources.first.id
+            ::Categories::ItemCounter.stubs(:call).raises(RuntimeError, "boom")
             Rails.logger.stubs(:info)
             Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_category_merge outcome=failed .*source_id=#{@sources.first.id}/)).once
 

@@ -82,6 +82,9 @@ module Api
             source_ids = parse_source_ids
             return if performed?
 
+            dry_run = strict_dry_run
+            return if dry_run == :invalid
+
             target = ::Books::Category.find_by(id: params[:id])
             return render_problem(::Api::Problem.new(:not_found, detail: "No target category #{params[:id]}")) if target.nil?
 
@@ -105,13 +108,15 @@ module Api
             end
             return render_problem(::Api::Problem.new(:unprocessable, detail: refused.join("; "))) if refused.any?
 
-            dry_run = ActiveModel::Type::Boolean.new.cast(params[:dry_run]) || false
             return render_merge_dry_run(target, sources) if dry_run
 
             run_merges(target, sources)
           end
 
           def destroy
+            dry_run = strict_dry_run
+            return if dry_run == :invalid
+
             category = ::Books::Category.find(params[:id])
             unless ::Books::CategoryPolicy.new(current_principal.user, category).destroy?
               return render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not delete category #{category.id}"))
@@ -121,7 +126,6 @@ module Api
             refusal = ::Categories::Deleter.refusal(category: category)
             return render_problem(::Api::Problem.new(:unprocessable, detail: refusal)) if refusal
 
-            dry_run = ActiveModel::Type::Boolean.new.cast(params[:dry_run]) || false
             counts = counts_for([category.id])
             removed = {
               book_links_removed: counts[:book_links].fetch(category.id, 0),
@@ -181,29 +185,63 @@ module Api
             }
           end
 
+          # A merge commits before its post-commit work (reindex queueing, ancestor
+          # reconcile) runs, so an exception can arrive after the source is already
+          # merged. Re-read the row: a merged source is reported as merged, with the
+          # error listed apart; only a merge that did not happen stops the batch.
           def run_merges(target, sources)
             merged = []
+            post_commit_errors = []
             sources.each_with_index do |source, index|
               ::Categories::Merger.new(category: source, category_to_merge_with: target).merge
               log_merge(source, target, "succeeded")
               merged << source.id
             rescue => e
-              log_merge(source, target, "failed", e.message)
+              if committed_merge?(source, target)
+                log_merge(source, target, "succeeded", post_commit_error: e.message)
+                merged << source.id
+                post_commit_errors << {id: source.id, message: e.message}
+                next
+              end
+
+              log_merge(source, target, "failed", error: e.message)
               body = ::Api::Problem.new(:unprocessable, detail: "Merged #{merged.size} of #{sources.size}; #{source.id} failed: #{e.message}").to_h
               body.merge!(merged: merged, failed: {id: source.id, message: e.message}, not_attempted: sources[(index + 1)..].map(&:id))
+              body[:post_commit_errors] = post_commit_errors if post_commit_errors.any?
               return render(json: body, status: :unprocessable_entity, content_type: ::Api::Problem::CONTENT_TYPE)
             end
 
             target.reload
-            render json: {
-              data: {target: CategoryResource.new(target, params: counts_for([target.id])).to_h, merged: merged},
-              meta: {dry_run: false}
-            }
+            data = {target: CategoryResource.new(target, params: counts_for([target.id])).to_h, merged: merged}
+            data[:post_commit_errors] = post_commit_errors if post_commit_errors.any?
+            render json: {data: data, meta: {dry_run: false}}
           end
 
-          def log_merge(source, target, outcome, error = nil)
+          def committed_merge?(source, target)
+            source.reload
+            source.deleted? && source.merged_into_id == target.id
+          rescue
+            false
+          end
+
+          # absent -> false; true/"true" -> true; false/"false" -> false; anything
+          # else renders a 400 and returns :invalid.
+          def strict_dry_run
+            return false unless params.key?(:dry_run)
+
+            case params[:dry_run]
+            when true, "true" then true
+            when false, "false" then false
+            else
+              bad_parameter("dry_run must be true or false")
+              :invalid
+            end
+          end
+
+          def log_merge(source, target, outcome, error: nil, post_commit_error: nil)
             line = "event=api_admin_category_merge outcome=#{outcome} #{log_actor} source_id=#{source.id} target_id=#{target.id}"
             line += " errors=#{error.inspect}" if error
+            line += " post_commit_error=#{post_commit_error.inspect}" if post_commit_error
             Rails.logger.info(line)
           end
 

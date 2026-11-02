@@ -319,6 +319,7 @@ paths:
       description: |
         Marks the category deleted AND REMOVES EVERY ONE OF ITS LINKS to books and authors. The category row stays, but deleting it cannot be undone with the links intact: restoring it would not bring them back.
         Fiction, Nonfiction, Poetry and Religion & Spirituality cannot be deleted (422), and neither can a category that is already deleted (422).
+        Child places of a deleted location keep pointing at it; only the category's own links are removed.
         Send `dry_run=true` to see the category and how many book and author links would be removed without changing anything.
         Requires `books:admin:merge`, and the token's owner must be allowed to delete the category.
       parameters:
@@ -326,7 +327,7 @@ paths:
         - name: dry_run
           in: query
           required: false
-          description: "`true` reports what would be removed and changes nothing. Default `false`."
+          description: "`true` reports what would be removed and changes nothing. Default `false`. Only `true` and `false` are accepted; anything else is a 400."
           schema: {type: boolean, default: false}
       responses:
         "200":
@@ -367,7 +368,8 @@ paths:
         Folds each category in `source_ids` (1 to 50, no repeats, never the target) into the category in the path, one at a time in the order given. Every source's links move to the target, the source is soft-deleted with `merged_into` pointing at the target, and its slug keeps resolving to the target. There is no undelete.
         Everything is checked before any merge runs: each id must exist (404 names the first missing one), the token's owner must be allowed to delete the target and every source (403 names it), and no source may be refused by the merger (422 lists every refused source as `id: reason`). Fiction, Nonfiction, Poetry and Religion & Spirituality cannot be merged.
         If a merge still fails part way, the request stops and answers 422 with `merged`, `failed` and `not_attempted`; the sources already merged stay merged.
-        Send `dry_run: true` to run every check and see each source's link counts without changing anything.
+        Send `dry_run: true` to run every check and see each source's link counts without changing anything. `dry_run` must be a boolean or `"true"`/`"false"`; anything else is a 400.
+        A merge commits before its follow-up work (search reindex queueing) runs. If that follow-up raises, the source still counts as merged and the error is listed in `post_commit_errors`.
         Requires `books:admin:merge`.
       parameters:
         - $ref: "#/components/parameters/id"
@@ -894,6 +896,15 @@ components:
           description: Category merge only, on a 422 that came part way. Ids never tried.
           type: array
           items: {type: integer}
+        post_commit_errors:
+          description: Category merge only. Sources listed in `merged` whose follow-up work raised after the merge committed.
+          type: array
+          items:
+            type: object
+            required: [id, message]
+            properties:
+              id: {type: integer}
+              message: {type: string}
     PaginationMeta:
       type: object
       required: [page, per_page, total_count, total_pages]
@@ -1112,6 +1123,15 @@ components:
               description: Ids merged, in order. Absent on a dry run.
               type: array
               items: {type: integer}
+            post_commit_errors:
+              description: Sources that merged but whose follow-up work raised. Present only when there were any.
+              type: array
+              items:
+                type: object
+                required: [id, message]
+                properties:
+                  id: {type: integer}
+                  message: {type: string}
             sources:
               description: Present on a dry run only. What each source would carry over.
               type: array
