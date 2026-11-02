@@ -12,9 +12,9 @@ module ApiConformance
   # Test::Configuration#response_raise_error, set to false in test_helper.rb,
   # which is what actually turns an invalid response into a normal assertion
   # FAILURE here instead of an ERROR raised inside the gem.
-  def assert_api_response_conform(status:)
+  def assert_api_response_conform(status:, api: :default)
     assert_equal status, response.status, "#{request.request_method} #{request.fullpath}"
-    validated = OpenapiFirst::Test[:default].validate_response(request, response, raise_error: false)
+    validated = OpenapiFirst::Test[api].validate_response(request, response, raise_error: false)
     refute_nil validated, "#{request.request_method} #{request.fullpath} matched no documented operation"
     assert validated.valid?, validated.error&.exception_message
   end

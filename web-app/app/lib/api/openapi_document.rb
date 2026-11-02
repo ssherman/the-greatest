@@ -6,25 +6,32 @@
 # therefore never sees /api/v1/books, which is routed on the books host alone;
 # untagged paths (this document itself) appear everywhere. Memoised outside
 # development: the file changes only with a deploy.
+#
+# Two documents: the public one, and the admin one (served only to a token
+# holding books:admin:read). The public document never mentions an admin path.
 module Api
   module OpenapiDocument
-    PATH = Rails.root.join("config/api/v1/openapi.yaml")
+    PATHS = {
+      public: Rails.root.join("config/api/v1/openapi.yaml"),
+      admin: Rails.root.join("config/api/v1/admin_openapi.yaml")
+    }.freeze
     DOMAIN_KEY = "x-domain"
 
-    def self.raw
-      return load if Rails.env.development?
+    def self.raw(document = :public)
+      return load(document) if Rails.env.development?
 
-      @raw ||= load
+      (@raw ||= {})[document] ||= load(document)
     end
 
-    def self.for_host(base_url, domain:)
-      paths = raw.fetch("paths").select do |_path, item|
+    def self.for_host(base_url, domain:, document: :public)
+      source = raw(document)
+      paths = source.fetch("paths").select do |_path, item|
         item[DOMAIN_KEY].nil? || item[DOMAIN_KEY] == domain.to_s
       end
 
-      raw.merge("servers" => [{"url" => base_url}], "paths" => paths)
+      source.merge("servers" => [{"url" => base_url}], "paths" => paths)
     end
 
-    def self.load = YAML.safe_load_file(PATH, aliases: true)
+    def self.load(document) = YAML.safe_load_file(PATHS.fetch(document), aliases: true)
   end
 end

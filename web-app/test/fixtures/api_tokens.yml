@@ -62,3 +62,19 @@ service_account_token:
   token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::SERVICE) %>
   token_prefix: <%= ApiTokenSecrets::SERVICE[0, 12] %>
   scopes: ["books:read", "music:read", "games:read"]
+
+admin_merge_token:
+  user: admin_user
+  name: admin-merge
+  token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::ADMIN) %>
+  token_prefix: <%= ApiTokenSecrets::ADMIN[0, 12] %>
+  scopes: ["books:admin:merge"]
+  expires_at: <%= 30.days.from_now.iso8601 %>
+
+books_viewer_admin_read_token:
+  user: books_viewer_user
+  name: admin-read
+  token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::ADMIN_READ) %>
+  token_prefix: <%= ApiTokenSecrets::ADMIN_READ[0, 12] %>
+  scopes: ["books:admin:read"]
+  expires_at: <%= 30.days.from_now.iso8601 %>

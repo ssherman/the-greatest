@@ -657,6 +657,17 @@ Rails.application.routes.draw do
             as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
           get "lists/:list_id/items", to: "list_items#index", as: :list_items, constraints: {list_id: /\d+/}
         end
+
+        # Admin API: needs a books:admin:* scope. Its contract is
+        # config/api/v1/admin_openapi.yaml, served only from
+        # /api/v1/admin/openapi.json, never from the public document.
+        namespace :admin do
+          get "openapi", to: "openapi#show"
+          scope module: :books do
+            get "books", to: "books#index"
+            get "authors", to: "authors#index"
+          end
+        end
       end
     end
 
