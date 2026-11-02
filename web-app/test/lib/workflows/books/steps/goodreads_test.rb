@@ -257,6 +257,22 @@ module Workflows
           assert_equal [["unrecognized", "blocked"]], ledger_rows.pluck(:outcome, :reason)
         end
 
+        # Steps parked by the code before this one carry a bad fetch from an
+        # unparseable search; a usable search clears it, so a later real block
+        # on the page is waited out, not taken as the second strike.
+        test "a usable search clears a bad fetch left from earlier, so a blocked page still waits" do
+          @stored = {"progress" => {"phase" => "search", "query" => "Catch-22", "origin" => "search", "due" => false,
+                                    "followed_best" => false, "searched_retry" => false, "bad_fetches" => 1}}
+          search_row(row(MAIN, title: "Catch-22"))
+          pick(MAIN)
+          gate_decisions(FETCH)
+          stub_page_fetch([:blocked, nil])
+
+          outcome = execute
+
+          assert_equal [:wait, 1], [outcome.kind, @stored.dig("progress", "bad_fetches")]
+        end
+
         test "an unparseable page goes through after_fetch and ends the step at once as a miss with one ledger row" do
           search_row(row(MAIN, title: "Catch-22"))
           pick(MAIN)

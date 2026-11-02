@@ -28,8 +28,9 @@ Rails.application.config.x.goodreads = ActiveSupport::OrderedOptions.new.merge(
   fetch_interval: GoodreadsEnv.integer("GOODREADS_FETCH_INTERVAL", 15),
   # Fetches reserved per UTC day. GOODREADS_DAILY_FETCH_CAP overrides it.
   daily_fetch_cap: GoodreadsEnv.integer("GOODREADS_DAILY_FETCH_CAP", 1_500),
-  # How long a 401/403/429 or a challenge page stops every fetch. A page the
-  # parser cannot recognize does not (see GateTurn.after_fetch).
+  # How long a block stops every fetch: a 401/403/429, another status the
+  # parser cannot read, or a page Goodreads did not title as its own (a
+  # challenge). An unreadable Goodreads page does not (GateTurn.after_fetch).
   block_cooldown: 6.hours.to_i,
   # Tries for a fetch that got no answer (Goodreads' 503 page, a timeout)
   # before the edition is created unverified for the sweep.

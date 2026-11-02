@@ -66,6 +66,10 @@ module Books
         return Parsed.new(outcome: :found, facts: facts) if facts
         return verdict(:not_found) if doc.at_css("title")&.text.to_s.strip == NOT_FOUND_TITLE
         return verdict(:unavailable) if doc.at_css("h1")&.text.to_s.strip == ERROR_HEADING
+        # Unparseable ends one book and leaves the gate open, so it is kept for
+        # a 200 page Goodreads itself titled ("... | Goodreads"). Anything else
+        # (a challenge, an empty body, AWS WAF's 202/405) stands in for a block.
+        return verdict(:blocked) unless @status == 200 && doc.at_css("title")&.text.to_s.include?("Goodreads")
 
         verdict(:unparseable)
       end

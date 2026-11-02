@@ -28,11 +28,13 @@ module Books
         Decision.new(action: :fetch, wait: nil, refusal: nil)
       end
 
-      # A challenge page (or a 401/403/429) blocks every fetch for the cooldown.
-      # An unrecognizable page does not: Goodreads answered, the parser just
-      # could not read it, and blocking on that froze all enrichment for days
-      # when the search page was redesigned (2026-11-01). The caller ends that
-      # one fetch's work instead; the HTML is kept for a parser fix.
+      # A block (a 401/403/429, any other status the parser cannot read, or a
+      # page that is not Goodreads' own, such as a challenge) stops every fetch
+      # for the cooldown. An unreadable Goodreads page does not: Goodreads
+      # answered, the parser just could not read it, and blocking on that
+      # froze all enrichment when the search page was redesigned (2026-11-01).
+      # The caller ends that one fetch's work instead; the HTML is kept for a
+      # parser fix.
       def self.after_fetch(gate:, outcome:)
         gate.block! if outcome == :blocked
       end

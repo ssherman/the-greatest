@@ -140,9 +140,10 @@ for it. Matched editions never touch Goodreads.
   `daily_fetch_cap` (1,500), each fetch counted against the day it starts on, so a line that runs
   past midnight fills the next day's cap. A job waits for its turn by rescheduling itself, and a turn that came
   due late (after a deploy or a slow fetch) still waits out `fetch_interval` since the last fetch
-  actually began. A page with no title or no contributors is unparseable, never found. A 401/403/429 or a
-  challenge page blocks all fetching for `block_cooldown` (6 h); an unrecognizable page does not, and
-  its editions settle as if no page came back. Goodreads' own 503 page
+  actually began. A page with no title or no contributors is unparseable, never found. A 401/403/429, any
+  other status it cannot read, or a page whose `<title>` is not Goodreads' (a challenge) blocks all
+  fetching for `block_cooldown` (6 h). A Goodreads page it cannot read does not; its editions settle
+  as if no page came back. Goodreads' own 503 page
   and timeouts are retried through the line up to `fetch_attempts` (3). Settings:
   `config/initializers/goodreads.rb`.
 - **Reading.** `Books::Goodreads::BookPage` reads `__NEXT_DATA__`, or the markup and `ld+json`

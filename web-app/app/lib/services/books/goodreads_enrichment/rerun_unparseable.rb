@@ -13,6 +13,11 @@ module Services
       # (or missed for another reason) is not run again, and a book with a run
       # still going is left to it. At most `limit` books per call, oldest miss
       # first: every started run joins the Goodreads fetch line.
+      #
+      # The new run is a whole run, carrying the old one's options: book_facts
+      # (the AI step) and amazon run again too. That is the point when Goodreads
+      # now matches, since both use the page; for a book that misses again it
+      # costs one more AI and Amazon pass, which is why each call is limited.
       class RerunUnparseable
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -42,7 +47,7 @@ module Services
             next false unless book
 
             ::Workflows::Books::BookEnrichment.start(book, initiated_by: INITIATED_BY,
-              author_names: Array(run.options["author_names"]))
+              author_names: Array(run.options["author_names"]), options: run.options.except("author_names"))
             true
           end
           Result.new(success?: true, data: {started: started, remaining: total - started}, errors: [])

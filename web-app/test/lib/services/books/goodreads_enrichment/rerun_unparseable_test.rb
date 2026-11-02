@@ -14,17 +14,17 @@ module Services
         end
 
         # A finished book run whose goodreads step ended with this outcome.
-        def finished_run(book, outcome:, status: :completed, created_at: 2.days.ago, author_names: ["Joseph Heller"])
+        def finished_run(book, outcome:, status: :completed, created_at: 2.days.ago, author_names: ["Joseph Heller"], options: {})
           run = WorkflowRun.create!(workflow: WORKFLOW, definition_version: 2, enrichable: book, initiated_by: "goodreads_rebuild",
-            options: {"author_names" => author_names}, status: status, created_at: created_at)
+            options: options.merge("author_names" => author_names), status: status, created_at: created_at)
           run.steps.create!(key: "goodreads", queue: "goodreads_fetch", lease_seconds: 600, state: :succeeded,
             outcome: outcome, result: {})
           run
         end
 
-        test "starts a new book run for each book whose latest goodreads step was unparseable, with its author names" do
+        test "starts a new book run for each book whose latest goodreads step was unparseable, with its options" do
           catch22 = book("Catch-22")
-          finished_run(catch22, outcome: "unparseable", author_names: ["Joseph Heller"])
+          finished_run(catch22, outcome: "unparseable", author_names: ["Joseph Heller"], options: {"force_research" => true})
           matched = book("Closing Time")
           finished_run(matched, outcome: "matched")
           started = []
@@ -32,7 +32,8 @@ module Services
 
           result = RerunUnparseable.call(limit: 10)
 
-          assert_equal [[catch22, {initiated_by: "goodreads_unparseable_rerun", author_names: ["Joseph Heller"]}]], started
+          assert_equal [[catch22, {initiated_by: "goodreads_unparseable_rerun", author_names: ["Joseph Heller"],
+                                   options: {"force_research" => true}}]], started
           assert_equal({started: 1, remaining: 0}, result.data)
         end
 

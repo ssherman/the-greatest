@@ -19,8 +19,9 @@
 #                     reserved turn, so the next execution must not reserve again
 #   followed_best     the main edition's page has been followed; never follow twice
 #   searched_retry    the title-plus-surname search has been used
-#   bad_fetches       blocked fetches so far; the second ends the step as a
-#                     miss (an unparseable fetch ends it at once)
+#   bad_fetches       blocked fetches in a row; the second ends the step as a
+#                     miss, a usable search or page clears it (an unparseable
+#                     fetch ends the step at once)
 #   stray_id          the page followed away from, to fall back to if the main
 #                     edition's page is not found (not in the spec's list)
 #
@@ -72,6 +73,7 @@ module Workflows
             search = fetched(result.data[:outcome], result.data[:search])
             return search if search.is_a?(Workflows::Outcome)
           end
+          clear_bad_fetches
 
           survivors = ::Services::Books::GoodreadsEnrichment::CandidateFilter.call(book: @book, rows: search.candidate_rows)
           if survivors.empty?
@@ -102,6 +104,7 @@ module Workflows
             page = fetched(result.data[:outcome], result.data[:page])
             return page if page.is_a?(Workflows::Outcome)
           end
+          clear_bad_fetches
 
           return follow_best(page) if follow_best?(page)
           return fall_back_to_stray if !page.outcome_found? && @progress["followed_best"] && @progress["stray_id"]
@@ -233,6 +236,9 @@ module Workflows
           ::Services::Books::GoodreadsEnrichment::Ledger.record(book: @book, outcome: "unrecognized", reason: "unparseable")
           Workflows::Outcome.succeeded("unparseable", {"matched" => false})
         end
+
+        # The count is of one URL coming back blocked; a usable answer ends it.
+        def clear_bad_fetches = @progress.delete("bad_fetches")
 
         def blocked_until
           @gate.blocked_until || (Time.current + Rails.application.config.x.goodreads.block_cooldown)

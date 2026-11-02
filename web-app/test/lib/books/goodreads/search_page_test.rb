@@ -72,10 +72,19 @@ module Books
         assert_equal [:no_results, []], [parsed.outcome, parsed.rows]
       end
 
-      test "a 200 page with neither rows nor the no-results text is unparseable" do
+      test "a 200 Goodreads page with neither rows nor the no-results text is unparseable" do
         parsed = SearchPage.parse(html: search_html("redesigned.html"), status: 200)
 
         assert_equal [:unparseable, []], [parsed.outcome, parsed.rows]
+      end
+
+      # Only an unreadable page Goodreads itself served may end one book without
+      # closing the gate; anything else stands in for a challenge.
+      test "a page that is not Goodreads', or any other status it cannot read, is blocked" do
+        challenge = file_fixture("goodreads/pages/synthetic_challenge.html").read
+        redesigned = search_html("redesigned.html")
+
+        assert_equal [:blocked] * 4, [[challenge, 200], ["", 200], [redesigned, 202], [redesigned, 405]].map { |html, status| SearchPage.parse(html: html, status: status).outcome }
       end
 
       test "401, 403 and 429 are blocked and 5xx is unavailable" do

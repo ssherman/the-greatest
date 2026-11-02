@@ -44,11 +44,21 @@ module Books
         rows = card_rows.presence || table_rows
         return Parsed.new(outcome: :found, rows: rows) if rows.any?
         return verdict(:no_results) if no_results?
+        return verdict(:blocked) unless @status == 200 && goodreads_page?
 
         verdict(:unparseable)
       end
 
       private
+
+      # Unparseable ends one book and leaves the gate open, so it is kept for a
+      # 200 page Goodreads itself titled ("... | Goodreads", or the table
+      # layout's "Search results for ..."). Anything else (a challenge, an
+      # empty body, AWS WAF's 202/405) stands in for a block.
+      def goodreads_page?
+        title = doc.at_css("title")&.text.to_s.strip
+        title.include?("Goodreads") || title.start_with?("Search results for")
+      end
 
       def verdict(outcome) = Parsed.new(outcome: outcome, rows: [])
 
