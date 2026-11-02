@@ -62,7 +62,46 @@ module Api
         ["POST", "/api/v1/admin/authors/{id}/merge", "404"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: 999_999_999}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/authors/{id}/merge", "422"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:tolstoy).id}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/authors/{id}/merge", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:king).id}, as: :json, headers: bearer(MERGE) } }
-      }.freeze
+      }.merge(
+        %w[books authors].flat_map do |segment|
+          tag = "/api/v1/admin/#{segment}/{id}/categories"
+          untag = "#{tag}/{category_id}"
+          entries = [
+            [["POST", tag, "200"], -> { post tag_path(segment), params: {category_id: politics_id}, as: :json, headers: bearer(MERGE) }],
+            [["POST", tag, "400"], -> { post tag_path(segment), params: {category_id: "abc"}, as: :json, headers: bearer(MERGE) }],
+            [["POST", tag, "401"], -> { post tag_path(segment), params: {category_id: politics_id}, as: :json }],
+            [["POST", tag, "403"], -> { post tag_path(segment), params: {category_id: politics_id}, as: :json, headers: bearer(READ) }],
+            [["POST", tag, "404"], -> { post tag_path(segment, 999_999_999), params: {category_id: politics_id}, as: :json, headers: bearer(MERGE) }],
+            [["POST", tag, "422"], -> { post tag_path(segment), params: {category_id: categories(:music_rock_genre).id}, as: :json, headers: bearer(MERGE) }],
+            [["POST", tag, "429"], -> { with_exhausted_limit { post tag_path(segment), params: {category_id: politics_id}, as: :json, headers: bearer(MERGE) } }],
+            [["DELETE", untag, "200"], -> {
+              CategoryItem.find_or_create_by!(item: tag_item(segment), category: categories(:books_politics_subject)) { |row| row.source = :admin }
+              delete "#{tag_path(segment)}/#{politics_id}", headers: bearer(MERGE)
+            }],
+            [["DELETE", untag, "400"], -> { delete "#{tag_path(segment)}/0", headers: bearer(MERGE) }],
+            [["DELETE", untag, "401"], -> { delete "#{tag_path(segment)}/#{politics_id}" }],
+            [["DELETE", untag, "403"], -> { delete "#{tag_path(segment)}/#{politics_id}", headers: bearer(READ) }],
+            [["DELETE", untag, "404"], -> { delete "#{tag_path(segment)}/999999999", headers: bearer(MERGE) }],
+            [["DELETE", untag, "429"], -> { with_exhausted_limit { delete "#{tag_path(segment)}/#{politics_id}", headers: bearer(MERGE) } }]
+          ]
+          # Only books have inherited links (ancestor locations), so only books can answer 422.
+          if segment == "books"
+            entries << [["DELETE", untag, "422"], -> {
+              parent = ::Books::Category.create!(name: "Coverage Land", category_type: :location)
+              child = ::Books::Category.create!(name: "Coverage Town", category_type: :location, parent: parent)
+              ::Categories::ItemLinker.link(item: tag_item(segment), category: child)
+              delete "#{tag_path(segment)}/#{parent.id}", headers: bearer(MERGE)
+            }]
+          end
+          entries
+        end.to_h
+      ).freeze
+
+      def tag_item(segment) = (segment == "books") ? books_books(:war_and_peace) : books_authors(:tolstoy)
+
+      def tag_path(segment, id = tag_item(segment).id) = "/api/v1/admin/#{segment}/#{id}/categories"
+
+      def politics_id = categories(:books_politics_subject).id
 
       setup do
         host! "dev-new.thegreatestbooks.org"

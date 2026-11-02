@@ -413,6 +413,188 @@ paths:
           $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/books/{id}/categories:
+    x-domain: books
+    post:
+      operationId: tagBook
+      summary: Tag a book with a category
+      description: |
+        Links the category in `category_id` to the book. Tagging twice is a success and changes nothing; tagging with a category that was inferred from a more specific location makes the link direct.
+        Refused (422) when the category belongs to another section, was deleted, or was merged (the message names the category it was merged into).
+        Requires `books:admin:write`, and the token's owner must be allowed to change both the book and the category.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryLinkRequest"
+      responses:
+        "200":
+          description: The item's category links after the change, sorted by name.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryLinks"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/books/{id}/categories/{category_id}:
+    x-domain: books
+    delete:
+      operationId: untagBook
+      summary: Remove a category from a book
+      description: |
+        Removes a direct link. A link inferred from a more specific location cannot be removed directly (422, the message names the location to remove instead); a category the book does not have is 404.
+        Requires `books:admin:write`, and the token's owner must be allowed to change both the book and the category.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/category_id"
+      responses:
+        "200":
+          description: The item's category links after the change, sorted by name.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryLinks"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/authors/{id}/categories:
+    x-domain: books
+    post:
+      operationId: tagAuthor
+      summary: Tag a author with a category
+      description: |
+        Links the category in `category_id` to the author. Tagging twice is a success and changes nothing; tagging with a category that was inferred from a more specific location makes the link direct.
+        Refused (422) when the category belongs to another section, was deleted, or was merged (the message names the category it was merged into).
+        Requires `books:admin:write`, and the token's owner must be allowed to change both the author and the category.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryLinkRequest"
+      responses:
+        "200":
+          description: The item's category links after the change, sorted by name.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryLinks"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/authors/{id}/categories/{category_id}:
+    x-domain: books
+    delete:
+      operationId: untagAuthor
+      summary: Remove a category from a author
+      description: |
+        Removes a direct link. A link inferred from a more specific location cannot be removed directly (422, the message names the location to remove instead); a category the author does not have is 404.
+        Requires `books:admin:write`, and the token's owner must be allowed to change both the author and the category.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/category_id"
+      responses:
+        "200":
+          description: The item's category links after the change, sorted by name.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryLinks"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -448,6 +630,14 @@ components:
       in: path
       required: true
       description: The resource's integer id.
+      schema:
+        type: integer
+        minimum: 1
+    category_id:
+      name: category_id
+      in: path
+      required: true
+      description: The category's integer id.
       schema:
         type: integer
         minimum: 1
@@ -513,7 +703,7 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     Forbidden:
-      description: The token lacks the admin scope this endpoint needs, or its owner no longer qualifies for it (`insufficient_scope`); or, on a merge, the owner may not delete one of the records (`forbidden`).
+      description: The token lacks the admin scope this endpoint needs, or its owner no longer qualifies for it (`insufficient_scope`); or, on a merge or a tag change, the owner may not change one of the records (`forbidden`).
       headers:
         WWW-Authenticate:
           $ref: "#/components/headers/WWW-Authenticate"
@@ -782,6 +972,35 @@ components:
             - {type: integer, minimum: 1}
             - {type: string, pattern: "^0*[1-9][0-9]*$"}
         dry_run: {type: boolean, default: false, description: Validate and report without merging.}
+    CategoryLinkRequest:
+      type: object
+      required: [category_id]
+      properties:
+        category_id:
+          description: The category to link. A JSON integer, or a string of plain decimal digits.
+          oneOf:
+            - {type: integer, minimum: 1}
+            - {type: string, pattern: "^0*[1-9][0-9]*$"}
+    CategoryLink:
+      type: object
+      required: [id, slug, name, category_type, source]
+      properties:
+        id: {type: integer}
+        slug: {type: [string, "null"]}
+        name: {type: string}
+        category_type: {type: string}
+        source:
+          type: string
+          enum: [legacy, admin, inherited, goodreads]
+          description: How the link came about. `inherited` links follow from a more specific location and cannot be removed directly.
+    CategoryLinks:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryLink"
     MergeWarning:
       type: object
       required: [code, detail]

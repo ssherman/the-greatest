@@ -675,6 +675,10 @@ Rails.application.routes.draw do
             patch "categories/:id", to: "categories#update", constraints: {id: /\d+/}
             post "books/:id/merge", to: "book_merges#create", constraints: {id: /\d+/}
             post "authors/:id/merge", to: "author_merges#create", constraints: {id: /\d+/}
+            post "books/:id/categories", to: "book_categories#create", constraints: {id: /\d+/}
+            delete "books/:id/categories/:category_id", to: "book_categories#destroy", constraints: {id: /\d+/, category_id: /\d+/}
+            post "authors/:id/categories", to: "author_categories#create", constraints: {id: /\d+/}
+            delete "authors/:id/categories/:category_id", to: "author_categories#destroy", constraints: {id: /\d+/, category_id: /\d+/}
           end
         end
       end
