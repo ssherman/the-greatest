@@ -49,6 +49,19 @@ module Api
               [row[:rank], row[:book_kind], row[:authors]]
           end
 
+          test "pagination links carry q and can be followed" do
+            ::Search::Books::Search::BookGeneral.stubs(:call).returns(hits(@mice, @war, @crime))
+
+            get "/api/v1/admin/books", params: {q: "war & peace", per_page: 2}, headers: bearer(ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 200, api: :admin)
+            next_link = json[:links][:next]
+
+            assert_includes next_link, "q=war+%26+peace"
+            get next_link, headers: bearer(ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal [2, [@crime.id]], [json[:meta][:page], json[:data].map { |b| b[:id] }]
+          end
+
           test "no hits is an empty page" do
             ::Search::Books::Search::BookGeneral.stubs(:call).returns([])
 

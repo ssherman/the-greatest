@@ -47,17 +47,6 @@ module Api
           assert_api_response_conform(status: Integer(status), api: :admin)
         end
       end
-
-      private
-
-      def with_exhausted_limit
-        minute = Services::Api::RateLimiter::Window.new(limit: 60, remaining: 0, reset_at: 30.seconds.from_now, exceeded: true)
-        day = Services::Api::RateLimiter::Window.new(limit: 5000, remaining: 10, reset_at: 1.day.from_now, exceeded: false)
-        Services::Api::RateLimiter.stubs(:hit).returns(Services::Api::RateLimiter::Verdict.new(minute: minute, day: day))
-        yield
-      ensure
-        Services::Api::RateLimiter.unstub(:hit)
-      end
     end
   end
 end

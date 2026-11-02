@@ -78,6 +78,15 @@ module Api
       )
     end
 
+    test "links carry extra query params after page and per_page, encoded" do
+      page = Page.from_params(params(page: "1", per_page: "10"), total_count: 35)
+
+      links = page.links("https://x.test/api/v1/admin/books", query: {q: "war & peace"})
+
+      assert_equal "https://x.test/api/v1/admin/books?page=2&per_page=10&q=war+%26+peace", links[:next]
+      assert_equal "https://x.test/api/v1/admin/books?page=1&per_page=10&q=war+%26+peace", links[:self]
+    end
+
     test "links carry nulls, not missing keys, when there is no next or prev" do
       links = Page.from_params(params, total_count: 3).links("https://x.test/api/v1/books")
 

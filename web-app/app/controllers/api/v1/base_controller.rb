@@ -52,14 +52,14 @@ module Api
       # count(:all), not count: a relation carrying a custom select (a book's
       # listings ride their weight along) would otherwise be counted as
       # COUNT(<select list>), which Postgres rejects. It is what Pagy does too.
-      def render_page(relation, path:)
+      def render_page(relation, path:, query: {})
         page = ::Api::Page.from_params(params, total_count: relation&.count(:all) || 0)
         rows = (relation && page.page <= page.total_pages) ? relation.offset(page.offset).limit(page.per_page).to_a : []
 
         render json: {
           data: yield(rows),
           meta: page.meta,
-          links: page.links("#{::Api::Host.base_url}#{path}")
+          links: page.links("#{::Api::Host.base_url}#{path}", query: query)
         }
       end
 

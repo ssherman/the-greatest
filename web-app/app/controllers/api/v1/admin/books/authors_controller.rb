@@ -12,7 +12,7 @@ module Api
             ids = hit_ids(::Search::Books::Search::AuthorGeneral.call(query, size: SEARCH_LIMIT))
             relation = ids.any? ? ::Books::Author.where(id: ids).in_order_of(:id, ids).includes(:primary_ranked_item) : nil
 
-            render_page(relation, path: "/api/v1/admin/authors") do |rows|
+            render_page(relation, path: "/api/v1/admin/authors", query: {q: query}) do |rows|
               # One grouped count for the page, not one per author.
               counts = ::Books::BookAuthor.where(author_id: rows.map(&:id)).group(:author_id).count
               rows.map { |author| AuthorResource.new(author, params: {book_counts: counts}).to_h }

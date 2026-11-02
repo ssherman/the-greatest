@@ -232,7 +232,7 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     Forbidden:
-      description: The token is valid but its account is not a member (`membership_required`) or lacks the scope this host needs (`insufficient_scope`).
+      description: The token lacks the admin scope this endpoint needs, or its owner no longer qualifies for it (`insufficient_scope`).
       headers:
         WWW-Authenticate:
           $ref: "#/components/headers/WWW-Authenticate"
