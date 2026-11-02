@@ -114,4 +114,56 @@ test.describe("Books admin — categories", () => {
     await page.goto(`/the-greatest/${sourceSlug}/books`);
     await expect(page).toHaveURL(/\/the-greatest\/e2e-merge-target\/books/);
   });
+
+  test("an inherited location is labelled 'via' with no Remove, and re-adding succeeds", async ({ page }) => {
+    const stamp = Date.now();
+    const country = `E2E Country ${stamp}`;
+    const city = `E2E City ${stamp}`;
+
+    await page.goto("/admin/categories/new");
+    await page.locator('input[name="books_category[name]"]').fill(country);
+    await page.locator('select[name="books_category[category_type]"]').selectOption("location");
+    await page.getByRole("button", { name: "Create Category" }).click();
+    await expect(page.getByRole("heading", { name: country, level: 1 })).toBeVisible();
+
+    await page.goto("/admin/categories/new");
+    await page.locator('input[name="books_category[name]"]').fill(city);
+    await page.locator('select[name="books_category[category_type]"]').selectOption("location");
+    await page.getByPlaceholder("Search for a parent category...").fill(country);
+    await page.locator("li.cursor-pointer", { hasText: country }).first().click();
+    await page.getByRole("button", { name: "Create Category" }).click();
+    await expect(page.getByRole("heading", { name: city, level: 1 })).toBeVisible();
+
+    const bookTitle = `E2E Inherit Book ${stamp}`;
+    await page.goto("/admin/books/new");
+    await page.locator('input[name="books_book[title]"]').fill(bookTitle);
+    await page.getByRole("button", { name: "Create Book" }).click();
+    await expect(page.getByRole("heading", { name: bookTitle, level: 1 })).toBeVisible();
+
+    const addCategory = async (name: string) => {
+      const categoriesCard = page.locator(".card", { hasText: "Categories" });
+      await categoriesCard.getByRole("button", { name: "+ Add" }).click();
+      const modal = page.locator("dialog#add_category_modal_dialog");
+      await expect(modal).toBeVisible();
+      await modal.getByPlaceholder("Search for category...").fill(name);
+      await modal.locator("li.cursor-pointer").first().click();
+      await modal.getByRole("button", { name: "Add Category" }).click();
+    };
+
+    await addCategory(city);
+
+    const list = page.locator("turbo-frame#category_items_list");
+    const cityRow = list.locator("tr", { hasText: city });
+    const countryRow = list.locator("tr", { hasText: country });
+    await expect(cityRow.getByRole("button", { name: "Remove" })).toBeVisible();
+    await expect(countryRow).toContainText(`via ${city}`);
+    await expect(countryRow.getByRole("button", { name: "Remove" })).toHaveCount(0);
+
+    // Tagging the inherited country directly upgrades it; tagging it again is a success.
+    await addCategory(country);
+    await expect(countryRow.getByRole("button", { name: "Remove" })).toBeVisible();
+    await addCategory(country);
+    await expect(page.getByText("Category added successfully")).toBeVisible();
+    await expect(list.locator("tr", { hasText: country })).toHaveCount(1);
+  });
 });
