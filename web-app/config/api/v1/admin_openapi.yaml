@@ -1,0 +1,563 @@
+openapi: 3.1.0
+info:
+  title: The Greatest API (admin)
+  version: "1"
+  description: |
+    Administrative operations on The Greatest Books catalogue. Every endpoint needs a
+    bearer token carrying a `books:admin:*` scope, which only an administrator or a
+    books domain role holder can be issued, and which always expires. This document
+    is served only to such tokens.
+servers:
+  - url: https://thegreatestbooks.org
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/admin/openapi.json:
+    x-domain: books
+    get:
+      operationId: getAdminOpenapi
+      summary: This document
+      description: Requires `books:admin:read`.
+      responses:
+        "200":
+          description: The admin OpenAPI 3.1 document as JSON, with `servers` set to the host it was fetched from.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/books:
+    x-domain: books
+    get:
+      operationId: searchAdminBooks
+      summary: Search books
+      description: Full-text search over titles, subtitles and author names. Unlike the public API this includes provisional (unreviewed import) books and every book kind. Requires `books:admin:read`. At most the first 1000 matches are paged.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search text. Blank is a 400.
+          schema:
+            type: string
+            minLength: 1
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of matching books, best match first.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/authors:
+    x-domain: books
+    get:
+      operationId: searchAdminAuthors
+      summary: Search authors
+      description: Full-text search over author names, including provisional authors. Requires `books:admin:read`. At most the first 1000 matches are paged.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search text. Blank is a 400.
+          schema:
+            type: string
+            minLength: 1
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of matching authors, best match first.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthorCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/books/{id}/merge:
+    x-domain: books
+    post:
+      operationId: mergeBook
+      summary: Merge a duplicate book
+      description: |
+        Folds the book named by `source_id` into the book in the path and PERMANENTLY DELETES the source.
+        Requires `books:admin:merge`, and the token's owner must be allowed to delete both records.
+        Send `dry_run: true` to validate and see both records without changing anything.
+        There is no undelete.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MergeRequest"
+      responses:
+        "200":
+          description: The merge was done (or, for a dry run, would succeed). `warnings` lists follow-up work that could not be completed.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBookMerge"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/authors/{id}/merge:
+    x-domain: books
+    post:
+      operationId: mergeAuthor
+      summary: Merge a duplicate author
+      description: |
+        Folds the author named by `source_id` into the author in the path and PERMANENTLY DELETES the source.
+        Requires `books:admin:merge`, and the token's owner must be allowed to delete both records.
+        Send `dry_run: true` to validate and see both records without changing anything.
+        There is no undelete.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MergeRequest"
+      responses:
+        "200":
+          description: The merge was done (or, for a dry run, would succeed). `warnings` lists follow-up work that could not be completed.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthorMerge"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: A personal access token (`tg_…`). Create one at /developers/tokens.
+  parameters:
+    page:
+      name: page
+      in: query
+      description: 1-based page number. A page past the end returns an empty `data` array.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 2147483647
+        default: 1
+    per_page:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    slug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+    id:
+      name: id
+      in: path
+      required: true
+      description: The resource's integer id.
+      schema:
+        type: integer
+        minimum: 1
+  headers:
+    X-RateLimit-Limit:
+      description: Requests allowed per calendar minute.
+      schema: {type: integer}
+    X-RateLimit-Remaining:
+      description: Requests left in the current minute.
+      schema: {type: integer}
+    X-RateLimit-Reset:
+      description: Unix time at which the minute window resets.
+      schema: {type: integer}
+    X-RateLimit-Daily-Limit:
+      description: Requests allowed per UTC day.
+      schema: {type: integer}
+    X-RateLimit-Daily-Remaining:
+      description: Requests left today.
+      schema: {type: integer}
+    X-RateLimit-Daily-Reset:
+      description: Unix time of the next 00:00 UTC.
+      schema: {type: integer}
+    Retry-After:
+      description: Seconds until the exhausted window resets.
+      schema: {type: integer}
+    WWW-Authenticate:
+      description: RFC 6750 challenge.
+      schema: {type: string}
+  responses:
+    BadRequest:
+      description: A query parameter is malformed or out of range.
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+        X-RateLimit-Daily-Limit:
+          $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+        X-RateLimit-Daily-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+        X-RateLimit-Daily-Reset:
+          $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: No token, or a token that is malformed, unknown, revoked or expired.
+      headers:
+        WWW-Authenticate:
+          $ref: "#/components/headers/WWW-Authenticate"
+          required: true
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: The token lacks the admin scope this endpoint needs, or its owner no longer qualifies for it (`insufficient_scope`); or, on a merge, the owner may not delete one of the records (`forbidden`).
+      headers:
+        WWW-Authenticate:
+          $ref: "#/components/headers/WWW-Authenticate"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: No record at that address (unknown slug or id).
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+        X-RateLimit-Daily-Limit:
+          $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+        X-RateLimit-Daily-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+        X-RateLimit-Daily-Reset:
+          $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unprocessable:
+      description: The request was understood but the merge is not allowed or failed (`unprocessable`), for example merging a record into itself.
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+        X-RateLimit-Daily-Limit:
+          $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+        X-RateLimit-Daily-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+        X-RateLimit-Daily-Reset:
+          $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    TooManyRequests:
+      description: A rate-limit window is exhausted. `Retry-After` says when it resets.
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/Retry-After"
+          required: true
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Problem:
+      description: RFC 9457 Problem Details with a stable `code`.
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+          enum: [unauthenticated, invalid_token, membership_required, insufficient_scope, forbidden, not_found, invalid_parameter, unprocessable, rate_limited]
+        detail:
+          type: string
+    PaginationMeta:
+      type: object
+      required: [page, per_page, total_count, total_pages]
+      properties:
+        page: {type: integer, minimum: 1}
+        per_page: {type: integer, minimum: 1, maximum: 100}
+        total_count: {type: integer, minimum: 0}
+        total_pages: {type: integer, minimum: 1}
+    PaginationLinks:
+      type: object
+      required: [self, next, prev, first, last]
+      properties:
+        self: {type: string, format: uri}
+        next: {type: [string, "null"], format: uri}
+        prev: {type: [string, "null"], format: uri}
+        first: {type: string, format: uri}
+        last: {type: string, format: uri}
+    AuthorSummary:
+      type: object
+      required: [id, slug, name]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        name: {type: string}
+    AdminBook:
+      type: object
+      required: [id, slug, title, subtitle, book_kind, provisional, first_published_year, rank, authors]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        title: {type: string}
+        subtitle: {type: [string, "null"]}
+        book_kind:
+          type: string
+          enum: [standalone, collection]
+        provisional: {type: boolean, description: An unreviewed import, absent from the public catalogue.}
+        first_published_year: {type: [integer, "null"]}
+        rank:
+          type: [integer, "null"]
+          description: Position in the site's primary ranking; null when unranked.
+        authors:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthorSummary"
+    AdminAuthor:
+      type: object
+      required: [id, slug, name, kind, provisional, birth_year, death_year, rank, book_count]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        name: {type: string}
+        kind:
+          type: string
+          enum: [person, organization, pseudonym, collective]
+        provisional: {type: boolean}
+        birth_year: {type: [integer, "null"]}
+        death_year: {type: [integer, "null"]}
+        rank:
+          type: [integer, "null"]
+          description: Position in the site's primary author ranking; null when unranked.
+        book_count: {type: integer, minimum: 0, description: Books credited to this author, provisional included.}
+    AdminBookCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminBook"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    AdminAuthorCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAuthor"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    MergeRequest:
+      type: object
+      required: [source_id]
+      properties:
+        source_id:
+          description: The duplicate to fold in and delete. A JSON integer, or a string of plain decimal digits (no sign, prefix or separators).
+          oneOf:
+            - {type: integer, minimum: 1}
+            - {type: string, pattern: "^0*[1-9][0-9]*$"}
+        dry_run: {type: boolean, default: false, description: Validate and report without merging.}
+    MergeWarning:
+      type: object
+      required: [code, detail]
+      properties:
+        code:
+          type: string
+          enum: [post_commit_error, book_authors_not_transferred, credits_not_transferred]
+        detail: {type: string}
+    AdminBookMerge:
+      type: object
+      required: [data, meta, warnings]
+      properties:
+        data:
+          type: object
+          required: [survivor, deleted]
+          properties:
+            survivor:
+              description: The record that remains, as it is after the merge.
+              $ref: "#/components/schemas/AdminBook"
+            deleted:
+              description: The source record as it was before the merge. On a dry run it still exists.
+              $ref: "#/components/schemas/AdminBook"
+        meta:
+          type: object
+          required: [dry_run]
+          properties:
+            dry_run: {type: boolean}
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/MergeWarning"
+    AdminAuthorMerge:
+      type: object
+      required: [data, meta, warnings]
+      properties:
+        data:
+          type: object
+          required: [survivor, deleted]
+          properties:
+            survivor:
+              description: The record that remains, as it is after the merge.
+              $ref: "#/components/schemas/AdminAuthor"
+            deleted:
+              description: The source record as it was before the merge. On a dry run it still exists.
+              $ref: "#/components/schemas/AdminAuthor"
+        meta:
+          type: object
+          required: [dry_run]
+          properties:
+            dry_run: {type: boolean}
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/MergeWarning"

@@ -7,7 +7,7 @@ module Services
     #
     #   :unauthenticated     no Authorization header at all       -> 401, `Bearer`
     #   :invalid_token       wrong scheme, malformed, unknown, expired -> 401, `Bearer error="invalid_token"`
-    #   :membership_required a person whose membership is not active -> 403, no challenge
+    #   :membership_required a person with no effective scope and no active membership -> 403, no challenge
     #
     # The only place that knows what a token IS. A session cookie is never
     # consulted: the API is stateless by design.
@@ -31,18 +31,25 @@ module Services
         return failure(:invalid_token) if token.nil?
 
         user = token.user
-        return failure(:membership_required) if user.person? && !user.member?
+        scopes = ::Api::Scopes.effective(token.scopes, user)
+        return failure(:membership_required) if user.person? && scopes.empty? && !user.member?
 
         Tokens.record_use(token)
         success(::Api::Principal.new(
           user: user,
           token: token,
-          scopes: token.scopes,
-          tier: user.service? ? :system : :member
+          scopes: scopes,
+          tier: tier_for(user, scopes)
         ))
       end
 
       private
+
+      def tier_for(user, scopes)
+        return :system if user.service?
+
+        (scopes.any? { |scope| ::Api::Scopes.admin?(scope) }) ? :admin : :member
+      end
 
       def bearer_value(header)
         scheme, value = header.strip.split(/\s+/, 2)

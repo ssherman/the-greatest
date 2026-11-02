@@ -40,6 +40,7 @@ WebMock.disable_net_connect!(allow_localhost: true)
 # is the gate instead: it exercises every documented response itself.
 OpenapiFirst::Test.setup do |test|
   test.register(Rails.root.join("config/api/v1/openapi.yaml").to_s)
+  test.register(Rails.root.join("config/api/v1/admin_openapi.yaml").to_s, as: :admin)
   test.report_coverage = false
   # Without this, an invalid response raises inside the gem's own
   # after_response_validation hook (an ERROR), not through our assertion (a

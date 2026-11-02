@@ -37,6 +37,7 @@ class ApiToken < ApplicationRecord
   validates :token_prefix, presence: true
   validates :scopes, presence: true
   validate :scopes_are_known_and_mintable
+  validate :admin_scopes_require_expiry
   validate :owner_is_under_the_cap, on: :create
 
   def expired? = expires_at.present? && expires_at <= Time.current
@@ -51,6 +52,13 @@ class ApiToken < ApplicationRecord
 
     forbidden = (scopes - unknown) - Api::Scopes.mintable_by(user)
     errors.add(:scopes, "not available to this account: #{forbidden.join(", ")}") if forbidden.any?
+  end
+
+  # An admin token can merge records, so it must not live forever.
+  def admin_scopes_require_expiry
+    return if expires_at.present?
+
+    errors.add(:expires_at, "must be set for tokens with admin scopes") if scopes.any? { |scope| Api::Scopes.known?(scope) && Api::Scopes.admin?(scope) }
   end
 
   def owner_is_under_the_cap

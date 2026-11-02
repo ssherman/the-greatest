@@ -19,7 +19,28 @@ Members mint tokens at `/developers/tokens`: a name (≤60 chars), any of the th
 
 ## Scopes
 
-`Api::Scopes` — `books:read`, `music:read`, `games:read`. Members may mint the three reads; service accounts get whatever an admin assigns. `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy (`x:write` implies `x:read`) is already honoured for when write scopes exist.
+`Api::Scopes` — `books:read`, `music:read`, `games:read`. Members may mint the three reads; service accounts get the read scopes only (never an admin scope, even if the account holds an admin role). `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy (`x:write` implies `x:read`) is already honoured for when write scopes exist.
+
+## Admin permissions
+
+Spec: `docs/superpowers/specs/2026-11-01-api-admin-permissions-design.md`. A token may now carry admin scopes, and an admin needs no membership.
+
+- **Three checks, every request.** (1) The token's granted scopes are expanded through `implies:` and intersected with what the owner is eligible for right now (`Api::Scopes.effective`); (2) the endpoint's `require_scope` must be satisfied by that set; (3) the Books policy behind the action (`destroy?` on the source and the target for a merge) must allow the user. A demoted owner's token shrinks on the next request; nothing is cached on the token.
+- **Eligibility** lives on each scope in `Api::Scopes::ALL` (`eligible`, `->(user, member)`):
+
+  | Scope | Who may hold it |
+  |---|---|
+  | `books:read`, `music:read`, `games:read` | an active member, or a service account |
+  | `books:admin:read` | `Books::BookPolicy#index?`; implies `books:read` |
+  | `books:admin:merge` | `Books::BookPolicy#destroy?`; implies `books:admin:read` |
+
+  `eligible_for(user)` is the passing scopes plus everything they imply; `mintable_by(user)` is the same set. `/developers/tokens` is open to anyone who can mint at least one scope, and never pre-ticks an admin scope.
+- **Must expire.** `ApiToken` rejects a token with any admin scope and no `expires_at`.
+- **Authenticator.** Scopes on the `Api::Principal` are the effective ones. A person with no effective scope and no active membership gets 403 `membership_required`. A person whose token holds any admin scope gets the `admin` rate-limit tier (`config/initializers/api.rb`, 600/min and 200,000/day); service accounts stay on `system` (and cannot hold admin scopes). The tier selects only the limits: counters are keyed on the account, as for every tier.
+- **Endpoints** (`Api::V1::Admin::Books::*`, business logic in `Services::Books::AdminMerge`; bearer auth, same envelope and problem format):
+  - `GET /api/v1/admin/books?q=` and `GET /api/v1/admin/authors?q=` need `books:admin:read`. `q` is required; pagination links carry it.
+  - `POST /api/v1/admin/books/{id}/merge` and `POST /api/v1/admin/authors/{id}/merge` need `books:admin:merge`. `{id}` is the target. Body `{"source_id": …, "dry_run": false}`; `source_id` is a JSON integer or a string of plain decimal digits, at least 1 (`"010"` is 10, not octal; 0 and negatives are 400 `invalid_parameter`). A dry run validates and reports without changing anything, but it runs after authorization, so it enforces the same scope and policy checks. A real merge writes one `event=api_admin_merge` log line (token, user, record type, source, target). The 200 carries `warnings` for follow-up work that could not complete after the commit; a refusal says which record was refused.
+- **Contract.** `web-app/config/api/v1/admin_openapi.yaml`, served at `GET /api/v1/admin/openapi.json`. Admin paths are not in the public `openapi.yaml`, so `/developers` and `/api/v1/openapi.json` never advertise them.
 
 ## Rate limits
 
