@@ -84,6 +84,31 @@ module Api
           assert_equal expected, json[:data].map { |c| c[:name] }
         end
 
+        test "pagination links keep type and sort, and following next continues the same list" do
+          # A second ranked subject, so the subject list spans two pages.
+          extra = ::Books::Category.create!(name: "Aardvark Studies", category_type: :subject)
+          CategoryItem.create!(category: extra, item: books_books(:war_and_peace))
+          expected = ::Books::BrowseQuery.categories(ranking_configuration: @rc, type: "subject", sort: "name").map(&:id)
+          assert_operator expected.size, :>, 1
+
+          get "/api/v1/categories?type=subject&sort=name&per_page=1", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+          next_link = json[:links][:next]
+          assert_includes next_link, "type=subject"
+          assert_includes next_link, "sort=name"
+          assert_equal [expected.first], json[:data].map { |c| c[:id] }
+
+          get URI.parse(next_link).request_uri, headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+          assert_equal [expected.second], json[:data].map { |c| c[:id] }
+        end
+
+        test "pagination links omit type and sort when the request did not send them" do
+          get "/api/v1/categories?per_page=1", headers: bearer(ApiTokenSecrets::MEMBER)
+          refute_includes json[:links][:next], "type="
+          refute_includes json[:links][:next], "sort="
+        end
+
         test "a parent that was soft-deleted is null on list and show" do
           parent = ::Books::Category.create!(name: "Old Region", category_type: :location, deleted: true)
           categories(:books_novels_genre).update_columns(parent_id: parent.id)

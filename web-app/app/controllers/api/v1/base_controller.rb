@@ -70,8 +70,8 @@ module Api
 
       # One row at a time, for collections with no per-page lookups. The block
       # turns one row into its hash.
-      def render_ranked_page(relation, path:, &row)
-        render_page(relation, path:) { |rows| rows.map(&row) }
+      def render_ranked_page(relation, path:, query: {}, &row)
+        render_page(relation, path:, query:) { |rows| rows.map(&row) }
       end
     end
   end

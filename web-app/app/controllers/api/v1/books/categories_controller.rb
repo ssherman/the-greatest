@@ -20,7 +20,10 @@ module Api
             .categories(ranking_configuration: configuration, type: type, sort: sort)
             .includes(parent: :merged_into)
 
-          render_ranked_page(relation, path: "/api/v1/categories") do |row|
+          # The filters ride along on the paging links, or `next` would fall back
+          # to the default type and sort and silently switch lists.
+          filters = {type: params[:type].presence && type, sort: sort}.compact
+          render_ranked_page(relation, path: "/api/v1/categories", query: filters) do |row|
             CategoryResource.new(row, params: {book_count: row.ranked_count}).to_h
           end
         end
