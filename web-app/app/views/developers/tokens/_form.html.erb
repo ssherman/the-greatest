@@ -35,7 +35,8 @@
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Scopes</legend>
         <% Api::Scopes.mintable_by(current_user).each do |scope| %>
-          <% checked = local_assigns[:scopes_value].nil? || scopes_value.include?(scope) %>
+          <%# Admin scopes are never pre-ticked: they delete records, so choosing one must be deliberate. %>
+          <% checked = local_assigns[:scopes_value].nil? ? !Api::Scopes.admin?(scope) : scopes_value.include?(scope) %>
           <label class="label cursor-pointer justify-start gap-3" for="<%= "api_token_scope_#{scope.tr(":", "_")}" %>">
             <%= check_box_tag "api_token[scopes][]", scope, checked,
                   id: "api_token_scope_#{scope.tr(":", "_")}",

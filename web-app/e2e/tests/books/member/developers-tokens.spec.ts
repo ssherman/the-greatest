@@ -125,6 +125,7 @@ test.describe('Books API tokens, as a member', () => {
 
     await expect(page.getByLabel(/^\s*books:read/)).toBeVisible();
     await expect(page.getByLabel(/^\s*books:admin:merge/)).toHaveCount(0);
+    await expect(page.getByLabel(/^\s*books:admin:read/)).toHaveCount(0);
   });
 
   test('a submission with no scopes is refused in place and keeps the name', async ({ page }) => {

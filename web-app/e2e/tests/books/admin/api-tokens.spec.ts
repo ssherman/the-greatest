@@ -38,7 +38,9 @@ test.describe('Books API tokens, as an admin', () => {
     await page.goto('/developers/tokens');
 
     await page.getByLabel('Name').fill(TOKEN_NAME);
+    await expect(page.getByLabel(/^\s*books:admin:merge/)).not.toBeChecked();
     await page.getByLabel(/^\s*books:admin:merge/).check();
+    await page.getByLabel('Expires').selectOption('');
     await page.getByRole('button', { name: 'Create token' }).click();
 
     await expect(page.getByTestId('token-form-error')).toContainText(/expires at must be set/i);
@@ -49,6 +51,7 @@ test.describe('Books API tokens, as an admin', () => {
     await page.goto('/developers/tokens');
 
     await page.getByLabel('Name').fill(TOKEN_NAME);
+    await expect(page.getByLabel(/^\s*books:admin:merge/)).not.toBeChecked();
     await page.getByLabel(/^\s*books:admin:merge/).check();
     await page.getByLabel('Expires').selectOption('30');
     await page.getByRole('button', { name: 'Create token' }).click();

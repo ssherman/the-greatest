@@ -3,8 +3,8 @@
 module Developers
   # /developers/tokens -- where a member mints and revokes API tokens.
   #
-  # Members, or anyone holding a mintable scope (an admin needs no membership), and never cached: it is per-user by
-  # definition. Global route with a per-domain layout, the MembersController
+  # Members, or anyone holding a mintable scope (an admin needs no
+  # membership), and never cached: it is per-user by definition. Global route with a per-domain layout, the MembersController
   # shape. The write actions answer with a Turbo Stream in BOTH outcomes:
   # Turbo Drive rejects a 200 HTML page as a form response, a redirect would
   # put the secret in a URL or the flash, and the public layouts render no

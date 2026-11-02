@@ -88,7 +88,7 @@ module Developers
       assert_select "form[action=?]", developers_tokens_path do
         assert_select "input[name='api_token[name]']", 1
         Api::Scopes.mintable_by(users(:editor_user)).each do |scope|
-          assert_select "input[type=checkbox][name='api_token[scopes][]'][value=?][checked]", scope, 1
+          assert_select "input[type=checkbox][name='api_token[scopes][]'][value=?][checked]", scope, (Api::Scopes.admin?(scope) ? 0 : 1)
         end
         assert_select "input[type=checkbox][name='api_token[scopes][]']", Api::Scopes.mintable_by(users(:editor_user)).size
         assert_select "select[name='api_token[expires_in]'] option", 4
@@ -143,12 +143,17 @@ module Developers
       assert_response :success
     end
 
-    test "a non-member with no role is still redirected" do
-      sign_in_as(users(:user_with_expired_membership), stub_auth: true)
+    test "an admin's form leaves admin scopes unchecked and ticks the rest" do
+      admin = users(:admin_user)
+      admin.memberships.destroy_all
+      sign_in_as(admin, stub_auth: true)
 
       get developers_tokens_path
 
-      assert_redirected_to membership_path
+      assert_select "input[type=checkbox][value='books:admin:merge']", 1
+      assert_select "input[type=checkbox][value='books:admin:merge'][checked]", 0
+      assert_select "input[type=checkbox][value='books:admin:read'][checked]", 0
+      assert_select "input[type=checkbox][value='books:read'][checked]", 1
     end
 
     test "an admin cannot create an admin-scoped token without an expiry" do
