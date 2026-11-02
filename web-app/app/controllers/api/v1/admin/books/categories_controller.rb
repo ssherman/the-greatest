@@ -250,6 +250,13 @@ module Api
               "book_links_removed=#{removed[:book_links_removed]} author_links_removed=#{removed[:author_links_removed]}")
           end
 
+          # Attribute names only, never values. Runs before the reload, which clears saved_changes.
+          def log_write(category, action)
+            line = "event=api_admin_category_#{action} outcome=succeeded #{log_actor} category_id=#{category.id}"
+            line += " changed=#{(category.saved_changes.keys - %w[updated_at created_at id]).sort.join(",")}" if action == "update"
+            Rails.logger.info(line)
+          end
+
           def log_actor
             "token_id=#{current_principal.token.id} user_id=#{current_principal.user.id}"
           end
@@ -269,6 +276,7 @@ module Api
             result = ::Categories::Editor.call(category: category, attributes: attributes)
             return render_problem(::Api::Problem.new(:unprocessable, detail: result.errors.join(", "))) unless result.success?
 
+            log_write(category, (status == :created) ? "create" : "update")
             render status: status, json: {data: CategoryResource.new(category.reload, params: counts_for([category.id]), with_traits: :full).to_h}
           end
 

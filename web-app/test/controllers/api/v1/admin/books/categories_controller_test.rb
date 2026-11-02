@@ -239,6 +239,33 @@ module Api
             assert_equal "genre", json[:data][:category_type]
           end
 
+          test "a create writes one log line" do
+            Rails.logger.stubs(:info)
+            Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_category_create outcome=succeeded token_id=\d+ user_id=\d+ category_id=\d+/)).once
+            create_category(WRITE_BODY)
+            assert_response :created
+          end
+
+          test "an update logs the changed attribute names, not values" do
+            lines = []
+            Rails.logger.stubs(:info).with { |line| lines << line.to_s }
+            update_category(@novels.id, {description: "Secret text"})
+            assert_response :ok
+            ours = lines.grep(/event=api_admin_category_update/)
+            assert_equal 1, ours.size
+            assert_match(/category_id=#{@novels.id} changed=description\z/, ours.first)
+            refute_includes ours.first, "Secret text"
+          end
+
+          test "a refused create or update writes no category log line" do
+            lines = []
+            Rails.logger.stubs(:info).with { |line| lines << line.to_s }
+            create_category({name: "novels"})
+            assert_response :unprocessable_entity
+            update_category(@novels.id, {name: ""})
+            assert_empty lines.grep(/event=api_admin_category_(create|update)/)
+          end
+
           test "a merge-scoped token can also write" do
             create_category(WRITE_BODY, token: ApiTokenSecrets::ADMIN)
             assert_api_response_conform(status: 201, api: :admin)
