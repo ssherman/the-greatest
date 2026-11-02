@@ -56,6 +56,18 @@ class BooksGoodreadsRakeTest < ActiveSupport::TestCase
     task&.reenable
   end
 
+  test "rerun_unparseable queues the re-run, with a limit when one is given" do
+    task = Rake::Task["books:goodreads:rerun_unparseable"]
+    Books::Goodreads::RerunUnparseableJob.expects(:perform_async).with
+    Books::Goodreads::RerunUnparseableJob.expects(:perform_async).with(50)
+
+    assert_output(/queued Books::Goodreads::RerunUnparseableJob/) { task.invoke }
+    task.reenable
+    assert_output(/limit 50/) { task.invoke("50") }
+  ensure
+    task&.reenable
+  end
+
   test "seed_legacy_pages prints what it loaded" do
     seed = Services::Books::GoodreadsPages::SeedLegacyPages
     seed.expects(:call).returns(seed::Result.new(success?: true, data: {inserted: 3, already_present: 1, skipped: 2}, errors: []))

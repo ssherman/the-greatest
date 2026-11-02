@@ -230,7 +230,50 @@ module Workflows
           assert_equal [Time.utc(2026, 10, 26, 6), false], [outcome.run_after, outcome.result.dig("progress", "due")]
         end
 
-        test "an unparseable page blocks the gate through after_fetch and waits until blocked_until" do
+        test "a blocked page goes through after_fetch and waits until blocked_until" do
+          search_row(row(MAIN, title: "Catch-22"))
+          pick(MAIN)
+          gate_decisions(FETCH)
+          stub_page_fetch([:blocked, nil])
+          ::Books::Goodreads::GateTurn.expects(:after_fetch).with(gate: @gate, outcome: :blocked)
+
+          outcome = execute
+
+          assert_equal [:wait, Time.utc(2026, 10, 26, 6), "page", MAIN], [outcome.kind, outcome.run_after, @stored.dig("progress", "phase"), @stored.dig("progress", "goodreads_book_id")]
+          assert_equal 1, @stored.dig("progress", "bad_fetches")
+        end
+
+        test "a second blocked fetch of the same page ends the step as a miss with one ledger row" do
+          search_row(row(MAIN, title: "Catch-22"))
+          pick(MAIN)
+          gate_decisions(FETCH)
+          stub_page_fetch([:blocked, nil], [:blocked, nil])
+
+          first = execute
+          second = execute
+
+          assert_equal :wait, first.kind
+          assert_equal [:succeeded, "blocked", false], [second.kind, second.outcome, second.result["matched"]]
+          assert_equal [["unrecognized", "blocked"]], ledger_rows.pluck(:outcome, :reason)
+        end
+
+        # Steps parked by the code before this one carry a bad fetch from an
+        # unparseable search; a usable search clears it, so a later real block
+        # on the page is waited out, not taken as the second strike.
+        test "a usable search clears a bad fetch left from earlier, so a blocked page still waits" do
+          @stored = {"progress" => {"phase" => "search", "query" => "Catch-22", "origin" => "search", "due" => false,
+                                    "followed_best" => false, "searched_retry" => false, "bad_fetches" => 1}}
+          search_row(row(MAIN, title: "Catch-22"))
+          pick(MAIN)
+          gate_decisions(FETCH)
+          stub_page_fetch([:blocked, nil])
+
+          outcome = execute
+
+          assert_equal [:wait, 1], [outcome.kind, @stored.dig("progress", "bad_fetches")]
+        end
+
+        test "an unparseable page goes through after_fetch and ends the step at once as a miss with one ledger row" do
           search_row(row(MAIN, title: "Catch-22"))
           pick(MAIN)
           gate_decisions(FETCH)
@@ -239,22 +282,34 @@ module Workflows
 
           outcome = execute
 
-          assert_equal [:wait, Time.utc(2026, 10, 26, 6), "page", MAIN], [outcome.kind, outcome.run_after, @stored.dig("progress", "phase"), @stored.dig("progress", "goodreads_book_id")]
-          assert_equal 1, @stored.dig("progress", "bad_fetches")
+          assert_equal [:succeeded, "unparseable", false], [outcome.kind, outcome.outcome, outcome.result["matched"]]
+          assert_equal [["unrecognized", "unparseable"]], ledger_rows.pluck(:outcome, :reason)
         end
 
-        test "a second unparseable fetch of the same page ends the step as a miss with one ledger row" do
-          search_row(row(MAIN, title: "Catch-22"))
-          pick(MAIN)
+        test "an unparseable search ends the step at once as a miss, with no retry search" do
           gate_decisions(FETCH)
-          stub_page_fetch([:unparseable, nil], [:unparseable, nil])
+          stub_search_fetch(nil, outcome: :unparseable)
 
-          first = execute
-          second = execute
+          outcome = execute
 
-          assert_equal :wait, first.kind
-          assert_equal [:succeeded, "unparseable", false], [second.kind, second.outcome, second.result["matched"]]
+          assert_equal [:succeeded, "unparseable"], [outcome.kind, outcome.outcome]
+          assert_equal [[:search, "Catch-22"]], @fetches
           assert_equal [["unrecognized", "unparseable"]], ledger_rows.pluck(:outcome, :reason)
+        end
+
+        test "an unparseable search stored under an older parser is re-read, not fetched" do
+          stored = ::Books::GoodreadsSearch.create!(query: "catch-22", outcome: :unparseable, fetched_at: 1.day.ago,
+            http_status: 200, parser_version: 1, rows: [])
+          stored.html.attach(io: StringIO.new(file_fixture("goodreads/searches/catch_22_title_only.html.gz").binread),
+            filename: "goodreads-search.html.gz", content_type: "application/gzip", identify: false)
+          pick(MAIN)
+          gate_decisions(waiting)
+          ::Services::Books::GoodreadsPages::FetchSearch.expects(:call).never
+
+          execute
+
+          assert_equal ["page", MAIN], @stored["progress"].values_at("phase", "goodreads_book_id")
+          assert_predicate stored.reload, :outcome_found?
         end
 
         test "a fetcher that is down raises so the coordinator retries" do
