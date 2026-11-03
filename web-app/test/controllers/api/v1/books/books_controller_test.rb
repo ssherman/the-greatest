@@ -211,6 +211,10 @@ module Api
           RankedItem.create!(item: books_books(:got), ranking_configuration: @rc, rank: 4, score: 70)
         end
 
+        def rank_clash
+          RankedItem.create!(item: books_books(:clash), ranking_configuration: @rc, rank: 5, score: 60)
+        end
+
         def slugs = json[:data].map { |b| b[:slug] }
 
         test "country_id keeps only that country's books, in rank order, and echoes the filter" do
@@ -244,14 +248,33 @@ module Api
           assert_equal({year: 1869}, json[:meta][:filters])
         end
 
-        test "category_id and country_id together give the intersection" do
+        test "category_id alone keeps only books carrying the category" do
           rank_got
 
-          get "/api/v1/books?category_id=novels&country_id=french", headers: bearer(ApiTokenSecrets::MEMBER)
+          get "/api/v1/books?category_id=novels", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)
 
+          # of_mice_and_men is ranked but not in novels.
+          assert_equal %w[war-and-peace crime-and-punishment a-game-of-thrones], slugs
+          assert_equal({category_id: "novels"}, json[:meta][:filters])
+        end
+
+        test "category_id and country_id together give the intersection" do
+          rank_got
+          rank_clash
+
+          # classics alone is war_and_peace + clash; french alone is war_and_peace + got.
+          get "/api/v1/books?category_id=classics", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_equal %w[war-and-peace a-clash-of-kings], slugs
+
+          get "/api/v1/books?country_id=french", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_equal %w[war-and-peace a-game-of-thrones], slugs
-          assert_equal({category_id: "novels", country_id: "french"}, json[:meta][:filters])
+
+          get "/api/v1/books?category_id=classics&country_id=french", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal %w[war-and-peace], slugs
+          assert_equal({category_id: "classics", country_id: "french"}, json[:meta][:filters])
         end
 
         test "a collection filters the ranked list" do
