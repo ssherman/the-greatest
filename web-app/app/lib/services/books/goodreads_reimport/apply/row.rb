@@ -48,11 +48,17 @@ module Services
             return Entries.noop("import row #{verdict.payload["import_id"]}:#{verdict.payload["row_number"]} no longer exists") unless row
 
             before = snapshot(user, to)
-            result = ::ApplicationRecord.transaction { write(user, row, to, review: verdict.payload["review"] == true) }
+            trail = Entries.new_trail
+            result = nil
+            ::ApplicationRecord.transaction do
+              result = write(user, row, to, trail, review: verdict.payload["review"] == true)
+              if snapshot(user, to) != before
+                Entries.record_moved(verdict, "list_item_ids_before" => before.first.map(&:first), "list_item_ids_after" => result[:list_item_ids],
+                  "review_id_before" => before.last, "review_id_after" => Entries.review_on(user, to)&.id, **trail)
+              end
+            end
             return Entries.noop("the user's lists already hold the book") if snapshot(user, to) == before
 
-            Entries.record_moved(verdict, "list_item_ids_before" => before.first.map(&:first), "list_item_ids_after" => result[:list_item_ids],
-              "review_id_before" => before.last, "review_id_after" => Entries.review_on(user, to)&.id)
             Entries.applied(Entries.favorites_follow_ups(items_by_id(result[:list_item_ids]), [to]))
           end
 
@@ -62,13 +68,14 @@ module Services
             return Entries.noop("nothing to move") if items.empty? && review.nil?
 
             urls = Entries.goal_urls(user, items)
+            trail = Entries.new_trail
             afters = []
             review_after = nil
             ::ApplicationRecord.transaction do
-              afters = items.map { |item| Entries.move_item(item, to) }
-              review_after = Entries.move_review(review, user, to) if review
+              afters = items.map { |item| Entries.move_item(item, to, trail) }
+              review_after = Entries.move_review(review, user, to, trail) if review
               Entries.record_moved(verdict, "list_item_ids_before" => items.map(&:id), "list_item_ids_after" => afters,
-                "review_id_before" => review&.id, "review_id_after" => review_after)
+                "review_id_before" => review&.id, "review_id_after" => review_after, **trail)
             end
             recalculate(from, to) if review
             ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) if urls.any?
@@ -84,17 +91,36 @@ module Services
             return Entries.noop("nothing to move") if items.empty? && review.nil?
 
             before = snapshot(user, to)
-            result = nil
-            review_after = nil
+            trail = Entries.new_trail
+            ids = []
+            review_id = nil
             ::ApplicationRecord.transaction do
               # The CSV's review is written only when there is none to move: a review is moved, never doubled.
-              result = write(user, row, to, review: verdict.payload["review"] == true && review.nil?)
-              review_after = Entries.move_review(review, user, to) if review
-              Entries.record_moved(verdict, "list_item_ids_before" => before.first.map(&:first), "list_item_ids_after" => result[:list_item_ids],
-                "review_id_before" => review&.id, "review_id_after" => review_after || result[:review_id])
+              result = write(user, row, to, trail, review: verdict.payload["review"] == true && review.nil?)
+              ids = result[:list_item_ids] + copy_other_lists(items, to)
+              review_id = review ? Entries.move_review(review, user, to, trail) : result[:review_id]
+              Entries.record_moved(verdict, "list_item_ids_before" => before.first.map(&:first), "list_item_ids_after" => ids,
+                "review_id_before" => review&.id, "review_id_after" => review_id, **trail)
             end
             recalculate(from, to) if review
-            Entries.applied(Entries.favorites_follow_ups(items_by_id(result[:list_item_ids]), [from, to]))
+            Entries.applied(Entries.favorites_follow_ups(items_by_id(ids), [from, to]))
+          end
+
+          # The row's shelves are only some of the lists the old book was on: Favorites and hand-made lists
+          # are not shelves, and the old book's items go when it is deleted. Each such list gets the
+          # destination too, dated as its own item was. A list that already holds it is skipped, and so is
+          # Reading when the user has read the destination.
+          def self.copy_other_lists(items, to)
+            read_it = items.any? && ::UserListItem.joins(:user_list).exists?(listable_type: "Books::Book", listable_id: to.id,
+              user_lists: {user_id: items.first.user_list.user_id, list_type: ::Books::UserList.list_types[:read]})
+            items.filter_map do |item|
+              next if ::UserListItem.exists?(user_list_id: item.user_list_id, listable_type: "Books::Book", listable_id: to.id)
+              next if read_it && item.user_list.is_a?(::Books::UserList) && item.user_list.reading?
+
+              position = ::UserListItem.where(user_list_id: item.user_list_id).maximum(:position).to_i + 1
+              ::UserListItem.create!(user_list_id: item.user_list_id, listable_type: "Books::Book", listable_id: to.id,
+                completed_on: item.completed_on, position: position, created_at: item.created_at).id
+            end
           end
 
           def self.csv_row(verdict)
@@ -106,8 +132,12 @@ module Services
             Entries.review_on(user, from) if verdict.payload["review"] == true
           end
 
-          def self.write(user, row, book, review:)
-            GoodreadsImports::LibraryRules.write_row(user: user, row: row, book: book, fallback_created_at: row.import.created_at, review: review)
+          # write_row removes the reading item of a book the row says is read; capture it first.
+          def self.write(user, row, book, trail, review:)
+            held = Entries.items_on(user, book).index_by(&:id)
+            result = GoodreadsImports::LibraryRules.write_row(user: user, row: row, book: book, fallback_created_at: row.import.created_at, review: review)
+            (held.keys - ::UserListItem.where(id: held.keys).pluck(:id)).each { |id| trail["destroyed_items"] << Entries.item_attributes(held[id]) }
+            result
           end
 
           # The user's lists items and review on one book, to see whether a write changed anything.
@@ -121,7 +151,7 @@ module Services
             books.each { |book| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book.id) }
           end
 
-          private_class_method :add, :move, :copy, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
+          private_class_method :add, :move, :copy, :copy_other_lists, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
         end
       end
     end

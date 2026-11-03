@@ -30,10 +30,11 @@ module Services
             return Entries.noop("nothing to move") unless item
 
             urls = Entries.goal_urls(user, [item])
+            trail = Entries.new_trail
             ::UserListItem.transaction do
-              after = Entries.move_item(item, to)
+              after = Entries.move_item(item, to, trail)
               Entries.record_moved(verdict, "list_item_ids_before" => [item.id], "list_item_ids_after" => [after],
-                "review_id_before" => nil, "review_id_after" => nil)
+                "review_id_before" => nil, "review_id_after" => nil, **trail)
             end
             ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) if urls.any?
             Entries.applied(Entries.favorites_follow_ups([item], [from, to]))
@@ -43,10 +44,11 @@ module Services
             review = ::Review.find_by(id: verdict.payload["item_id"], user_id: user.id, reviewable_type: "Books::Book", reviewable_id: from.id)
             return Entries.noop("nothing to move") unless review
 
+            trail = Entries.new_trail
             ::Review.transaction do
-              after = Entries.move_review(review, user, to)
+              after = Entries.move_review(review, user, to, trail)
               Entries.record_moved(verdict, "list_item_ids_before" => [], "list_item_ids_after" => [],
-                "review_id_before" => review.id, "review_id_after" => after)
+                "review_id_before" => review.id, "review_id_after" => after, **trail)
             end
             ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", from.id)
             ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", to.id)

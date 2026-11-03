@@ -73,13 +73,76 @@ module Services
             assert_equal [false], book.authors.map(&:provisional?)
           end
 
+          test "create on an edition legacy already settled on another book makes a new book and remembers the old cache" do
+            old = books_books(:crime_and_punishment)
+            @edition.update!(book: old, resolution: :created, resolved_at: 1.day.ago, verification: :unverified)
+            row_in(@import)
+            verdict = verdict(outcome: "create")
+
+            result = Match.call(verdict: verdict)
+
+            made = @edition.reload.book
+            assert_equal :applied, result.data[:outcome]
+            assert_not_equal old, made
+            assert_equal [false, made.id], [made.provisional?, verdict.reload.payload["created_book_id"]]
+            assert_equal old.id, verdict.payload["edition_before"]["book_id"]
+          end
+
+          test "create that would only return a cached book is a no-op and restores the cache" do
+            old = books_books(:crime_and_punishment)
+            @edition.update!(book: old, resolution: :created, resolved_at: 1.day.ago)
+            row_in(@import)
+            ::Services::Books::GoodreadsImports::CreateBook.stubs(:call).returns(stub(data: {outcome: :cached}))
+            verdict = verdict(outcome: "create")
+
+            result = Match.call(verdict: verdict)
+
+            assert_equal :noop, result.data[:outcome]
+            assert_nil verdict.reload.payload["created_book_id"]
+            assert_equal old, @edition.reload.book
+          end
+
+          test "create adopting the old cache is refused and rolled back" do
+            old = books_books(:crime_and_punishment)
+            @edition.update!(book: old, resolution: :created, resolved_at: 1.day.ago)
+            row_in(@import)
+            edition = @edition
+            ::Services::Books::GoodreadsImports::CreateBook.stubs(:call).with do
+              edition.update!(book: old, resolution: :created, resolved_at: Time.current)
+              true
+            end.returns(stub(data: {outcome: :matched}))
+            verdict = verdict(outcome: "create")
+
+            assert_equal :noop, Match.call(verdict: verdict).data[:outcome]
+            assert_equal [old.id, nil], [@edition.reload.book_id, verdict.reload.payload["created_book_id"]]
+          end
+
+          test "a parked edition is not created" do
+            @edition.update!(resolution: :parked, resolved_at: Time.current)
+            row_in(@import)
+            ::Services::Books::GoodreadsImports::CreateBook.expects(:call).never
+
+            result = Match.call(verdict: verdict(outcome: "create"))
+
+            assert_equal [:noop, "edition parked"], [result.data[:outcome], result.data[:reason]]
+          end
+
+          test "matched records the cache it replaced" do
+            @edition.update!(book: books_books(:crime_and_punishment), resolution: :created, resolved_at: 1.day.ago)
+            verdict = verdict(outcome: "matched", book_id: books_books(:war_and_peace).id)
+
+            Match.call(verdict: verdict)
+
+            assert_equal books_books(:crime_and_punishment).id, verdict.reload.payload["edition_before"]["book_id"]
+          end
+
           test "create records the book against the newest in-scope import of the edition" do
             older = ::Books::GoodreadsImport.create!(user: users(:regular_user), source: :legacy_replay, status: :complete, finished_at: 2.days.ago)
             row_in(older)
             row_in(@import)
             ::Services::Books::GoodreadsImports::CreateBook.expects(:call)
               .with { |args| args[:import] == @import && args[:provisional] == false && args[:match].unmatched? }
-              .returns(stub)
+              .returns(stub(data: {outcome: :created}))
 
             Match.call(verdict: verdict(outcome: "create"))
           end

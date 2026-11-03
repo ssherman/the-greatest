@@ -32,6 +32,20 @@ module Services
             assert_not UserListItem.exists?(stray.id)
           end
 
+          test "a guessed review and item destroyed on collisions are kept whole in the verdict" do
+            UserListItem.create!(user_list: list(:read), listable: @to)
+            stray = UserListItem.create!(user_list: list(:read), listable: @from, completed_on: Date.new(2021, 1, 1))
+            item_verdict = guess_verdict(item_type: "UserListItem", item_id: stray.id)
+            Guess.call(verdict: item_verdict)
+            assert_equal [stray.id], item_verdict.reload.payload["moved"]["destroyed_items"].map { |item| item["id"] }
+
+            lost = Review.create!(user: @user, reviewable: @from, rating: 3, body: "stray words")
+            Review.create!(user: @user, reviewable: @to, rating: 5, body: "winner")
+            review_verdict = guess_verdict(item_type: "Review", item_id: lost.id)
+            Guess.call(verdict: review_verdict)
+            assert_equal ["stray words"], review_verdict.reload.payload["moved"]["destroyed_reviews"].map { |review| review["body"] }
+          end
+
           test "a review moves to the guessed book" do
             review = Review.create!(user: @user, reviewable: @from, rating: 3, body: "hand written")
 

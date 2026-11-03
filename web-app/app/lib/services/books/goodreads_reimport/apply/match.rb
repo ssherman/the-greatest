@@ -7,6 +7,11 @@ module Services
         # Applies a reimport_match verdict (re-import spec 4.4). matched: the decision becomes the shared edition
         # cache's answer, beating whatever legacy cached. create: the book is made (not provisional: the approved
         # verdict is the approval, rebuild spec 12 call 5) and its id kept in the payload, where DecideRow reads it.
+        #
+        # Both record the cache they replace in the payload (`edition_before`). A create must first clear it:
+        # legacy-replay editions are settled, often on the very mixed book being emptied, and CreateBook returns
+        # a settled edition's book as it is. The clear, the create and the payload write share one transaction
+        # (and CreateBook's advisory lock), so a failure leaves the old cache in place.
         class Match
           def self.call(verdict:)
             return Entries.noop("already applied") if verdict.applied_at.present?
@@ -22,25 +27,57 @@ module Services
             return Entries.noop("book #{verdict.payload["book_id"]} no longer exists") unless book
             return Entries.noop("already cached") if edition.book_id == book.id && edition.matched?
 
-            edition.update!(book: book, resolution: :matched, resolved_at: edition.resolved_at || Time.current)
+            ::ApplicationRecord.transaction do
+              remember(verdict, edition)
+              edition.update!(book: book, resolution: :matched, resolved_at: edition.resolved_at || Time.current)
+            end
             Entries.applied
           end
 
-          # CreateBook has three outcomes that all leave a book on the edition: made, adopted from a racing
-          # import, already cached. The id is stored whichever it was.
+          # Only a book CreateBook made counts. The one other outcome accepted is adopting a same-signature
+          # edition's book made by a racing import; that book must not be the edition's old cache or a mixed
+          # book (a legacy edition of the same title can share the signature).
           def self.create(verdict, edition)
-            existing = ::Books::Book.find_by(id: verdict.payload["created_book_id"])
+            existing = GoodreadsReplay::Apply::MergedBook.call(verdict.payload["created_book_id"])
             return Entries.noop("book #{existing.id} already created") if existing
+            return Entries.noop("edition parked") if edition.parked?
 
             import = import_for(edition)
             return Entries.noop("no in-scope row for edition #{edition.id}") unless import
 
-            GoodreadsImports::CreateBook.call(edition: edition, import: import, match: unmatched(verdict, edition), provisional: false)
-            book_id = edition.reload.book_id
-            return Entries.noop("edition #{edition.id} has no book after create") unless book_id
+            reason = nil
+            ::ApplicationRecord.transaction do
+              GoodreadsImports::CreateBook.lock(edition)
+              edition.reload
+              before = remember(verdict, edition)
+              edition.update!(book: nil, resolution: nil, resolved_at: nil, verification: :not_needed)
+              outcome = GoodreadsImports::CreateBook.call(edition: edition, import: import, match: unmatched(verdict, edition),
+                provisional: false).data[:outcome]
+              book_id = edition.reload.book_id
+              reason = refusal(outcome, book_id, before)
+              raise ActiveRecord::Rollback if reason
 
-            verdict.update_columns(payload: verdict.payload.merge("created_book_id" => book_id))
-            Entries.applied
+              verdict.update_columns(payload: verdict.payload.merge("created_book_id" => book_id))
+            end
+            reason ? Entries.noop(reason) : Entries.applied
+          end
+
+          def self.refusal(outcome, book_id, before)
+            return "edition has no book after create" unless book_id
+            return "create returned #{outcome}, not a new book" unless %i[created matched].include?(outcome)
+            return nil if outcome == :created
+
+            return "create adopted book #{book_id}, the edition's old cache" if book_id == before["book_id"]
+
+            mixed = ::Books::RepairVerdict.reimport_mixed.where("payload->>'book_id' = ?", book_id.to_s).exists?
+            "create adopted book #{book_id}, a mixed book" if mixed
+          end
+
+          def self.remember(verdict, edition)
+            before = verdict.payload["edition_before"] ||
+              edition.attributes.slice("book_id", "resolution", "resolved_at", "verification")
+            verdict.update_columns(payload: verdict.payload.merge("edition_before" => before))
+            before
           end
 
           # The newest completed legacy import that names the edition: the import its book is recorded against.
@@ -56,7 +93,7 @@ module Services
               reason: verdict.reason.presence || "re-import: no book matched edition #{edition.id}", decision: decision)
           end
 
-          private_class_method :cache_match, :create, :import_for, :unmatched
+          private_class_method :cache_match, :create, :refusal, :remember, :import_for, :unmatched
         end
       end
     end

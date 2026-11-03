@@ -20,11 +20,19 @@ module Services
 
           def review_on(user, book) = ::Review.find_by(user: user, reviewable_type: "Books::Book", reviewable_id: book.id)
 
-          # Returns the id the entry has on the destination afterwards.
-          def move_item(item, to)
+          def new_trail = {"destroyed_items" => [], "destroyed_reviews" => []}
+
+          # Everything a destroyed record held, so the verdict can put it back by hand.
+          def item_attributes(item) = item.attributes.slice("id", "user_list_id", "listable_id", "position", "completed_on", "created_at")
+
+          def review_attributes(review) = review.attributes.slice("id", "user_id", "reviewable_id", "rating", "title", "body", "created_at", "updated_at")
+
+          # Returns the id the entry has on the destination afterwards. A destroyed item is added to the trail.
+          def move_item(item, to, trail)
             kept = ::UserListItem.find_by(user_list_id: item.user_list_id, listable_type: "Books::Book", listable_id: to.id)
             if kept
               kept.update!(completed_on: item.completed_on) if kept.completed_on.nil? && item.completed_on
+              trail["destroyed_items"] << item_attributes(item)
               item.destroy!
               kept.id
             else
@@ -34,9 +42,10 @@ module Services
           end
 
           # Returns the id the user's review of the destination has afterwards.
-          def move_review(review, user, to)
+          def move_review(review, user, to, trail)
             existing = review_on(user, to)
             if existing
+              trail["destroyed_reviews"] << review_attributes(review)
               review.destroy!
               existing.id
             else

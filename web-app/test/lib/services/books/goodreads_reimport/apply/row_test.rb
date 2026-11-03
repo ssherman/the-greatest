@@ -175,6 +175,62 @@ module Services
               [UserListItem.find_by!(listable: @to, user_list: list(:read)).completed_on, UserListItem.find_by!(listable: other, user_list: list(:read)).completed_on]
           end
 
+          test "copy also puts the destination on the user's Favorites and custom lists, keeping the originals" do
+            custom = ::Books::UserList.create!(user: @user, list_type: :custom, name: "Mine")
+            fav = UserListItem.create!(user_list: list(:favorites), listable: @from)
+            mine = UserListItem.create!(user_list: custom, listable: @from, completed_on: Date.new(2020, 2, 2))
+            UserListItem.create!(user_list: list(:read), listable: @from)
+
+            result = Row.call(verdict: row_verdict(csv_row, action: "copy"))
+
+            assert_equal [@from, @from], [fav.reload.listable, mine.reload.listable]
+            assert UserListItem.exists?(user_list: list(:favorites), listable: @to)
+            assert_equal Date.new(2020, 2, 2), UserListItem.find_by!(user_list: custom, listable: @to).completed_on
+            assert_includes result.data[:follow_ups], :user_favorites
+          end
+
+          test "copy skips a list that already holds the destination" do
+            UserListItem.create!(user_list: list(:favorites), listable: @from)
+            kept = UserListItem.create!(user_list: list(:favorites), listable: @to)
+
+            Row.call(verdict: row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy"))
+
+            assert_equal [kept.id], UserListItem.where(user_list: list(:favorites), listable: @to).pluck(:id)
+          end
+
+          test "a review destroyed on a collision is kept whole in the verdict" do
+            make_review(@from, body: "the lost words", rating: 2)
+            make_review(@to, body: "winner")
+            UserListItem.create!(user_list: list(:read), listable: @from)
+            verdict = row_verdict(csv_row, action: "move", review: true)
+
+            Row.call(verdict: verdict)
+
+            lost = verdict.reload.payload["moved"]["destroyed_reviews"].sole
+            assert_equal ["the lost words", 2, @user.id, @from.id], [lost["body"], lost["rating"].to_i, lost["user_id"], lost["reviewable_id"]]
+          end
+
+          test "an item destroyed on a collision is kept whole in the verdict" do
+            UserListItem.create!(user_list: list(:read), listable: @to)
+            old = UserListItem.create!(user_list: list(:read), listable: @from, completed_on: Date.new(2022, 2, 2))
+            verdict = row_verdict(csv_row, action: "move")
+
+            Row.call(verdict: verdict)
+
+            lost = verdict.reload.payload["moved"]["destroyed_items"].sole
+            assert_equal [old.id, list(:read).id, @from.id, "2022-02-02"], lost.values_at("id", "user_list_id", "listable_id", "completed_on")
+          end
+
+          test "the reading item a read row removes is kept in the verdict" do
+            reading = UserListItem.create!(user_list: list(:reading), listable: @to)
+            verdict = row_verdict(csv_row(exclusive_shelf: "read"), action: "add", from: nil)
+
+            Row.call(verdict: verdict)
+
+            assert_not UserListItem.exists?(reading.id)
+            assert_equal [reading.id], verdict.reload.payload["moved"]["destroyed_items"].map { |item| item["id"] }
+          end
+
           test "copy with review true moves the user's review from the old book instead of writing the CSV's" do
             review = make_review(@from, body: "original")
             UserListItem.create!(user_list: list(:read), listable: @from)
