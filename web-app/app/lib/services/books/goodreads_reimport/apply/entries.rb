@@ -84,8 +84,21 @@ module Services
           def applied(extra = {}) = Result.new(success?: true, data: {outcome: :applied}.merge(extra), errors: [])
 
           # The audit trail the verdict keeps: ids before and after, so a wrong move can be read back.
+          # A second write (a retry after a crash) keeps the FIRST trail's destroyed records and "before" ids: those
+          # are what the entries held before this verdict touched them, and the retry sees only what was left.
           def record_moved(verdict, moved)
+            first = verdict.payload["moved"]
+            moved = moved.merge(first.slice("destroyed_items", "destroyed_reviews", "list_item_ids_before", "review_id_before")) if first.is_a?(Hash)
             verdict.update_columns(payload: verdict.payload.merge("moved" => moved))
+          end
+
+          # True when the verdict already recorded what it moved: it ran, and only its applied_at was lost.
+          def moved?(verdict) = verdict.payload["moved"].present?
+
+          # The verdict was decided from this edition's approved match; one rejected or superseded since means the
+          # book it names is no longer the answer, and nothing may move on the strength of it.
+          def match_approved?(edition_id)
+            edition_id.blank? || ::Books::RepairVerdict.reimport_match.approved.current.exists?(subject_key: "reimport:edition:#{edition_id}")
           end
         end
       end

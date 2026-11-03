@@ -9,14 +9,16 @@ module Services
         #
         # Every branch looks at what the user has NOW, never at the payload alone: the verdict was decided
         # earlier, and the reader, an admin or a sibling verdict may have changed things since.
-        # - keep (and any superseded row): nothing.
+        # - keep (and any superseded row): nothing. A final no-op: the verdict is applied, so DecideRow and the
+        #   author check see the row.
         # - add: the row's entries on the destination, by LibraryRules; a list that already holds the book is
-        #   left as it is. review: true writes the CSV's rating and review.
+        #   left as it is (a final no-op). review: true writes the CSV's rating and review.
         # - move: ALL the user's items on the old book (every list) go to the destination, with Relink's
         #   collision rules. The user's review goes only when review: true.
         # - copy: the row's entries are created on the destination, dated from this row; the old book's items
         #   stay (the mixed-book delete or a later move removes them). review: true carries the user's review
-        #   from the old book (moved); with none there, the CSV's is written.
+        #   from the old book (moved); with none there, the CSV's is written. A row that does not carry it
+        #   writes its own CSV rating and review, when it has any (spec 8 call 2).
         # A user has one review per book. An existing review on the destination always wins.
         class Row
           def self.call(verdict:)
@@ -24,9 +26,11 @@ module Services
 
             payload = verdict.payload
             action = payload["action"]
-            return Entries.noop("superseded by #{payload["superseded_by"]}") if payload["superseded_by"].present?
-            return Entries.noop("keep") if action == "keep"
+            return Entries.noop("superseded by #{payload["superseded_by"]}", final: true) if payload["superseded_by"].present?
+            return Entries.noop("keep", final: true) if action == "keep"
             return Entries.noop("unknown action #{action.inspect}") unless %w[add move copy].include?(action)
+
+            return Entries.noop("match no longer approved") unless Entries.match_approved?(payload["goodreads_edition_id"])
 
             user = ::User.find_by(id: payload["user_id"])
             return Entries.noop("user #{payload["user_id"]} no longer exists") unless user
@@ -37,7 +41,7 @@ module Services
             return add(verdict, user, to) if action == "add"
 
             from = GoodreadsReplay::Apply::MergedBook.call(payload["from_book_id"])
-            return Entries.noop("nothing to move") unless from
+            return nothing_to_move(verdict) unless from
             return Entries.noop("both books were merged into book #{to.id}") if from.id == to.id
 
             (action == "move") ? move(verdict, user, from, to) : copy(verdict, user, from, to)
@@ -57,7 +61,9 @@ module Services
                   "review_id_before" => before.last, "review_id_after" => Entries.review_on(user, to)&.id, **trail)
               end
             end
-            return Entries.noop("the user's lists already hold the book") if snapshot(user, to) == before
+            if snapshot(user, to) == before
+              return Entries.moved?(verdict) ? Entries.applied : Entries.noop("the user's lists already hold the book", final: true)
+            end
 
             Entries.applied(Entries.favorites_follow_ups(items_by_id(result[:list_item_ids]), [to]))
           end
@@ -65,7 +71,7 @@ module Services
           def self.move(verdict, user, from, to)
             items = Entries.items_on(user, from)
             review = carried_review(verdict, user, from)
-            return Entries.noop("nothing to move") if items.empty? && review.nil?
+            return nothing_to_move(verdict) if items.empty? && review.nil?
 
             urls = Entries.goal_urls(user, items)
             trail = Entries.new_trail
@@ -88,15 +94,15 @@ module Services
 
             items = Entries.items_on(user, from)
             review = carried_review(verdict, user, from)
-            return Entries.noop("nothing to move") if items.empty? && review.nil?
+            return nothing_to_move(verdict) if items.empty? && review.nil?
 
             before = snapshot(user, to)
             trail = Entries.new_trail
             ids = []
             review_id = nil
             ::ApplicationRecord.transaction do
-              # The CSV's review is written only when there is none to move: a review is moved, never doubled.
-              result = write(user, row, to, trail, review: verdict.payload["review"] == true && review.nil?)
+              # See writes_csv_review?: a review is moved or written, never doubled.
+              result = write(user, row, to, trail, review: writes_csv_review?(verdict, row, review))
               ids = result[:list_item_ids] + copy_other_lists(items, to)
               review_id = review ? Entries.move_review(review, user, to, trail) : result[:review_id]
               Entries.record_moved(verdict, "list_item_ids_before" => before.first.map(&:first), "list_item_ids_after" => ids,
@@ -104,6 +110,19 @@ module Services
             end
             recalculate(from, to) if review
             Entries.applied(Entries.favorites_follow_ups(items_by_id(ids), [from, to]))
+          end
+
+          # Nothing left on the old book. If this verdict already recorded a move, a crash lost only its applied_at,
+          # and it is done; otherwise there was never anything to move.
+          def self.nothing_to_move(verdict) = Entries.moved?(verdict) ? Entries.applied : Entries.noop("nothing to move")
+
+          # The CSV's review is written when the row carries the review and there is none to move (a review is
+          # moved, never doubled), or when it does not carry it but has a rating or text of its own: that review
+          # belongs to this row's book. write_review refuses when the user already has one on the destination.
+          def self.writes_csv_review?(verdict, row, moved_review)
+            return moved_review.nil? if verdict.payload["review"] == true
+
+            row.rating.to_f > 0 || row.review_body.present?
           end
 
           # The row's shelves are only some of the lists the old book was on: Favorites and hand-made lists
@@ -154,7 +173,7 @@ module Services
             books.each { |book| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book.id) }
           end
 
-          private_class_method :add, :move, :copy, :copy_other_lists, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
+          private_class_method :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
         end
       end
     end

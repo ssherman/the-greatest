@@ -73,6 +73,27 @@ module Services
             assert_equal [:noop, "nothing to move"], [result.data[:outcome], result.data[:reason]]
           end
 
+          test "an entry gone after the guess already recorded its trail is applied" do
+            verdict = guess_verdict(item_type: "UserListItem", item_id: 0)
+            verdict.update_columns(payload: verdict.payload.merge("moved" => {"list_item_ids_before" => [0]}))
+
+            assert_equal :applied, Guess.call(verdict: verdict).data[:outcome]
+          end
+
+          test "a guess whose destination only rejected matches supported waits" do
+            item = UserListItem.create!(user_list: list(:read), listable: @from)
+            row = csv_row
+            ::Books::RepairVerdict.create!(kind: :reimport_row, subject_key: "reimport:row:#{row.import_id}:#{row.row_number}", decided_by: :rule,
+              status: :approved, payload: {"action" => "move", "from_book_id" => @from.id, "to_book_id" => @to.id,
+                                           "goodreads_edition_id" => row.goodreads_edition_id})
+            approved_match(row.goodreads_edition_id, status: :rejected)
+
+            result = Guess.call(verdict: guess_verdict(item_type: "UserListItem", item_id: item.id))
+
+            assert_equal [:noop, "match no longer approved", false], result.data.values_at(:outcome, :reason, :final)
+            assert_equal @from, item.reload.listable
+          end
+
           test "another user's entry is never moved, whatever the payload says" do
             other = User.create!(email: "other-#{SecureRandom.hex(3)}@example.com", role: :user, email_verified: false)
             theirs = UserListItem.create!(user_list: ::Books::UserList.find_by!(user: other, list_type: :read), listable: @from)

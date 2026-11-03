@@ -74,10 +74,11 @@ module Services
             .index_by { |verdict| verdict.subject_key.delete_prefix("reimport:edition:").to_i }
         end
 
-        # A destination exists only once the match is approved, current and applied.
+        # A destination exists only once the match is approved, current and applied. A create that stored its book
+        # counts as applied even if applied_at was lost after it.
         def destination(row)
           match = matches[row.goodreads_edition_id]
-          return nil unless match&.approved? && match.applied_at
+          return nil unless match&.approved? && (match.applied_at || match.payload["created_book_id"])
           id = match.payload["book_id"] || match.payload["created_book_id"]
           # A book merged away since the match was decided is followed, as from_id does for the legacy book.
           ::Services::Books::GoodreadsReplay::Apply::MergedBook.call(id)&.id
@@ -147,7 +148,7 @@ module Services
 
         def unchanged?(row, decision)
           current = existing[row_key(row)]
-          current.nil? || current.applied_at.nil? || COMPARED.all? { |field| current.payload[field] == decision[field] }
+          current.nil? || !applied?(current) || COMPARED.all? { |field| current.payload[field] == decision[field] }
         end
 
         # Rows legacy put on one book share a single entry and review there, so once one of them has been applied a
@@ -188,10 +189,13 @@ module Services
           group.max_by { |other| preference(other) }&.id == row.id
         end
 
+        # A verdict that recorded what it moved ran, even if its applied_at was lost: a rewrite would erase the trail.
+        def applied?(verdict) = verdict.applied_at.present? || verdict.payload["moved"].present?
+
         def settle(row, decision)
           key = row_key(row)
           current = existing[key]
-          if current&.applied_at
+          if current && applied?(current)
             return [:kept, current] if unchanged?(row, decision)
 
             Rails.logger.warn("decide_row: #{key} already applied as #{current.payload.slice(*COMPARED)}, now decided #{decision.slice(*COMPARED)}; left alone")

@@ -15,14 +15,63 @@ module Services
 
           def make_review(book, body: "mine", rating: 4) = Review.create!(user: @user, reviewable: book, rating: rating, body: body)
 
-          test "keep and a superseded keep change nothing" do
+          test "keep and a superseded keep change nothing and are final, so downstream sees them" do
             item = UserListItem.create!(user_list: list(:read), listable: @from)
 
             [row_verdict(csv_row, action: "keep", to: @from),
               row_verdict(csv_row, action: "move", superseded_by: "reimport:row:1:1")].each do |verdict|
-              assert_equal :noop, Row.call(verdict: verdict).data[:outcome]
+              result = Row.call(verdict: verdict)
+              assert_equal [:noop, true], result.data.values_at(:outcome, :final)
             end
             assert_equal @from, item.reload.listable
+          end
+
+          test "a verdict whose row's match is no longer approved waits, unapplied" do
+            UserListItem.create!(user_list: list(:read), listable: @from)
+            row = csv_row
+            verdict = row_verdict(row, action: "move")
+            ::Books::RepairVerdict.reimport_match.find_by!(subject_key: "reimport:edition:#{row.goodreads_edition_id}").update!(status: :rejected)
+
+            result = Row.call(verdict: verdict)
+
+            assert_equal [:noop, "match no longer approved", false], result.data.values_at(:outcome, :reason, :final)
+            assert_equal 1, UserListItem.where(listable: @from).count
+          end
+
+          test "a move that finds nothing to move after it already recorded its trail is applied" do
+            verdict = row_verdict(csv_row, action: "move")
+            verdict.update_columns(payload: verdict.payload.merge("moved" => {"list_item_ids_before" => [1]}))
+
+            assert_equal :applied, Row.call(verdict: verdict).data[:outcome]
+          end
+
+          test "copy of a row that does not carry the review writes its own CSV review, keeping the old one where it is" do
+            review = make_review(@from, body: "original")
+            UserListItem.create!(user_list: list(:read), listable: @from)
+
+            Row.call(verdict: row_verdict(csv_row(rating: 5, review_body: "csv"), action: "copy", review: false))
+
+            assert_equal @from, review.reload.reviewable
+            assert_equal "csv", review_on(@to).body
+          end
+
+          test "copy of a row with no rating or review writes none" do
+            UserListItem.create!(user_list: list(:read), listable: @from)
+
+            Row.call(verdict: row_verdict(csv_row, action: "copy", review: false))
+
+            assert_nil review_on(@to)
+          end
+
+          test "record_moved keeps the first trail's destroyed records and before ids" do
+            verdict = row_verdict(csv_row, action: "move")
+            Entries.record_moved(verdict, "list_item_ids_before" => [1], "list_item_ids_after" => [2], "review_id_before" => 3, "review_id_after" => 4,
+              "destroyed_items" => [{"id" => 1}], "destroyed_reviews" => [])
+            Entries.record_moved(verdict, "list_item_ids_before" => [], "list_item_ids_after" => [2], "review_id_before" => nil, "review_id_after" => 4,
+              "destroyed_items" => [], "destroyed_reviews" => [])
+
+            moved = verdict.reload.payload["moved"]
+            assert_equal [[1], [{"id" => 1}], 3], [moved["list_item_ids_before"], moved["destroyed_items"], moved["review_id_before"]]
           end
 
           test "an already applied verdict is a no-op" do
@@ -57,7 +106,7 @@ module Services
 
             result = Row.call(verdict: verdict)
 
-            assert_equal :noop, result.data[:outcome]
+            assert_equal [:noop, true], result.data.values_at(:outcome, :final)
             assert_equal [item.id], UserListItem.where(listable: @to).pluck(:id)
             assert_equal Date.new(2020, 1, 1), item.reload.completed_on
           end
@@ -256,16 +305,6 @@ module Services
             Row.call(verdict: row_verdict(csv_row(rating: 5, review_body: "csv"), action: "copy", review: true))
 
             assert_equal "csv", review_on(@to).body
-          end
-
-          test "copy with review false leaves the review on the old book and writes none" do
-            review = make_review(@from)
-            UserListItem.create!(user_list: list(:read), listable: @from)
-
-            Row.call(verdict: row_verdict(csv_row(rating: 5, review_body: "csv"), action: "copy", review: false))
-
-            assert_equal @from, review.reload.reviewable
-            assert_nil review_on(@to)
           end
 
           test "copy never doubles a review the destination already has" do

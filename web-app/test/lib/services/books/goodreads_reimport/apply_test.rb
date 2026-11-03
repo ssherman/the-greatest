@@ -212,6 +212,19 @@ module Services
           assert_not_nil match.reload.applied_at
           assert_equal :recorded, DecideRow.call(row: row).data[:outcome]
         end
+
+        test "a kept row is applied, so the author check sees its book and the decide job stops queuing its reader" do
+          row = csv_row
+          row_verdict(row, action: "keep", to: @from)
+
+          Apply.call
+
+          assert ::Books::RepairVerdict.reimport_row.sole.applied_at.present?
+          ::Books::GoodreadsReimport::CheckAuthorsJob.expects(:perform_async).with([@from.id])
+          assert_equal 1, ::Books::GoodreadsReimport::CheckAuthorsJob.enqueue
+          ::Books::GoodreadsReimport::DecideRowsJob.expects(:perform_async).never
+          assert_equal 0, ::Books::GoodreadsReimport::DecideRowsJob.enqueue
+        end
       end
     end
   end

@@ -19,15 +19,28 @@ module Services
             from = GoodreadsReplay::Apply::MergedBook.call(payload["from_book_id"])
             to = GoodreadsReplay::Apply::MergedBook.call(payload["to_book_id"])
             return Entries.noop("book #{payload["to_book_id"]} no longer exists") unless to
-            return Entries.noop("nothing to move") unless from
+            return nothing_to_move(verdict) unless from
             return Entries.noop("both books were merged into book #{to.id}") if from.id == to.id
+            return Entries.noop("match no longer approved") unless destination_supported?(from, to)
 
             (payload["item_type"] == "Review") ? move_review(verdict, user, from, to) : move_item(verdict, user, from, to)
           end
 
+          # A crash after the move recorded its trail lost only applied_at: that is done, not "nothing to move".
+          def self.nothing_to_move(verdict) = Entries.moved?(verdict) ? Entries.applied : Entries.noop("nothing to move")
+
+          # The guess names the book most of the mixed book's rows went to. When those rows' decisions exist and
+          # every one of their matches has been rejected since, the destination is no longer anyone's answer.
+          def self.destination_supported?(from, to)
+            editions = ::Books::RepairVerdict.reimport_row.current
+              .where("payload->>'from_book_id' = ? AND payload->>'to_book_id' = ?", from.id.to_s, to.id.to_s)
+              .pluck(Arel.sql("payload->>'goodreads_edition_id'")).compact
+            editions.empty? || editions.any? { |id| Entries.match_approved?(id) }
+          end
+
           def self.move_item(verdict, user, from, to)
             item = Entries.items_on(user, from).find { |candidate| candidate.id == verdict.payload["item_id"].to_i }
-            return Entries.noop("nothing to move") unless item
+            return nothing_to_move(verdict) unless item
 
             urls = Entries.goal_urls(user, [item])
             trail = Entries.new_trail
@@ -42,7 +55,7 @@ module Services
 
           def self.move_review(verdict, user, from, to)
             review = ::Review.find_by(id: verdict.payload["item_id"], user_id: user.id, reviewable_type: "Books::Book", reviewable_id: from.id)
-            return Entries.noop("nothing to move") unless review
+            return nothing_to_move(verdict) unless review
 
             trail = Entries.new_trail
             ::Review.transaction do
@@ -55,7 +68,7 @@ module Services
             Entries.applied
           end
 
-          private_class_method :move_item, :move_review
+          private_class_method :nothing_to_move, :destination_supported?, :move_item, :move_review
         end
       end
     end

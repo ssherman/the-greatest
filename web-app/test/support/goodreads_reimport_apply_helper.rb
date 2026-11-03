@@ -23,9 +23,16 @@ module GoodreadsReimportApplyHelper
     @import.rows.create!({row_number: @n, goodreads_edition: edition, exclusive_shelf: "read"}.merge(attributes))
   end
 
+  def approved_match(edition_id, status: :approved)
+    ::Books::RepairVerdict.find_or_create_by!(kind: :reimport_match, subject_key: "reimport:edition:#{edition_id}") do |verdict|
+      verdict.assign_attributes(decided_by: :ai, status: status, payload: {"goodreads_edition_id" => edition_id, "outcome" => "matched"})
+    end
+  end
+
   def row_verdict(row, action:, from: @from, to: @to, review: false, superseded_by: nil)
+    approved_match(row.goodreads_edition_id)
     ::Books::RepairVerdict.create!(kind: :reimport_row, subject_key: "reimport:row:#{row.import_id}:#{row.row_number}", decided_by: :rule, status: :approved,
-      payload: {"import_id" => row.import_id, "row_number" => row.row_number, "user_id" => @user.id, "action" => action,
+      payload: {"import_id" => row.import_id, "row_number" => row.row_number, "user_id" => @user.id, "action" => action, "goodreads_edition_id" => row.goodreads_edition_id,
                 "from_book_id" => from&.id, "to_book_id" => to.id, "review" => review, "superseded_by" => superseded_by})
   end
 

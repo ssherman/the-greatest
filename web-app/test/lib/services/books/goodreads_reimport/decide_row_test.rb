@@ -251,6 +251,27 @@ module Services
           assert_equal before, verdict.reload.payload
         end
 
+        test "a verdict that recorded its trail but lost applied_at is final too, and its trail survives" do
+          e = edition
+          match(e, @war)
+          r = row(e, legacy: @crime)
+          payload_for_decision(r)
+          verdict = payload_for(r)
+          verdict.update!(payload: verdict.payload.merge("review" => false, "moved" => {"list_item_ids_before" => [1]}))
+          before = verdict.reload.payload
+
+          assert_equal :conflict, decide(r).data[:outcome]
+          assert_equal before, verdict.reload.payload
+        end
+
+        test "a created book counts as the destination as soon as it is stored, applied_at or not" do
+          e = edition
+          match(e, @war, created: true, applied: false)
+          r = row(e, legacy: @crime)
+
+          assert_equal :recorded, decide(r).data[:outcome]
+        end
+
         test "applied verdicts are final: a move that would become a copy is a conflict" do
           e1, e2 = edition, edition
           match(e1, @war)
