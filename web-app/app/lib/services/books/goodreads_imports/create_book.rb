@@ -31,8 +31,9 @@ module Services
         # pg_advisory_xact_lock returns void (see Services::Billing::ReconcileCustomer).
         LOCK_SQL = "SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext($1)::bigint)) AS lock_taken"
 
-        def self.call(edition:, import:, match:, importer: ::DataImporters::Books::Book::Importer, page: nil, author_names: nil)
-          new(edition: edition, import: import, match: match, importer: importer, page: page, author_names: author_names).call
+        def self.call(edition:, import:, match:, importer: ::DataImporters::Books::Book::Importer, page: nil, author_names: nil, provisional: true)
+          new(edition: edition, import: import, match: match, importer: importer, page: page, author_names: author_names,
+            provisional: provisional).call
         end
 
         # Held until the caller's transaction ends. SettleEdition parks and
@@ -41,13 +42,14 @@ module Services
           ActiveRecord::Base.connection.exec_query(LOCK_SQL, "goodreads-create-lock", ["goodreads-edition:#{edition.signature}"])
         end
 
-        def initialize(edition:, import:, match:, importer:, page:, author_names:)
+        def initialize(edition:, import:, match:, importer:, page:, author_names:, provisional: true)
           @edition = edition
           @import = import
           @match = match
           @importer = importer
           @page = page
           @author_names = author_names
+          @provisional = provisional
         end
 
         # requires_new: inside a caller's transaction (the dry run, a test, a
@@ -99,7 +101,7 @@ module Services
             goodreads_id: [@edition.goodreads_book_id.to_s],
             subject: @edition,
             match: @match,
-            provisional: true,
+            provisional: @provisional,
             stamp_identifiers: true,
             enrich: false
           )

@@ -39,6 +39,15 @@ module Services
           assert_equal 0, WorkflowRun.where(enrichable: [book, author]).count
         end
 
+        test "provisional: false makes a book and author that are not provisional" do
+          edition = goodreads_edition(goodreads_book_id: 90_000_002)
+
+          CreateBook.call(edition: edition, import: @import, match: unmatched_match(subject: edition), provisional: false)
+
+          book = edition.reload.book
+          assert_equal [false, false], [book.provisional?, book.authors.sole.provisional?]
+        end
+
         test "an existing author is linked, never made provisional, never recorded as created" do
           edition = goodreads_edition(title: "Hadji Murat", primary_author: "Leo Tolstoy")
 

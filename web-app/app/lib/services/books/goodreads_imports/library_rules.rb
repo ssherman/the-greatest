@@ -74,9 +74,10 @@ module Services
         # Writes one row for one user onto one book, whatever the import's
         # status. Additive and idempotent like WriteLibrary: an existing item
         # only gets a blank completed_on filled, a read book drops its reading
-        # item, an existing review is left alone. Returns the ids of the list
+        # item, an existing review is left alone. review: false writes the list
+        # items only (a copy whose review is moved, not rewritten from the CSV). Returns the ids of the list
         # items the row now has on the book, created or already there.
-        def write_row(user:, row:, book:, fallback_created_at:)
+        def write_row(user:, row:, book:, fallback_created_at:, review: true)
           purge_urls = []
           result = nil
           user.with_lock do
@@ -105,7 +106,7 @@ module Services
               lists[:reading].user_list_items.where(listable_type: "Books::Book", listable_id: book.id).find_each(&:destroy!)
             end
             ::UserList.where(id: touched.to_a).touch_all if touched.any?
-            result = {list_item_ids: item_ids, review_id: write_review(user, book, row, fallback_created_at)}
+            result = {list_item_ids: item_ids, review_id: (write_review(user, book, row, fallback_created_at) if review)}
             purge_urls = ::Services::Books::ReadingGoals::DestructionInvalidator.for_user(user: user) if completion_changed
           end
           if purge_urls.any?

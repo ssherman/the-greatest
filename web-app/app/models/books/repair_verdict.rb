@@ -56,8 +56,9 @@ module Books
       ids = case kind
       when "relink" then [payload["from_book_id"], payload["to_book_id"]]
       when "merge_books" then [payload["source_id"], payload["target_id"]]
-      when "strip_identifier", "mark_provisional", "fix_identity", "reimport_mixed", "reimport_match", "reimport_strip",
+      when "strip_identifier", "mark_provisional", "fix_identity", "reimport_mixed", "reimport_strip",
         "reimport_author" then [payload["book_id"]]
+      when "reimport_match" then [payload["book_id"], payload["created_book_id"]]
       when "reimport_row", "reimport_guess" then [payload["from_book_id"], payload["to_book_id"]]
       else []
       end

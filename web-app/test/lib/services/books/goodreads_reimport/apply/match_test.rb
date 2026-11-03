@@ -1,0 +1,114 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+module Services
+  module Books
+    module GoodreadsReimport
+      module Apply
+        class MatchTest < ActiveSupport::TestCase
+          include GoodreadsImportHelper
+
+          setup do
+            stub_resolution_services
+            @user = users(:editor_user)
+            @import = ::Books::GoodreadsImport.create!(user: @user, source: :legacy_replay, status: :complete, finished_at: Time.current)
+            @edition = goodreads_edition(goodreads_book_id: 91_000_001, isbn13: "9780441013593", original_publication_year: 1977)
+          end
+
+          def verdict(outcome:, book_id: nil, **extra)
+            ::Books::RepairVerdict.create!(kind: :reimport_match, subject_key: "reimport:edition:#{@edition.id}", decided_by: :ai, status: :approved,
+              payload: {"goodreads_edition_id" => @edition.id, "outcome" => outcome, "book_id" => book_id}.merge(extra))
+          end
+
+          def row_in(import)
+            import.rows.create!(row_number: import.rows.count + 1, goodreads_edition: @edition)
+          end
+
+          test "matched writes the decision into the shared edition cache over what legacy cached" do
+            @edition.update!(book: books_books(:crime_and_punishment), resolution: :created, resolved_at: 1.day.ago)
+
+            result = Match.call(verdict: verdict(outcome: "matched", book_id: books_books(:war_and_peace).id))
+
+            @edition.reload
+            assert_equal :applied, result.data[:outcome]
+            assert_equal [books_books(:war_and_peace), true], [@edition.book, @edition.matched?]
+            assert @edition.resolved_at.present?
+          end
+
+          test "matched is a no-op when the edition already caches that book" do
+            @edition.update!(book: books_books(:war_and_peace), resolution: :matched, resolved_at: Time.current)
+
+            assert_equal :noop, Match.call(verdict: verdict(outcome: "matched", book_id: books_books(:war_and_peace).id)).data[:outcome]
+          end
+
+          test "matched follows a book merged away" do
+            gone = ::Books::Book.create!(title: "Gone #{SecureRandom.hex(3)}")
+            target = books_books(:war_and_peace)
+            ::Books::RepairVerdict.create!(kind: :merge_books, subject_key: "books:gone", decided_by: :rule, status: :approved,
+              payload: {"source_id" => gone.id, "target_id" => target.id})
+            gone_id = gone.id
+            gone.destroy!
+
+            Match.call(verdict: verdict(outcome: "matched", book_id: gone_id))
+
+            assert_equal target, @edition.reload.book
+          end
+
+          test "matched with a book that is gone is a no-op" do
+            assert_equal :noop, Match.call(verdict: verdict(outcome: "matched", book_id: 0)).data[:outcome]
+            assert_nil @edition.reload.book_id
+          end
+
+          test "create makes a non-provisional book and caches it on the edition" do
+            row_in(@import)
+            verdict = verdict(outcome: "create")
+
+            result = Match.call(verdict: verdict)
+
+            book = @edition.reload.book
+            assert_equal :applied, result.data[:outcome]
+            assert_equal [false, true], [book.provisional?, @edition.created?]
+            assert_equal book.id, verdict.reload.payload["created_book_id"]
+            assert_equal [false], book.authors.map(&:provisional?)
+          end
+
+          test "create records the book against the newest in-scope import of the edition" do
+            older = ::Books::GoodreadsImport.create!(user: users(:regular_user), source: :legacy_replay, status: :complete, finished_at: 2.days.ago)
+            row_in(older)
+            row_in(@import)
+            ::Services::Books::GoodreadsImports::CreateBook.expects(:call)
+              .with { |args| args[:import] == @import && args[:provisional] == false && args[:match].unmatched? }
+              .returns(stub)
+
+            Match.call(verdict: verdict(outcome: "create"))
+          end
+
+          test "create is a no-op when an earlier apply already stored the book" do
+            row_in(@import)
+            verdict = verdict(outcome: "create", created_book_id: books_books(:war_and_peace).id)
+            ::Services::Books::GoodreadsImports::CreateBook.expects(:call).never
+
+            assert_equal :noop, Match.call(verdict: verdict).data[:outcome]
+          end
+
+          test "create with no in-scope row is a no-op and creates nothing" do
+            ::Services::Books::GoodreadsImports::CreateBook.expects(:call).never
+
+            result = Match.call(verdict: verdict(outcome: "create"))
+
+            assert_equal :noop, result.data[:outcome]
+          end
+
+          test "an applied verdict is a no-op" do
+            verdict = verdict(outcome: "matched", book_id: books_books(:war_and_peace).id)
+            verdict.update_columns(applied_at: Time.current)
+
+            assert_equal :noop, Match.call(verdict: verdict).data[:outcome]
+            assert_nil @edition.reload.book_id
+          end
+        end
+      end
+    end
+  end
+end

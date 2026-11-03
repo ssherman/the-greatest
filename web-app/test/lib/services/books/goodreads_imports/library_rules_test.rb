@@ -103,6 +103,14 @@ module Services
           assert_equal [4, "Line one\nLine two", Date.new(2024, 5, 3)], [review.rating.to_i, review.body, review.created_at.to_date]
         end
 
+        test "review: false writes the list items and no review" do
+          result = LibraryRules.write_row(user: @user, row: row(rating: 4, review_body: "Good"), book: @book, fallback_created_at: @fallback, review: false)
+
+          assert_nil result[:review_id]
+          assert_equal 1, result[:list_item_ids].size
+          assert_not ::Review.exists?(user: @user, reviewable: @book)
+        end
+
         test "rating 0 with text is an unrated review and rating 0 without text is none" do
           result = write(row(rating: 0, review_body: "Just words"))
           assert_nil ::Review.find(result[:review_id]).rating

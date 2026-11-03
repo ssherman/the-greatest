@@ -90,6 +90,12 @@ module Books
       assert_equal [9], verdict(kind: :reimport_row, subject_key: "reimport:row:1:1", payload: {"action" => "add", "from_book_id" => nil, "to_book_id" => 9}).book_ids
     end
 
+    test "a create match lists the book it made once the create applied" do
+      created = verdict(kind: :reimport_match, subject_key: "reimport:edition:2", payload: {"outcome" => "create", "book_id" => nil, "created_book_id" => 12})
+
+      assert_equal [12], created.book_ids
+    end
+
     test "the reimport gate is off by default" do
       refute Rails.configuration.x.goodreads_reimport.enabled
       refute Rails.configuration.x.goodreads_reimport.enrichment
