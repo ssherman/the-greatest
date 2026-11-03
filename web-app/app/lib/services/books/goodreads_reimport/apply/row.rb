@@ -107,20 +107,23 @@ module Services
           end
 
           # The row's shelves are only some of the lists the old book was on: Favorites and hand-made lists
-          # are not shelves, and the old book's items go when it is deleted. Each such list gets the
-          # destination too, dated as its own item was. A list that already holds it is skipped, and so is
-          # Reading when the user has read the destination.
+          # are not shelves, and the old book's items go when it is deleted. Each of those lists gets the
+          # destination too, dated as its own item was; one that already holds it is skipped. Read, Want to
+          # Read and Reading are never copied: the row's own shelves (write_row) decide them, so a to-read row
+          # cannot leave the destination on Read with the old book's date. None of these lists counts toward a
+          # reading goal, so no goal page needs purging.
           def self.copy_other_lists(items, to)
-            read_it = items.any? && ::UserListItem.joins(:user_list).exists?(listable_type: "Books::Book", listable_id: to.id,
-              user_lists: {user_id: items.first.user_list.user_id, list_type: ::Books::UserList.list_types[:read]})
-            items.filter_map do |item|
+            copied = items.filter_map do |item|
+              list = item.user_list
+              next unless [:favorites, :custom].include?(list.try(:list_type)&.to_sym)
               next if ::UserListItem.exists?(user_list_id: item.user_list_id, listable_type: "Books::Book", listable_id: to.id)
-              next if read_it && item.user_list.is_a?(::Books::UserList) && item.user_list.reading?
 
               position = ::UserListItem.where(user_list_id: item.user_list_id).maximum(:position).to_i + 1
               ::UserListItem.create!(user_list_id: item.user_list_id, listable_type: "Books::Book", listable_id: to.id,
-                completed_on: item.completed_on, position: position, created_at: item.created_at).id
+                completed_on: item.completed_on, position: position, created_at: item.created_at)
             end
+            ::UserList.where(id: copied.map(&:user_list_id)).touch_all if copied.any?
+            copied.map(&:id)
           end
 
           def self.csv_row(verdict)

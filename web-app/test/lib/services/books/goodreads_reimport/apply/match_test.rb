@@ -117,6 +117,45 @@ module Services
             assert_equal [old.id, nil], [@edition.reload.book_id, verdict.reload.payload["created_book_id"]]
           end
 
+          test "create never adopts a same-signature book the check turned down" do
+            turned_down = books_books(:crime_and_punishment)
+            goodreads_edition(goodreads_book_id: 91_000_099, book: turned_down, resolution: :created, resolved_at: 1.day.ago)
+            row_in(@import)
+            verdict = verdict(outcome: "create", candidate_book_ids: [turned_down.id])
+
+            result = Match.call(verdict: verdict)
+
+            assert_equal :applied, result.data[:outcome]
+            assert_not_equal turned_down.id, verdict.reload.payload["created_book_id"]
+            assert_equal verdict.payload["created_book_id"], @edition.reload.book_id
+          end
+
+          test "an adopt of a turned-down candidate is refused even if CreateBook returns it" do
+            turned_down = books_books(:crime_and_punishment)
+            row_in(@import)
+            edition = @edition
+            ::Services::Books::GoodreadsImports::CreateBook.stubs(:call).with do
+              edition.update!(book: turned_down, resolution: :created, resolved_at: Time.current)
+              true
+            end.returns(stub(data: {outcome: :matched}))
+            verdict = verdict(outcome: "create", candidate_book_ids: [turned_down.id])
+
+            result = Match.call(verdict: verdict)
+
+            assert_equal :noop, result.data[:outcome]
+            assert_nil @edition.reload.book_id
+          end
+
+          test "edition_before keeps the decision and pending import too" do
+            decision = ::MatchDecision.create!(finder: "X", subject: @edition, outcome: :unmatched, confidence: :high, decided_by: :rule)
+            @edition.update!(match_decision: decision, book: books_books(:crime_and_punishment), resolution: :created, resolved_at: 1.day.ago)
+            verdict = verdict(outcome: "matched", book_id: books_books(:war_and_peace).id)
+
+            Match.call(verdict: verdict)
+
+            assert_equal decision.id, verdict.reload.payload["edition_before"]["match_decision_id"]
+          end
+
           test "a parked edition is not created" do
             @edition.update!(resolution: :parked, resolved_at: Time.current)
             row_in(@import)

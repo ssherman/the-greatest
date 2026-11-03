@@ -189,6 +189,15 @@ module Services
             assert_includes result.data[:follow_ups], :user_favorites
           end
 
+          test "copy of a to-read row never puts the destination on Read, Want to Read or Reading from the old book's items" do
+            UserListItem.create!(user_list: list(:read), listable: @from, completed_on: Date.new(2020, 1, 1))
+            UserListItem.create!(user_list: list(:reading), listable: @from)
+
+            Row.call(verdict: row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy"))
+
+            assert_equal [[list(:want_to_read).id]], [UserListItem.where(listable: @to).pluck(:user_list_id)]
+          end
+
           test "copy skips a list that already holds the destination" do
             UserListItem.create!(user_list: list(:favorites), listable: @from)
             kept = UserListItem.create!(user_list: list(:favorites), listable: @to)

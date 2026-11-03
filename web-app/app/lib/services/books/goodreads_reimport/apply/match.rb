@@ -54,7 +54,7 @@ module Services
               outcome = GoodreadsImports::CreateBook.call(edition: edition, import: import, match: unmatched(verdict, edition),
                 provisional: false).data[:outcome]
               book_id = edition.reload.book_id
-              reason = refusal(outcome, book_id, before)
+              reason = refusal(outcome, book_id, before, verdict)
               raise ActiveRecord::Rollback if reason
 
               verdict.update_columns(payload: verdict.payload.merge("created_book_id" => book_id))
@@ -62,20 +62,21 @@ module Services
             reason ? Entries.noop(reason) : Entries.applied
           end
 
-          def self.refusal(outcome, book_id, before)
+          def self.refusal(outcome, book_id, before, verdict)
             return "edition has no book after create" unless book_id
             return "create returned #{outcome}, not a new book" unless %i[created matched].include?(outcome)
             return nil if outcome == :created
 
             return "create adopted book #{book_id}, the edition's old cache" if book_id == before["book_id"]
+            return "create adopted book #{book_id}, a candidate the check turned down" if Array(verdict.payload["candidate_book_ids"]).include?(book_id)
 
-            mixed = ::Books::RepairVerdict.reimport_mixed.where("payload->>'book_id' = ?", book_id.to_s).exists?
+            mixed = ::Books::RepairVerdict.reimport_mixed.approved.current.where("payload->>'book_id' = ?", book_id.to_s).exists?
             "create adopted book #{book_id}, a mixed book" if mixed
           end
 
           def self.remember(verdict, edition)
             before = verdict.payload["edition_before"] ||
-              edition.attributes.slice("book_id", "resolution", "resolved_at", "verification")
+              edition.attributes.slice("book_id", "resolution", "resolved_at", "verification", "match_decision_id", "pending_import_id")
             verdict.update_columns(payload: verdict.payload.merge("edition_before" => before))
             before
           end
@@ -89,7 +90,9 @@ module Services
 
           def self.unmatched(verdict, edition)
             decision = ::MatchDecision.find_by(id: verdict.payload["match_decision_id"])
-            ::DataImporters::Match.new(outcome: :unmatched, record: nil, confidence: :high, decided_by: :rule,
+            # The books the check turned down go in as candidates, so CreateBook's racer check leaves them alone.
+            candidates = ::Books::Book.where(id: Array(verdict.payload["candidate_book_ids"])).map { |book| ::DataImporters::Candidate.new(record: book) }
+            ::DataImporters::Match.new(outcome: :unmatched, record: nil, confidence: :high, decided_by: :rule, candidates: candidates,
               reason: verdict.reason.presence || "re-import: no book matched edition #{edition.id}", decision: decision)
           end
 
