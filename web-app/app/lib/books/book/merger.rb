@@ -21,6 +21,11 @@ module Books
         description original_language_id default_edition_id
       ].freeze
 
+      # Text that belongs to one title in one language. A source under another title is usually a translation
+      # merged into the English book, and its subtitle or description ("Einheitsübersetzung", "Finde dein
+      # perfektes Match") would be wrong there, so these fill only from a source with the same title.
+      TITLE_BOUND = %i[subtitle sort_title description].freeze
+
       attr_reader :source_book, :target_book, :stats, :affected_ranking_configurations
 
       def self.call(source:, target:, defer_rankings: false)
@@ -513,8 +518,10 @@ module Books
       def fill_blank_fields
         filled = []
 
+        same_title = same_title?
         BLANK_FILLABLE.each do |field|
           next if target_book.public_send(field).present?
+          next if TITLE_BOUND.include?(field) && !same_title
 
           value = source_book.public_send(field)
           next if value.blank?
@@ -524,6 +531,11 @@ module Books
         end
 
         @stats[:filled_fields] = filled
+      end
+
+      def same_title?
+        key = ::Services::Books::Verification::Check.title_key(target_book.title)
+        key.present? && key == ::Services::Books::Verification::Check.title_key(source_book.title)
       end
 
       def reconcile_first_published_year
