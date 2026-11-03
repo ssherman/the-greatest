@@ -43,7 +43,7 @@ module Services
 
         test "a Goodreads statement hit on a novel by our author is accepted and stored" do
           Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
-          @client.expects(:by_statements).with([["P2969", "656"]]).returns(["Q161531"])
+          @client.expects(:by_statements).with([["P2969", "656"]], limit: 50).returns(["Q161531"])
           @client.stubs(:entities).with(["Q161531"]).returns("Q161531" => entity("Q161531", "War and Peace", instance_of: NOVEL, authors: ["Q7243"]))
 
           data = call.data
