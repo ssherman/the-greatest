@@ -116,6 +116,17 @@ module Services
             assert_equal [false], book.authors.map(&:provisional?)
           end
 
+          test "create records the authors it created, so their enrichment can be queued" do
+            row_in(@import)
+            verdict = verdict(outcome: "create")
+
+            Match.call(verdict: verdict)
+
+            book = @edition.reload.book
+            assert_not_empty book.authors
+            assert_equal book.authors.map(&:id).sort, verdict.reload.payload["created_author_ids"].sort
+          end
+
           test "create on an edition legacy already settled on another book makes a new book and remembers the old cache" do
             old = books_books(:crime_and_punishment)
             @edition.update!(book: old, resolution: :created, resolved_at: 1.day.ago, verification: :unverified)

@@ -121,7 +121,7 @@ module Services
         def names_and_authors(payload, shape)
           case shape
           when :fix then [payload["author_names"], payload["created_author_ids"] || []]
-          when :match then [payload.dig("facts", "author_names"), []]
+          when :match then [payload.dig("facts", "author_names"), payload["created_author_ids"] || []]
           else [payload["row_author_names"], payload["created_author_ids"] || []]
           end
         end

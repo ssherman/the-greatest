@@ -129,7 +129,7 @@ module Services
         end
 
         def created_book
-          reimport_book(:reimport_match, ->(b) { {"created_book_id" => b.id, "facts" => {"author_names" => ["Facts Author"]}} })
+          reimport_book(:reimport_match, ->(b) { {"created_book_id" => b.id, "created_author_ids" => [@author.id], "facts" => {"author_names" => ["Facts Author"]}} })
         end
 
         def checked_book
@@ -166,6 +166,7 @@ module Services
 
           assert_equal [fixed, created, checked], started.map(&:first)
           assert_equal ["Facts Author"], started[1].last[:author_names]
+          assert_equal [@author.id], started[1].last[:new_author_ids]
           assert_equal [@author.id], started[2].last[:new_author_ids]
           assert_equal ["Row Author"], started[2].last[:author_names]
         end

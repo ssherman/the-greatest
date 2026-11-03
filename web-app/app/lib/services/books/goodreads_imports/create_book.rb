@@ -116,9 +116,10 @@ module Services
             raise CreateFailed, "the book for Goodreads edition #{@edition.id} got no author: #{result.all_errors.join("; ")}"
           end
 
-          record_provenance(book, result.created_author_ids)
+          created_author_ids = result.created_author_ids
+          record_provenance(book, created_author_ids)
           resolve!(book, :created, @page ? :verified : :unverified)
-          done(:created)
+          done(:created, created_author_ids: created_author_ids)
         end
 
         def record_provenance(book, created_author_ids)
@@ -134,8 +135,8 @@ module Services
             match_decision: @match.decision, resolved_at: Time.current, pending_import: nil)
         end
 
-        def done(outcome)
-          Result.new(success?: true, data: {edition: @edition, outcome: outcome}, errors: [])
+        def done(outcome, **extra)
+          Result.new(success?: true, data: {edition: @edition, outcome: outcome}.merge(extra), errors: [])
         end
       end
     end

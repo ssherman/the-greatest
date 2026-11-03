@@ -59,13 +59,16 @@ module Services
               edition.reload
               before = remember(verdict, edition)
               edition.update!(book: nil, resolution: nil, resolved_at: nil, verification: :not_needed)
-              outcome = GoodreadsImports::CreateBook.call(edition: edition, import: import, match: unmatched(verdict, edition),
-                provisional: false).data[:outcome]
+              created = GoodreadsImports::CreateBook.call(edition: edition, import: import, match: unmatched(verdict, edition),
+                provisional: false).data
+              outcome = created[:outcome]
               book_id = edition.reload.book_id
               reason = refusal(outcome, book_id, before, verdict)
               raise ActiveRecord::Rollback if reason
 
-              verdict.update_columns(payload: verdict.payload.merge("created_book_id" => book_id))
+              # The created authors ride along so QueueEnrichment can start their enrichment with the book's.
+              verdict.update_columns(payload: verdict.payload.merge("created_book_id" => book_id,
+                "created_author_ids" => Array(created[:created_author_ids]).sort))
             end
             reason ? Entries.noop(reason) : applied(edition, edition.reload.book)
           end
