@@ -56,7 +56,7 @@ module Services
           current = running.count
           return result(0, current) if ::Books::Goodreads::FetchGate.new.blocked?
 
-          entries = eligible.first([@in_flight - current, 0].max)
+          entries = eligible([@in_flight - current, 0].max)
           entries.each { |entry| start(entry) }
           result(entries.size, current + entries.size)
         end
@@ -79,7 +79,10 @@ module Services
             .where("COALESCE(books_repair_verdicts.payload->>'fix_scope', 'full') = 'full'"), "book_id", :fix]]
           if Rails.configuration.x.goodreads_reimport.enrichment
             list << [::Books::RepairVerdict.reimport_match.approved.current, "created_book_id", :match]
-            list << [::Books::RepairVerdict.reimport_author.current, "book_id", :author]
+            # Only authors the re-import created: a final noop ("authors already set") leaves the book as it was.
+            list << [::Books::RepairVerdict.reimport_author.current
+              .where("jsonb_array_length(COALESCE(books_repair_verdicts.payload->'created_author_ids', '[]'::jsonb)) > 0"),
+              "book_id", :author]
           end
           list
         end
@@ -92,18 +95,27 @@ module Services
             .reorder(Arel.sql("COALESCE(list_counts.item_count, 0) DESC, books_books.id"))
         end
 
-        # One entry per book, in start order; a book several verdicts name gets all their created authors.
-        def eligible
+        # Up to `limit` entries, one per book, in start order; a book several verdicts name gets all their
+        # created authors. Each source loads at most what could still be started, not every eligible row.
+        # A created book that was merged away is skipped on purpose: the survivor had its own enrichment.
+        def eligible(limit)
           entries = {}
           sources.each do |relation, key, shape|
-            eligible_in(relation, key).each do |verdict|
+            break if entries.size >= limit
+
+            eligible_in(relation, key).limit(limit + entries.size).each do |verdict|
               entry = entries[verdict.payload[key]] ||= {book_id: verdict.payload[key], author_names: nil, new_author_ids: []}
               names, ids = names_and_authors(verdict.payload, shape)
               entry[:author_names] ||= names
               entry[:new_author_ids] |= ids
             end
           end
-          entries.values
+          entries.values.first(limit)
+        end
+
+        # Distinct books still eligible, for the "waiting" count; ids only.
+        def eligible_count
+          sources.flat_map { |relation, key, _| eligible_in(relation, key).pluck(Arel.sql("books_books.id")) }.uniq.size
         end
 
         def names_and_authors(payload, shape)
@@ -120,7 +132,7 @@ module Services
         end
 
         def result(started, in_flight)
-          Result.new(success?: true, data: {started: started, in_flight: in_flight, waiting: eligible.size}, errors: [])
+          Result.new(success?: true, data: {started: started, in_flight: in_flight, waiting: eligible_count}, errors: [])
         end
       end
     end

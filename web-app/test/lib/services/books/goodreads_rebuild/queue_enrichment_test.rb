@@ -170,6 +170,34 @@ module Services
           assert_equal ["Row Author"], started[2].last[:author_names]
         end
 
+        test "a re-import author check that created no authors, and unapplied, proposed or superseded re-import verdicts, are not started" do
+          reimport_book(:reimport_author, ->(b) { {"book_id" => b.id, "created_author_ids" => []} })
+          unapplied = created_book
+          ::Books::RepairVerdict.reimport_match.find_by("payload->>'created_book_id' = ?", unapplied.id.to_s).update_columns(applied_at: nil)
+          proposed = created_book
+          ::Books::RepairVerdict.reimport_match.find_by("payload->>'created_book_id' = ?", proposed.id.to_s)
+            .update_columns(status: ::Books::RepairVerdict.statuses.fetch("proposed"))
+          old = checked_book
+          ::Books::RepairVerdict.reimport_author.find_by("payload->>'book_id' = ?", old.id.to_s).update_columns(superseded_at: Time.current)
+          ::Workflows::Books::BookEnrichment.expects(:start).never
+
+          result = with_enrichment(true) { QueueEnrichment.call(in_flight: 10) }
+
+          assert_equal({started: 0, in_flight: 0, waiting: 0}, result.data)
+        end
+
+        test "a book named by a fix and a re-import verdict starts once with the created authors unioned" do
+          book = fixed_book(payload: {"created_author_ids" => [@author.id]})
+          other = ::Books::Author.create!(name: "Another")
+          ::Books::RepairVerdict.create!(kind: :reimport_author, subject_key: "reimport:author:#{book.id}", status: :approved, confidence: :high,
+            decided_by: :rule, applied_at: 1.hour.ago, payload: {"book_id" => book.id, "created_author_ids" => [other.id]})
+          ::Workflows::Books::BookEnrichment.expects(:start)
+            .with(book, initiated_by: "goodreads_rebuild", new_author_ids: [@author.id, other.id], author_names: ["Real Author"])
+            .once.returns(WorkflowRun.new)
+
+          with_enrichment(true) { QueueEnrichment.call(in_flight: 10) }
+        end
+
         test "re-import books count against the same cap as the rebuild's" do
           fixed_book
           created_book
