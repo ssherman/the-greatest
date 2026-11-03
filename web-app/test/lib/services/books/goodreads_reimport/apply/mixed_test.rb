@@ -69,6 +69,31 @@ module Services
             assert_equal [original.id], kept.reload.payload["deleted"].map { |item| item["id"] }
           end
 
+          test "a copy that applies after the keep step closed reopens it, and the next apply removes the original" do
+            kept = mixed_verdict
+            kept.update!(payload: kept.payload.merge("kept" => true))
+            original = UserListItem.create!(user_list: list(:read), listable: @mixed)
+            verdict_a = row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @mixed, to: @mixed)
+            verdict_b = row_verdict(csv_row(exclusive_shelf: "read"), action: "copy", from: @mixed, to: @to)
+
+            # The keep step closes while no copy from the book has applied yet.
+            assert_equal true, Mixed.call(verdict: kept).data[:final]
+            kept.update!(applied_at: Time.current, payload: kept.reload.payload.merge("closed_reason" => "kept: readers matched this book"))
+            assert UserListItem.exists?(original.id)
+
+            [verdict_a, verdict_b].each do |verdict|
+              assert_equal :applied, Row.call(verdict: verdict).data[:outcome]
+              verdict.update!(applied_at: Time.current)
+            end
+
+            kept.reload
+            assert_nil kept.applied_at
+            assert_not kept.payload.key?("closed_reason")
+            assert_equal true, kept.payload["kept"]
+            assert_equal true, Mixed.call(verdict: kept).data[:final]
+            assert_not UserListItem.exists?(original.id)
+          end
+
           test "a kept mixed book with row keys and no redirect is final, not waiting" do
             verdict = mixed_verdict(redirect: nil)
             verdict.update!(payload: verdict.payload.merge("kept" => true, "row_keys" => [[1, 1]]))

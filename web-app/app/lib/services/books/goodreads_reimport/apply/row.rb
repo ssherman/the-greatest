@@ -45,9 +45,25 @@ module Services
             return nothing_to_move(verdict) unless from
             # The row's destination is the very book its entries are on (a mixed book that stayed matchable, or two
             # merged books): nothing moves, but this row's own shelf, dates and review still belong on it.
-            return in_place(verdict, user, to) if from.id == to.id
+            result = if from.id == to.id
+              in_place(verdict, user, to)
+            elsif action == "move"
+              move(verdict, user, from, to)
+            else
+              copy(verdict, user, from, to)
+            end
+            reopen_kept(from) if result.data[:outcome] == :applied
+            result
+          end
 
-            (action == "move") ? move(verdict, user, from, to) : copy(verdict, user, from, to)
+          # A kept mixed book's keep step (Apply::Mixed) removes copy originals once every copy from it has applied. A
+          # copy or move that applies after that step closed would leave its original behind, so the step runs again.
+          def self.reopen_kept(from)
+            mixed = ::Books::RepairVerdict.reimport_mixed.approved.current.where.not(applied_at: nil)
+              .find_by(subject_key: "reimport:book:#{from.id}")
+            return unless mixed&.payload&.dig("kept")
+
+            mixed.update_columns(applied_at: nil, payload: mixed.payload.except("closed_reason"))
           end
 
           def self.in_place(verdict, user, to)
@@ -198,7 +214,7 @@ module Services
             books.each { |book| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book.id) }
           end
 
-          private_class_method :in_place, :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :sibling_carries?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
+          private_class_method :reopen_kept, :in_place, :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :sibling_carries?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
         end
       end
     end
