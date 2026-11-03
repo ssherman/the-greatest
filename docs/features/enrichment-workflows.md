@@ -266,9 +266,9 @@ step. `bin/rails books:evidence[id]` runs it inline for one book.
 
 ### Version tolerance
 
-A run planned under version 2 has no `evidence` step and keeps running. A run planned under version 1 has only `book_facts` and `amazon`, and keeps running after the deploy:
+A run planned under version 2 has no `evidence` step (added in version 3) and keeps running. A run planned under version 1 has no `goodreads` step (added in version 2) and only `book_facts` and `amazon`, and keeps running after the deploy:
 `book_facts` finds no `goodreads` step and runs as it always did (knowledge, then research), and
-`amazon` has no `goodreads` edge. Only runs planned after the deploy get the new step.
+`amazon` has no `goodreads` edge. Only runs planned after a deploy get that version's step: `goodreads` from version 2, `evidence` from version 3.
 
 Callers: `DataImporters::Books::Book::Providers::Enrichment` (importer with `enrich: true`, and the
 list wizard's text rows) and `Services::Books::GoodreadsImports::PromoteRecords` (admin approval of a

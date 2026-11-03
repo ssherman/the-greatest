@@ -89,14 +89,29 @@ module Workflows
         assert_equal ["skipped", "ready"], [run.step(:goodreads).state, run.step(:evidence).state]
       end
 
-      test "a run planned under version 2 (no evidence step) still completes" do
+      test "a run planned under version 2 (goodreads, book_facts, amazon; no evidence step) still completes" do
+        now = Time.current
         run = WorkflowRun.create!(workflow: "books.book_enrichment", definition_version: 2, enrichable: @book, initiated_by: "test")
+        goodreads = run.steps.create!(key: "goodreads", queue: "goodreads_fetch", max_attempts: 3, lease_seconds: 600,
+          state: :succeeded, outcome: "no_match", released_at: now, finished_at: now)
         facts = run.steps.create!(key: "book_facts", queue: "low", max_attempts: 3, lease_seconds: 900, state: :ready)
+        amazon = run.steps.create!(key: "amazon", queue: "serial", max_attempts: 7, lease_seconds: 600, state: :ready)
+        [facts, amazon].each { WorkflowDependency.create!(step: it, prerequisite_step: goodreads, kind: :finish, satisfied_at: now) }
         ::Services::Books::EnrichBook.expects(:call).with(book: @book, force_research: false, author_names: [], goodreads_page: nil).returns(stub(success?: true, errors: []))
+        ::Services::Books::AmazonProductService.expects(:call).with(book: @book).returns({success: true, errors: [], data: {}})
 
-        WorkflowStepJob.new.tap { it.jid = "old" }.perform(facts.id)
+        [facts, amazon].each { |step| WorkflowStepJob.new.tap { it.jid = "old" }.perform(step.id) }
 
-        assert_equal ["succeeded", "completed"], [facts.reload.state, run.reload.status]
+        assert_equal [%w[succeeded succeeded], "completed"], [[facts, amazon].map { it.reload.state }, run.reload.status]
+      end
+
+      test "evidence waits only on goodreads, never on a new author's AI step" do
+        run = start(new_author_ids: [@a.id, @b.id])
+
+        assert_equal [%w[goodreads]], [WorkflowDependency.where(step: run.step(:evidence)).map { it.prerequisite_step.key }]
+        finish_goodreads(run)
+        assert_equal "ready", run.step(:evidence).reload.state
+        assert_equal "blocked", run.step(:book_facts).reload.state
       end
 
       test "a book with no authors plans goodreads skipped as no_authors" do

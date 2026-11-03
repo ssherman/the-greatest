@@ -16,7 +16,7 @@ module Workflows
 
         def call(step:, run:, target:)
           enrichment = ::Services::Books::Evidence::Gather.call(book: target).data[:enrichment]
-          qid = target.identifiers.find_by(identifier_type: :books_work_wikidata_qid)&.value
+          qid = target.identifiers.where(identifier_type: :books_work_wikidata_qid).order(:id).first&.value
           Workflows::Outcome.succeeded(enrichment.outcome, {"enrichment_id" => enrichment.id, "qid" => qid})
         rescue ::Wikimedia::Exceptions::RateLimited => e
           Workflows::Outcome.wait(Time.current + e.retry_after.to_i + rand(RESCHEDULE_JITTER))

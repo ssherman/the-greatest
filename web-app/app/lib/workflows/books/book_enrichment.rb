@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# books.book_enrichment (spec section 6.2): the Goodreads step, the book AI
-# step and the Amazon step of an import. Each wraps an existing service in an
+# books.book_enrichment (spec section 6.2): the Goodreads step, the evidence
+# step, the book AI step and the Amazon step of an import. Each wraps an existing service in an
 # adapter under Steps. Version 2 added goodreads, which book_facts and amazon
 # wait on (`waits_on: {goodreads: :finish}`); a run planned under version 1
 # has only the other two steps and still runs. Version 3 added evidence (a

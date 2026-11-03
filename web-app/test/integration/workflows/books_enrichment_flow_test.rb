@@ -5,7 +5,7 @@ require "test_helper"
 # Whole book and author runs through the real engine: planner, coordinator,
 # WorkflowStepJob and the recovery sweep. Sidekiq runs inline and the dispatch is
 # NOT stubbed, so a finished step really dispatches what it readied. Only the
-# service boundary is stubbed (Wikidata, VIAF, the two AI steps, Amazon, the
+# service boundary is stubbed (Wikidata, VIAF, the two AI steps, Amazon, the evidence gatherer, the
 # goodreads step itself, whose fetching has its own tests, and Open Library, which is down so the importer falls back to the query's names).
 module Workflows
   class BooksEnrichmentFlowTest < ActiveSupport::TestCase
@@ -65,6 +65,11 @@ module Workflows
         calls << [:book_facts, kwargs[:book].title]
         true
       }.returns(book_result)
+      enrichment = stub(outcome: "nothing_to_apply", id: 0)
+      ::Services::Books::Evidence::Gather.stubs(:call).with { |**kwargs|
+        calls << [:evidence, kwargs[:book].title]
+        true
+      }.returns(stub(data: {enrichment: enrichment}))
       ::Services::Books::AmazonProductService.stubs(:call).with { |**kwargs|
         calls << [:amazon, kwargs[:book].title]
         true
@@ -92,7 +97,7 @@ module Workflows
 
       assert_equal %w[completed completed], runs_of(book.authors).map(&:status)
       assert_equal %w[completed], runs_of(book).map(&:status)
-      assert_equal %w[succeeded succeeded succeeded], runs_of(book).first.steps.order(:id).map(&:state)
+      assert_equal %w[succeeded succeeded succeeded succeeded], runs_of(book).first.steps.order(:id).map(&:state)
     end
 
     # The order above also falls out of callback order (the author chains run
