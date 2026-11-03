@@ -1,0 +1,10 @@
+{"entities": {"Q999001": {
+  "id": "Q999001",
+  "type": "item",
+  "labels": {"en": {"language": "en", "value": "Lolita (Penguin edition)"}},
+  "claims": {
+    "P31": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q3331189"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P629": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q161531"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P407": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q1860"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}]
+  }
+}}, "success": 1}

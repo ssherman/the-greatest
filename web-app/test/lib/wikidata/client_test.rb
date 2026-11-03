@@ -123,6 +123,32 @@ module Wikidata
       @client.works(["Q7243"])
     end
 
+    test "work_items posts one SPARQL query and returns id and label pairs per author" do
+      stub = stub_request(:post, SPARQL)
+        .with { |request| sparql_query(request).include?("wd:Q42") && sparql_query(request).include?("?work ?workLabel") }
+        .to_return(json_response(fixture("sparql_work_items_Q42.json")))
+
+      items = @client.work_items(["Q42"])
+
+      assert_requested stub, times: 1
+      assert_equal({"Q42" => [{"id" => "Q25169", "label" => "The Hitchhiker's Guide to the Galaxy"}]}, items)
+    end
+
+    test "work_items makes no request for empty input" do
+      assert_equal({}, @client.work_items([]))
+      assert_not_requested :post, SPARQL
+    end
+
+    test "work_items logs a warning when the answer fills the row limit" do
+      rows = Array.new(Client::WORKS_ROW_LIMIT) do |index|
+        {"author" => {"value" => "http://www.wikidata.org/entity/Q7243"}, "work" => {"value" => "http://www.wikidata.org/entity/Q#{index + 1}"}, "workLabel" => {"value" => "Work #{index}"}}
+      end
+      stub_request(:post, SPARQL).to_return(json_response({results: {bindings: rows}}.to_json))
+      Rails.logger.expects(:warn).with { |message| message.include?("#{Client::WORKS_ROW_LIMIT}-row limit") }.once
+
+      assert_equal Client::WORKS_ROW_LIMIT, @client.work_items(["Q7243"])["Q7243"].size
+    end
+
     test "country_codes returns the ISO code and English label, and caches each country" do
       limiter = mock("limiter")
       limiter.stubs(:acquire!)

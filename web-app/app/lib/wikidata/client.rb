@@ -86,6 +86,37 @@ module Wikidata
       end
     end
 
+    # The works of each item (same P50/P800 query and exclusions as #works),
+    # as id and English label pairs, keyed by author id.
+    def work_items(item_ids)
+      ids = Array(item_ids).map(&:to_s).uniq.grep(ITEM_ID)
+      return {} if ids.empty?
+
+      query = <<~SPARQL
+        SELECT ?author ?work ?workLabel WHERE {
+          VALUES ?author { #{ids.map { |id| "wd:#{id}" }.join(" ")} }
+          { ?work wdt:P50 ?author } UNION { ?author wdt:P800 ?work }
+          FILTER NOT EXISTS { ?work wdt:P31 wd:Q13442814 }
+          FILTER NOT EXISTS { ?work wdt:P31 wd:Q3331189 }
+          ?work rdfs:label ?workLabel . FILTER(LANG(?workLabel) = "en")
+        } LIMIT #{WORKS_ROW_LIMIT}
+      SPARQL
+      rows = bindings(@http.sparql(SPARQL_URL, query))
+      if rows.size >= WORKS_ROW_LIMIT
+        Rails.logger.warn("Wikidata::Client#work_items: #{rows.size} rows filled the #{WORKS_ROW_LIMIT}-row limit for " \
+          "#{ids.join(", ")}; works past it were cut")
+      end
+      rows.each_with_object({}) do |row, found|
+        author = entity_id(row["author"])
+        work = entity_id(row["work"])
+        label = row.dig("workLabel", "value")
+        next if author.nil? || work.nil? || label.blank?
+
+        items = (found[author] ||= [])
+        items << {"id" => work, "label" => label} unless items.any? { |item| item["id"] == work }
+      end
+    end
+
     def country_codes(item_ids)
       ids = Array(item_ids).map(&:to_s).uniq.grep(ITEM_ID)
       cached = read_cached("country", ids)
