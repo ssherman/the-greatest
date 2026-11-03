@@ -28,7 +28,7 @@ module Services
             return Entries.noop("no authors to set") if names.empty?
 
             missing = names.filter_map { |name| payload["after"][name] }.reject { |id| ::Books::Author.exists?(id) }
-            return Entries.noop("author #{missing.first} no longer exists") if missing.any?
+            return Entries.noop("author #{missing.first} no longer exists", final: true) if missing.any?
 
             authors = resolve(verdict, book, names)
             return Entries.noop("authors already set", final: true) if book.book_authors.author.pluck(:author_id) == authors.map(&:id)
@@ -37,7 +37,7 @@ module Services
               record_before(verdict, book)
               replace(book, authors)
             end
-            Entries.applied
+            Entries.applied(follow_ups: [:author_rankings])
           end
 
           # jsonb does not keep key order, so the rows' own order (row_author_names) says who is first.
@@ -78,7 +78,7 @@ module Services
             book.book_authors.author.where.not(author_id: authors.map(&:id)).destroy_all
             authors.each_with_index do |author, index|
               link = ::Books::BookAuthor.find_or_initialize_by(book_id: book.id, author_id: author.id)
-              link.update!(position: index + 1)
+              link.update!(position: index + 1, role: :author)
             end
             book.book_authors.reset
             book.authors.reset

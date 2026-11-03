@@ -120,6 +120,23 @@ module Services
             assert_equal [:noop, true], Mixed.call(verdict: verdict).data.values_at(:outcome, :final)
           end
 
+          test "the verdict records that the redirect was written" do
+            verdict = mixed_verdict
+
+            Mixed.call(verdict: verdict)
+
+            assert_equal true, verdict.reload.payload["redirect_written"]
+          end
+
+          test "a book gone before the redirect was written still gets it, once" do
+            verdict = mixed_verdict
+            @mixed.destroy!
+            ::Services::BooksMigration::RedirectRecorder.expects(:merged).once.with(item_type: "Books::Book", from_id: @mixed.id, to_id: @to.id)
+
+            Mixed.call(verdict: verdict)
+            Mixed.call(verdict: verdict.reload)
+          end
+
           test "no redirect is written when there is no target" do
             ::Services::BooksMigration::RedirectRecorder.expects(:merged).never
 

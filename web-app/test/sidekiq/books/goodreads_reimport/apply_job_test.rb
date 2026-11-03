@@ -2,7 +2,7 @@ require "test_helper"
 
 class Books::GoodreadsReimport::ApplyJobTest < ActiveSupport::TestCase
   def result(**data)
-    Services::Books::GoodreadsReimport::Apply::Result.new(success?: true, data: {applied: 0, noop: 0, failed: 0, remaining: 0}.merge(data), errors: [])
+    Services::Books::GoodreadsReimport::Apply::Result.new(success?: true, data: {applied: 0, noop: 0, failed: 0, cursor: nil}.merge(data), errors: [])
   end
 
   setup do
@@ -26,22 +26,23 @@ class Books::GoodreadsReimport::ApplyJobTest < ActiveSupport::TestCase
     Books::GoodreadsReimport::ApplyJob.new.perform
   end
 
-  test "queues itself again while verdicts remain" do
-    Services::Books::GoodreadsReimport::Apply.expects(:call).returns(result(applied: 500, remaining: 3))
+  test "queues itself again with the cursor, and passes the cursor it was given on" do
+    cursor = {"kind" => "reimport_row", "id" => 9}
+    Services::Books::GoodreadsReimport::Apply.expects(:call).with(after: nil).returns(result(applied: 500, cursor: cursor))
 
     Sidekiq::Testing.fake! do
       Books::GoodreadsReimport::ApplyJob.new.perform
-      assert_equal 1, Books::GoodreadsReimport::ApplyJob.jobs.size
+      assert_equal [[cursor]], Books::GoodreadsReimport::ApplyJob.jobs.map { |job| job["args"] }
     ensure
       Books::GoodreadsReimport::ApplyJob.clear
     end
   end
 
-  test "stops when nothing remains" do
-    Services::Books::GoodreadsReimport::Apply.expects(:call).returns(result(applied: 2, remaining: 0))
+  test "stops when the walk reached the end" do
+    Services::Books::GoodreadsReimport::Apply.expects(:call).with(after: {"kind" => "reimport_row", "id" => 9}).returns(result(applied: 2))
 
     Sidekiq::Testing.fake! do
-      Books::GoodreadsReimport::ApplyJob.new.perform
+      Books::GoodreadsReimport::ApplyJob.new.perform({"kind" => "reimport_row", "id" => 9})
       assert_empty Books::GoodreadsReimport::ApplyJob.jobs
     end
   end

@@ -3,16 +3,14 @@
 module Services
   module Books
     module GoodreadsReimport
-      # Runs the approved re-import verdicts (re-import spec 8), one kind at a time in HANDLERS order: matches
-      # and creates, then the rows, the guesses, the identifier strips, the mixed-book deletes (which need
-      # everything before them), and the authors. A call takes the approved, current, unapplied verdicts of the
-      # first kind that has any, in id order, up to `limit`.
+      # Runs the approved re-import verdicts (re-import spec 8), one kind at a time in HANDLERS order, each kind
+      # in id order. One chain of calls walks that order ONCE: `after` is the cursor ({"kind", "id"}) of the last
+      # verdict the previous call tried, and a call takes the approved, current, unapplied verdicts strictly after
+      # it, up to `limit`. data[:cursor] is the last one tried, or nil once the walk reached the end.
       #
-      # A verdict whose handler answers :noop stays unapplied (the answer may change: a mixed book that still
-      # holds an entry), unless the handler says the answer is final. So that one waiting verdict does not hold
-      # every later kind back, a call moves on to the next kind once everything left in the current one has
-      # been tried in this call. `remaining` counts what the limit cut off; the job queues another call while
-      # it is above zero.
+      # A verdict whose handler answers a non-final :noop (a mixed book that still holds an entry) stays
+      # unapplied and is not offered again in this chain, so any number of them cannot hold later verdicts or
+      # later kinds back, and the chain always ends. A new chain starts from the rake task or cron with no cursor.
       module Apply
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         HANDLERS = {
@@ -24,48 +22,63 @@ module Services
           reimport_author: Author
         }.freeze
 
-        def self.call(limit: 500) = Run.new(limit).call
+        def self.call(limit: 500, after: nil) = Run.new(limit, after).call
 
         class Run
           include GoodreadsReplay::HandlerRun
 
-          def initialize(limit)
+          def initialize(limit, after)
             @limit = limit
+            @after = after
             @tally = {applied: 0, noop: 0, failed: 0}
             @reasons = Hash.new(0)
-            @tried = Set.new
             @rankings = Set.new
             @follow_ups = Set.new
           end
 
           def call
-            cut_off = false
+            last = nil
+            tried = 0
             HANDLERS.each do |kind, handler|
-              cut_off = work(kind, handler)
-              break if cut_off
+              floor = floor_for(kind)
+              next if floor.nil?
+
+              verdicts = pending(kind, floor).limit(@limit - tried).to_a
+              verdicts.each do |verdict|
+                apply(verdict, handler)
+                last = {"kind" => kind.to_s, "id" => verdict.id}
+              end
+              tried += verdicts.size
+              break if tried >= @limit
             end
+            cursor = (last if tried >= @limit && more_after?(last))
             queue_follow_ups(@rankings, @follow_ups)
-            data = @tally.merge(remaining: cut_off ? pending.count : 0, noop_reasons: @reasons.to_h)
-            Result.new(success?: true, data: data, errors: [])
+            Result.new(success?: true, data: @tally.merge(cursor: cursor, noop_reasons: @reasons.to_h), errors: [])
           end
 
           private
 
-          def pending(kind = nil)
-            scope = ::Books::RepairVerdict.approved.current.unapplied.where.not(id: @tried.to_a)
-            kind ? scope.where(kind: kind) : scope.where(kind: HANDLERS.keys)
+          # Lowest verdict id still to look at in this kind; nil when the cursor is already past the kind.
+          def floor_for(kind)
+            return 0 unless @after
+
+            order = HANDLERS.keys
+            here, there = order.index(kind), order.index(@after["kind"].to_sym)
+            return nil if here < there
+
+            (here == there) ? @after["id"].to_i : 0
           end
 
-          # Tries one kind's verdicts; true when the limit stopped it with some left.
-          def work(kind, handler)
-            budget = @limit - @tried.size
-            return pending(kind).exists? if budget <= 0
+          def pending(kind, floor)
+            ::Books::RepairVerdict.approved.current.unapplied.where(kind: kind).where("id > ?", floor).order(:id)
+          end
 
-            pending(kind).order(:id).limit(budget).each do |verdict|
-              @tried << verdict.id
-              apply(verdict, handler)
+          def more_after?(last)
+            return false unless last
+
+            HANDLERS.keys.drop(HANDLERS.keys.index(last["kind"].to_sym)).any? do |kind|
+              pending(kind, (kind.to_s == last["kind"]) ? last["id"] : 0).exists?
             end
-            pending(kind).exists?
           end
 
           def apply(verdict, handler)
@@ -75,6 +88,9 @@ module Services
             @rankings.merge(Array(data[:ranking_configuration_ids]) + Array(data[:reweigh_configuration_ids]))
             @follow_ups.merge(Array(data[:follow_ups]))
             done = outcome == :applied || (outcome == :noop && data[:final])
+            if outcome == :noop && data[:final]
+              verdict.update_columns(payload: verdict.payload.merge("closed_reason" => data[:reason]))
+            end
             verdict.update!(applied_at: done ? Time.current : verdict.applied_at, error: nil)
             @tally[(outcome == :applied) ? :applied : :noop] += 1
             @reasons[data[:reason]] += 1 if outcome == :noop && data[:reason]

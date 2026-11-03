@@ -31,6 +31,7 @@ module Services
 
             assert_equal :applied, result.data[:outcome]
             assert_equal [@garnett.id, @tolstoy.id], author_ids
+            assert_equal [:author_rankings], result.data[:follow_ups]
             before = verdict.reload.payload["before_book_authors"]
             assert_equal [[@tolstoy.id, 1]], before.map { |ba| ba.values_at("author_id", "position") }
           end
@@ -81,10 +82,18 @@ module Services
             assert_equal [:noop, true], result.data.values_at(:outcome, :final)
           end
 
-          test "an author id that no longer exists changes nothing" do
+          test "an editor row for a credited author becomes an author row" do
+            ::Books::BookAuthor.create!(book: @book, author: @garnett, position: 2, role: :editor)
+
+            Author.call(verdict: verdict(after: {"Constance Garnett" => @garnett.id}))
+
+            assert_equal ["author"], @book.book_authors.where(author_id: @garnett.id).map(&:role)
+          end
+
+          test "an author id that no longer exists changes nothing and is final" do
             result = Author.call(verdict: verdict(after: {"Gone" => 0}))
 
-            assert_equal :noop, result.data[:outcome]
+            assert_equal [:noop, true], result.data.values_at(:outcome, :final)
             assert_equal [@tolstoy.id], author_ids
           end
 

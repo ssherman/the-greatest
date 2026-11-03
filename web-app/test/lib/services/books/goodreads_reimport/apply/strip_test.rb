@@ -35,7 +35,7 @@ module Services
 
             result = Strip.call(verdict: verdict)
 
-            assert_equal [:noop, false], result.data.values_at(:outcome, :final)
+            assert_equal [:noop, true], result.data.values_at(:outcome, :final)
             assert Identifier.exists?(identifier.id)
           end
 
@@ -43,6 +43,15 @@ module Services
             result = Strip.call(verdict: verdict)
 
             assert_equal [:noop, true], result.data.values_at(:outcome, :final)
+          end
+
+          test "a proposed verdict is left alone" do
+            Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: "9780000000001", source: :legacy)
+            verdict = verdict()
+            verdict.update!(status: :proposed)
+
+            assert_equal :noop, Strip.call(verdict: verdict).data[:outcome]
+            assert_equal 1, @book.identifiers.where(value: "9780000000001").count
           end
 
           test "an applied verdict is not applied twice" do

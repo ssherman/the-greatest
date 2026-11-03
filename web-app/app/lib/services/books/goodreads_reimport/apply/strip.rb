@@ -10,6 +10,7 @@ module Services
         class Strip
           def self.call(verdict:)
             return Entries.noop("already applied") if verdict.applied_at.present?
+            return Entries.noop("verdict is not approved and current") unless verdict.approved? && verdict.superseded_at.nil?
 
             payload = verdict.payload
             book = GoodreadsReplay::Apply::MergedBook.call(payload["book_id"])
@@ -18,7 +19,7 @@ module Services
             identifiers = book.identifiers.where(identifier_type: payload["identifier_type"], value: payload["value"]).to_a
             return Entries.noop("identifier already gone", final: true) if identifiers.empty?
             # The removal below is by type and value; a mixed set would drag a non-legacy one with it.
-            return Entries.noop("identifier is not a legacy one") unless identifiers.all? { |identifier| identifier.source == "legacy" }
+            return Entries.noop("identifier is not a legacy one", final: true) unless identifiers.all? { |identifier| identifier.source == "legacy" }
 
             ::Identifier.transaction do
               removed = identifiers.map { |identifier| identifier.attributes.slice("id", "identifiable_id", "identifier_type", "value", "source", "created_at") }

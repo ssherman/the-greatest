@@ -58,14 +58,14 @@ module Services
 
           result = Apply.call(limit: 1)
 
-          assert_equal [1, 2], result.data.values_at(:applied, :remaining)
+          assert_equal [1, {"kind" => "reimport_strip", "id" => first.id}], result.data.values_at(:applied, :cursor)
           assert_not_nil first.reload.applied_at
           assert_nil second.reload.applied_at
           assert_nil author.reload.applied_at
 
-          result = Apply.call(limit: 5)
+          result = Apply.call(limit: 5, after: result.data[:cursor])
 
-          assert_equal [2, 0], result.data.values_at(:applied, :remaining)
+          assert_equal [2, nil], result.data.values_at(:applied, :cursor)
           assert_not_nil second.reload.applied_at
           assert_not_nil author.reload.applied_at
         end
@@ -76,7 +76,7 @@ module Services
 
           result = Apply.call
 
-          assert_equal [1, 1, 0], result.data.values_at(:applied, :noop, :remaining)
+          assert_equal [1, 1, nil], result.data.values_at(:applied, :noop, :cursor)
           assert_nil mixed.reload.applied_at
           assert ::Books::Book.exists?(lump.id)
           assert_not_nil author.reload.applied_at
@@ -100,7 +100,7 @@ module Services
 
           result = Apply.call
 
-          assert_equal [0, 0, 0], result.data.values_at(:applied, :noop, :remaining)
+          assert_equal [0, 0, nil], result.data.values_at(:applied, :noop, :cursor)
           assert_nil proposed.reload.applied_at
           assert_nil superseded.reload.applied_at
           assert_in_delta 1.day.ago, done.reload.applied_at, 5
@@ -130,6 +130,33 @@ module Services
           assert_equal 1, result.data[:applied]
           assert_equal 2, calls
           assert_not_nil verdict.reload.applied_at
+        end
+
+        test "more non-final noops than the limit do not starve a later verdict, and the chain ends" do
+          lumps = Array.new(3) { mixed_verdict.last }
+          author = author_verdict
+          cursor = nil
+          calls = 0
+          loop do
+            calls += 1
+            cursor = Apply.call(limit: 2, after: cursor).data[:cursor]
+            break if cursor.nil? || calls > 10
+          end
+
+          assert_operator calls, :<=, 3
+          assert_nil cursor
+          assert_not_nil author.reload.applied_at
+          assert lumps.all? { |lump| lump.reload.applied_at.nil? }
+        end
+
+        test "a final noop closes the verdict with its reason" do
+          verdict = strip_verdict
+          Identifier.where(identifiable: @to).update_all(source: Identifier.sources[:open_library])
+
+          Apply.call
+
+          assert_not_nil verdict.reload.applied_at
+          assert_equal "identifier is not a legacy one", verdict.payload["closed_reason"]
         end
 
         test "follow-ups from every verdict are queued once" do

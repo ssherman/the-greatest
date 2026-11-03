@@ -22,9 +22,9 @@ module Services
             return Entries.noop("verdict is not approved and current") unless verdict.approved? && verdict.superseded_at.nil?
 
             book = ::Books::Book.find_by(id: verdict.payload["book_id"])
-            return Entries.noop("book #{verdict.payload["book_id"]} no longer exists", final: true) unless book
+            return gone(verdict) unless book
 
-            redirect_to = redirect_target(verdict, book)
+            redirect_to = redirect_target(verdict, book.id)
             reason = nil
             ::ApplicationRecord.transaction do
               book.lock!
@@ -32,21 +32,38 @@ module Services
               reason = blocker(book, items)
               raise ActiveRecord::Rollback if reason
 
-              verdict.update_columns(payload: verdict.payload.merge("deleted" => items.map { |item| attributes(item) }))
+              verdict.update_columns(payload: verdict.payload.merge("deleted" => items.map { |item| attributes(item) }, "redirect_written" => false))
               items.each(&:destroy!)
               book.reload.destroy!
             end
             return Entries.noop(reason) if reason
 
-            ::Services::BooksMigration::RedirectRecorder.merged(item_type: "Books::Book", from_id: book.id, to_id: redirect_to) if redirect_to
+            write_redirect(verdict, book.id, redirect_to)
             Entries.applied
           end
 
+          # The book went before this verdict ran (or the run died between the delete and the redirect): the
+          # redirect is still owed if it was never written.
+          def self.gone(verdict)
+            book_id = verdict.payload["book_id"]
+            unless verdict.payload["redirect_written"]
+              write_redirect(verdict, book_id, redirect_target(verdict, book_id))
+            end
+            Entries.noop("book #{book_id} no longer exists", final: true)
+          end
+
+          def self.write_redirect(verdict, book_id, to_id)
+            return unless to_id
+
+            ::Services::BooksMigration::RedirectRecorder.merged(item_type: "Books::Book", from_id: book_id, to_id: to_id)
+            verdict.update_columns(payload: verdict.payload.merge("redirect_written" => true))
+          end
+
           # The most-read book, followed through merges. Not the book itself.
-          def self.redirect_target(verdict, book)
+          def self.redirect_target(verdict, book_id)
             id = verdict.payload["redirect_to_book_id"]
             target = id && GoodreadsReplay::Apply::MergedBook.call(id)
-            target&.id unless target&.id == book.id
+            target&.id unless target&.id == book_id
           end
 
           # Items of users who have an applied copy verdict from this book; they are the only items that may go.
@@ -95,7 +112,7 @@ module Services
 
           def self.attributes(item) = Entries.item_attributes(item).merge("user_id" => item.user_list.user_id)
 
-          private_class_method :redirect_target, :copy_originals, :blocker, :pending_guess?, :pending_row?, :attributes
+          private_class_method :gone, :write_redirect, :redirect_target, :copy_originals, :blocker, :pending_guess?, :pending_row?, :attributes
         end
       end
     end
