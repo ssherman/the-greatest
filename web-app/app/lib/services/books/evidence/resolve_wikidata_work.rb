@@ -211,18 +211,16 @@ module Services
           finish(qid, work, via)
         end
 
-        # Flag retries after a lost insert race, which cannot recover inside the lock's
-        # transaction once the failed statement has aborted it; the savepoint can.
+        # Flag keeps its own savepoint around each attempt, so its retry after a lost
+        # insert race works inside the lock's transaction.
         def record_collision(qid, via, holder)
-          ::Identifier.transaction(requires_new: true) do
-            result = ::Services::DuplicateCandidates::Flag.call(
-              item_type: "Books::Book", ids: [@book.id, holder.identifiable_id], source: :identifier_collision,
-              evidence: {"wikidata_qid" => qid, "via" => via}
-            )
-            note_qid(result.data, qid)
-            holder.destroy! if holder.source_wikidata?
-            drop_own_row(qid)
-          end
+          result = ::Services::DuplicateCandidates::Flag.call(
+            item_type: "Books::Book", ids: [@book.id, holder.identifiable_id], source: :identifier_collision,
+            evidence: {"wikidata_qid" => qid, "via" => via}
+          )
+          note_qid(result.data, qid)
+          holder.destroy! if holder.source_wikidata?
+          drop_own_row(qid)
         end
 
         # Flag leaves a dismissed pair untouched and keeps a pending pair's first source

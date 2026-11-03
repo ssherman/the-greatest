@@ -121,6 +121,22 @@ module Services
         assert_raises(ActiveRecord::RecordNotUnique) { Flag.call(item_type: @type, ids: [@a.id, @b.id], source: :ai) }
       end
 
+      test "a real unique violation on the first attempt is recovered by the retry inside an outer transaction" do
+        lo, hi = [@a.id, @b.id].minmax
+        existing = DuplicateCandidate.create!(item_type: @type, item_a_id: lo, item_b_id: hi, source: :ai)
+        fresh = DuplicateCandidate.new(item_type: @type, item_a_id: lo, item_b_id: hi)
+        fresh.stubs(:valid?).returns(true)
+        DuplicateCandidate.stubs(:find_or_initialize_by).returns(fresh).then.returns(existing)
+
+        row = ActiveRecord::Base.transaction do
+          Flag.call(item_type: @type, ids: [@a.id, @b.id], source: :human, evidence: {reason: "again"}).data
+        end
+
+        assert_equal existing.id, row.id
+        assert_equal 2, row.reload.occurrences
+        assert_equal 1, DuplicateCandidate.where(item_type: @type, item_a_id: lo, item_b_id: hi).count
+      end
+
       test "a validation failure that the retry cannot cure still raises" do
         assert_raises(ActiveRecord::RecordInvalid) { Flag.call(item_type: "", ids: [@a.id, @b.id], source: :ai) }
       end
