@@ -17,9 +17,9 @@ class Books::GoodreadsReimport::DecideRowsJobTest < ActiveSupport::TestCase
 
   test "does nothing while the gate is off" do
     @config.enabled = false
-    Services::Books::GoodreadsReimport::DecideRow.expects(:call).never
+    Services::Books::GoodreadsReimport::DecideRow.expects(:decide_user).never
 
-    Books::GoodreadsReimport::DecideRowsJob.new.perform([row(@replay, 1).id])
+    Books::GoodreadsReimport::DecideRowsJob.new.perform([@replay.user_id])
   end
 
   test "decides each user and survives one raising" do

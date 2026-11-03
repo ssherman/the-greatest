@@ -42,7 +42,17 @@ module Services
           if rows.any? { |row| decidable?(row) && live?(row) && destination(row).nil? }
             rows.each { |row| @by_row[row.id] = [:waiting, nil] }
           else
-            rows.each { |row| @by_row[row.id] = decide(row) }
+            decisions = rows.to_h { |row| [row.id, decision_for(row)] }
+            conflicted = conflicted_groups(decisions)
+            rows.each do |row|
+              @by_row[row.id] = if rejected?(row)
+                [:waiting, nil]
+              elsif conflicted.include?(from_id(row))
+                [:conflict, existing[row_key(row)]]
+              else
+                settle(row, decisions[row.id])
+              end
+            end
           end
           tally = @by_row.values.map(&:first).tally
           Result.new(success?: true, data: {tally: tally, by_row: @by_row}, errors: [])
@@ -108,16 +118,31 @@ module Services
 
         def has_content?(row) = row.rating.to_f > 0 || row.review_body.present?
 
-        def decide(row)
-          return [:waiting, nil] if rejected?(row)
+        def decision_for(row)
+          return nil if rejected?(row)
 
           newer = superseded_by(row)
-          decision = if newer
+          if newer
             {"action" => "keep", "from_book_id" => nil, "to_book_id" => destination(row), "review" => false, "superseded_by" => row_key(newer)}
           else
             live_decision(row)
           end
-          settle(row, decision)
+        end
+
+        def unchanged?(row, decision)
+          current = existing[row_key(row)]
+          current.nil? || current.applied_at.nil? || COMPARED.all? { |field| current.payload[field] == decision[field] }
+        end
+
+        # Rows legacy put on one book share a single entry and review there, so once one of them has been applied a
+        # changed answer for any of them makes the whole group unsafe: its unapplied siblings could double-carry the
+        # review or move an entry the applied row already took. Rows with no legacy book stand alone.
+        def conflicted_groups(decisions)
+          rows.select { |row| decisions[row.id] && from_id(row) && !unchanged?(row, decisions[row.id]) }.map do |row|
+            Rails.logger.warn("decide_row: #{row_key(row)} already applied as #{existing[row_key(row)].payload.slice(*COMPARED)}, " \
+              "now decided #{decisions[row.id].slice(*COMPARED)}; its whole group is left alone")
+            from_id(row)
+          end.to_set
         end
 
         def live_decision(row)
@@ -151,7 +176,7 @@ module Services
           key = row_key(row)
           current = existing[key]
           if current&.applied_at
-            return [:kept, current] if COMPARED.all? { |field| current.payload[field] == decision[field] }
+            return [:kept, current] if unchanged?(row, decision)
 
             Rails.logger.warn("decide_row: #{key} already applied as #{current.payload.slice(*COMPARED)}, now decided #{decision.slice(*COMPARED)}; left alone")
             return [:conflict, current]

@@ -242,6 +242,38 @@ module Services
           assert_equal before, payload_for(r).payload
         end
 
+        test "a changed applied row makes its whole legacy-book group a conflict, siblings record nothing" do
+          third = books_books(:got)
+          e1, e2 = edition, edition
+          match(e1, @war)
+          r1 = row(e1, legacy: @crime, rating: 4, review: "x")
+          decide(r1)
+          verdict = payload_for(r1)
+          assert_equal true, verdict.payload["review"]
+          verdict.update!(applied_at: Time.current)
+          before = verdict.reload.payload
+          match(e2, third)
+          r2 = row(e2, legacy: @crime, rating: 3, import: replay_import(@user, finished_at: 1.day.from_now))
+
+          assert_equal :conflict, decide(r1).data[:outcome]
+          assert_equal :conflict, decide(r2).data[:outcome]
+          assert_nil ::Books::RepairVerdict.find_by(subject_key: "reimport:row:#{r2.import_id}:#{r2.row_number}")
+          assert_equal before, verdict.reload.payload
+        end
+
+        test "an unchanged applied row still lets its sibling be recorded" do
+          e1, e2 = edition, edition
+          match(e1, @war)
+          match(e2, @war)
+          r1 = row(e1, legacy: @crime, rating: 4)
+          r2 = row(e2, legacy: @crime)
+          decide(r1)
+          payload_for(r1).update!(applied_at: Time.current)
+
+          assert_equal :kept, decide(r1).data[:outcome]
+          assert_equal :recorded, decide(r2).data[:outcome]
+        end
+
         test "two rows from one legacy book going to the same destination stay moves" do
           e1, e2 = edition, edition
           match(e1, @war)
@@ -259,6 +291,7 @@ module Services
           new = row(e, legacy: @crime, import: newer_import, rating: 2)
 
           old_verdict = decide(old).data[:verdict]
+          assert_nil old_verdict.payload["from_book_id"]
           assert_equal "keep", old_verdict.payload["action"]
           assert_equal "reimport:row:#{newer_import.id}:#{new.row_number}", old_verdict.payload["superseded_by"]
           assert_equal false, old_verdict.payload["review"]
