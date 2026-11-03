@@ -11,6 +11,12 @@ module Services
       # does not name authors that are not ours. More than one distinct
       # accepted QID within a strategy means none, and the next strategy runs.
       #
+      # A candidate that fails the check is recorded in data[:rejected] with a
+      # reason: not_written_work, author_mismatch, ambiguous_edition (an edition
+      # of several works, or of another edition), edition_without_work,
+      # unparseable, ambiguous_statements, ambiguous_title. A stored QID whose
+      # source is admin is trusted: used as-is and never replaced.
+      #
       # ISBN statements are not used: Wikidata stores P212 hyphenated and
       # haswbstatement needs the exact string.
       class ResolveWikidataWork
@@ -22,6 +28,7 @@ module Services
           "P648" => "books_work_openlibrary_id",
           "P243" => "books_work_oclc_id"
         }.freeze
+        MAX_STATEMENT_PAIRS = 50
 
         def self.call(book:, client: ::Wikidata::Client.new)
           new(book: book, client: client).call
@@ -58,21 +65,29 @@ module Services
         end
 
         def from_stored
-          stored = own_rows.first&.value
+          row = own_rows.first
+          stored = row&.value
           return if stored.blank?
 
           entity = @client.entities([stored])[stored]
+          return trusted(stored, entity) if row.source_admin?
           return if entity.nil?
 
           work = accept(entity)
           [work.id, work, "stored"] if work
         end
 
+        # A person set this QID: no checks, no replacement, even after a merge.
+        def trusted(stored, entity)
+          [stored, (distill(entity) if entity), "stored"]
+        end
+
+        # Every id the book holds, Goodreads first. The search returns at most
+        # STATEMENT_LIMIT (10) items; edition hits collapse after the hop, so 10 is enough.
         def from_statements
-          pairs = STATEMENT_IDS.filter_map do |property, type|
-            value = own_identifiers.where(identifier_type: type).pick(:value)
-            [property, value] if value.present?
-          end
+          pairs = STATEMENT_IDS.flat_map do |property, type|
+            own_identifiers.where(identifier_type: type).order(:id).pluck(:value).compact_blank.map { |value| [property, value] }
+          end.first(MAX_STATEMENT_PAIRS)
           return if pairs.empty?
 
           unique_work(@client.by_statements(pairs), "ambiguous_statements", "statements")
@@ -103,17 +118,19 @@ module Services
         # The distilled Work when the entity passes the check, else nil with the reason recorded.
         def accept(entity)
           work = distill(entity)
-          return if work.nil?
+          return reject(entity.is_a?(Hash) ? entity["id"] : nil, "unparseable") if work.nil?
 
           if work.edition?
             targets = work.edition_of
+            return reject(work.id, "edition_without_work") if targets.empty?
             return reject(work.id, "ambiguous_edition") unless targets.size == 1
 
             target = @client.entities(targets)[targets.first]
             return reject(targets.first, "not_written_work") if target.nil?
 
             work = distill(target)
-            return if work.nil?
+            return reject(targets.first, "unparseable") if work.nil?
+            return reject(work.id, "ambiguous_edition") if work.edition?
           end
           return reject(work.id, "not_written_work") unless work.written_work?
           return reject(work.id, "author_mismatch") unless authors_ok?(work)

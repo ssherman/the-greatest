@@ -96,7 +96,8 @@ class Identifier < ApplicationRecord
     amazon: 4,
     wikidata: 5,
     viaf: 6,
-    goodreads: 7
+    goodreads: 7,
+    admin: 8
   }, prefix: true
 
   BOOKS_TYPES = %w[Books::Book Books::Edition Books::Author Books::Series].freeze

@@ -35,7 +35,9 @@ module Services
           Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q1", source: :wikidata)
           @client.stubs(:entities).with(["Q1"]).returns("Q1" => entity("Q161531", "War and Peace", instance_of: NOVEL, authors: ["Q7243"]))
 
-          assert_equal "Q161531", call.data[:qid]
+          data = call.data
+
+          assert_equal ["Q161531", "stored"], [data[:qid], data[:via]]
           assert_equal ["Q161531"], stored_values
         end
 
@@ -182,6 +184,88 @@ module Services
           assert_equal ["Q161531"], stored_values
         end
 
+        test "every Goodreads id the book holds is sent, in id order" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "657")
+          @client.expects(:by_statements).with([["P2969", "656"], ["P2969", "657"]]).returns([])
+
+          call
+        end
+
+        test "Goodreads and OCLC ids go out in one call, Goodreads first" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "12345")
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          @client.expects(:by_statements).once.with([["P2969", "656"], ["P243", "12345"]]).returns([])
+
+          call
+        end
+
+        test "statement pairs are capped" do
+          60.times { |i| Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: (1000 + i).to_s) }
+          @client.expects(:by_statements).with { |pairs| pairs.size == 50 }.returns([])
+
+          call
+        end
+
+        test "an edition whose target is itself an edition is rejected" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "12345")
+          @client.stubs(:by_statements).returns(["Q900"])
+          @client.stubs(:entities).with(["Q900"]).returns("Q900" => entity("Q900", "War and Peace", instance_of: EDITION, edition_of: ["Q901"]))
+          @client.stubs(:entities).with(["Q901"]).returns("Q901" => entity("Q901", "War and Peace", instance_of: [EDITION, NOVEL], edition_of: ["Q161531"]))
+
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_includes data[:rejected], {"id" => "Q901", "reason" => "ambiguous_edition"}
+        end
+
+        test "an edition with no work is rejected as edition_without_work" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "12345")
+          @client.stubs(:by_statements).returns(["Q900"])
+          @client.stubs(:entities).with(["Q900"]).returns("Q900" => entity("Q900", "War and Peace", instance_of: EDITION))
+
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_includes data[:rejected], {"id" => "Q900", "reason" => "edition_without_work"}
+        end
+
+        test "an entity that fails to distill is recorded as unparseable" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "12345")
+          @client.stubs(:by_statements).returns(["Q900"])
+          @client.stubs(:entities).with(["Q900"]).returns("Q900" => {"id" => "Q900", "missing" => ""})
+
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_includes data[:rejected], {"id" => "Q900", "reason" => "unparseable"}
+        end
+
+        test "an admin-sourced stored QID is trusted without the checks" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q5", source: :admin)
+          @client.stubs(:entities).with(["Q5"]).returns("Q5" => entity("Q5", "Anything", instance_of: FILM, authors: ["Q999"]))
+          @client.expects(:by_statements).never
+
+          data = call.data
+
+          assert_equal ["Q5", "stored"], [data[:qid], data[:via]]
+          assert_equal ["Q5"], stored_values
+        end
+
+        test "an admin-sourced stored QID is never replaced by an automatic hit" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q5", source: :admin)
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          @client.stubs(:entities).with(["Q5"]).returns({})
+          @client.stubs(:by_statements).returns(["Q161531"])
+          @client.stubs(:entities).with(["Q161531"]).returns("Q161531" => entity("Q161531", "War and Peace", instance_of: NOVEL, authors: ["Q7243"]))
+
+          data = call.data
+
+          assert_equal "Q5", data[:qid]
+          assert_equal ["Q5"], stored_values
+          assert_equal ["admin"], Identifier.where(identifiable: @book, identifier_type: :books_work_wikidata_qid).map(&:source)
+        end
+
         private
 
         def call = ResolveWikidataWork.call(book: @book, client: @client)
@@ -191,11 +275,12 @@ module Services
         end
 
         def entity(id, label, instance_of:, authors: [], edition_of: [])
+          instance_of = Array(instance_of)
           {
             "id" => id,
             "labels" => {"en" => {"value" => label}},
             "claims" => {
-              "P31" => claims(instance_of),
+              "P31" => claims(*instance_of),
               "P50" => claims(*authors),
               "P629" => claims(*edition_of)
             }
