@@ -153,7 +153,8 @@ Never by text search. In order, stopping at the first hit that passes the check:
    `/book/show/` id, not a Goodreads work id, so P8383 is not usable), Open Library work id (P648),
    OCLC control number (P243).
 3. ISBN-13 (P212) / ISBN-10 (P957) via `by_statements`; these usually land on an *edition* item, so
-   follow "edition or translation of" (P629) to the work.
+   follow "edition or translation of" (P629) to the work. *Dropped from stage 1:* Wikidata stores
+   P212 hyphenated and `haswbstatement` needs the exact string, so an unhyphenated ISBN never matches.
 4. The works of the book's authors that already hold a `books_author_wikidata_qid` (a new client
    query returning work QID + English label, same P50/P800 shape as `#works`), matched on
    normalised title or one of the book's alternate titles.
