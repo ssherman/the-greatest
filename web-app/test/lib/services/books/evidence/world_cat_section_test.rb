@@ -21,7 +21,7 @@ module Services
 
           def record_by_oclc(oclc)
             @fetched << oclc
-            @full.fetch(oclc) { raise ::Books::WorldCat::Exceptions::NotFoundError.new("none", 404, "") }
+            @full[oclc]
           end
         end
 
@@ -42,25 +42,40 @@ module Services
           full(oclc, title: "War and peace", creator: "Tolstoy, Leo, 1828-1910.", **opts)
         end
 
+        def isbn13(body)
+          total = body.chars.each_with_index.sum { |digit, index| digit.to_i * (index.even? ? 1 : 3) }
+          "#{body}#{(10 - (total % 10)) % 10}"
+        end
+
         setup do
           @map = ::Books::WorldCat::GenreMap.new("genres" => ["Fiction"], "terms" => {"Fiction" => {"verdict" => "genre", "genre" => "Fiction"}})
           @book = books_books(:war_and_peace)
         end
 
-        test "a verified ISBN is accepted and full records are fetched only for text" do
+        test "a verified ISBN is accepted without an identity check, even when its full record disagrees" do
           ::Identifier.where(identifiable: @book, identifier_type: :books_work_isbn13).update_all(source: ::Identifier.sources[:open_library])
           client = FakeClient.new(lookup: {MATCH => [slim(1, genre: "Fiction"), slim(2, genre: "Fiction")]},
-            full: {1 => agreeing(1, summary: "A long novel.", place: "London"), 2 => agreeing(2, summary: "Short.", place: "London")})
+            full: {1 => full(1, title: "Leaves of Grass", creator: "Whitman, Walt, 1819-1892.", summary: "Poems.", place: "Paris", language: "fre"),
+                   2 => agreeing(2, summary: "A long novel.", place: "London")})
           result = WorldCatSection.call(book: @book, client: client, map: @map)
           assert_equal [MATCH], result["isbns_accepted"]
+          assert_empty result["isbns_rejected"]
           assert_equal 2, result["records"]
           assert_equal({"Fiction" => 2}, result["genre_terms"])
           assert_equal({"genre:Fiction" => 2}, result["mapped_genres"])
+          # Verified records are trusted, so every accepted full record is a text record.
           assert_equal "A long novel.", result["summary"]
-          assert_equal ["London"], result["publication_places"]
+          assert_equal %w[Paris London], result["publication_places"]
           assert_equal 2005, result["earliest_year"]
           assert_equal({"eng" => 2}, result["cataloging_languages"])
-          assert_equal [1, 2], client.fetched.sort
+        end
+
+        test "a verified ISBN's non-English full record gives places but not the summary" do
+          ::Identifier.where(identifiable: @book, identifier_type: :books_work_isbn13).update_all(source: ::Identifier.sources[:open_library])
+          client = FakeClient.new(lookup: {MATCH => [slim(1)]}, full: {1 => agreeing(1, summary: "Un roman.", place: "Paris", language: "fre")})
+          result = WorldCatSection.call(book: @book, client: client, map: @map)
+          assert_nil result["summary"]
+          assert_equal ["Paris"], result["publication_places"]
         end
 
         test "an unverified ISBN whose record names another book is rejected and its genres are dropped" do
@@ -81,18 +96,61 @@ module Services
           result = WorldCatSection.call(book: @book, client: client, map: @map)
           assert_equal [MATCH], result["isbns_accepted"]
           assert_empty result["isbns_rejected"]
+          assert_empty result["isbns_unchecked"]
           assert_equal 1, result["records"]
         end
 
-        test "a 504 or a missing full record rejects the ISBN" do
+        test "a 504 on the identity fetch rejects the ISBN" do
+          ::Identifier.where(identifiable: @book, identifier_type: :books_work_isbn13).update_all(source: ::Identifier.sources[:open_library])
+          ::Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: OTHER)
           timeout = Class.new(FakeClient) do
-            def record_by_oclc(_oclc) = raise(::Books::WorldCat::Exceptions::ServerError.new("slow", 504))
+            def record_by_oclc(oclc)
+              (oclc == 9) ? raise(::Books::WorldCat::Exceptions::ServerError.new("slow", 504)) : super
+            end
           end
-          client = timeout.new(lookup: {MATCH => [slim(1, genre: "Fiction")]})
-          assert_nil WorldCatSection.call(book: @book, client: client, map: @map)
+          client = timeout.new(lookup: {MATCH => [slim(1)], OTHER => [slim(9, genre: "Poetry")]}, full: {1 => agreeing(1)})
+          result = WorldCatSection.call(book: @book, client: client, map: @map)
+          assert_equal [MATCH], result["isbns_accepted"]
+          assert_equal [OTHER], result["isbns_rejected"]
+        end
 
-          missing = FakeClient.new(lookup: {MATCH => [slim(1, genre: "Fiction")]})
-          assert_nil WorldCatSection.call(book: @book, client: missing, map: @map)
+        test "an unknown OCLC number (nil full record) rejects the ISBN" do
+          ::Identifier.where(identifiable: @book, identifier_type: :books_work_isbn13).update_all(source: ::Identifier.sources[:open_library])
+          ::Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: OTHER)
+          client = FakeClient.new(lookup: {MATCH => [slim(1)], OTHER => [slim(9, genre: "Poetry")]}, full: {1 => agreeing(1)})
+          result = WorldCatSection.call(book: @book, client: client, map: @map)
+          assert_equal [OTHER], result["isbns_rejected"]
+          assert_equal({}, result["genre_terms"])
+        end
+
+        test "only five unverified ISBNs are identity-checked, most records first, ties in ISBN order" do
+          ::Identifier.where(identifiable: @book, identifier_type: :books_work_isbn13).delete_all
+          isbns = (0..6).map { |n| isbn13("97800000000#{n}") }
+          isbns.each { |isbn| ::Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: isbn) }
+          lookup = isbns.each_with_index.to_h { |isbn, n| [isbn, [slim(100 + n)]] }
+          lookup[isbns[6]] = [slim(106), slim(206)]
+          fulls = (0..6).to_h { |n| [100 + n, agreeing(100 + n)] }
+          client = FakeClient.new(lookup: lookup, full: fulls)
+          result = WorldCatSection.call(book: @book, client: client, map: @map)
+          # 106 has two records so goes first; then the earliest four. Text fetches add up to three more.
+          assert_equal [106, 100, 101, 102, 103], client.fetched.first(5)
+          assert_equal [isbns[6], isbns[0], isbns[1], isbns[2], isbns[3]], result["isbns_accepted"]
+          assert_equal [isbns[4], isbns[5]], result["isbns_unchecked"]
+          assert_empty result["isbns_rejected"]
+        end
+
+        test "at most three extra full records are fetched for text" do
+          ::Identifier.where(identifiable: @book, identifier_type: :books_work_isbn13).update_all(source: ::Identifier.sources[:open_library])
+          records = (1..8).map { |n| slim(n) }
+          client = FakeClient.new(lookup: {MATCH => records}, full: (1..8).to_h { |n| [n, agreeing(n, summary: "s#{n}")] })
+          WorldCatSection.call(book: @book, client: client, map: @map)
+          assert_equal [1, 2, 3], client.fetched
+        end
+
+        test "the summary is cut to 1,500 characters" do
+          ::Identifier.where(identifiable: @book, identifier_type: :books_work_isbn13).update_all(source: ::Identifier.sources[:open_library])
+          client = FakeClient.new(lookup: {MATCH => [slim(1)]}, full: {1 => agreeing(1, summary: "x" * 2_000)})
+          assert_equal 1_500, WorldCatSection.call(book: @book, client: client, map: @map)["summary"].length
         end
 
         test "an ISBN with a bad check digit is never sent to lookup" do

@@ -36,14 +36,16 @@ module Services
           trusted, unverified = found.keys.partition { |isbn| verified.include?(isbn) }
           accepted = trusted.dup
           rejected = []
-          unverified.sort_by { |isbn| -found[isbn].size }.first(MAX_IDENTITY_CHECKS).each do |isbn|
+          ranked = unverified.sort_by.with_index { |isbn, index| [-found[isbn].size, index] }
+          ranked.first(MAX_IDENTITY_CHECKS).each do |isbn|
             (identity_agrees?(found[isbn].first) ? accepted : rejected) << isbn
           end
+          unchecked = ranked.drop(MAX_IDENTITY_CHECKS)
 
           records = Services::Books::WorldCat::MergedDuplicates.reject(accepted.flat_map { |isbn| found[isbn] }.uniq(&:oclc))
           return if records.empty?
 
-          build(records, accepted, rejected)
+          build(records, accepted, rejected, unchecked)
         end
 
         private
@@ -62,7 +64,7 @@ module Services
           (all.select { |isbn| verified.include?(isbn) } + all.reject { |isbn| verified.include?(isbn) }).first(MAX_ISBNS)
         end
 
-        # A missing or timed-out full record is no evidence the ISBN is this book's.
+        # A missing (nil) or timed-out full record is no evidence the ISBN is this book's.
         def identity_agrees?(slim)
           full = full_record(slim.oclc)
           full.present? && Services::Books::Verification::WorldCatCheck.agrees?(@book, full)
@@ -73,8 +75,6 @@ module Services
 
           @full[oclc] = begin
             @client.record_by_oclc(oclc)
-          rescue ::Books::WorldCat::Exceptions::NotFoundError
-            nil
           rescue ::Books::WorldCat::Exceptions::ServerError => error
             raise unless error.status_code == 504
 
@@ -82,35 +82,38 @@ module Services
           end
         end
 
-        def build(records, accepted, rejected)
+        def build(records, accepted, rejected, unchecked)
           mapped = records.flat_map do |record|
             record.genre.present? ? @map.targets_for(record.genre).map { |target| "#{target.kind}:#{target.name}" } : []
           end
           subjects = records.flat_map(&:subjects).tally.sort_by { |heading, count| [-count, heading] }.first(MAX_SUBJECTS).to_h
-          texts = text_records(records)
+          fulls = full_records(records)
+          english = fulls.select { |full| full.cataloging_language.nil? || full.cataloging_language == "eng" }
 
           {
             "records" => records.size,
             "isbns_accepted" => accepted,
             "isbns_rejected" => rejected,
+            "isbns_unchecked" => unchecked,
             "genre_terms" => records.filter_map(&:genre).tally,
             "mapped_genres" => mapped.tally,
             "subjects" => subjects,
-            "summary" => texts.filter_map(&:summary).select(&:present?).max_by(&:length)&.slice(0, MAX_SUMMARY),
-            "publication_places" => texts.filter_map(&:publication_place).select(&:present?).uniq,
+            "summary" => english.filter_map(&:summary).select(&:present?).max_by(&:length)&.slice(0, MAX_SUMMARY),
+            "publication_places" => fulls.filter_map(&:publication_place).select(&:present?).uniq,
             "earliest_year" => records.filter_map { |record| record.year.to_i if record.year.to_i.positive? }.min,
             "cataloging_languages" => records.filter_map(&:cataloging_language).tally
           }
         end
 
-        # Full records of accepted editions, English cataloguing only: a summary in
-        # another language says nothing useful about an English book.
-        def text_records(records)
+        # Full records of accepted editions (verified ISBNs are trusted, so theirs count
+        # too). Only the summary is limited to English cataloguing: a summary in another
+        # language says nothing useful about an English book, but a place is a place.
+        def full_records(records)
           oclcs = records.map(&:oclc)
           if @full.values_at(*oclcs).compact.size < MIN_FULL_RECORDS
             (oclcs - @full.keys).first(MAX_EXTRA_FULL_RECORDS).each { |oclc| full_record(oclc) }
           end
-          @full.values_at(*oclcs).compact.select { |full| full.cataloging_language.nil? || full.cataloging_language == "eng" }
+          @full.values_at(*oclcs).compact
         end
       end
     end
