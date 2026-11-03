@@ -67,8 +67,8 @@ Wipe-and-re-ingest is the model for the 1,654 mixed books only.
 2. **Mixed books are deleted and re-ingested.**
    - Each mixed record is deleted with its identifiers and editions, after everything on it is copied into the
      audit record.
-   - Its CSV rows are then matched fresh. Order per record: archive, delete, re-match, so a row can never match back
-     to the deleted record.
+   - Its CSV rows are matched fresh, and the finder never returns a mixed record. Order per record: archive,
+     re-match, move every reader's entry to its new book, then delete the empty record (§8 call 1).
    - The old address redirects to the book most of its readers went to.
 3. **Hand-added entries on a deleted mixed book go to that record's most-read book, flagged as a guess.** That's
    1,570 list entries from 683 users, plus 197 ratings. Shane chose this over an AI pick, because the evidence for
@@ -82,6 +82,8 @@ Wipe-and-re-ingest is the model for the 1,654 mixed books only.
    attracting nothing are removed.
 6. **AI is used liberally to double-check.** A powerful audit record is a hard requirement.
 7. **Every long step runs as a Sidekiq job.** Each one is resumable and safe across deploys.
+8. **Enrichment gate.** Build and test now, including a dev rehearsal. Nothing runs the importer or enrichment in
+   production until the other agent's new enrichment steps (categories, origin) have landed.
 9. **The weekly legacy sync stays off until it has been checked** (Shane: "i would rather get all this finished first
    then double check what the weekly sync does and make sure it doesn't revert any of the work we have done").
    - This run applies when it is ready. It does not wait for launch.
@@ -94,8 +96,6 @@ Wipe-and-re-ingest is the model for the 1,654 mixed books only.
      - the merges.
    - That is proven by a test that applies, then syncs, then checks that nothing reverted. This run's design does
      not depend on the sync.
-8. **Enrichment gate.** Build and test now, including a dev rehearsal. Nothing runs the importer or enrichment in
-   production until the other agent's new enrichment steps (categories, origin) have landed.
 
 ## 4. The run
 
