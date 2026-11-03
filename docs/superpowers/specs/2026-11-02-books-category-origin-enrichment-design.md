@@ -337,7 +337,27 @@ WorldCat increment 3 ("import-time seeding") is effectively delivered by the dos
 categorize step reads WorldCat directly. `ApplyCategories` is **not** run by the evidence step: its
 links are permanent (no re-judge removes a `worldcat` link) and it has no identity check, which is
 why `worldcat:backfill[all]` is on hold. WorldCat terms reach a book through this spec only as
-evidence that the judge weighs. The held backfill stays a separate launch-todo step.
+evidence that the judge weighs.
+
+**The WorldCat backfill becomes verified-only (owner, 2026-11-03).** The hold on
+`worldcat:backfill[all]` exists because it would link categories through the unverified ISBNs of
+~120k unranked books. Every verified ISBN-13 today belongs to a ranked book, so the safe part can
+run now:
+
+- `worldcat:backfill` looks up only `Identifier.verified` ISBN-13s, always. `Backfill` already takes
+  a `scope:`; the rake task passes the verified scope. Books with no verified ISBN-13 are not
+  processed.
+- Accepted arguments: `[verified]` (every book with a verified ISBN-13) and `[<count>]` (the first
+  N such books, for dev rehearsals). `[all]` aborts with a message pointing at `[verified]`, so the
+  old command cannot be run by habit.
+- It is additive and idempotent, so it is safe to re-run after any later verification pass adds
+  verified ISBNs (including an unranked pass, if one is ever run).
+- Unranked books never get WorldCat links through `ApplyCategories` while their ISBNs are
+  unverified. Their WorldCat data arrives only as dossier evidence behind the identity check above.
+- Docs in the same PR: launch-todo §9 step 15 becomes `bin/rails "worldcat:backfill[verified]"`
+  (runnable now, no longer waiting on the ISBN cleanup), and the `docs/todo.md` "Books data quality"
+  entry for `worldcat:backfill[all]` is removed. `docs/features/` text describing the backfill is
+  updated to match.
 
 ### 4.10 Backfill
 
@@ -378,8 +398,10 @@ In dev, after a snapshot:
 ## 5. Increments
 
 1. **Evidence.** Wikidata work resolution and QID storage, Wikipedia sections (new client code),
-   WorldCat lookup with the identity check, `worldcat` source on `ApplyCategories`, the `evidence`
-   workflow step. Shippable alone: it stores QIDs and makes WorldCat links distinguishable.
+   WorldCat lookup with the identity check, `worldcat` source on `ApplyCategories`, the verified-only
+   `worldcat:backfill` (§4.9) with its launch-todo/todo doc changes, the `evidence` workflow step.
+   Shippable alone: it stores QIDs, makes WorldCat links distinguishable, and unblocks launch-todo
+   §9 step 15 for the ranked books.
 2. **Origin.** `BookOriginTask`, shortcut, placeholder and apply rules, `ApplyBookFacts` stops
    applying `origin_countries`, origin part of `categorize`, prompt versions, origin backfill scope,
    rehearsal for origin, launch-todo steps (backfill, then rankings recalculation).
@@ -407,7 +429,10 @@ current prompt version is skipped.
 - Two workflow steps (`evidence`, `categorize`) rather than one per category type.
 - `standard` role for both judges, `fast` for the candidate choice.
 - WorldCat records are used for any ISBN that passes a title + author identity check, so the
-  catalog does not wait on the ISBN cleanup; this spec never runs `ApplyCategories` itself.
+  catalog does not wait on the ISBN cleanup; the categorize/evidence steps never run
+  `ApplyCategories` themselves.
+- (Owner decided 2026-11-03.) `worldcat:backfill` is verified-ISBN-only; `[all]` is retired and
+  launch-todo step 15 runs `[verified]`.
 - The backfill does not run `book_facts`; the judges report `recognized` and `book_type` themselves.
 - Only Fiction/Nonfiction are mutually exclusive; type and audience links are never removed by a
   re-judge.
