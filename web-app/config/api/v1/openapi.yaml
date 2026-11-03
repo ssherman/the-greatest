@@ -31,10 +31,16 @@ paths:
     get:
       operationId: listBooks
       summary: Books in rank order
-      description: The Greatest Books' primary ranking, best first. Only ranked books appear.
+      description: The Greatest Books' primary ranking, best first. Only ranked books appear. The filter parameters narrow the list as they do on the site; `meta.filters` echoes the ones applied.
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/category_id"
+        - $ref: "#/components/parameters/country_id"
+        - $ref: "#/components/parameters/year"
+        - $ref: "#/components/parameters/published_start"
+        - $ref: "#/components/parameters/published_end"
+        - $ref: "#/components/parameters/collection"
       responses:
         "200":
           description: A page of ranked books.
@@ -54,13 +60,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BookCollection"
+                $ref: "#/components/schemas/RankedBookCollection"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/books/{slug}:
@@ -293,6 +301,12 @@ paths:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/category_id"
+        - $ref: "#/components/parameters/country_id"
+        - $ref: "#/components/parameters/year"
+        - $ref: "#/components/parameters/published_start"
+        - $ref: "#/components/parameters/published_end"
+        - $ref: "#/components/parameters/collection"
       responses:
         "200":
           description: A page of ranked books.
@@ -312,7 +326,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BookCollection"
+                $ref: "#/components/schemas/RankedBookCollection"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -629,6 +643,42 @@ components:
         minimum: 1
         maximum: 100
         default: 50
+    category_id:
+      name: category_id
+      in: query
+      required: false
+      description: Comma-separated category slugs, up to 6. A book must carry every one. Merged and renamed slugs resolve.
+      schema: {type: string, minLength: 1}
+    country_id:
+      name: country_id
+      in: query
+      required: false
+      description: Comma-separated country slugs, up to 10. A book from any of them matches. Cannot be combined with collection.
+      schema: {type: string, minLength: 1}
+    year:
+      name: year
+      in: query
+      required: false
+      description: Books first published in this year. Cannot be combined with published_start or published_end.
+      schema: {type: integer, minimum: -4000}
+    published_start:
+      name: published_start
+      in: query
+      required: false
+      description: Books first published in or after this year.
+      schema: {type: integer, minimum: -4000}
+    published_end:
+      name: published_end
+      in: query
+      required: false
+      description: Books first published in or before this year.
+      schema: {type: integer, minimum: -4000}
+    collection:
+      name: collection
+      in: query
+      required: false
+      description: A curated collection, as on the site. The values are the slugs in Books::CollectionsRegistry (a test keeps the two in step).
+      schema: {type: string, enum: [women, africa, asia, latin-america, western, non-western]}
     slug:
       name: slug
       in: path
@@ -866,6 +916,27 @@ components:
           $ref: "#/components/schemas/PaginationMeta"
         links:
           $ref: "#/components/schemas/PaginationLinks"
+    AppliedFilters:
+      type: object
+      additionalProperties: false
+      description: The filters the server applied, in canonical form. Only the ones that were sent appear.
+      properties:
+        category_id: {type: string}
+        country_id: {type: string}
+        year: {type: integer}
+        published_start: {type: integer}
+        published_end: {type: integer}
+        collection: {type: string}
+    RankedBookCollection:
+      allOf:
+        - $ref: "#/components/schemas/BookCollection"
+        - type: object
+          properties:
+            meta:
+              type: object
+              properties:
+                filters:
+                  $ref: "#/components/schemas/AppliedFilters"
     BookItem:
       type: object
       required: [data]

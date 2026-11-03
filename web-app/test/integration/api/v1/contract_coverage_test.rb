@@ -14,6 +14,7 @@ module Api
         ["GET", "/api/v1/openapi.json", "429"] => -> { with_exhausted_ip_window { get "/api/v1/openapi.json" } },
         ["GET", "/api/v1/books", "200"] => -> { get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/books", "400"] => -> { get "/api/v1/books?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/books", "404"] => -> { get "/api/v1/books?country_id=atlantis", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/books", "401"] => -> { get "/api/v1/books" },
         ["GET", "/api/v1/books", "403"] => -> { get "/api/v1/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
         ["GET", "/api/v1/books", "429"] => -> { with_exhausted_limit { get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER) } },
