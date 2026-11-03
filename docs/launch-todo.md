@@ -471,7 +471,9 @@ Every step below only queues a Sidekiq job; wait for the jobs to finish before t
 4. **Match every edition.** `bin/rails "books:goodreads_reimport:match[200]"` first, then
    `bin/rails "books:goodreads_reimport:match[all]"`. Run `[all]` again for any editions left.
 5. **Report and review.** `bin/rails books:goodreads_reimport:report`; find the file at
-   `storage/goodreads_reimport/report-<UTC time>.md` (the path is in the Sidekiq log). Then in Admin, Repair
+   `storage/goodreads_reimport/report-<UTC time>.md` (the path is in the Sidekiq log). The worker writes it
+   into the shared storage volume, mounted in both web and worker, so read it from either container. The
+   snapshot's `counts.json` lands in the same folder. Then in Admin, Repair
    verdicts, review the proposed `reimport_match` ones: approve the right ones, reject the wrong ones. Rejected
    matches leave their rows waiting; the report lists them.
 6. **Apply the matches.** `bin/rails books:goodreads_reimport:apply`. This writes approved matches and creates
@@ -485,7 +487,7 @@ Every step below only queues a Sidekiq job; wait for the jobs to finish before t
 10. **Check the authors, then apply.** `bin/rails "books:goodreads_reimport:check_authors[200]"`, then
     `check_authors[all]`, then `bin/rails books:goodreads_reimport:apply` again.
 11. **Report.** `bin/rails books:goodreads_reimport:report` again. The acceptance lines at the bottom should
-    each print 0. Conflicts and verdicts closed as final no-ops are listed in it; read them.
+    each print 0. Conflicts and verdicts closed because there was nothing left to do are listed in it; read them.
 12. **Sample.** `bin/rails books:goodreads_reimport:sample`. The result is in the Sidekiq log (search
     "Goodreads re-import sample check"), not in a file. If a deploy interrupted it, enqueue it again. **Any
     "no" stops the run** until its cause is fixed.

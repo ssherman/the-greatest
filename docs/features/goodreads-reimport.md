@@ -31,9 +31,9 @@ in `app/sidekiq/books/goodreads_reimport/`, logic in `app/lib/services/books/goo
 |---|---|---|
 | Archive | `archive_mixed` | Records, for each mixed book, everything on it. Deletes nothing. |
 | Match | `match[<count>\|all]` | Finds the book for each Goodreads edition. An AI check looks at every match. |
-| Apply | `apply` | Carries out approved verdicts, one chain at a time. |
+| Apply | `apply` | Carries out approved verdicts, one apply run at a time; each run picks up where the last stopped. |
 | Decide | `decide[<count>\|all]` | Per user: keep, move, add or create each row. Also queues guesses for mixed books. |
-| Snapshot | `snapshot[redo]` | Saves each affected user's list-item and review counts before the first apply. |
+| Snapshot | `snapshot[redo]` | Saves each affected user's list-item and review counts before the first apply that moves rows. |
 | Author check | `check_authors[<count>\|all]` | Checks each import-made book's credited authors against its rows. |
 | Report | `report` | Writes the report file. |
 | Sample | `sample` | An independent AI check of random rows. |
@@ -83,12 +83,12 @@ the AI and the finder disagree a lot and most of the review falls to Shane.
 
 `books:goodreads_reimport:report` queues a job. It writes
 `storage/goodreads_reimport/report-<UTC time>.md` (for example `report-20261105T140000Z.md`), a plain-text file,
-and logs the path in the Sidekiq log. `storage/` is a volume mounted in web and worker, so the file survives a
-deploy. It lists:
+and logs the path in the Sidekiq log. The worker writes it into the shared storage volume, which is mounted in both web and worker, so you can
+read it from either container and it survives a deploy. It lists:
 
 - counts per kind and status, and per row action;
 - proposed verdicts waiting for Shane;
-- mixed books stuck waiting (rows not yet decided), rejected matches, and verdicts closed as final no-ops
+- mixed books stuck waiting (rows not yet decided), rejected matches, and verdicts closed because there was nothing left to do
   (nothing left to do, each with its reason);
 - verdicts with an error;
 - a random sample of each kind;
@@ -99,8 +99,8 @@ deploy. It lists:
   - mixed books still present.
 
 If a deploy interrupts the job, run the task again. The snapshot (`counts.json` in the same folder) is what
-the "count dropped" query compares against. Take it before the first apply. `snapshot` leaves an existing
-snapshot alone; `snapshot[redo]` replaces it, which you should only do before any apply, because a snapshot
+the "count dropped" query compares against. Take it before the first apply that moves rows. `snapshot` leaves an existing
+snapshot alone; `snapshot[redo]` replaces it, which you should only do before any apply that moves rows, because a snapshot
 taken afterwards would hide every loss.
 
 ## The sample check
