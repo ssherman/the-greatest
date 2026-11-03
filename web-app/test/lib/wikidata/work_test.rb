@@ -16,7 +16,20 @@ module Wikidata
       assert_equal ["Q30"], novel.countries
       assert_equal ["Q1860"], novel.languages
       assert_equal [1955], novel.publication_years
-      assert_equal "929", novel.identifiers["goodreads_book"]
+      assert_equal ["929"], novel.identifiers["goodreads_book"]
+    end
+
+    test "readers return the distilled fields" do
+      novel = work("Q161531")
+
+      assert_equal "Q161531", novel.id
+      assert_equal "Lolita", novel.label
+      assert_equal "1955 novel by Vladimir Nabokov", novel.description
+      assert_equal ["Q8253"], novel.genres
+      assert_equal ["Q1"], novel.main_subjects
+      assert_equal ["Q1297"], novel.narrative_locations
+      assert_equal ["Q1"], novel.set_in_periods
+      assert_equal ["Q8261"], novel.forms
     end
 
     test "a film is not a written work" do

@@ -25,7 +25,7 @@ module Wikidata
 
     def enwiki_title = payload["enwiki_title"]
 
-    def identifiers = payload["identifiers"].is_a?(Hash) ? payload["identifiers"] : {}
+    def identifiers = payload["identifiers"].is_a?(Hash) ? payload["identifiers"].transform_values { |ids| Array(ids) } : {}
 
     def publication_years = Array(payload["publication_years"]).map(&:to_i)
 

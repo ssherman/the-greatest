@@ -34,10 +34,10 @@ module Wikidata
       assert_equal [1955], WorkDistiller.call(entity("Q161531"))["publication_years"]
     end
 
-    test "identifiers are keyed by source and omit absent ones" do
-      assert_equal({"goodreads_book" => "929", "openlibrary" => "OL1168083W", "oclc" => "1234"},
+    test "identifiers are arrays keyed by source, empty when absent" do
+      assert_equal({"goodreads_book" => ["929"], "openlibrary" => ["OL1168083W"], "oclc" => ["1234"]},
         WorkDistiller.call(entity("Q161531"))["identifiers"])
-      assert_equal({}, WorkDistiller.call(entity("Q999001"))["identifiers"])
+      assert_equal({"goodreads_book" => [], "openlibrary" => [], "oclc" => []}, WorkDistiller.call(entity("Q999001"))["identifiers"])
     end
 
     test "an edition carries its work in edition_of" do

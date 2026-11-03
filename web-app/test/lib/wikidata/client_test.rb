@@ -134,6 +134,19 @@ module Wikidata
       assert_equal({"Q42" => [{"id" => "Q25169", "label" => "The Hitchhiker's Guide to the Galaxy"}]}, items)
     end
 
+    test "work_items skips rows with a blank label or no work, groups authors, and lists a repeated work once" do
+      row = lambda do |author, work, label|
+        {"author" => {"value" => "http://www.wikidata.org/entity/#{author}"}, "work" => work && {"value" => "http://www.wikidata.org/entity/#{work}"},
+         "workLabel" => {"value" => label}}.compact
+      end
+      rows = [row.call("Q1", "Q10", "Ten"), row.call("Q1", "Q10", "Ten"), row.call("Q1", "Q11", ""), row.call("Q1", nil, "No id"),
+        row.call("Q2", "Q20", "Twenty")]
+      stub_request(:post, SPARQL).to_return(json_response({results: {bindings: rows}}.to_json))
+
+      assert_equal({"Q1" => [{"id" => "Q10", "label" => "Ten"}], "Q2" => [{"id" => "Q20", "label" => "Twenty"}]},
+        @client.work_items(["Q1", "Q2"]))
+    end
+
     test "work_items makes no request for empty input" do
       assert_equal({}, @client.work_items([]))
       assert_not_requested :post, SPARQL

@@ -28,7 +28,7 @@ module Wikidata
         "description" => Distiller.english(entity["descriptions"])
       }.merge(ITEM_PROPERTIES.transform_values { |property| Distiller.item_ids(claims, property) }).merge(
         "publication_years" => publication_years(claims),
-        "identifiers" => IDENTIFIER_PROPERTIES.transform_values { |property| Distiller.values(claims, property).grep(String).first }.compact,
+        "identifiers" => IDENTIFIER_PROPERTIES.transform_values { |property| Distiller.values(claims, property).grep(String) },
         "enwiki_title" => sitelinks.dig("enwiki", "title")
       )
     end
