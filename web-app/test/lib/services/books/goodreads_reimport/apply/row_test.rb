@@ -85,6 +85,18 @@ module Services
             assert_equal %w[legacy legacy], bodies
           end
 
+          test "a copy whose destination is the book the entries already sit on writes this row's shelf in place and closes" do
+            UserListItem.create!(user_list: list(:read), listable: @from)
+            row = csv_row(exclusive_shelf: "to-read", rating: 0)
+            verdict = row_verdict(row, action: "copy", from: @from, to: @from)
+
+            result = Row.call(verdict: verdict)
+
+            assert_equal :applied, result.data[:outcome]
+            assert UserListItem.exists?(user_list: list(:want_to_read), listable: @from)
+            assert_equal 1, UserListItem.where(user_list: list(:read), listable: @from).count
+          end
+
           test "copy of a row with no rating or review writes none" do
             UserListItem.create!(user_list: list(:read), listable: @from)
 

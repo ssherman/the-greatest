@@ -33,8 +33,22 @@ module Services
             "row_keys" => kept["row_keys"] || row_keys(book, legacy_map)
           }
           payload["redirect_to_book_id"] = kept["redirect_to_book_id"] if kept.key?("redirect_to_book_id")
+          # A kept verdict keeps its mark and its closing reason through a re-archive, or DecideGuesses could not reopen it.
+          %w[kept closed_reason].each { |key| payload[key] = kept[key] if kept.key?(key) }
           GoodreadsReplay::RecordVerdict.call(kind: :reimport_mixed, subject_key: subject_key, payload: payload,
             decided_by: :rule, auto: true).data[:verdict]
+        end
+
+        # True while any reader is headed to the book: a current, unrejected, unsuperseded reimport_row whose
+        # destination is it, or a current, unrejected reimport_match that matched an edition to it. Read from the
+        # database, from anywhere, not from the book's own row_keys: a reader of another book can land here.
+        def headed_to?(book_id)
+          key = book_id.to_s
+          rows = ::Books::RepairVerdict.reimport_row.current.where.not(status: :rejected)
+            .where("payload->>'to_book_id' = ? AND COALESCE(payload->>'superseded_by', '') = ''", key)
+          matches = ::Books::RepairVerdict.reimport_match.current.where.not(status: :rejected)
+            .where("payload->>'outcome' = 'matched' AND payload->>'book_id' = ?", key)
+          rows.exists? || matches.exists?
         end
 
         def snapshot(book)

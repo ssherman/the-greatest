@@ -133,10 +133,38 @@ module Services
           row_verdict(1, @dest_a)
           row_verdict(2, @mixed, superseded_by: "reimport:row:#{@import.id}:9")
           row_verdict(3, @dest_a)
+          verdict(:reimport_row, "reimport:row:99:1", {"user_id" => @other.id, "action" => "keep", "to_book_id" => @mixed.id}, status: :rejected)
 
           result = DecideGuesses.call(mixed_verdict: @mixed_verdict)
 
           assert_equal :decided, result.data[:outcome]
+          assert_not @mixed_verdict.reload.payload.key?("kept")
+        end
+
+        test "a reader's row from another book, or an unrejected match, that heads to the mixed book keeps it" do
+          row_verdict(1, @dest_a)
+          row_verdict(2, @dest_a)
+          row_verdict(3, @dest_a)
+          outside = verdict(:reimport_row, "reimport:row:98:1",
+            {"user_id" => @user.id, "action" => "move", "from_book_id" => @dest_b.id, "to_book_id" => @mixed.id}, status: :proposed)
+
+          assert_equal :kept, DecideGuesses.call(mixed_verdict: @mixed_verdict).data[:outcome]
+
+          outside.update!(status: :rejected)
+          assert_equal :decided, DecideGuesses.call(mixed_verdict: @mixed_verdict).data[:outcome]
+
+          verdict(:reimport_match, "reimport:edition:5", {"outcome" => "matched", "book_id" => @mixed.id})
+          assert_equal :kept, DecideGuesses.call(mixed_verdict: @mixed_verdict).data[:outcome]
+        end
+
+        test "an applied verdict that was not kept is left alone" do
+          row_verdict(1, @dest_a)
+          row_verdict(2, @mixed)
+          row_verdict(3, @dest_a)
+          @mixed_verdict.update_columns(applied_at: Time.current,
+            payload: @mixed_verdict.payload.merge("redirect_to_book_id" => @dest_a.id, "redirect_written" => true))
+
+          assert_equal :skipped, DecideGuesses.call(mixed_verdict: @mixed_verdict).data[:outcome]
           assert_not @mixed_verdict.reload.payload.key?("kept")
         end
 

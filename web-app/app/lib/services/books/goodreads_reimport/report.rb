@@ -50,7 +50,7 @@ module Services
         def sample(n: SAMPLE_ROWS, mixed_books: SAMPLE_MIXED_BOOKS, task_class: ::Services::Ai::Tasks::Books::SameWorkTask)
           picked = verdicts.reimport_row.where.not(applied_at: nil).where("payload ->> 'superseded_by' IS NULL")
           chosen = picked.order(Arel.sql("random()")).limit(n).to_a
-          former = verdicts.reimport_mixed.approved.where.not(applied_at: nil).order(Arel.sql("random()")).limit(mixed_books).to_a
+          former = verdicts.reimport_mixed.approved.where.not(applied_at: nil).where("NOT (payload ? 'kept')").order(Arel.sql("random()")).limit(mixed_books).to_a
           keys = former.flat_map { |mixed| Array(mixed.payload["row_keys"]).map { |import_id, row_number| "reimport:row:#{import_id}:#{row_number}" } }
           chosen |= picked.where(subject_key: keys).to_a
 
@@ -155,6 +155,11 @@ module Services
           end
           lines << "  mixed books still present: #{still_mixed.size}"
           lines << "  (not a failure) mixed books kept (readers matched them): #{kept_mixed.size}"
+          # A guess applied before its book turned out to be kept moved a hand-added entry off a book that survives.
+          # Those are not undone automatically; they are listed here for a hand review.
+          moved = verdicts.reimport_guess.where.not(applied_at: nil).where("payload->>'from_book_id' IN (?)", kept_mixed.map(&:to_s).presence || ["-"])
+          lines << "  guesses already applied from kept mixed books (review by hand): #{moved.count}"
+          sample_of(moved).each { |guess| lines << "    #{guess.subject_key}: book ##{guess.payload["from_book_id"]} -> ##{guess.payload["to_book_id"]}" }
         end
 
         def sample_of(scope) = scope.order(Arel.sql("random()")).limit(SAMPLE)

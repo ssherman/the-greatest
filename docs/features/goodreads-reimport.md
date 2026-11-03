@@ -51,10 +51,15 @@ titles, so many "mixed" records are the right English book, and the per-edition 
 deleted later, once every row on it has moved. Deleting detaches each image's file first, so the stored file is
 kept and the archive can re-attach it.
 
-If a reader's row matched the mixed record itself (a current, non-rejected, non-superseded `reimport_row` verdict
-whose destination is the record), `decide` marks the verdict `kept`: no guesses, earlier unapplied guesses from the
-record superseded, no redirect, and `apply` closes it with "kept: readers matched this book" without deleting
-anything. If the rows are later re-decided with none keeping it, the next `decide` flips it back and reopens it.
+If any reader is headed to the mixed record, `decide` marks the verdict `kept`. "Headed to" is read from the
+database, not from the record's own rows: any current, non-rejected, non-superseded `reimport_row` verdict (of any
+reader, from any book) whose destination is the record, or any current, non-rejected `reimport_match` that matched an
+edition to it. A kept record gets no guesses, its earlier unapplied guesses are superseded, there is no redirect, and
+`apply` closes it with "kept: readers matched this book" without deleting anything. `apply` re-checks the same
+condition under the book's lock, so a delete never races a new match. If nothing heads there any more, the next
+`decide` flips it back and reopens it. Guesses already applied before the record turned out to be kept are not
+undone; the report lists them for hand review. When a record is deleted, `apply` writes every image's columns and its
+stored file's identity into the verdict (`deleted_images`), covering images added after the archive.
 
 Entries a user added by hand to a mixed book (not from a CSV row) cannot be matched. They go to the record's
 most-read book and are marked as guesses (`reimport_guess`). `decide` queues these, but a book whose rows are

@@ -22,13 +22,16 @@ module Services
 
         def call
           return done(:skipped) unless @mixed_verdict.reimport_mixed? && @mixed_verdict.approved? && @mixed_verdict.superseded_at.nil?
+          # An applied verdict is done (deleted, redirect written); only a kept one may still change its mind.
+          return done(:skipped) if @mixed_verdict.applied_at.present? && !@mixed_verdict.payload["kept"]
 
           keys = Array(@mixed_verdict.payload["row_keys"]).map { |import_id, row_number| "reimport:row:#{import_id}:#{row_number}" }
           verdicts = ::Books::RepairVerdict.reimport_row.current.where.not(status: :rejected).where(subject_key: keys).to_a
           return done(:waiting) if verdicts.map(&:subject_key).uniq.size < keys.size
 
-          # A reader's row kept this book: it is a real book with real readers, not a lump. Nothing is guessed.
-          return keep_book if verdicts.any? { |verdict| keeps_book?(verdict) }
+          # A reader is headed to this book (a row of any reader, or a match): it is a real book with real readers,
+          # not a lump. Nothing is guessed.
+          return keep_book if MixedBooks.headed_to?(book_id)
 
           destination = most_read(verdicts)
           return done(:waiting) if destination.nil?
@@ -51,10 +54,6 @@ module Services
           return unless @mixed_verdict.payload["kept"]
 
           @mixed_verdict.update_columns(applied_at: nil, payload: @mixed_verdict.payload.except("closed_reason"))
-        end
-
-        def keeps_book?(verdict)
-          verdict.payload["superseded_by"].blank? && verdict.payload["to_book_id"] == book_id
         end
 
         # Earlier guesses from this book are superseded (not deleted); a later re-decide without a keep brings them

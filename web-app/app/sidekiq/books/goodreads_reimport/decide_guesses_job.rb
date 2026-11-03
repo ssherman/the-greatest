@@ -8,7 +8,7 @@ class Books::GoodreadsReimport::DecideGuessesJob
   sidekiq_options queue: :low, retry: 3
 
   BATCH_SIZE = 100
-  OUTCOMES = %i[decided waiting skipped].freeze
+  OUTCOMES = %i[decided kept waiting skipped].freeze
   REIMPORT_MIXED_KIND = ::Books::RepairVerdict.kinds.fetch("reimport_mixed")
 
   # Approved, current mixed verdicts. Returns how many were queued.

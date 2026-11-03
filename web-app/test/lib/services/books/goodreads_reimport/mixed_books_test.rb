@@ -94,6 +94,15 @@ module Services
           image
         end
 
+        test "archive carries kept and the closing reason forward" do
+          first = MixedBooks.archive(@derived_lump, legacy_map: GoodreadsRebuild::LegacyBookMap.new({}))
+          first.update_columns(payload: first.payload.merge("kept" => true, "closed_reason" => "kept: readers matched this book"))
+
+          payload = MixedBooks.archive(@derived_lump, legacy_map: GoodreadsRebuild::LegacyBookMap.new({})).payload
+
+          assert_equal [true, "kept: readers matched this book"], payload.values_at("kept", "closed_reason")
+        end
+
         test "archive twice keeps the first snapshot" do
           author = ::Books::Author.create!(name: "Original")
           ::Books::BookAuthor.create!(book: @derived_lump, author: author, position: 1)

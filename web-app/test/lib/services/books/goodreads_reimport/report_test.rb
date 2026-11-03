@@ -141,6 +141,21 @@ module Services
           assert_includes report, "mixed books kept (readers matched them): 1"
         end
 
+        test "a kept mixed book's already-applied guesses are listed for hand review" do
+          MixedBooks.stubs(:ids).returns(Set[@other.id])
+          verdict(:reimport_mixed, "reimport:book:#{@other.id}", {"book_id" => @other.id, "kept" => true}, applied_at: Time.current)
+          verdict(:reimport_guess, "reimport:guess:UserListItem:77", {"item_type" => "UserListItem", "item_id" => 77, "user_id" => @user.id,
+                                                                       "from_book_id" => @other.id, "to_book_id" => @book.id}, applied_at: Time.current)
+          verdict(:reimport_guess, "reimport:guess:UserListItem:78", {"item_type" => "UserListItem", "item_id" => 78, "user_id" => @user.id,
+                                                                       "from_book_id" => @other.id, "to_book_id" => @book.id})
+
+          report = Report.call
+
+          assert_includes report, "guesses already applied from kept mixed books (review by hand): 1"
+          assert_includes report, "reimport:guess:UserListItem:77"
+          assert_not_includes report, "reimport:guess:UserListItem:78 "
+        end
+
         test "acceptance: mixed books still present are counted" do
           MixedBooks.stubs(:ids).returns(Set[@other.id])
 

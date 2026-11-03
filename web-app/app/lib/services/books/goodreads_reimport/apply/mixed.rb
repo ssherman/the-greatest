@@ -34,20 +34,31 @@ module Services
               return Entries.noop("waiting for redirect")
             end
 
-            redirect_to = redirect_target(verdict, book.id)
             reason = nil
+            kept = false
             ::ApplicationRecord.transaction do
               book.lock!
+              # Everything is read again from the database under the lock: DecideGuesses may have marked the verdict
+              # kept since it was loaded, and a reader's row or match may now head here.
+              verdict.reload
+              if verdict.payload["kept"]
+                kept = true
+                raise ActiveRecord::Rollback
+              end
               items = copy_originals(book)
               reason = blocker(book, items)
               raise ActiveRecord::Rollback if reason
 
-              verdict.update_columns(payload: verdict.payload.merge("deleted" => items.map { |item| attributes(item) }, "redirect_written" => false))
+              verdict.update_columns(payload: verdict.payload.merge("deleted" => items.map { |item| attributes(item) },
+                "deleted_images" => image_records(book), "redirect_written" => false))
               items.each(&:destroy!)
               keep_image_files(book)
               book.reload.destroy!
             end
+            return Entries.noop("kept: readers matched this book", final: true) if kept
             return Entries.noop(reason) if reason
+
+            redirect_to = redirect_target(verdict, book.id)
 
             write_redirect(verdict, book.id, redirect_to)
             Entries.applied
@@ -80,6 +91,12 @@ module Services
           # Image has_one_attached :file purges its blob when the image is destroyed, which destroying the book does.
           # Detaching first drops only the attachment row; the blob and its stored file stay, named in the archive
           # (MixedBooks.image_records), so the deletion can be reversed by hand.
+          # Every image on the book and its editions, with its stored file's identity, written into the verdict at delete
+          # time so images attached after the archive are covered too.
+          def self.image_records(book)
+            MixedBooks.image_records(book) + book.editions.order(:id).flat_map { |edition| MixedBooks.image_records(edition) }
+          end
+
           def self.keep_image_files(book)
             ::Image.where(parent: [book, *book.editions]).find_each { |image| image.file.detach }
           end
@@ -98,6 +115,8 @@ module Services
           # Why the book must stay, or nil when it holds nothing but the copy originals.
           def self.blocker(book, originals)
             return "not empty: reviews remain" if ::Review.exists?(reviewable_type: "Books::Book", reviewable_id: book.id)
+
+            return "not empty: a reader's row or match points to this book" if MixedBooks.headed_to?(book.id)
 
             others = ::UserListItem.where(listable_type: "Books::Book", listable_id: book.id).where.not(id: originals.map(&:id))
             return "not empty: list items remain" if others.exists?
@@ -130,7 +149,7 @@ module Services
 
           def self.attributes(item) = Entries.item_attributes(item).merge("user_id" => item.user_list.user_id)
 
-          private_class_method :gone, :write_redirect, :redirect_target, :copy_originals, :blocker, :keep_image_files, :pending_guess?, :pending_row?, :attributes
+          private_class_method :gone, :write_redirect, :redirect_target, :copy_originals, :blocker, :image_records, :keep_image_files, :pending_guess?, :pending_row?, :attributes
         end
       end
     end

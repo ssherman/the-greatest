@@ -43,12 +43,21 @@ module Services
 
             from = GoodreadsReplay::Apply::MergedBook.call(payload["from_book_id"])
             return nothing_to_move(verdict) unless from
-            return Entries.noop("both books were merged into book #{to.id}") if from.id == to.id
+            # The row's destination is the very book its entries are on (a mixed book that stayed matchable, or two
+            # merged books): nothing moves, but this row's own shelf, dates and review still belong on it.
+            return in_place(verdict, user, to) if from.id == to.id
 
             (action == "move") ? move(verdict, user, from, to) : copy(verdict, user, from, to)
           end
 
-          def self.add(verdict, user, to)
+          def self.in_place(verdict, user, to)
+            row = csv_row(verdict)
+            return Entries.noop("import row #{verdict.payload["import_id"]}:#{verdict.payload["row_number"]} no longer exists") unless row
+
+            add(verdict, user, to, review: writes_csv_review?(verdict, row, nil))
+          end
+
+          def self.add(verdict, user, to, review: verdict.payload["review"] == true)
             row = csv_row(verdict)
             return Entries.noop("import row #{verdict.payload["import_id"]}:#{verdict.payload["row_number"]} no longer exists") unless row
 
@@ -56,7 +65,7 @@ module Services
             trail = Entries.new_trail
             result = nil
             ::ApplicationRecord.transaction do
-              result = write(user, row, to, trail, review: verdict.payload["review"] == true)
+              result = write(user, row, to, trail, review: review)
               if snapshot(user, to) != before
                 Entries.record_moved(verdict, "list_item_ids_before" => before.first.map(&:first), "list_item_ids_after" => result[:list_item_ids],
                   "review_id_before" => before.last, "review_id_after" => Entries.review_on(user, to)&.id, **trail)
@@ -183,7 +192,7 @@ module Services
             books.each { |book| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book.id) }
           end
 
-          private_class_method :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :sibling_carries?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
+          private_class_method :in_place, :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :sibling_carries?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
         end
       end
     end

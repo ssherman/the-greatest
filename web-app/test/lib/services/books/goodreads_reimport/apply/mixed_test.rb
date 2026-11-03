@@ -49,6 +49,55 @@ module Services
             assert_equal [true, "kept: readers matched this book"], result.data.values_at(:final, :reason)
           end
 
+          test "an approved match or a live row anywhere that heads to this book blocks the delete" do
+            ::Services::BooksMigration::RedirectRecorder.stubs(:merged)
+            row = csv_row
+            outside = row_verdict(row, action: "move", from: @from, to: @mixed)
+            outside.update!(status: :proposed)
+            mixed = mixed_verdict
+
+            result = Mixed.call(verdict: mixed)
+            assert_equal [:noop, false], result.data.values_at(:outcome, :final)
+            assert ::Books::Book.exists?(@mixed.id)
+
+            outside.update!(status: :rejected)
+            match = ::Books::RepairVerdict.reimport_match.find_by!(subject_key: "reimport:edition:#{row.goodreads_edition_id}")
+            match.update!(payload: {"outcome" => "matched", "book_id" => @mixed.id})
+            assert_equal :noop, Mixed.call(verdict: mixed).data[:outcome]
+            assert ::Books::Book.exists?(@mixed.id)
+
+            match.update!(status: :rejected)
+            assert_equal :applied, Mixed.call(verdict: mixed).data[:outcome]
+          end
+
+          test "a keep marked after the verdict was loaded is seen inside the lock, and its payload is not overwritten" do
+            stale = mixed_verdict
+            ::Books::RepairVerdict.find(stale.id).update!(payload: stale.payload.merge("kept" => true))
+            ::Services::BooksMigration::RedirectRecorder.expects(:merged).never
+
+            result = Mixed.call(verdict: stale)
+
+            assert_equal [:noop, true], result.data.values_at(:outcome, :final)
+            assert ::Books::Book.exists?(@mixed.id)
+            assert_equal true, stale.reload.payload["kept"]
+          end
+
+          test "images attached after the archive are recorded in the verdict when the book goes" do
+            image = Image.new(parent: @mixed, primary: true, notes: "late")
+            image.file.attach(io: StringIO.new("late data"), filename: "late.jpg", content_type: "image/jpeg")
+            image.save!
+            blob = image.file.blob
+            verdict = mixed_verdict
+            ::Services::BooksMigration::RedirectRecorder.stubs(:merged)
+
+            assert_equal :applied, Mixed.call(verdict: verdict).data[:outcome]
+
+            recorded = verdict.reload.payload["deleted_images"]
+            assert_equal [[image.id, "late", blob.key, blob.checksum]],
+              recorded.map { |i| [i["id"], i["notes"], i.dig("blob", "key"), i.dig("blob", "checksum")] }
+            assert ActiveStorage::Blob.exists?(blob.id)
+          end
+
           test "deleting the book keeps its images' blobs, so the archive can re-attach them" do
             edition = ::Books::Edition.create!(book: @mixed, title: "Ed")
             blobs = [@mixed, edition].map do |parent|
