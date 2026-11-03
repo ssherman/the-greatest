@@ -10,7 +10,8 @@ module Services
       # A user's rows are decided together or not at all. Move versus copy and the review all depend on where the
       # user's other rows go, so until every live row of the user has a destination (an approved, applied
       # reimport_match) every row of the user waits and nothing is recorded. Rows whose edition's match was
-      # rejected never resolve on their own, so they are left out of that check and wait by themselves.
+      # rejected never resolve on their own, so they are left out of that check and wait by themselves, and so
+      # does every row legacy put on the same book (see unresolved_groups).
       #
       # The same edition in a newer completed import of the same user supersedes the older row: it is recorded as
       # a "keep" naming the newer row, and apply changes nothing for it.
@@ -45,7 +46,7 @@ module Services
             decisions = rows.to_h { |row| [row.id, decision_for(row)] }
             conflicted = conflicted_groups(decisions)
             rows.each do |row|
-              @by_row[row.id] = if rejected?(row)
+              @by_row[row.id] = if rejected?(row) || unresolved_groups.include?(from_id(row))
                 [:waiting, nil]
               elsif conflicted.include?(from_id(row))
                 [:conflict, existing[row_key(row)]]
@@ -77,10 +78,25 @@ module Services
         def destination(row)
           match = matches[row.goodreads_edition_id]
           return nil unless match&.approved? && match.applied_at
-          match.payload["book_id"] || match.payload["created_book_id"]
+          id = match.payload["book_id"] || match.payload["created_book_id"]
+          # A book merged away since the match was decided is followed, as from_id does for the legacy book.
+          ::Services::Books::GoodreadsReplay::Apply::MergedBook.call(id)&.id
         end
 
         def rejected?(row) = matches[row.goodreads_edition_id]&.rejected?
+
+        # Rows legacy put on one book are decided together: copy versus move and who carries the review depend on
+        # every sibling. A group holding a row that cannot be settled (its match rejected, or no edition at all)
+        # moves nothing and records nothing until that row is. The merged legacy books of those groups.
+        def unresolved_groups
+          @unresolved_groups ||= (rows.select { |row| rejected?(row) } + rows_without_edition).filter_map { |row| from_id(row) }.to_set
+        end
+
+        def rows_without_edition
+          ::Books::GoodreadsImportRow
+            .joins(:import).merge(::Books::GoodreadsImport.legacy_replay.complete)
+            .where(books_goodreads_imports: {user_id: @user_id}, goodreads_edition_id: nil).where.not(legacy_book_id: nil).to_a
+        end
 
         def decidable?(row) = !rejected?(row)
 

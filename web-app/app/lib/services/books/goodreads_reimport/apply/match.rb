@@ -25,7 +25,12 @@ module Services
           def self.cache_match(verdict, edition)
             book = GoodreadsReplay::Apply::MergedBook.call(verdict.payload["book_id"])
             return Entries.noop("book #{verdict.payload["book_id"]} no longer exists") unless book
-            return Entries.noop("already cached") if edition.book_id == book.id && edition.matched?
+            if edition.book_id == book.id && edition.matched?
+              # The cache is already the decision: that is the wanted state, so the verdict counts as applied and
+              # DecideRow (which only follows an applied match) can use it.
+              remember(verdict, edition)
+              return Entries.applied
+            end
 
             ::ApplicationRecord.transaction do
               remember(verdict, edition)
@@ -39,7 +44,7 @@ module Services
           # book (a legacy edition of the same title can share the signature).
           def self.create(verdict, edition)
             existing = GoodreadsReplay::Apply::MergedBook.call(verdict.payload["created_book_id"])
-            return Entries.noop("book #{existing.id} already created") if existing
+            return Entries.applied if existing
             return Entries.noop("edition parked") if edition.parked?
 
             import = import_for(edition)

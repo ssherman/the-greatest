@@ -99,11 +99,22 @@ module Services
         test "a legacy book that was merged away is followed" do
           e = edition
           match(e, @war)
+          ::Services::Books::GoodreadsReplay::Apply::MergedBook.stubs(:call).with(@war.id).returns(@war)
           ::Services::Books::GoodreadsReplay::Apply::MergedBook.stubs(:call).with(555).returns(@crime)
           r = row(e)
           r.update!(legacy_book_id: 555)
 
           assert_equal @crime.id, decide(r).data[:verdict].payload["from_book_id"]
+        end
+
+        test "the destination follows a match book that was merged away" do
+          e = edition
+          match(e, @war)
+          ::Services::Books::GoodreadsReplay::Apply::MergedBook.stubs(:call).with(@war.id).returns(@crime)
+          ::Services::Books::GoodreadsReplay::Apply::MergedBook.stubs(:call).with(@crime.id).returns(@crime)
+
+          assert_equal @crime.id, decide(row(e, legacy: @crime)).data[:verdict].payload["to_book_id"]
+          assert_equal "keep", ::Books::RepairVerdict.reimport_row.last.payload["action"]
         end
 
         test "a move off a trusted book is proposed, a keep on one is not" do
@@ -178,10 +189,35 @@ module Services
           assert_equal :waiting, decide(r3).data[:outcome]
         end
 
+        test "a group with a rejected sibling waits as a whole, recording nothing" do
+          e1, e2 = edition, edition
+          match(e1, @war)
+          match(e2, @crime, status: :rejected)
+          r1 = row(e1, legacy: @war)
+          r2 = row(e2, legacy: @war, rating: 5, review: "about the other book")
+
+          assert_equal %i[waiting waiting], [r1, r2].map { |r| decide(r).data[:outcome] }
+          assert_equal 0, ::Books::RepairVerdict.where(kind: :reimport_row).count
+        end
+
+        test "a group with a row that has no edition waits as a whole, and other groups go on" do
+          e1, e2 = edition, edition
+          match(e1, @crime)
+          match(e2, @war)
+          r1 = row(e1, legacy: @war)
+          ::Books::GoodreadsImportRow.create!(import: @import, row_number: (@row_number += 1), raw: {"Title" => "T"}, legacy_book_id: @war.id)
+          other = row(e2, legacy: @crime)
+
+          assert_equal [:waiting, :recorded], [decide(r1).data[:outcome], decide(other).data[:outcome]]
+          assert_equal ["reimport:row:#{@import.id}:#{other.row_number}"], ::Books::RepairVerdict.where(kind: :reimport_row).pluck(:subject_key)
+        end
+
         test "siblings are grouped by the merged legacy book" do
           e1, e2 = edition, edition
           match(e1, @war)
           match(e2, @crime)
+          ::Services::Books::GoodreadsReplay::Apply::MergedBook.stubs(:call).with(@war.id).returns(@war)
+          ::Services::Books::GoodreadsReplay::Apply::MergedBook.stubs(:call).with(@crime.id).returns(@crime)
           ::Services::Books::GoodreadsReplay::Apply::MergedBook.stubs(:call).with(701).returns(@war)
           ::Services::Books::GoodreadsReplay::Apply::MergedBook.stubs(:call).with(702).returns(@war)
           r1 = row(e1)

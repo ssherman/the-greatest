@@ -199,6 +199,19 @@ module Services
 
           Apply.call
         end
+
+        test "an approved match whose edition already caches the book is applied, so DecideRow can use it" do
+          edition = ::Books::GoodreadsEdition.create!(goodreads_book_id: 98_001, signature: "cached-sig", title: "War and Peace",
+            primary_author: "Leo Tolstoy", book: @from, resolution: :matched, resolved_at: 1.day.ago)
+          match = ::Books::RepairVerdict.create!(kind: :reimport_match, subject_key: "reimport:edition:#{edition.id}", decided_by: :ai,
+            status: :approved, payload: {"outcome" => "matched", "book_id" => @from.id, "goodreads_edition_id" => edition.id})
+          row = @import.rows.create!(row_number: 1, raw: {"Title" => "War and Peace"}, goodreads_edition: edition, legacy_book_id: @from.id)
+
+          Apply.call
+
+          assert_not_nil match.reload.applied_at
+          assert_equal :recorded, DecideRow.call(row: row).data[:outcome]
+        end
       end
     end
   end

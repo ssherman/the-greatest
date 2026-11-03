@@ -36,10 +36,13 @@ module Services
             assert @edition.resolved_at.present?
           end
 
-          test "matched is a no-op when the edition already caches that book" do
-            @edition.update!(book: books_books(:war_and_peace), resolution: :matched, resolved_at: Time.current)
+          test "matched is applied, changing nothing, when the edition already caches that book" do
+            cached = @edition.tap { |edition| edition.update!(book: books_books(:war_and_peace), resolution: :matched, resolved_at: Time.current) }
+            verdict = verdict(outcome: "matched", book_id: books_books(:war_and_peace).id)
 
-            assert_equal :noop, Match.call(verdict: verdict(outcome: "matched", book_id: books_books(:war_and_peace).id)).data[:outcome]
+            assert_equal :applied, Match.call(verdict: verdict).data[:outcome]
+            assert_equal "book_id", verdict.reload.payload["edition_before"].keys.first
+            assert_equal cached.book_id, @edition.reload.book_id
           end
 
           test "matched follows a book merged away" do
@@ -186,12 +189,12 @@ module Services
             Match.call(verdict: verdict(outcome: "create"))
           end
 
-          test "create is a no-op when an earlier apply already stored the book" do
+          test "create is applied, creating nothing, when an earlier apply already stored the book" do
             row_in(@import)
             verdict = verdict(outcome: "create", created_book_id: books_books(:war_and_peace).id)
             ::Services::Books::GoodreadsImports::CreateBook.expects(:call).never
 
-            assert_equal :noop, Match.call(verdict: verdict).data[:outcome]
+            assert_equal :applied, Match.call(verdict: verdict).data[:outcome]
           end
 
           test "create with no in-scope row is a no-op and creates nothing" do

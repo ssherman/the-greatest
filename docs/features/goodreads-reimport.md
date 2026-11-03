@@ -32,7 +32,7 @@ in `app/sidekiq/books/goodreads_reimport/`, logic in `app/lib/services/books/goo
 | Archive | `archive_mixed` | Records, for each mixed book, everything on it. Deletes nothing. |
 | Match | `match[<count>\|all]` | Finds the book for each Goodreads edition. An AI check looks at every match. |
 | Apply | `apply` | Carries out approved verdicts, one apply run at a time; each run picks up where the last stopped. |
-| Decide | `decide[<count>\|all]` | Per user: keep, move, add or create each row. Also queues guesses for mixed books. |
+| Decide | `decide[<count>\|all]` | Per user: keep, move, copy or add each row. Also queues guesses for mixed books. |
 | Snapshot | `snapshot[redo]` | Saves each affected user's list-item and review counts before the first apply that moves rows. |
 | Author check | `check_authors[<count>\|all]` | Checks each import-made book's credited authors against its rows. |
 | Report | `report` | Writes the report file. |
@@ -58,8 +58,8 @@ Everything is written to `books_repair_verdicts` before it happens. Admin, Repai
 
 - `reimport_mixed`: a mixed book, archived and later deleted.
 - `reimport_match`: one Goodreads edition matched to a book.
-- `reimport_row`: one CSV row, with an action: keep (already right), move, add (the row had no entry) or create
-  (a new book).
+- `reimport_row`: one CSV row, with an action: keep (already right), move, copy (legacy put two editions on one
+  book) or add (the row had no entry). A new book is made by a `reimport_match` with outcome create, not a row action.
 - `reimport_guess`: a hand-added entry from a mixed book, moved to its most-read book.
 - `reimport_strip`: a legacy identifier removed from a book because a row brought its own real one.
 - `reimport_author`: a correction to a book's credited authors.
@@ -75,6 +75,9 @@ the match is proposed. Review them in Admin, Repair verdicts, filtered to `reimp
 - Approve a match that is right; `apply` then writes it.
 - Reject one that is wrong. A rejected match stays rejected and its rows **wait**: they are not moved, and the
   report lists them under "rejected matches". Fix the cause (or leave them for a later pass) and they stay put.
+  Rows the same reader had on the same legacy book wait with them (a row with no edition does the same), because
+  copy versus move and the review's owner depend on every row of that book: nothing of the group moves until
+  all of it can.
 
 The report's "AI agreement" line shows how many matches were approved without anyone looking. A low rate means
 the AI and the finder disagree a lot and most of the review falls to Shane.
