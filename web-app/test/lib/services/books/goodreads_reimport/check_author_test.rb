@@ -30,8 +30,8 @@ module Services
           task
         end
 
-        def found(record, confidence: :high)
-          DataImporters::Match.new(outcome: :matched, record: record, confidence: confidence, decided_by: :ai)
+        def found(record, confidence: :high, decided_by: :ai)
+          DataImporters::Match.new(outcome: :matched, record: record, confidence: confidence, decided_by: decided_by)
         end
 
         def none(confidence: :high) = DataImporters::Match.new(outcome: :unmatched, confidence: confidence, decided_by: :rule)
@@ -114,6 +114,58 @@ module Services
           @finder.expects(:call).returns(none(confidence: :medium))
 
           assert call.data[:verdict].proposed?
+        end
+
+        test "a rule-only exact-name match keeps its candidate but leaves the verdict proposed" do
+          garnett = books_authors(:garnett)
+          edition("Constance Garnett")
+          @task_class.expects(:new).returns(ai)
+          @finder.expects(:call).returns(found(garnett, decided_by: :rule))
+
+          verdict = call.data[:verdict]
+
+          assert_equal({"Constance Garnett" => garnett.id}, verdict.payload["after"])
+          assert verdict.proposed?
+        end
+
+        test "an applied verdict is never overwritten by a later run" do
+          edition("Constance Garnett")
+          @task_class.stubs(:new).returns(ai)
+          @finder.stubs(:call).returns(none)
+          verdict = call.data[:verdict]
+          verdict.update_columns(applied_at: Time.current, payload: verdict.payload.merge("before_book_authors" => [[1]], "created_author_ids" => [7]))
+          @finder.stubs(:call).returns(found(books_authors(:garnett)))
+
+          result = call
+
+          assert_equal :kept, result.data[:outcome]
+          payload = verdict.reload.payload
+          assert_equal [[1]], payload["before_book_authors"]
+          assert_equal [7], payload["created_author_ids"]
+          assert_equal({"Constance Garnett" => nil}, payload["after"])
+        end
+
+        test "an agreeing run supersedes an earlier unapplied proposal" do
+          edition("Constance Garnett")
+          @task_class.stubs(:new).returns(ai)
+          @finder.stubs(:call).returns(none(confidence: :medium))
+          verdict = call.data[:verdict]
+          @book.book_authors.destroy_all
+          @book.book_authors.create!(author: books_authors(:garnett), position: 1)
+
+          assert_equal :agrees, call.data[:outcome]
+          assert verdict.reload.superseded_at.present?
+        end
+
+        test "an additional author already linked to a primary name's author is not listed twice" do
+          edition("Brand New Writer", additional: ["Lev N. Tolstoy"])
+          edition("Leo Tolstoy", additional: ["Lev N. Tolstoy"])
+          @task_class.stubs(:new).returns(ai({export_name: "Lev N. Tolstoy", author_number: 1, confidence: "high"}))
+          @finder.stubs(:call).returns(none)
+
+          verdict = call.data[:verdict]
+
+          assert_equal ["Brand New Writer", "Leo Tolstoy"], verdict.payload["row_author_names"]
         end
 
         test "a trusted book is always proposed" do

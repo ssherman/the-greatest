@@ -35,8 +35,9 @@ module Services
 
             ::ApplicationRecord.transaction do
               record_before(verdict, book)
+              dropped = book.book_authors.author.pluck(:author_id) - authors.map(&:id)
               replace(book, authors)
-              remove_stale_alternates(verdict, authors)
+              remove_stale_alternates(verdict, ::Books::Author.where(id: dropped))
             end
             Entries.applied(follow_ups: [:author_rankings])
           end
@@ -85,8 +86,9 @@ module Services
             book.authors.reset
           end
 
-          # Afterwards, an alternate name that is another author's own name, and that none of the author's rows
-          # names, goes (spec 4.7). What was removed is kept in the payload, by author id.
+          # Afterwards, an author this verdict took off the book loses an alternate name that is another author's own
+          # name and that none of its rows names (spec 4.7). Authors the verdict sets keep theirs: a pen name on the
+          # right author is no evidence of a mix-up. What was removed is kept in the payload, by author id.
           def self.remove_stale_alternates(verdict, authors)
             removed = authors.each_with_object({}) do |author, all|
               stale = CheckAuthor.stale_alternates(author)

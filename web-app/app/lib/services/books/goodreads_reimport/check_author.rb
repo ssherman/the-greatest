@@ -58,13 +58,16 @@ module Services
         end
 
         def call
+          # An applied verdict is final: its payload holds what undoing it needs.
+          return done(:kept, current_verdict) if current_verdict&.applied_at
+
           facts = edition_facts
           names = primary_names(facts)
-          return done(:agrees) if names.empty?
+          return agrees if names.empty?
 
           matched = ::Services::Books::GoodreadsRebuild::MatchAuthors.call(book: @book, facts: facts_for(facts, names), task_class: @task_class)
           return failed(matched.errors) unless matched.success?
-          return done(:agrees) if matched.data[:all_matched]
+          return agrees if matched.data[:all_matched]
 
           links = matched.data[:links].dup
           extras = additional_names(facts, names)
@@ -72,7 +75,8 @@ module Services
             more = ::Services::Books::GoodreadsRebuild::MatchAuthors.call(book: @book, facts: facts_for(facts, extras), task_class: @task_class)
             return failed(more.errors) unless more.success?
 
-            links.merge!(more.data[:links])
+            # No person twice: an additional author already linked to a primary name's author adds nothing.
+            links.merge!(more.data[:links].reject { |_, id| links.value?(id) })
           end
 
           record(names + links.keys.select { |name| extras.include?(name) }, links)
@@ -82,6 +86,16 @@ module Services
 
         def done(outcome, verdict = nil)
           Result.new(success?: true, data: {outcome: outcome, verdict: verdict}, errors: [])
+        end
+
+        def current_verdict
+          ::Books::RepairVerdict.reimport_author.current.find_by(subject_key: "reimport:author:#{@book.id}")
+        end
+
+        # Nothing to correct. A proposal an earlier run left unapplied no longer describes a problem.
+        def agrees
+          current_verdict&.then { |verdict| verdict.update!(superseded_at: Time.current) if verdict.proposed? && verdict.applied_at.nil? }
+          done(:agrees)
         end
 
         def failed(errors) = Result.new(success?: false, data: {}, errors: errors)
@@ -137,12 +151,16 @@ module Services
         end
 
         # [author id or nil, settled with confidence?, what the finder said]. A match below high is not accepted.
+        # A rule-only match (an exact name, no AI or identifier behind it) keeps its author in `after` but is not
+        # sure: two people can share a name, so such a verdict waits for an admin.
         def catalog_author(name)
           match = finder.call(query: ::DataImporters::Books::Author::ImportQuery.new(name: name, work_titles: [@book.title].compact_blank),
             verify: true, subject: @book)
           finding = {"outcome" => match.outcome.to_s, "confidence" => match.confidence.to_s, "reason" => match.reason}
           sure = ACCEPTED.include?(match.confidence) && match.sources_failed.empty?
-          return [match.record.id, sure, finding] if match.matched? && match.record && ACCEPTED.include?(match.confidence)
+          if match.matched? && match.record && ACCEPTED.include?(match.confidence)
+            return [match.record.id, sure && %i[ai identifier].include?(match.decided_by), finding]
+          end
 
           [nil, match.unmatched? && sure, finding]
         end

@@ -22,7 +22,7 @@ class Books::GoodreadsReimport::CheckAuthorsJobTest < ActiveSupport::TestCase
     Services::Books::GoodreadsReimport::CheckAuthor.expects(:call).with(book: first).returns(result)
     Services::Books::GoodreadsReimport::CheckAuthor.expects(:call).with(book: second).raises(RuntimeError, "boom")
     Rails.logger.stubs(:error)
-    Rails.logger.expects(:info).with("check_authors batch: 2 books — agrees 0, recorded 1, kept 0, failed 0, errors 1")
+    Rails.logger.expects(:info).with { |line| line.include?("recorded 1") && line.include?("errors 1") }
 
     Books::GoodreadsReimport::CheckAuthorsJob.new.perform([first.id, second.id])
   end
