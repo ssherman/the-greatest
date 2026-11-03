@@ -519,6 +519,24 @@ module DataImporters
           assert_equal [], match.candidates.map(&:record).compact
         end
 
+        test "exclude_ids keeps the listed books out of every source" do
+          author = ::Books::Author.create!(name: "Excl Writer")
+          kept = ::Books::Book.create!(title: "Exclusion Probe")
+          dropped = ::Books::Book.create!(title: "Exclusion Probe")
+          [kept, dropped].each { |book| ::Books::BookAuthor.create!(book: book, author: author, position: 1) }
+          dropped.identifiers.create!(identifier_type: :books_work_isbn13, value: "9780000009991", source: :legacy)
+          SEARCH.stubs(:call).returns([hit(kept), hit(dropped)])
+          finder = Finder.new(open_library_client: @finder.instance_variable_get(:@open_library_client), exclude_ids: Set[dropped.id])
+          stub_ai({selected_index: 1, confidence: "high", reasoning: "Same.", same_entity_groups: []})
+
+          match = finder.call(query: ImportQuery.new(title: "Exclusion Probe", author_names: ["Excl Writer"], isbn13: ["9780000009991"]), verify: true)
+
+          assert_not_includes match.candidates.map(&:record), dropped
+          assert_includes match.candidates.map(&:record), kept
+          assert_not_equal dropped, match.record
+          assert_not ::DuplicateCandidate.where(item_type: "Books::Book", item_a_id: dropped.id).or(::DuplicateCandidate.where(item_type: "Books::Book", item_b_id: dropped.id)).exists?
+        end
+
         test "the subject is recorded on the decision" do
           subject = list_items(:music_albums_item)
 
