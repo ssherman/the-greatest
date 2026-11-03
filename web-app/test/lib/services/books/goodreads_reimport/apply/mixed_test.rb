@@ -40,6 +40,35 @@ module Services
             assert ::Books::Book.exists?(@mixed.id)
           end
 
+          test "a kept book ends with exactly what the rows heading to it say: the split user's leftover original goes, recorded" do
+            kept = mixed_verdict
+            kept.update!(payload: kept.payload.merge("kept" => true))
+            original = UserListItem.create!(user_list: list(:read), listable: @mixed)
+            row_a = csv_row(exclusive_shelf: "to-read")
+            row_b = csv_row(exclusive_shelf: "read")
+            verdict_a = row_verdict(row_a, action: "copy", from: @mixed, to: @mixed)
+            verdict_b = row_verdict(row_b, action: "copy", from: @mixed, to: @to)
+            bystander = User.create!(email: "by-#{SecureRandom.hex(3)}@example.com", role: :user, email_verified: false)
+            bystander_item = UserListItem.create!(user_list: ::Books::UserList.find_by!(user: bystander, list_type: :read), listable: @mixed)
+
+            # While the copy to the other book is unapplied, the original is still needed.
+            assert Row.call(verdict: verdict_a).data[:outcome] == :applied
+            verdict_a.update!(applied_at: Time.current)
+            Row.call(verdict: verdict_b)
+            verdict_b.update!(applied_at: nil)
+            assert_equal [:noop, false], Mixed.call(verdict: kept).data.values_at(:outcome, :final)
+            assert UserListItem.exists?(original.id)
+
+            verdict_b.update!(applied_at: Time.current)
+            result = Mixed.call(verdict: kept)
+
+            assert_equal [:noop, true, "kept: readers matched this book"], result.data.values_at(:outcome, :final, :reason)
+            assert_equal ["want_to_read"], UserListItem.joins(:user_list).where(listable: @mixed, user_lists: {user_id: @user.id}).map { |i| i.user_list.list_type }
+            assert_equal ["read"], UserListItem.joins(:user_list).where(listable: @to, user_lists: {user_id: @user.id}).map { |i| i.user_list.list_type }
+            assert UserListItem.exists?(bystander_item.id), "a user with no applied copy is untouched"
+            assert_equal [original.id], kept.reload.payload["deleted"].map { |item| item["id"] }
+          end
+
           test "a kept mixed book with row keys and no redirect is final, not waiting" do
             verdict = mixed_verdict(redirect: nil)
             verdict.update!(payload: verdict.payload.merge("kept" => true, "row_keys" => [[1, 1]]))

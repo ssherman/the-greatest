@@ -57,7 +57,9 @@ reader, from any book) whose destination is the record, or any current, non-reje
 edition to it. A kept record gets no guesses, its earlier unapplied guesses are superseded, there is no redirect, and
 `apply` closes it with "kept: readers matched this book" without deleting anything. `apply` re-checks the same
 condition under the book's lock, so a delete never races a new match. If nothing heads there any more, the next
-`decide` flips it back and reopens it. Guesses already applied before the record turned out to be kept are not
+`decide` flips it back and reopens it. When a kept record closes, `apply` also removes the copy originals of users whose
+rows were copied away from it (recorded in the verdict's `deleted`), except the items a row heading to the record
+accounts for, so the record holds exactly what its readers' rows say; it waits while such a copy is unapplied. Guesses already applied before the record turned out to be kept are not
 undone; the report lists them for hand review. When a record is deleted, `apply` writes every image's columns and its
 stored file's identity into the verdict (`deleted_images`), covering images added after the archive.
 

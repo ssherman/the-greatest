@@ -54,10 +54,15 @@ module Services
             row = csv_row(verdict)
             return Entries.noop("import row #{verdict.payload["import_id"]}:#{verdict.payload["row_number"]} no longer exists") unless row
 
-            add(verdict, user, to, review: writes_csv_review?(verdict, row, nil))
+            explained = []
+            result = add(verdict, user, to, review: writes_csv_review?(verdict, row, nil), explained: explained)
+            # The items on the book that this row's shelves account for. When the book stays (a kept mixed book),
+            # Apply::Mixed removes the user's other copy originals and must leave these alone.
+            verdict.update_columns(payload: verdict.payload.merge("explained_item_ids" => explained.uniq.sort))
+            result
           end
 
-          def self.add(verdict, user, to, review: verdict.payload["review"] == true)
+          def self.add(verdict, user, to, review: verdict.payload["review"] == true, explained: nil)
             row = csv_row(verdict)
             return Entries.noop("import row #{verdict.payload["import_id"]}:#{verdict.payload["row_number"]} no longer exists") unless row
 
@@ -66,6 +71,7 @@ module Services
             result = nil
             ::ApplicationRecord.transaction do
               result = write(user, row, to, trail, review: review)
+              explained&.concat(result[:list_item_ids])
               if snapshot(user, to) != before
                 Entries.record_moved(verdict, "list_item_ids_before" => before.first.map(&:first), "list_item_ids_after" => result[:list_item_ids],
                   "review_id_before" => before.last, "review_id_after" => Entries.review_on(user, to)&.id, **trail)

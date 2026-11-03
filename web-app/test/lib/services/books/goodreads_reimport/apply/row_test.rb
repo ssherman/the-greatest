@@ -93,8 +93,9 @@ module Services
             result = Row.call(verdict: verdict)
 
             assert_equal :applied, result.data[:outcome]
-            assert UserListItem.exists?(user_list: list(:want_to_read), listable: @from)
-            assert_equal 1, UserListItem.where(user_list: list(:read), listable: @from).count
+            want = UserListItem.find_by!(user_list: list(:want_to_read), listable: @from)
+            assert_equal [want.id], verdict.reload.payload["explained_item_ids"]
+            # The old Read item is a copy original; a kept mixed book's Apply::Mixed removes it (apply/mixed_test).
           end
 
           test "copy of a row with no rating or review writes none" do

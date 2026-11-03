@@ -26,7 +26,7 @@ module Services
             return gone(verdict) unless book
 
             # Some reader's row kept this book (DecideGuesses): it holds real readers and stays, with no redirect.
-            return Entries.noop("kept: readers matched this book", final: true) if verdict.payload["kept"]
+            return keep(verdict, book) if verdict.payload["kept"]
 
             # DecideGuesses writes the redirect once every row of the book is decided. A book that has rows but no
             # redirect yet would be deleted with no address pointing anywhere.
@@ -55,13 +55,47 @@ module Services
               keep_image_files(book)
               book.reload.destroy!
             end
-            return Entries.noop("kept: readers matched this book", final: true) if kept
+            return keep(verdict, book) if kept
             return Entries.noop(reason) if reason
 
             redirect_to = redirect_target(verdict, book.id)
 
             write_redirect(verdict, book.id, redirect_to)
             Entries.applied
+          end
+
+          # A kept book stays, but what the delete path would have removed still goes: the originals of users whose
+          # rows were copied away from it, except the items a row that heads to this book accounts for. Recorded in
+          # the payload first, like a delete. Waits while a copy or move from this book is still unapplied.
+          def self.keep(verdict, book)
+            result = nil
+            ::ApplicationRecord.transaction do
+              book.lock!
+              verdict.reload
+              originals = copy_originals(book)
+              if pending_row?(book, originals)
+                result = Entries.noop("kept: a copy or move is not applied yet")
+                raise ActiveRecord::Rollback
+              end
+
+              explained = explained_item_ids(book)
+              stale = originals.reject { |item| explained.include?(item.id) }
+              if stale.any?
+                verdict.update_columns(payload: verdict.payload.merge("deleted" => stale.map { |item| attributes(item) }))
+                stale.each(&:destroy!)
+              end
+              result = Entries.noop("kept: readers matched this book", final: true)
+            end
+            result
+          end
+
+          # Items on the book that an applied row heading to it wrote or found: the in-place rows' own record, and
+          # whatever a move or add into the book put there.
+          def self.explained_item_ids(book)
+            ::Books::RepairVerdict.reimport_row.current.approved.where.not(applied_at: nil)
+              .where("payload->>'to_book_id' = ?", book.id.to_s).flat_map do |row|
+              Array(row.payload["explained_item_ids"]) + Array(row.payload.dig("moved", "list_item_ids_after"))
+            end.to_set
           end
 
           # The run died between the delete and the redirect: this verdict recorded redirect_written false, so the
@@ -149,7 +183,7 @@ module Services
 
           def self.attributes(item) = Entries.item_attributes(item).merge("user_id" => item.user_list.user_id)
 
-          private_class_method :gone, :write_redirect, :redirect_target, :copy_originals, :blocker, :image_records, :keep_image_files, :pending_guess?, :pending_row?, :attributes
+          private_class_method :gone, :write_redirect, :redirect_target, :copy_originals, :blocker, :keep, :explained_item_ids, :image_records, :keep_image_files, :pending_guess?, :pending_row?, :attributes
         end
       end
     end

@@ -21,8 +21,10 @@
 #
 # Indexes
 #
-#  index_books_repair_verdicts_on_kind_and_subject_key  (kind,subject_key) UNIQUE
-#  index_books_repair_verdicts_on_status_and_kind       (status,kind)
+#  index_books_repair_verdicts_on_kind_and_subject_key      (kind,subject_key) UNIQUE
+#  index_books_repair_verdicts_on_reimport_match_book       (((payload ->> 'book_id'::text))) WHERE (kind = 7)
+#  index_books_repair_verdicts_on_reimport_row_destination  (((payload ->> 'to_book_id'::text))) WHERE (kind = 8)
+#  index_books_repair_verdicts_on_status_and_kind           (status,kind)
 #
 module Books
   # One finding of the legacy Goodreads replay and what was decided about it
