@@ -27,19 +27,44 @@ module Services
           verdicts = ::Books::RepairVerdict.reimport_row.current.where.not(status: :rejected).where(subject_key: keys).to_a
           return done(:waiting) if verdicts.map(&:subject_key).uniq.size < keys.size
 
+          # A reader's row kept this book: it is a real book with real readers, not a lump. Nothing is guessed.
+          return keep_book if verdicts.any? { |verdict| keeps_book?(verdict) }
+
           destination = most_read(verdicts)
           return done(:waiting) if destination.nil?
 
           # A superseded keep says the user re-imported that edition later: it explains no entry on this book.
           explained = verdicts.reject { |verdict| verdict.payload["superseded_by"].present? }.map { |verdict| verdict.payload["user_id"] }.to_set
           guesses = unexplained_items(explained).sum { |type, id, user_id| record_guess(type, id, user_id, destination) }
-          @mixed_verdict.update_columns(payload: @mixed_verdict.payload.merge("redirect_to_book_id" => destination))
+          reopen_if_kept
+          @mixed_verdict.update_columns(payload: @mixed_verdict.payload.except("kept").merge("redirect_to_book_id" => destination))
           done(:decided, guesses: guesses, redirect_to_book_id: destination)
         end
 
         private
 
         def book_id = @mixed_verdict.payload["book_id"]
+
+        # Apply closed a kept verdict as a final noop (applied_at set). Without a keep it is a lump again and
+        # has to be offered to Apply::Mixed once more.
+        def reopen_if_kept
+          return unless @mixed_verdict.payload["kept"]
+
+          @mixed_verdict.update_columns(applied_at: nil, payload: @mixed_verdict.payload.except("closed_reason"))
+        end
+
+        def keeps_book?(verdict)
+          verdict.payload["superseded_by"].blank? && verdict.payload["to_book_id"] == book_id
+        end
+
+        # Earlier guesses from this book are superseded (not deleted); a later re-decide without a keep brings them
+        # back through record_guess's replace_superseded. Applied and rejected guesses stand as they are.
+        def keep_book
+          ::Books::RepairVerdict.reimport_guess.current.unapplied.where.not(status: :rejected)
+            .where("payload->>'from_book_id' = ?", book_id.to_s).update_all(superseded_at: Time.current, updated_at: Time.current)
+          @mixed_verdict.update_columns(payload: @mixed_verdict.payload.except("redirect_to_book_id").merge("kept" => true))
+          done(:kept)
+        end
 
         # Superseded keeps are rows the user re-imported later; they say nothing about where readers went.
         def most_read(verdicts)

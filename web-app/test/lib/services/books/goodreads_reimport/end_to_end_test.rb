@@ -134,6 +134,32 @@ module Services
             assert ::Books::RepairVerdict.where(kind: kind).exists?, "no #{kind} verdict was recorded"
           end
         end
+
+        test "an edition that matches the mixed book itself keeps it: no guesses, no deletion, no redirect" do
+          keeper = User.create!(email: "e2e-keeper-#{SecureRandom.hex(3)}@example.com", role: :user, email_verified: false)
+          ed_keep = edition(4, "First Work and Second Work", isbn13: nil)
+          UserListItem.create!(user_list: list(keeper, :read), listable: @mixed)
+          import = import_for(keeper)
+          import.rows.create!(row_number: 1, goodreads_edition: ed_keep, legacy_book_id: @mixed.id, exclusive_shelf: "read",
+            raw: {"Title" => "First Work and Second Work"})
+          mixed_verdict = MixedBooks.archive(@mixed, legacy_map: GoodreadsRebuild::LegacyBookMap.new(@mixed.id => [@mixed.id]))
+          [[@ed_coherent, @coherent], [@ed_first, @first], [@ed_second, @second], [ed_keep, @mixed]].each do |edition, target|
+            assert_predicate run_match(edition, target).data[:verdict], :approved?
+          end
+          apply_all
+
+          (@readers.first(2) + [keeper]).each { |user| DecideRow.decide_user(user_id: user.id) }
+          assert_equal :kept, DecideGuesses.call(mixed_verdict: mixed_verdict).data[:outcome]
+          ::Services::BooksMigration::RedirectRecorder.expects(:merged).never
+          apply_all
+
+          assert ::Books::Book.exists?(@mixed.id)
+          assert_equal [@mixed.id], books_of(keeper)
+          assert_empty ::Books::RepairVerdict.reimport_guess.current
+          mixed_verdict.reload
+          assert_equal [true, "kept: readers matched this book"], mixed_verdict.payload.values_at("kept", "closed_reason")
+          assert_not_nil mixed_verdict.applied_at
+        end
       end
     end
   end

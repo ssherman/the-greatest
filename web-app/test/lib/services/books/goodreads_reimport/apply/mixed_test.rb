@@ -28,6 +28,26 @@ module Services
             verdict
           end
 
+          test "a kept mixed book is a final noop and deletes nothing, redirect or not" do
+            verdict = mixed_verdict
+            verdict.update!(payload: verdict.payload.merge("kept" => true))
+            ::Services::BooksMigration::RedirectRecorder.expects(:merged).never
+
+            result = Mixed.call(verdict: verdict)
+
+            assert_equal [:noop, true, "kept: readers matched this book"], result.data.values_at(:outcome, :final, :reason)
+            assert ::Books::Book.exists?(@mixed.id)
+          end
+
+          test "a kept mixed book with row keys and no redirect is final, not waiting" do
+            verdict = mixed_verdict(redirect: nil)
+            verdict.update!(payload: verdict.payload.merge("kept" => true, "row_keys" => [[1, 1]]))
+
+            result = Mixed.call(verdict: verdict)
+
+            assert_equal [true, "kept: readers matched this book"], result.data.values_at(:final, :reason)
+          end
+
           test "deletes an empty book and records the redirect after commit" do
             ::Services::BooksMigration::RedirectRecorder.expects(:merged).with(item_type: "Books::Book", from_id: @mixed.id, to_id: @to.id)
 

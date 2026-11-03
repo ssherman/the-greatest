@@ -106,6 +106,89 @@ module Services
 
         private
 
+        test "a row that keeps the mixed book keeps it: marked kept, no guesses, earlier guesses superseded" do
+          earlier = verdict(:reimport_guess, "reimport:guess:UserListItem:#{@hand_added.id}",
+            {"item_type" => "UserListItem", "item_id" => @hand_added.id, "from_book_id" => @mixed.id, "to_book_id" => @dest_a.id})
+          unrelated = verdict(:reimport_guess, "reimport:guess:UserListItem:0",
+            {"item_type" => "UserListItem", "item_id" => 0, "from_book_id" => @mixed.id + 1, "to_book_id" => @dest_a.id})
+          applied = verdict(:reimport_guess, "reimport:guess:Review:0",
+            {"item_type" => "Review", "item_id" => 0, "from_book_id" => @mixed.id, "to_book_id" => @dest_a.id})
+          applied.update!(applied_at: Time.current)
+          row_verdict(1, @dest_a)
+          row_verdict(2, @mixed)
+          row_verdict(3, @dest_a)
+
+          result = DecideGuesses.call(mixed_verdict: @mixed_verdict)
+
+          assert_equal [:kept, 0, nil], result.data.values_at(:outcome, :guesses, :redirect_to_book_id)
+          payload = @mixed_verdict.reload.payload
+          assert_equal true, payload["kept"]
+          assert_not payload.key?("redirect_to_book_id")
+          assert_not_nil earlier.reload.superseded_at
+          assert_nil unrelated.reload.superseded_at
+          assert_nil applied.reload.superseded_at
+        end
+
+        test "a superseded or rejected keep does not keep the mixed book" do
+          row_verdict(1, @dest_a)
+          row_verdict(2, @mixed, superseded_by: "reimport:row:#{@import.id}:9")
+          row_verdict(3, @dest_a)
+
+          result = DecideGuesses.call(mixed_verdict: @mixed_verdict)
+
+          assert_equal :decided, result.data[:outcome]
+          assert_not @mixed_verdict.reload.payload.key?("kept")
+        end
+
+        test "flips back when no row keeps the book any more" do
+          row_verdict(1, @dest_a)
+          keep = row_verdict(2, @mixed)
+          row_verdict(3, @dest_a)
+          DecideGuesses.call(mixed_verdict: @mixed_verdict)
+          guess_key = "reimport:guess:UserListItem:#{@hand_added.id}"
+          earlier = ::Books::RepairVerdict.find_by(subject_key: guess_key)
+          assert_nil earlier
+
+          keep.update!(payload: keep.payload.merge("to_book_id" => @dest_a.id))
+          result = DecideGuesses.call(mixed_verdict: @mixed_verdict)
+
+          assert_equal :decided, result.data[:outcome]
+          payload = @mixed_verdict.reload.payload
+          assert_not payload.key?("kept")
+          assert_equal @dest_a.id, payload["redirect_to_book_id"]
+          assert ::Books::RepairVerdict.reimport_guess.current.exists?(subject_key: guess_key)
+        end
+
+        test "flipping back reopens a kept verdict that Apply closed" do
+          row_verdict(1, @dest_a)
+          keep = row_verdict(2, @mixed)
+          row_verdict(3, @dest_a)
+          DecideGuesses.call(mixed_verdict: @mixed_verdict)
+          @mixed_verdict.update_columns(applied_at: Time.current, payload: @mixed_verdict.reload.payload.merge("closed_reason" => "kept: readers matched this book"))
+
+          keep.update!(payload: keep.payload.merge("to_book_id" => @dest_a.id))
+          DecideGuesses.call(mixed_verdict: @mixed_verdict)
+
+          @mixed_verdict.reload
+          assert_nil @mixed_verdict.applied_at
+          assert_not @mixed_verdict.payload.key?("closed_reason")
+        end
+
+        test "a superseded guess is brought back by a flip back" do
+          row_verdict(1, @dest_a)
+          keep = row_verdict(2, @mixed)
+          row_verdict(3, @dest_a)
+          key = "reimport:guess:UserListItem:#{@hand_added.id}"
+          verdict(:reimport_guess, key, {"item_type" => "UserListItem", "item_id" => @hand_added.id, "from_book_id" => @mixed.id, "to_book_id" => @dest_a.id})
+          DecideGuesses.call(mixed_verdict: @mixed_verdict)
+          assert_not_nil ::Books::RepairVerdict.find_by(subject_key: key).superseded_at
+
+          keep.update!(payload: keep.payload.merge("to_book_id" => @dest_a.id))
+          DecideGuesses.call(mixed_verdict: @mixed_verdict)
+
+          assert_nil ::Books::RepairVerdict.find_by(subject_key: key).superseded_at
+        end
+
         def verdict(kind, key, payload, status: :approved)
           ::Books::RepairVerdict.create!(kind: kind, subject_key: key, payload: payload, decided_by: :rule, status: status)
         end

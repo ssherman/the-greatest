@@ -154,6 +154,7 @@ module Services
             dropped[:explained].first(SAMPLE).each { |row| lines << "    #{drop_line(row)}" }
           end
           lines << "  mixed books still present: #{still_mixed.size}"
+          lines << "  (not a failure) mixed books kept (readers matched them): #{kept_mixed.size}"
         end
 
         def sample_of(scope) = scope.order(Arel.sql("random()")).limit(SAMPLE)
@@ -296,8 +297,14 @@ module Services
           user_ids.sort.to_h { |id| [id, {"items" => items.fetch(id, 0), "reviews" => reviews.fetch(id, 0)}] }
         end
 
+        # Mixed books no reader's row matched: the ones that should have been emptied and deleted by now.
         def still_mixed
-          ::Books::Book.where(id: ::Services::Books::GoodreadsReimport::MixedBooks.ids.to_a).pluck(:id)
+          ::Books::Book.where(id: ::Services::Books::GoodreadsReimport::MixedBooks.ids.to_a - kept_mixed).pluck(:id)
+        end
+
+        # Mixed books a reader's row matched (DecideGuesses marks the verdict kept): they stay, with their readers.
+        def kept_mixed
+          verdicts.reimport_mixed.approved.current.where("payload ? 'kept'").filter_map { |verdict| verdict.payload["book_id"] }
         end
 
         def ask(verdict, task_class)

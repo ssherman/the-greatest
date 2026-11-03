@@ -131,6 +131,16 @@ module Services
           assert_equal 1, Report.snapshot(replace: true)
         end
 
+        test "acceptance: a kept mixed book is counted apart from the ones still to be deleted" do
+          MixedBooks.stubs(:ids).returns(Set[@other.id, @book.id])
+          verdict(:reimport_mixed, "reimport:book:#{@other.id}", {"book_id" => @other.id, "kept" => true}, applied_at: Time.current)
+
+          report = Report.call
+
+          assert_includes report, "mixed books still present: 1"
+          assert_includes report, "mixed books kept (readers matched them): 1"
+        end
+
         test "acceptance: mixed books still present are counted" do
           MixedBooks.stubs(:ids).returns(Set[@other.id])
 

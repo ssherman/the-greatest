@@ -5,6 +5,7 @@ module Services
     module GoodreadsReimport
       module Apply
         # Applies a reimport_mixed verdict (re-import spec 4.1, 8 call 1): deletes a mixed book once it is empty.
+        # A verdict marked kept (a reader's row matched this very book) deletes nothing.
         # The only step that deletes a book, so it re-checks everything against the database now and deletes
         # nothing that still holds a reader's entry.
         #
@@ -23,6 +24,9 @@ module Services
 
             book = ::Books::Book.find_by(id: verdict.payload["book_id"])
             return gone(verdict) unless book
+
+            # Some reader's row kept this book (DecideGuesses): it holds real readers and stays, with no redirect.
+            return Entries.noop("kept: readers matched this book", final: true) if verdict.payload["kept"]
 
             # DecideGuesses writes the redirect once every row of the book is decided. A book that has rows but no
             # redirect yet would be deleted with no address pointing anywhere.
