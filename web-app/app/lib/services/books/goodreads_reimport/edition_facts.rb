@@ -8,14 +8,15 @@ module Services
       # built from the CSV rows' FULL title and every credited author instead.
       class EditionFacts
         Facts = Struct.new(:full_title, :title, :subtitle, :author_names, :year, :isbn13, :isbn10, :goodreads_book_id,
-          :series_name, :series_number, keyword_init: true) do
+          :series_name, :series_number, :primary_author, keyword_init: true) do
           def to_h = super.stringify_keys
 
-          # additional authors are left out on purpose: Goodreads mixes co-authors with translators and
-          # illustrators, so only the primary author is a creator for matching.
+          # Only the primary author is a creator for matching: Goodreads' additional authors mix co-authors with
+          # translators and illustrators, so they go to the finder as AI context only (as EditionQuery does).
           def to_query
             ::DataImporters::Books::Book::ImportQuery.new(
-              title: title, subtitle: subtitle, author_names: author_names, year: year,
+              title: title, subtitle: subtitle, author_names: [primary_author].compact, year: year,
+              context_author_names: author_names - [primary_author],
               isbn13: [isbn13], isbn10: [isbn10], goodreads_id: [goodreads_book_id.to_s],
               series_name: series_name, series_number: series_number
             )
@@ -35,7 +36,8 @@ module Services
             full_title: full_title, title: title, subtitle: subtitle, author_names: author_names,
             year: @edition.original_publication_year || @edition.year_published,
             isbn13: @edition.isbn13.presence, isbn10: @edition.isbn10.presence, goodreads_book_id: @edition.goodreads_book_id,
-            series_name: @edition.series_name.presence, series_number: @edition.series_number.presence
+            series_name: @edition.series_name.presence, series_number: @edition.series_number.presence,
+            primary_author: Services::Text::NameNormalizer.call(@edition.primary_author.to_s).presence
           )
         end
 

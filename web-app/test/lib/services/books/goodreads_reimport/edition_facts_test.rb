@@ -51,6 +51,14 @@ module Services
           assert_equal ["Frank Miller", "David Mazzucchelli"], facts.author_names
         end
 
+        test "to_query sends only the primary author as author, the rest as context" do
+          edition = edition_with(additional_authors: ["David Mazzucchelli", "Richmond Lewis"])
+          query = EditionFacts.call(edition: edition).to_query
+
+          assert_equal ["Frank Miller"], query.author_names
+          assert_equal ["David Mazzucchelli", "Richmond Lewis"], query.context_author_names
+        end
+
         test "year is original publication year, else year published" do
           assert_equal 1987, EditionFacts.call(edition: edition_with(original_publication_year: 1987, year_published: 2005)).year
           assert_equal 2005, EditionFacts.call(edition: edition_with(year_published: 2005)).year
@@ -70,6 +78,8 @@ module Services
           assert_equal ["1401207529"], query.isbn10
           assert_equal [edition.goodreads_book_id.to_s], query.goodreads_id
           assert_equal "Batman", query.series_name
+          assert_equal "404", query.series_number
+          assert_equal "Year One", query.subtitle
           assert_equal "Batman", facts.to_h["series_name"]
           assert_equal "Batman: Year One (Batman #404-407)", facts.to_h["full_title"]
         end
