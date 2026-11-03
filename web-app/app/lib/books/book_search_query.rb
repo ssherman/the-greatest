@@ -16,10 +16,18 @@ module Books
     DEFAULT_SIZE = 50
 
     def self.call(text, size: DEFAULT_SIZE)
+      hydrate(hit_ids(text, size: size))
+    end
+
+    # The distinct ids OpenSearch matched, best match first, and nothing else:
+    # no Postgres read. For a caller that hydrates the books itself (the public
+    # API search). Uses BookGeneral's defaults -- standalone books, provisional
+    # imports excluded -- though the index can lag the database, so a caller
+    # that must not serve a provisional book still filters on the hydrate side.
+    def self.hit_ids(text, size:)
       return [] if text.blank?
 
-      hits = ::Search::Books::Search::BookGeneral.call(text, size: size)
-      hydrate(hits.map { |hit| hit[:id].to_i }.uniq)
+      ::Search::Books::Search::BookGeneral.call(text, size: size).map { |hit| hit[:id].to_i }.uniq
     end
 
     # The join is written out rather than using `includes(:primary_ranked_item)`

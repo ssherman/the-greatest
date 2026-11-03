@@ -655,10 +655,13 @@ Rails.application.routes.draw do
           resources :ranking_configurations, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/books", to: "books#index",
             as: :ranking_configuration_books, constraints: {ranking_configuration_id: /\d+/}
+          get "ranking_configurations/:ranking_configuration_id/categories/:slug/books", to: "category_books#index",
+            as: :ranking_configuration_category_books, constraints: {ranking_configuration_id: /\d+/}
           resources :lists, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/lists", to: "lists#index",
             as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
           get "lists/:list_id/items", to: "list_items#index", as: :list_items, constraints: {list_id: /\d+/}
+          get "search/books", to: "book_searches#index", as: :search_books
         end
 
         # Admin API: needs a books:admin:* scope. Its contract is
