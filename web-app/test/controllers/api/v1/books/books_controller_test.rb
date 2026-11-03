@@ -202,6 +202,148 @@ module Api
           assert_equal "https://dev-new.thegreatestbooks.org/api/v1/books?page=1&per_page=50", json[:links][:self]
         end
 
+        # --- filters -------------------------------------------------------------
+
+        # The fixtures' ranked set above is war_and_peace (1869, French, novels),
+        # crime_and_punishment (1866, novels) and of_mice_and_men (1937, Japanese).
+        # got (1996, French, novels) joins at rank 4 for the filter tests only.
+        def rank_got
+          RankedItem.create!(item: books_books(:got), ranking_configuration: @rc, rank: 4, score: 70)
+        end
+
+        def rank_clash
+          RankedItem.create!(item: books_books(:clash), ranking_configuration: @rc, rank: 5, score: 60)
+        end
+
+        def slugs = json[:data].map { |b| b[:slug] }
+
+        test "country_id keeps only that country's books, in rank order, and echoes the filter" do
+          rank_got
+
+          get "/api/v1/books?country_id=french", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal %w[war-and-peace a-game-of-thrones], slugs
+          assert_equal [1, 4], json[:data].map { |b| b[:rank] }
+          assert_equal 2, json[:meta][:total_count]
+          assert_equal({country_id: "french"}, json[:meta][:filters])
+          assert_includes json[:links][:self], "country_id=french"
+        end
+
+        test "published_start and published_end bound the first publication year" do
+          rank_got
+
+          get "/api/v1/books?published_start=1800&published_end=1899", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal %w[war-and-peace crime-and-punishment], slugs
+          assert_equal({published_start: 1800, published_end: 1899}, json[:meta][:filters])
+        end
+
+        test "year keeps only books first published that year" do
+          get "/api/v1/books?year=1869", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal %w[war-and-peace], slugs
+          assert_equal({year: 1869}, json[:meta][:filters])
+        end
+
+        test "category_id alone keeps only books carrying the category" do
+          rank_got
+
+          get "/api/v1/books?category_id=novels", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          # of_mice_and_men is ranked but not in novels.
+          assert_equal %w[war-and-peace crime-and-punishment a-game-of-thrones], slugs
+          assert_equal({category_id: "novels"}, json[:meta][:filters])
+        end
+
+        test "category_id and country_id together give the intersection" do
+          rank_got
+          rank_clash
+
+          # classics alone is war_and_peace + clash; french alone is war_and_peace + got.
+          get "/api/v1/books?category_id=classics", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_equal %w[war-and-peace a-clash-of-kings], slugs
+
+          get "/api/v1/books?country_id=french", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_equal %w[war-and-peace a-game-of-thrones], slugs
+
+          get "/api/v1/books?category_id=classics&country_id=french", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal %w[war-and-peace], slugs
+          assert_equal({category_id: "classics", country_id: "french"}, json[:meta][:filters])
+        end
+
+        test "a collection filters the ranked list" do
+          get "/api/v1/books?collection=western", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal({collection: "western"}, json[:meta][:filters])
+          refute_includes slugs, "of-mice-and-men"
+        end
+
+        test "the nested index filters the named configuration and keeps its links nested" do
+          rank_got
+
+          get "/api/v1/ranking_configurations/#{@rc.id}/books?country_id=french", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal %w[war-and-peace a-game-of-thrones], slugs
+          assert_equal({country_id: "french"}, json[:meta][:filters])
+          assert_includes json[:links][:self], "/api/v1/ranking_configurations/#{@rc.id}/books?"
+          assert_includes json[:links][:self], "country_id=french"
+        end
+
+        test "an unfiltered index has no filters key in meta" do
+          get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          refute json[:meta].key?(:filters)
+        end
+
+        test "links.next carries the filters and leads to the next page of the same filtered list" do
+          rank_got
+
+          get "/api/v1/books?per_page=1&country_id=french", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal %w[war-and-peace], slugs
+          assert_includes json[:links][:next], "country_id=french"
+
+          get json[:links][:next], headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal %w[a-game-of-thrones], slugs
+          assert_equal({country_id: "french"}, json[:meta][:filters])
+        end
+
+        test "an unknown country slug is a 404 naming it" do
+          get "/api/v1/books?country_id=atlantis", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+
+          assert_equal "not_found", json[:code]
+          assert_includes json[:detail], "atlantis"
+        end
+
+        test "conflicting or invalid filters are a 400 invalid_parameter" do
+          ["year=1869&published_start=1800", "collection=martians", "country_id=french&collection=women"].each do |query|
+            get "/api/v1/books?#{query}", headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_response_conform(status: 400)
+
+            assert_response :bad_request, query
+            assert_equal "invalid_parameter", json[:code], query
+          end
+        end
+
+        test "the documented collection enum matches the registry" do
+          documented = ::Api::OpenapiDocument.raw.dig("components", "parameters", "collection", "schema", "enum")
+
+          assert_equal ::Books::CollectionsRegistry.all.map(&:slug).sort, documented.sort
+        end
+
         # --- show ----------------------------------------------------------------
 
         test "show renders the full book" do

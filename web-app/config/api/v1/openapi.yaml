@@ -31,10 +31,16 @@ paths:
     get:
       operationId: listBooks
       summary: Books in rank order
-      description: The Greatest Books' primary ranking, best first. Only ranked books appear.
+      description: The Greatest Books' primary ranking, best first. Only ranked books appear. The filter parameters narrow the list as they do on the site; `meta.filters` echoes the ones applied.
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/category_id"
+        - $ref: "#/components/parameters/country_id"
+        - $ref: "#/components/parameters/year"
+        - $ref: "#/components/parameters/published_start"
+        - $ref: "#/components/parameters/published_end"
+        - $ref: "#/components/parameters/collection"
       responses:
         "200":
           description: A page of ranked books.
@@ -54,13 +60,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BookCollection"
+                $ref: "#/components/schemas/RankedBookCollection"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/books/{slug}:
@@ -293,6 +301,12 @@ paths:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/category_id"
+        - $ref: "#/components/parameters/country_id"
+        - $ref: "#/components/parameters/year"
+        - $ref: "#/components/parameters/published_start"
+        - $ref: "#/components/parameters/published_end"
+        - $ref: "#/components/parameters/collection"
       responses:
         "200":
           description: A page of ranked books.
@@ -312,7 +326,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BookCollection"
+                $ref: "#/components/schemas/RankedBookCollection"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -570,14 +584,115 @@ paths:
     get:
       operationId: listCategoryBooks
       summary: Books in a category
-      description: The same ranked books as `GET /api/v1/books` (same fields, same `rank`, best first), limited to the books that carry the category. Old and merged slugs resolve as they do on `GET /api/v1/categories/{slug}`, and the `links` point at the category's current slug.
+      description: The same ranked books as `GET /api/v1/books` (same fields, same `rank`, best first), limited to the books that carry the category. The filter parameters apply on top, so `category_id` adds categories that a book must also carry; the category in the path is never repeated in `meta.filters`. Old and merged slugs resolve as they do on `GET /api/v1/categories/{slug}`, and the `links` point at the category's current slug.
       parameters:
         - $ref: "#/components/parameters/slug"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/category_id"
+        - $ref: "#/components/parameters/country_id"
+        - $ref: "#/components/parameters/year"
+        - $ref: "#/components/parameters/published_start"
+        - $ref: "#/components/parameters/published_end"
+        - $ref: "#/components/parameters/collection"
       responses:
         "200":
           description: A page of the category's ranked books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankedBookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}/categories/{slug}/books:
+    x-domain: books
+    get:
+      operationId: listRankingConfigurationCategoryBooks
+      summary: Books in a category on one configuration
+      description: The same rows and shape as `/api/v1/categories/{slug}/books`, ranked by the named configuration; `rank` is relative to it. Limited to the books that carry the category. The filter parameters apply on top, so `category_id` adds categories that a book must also carry; the category in the path is never repeated in `meta.filters`. Old and merged slugs resolve as they do on `GET /api/v1/categories/{slug}`, and the `links` point at the category's current slug.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/category_id"
+        - $ref: "#/components/parameters/country_id"
+        - $ref: "#/components/parameters/year"
+        - $ref: "#/components/parameters/published_start"
+        - $ref: "#/components/parameters/published_end"
+        - $ref: "#/components/parameters/collection"
+      responses:
+        "200":
+          description: A page of the category's ranked books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankedBookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/search/books:
+    x-domain: books
+    get:
+      operationId: searchBooks
+      summary: Search books
+      description: |
+        Full-text search over the catalogue, best match first. `q` is required; a missing or blank `q` is a 400. Only standalone, catalogued books are returned (not collections, and not books still awaiting review). A query yields at most 100 matches, so `total_count` never exceeds 100: refine the query rather than paging for more. `rank` is the book's position in the site's primary ranking, or null when it is unranked. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search text, at most 200 characters once surrounding whitespace is stripped.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of matching books.
           headers:
             X-RateLimit-Limit:
               $ref: "#/components/headers/X-RateLimit-Limit"
@@ -601,10 +716,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 components:
   securitySchemes:
     bearerAuth:
@@ -629,6 +744,42 @@ components:
         minimum: 1
         maximum: 100
         default: 50
+    category_id:
+      name: category_id
+      in: query
+      required: false
+      description: Comma-separated category slugs, up to 6. A book must carry every one. Merged and renamed slugs resolve.
+      schema: {type: string, minLength: 1}
+    country_id:
+      name: country_id
+      in: query
+      required: false
+      description: Comma-separated country slugs, up to 10. A book from any of them matches. Cannot be combined with collection.
+      schema: {type: string, minLength: 1}
+    year:
+      name: year
+      in: query
+      required: false
+      description: Books first published in this year. Cannot be combined with published_start or published_end.
+      schema: {type: integer, minimum: -4000}
+    published_start:
+      name: published_start
+      in: query
+      required: false
+      description: Books first published in or after this year.
+      schema: {type: integer, minimum: -4000}
+    published_end:
+      name: published_end
+      in: query
+      required: false
+      description: Books first published in or before this year.
+      schema: {type: integer, minimum: -4000}
+    collection:
+      name: collection
+      in: query
+      required: false
+      description: A curated collection, as on the site. The values are the slugs in Books::CollectionsRegistry (a test keeps the two in step).
+      schema: {type: string, enum: [women, africa, asia, latin-america, western, non-western]}
     slug:
       name: slug
       in: path
@@ -748,6 +899,25 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    ServiceUnavailable:
+      description: A service this endpoint depends on is down. Retry shortly.
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+        X-RateLimit-Daily-Limit:
+          $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+        X-RateLimit-Daily-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+        X-RateLimit-Daily-Reset:
+          $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
   schemas:
     Problem:
       description: RFC 9457 Problem Details with a stable `code`.
@@ -763,7 +933,7 @@ components:
           type: integer
         code:
           type: string
-          enum: [unauthenticated, invalid_token, membership_required, insufficient_scope, not_found, invalid_parameter, rate_limited]
+          enum: [unauthenticated, invalid_token, membership_required, insufficient_scope, not_found, invalid_parameter, rate_limited, search_unavailable]
         detail:
           type: string
     PaginationMeta:
@@ -866,6 +1036,27 @@ components:
           $ref: "#/components/schemas/PaginationMeta"
         links:
           $ref: "#/components/schemas/PaginationLinks"
+    AppliedFilters:
+      type: object
+      additionalProperties: false
+      description: The filters the server applied, in canonical form. Only the ones that were sent appear.
+      properties:
+        category_id: {type: string}
+        country_id: {type: string}
+        year: {type: integer}
+        published_start: {type: integer}
+        published_end: {type: integer}
+        collection: {type: string}
+    RankedBookCollection:
+      allOf:
+        - $ref: "#/components/schemas/BookCollection"
+        - type: object
+          properties:
+            meta:
+              type: object
+              properties:
+                filters:
+                  $ref: "#/components/schemas/AppliedFilters"
     BookItem:
       type: object
       required: [data]
