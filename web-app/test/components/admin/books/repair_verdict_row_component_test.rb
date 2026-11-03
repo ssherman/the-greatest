@@ -29,6 +29,20 @@ class Admin::Books::RepairVerdictRowComponentTest < ViewComponent::TestCase
     assert_includes text, "Goodreads export: \"The Export Title\" by Ann Author, Bo Author"
   end
 
+  test "renders a reimport_row verdict" do
+    verdict = build(:reimport_row, {"import_id" => 1, "row_number" => 2, "user_id" => 3, "action" => "move",
+                                    "from_book_id" => @source.id, "to_book_id" => @target.id})
+
+    text = text_of(verdict)
+
+    assert_includes text, "Re-import row"
+    assert_includes text, @target.title
+  end
+
+  test "every kind has a label" do
+    assert_equal ::Books::RepairVerdict.kinds.keys.sort, Admin::Books::RepairVerdictRowComponent::LABELS.keys.sort
+  end
+
   def author_flag_text(author_names)
     verdict = build(:merge_books, {"source_id" => @source.id, "target_id" => @target.id, "author_names" => author_names})
     render_inline(Admin::Books::RepairVerdictRowComponent.new(verdict: verdict, books: @books)).text.squish

@@ -7,7 +7,7 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   STATUSES = ::Books::RepairVerdict.statuses.keys.freeze
   DECIDED_BY = ::Books::RepairVerdict.decided_bies.keys.freeze
   CONFIDENCES = ::Books::RepairVerdict.confidences.keys.freeze
-  FILTER_KEYS = %w[kind status decided_by confidence].freeze
+  FILTER_KEYS = %w[kind status decided_by confidence guess].freeze
   PER_PAGE = 50
 
   before_action :set_verdict, only: [:show, :approve, :reject]
@@ -95,6 +95,7 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
     scope = scope.where(kind: params[:kind]) if KINDS.include?(params[:kind])
     scope = scope.where(decided_by: params[:decided_by]) if DECIDED_BY.include?(params[:decided_by])
     scope = scope.where(confidence: params[:confidence]) if CONFIDENCES.include?(params[:confidence])
+    scope = scope.where("payload->>'guess' = 'true'") if params[:guess] == "true"
     scope
   end
 

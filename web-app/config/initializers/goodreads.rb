@@ -15,6 +15,14 @@ module GoodreadsEnv
     Rails.logger ? Rails.logger.warn(message) : warn(message)
     default
   end
+
+  # "1", "true" and "yes" (any case) are on; anything else that is set is off.
+  def self.boolean(name, default)
+    raw = ENV[name]
+    return default if raw.nil?
+
+    %w[1 true yes].include?(raw.strip.downcase)
+  end
 end
 
 # Goodreads page fetching (Goodreads import spec §6, "Politeness"). Rails

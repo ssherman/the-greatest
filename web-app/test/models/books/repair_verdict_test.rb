@@ -67,6 +67,34 @@ module Books
       assert_equal [7], fix.book_ids
     end
 
+    test "every reimport kind has a summary and book ids" do
+      cases = {
+        reimport_mixed: [{"book_id" => 7, "title" => "Mixed", "author_names" => ["A"]}, [7]],
+        reimport_match: [{"goodreads_edition_id" => 5, "outcome" => "matched", "book_id" => 8}, [8]],
+        reimport_row: [{"import_id" => 1, "row_number" => 2, "user_id" => 3, "action" => "move", "from_book_id" => 4, "to_book_id" => 9}, [4, 9]],
+        reimport_guess: [{"item_type" => "Review", "item_id" => 6, "user_id" => 3, "from_book_id" => 4, "to_book_id" => 9, "guess" => true}, [4, 9]],
+        reimport_strip: [{"book_id" => 7, "identifier_type" => "isbn13", "value" => "9780000000002"}, [7]],
+        reimport_author: [{"book_id" => 7, "before_author_ids" => [1], "row_author_names" => ["B"], "after" => {"B" => nil}}, [7]]
+      }
+
+      cases.each_with_index do |(kind, (payload, ids)), index|
+        record = verdict(kind: kind, subject_key: "reimport:test:#{index}", payload: payload)
+
+        assert_predicate record.summary, :present?, kind
+        assert_equal ids, record.book_ids, kind
+      end
+    end
+
+    test "reimport match and row book ids drop the nils" do
+      assert_empty verdict(kind: :reimport_match, subject_key: "reimport:edition:1", payload: {"outcome" => "create", "book_id" => nil}).book_ids
+      assert_equal [9], verdict(kind: :reimport_row, subject_key: "reimport:row:1:1", payload: {"action" => "add", "from_book_id" => nil, "to_book_id" => 9}).book_ids
+    end
+
+    test "the reimport gate is off by default" do
+      refute Rails.configuration.x.goodreads_reimport.enabled
+      refute Rails.configuration.x.goodreads_reimport.enrichment
+    end
+
     test "unapplied excludes applied verdicts" do
       applied = verdict(applied_at: Time.current)
       pending = verdict(kind: :merge_books, subject_key: "books:1:2")

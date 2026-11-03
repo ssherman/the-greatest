@@ -44,6 +44,16 @@ module Admin
         assert_equal [@relink.id], verdict_ids
       end
 
+      test "guess filter shows only guesses" do
+        sign_in_as(@admin, stub_auth: true)
+        guess = verdict(:reimport_guess, "reimport:guess:Review:1", payload: {"item_type" => "Review", "item_id" => 1, "from_book_id" => @book.id, "to_book_id" => books_books(:got).id, "guess" => true})
+        verdict(:reimport_guess, "reimport:guess:Review:2", payload: {"item_type" => "Review", "item_id" => 2, "from_book_id" => @book.id, "to_book_id" => books_books(:got).id, "guess" => false})
+
+        get admin_books_repair_verdicts_path(guess: "true", kind: "reimport_guess")
+
+        assert_equal [guess.id], verdict_ids
+      end
+
       test "index renders every kind, with books present and gone" do
         sign_in_as(@admin, stub_auth: true)
         got = books_books(:got)
