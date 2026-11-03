@@ -42,7 +42,9 @@ facet, and the western-canon penalty.
 | Books with 2 countries | 55 (everything else has exactly one) |
 | Books holding a Goodreads id / ISBN-13 / OL work id / OCLC id | 155,752 / 137,777 / 34,639 / 15,701 |
 | Books holding a `books_work_wikidata_qid` | 0 |
-| Books holding a *verified* ISBN-13 (`Identifier.verified`: open_library/worldcat source) | 17,826 |
+| Ranked books (primary config 8) | 21,260 |
+| Books holding a *verified* ISBN-13 (`Identifier.verified`: open_library/worldcat source) | 17,826, all of them ranked (84% of ranked books; the `books:verify` ranked pass). Unranked books: 0 |
+| Ranked books holding an OCLC id | 15,701 |
 | Genres with a description | 58 of 96 |
 
 Re-run these before acting; they describe a moment.
@@ -128,13 +130,14 @@ dossier is also written into the ledger row (trimmed) so a decision can be audit
 | Goodreads | the matched page's raw genre shelf names (already cached in `Books::GoodreadsPage`) |
 | Open Library | only the work description, and only when no other section supplies a description. OL subjects are not used (measured as junk: 54k distinct strings, 37k singletons, bestseller tags, call numbers) |
 
-**WorldCat identity check.** Only 13% of books hold a verified ISBN-13, and the unverified ones
-include wrong ISBNs that point at other books (the reason `worldcat:backfill[all]` is on hold).
-So a WorldCat record enters the dossier only when its ISBN is verified, **or** its title matches the
-book's title or an alternate title (normalised, ignoring subtitle) **and** its creator or a
-contributor matches one of the book's authors by name key. Records that fail are dropped and
-counted in the ledger. This makes WorldCat usable as evidence for the whole catalog without waiting
-for the ISBN cleanup. The builder may reuse the matching in
+**WorldCat identity check.** The verification pass covered the ranked books: 84% of them hold
+Open Library/WorldCat-verified ISBN-13s. The ~140k unranked books (and the remaining ranked 16%)
+hold only legacy, Goodreads-import or Amazon ISBNs, some of which point at other books. So a WorldCat
+record enters the dossier when its ISBN is verified, **or** its title matches the book's title or
+an alternate title (normalised, ignoring subtitle) **and** its creator or a contributor matches one
+of the book's authors by name key. Records that fail are dropped and counted in the ledger. For
+ranked books this check almost never matters; it is what lets the unranked catalog use WorldCat
+without waiting for an unranked verification pass. The builder may reuse the matching in
 `Services::Books::Verification::ConfirmWithWorldCat` if it fits.
 
 Sources that fail (timeout, 5xx) are recorded as `sources_failed` in the ledger and the judge runs
