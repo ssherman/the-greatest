@@ -79,7 +79,7 @@ module Services
           task = stub(call: answer)
           klass = stub
           klass.stubs(:new).returns(task)
-          MatchEdition.call(edition: edition, exclude_ids: Set[@mixed.id], finder: Fake.new(found), task_class: klass)
+          MatchEdition.call(edition: edition, finder: Fake.new(found), task_class: klass)
         end
 
         # One chain of apply calls, as the rake task walks it: small pages, so the cursor does real work.

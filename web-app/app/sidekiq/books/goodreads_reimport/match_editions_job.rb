@@ -28,9 +28,8 @@ class Books::GoodreadsReimport::MatchEditionsJob
     return unless Rails.configuration.x.goodreads_reimport.enabled
 
     counts = OUTCOMES.index_with(0).merge(errors: 0)
-    exclude_ids = ::Services::Books::GoodreadsReimport::MixedBooks.ids
     ::Books::GoodreadsEdition.where(id: edition_ids).find_each do |edition|
-      outcome = ::Services::Books::GoodreadsReimport::MatchEdition.call(edition: edition, exclude_ids: exclude_ids).data[:outcome]
+      outcome = ::Services::Books::GoodreadsReimport::MatchEdition.call(edition: edition).data[:outcome]
       counts[outcome] += 1 if counts.key?(outcome)
     rescue => e
       counts[:errors] += 1

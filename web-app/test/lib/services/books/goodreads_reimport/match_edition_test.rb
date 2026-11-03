@@ -36,7 +36,7 @@ module Services
         end
 
         def run_match(finder_match, task_class)
-          MatchEdition.call(edition: @edition, exclude_ids: Set.new, finder: Fake.new(finder_match), task_class: task_class)
+          MatchEdition.call(edition: @edition, finder: Fake.new(finder_match), task_class: task_class)
         end
 
         def verdict = ::Books::RepairVerdict.find_by!(kind: :reimport_match, subject_key: @key)
@@ -93,6 +93,16 @@ module Services
           assert_nil verdict.payload["book_id"]
         end
 
+        test "AI says none at medium or low with candidates: create, proposed" do
+          %w[medium low].each do |confidence|
+            ::Books::RepairVerdict.where(subject_key: @key).delete_all
+            run_match(match(candidates: [@other]), task_returning(nil, confidence))
+
+            assert verdict.proposed?, confidence
+            assert_equal "create", verdict.payload["outcome"]
+          end
+        end
+
         test "AI says none but the finder matched: create, proposed" do
           run_match(match(record: @pick), task_returning(nil, "high"))
 
@@ -147,7 +157,7 @@ module Services
           finder = mock
           finder.expects(:call).never
 
-          result = MatchEdition.call(edition: @edition, exclude_ids: Set.new, finder: finder)
+          result = MatchEdition.call(edition: @edition, finder: finder)
 
           assert_equal :kept, result.data[:outcome]
           assert_equal existing, result.data[:verdict]
@@ -160,20 +170,19 @@ module Services
           klass = mock
           klass.expects(:new).never
 
-          result = MatchEdition.call(edition: @edition, exclude_ids: Set.new, finder: finder, task_class: klass)
+          result = MatchEdition.call(edition: @edition, finder: finder, task_class: klass)
 
           assert_equal :rejected, result.data[:outcome]
           assert_equal rejected, result.data[:verdict]
           assert_equal({"x" => 1}, rejected.reload.payload)
         end
 
-        test "call without a finder builds the blinded one with the excluded ids" do
-          x = @other.id
+        test "call without a finder builds the blinded one, excluding nothing" do
           DataImporters::Books::Book::Finder.expects(:new).with { |**kw|
-            kw[:exclude_ids] == Set[x] && kw[:identifier_sources] == DataImporters::Books::Book::Finder::TRUSTED_IDENTIFIER_SOURCES
+            !kw.key?(:exclude_ids) && kw[:identifier_sources] == DataImporters::Books::Book::Finder::TRUSTED_IDENTIFIER_SOURCES
           }.returns(Fake.new(match))
 
-          assert_equal :create, MatchEdition.call(edition: @edition, exclude_ids: Set[x]).data[:outcome]
+          assert_equal :create, MatchEdition.call(edition: @edition).data[:outcome]
         end
 
         test "the finder's record also listed among its candidates counts once" do
@@ -182,13 +191,13 @@ module Services
           assert_equal [@pick.id, @other.id], verdict.payload["candidate_book_ids"]
         end
 
-        test "default_finder is blinded and passes the excluded mixed books through" do
+        test "default_finder is blinded and excludes no book" do
           captured = nil
           DataImporters::Books::Book::Finder.stubs(:new).with { |**args| captured = args }.returns(:finder)
 
-          assert_equal :finder, MatchEdition.default_finder(exclude_ids: Set[@other.id])
+          assert_equal :finder, MatchEdition.default_finder
           assert_equal :none, captured[:open_library]
-          assert_equal Set[@other.id], captured[:exclude_ids]
+          assert_not captured.key?(:exclude_ids)
           assert_equal DataImporters::Books::Book::Finder::TRUSTED_IDENTIFIER_SOURCES, captured[:identifier_sources]
           assert_equal DataImporters::Books::Book::Finder::TRUSTED_ALTERNATE_TITLE_SOURCES, captured[:alternate_title_sources]
         end

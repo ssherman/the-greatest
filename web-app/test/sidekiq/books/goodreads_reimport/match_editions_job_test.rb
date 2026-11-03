@@ -29,13 +29,12 @@ class Books::GoodreadsReimport::MatchEditionsJobTest < ActiveSupport::TestCase
     Books::GoodreadsReimport::MatchEditionsJob.new.perform([edition(1).id])
   end
 
-  test "matches each edition with the mixed book ids computed once, and survives one raising" do
+  test "matches each edition, mixed books included, and survives one raising" do
     @config.enabled = true
     a, b = edition(2), edition(3)
-    mixed = Set[42]
-    Services::Books::GoodreadsReimport::MixedBooks.expects(:ids).once.returns(mixed)
-    Services::Books::GoodreadsReimport::MatchEdition.expects(:call).with(edition: a, exclude_ids: mixed).returns(result(:matched))
-    Services::Books::GoodreadsReimport::MatchEdition.expects(:call).with(edition: b, exclude_ids: mixed).raises(RuntimeError, "boom")
+    Services::Books::GoodreadsReimport::MixedBooks.expects(:ids).never
+    Services::Books::GoodreadsReimport::MatchEdition.expects(:call).with(edition: a).returns(result(:matched))
+    Services::Books::GoodreadsReimport::MatchEdition.expects(:call).with(edition: b).raises(RuntimeError, "boom")
     Rails.logger.stubs(:error)
     Rails.logger.expects(:info).with("match_editions batch: 2 editions — matched 1, create 0, kept 0, retry 0, errors 1")
 

@@ -4,7 +4,8 @@ module Services
   module Books
     module GoodreadsReimport
       # Matches one Goodreads edition to our catalog and records it as a reimport_match verdict (re-import spec
-      # 4.2). The finder runs blinded (no Open Library, trusted sources only) and never sees a mixed book; the AI
+      # 4.2). The finder runs blinded (no Open Library, trusted sources only); a mixed book stays matchable, since the survey's
+      # mixed rule ignores titles and many such records are the right English book. The AI
       # then double-checks its candidates, because a finder match on a near-identical title can be a different
       # volume or an adaptation. Only an AI "high" on the finder's own pick is approved without an admin; any
       # disagreement, doubt, or "none of these" next to a finder match waits for review. A finder or AI failure
@@ -14,22 +15,20 @@ module Services
 
         MAX_CANDIDATES = 6
 
-        def self.default_finder(exclude_ids:)
+        def self.default_finder
           ::DataImporters::Books::Book::Finder.new(
             open_library: :none,
             identifier_sources: ::DataImporters::Books::Book::Finder::TRUSTED_IDENTIFIER_SOURCES,
-            alternate_title_sources: ::DataImporters::Books::Book::Finder::TRUSTED_ALTERNATE_TITLE_SOURCES,
-            exclude_ids: exclude_ids
+            alternate_title_sources: ::DataImporters::Books::Book::Finder::TRUSTED_ALTERNATE_TITLE_SOURCES
           )
         end
 
-        def self.call(edition:, exclude_ids:, finder: nil, task_class: ::Services::Ai::Tasks::Books::SameWorkTask)
-          new(edition: edition, exclude_ids: exclude_ids, finder: finder, task_class: task_class).call
+        def self.call(edition:, finder: nil, task_class: ::Services::Ai::Tasks::Books::SameWorkTask)
+          new(edition: edition, finder: finder, task_class: task_class).call
         end
 
-        def initialize(edition:, exclude_ids:, finder:, task_class:)
+        def initialize(edition:, finder:, task_class:)
           @edition = edition
-          @exclude_ids = exclude_ids
           @finder = finder
           @task_class = task_class
           @key = "reimport:edition:#{edition.id}"
@@ -42,7 +41,7 @@ module Services
           return done(:kept, existing) if existing && !existing.rejected?
 
           @facts = EditionFacts.call(edition: @edition)
-          match = (@finder || self.class.default_finder(exclude_ids: @exclude_ids)).call(query: @facts.to_query, verify: true, subject: @edition)
+          match = (@finder || self.class.default_finder).call(query: @facts.to_query, verify: true, subject: @edition)
           return done(:retry) if match.decided_by == :fallback || Array(match.sources_failed).any?
 
           books = candidate_books(match)
@@ -69,7 +68,8 @@ module Services
           auto = if book_id.present?
             book_id == match.record&.id && confidence == "high"
           else
-            match.unmatched?
+            # "None of these" creates a book, so an AI answer needs high confidence; no candidates = rule only.
+            match.unmatched? && (answer.nil? || confidence == "high")
           end
           payload = {
             "goodreads_edition_id" => @edition.id, "goodreads_book_id" => @edition.goodreads_book_id, "facts" => @facts.to_h,
