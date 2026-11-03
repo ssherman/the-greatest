@@ -8,6 +8,7 @@ class Books::GoodreadsReimport::SampleJob
 
   def perform(n = ::Services::Books::GoodreadsReimport::Report::SAMPLE_ROWS,
     mixed_books = ::Services::Books::GoodreadsReimport::Report::SAMPLE_MIXED_BOOKS)
+    Rails.logger.info("Goodreads re-import sample check started: #{n} rows plus #{mixed_books} former mixed books")
     Rails.logger.info("Goodreads re-import sample check:\n" + ::Services::Books::GoodreadsReimport::Report.sample(n: n, mixed_books: mixed_books))
   end
 end

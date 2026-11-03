@@ -58,20 +58,27 @@ namespace :books do
       puts "queued #{Books::GoodreadsReimport::CheckAuthorsJob.enqueue(limit: count)} books for the author check"
     end
 
-    desc "Read-only: counts, what is stuck, samples and the acceptance queries (works with the gate off)"
+    desc "Queue the report (read-only; works with the gate off). It is written to storage/goodreads_reimport/report-<UTC time>.md"
     task report: :environment do
-      puts Services::Books::GoodreadsReimport::Report.call
+      Books::GoodreadsReimport::ReportJob.perform_async
+      puts "queued the report; it will be written under #{Services::Books::GoodreadsReimport::Report.storage_dir}/report-<UTC time>.md " \
+        "(the path is in the Sidekiq log). Re-enqueue if a deploy interrupted it"
     end
 
-    desc "Read-only: record each affected user's list item and review counts in tmp/goodreads_reimport_counts.json. Run before apply"
-    task snapshot: :environment do
-      puts "recorded the counts of #{Services::Books::GoodreadsReimport::Report.snapshot} users in #{Services::Books::GoodreadsReimport::Report::SNAPSHOT_PATH}"
+    desc "Queue the snapshot of each affected user's list item and review counts (read-only). Run before apply. " \
+      "It refuses to replace an existing snapshot; snapshot[redo] does"
+    task :snapshot, [:redo] => :environment do |_task, args|
+      abort "usage: books:goodreads_reimport:snapshot[redo]" unless [nil, "redo"].include?(args[:redo])
+
+      Books::GoodreadsReimport::SnapshotJob.perform_async(args[:redo] == "redo")
+      puts "queued the snapshot; it will be written to #{Services::Books::GoodreadsReimport::Report.snapshot_path} " \
+        "(left alone if one exists and redo was not given; the result is in the Sidekiq log). Re-enqueue if a deploy interrupted it"
     end
 
     desc "Queue the independent AI sample check (read-only); the job logs its result"
     task sample: :environment do
       Books::GoodreadsReimport::SampleJob.perform_async
-      puts "queued the sample check; its result is in the Sidekiq log"
+      puts "queued the sample check; its result is in the Sidekiq log. Re-enqueue if a deploy interrupted it"
     end
   end
 end

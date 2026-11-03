@@ -12,7 +12,9 @@ module Services
         SAMPLE = 10
         SAMPLE_ROWS = 300
         SAMPLE_MIXED_BOOKS = 20
-        SNAPSHOT_PATH = "tmp/goodreads_reimport_counts.json"
+        ERRORS_SHOWN = 5
+        # A volume mounted in web and worker, so it survives a deploy.
+        STORAGE_DIR = "storage/goodreads_reimport"
         BATCH = 5_000
         KINDS = %w[reimport_mixed reimport_match reimport_row reimport_guess reimport_strip reimport_author].freeze
 
@@ -31,10 +33,13 @@ module Services
         end
 
         # Per-user counts of list items and reviews on books, for the users the re-import touches. Taken before
-        # apply, read by the "users whose count dropped" acceptance query. Returns how many users it recorded.
-        def snapshot
-          counts = user_counts(in_scope_user_ids)
+        # apply, read by the "users whose count dropped" acceptance query. Returns how many users it recorded, or nil
+        # when a snapshot exists and replace is not set: one taken after apply would hide every loss.
+        def snapshot(replace: false)
           path = snapshot_path
+          return nil if path.exist? && !replace
+
+          counts = user_counts(in_scope_user_ids)
           FileUtils.mkdir_p(path.dirname)
           File.write(path, JSON.generate({"taken_at" => Time.current.iso8601, "users" => counts}))
           counts.size
@@ -45,7 +50,7 @@ module Services
         def sample(n: SAMPLE_ROWS, mixed_books: SAMPLE_MIXED_BOOKS, task_class: ::Services::Ai::Tasks::Books::SameWorkTask)
           picked = verdicts.reimport_row.where.not(applied_at: nil).where("payload ->> 'superseded_by' IS NULL")
           chosen = picked.order(Arel.sql("random()")).limit(n).to_a
-          former = verdicts.reimport_mixed.order(Arel.sql("random()")).limit(mixed_books).to_a
+          former = verdicts.reimport_mixed.approved.where.not(applied_at: nil).order(Arel.sql("random()")).limit(mixed_books).to_a
           keys = former.flat_map { |mixed| Array(mixed.payload["row_keys"]).map { |import_id, row_number| "reimport:row:#{import_id}:#{row_number}" } }
           chosen |= picked.where(subject_key: keys).to_a
 
@@ -65,7 +70,11 @@ module Services
           lines.join("\n")
         end
 
-        def snapshot_path = Rails.root.join(SNAPSHOT_PATH)
+        def storage_dir = Rails.root.join(STORAGE_DIR)
+
+        def snapshot_path = storage_dir.join("counts.json")
+
+        def report_path(time = Time.current) = storage_dir.join("report-#{time.utc.strftime("%Y%m%dT%H%M%SZ")}.md")
 
         def verdicts = ::Books::RepairVerdict.where(kind: KINDS).current
 
@@ -120,7 +129,7 @@ module Services
         def errors(lines)
           failed = verdicts.where.not(error: nil)
           lines << "" << "verdicts with an error: #{failed.count}"
-          failed.order(:id).limit(SAMPLE).each { |verdict| lines << "  #{verdict.kind} #{verdict.subject_key}: #{verdict.error.to_s.lines.first.to_s.strip}" }
+          failed.order(:id).limit(ERRORS_SHOWN).each { |verdict| lines << "  #{verdict.kind} #{verdict.subject_key}: #{verdict.error.to_s.lines.first.to_s.strip}" }
         end
 
         def samples(lines)
@@ -137,10 +146,12 @@ module Services
           mismatched.first(SAMPLE).each { |line| lines << "    #{line}" }
           dropped = dropped_users
           if dropped.nil?
-            lines << "  users whose list item plus review count dropped: no snapshot (run books:goodreads_reimport:snapshot before apply)"
+            lines << "  users whose list item or review count dropped: no snapshot (run books:goodreads_reimport:snapshot before apply)"
           else
-            lines << "  users whose list item plus review count dropped: #{dropped.size}"
-            dropped.first(SAMPLE).each { |user_id, before, now| lines << "    user #{user_id}: #{before} -> #{now}" }
+            lines << "  users whose list item or review count dropped beyond the destroys recorded: #{dropped[:unexplained].size}"
+            dropped[:unexplained].first(SAMPLE).each { |row| lines << "    #{drop_line(row)}" }
+            lines << "  explained drops (destroyed by a collision the verdicts recorded; not a loss): #{dropped[:explained].size}"
+            dropped[:explained].first(SAMPLE).each { |row| lines << "    #{drop_line(row)}" }
           end
           lines << "  mixed books still present: #{still_mixed.size}"
         end
@@ -171,14 +182,16 @@ module Services
             after = batch.last[0]
             titles = ::Books::Book.where(id: batch.map { |row| row[3] }.compact.uniq).pluck(:id, :title, :subtitle)
               .to_h { |id, title, subtitle| [id, [title, subtitle]] }
-            batch.each do |_id, key, csv_title, to_id, edition_id|
-              next if to_id.nil?
+            # A destination merged away since is looked up once per batch, and the matches are loaded once per batch.
+            (batch.filter_map { |row| row[3] }.uniq - titles.keys).each { |id| titles[id] = resolve(id) }
+            suspects = batch.select do |_id, _key, csv_title, to_id, _edition_id|
+              to_id && !(titles[to_id] && title_keys(titles[to_id]).include?(csv_key(csv_title)))
+            end
+            matches = approved_matches(suspects.map { |row| row[4] })
+            suspects.each do |_id, key, csv_title, to_id, edition_id|
+              next if explained?(matches[edition_id], to_id)
 
-              book = titles[to_id] || resolve(to_id)
-              next if book && title_keys(book).include?(csv_key(csv_title))
-              next if explained?(edition_id, to_id)
-
-              found << "#{key}: CSV \"#{csv_title}\" -> book ##{to_id} \"#{book&.first}\""
+              found << "#{key}: CSV \"#{csv_title}\" -> book ##{to_id} \"#{titles[to_id]&.first}\""
             end
           end
           found
@@ -187,7 +200,7 @@ module Services
         def applied_rows_after(after)
           ::Books::RepairVerdict.reimport_row.current.where.not(applied_at: nil).where("books_repair_verdicts.id > ?", after)
             .where("payload ->> 'superseded_by' IS NULL")
-            .joins("JOIN books_goodreads_import_rows r ON books_repair_verdicts.subject_key = 'reimport:row:' || r.import_id || ':' || r.row_number")
+            .joins("JOIN books_goodreads_import_rows r ON r.import_id = (payload ->> 'import_id')::bigint AND r.row_number = (payload ->> 'row_number')::int")
             .order(:id).limit(BATCH)
             .pluck(:id, :subject_key, Arel.sql("r.raw ->> 'Title'"), Arel.sql("(payload ->> 'to_book_id')::bigint"),
               Arel.sql("(payload ->> 'goodreads_edition_id')::bigint"))
@@ -209,26 +222,68 @@ module Services
           [check.title_key(title), check.title_key([title, subtitle.presence].compact.join(": "))]
         end
 
-        def explained?(edition_id, to_id)
-          match = ::Books::RepairVerdict.reimport_match.current.approved.find_by(subject_key: "reimport:edition:#{edition_id}")
+        def approved_matches(edition_ids)
+          ::Books::RepairVerdict.reimport_match.current.approved
+            .where(subject_key: edition_ids.uniq.map { |id| "reimport:edition:#{id}" })
+            .index_by { |verdict| verdict.subject_key.delete_prefix("reimport:edition:").to_i }
+        end
+
+        def explained?(match, to_id)
           return false if match.nil?
           return false unless (match.payload["book_id"] || match.payload["created_book_id"]) == to_id
 
           match.reviewed_at.present? || (match.payload.dig("ai", "answer").present? && match.payload.dig("ai", "confidence") == "high")
         end
 
-        # nil without a snapshot; otherwise [[user_id, before, now]] for users with fewer items plus reviews.
+        # nil without a snapshot; otherwise {unexplained:, explained:}, each [[user_id, "items"|"reviews", before, now,
+        # recorded destroys]]. Items and reviews are compared separately, so a gained item cannot hide a lost review.
+        # A drop that applied verdicts recorded as a destroy (a collision with an entry already on the destination, a
+        # mixed book's leftovers) is explained; anything beyond that is not.
         def dropped_users
           path = snapshot_path
           return nil unless path.exist?
 
-          before = JSON.parse(path.read).fetch("users")
-          now = user_counts(before.keys.map(&:to_i))
-          before.filter_map do |user_id, counts|
-            was = counts.values.sum
-            is = now.fetch(user_id.to_i, {}).values.sum
-            [user_id.to_i, was, is] if is < was
+          before = JSON.parse(path.read).fetch("users").transform_keys(&:to_i)
+          now = user_counts(before.keys)
+          destroyed = recorded_destroys(before.keys)
+          result = {unexplained: [], explained: []}
+          before.each do |user_id, was|
+            %w[items reviews].each do |what|
+              drop = was[what] - now.fetch(user_id)[what]
+              next unless drop.positive?
+
+              recorded = destroyed.fetch([user_id, what], 0)
+              result[(drop > recorded) ? :unexplained : :explained] << [user_id, what, was[what], now.fetch(user_id)[what], recorded]
+            end
           end
+          result
+        end
+
+        def drop_line(row)
+          user_id, what, was, now, recorded = row
+          "user #{user_id} #{what}: #{was} -> #{now} (#{recorded} recorded destroys)"
+        end
+
+        # {[user_id, "items"|"reviews"] => count} from the trails applied verdicts keep of what they destroyed.
+        def recorded_destroys(user_ids)
+          wanted = user_ids.to_set
+          totals = Hash.new(0)
+          trailed = ::Books::RepairVerdict.where(kind: %w[reimport_row reimport_guess]).where.not(applied_at: nil)
+            .where("jsonb_array_length(COALESCE(payload -> 'moved' -> 'destroyed_items', '[]'::jsonb)) > 0 OR " \
+              "jsonb_array_length(COALESCE(payload -> 'moved' -> 'destroyed_reviews', '[]'::jsonb)) > 0")
+          trailed.find_each do |verdict|
+            user_id = verdict.payload["user_id"]
+            next unless wanted.include?(user_id)
+
+            totals[[user_id, "items"]] += Array(verdict.payload.dig("moved", "destroyed_items")).size
+            totals[[user_id, "reviews"]] += Array(verdict.payload.dig("moved", "destroyed_reviews")).size
+          end
+          ::Books::RepairVerdict.reimport_mixed.where.not(applied_at: nil).where("payload ? 'deleted'").find_each do |verdict|
+            Array(verdict.payload["deleted"]).each do |item|
+              totals[[item["user_id"], "items"]] += 1 if wanted.include?(item["user_id"])
+            end
+          end
+          totals
         end
 
         def in_scope_user_ids

@@ -81,18 +81,23 @@ class BooksGoodreadsReimportRakeTest < ActiveSupport::TestCase
     assert_match(/queued 3 books/, run_task("check_authors", "3"))
   end
 
-  test "report prints with the gate off" do
+  test "report only enqueues the job, even with the gate off" do
     @config.enabled = false
-    Services::Books::GoodreadsReimport::Report.expects(:call).returns("THE REPORT")
+    JOBS::ReportJob.expects(:perform_async).with
+    Services::Books::GoodreadsReimport::Report.expects(:call).never
 
-    assert_match(/THE REPORT/, run_task("report"))
+    assert_match(%r{storage/goodreads_reimport.*report-<UTC time>.md}, run_task("report"))
   end
 
-  test "snapshot prints the user count and runs inline" do
+  test "snapshot only enqueues the job and redo is passed on" do
     @config.enabled = false
-    Services::Books::GoodreadsReimport::Report.expects(:snapshot).returns(812)
+    JOBS::SnapshotJob.expects(:perform_async).with(false)
+    Services::Books::GoodreadsReimport::Report.expects(:snapshot).never
+    assert_match(/queued the snapshot/, run_task("snapshot"))
 
-    assert_match(/counts of 812 users/, run_task("snapshot"))
+    Rake::Task["books:goodreads_reimport:snapshot"].reenable
+    JOBS::SnapshotJob.expects(:perform_async).with(true)
+    run_task("snapshot", "redo")
   end
 
   test "sample only enqueues the job, even with the gate off" do

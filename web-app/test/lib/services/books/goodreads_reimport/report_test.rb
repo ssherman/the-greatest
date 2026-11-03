@@ -74,20 +74,48 @@ module Services
         end
 
         test "acceptance: reports no snapshot, then the users whose counts dropped" do
-          assert_includes Report.call, "count dropped: no snapshot"
+          assert_includes Report.call, "dropped: no snapshot"
 
           list = ::Books::UserList.create!(user: @user, name: "Shelf", list_type: :custom)
           item = UserListItem.create!(user_list: list, listable: @book)
           assert_equal 1, Report.snapshot
-          assert_includes Report.call, "count dropped: 0"
+          assert_includes Report.call, "beyond the destroys recorded: 0"
 
           item.destroy!
           report = Report.call
 
-          assert_includes report, "count dropped: 1"
-          assert_match(/user #{@user.id}: (\d+) -> (\d+)/, report)
-          before, now = report.match(/user #{@user.id}: (\d+) -> (\d+)/).captures.map(&:to_i)
-          assert_equal 1, before - now
+          assert_includes report, "beyond the destroys recorded: 1"
+          assert_match(/user #{@user.id} items: \d+ -> \d+ \(0 recorded destroys\)/, report)
+        end
+
+        test "a lost review is not hidden by a gained item, and a recorded collision destroy is an explained drop" do
+          Review.where(user: @user).delete_all
+          review = Review.create!(user: @user, reviewable: @book, rating: 4, title: "T", body: "B")
+          Report.snapshot
+          review.destroy!
+          list = ::Books::UserList.create!(user: @user, name: "Shelf", list_type: :custom)
+          UserListItem.create!(user_list: list, listable: @other)
+
+          report = Report.call
+          assert_includes report, "beyond the destroys recorded: 1"
+          assert_includes report, "user #{@user.id} reviews: 1 -> 0 (0 recorded destroys)"
+
+          row_verdict(@row, @book, applied_at: Time.current).update!(
+            payload: {"user_id" => @user.id, "moved" => {"destroyed_reviews" => [{"id" => review.id}], "destroyed_items" => []}}
+          )
+          report = Report.call
+          assert_includes report, "beyond the destroys recorded: 0"
+          assert_includes report, "explained drops (destroyed by a collision the verdicts recorded; not a loss): 1"
+          assert_includes report, "user #{@user.id} reviews: 1 -> 0 (1 recorded destroys)"
+        end
+
+        test "snapshot refuses to overwrite without redo" do
+          assert_equal 1, Report.snapshot
+          first = @snapshot.read
+
+          assert_nil Report.snapshot
+          assert_equal first, @snapshot.read
+          assert_equal 1, Report.snapshot(replace: true)
         end
 
         test "acceptance: mixed books still present are counted" do
@@ -135,7 +163,7 @@ module Services
 
         test "sample also checks every row of former mixed books and reports rows it could not check" do
           row_verdict(@row, @book, applied_at: Time.current)
-          verdict(:reimport_mixed, "reimport:book:#{@other.id}", {"book_id" => @other.id, "row_keys" => [[@import.id, 1]]})
+          verdict(:reimport_mixed, "reimport:book:#{@other.id}", {"book_id" => @other.id, "row_keys" => [[@import.id, 1]]}, applied_at: Time.current)
           failure = Struct.new(:success?, :data).new(false, {})
 
           report = Report.sample(n: 0, mixed_books: 20, task_class: task_class("War and Peace" => failure))
