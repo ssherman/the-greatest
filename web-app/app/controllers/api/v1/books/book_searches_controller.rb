@@ -20,18 +20,29 @@ module Api
           render_problem(::Api::Problem.new(:search_unavailable, detail: "Search is temporarily unavailable. Retry shortly."))
         end
 
+        # A query this long is a pasted paragraph, not a search. Left uncapped it
+        # exceeds OpenSearch's max_clause_count, and the 400 that comes back is a
+        # failure of ours that the client could do nothing about.
+        MAX_QUERY_LENGTH = 200
+
         def index
-          query = params[:q].to_s.strip
+          raw = params[:q]
+          # `q[]=war` arrives as an Array and `q[a]=war` as Parameters: neither is
+          # a search string, and to_s would turn it into one.
+          raise ::Api::Page::InvalidParameter, "q must be a single value" unless raw.nil? || raw.is_a?(String)
+
+          query = raw.to_s.strip
           return render_problem(::Api::Problem.new(:invalid_parameter, detail: "q is required")) if query.blank?
+          raise ::Api::Page::InvalidParameter, "q must be at most #{MAX_QUERY_LENGTH} characters" if query.length > MAX_QUERY_LENGTH
 
           ids = ::Books::BookSearchQuery.hit_ids(query, size: SEARCH_LIMIT)
 
           # `catalog` and the relation's own count are what keep the page honest:
-          # the index can still carry a provisional book or an id Postgres has
-          # lost, and total_count / total_pages come from the rows that exist, so
-          # a page is never short of what its meta promises.
+          # the index can still carry a provisional book, a collection or an id
+          # Postgres has lost, and total_count / total_pages come from the rows
+          # that exist, so a page is never short of what its meta promises.
           relation = if ids.any?
-            ::Books::Book.catalog.where(id: ids).in_order_of(:id, ids)
+            ::Books::Book.catalog.where(book_kind: :standalone).where(id: ids).in_order_of(:id, ids)
               .includes(:primary_ranked_item, {book_authors: :author}, {primary_image: {file_attachment: :blob}})
           end
 

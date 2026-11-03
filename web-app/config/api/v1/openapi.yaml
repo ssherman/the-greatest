@@ -683,10 +683,11 @@ paths:
         - name: q
           in: query
           required: true
-          description: The search text.
+          description: The search text, at most 200 characters once surrounding whitespace is stripped.
           schema:
             type: string
             minLength: 1
+            maxLength: 200
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
       responses:

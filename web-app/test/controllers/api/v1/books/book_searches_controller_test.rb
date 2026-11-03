@@ -118,14 +118,106 @@ module Api
           assert_equal ["search_unavailable", 503], [json[:code], json[:status]]
         end
 
-        test "a 503 from the cluster is a 503 search_unavailable" do
-          ::Search::Books::Search::BookGeneral.stubs(:call)
-            .raises(::OpenSearch::Transport::Transport::Errors::ServiceUnavailable, "overloaded")
+        test "a timeout talking to the cluster is a 503 search_unavailable" do
+          ::Search::Books::Search::BookGeneral.stubs(:call).raises(Faraday::TimeoutError, "slow")
 
           search
           assert_api_response_conform(status: 503)
 
           assert_equal "search_unavailable", json[:code]
+        end
+
+        test "a Ruby timeout is a 503 search_unavailable" do
+          ::Search::Books::Search::BookGeneral.stubs(:call).raises(Timeout::Error, "slow")
+
+          search
+          assert_api_response_conform(status: 503)
+
+          assert_equal "search_unavailable", json[:code]
+        end
+
+        test "the gem's pool-exhausted error is a 503 search_unavailable" do
+          ::Search::Books::Search::BookGeneral.stubs(:call)
+            .raises(::OpenSearch::Transport::Transport::Error, "Cannot get new connection from pool.")
+
+          search
+          assert_api_response_conform(status: 503)
+
+          assert_equal "search_unavailable", json[:code]
+        end
+
+        %w[ServiceUnavailable InternalServerError BadGateway GatewayTimeout TooManyRequests].each do |name|
+          test "a #{name} from the cluster is a 503 search_unavailable" do
+            ::Search::Books::Search::BookGeneral.stubs(:call)
+              .raises(::OpenSearch::Transport::Transport::Errors.const_get(name), "trouble")
+
+            search
+            assert_api_response_conform(status: 503)
+
+            assert_equal "search_unavailable", json[:code]
+          end
+        end
+
+        test "a BadRequest from the cluster is a bug to see, not a retryable 503" do
+          ::Search::Books::Search::BookGeneral.stubs(:call)
+            .raises(::OpenSearch::Transport::Transport::Errors::BadRequest, "too_many_nested_clauses")
+
+          assert_raises(::OpenSearch::Transport::Transport::Errors::BadRequest) { search }
+        end
+
+        test "q of exactly 200 characters is searched" do
+          q = "a" * 200
+          ::Search::Books::Search::BookGeneral.expects(:call).with(q, size: 100).returns(hits(@war))
+
+          search(q: q)
+          assert_api_conform(status: 200)
+        end
+
+        test "q is measured after it is stripped" do
+          q = "a" * 200
+          ::Search::Books::Search::BookGeneral.expects(:call).with(q, size: 100).returns(hits(@war))
+
+          search(q: "  #{q}  ")
+
+          assert_response :success
+        end
+
+        test "q over 200 characters is a 400 and never searches" do
+          ::Search::Books::Search::BookGeneral.expects(:call).never
+
+          search(q: "a" * 201)
+          assert_api_response_conform(status: 400)
+
+          assert_equal ["invalid_parameter", "q must be at most 200 characters"], [json[:code], json[:detail]]
+        end
+
+        test "an array q is a 400 and never searches" do
+          ::Search::Books::Search::BookGeneral.expects(:call).never
+
+          get "/api/v1/search/books?q[]=war", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 400)
+
+          assert_equal ["invalid_parameter", "q must be a single value"], [json[:code], json[:detail]]
+        end
+
+        test "a hash q is a 400 and never searches" do
+          ::Search::Books::Search::BookGeneral.expects(:call).never
+
+          get "/api/v1/search/books?q[a]=war", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 400)
+
+          assert_equal "q must be a single value", json[:detail]
+        end
+
+        test "a non-standalone book among the hits is left out, and total_count matches" do
+          @crime.update!(book_kind: :collection)
+          ::Search::Books::Search::BookGeneral.stubs(:call).returns(hits(@war, @crime, @mice))
+
+          search
+          assert_api_conform(status: 200)
+
+          assert_equal [@war.id, @mice.id], json[:data].map { |b| b[:id] }
+          assert_equal 2, json[:meta][:total_count]
         end
 
         test "an unrelated error is not dressed up as a 503" do

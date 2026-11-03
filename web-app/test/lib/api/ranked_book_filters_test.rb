@@ -161,6 +161,22 @@ module Api
       end
     end
 
+    test "over the limit on the category path, the message says the path category counts" do
+      novels = categories(:books_novels_genre)
+
+      error = assert_raises(Api::Page::InvalidParameter) do
+        filter({category_id: %w[a b c d e f].join(",")}, path_category: novels)
+      end
+
+      assert_equal "category_id: at most 6 categories, including the one in the path", error.message
+    end
+
+    test "over the limit without a path category, the message is the plain one" do
+      error = assert_raises(Api::Page::InvalidParameter) { filter(category_id: %w[a b c d e f g].join(",")) }
+
+      assert_equal "Invalid category_id: at most 6 values allowed", error.message
+    end
+
     test "the path category is joined with category_id" do
       fiction = categories(:books_fiction_genre)
       novels = categories(:books_novels_genre)

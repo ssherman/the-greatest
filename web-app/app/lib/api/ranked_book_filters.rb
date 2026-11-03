@@ -92,7 +92,11 @@ module Api
         published_end: @params[:published_end]
       )
     rescue ::Books::FilterParams::InvalidFilter => error
-      raise Api::Page::InvalidParameter, error.message
+      raise Api::Page::InvalidParameter, error.message unless @path_category && error.param == "category_id"
+
+      # The generic message ("at most 6 values allowed") would send a client that
+      # listed six slugs hunting for its own mistake: the path counts as the seventh.
+      raise Api::Page::InvalidParameter, "category_id: at most #{::Books::FilterParams::MAX_CATEGORIES} categories, including the one in the path"
     rescue ::Books::FilterParams::UnknownFilter => error
       raise Api::UnknownFilter.new(error.param, error.slug)
     end
