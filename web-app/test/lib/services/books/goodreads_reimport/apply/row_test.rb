@@ -55,6 +55,36 @@ module Services
             assert_equal "csv", review_on(@to).body
           end
 
+          test "a keep whose edition match was rejected waits unapplied, and closes after re-approval" do
+            row = csv_row
+            verdict = row_verdict(row, action: "keep", to: @from)
+            match = ::Books::RepairVerdict.reimport_match.find_by!(subject_key: "reimport:edition:#{row.goodreads_edition_id}")
+            match.update!(status: :rejected)
+
+            result = Row.call(verdict: verdict)
+            assert_equal [:noop, "match no longer approved", false], result.data.values_at(:outcome, :reason, :final)
+
+            match.update!(status: :approved)
+            assert_equal [:noop, true], Row.call(verdict: verdict).data.values_at(:outcome, :final)
+          end
+
+          test "two rows to one destination give it the carrying row's review whichever applies first" do
+            bodies = [true, false].map do |carrier_first|
+              Review.where(user: @user).destroy_all
+              UserListItem.where(listable: [@from, @to]).delete_all
+              UserListItem.create!(user_list: list(:read), listable: @from)
+              make_review(@from, body: "legacy")
+              carrier = row_verdict(csv_row(rating: 5, review_body: "csv a"), action: "copy", review: true)
+              plain = row_verdict(csv_row(rating: 4, review_body: "csv b"), action: "copy", review: false)
+              order = carrier_first ? [carrier, plain] : [plain, carrier]
+              order.each { |verdict| Row.call(verdict: verdict) }
+              [carrier, plain].each(&:destroy)
+              review_on(@to).body
+            end
+
+            assert_equal %w[legacy legacy], bodies
+          end
+
           test "copy of a row with no rating or review writes none" do
             UserListItem.create!(user_list: list(:read), listable: @from)
 

@@ -27,10 +27,11 @@ module Services
             payload = verdict.payload
             action = payload["action"]
             return Entries.noop("superseded by #{payload["superseded_by"]}", final: true) if payload["superseded_by"].present?
-            return Entries.noop("keep", final: true) if action == "keep"
-            return Entries.noop("unknown action #{action.inspect}") unless %w[add move copy].include?(action)
+            return Entries.noop("unknown action #{action.inspect}") unless %w[keep add move copy].include?(action)
 
+            # Before the keep return: a keep closed on a since-rejected match could never be corrected.
             return Entries.noop("match no longer approved") unless Entries.match_approved?(payload["goodreads_edition_id"])
+            return Entries.noop("keep", final: true) if action == "keep"
 
             user = ::User.find_by(id: payload["user_id"])
             return Entries.noop("user #{payload["user_id"]} no longer exists") unless user
@@ -122,7 +123,16 @@ module Services
           def self.writes_csv_review?(verdict, row, moved_review)
             return moved_review.nil? if verdict.payload["review"] == true
 
-            row.rating.to_f > 0 || row.review_body.present?
+            (row.rating.to_f > 0 || row.review_body.present?) && !sibling_carries?(verdict)
+          end
+
+          # Another row of the same reader, from the same old book to the same destination, carries the moved
+          # review. It wins whichever applies first, so this row must not write a CSV review there before it.
+          def self.sibling_carries?(verdict)
+            p = verdict.payload
+            ::Books::RepairVerdict.reimport_row.current.where.not(id: verdict.id)
+              .where("payload->>'user_id' = ? AND payload->>'from_book_id' = ? AND payload->>'to_book_id' = ? AND payload->>'review' = 'true'",
+                p["user_id"].to_s, p["from_book_id"].to_s, p["to_book_id"].to_s).exists?
           end
 
           # The row's shelves are only some of the lists the old book was on: Favorites and hand-made lists
@@ -173,7 +183,7 @@ module Services
             books.each { |book| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book.id) }
           end
 
-          private_class_method :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
+          private_class_method :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :sibling_carries?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
         end
       end
     end
