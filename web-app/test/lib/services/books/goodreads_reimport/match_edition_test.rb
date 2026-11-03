@@ -108,6 +108,8 @@ module Services
 
           assert_equal :create, result.data[:outcome]
           assert verdict.approved?
+          assert verdict.confidence_certain?
+          assert verdict.decided_by_rule?
           assert_empty verdict.payload["candidate_book_ids"]
         end
 
@@ -151,10 +153,33 @@ module Services
           assert_equal existing, result.data[:verdict]
         end
 
-        test "a rejected verdict is matched again" do
-          ::Books::RepairVerdict.create!(kind: :reimport_match, subject_key: @key, payload: {}, decided_by: :ai, status: :rejected, confidence: :low)
+        test "a current rejected verdict is left alone: no finder, no AI" do
+          rejected = ::Books::RepairVerdict.create!(kind: :reimport_match, subject_key: @key, payload: {"x" => 1}, decided_by: :ai, status: :rejected, confidence: :low)
+          finder = mock
+          finder.expects(:call).never
+          klass = mock
+          klass.expects(:new).never
 
-          assert_equal :create, run_match(match, nil).data[:outcome]
+          result = MatchEdition.call(edition: @edition, exclude_ids: Set.new, finder: finder, task_class: klass)
+
+          assert_equal :rejected, result.data[:outcome]
+          assert_equal rejected, result.data[:verdict]
+          assert_equal({"x" => 1}, rejected.reload.payload)
+        end
+
+        test "call without a finder builds the blinded one with the excluded ids" do
+          x = @other.id
+          DataImporters::Books::Book::Finder.expects(:new).with { |**kw|
+            kw[:exclude_ids] == Set[x] && kw[:identifier_sources] == DataImporters::Books::Book::Finder::TRUSTED_IDENTIFIER_SOURCES
+          }.returns(Fake.new(match))
+
+          assert_equal :create, MatchEdition.call(edition: @edition, exclude_ids: Set[x]).data[:outcome]
+        end
+
+        test "the finder's record also listed among its candidates counts once" do
+          run_match(match(record: @pick, candidates: [@pick, @other]), task_returning(@pick.id))
+
+          assert_equal [@pick.id, @other.id], verdict.payload["candidate_book_ids"]
         end
 
         test "default_finder is blinded and passes the excluded mixed books through" do

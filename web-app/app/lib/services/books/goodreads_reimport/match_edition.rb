@@ -36,8 +36,10 @@ module Services
         end
 
         def call
-          kept = ::Books::RepairVerdict.where(kind: :reimport_match, subject_key: @key).find { |verdict| !verdict.rejected? }
-          return done(:kept, kept) if kept
+          existing = ::Books::RepairVerdict.find_by(kind: :reimport_match, subject_key: @key)
+          # A rejected verdict is an admin's "no" and RecordVerdict would suppress any new one, so leave it alone.
+          return done(:rejected, existing) if existing&.rejected? && existing.superseded_at.nil?
+          return done(:kept, existing) if existing && !existing.rejected?
 
           @facts = EditionFacts.call(edition: @edition)
           match = (@finder || self.class.default_finder(exclude_ids: @exclude_ids)).call(query: @facts.to_query, verify: true, subject: @edition)
@@ -77,10 +79,13 @@ module Services
             "candidate_book_ids" => books.map(&:id)
           }
           recorded = ::Services::Books::GoodreadsReplay::RecordVerdict.call(
-            kind: :reimport_match, subject_key: @key, payload: payload, decided_by: :ai,
-            confidence: confidence || :high, reason: answer ? ai[:reason] : "no candidate book found",
+            kind: :reimport_match, subject_key: @key, payload: payload, decided_by: answer ? :ai : :rule,
+            confidence: answer ? confidence : :certain, reason: answer ? ai[:reason] : "no candidate book found",
             ai_chat_id: answer&.ai_chat&.id, auto: auto, replace_superseded: true
           )
+          outcome = recorded.data[:outcome]
+          return done(outcome, recorded.data[:verdict]) if %i[suppressed kept].include?(outcome)
+
           done(book_id.present? ? :matched : :create, recorded.data[:verdict])
         end
 
