@@ -126,7 +126,7 @@ module Services
 
         # @return [Boolean] true when a new link was made
         def link(category)
-          item = ::CategoryItem.find_or_create_by!(category: category, item: @book)
+          item = ::CategoryItem.find_or_create_by!(category: category, item: @book) { |item| item.source = :worldcat }
           item.previously_new_record?
         end
       end
