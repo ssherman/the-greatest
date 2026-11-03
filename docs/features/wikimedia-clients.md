@@ -29,6 +29,15 @@ against a Wikimedia host directly.
 exact title, following redirects, with the page's Wikidata item and whether it is a
 disambiguation page. There is no search method.
 
+`article(language:, title:)` returns a `Wikipedia::Article` (title, url, page_id, lead, plot,
+infobox) or nil for a missing, invalid or disambiguation page. It exists for book evidence: the
+category/origin enrichment reads a book's Wikipedia article through its confirmed Wikidata
+enwiki sitelink. It makes two requests through the same `Wikimedia::Http`: the full plain-text
+extract (lead capped at 2,000 characters; plot is the first Plot/Synopsis/Summary-style section,
+sub-headings dropped, capped at 6,000), then `action=parse` on section 0 for the infobox.
+`Wikipedia::Infobox.fields` keeps only `country`, `language`, `genre`, `subject` and `set_in`,
+stripping refs, links and templates.
+
 ## Pacing and etiquette
 
 - One request a second across every Wikimedia host, through a shared `DistributedRateLimiter` on
