@@ -32,7 +32,8 @@ module Services
           @map = ::Books::WorldCat::GenreMap.new("genres" => ["Fiction"], "terms" => {"Fiction" => {"verdict" => "genre", "genre" => "Fiction"}})
           @war = books_books(:war_and_peace)       # fixture ISBN 9780140447934
           @crime = books_books(:crime_and_punishment)
-          ::Identifier.create!(identifiable: @crime, identifier_type: :books_work_isbn13, value: "9780140449136")
+          ::Identifier.where(identifiable: @war, identifier_type: :books_work_isbn13).update_all(source: ::Identifier.sources[:open_library])
+          ::Identifier.create!(identifiable: @crime, identifier_type: :books_work_isbn13, value: "9780140449136", source: :open_library)
           @responses = {"9780140447934" => [record(1, "Fiction"), record(2, "Fiction")], "9780140449136" => [record(3, "Fiction")]}
           @sleeps = []
         end
@@ -108,12 +109,22 @@ module Services
         end
 
         test "a book carrying a valid and an invalid ISBN is looked up with the valid one only" do
-          ::Identifier.create!(identifiable: @war, identifier_type: :books_work_isbn13, value: "9780140447935") # bad check digit
+          ::Identifier.create!(identifiable: @war, identifier_type: :books_work_isbn13, value: "9780140447935", source: :open_library) # bad check digit
           client = FakeClient.new(@responses)
           result = run_backfill(client)
           assert result.success?
           assert_equal ["9780140447934", "9780140449136"], client.looked_up.sort
           assert_equal 2, result.data[:matched]
+        end
+
+        test "a book whose only ISBN-13 is unverified is not looked up" do
+          legacy = books_books(:of_mice_and_men)
+          ::Identifier.create!(identifiable: legacy, identifier_type: :books_work_isbn13, value: "9780140275360", source: :legacy)
+          client = FakeClient.new(@responses.merge("9780140275360" => [record(9, "Fiction")]))
+          result = run_backfill(client)
+          assert_equal ["9780140447934", "9780140449136"], client.looked_up.sort
+          assert_equal 2, result.data[:processed]
+          assert_not_includes legacy.reload.categories.pluck(:name), "Fiction"
         end
 
         test "a second run while one holds the lock exits at once" do

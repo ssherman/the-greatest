@@ -44,12 +44,19 @@ class WorldcatRakeTest < ActiveSupport::TestCase
     assert_output(/added 5 aliases on 2 genres; genres named by the map but missing: Nope/) { Rake::Task["worldcat:apply_aliases"].invoke }
   end
 
-  test "backfill queues one run with a count or all" do
-    Books::WorldCatBackfillJob.expects(:perform_async).with(100, instance_of(String))
-    assert_output(/queued WorldCat backfill run .*: 100 books/) { Rake::Task["worldcat:backfill"].invoke("100") }
-    Rake::Task["worldcat:backfill"].reenable
+  test "backfill[verified] queues one run over every verified book" do
     Books::WorldCatBackfillJob.expects(:perform_async).with(nil, instance_of(String))
-    assert_output(/all books/) { Rake::Task["worldcat:backfill"].invoke("all") }
+    assert_output(/queued WorldCat backfill run .*: every book with a verified ISBN-13/) { Rake::Task["worldcat:backfill"].invoke("verified") }
+  end
+
+  test "backfill[<count>] queues a limited run" do
+    Books::WorldCatBackfillJob.expects(:perform_async).with(100, instance_of(String))
+    assert_output(/: 100 books/) { Rake::Task["worldcat:backfill"].invoke("100") }
+  end
+
+  test "backfill[all] is refused and points at verified" do
+    Books::WorldCatBackfillJob.expects(:perform_async).never
+    assert_output(nil, /worldcat:backfill\[verified\]/) { assert_raises(SystemExit) { Rake::Task["worldcat:backfill"].invoke("all") } }
   end
 
   test "backfill aborts with usage on anything else" do
