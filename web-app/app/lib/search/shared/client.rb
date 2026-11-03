@@ -3,6 +3,11 @@
 module Search
   module Shared
     class Client
+      # What a search call raises when OpenSearch cannot answer: a non-2xx from
+      # the cluster (opensearch-ruby's Transport::Error tree) or a failure to
+      # reach it at all (Faraday's). The public API turns these into a 503.
+      UNAVAILABLE_ERRORS = [::OpenSearch::Transport::Transport::Error, ::Faraday::Error].freeze
+
       class << self
         def instance
           @instance ||= begin

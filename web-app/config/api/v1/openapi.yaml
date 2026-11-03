@@ -672,6 +672,53 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/search/books:
+    x-domain: books
+    get:
+      operationId: searchBooks
+      summary: Search books
+      description: |
+        Full-text search over the catalogue, best match first. `q` is required; a missing or blank `q` is a 400. Only standalone, catalogued books are returned (not collections, and not books still awaiting review). A query yields at most 100 matches, so `total_count` never exceeds 100: refine the query rather than paging for more. `rank` is the book's position in the site's primary ranking, or null when it is unranked. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search text.
+          schema:
+            type: string
+            minLength: 1
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of matching books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 components:
   securitySchemes:
     bearerAuth:
@@ -851,6 +898,25 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    ServiceUnavailable:
+      description: A service this endpoint depends on is down. Retry shortly.
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+        X-RateLimit-Daily-Limit:
+          $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+        X-RateLimit-Daily-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+        X-RateLimit-Daily-Reset:
+          $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
   schemas:
     Problem:
       description: RFC 9457 Problem Details with a stable `code`.
@@ -866,7 +932,7 @@ components:
           type: integer
         code:
           type: string
-          enum: [unauthenticated, invalid_token, membership_required, insufficient_scope, not_found, invalid_parameter, rate_limited]
+          enum: [unauthenticated, invalid_token, membership_required, insufficient_scope, not_found, invalid_parameter, rate_limited, search_unavailable]
         detail:
           type: string
     PaginationMeta:
