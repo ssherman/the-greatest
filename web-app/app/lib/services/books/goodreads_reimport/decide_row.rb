@@ -78,7 +78,9 @@ module Services
         # counts as applied even if applied_at was lost after it.
         def destination(row)
           match = matches[row.goodreads_edition_id]
-          return nil unless match&.approved? && (match.applied_at || match.payload["created_book_id"])
+          return nil unless match&.approved?
+          return nil unless match.applied_at || match.payload["created_book_id"]
+
           id = match.payload["book_id"] || match.payload["created_book_id"]
           # A book merged away since the match was decided is followed, as from_id does for the legacy book.
           ::Services::Books::GoodreadsReplay::Apply::MergedBook.call(id)&.id
