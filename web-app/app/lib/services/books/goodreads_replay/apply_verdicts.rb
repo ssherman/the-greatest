@@ -18,8 +18,8 @@ module Services
       # first full replay writes verdicts and applies nothing.
       class ApplyVerdicts
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
-        POSTGRES_ERRORS = [ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished].freeze
-        DEADLOCK_ATTEMPTS = 3
+        include HandlerRun
+
         HANDLERS = {
           fix_identity: Apply::FixIdentity,
           merge_authors: Apply::MergeAuthors,
@@ -52,27 +52,11 @@ module Services
               tally["#{kind} #{apply(verdict, handler)}"] += 1
             end
           end
-          queue_follow_ups
+          queue_follow_ups(@rankings | @reweigh, @follow_ups)
           Result.new(success?: true, data: {tally: tally.to_h, ranking_configuration_ids: (@rankings | @reweigh).to_a}, errors: [])
         end
 
         private
-
-        # The merges defer their per-merge requests, so a run of thousands of
-        # merges asks for each configuration once. Every refresh reweighs before
-        # it ranks, so a configuration a merge touched and one only a provisional
-        # flag touched get the same request. Sorted so the request is
-        # deterministic.
-        def queue_follow_ups
-          ::Services::RankingConfigurations::RequestRefresh.call_for_ids((@rankings | @reweigh).sort, delay: 5.minutes)
-          ::GenerateUserFavoritesListsJob.perform_async("Books::UserList") if @follow_ups.include?(:user_favorites)
-          request_author_rankings if @follow_ups.include?(:author_rankings)
-        end
-
-        def request_author_rankings
-          authors = ::Books::Authors::RankingConfiguration.default_primary
-          ::Services::RankingConfigurations::RequestRefresh.call(config: authors, delay: 5.minutes) if authors
-        end
 
         def apply(verdict, handler)
           result = call_handler(verdict, handler)
@@ -87,23 +71,6 @@ module Services
         rescue => e
           verdict.update!(error: "#{e.class}: #{e.message}")
           :failed
-        end
-
-        # Enrichment jobs running alongside apply update the same rows (a country's book_count, say), so
-        # Postgres sometimes kills apply's transaction to break a deadlock. That attempt rolled back, and every
-        # handler is safe to re-run, so the verdict is tried again from its stored state; the in-memory copy
-        # may still hold what the rolled-back attempt wrote. Still deadlocked after that, the run stops.
-        def call_handler(verdict, handler)
-          attempt = 1
-          begin
-            handler.call(verdict: verdict)
-          rescue ActiveRecord::Deadlocked
-            raise if attempt >= DEADLOCK_ATTEMPTS
-            sleep(attempt)
-            attempt += 1
-            verdict.reload
-            retry
-          end
         end
       end
     end

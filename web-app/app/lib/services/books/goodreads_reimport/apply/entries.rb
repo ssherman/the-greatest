@@ -77,7 +77,9 @@ module Services
              reweigh_configuration_ids: (ranked + [::Books::RankingConfiguration.default_primary&.id]).compact.uniq}
           end
 
-          def noop(reason) = Result.new(success?: true, data: {outcome: :noop, reason: reason}, errors: [])
+          # final: true says nothing will ever change this answer (the thing to act on is already gone), so the
+          # orchestrator marks the verdict done instead of offering it again on every run.
+          def noop(reason, final: false) = Result.new(success?: true, data: {outcome: :noop, reason: reason, final: final}, errors: [])
 
           def applied(extra = {}) = Result.new(success?: true, data: {outcome: :applied}.merge(extra), errors: [])
 

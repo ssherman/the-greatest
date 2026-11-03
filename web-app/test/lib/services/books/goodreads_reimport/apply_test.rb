@@ -1,0 +1,147 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+module Services
+  module Books
+    module GoodreadsReimport
+      class ApplyTest < ActiveSupport::TestCase
+        include GoodreadsReimportApplyHelper
+
+        setup do
+          setup_reader
+          @n = 0
+          @tolstoy = books_authors(:tolstoy)
+          @garnett = books_authors(:garnett)
+          @from.book_authors.destroy_all
+          ::Books::BookAuthor.create!(book: @from, author: @tolstoy, position: 1)
+          GoodreadsRebuild::Cohort.stubs(:trusted?).returns(false)
+          ::Services::RankingConfigurations::RequestRefresh.stubs(:call_for_ids)
+        end
+
+        def strip_verdict(book: @to, **attributes)
+          @n += 1
+          Identifier.create!(identifiable: book, identifier_type: :books_work_isbn13, value: "978000000#{@n.to_s.rjust(4, "0")}", source: :legacy)
+          ::Books::RepairVerdict.create!(kind: :reimport_strip, subject_key: "reimport:strip:#{book.id}:#{@n}", decided_by: :rule, status: :approved,
+            **attributes, payload: {"book_id" => book.id, "identifier_type" => "books_work_isbn13", "value" => "978000000#{@n.to_s.rjust(4, "0")}"})
+        end
+
+        def author_verdict(**attributes)
+          ::Books::RepairVerdict.create!(kind: :reimport_author, subject_key: "reimport:author:#{@from.id}", decided_by: :rule, status: :approved,
+            **attributes, payload: {"book_id" => @from.id, "row_author_names" => ["Constance Garnett"], "after" => {"Constance Garnett" => @garnett.id}})
+        end
+
+        def mixed_verdict
+          lump = ::Books::Book.create!(title: "Lump #{@n += 1}", book_kind: :standalone)
+          UserListItem.create!(user_list: list(:read), listable: lump)
+          [lump, ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{lump.id}", decided_by: :rule, status: :approved,
+            payload: {"book_id" => lump.id, "archive" => {}})]
+        end
+
+        test "applies the first kind that has work and leaves later kinds for later calls" do
+          strip = strip_verdict
+          author = author_verdict
+          Apply::Strip.stubs(:call).returns(Apply::Entries.noop("held back"))
+
+          result = Apply.call
+
+          assert_equal [1, 1, 0], result.data.values_at(:applied, :noop, :failed)
+          assert_nil strip.reload.applied_at
+          # every strip answered noop, so the call moves on rather than stall on them
+          assert_not_nil author.reload.applied_at
+        end
+
+        test "stops at a kind the limit cut short, and the next call continues there" do
+          first = strip_verdict
+          second = strip_verdict
+          author = author_verdict
+
+          result = Apply.call(limit: 1)
+
+          assert_equal [1, 2], result.data.values_at(:applied, :remaining)
+          assert_not_nil first.reload.applied_at
+          assert_nil second.reload.applied_at
+          assert_nil author.reload.applied_at
+
+          result = Apply.call(limit: 5)
+
+          assert_equal [2, 0], result.data.values_at(:applied, :remaining)
+          assert_not_nil second.reload.applied_at
+          assert_not_nil author.reload.applied_at
+        end
+
+        test "a mixed book that is not empty stays unapplied and does not hold the authors back" do
+          lump, mixed = mixed_verdict
+          author = author_verdict
+
+          result = Apply.call
+
+          assert_equal [1, 1, 0], result.data.values_at(:applied, :noop, :remaining)
+          assert_nil mixed.reload.applied_at
+          assert ::Books::Book.exists?(lump.id)
+          assert_not_nil author.reload.applied_at
+          assert_equal({"not empty: list items remain" => 1}, result.data[:noop_reasons])
+        end
+
+        test "an emptied mixed book is deleted and its verdict closed" do
+          lump, mixed = mixed_verdict
+          UserListItem.where(listable: lump).delete_all
+
+          Apply.call
+
+          assert_not ::Books::Book.exists?(lump.id)
+          assert_not_nil mixed.reload.applied_at
+        end
+
+        test "skips unapproved, superseded and already applied verdicts" do
+          proposed = strip_verdict(status: :proposed)
+          superseded = strip_verdict(superseded_at: Time.current)
+          done = strip_verdict(applied_at: 1.day.ago)
+
+          result = Apply.call
+
+          assert_equal [0, 0, 0], result.data.values_at(:applied, :noop, :remaining)
+          assert_nil proposed.reload.applied_at
+          assert_nil superseded.reload.applied_at
+          assert_in_delta 1.day.ago, done.reload.applied_at, 5
+        end
+
+        test "a handler that raises records the error and the run carries on" do
+          failing = strip_verdict
+          author = author_verdict
+          Apply::Strip.stubs(:call).raises(RuntimeError, "boom")
+
+          result = Apply.call
+
+          assert_equal [1, 1], result.data.values_at(:applied, :failed)
+          assert_equal "RuntimeError: boom", failing.reload.error
+          assert_nil failing.applied_at
+          assert_not_nil author.reload.applied_at
+        end
+
+        test "retries a deadlocked handler" do
+          verdict = strip_verdict
+          calls = 0
+          Apply::Strip.stubs(:call).with { calls += 1 }.raises(ActiveRecord::Deadlocked).then.returns(Apply::Entries.applied)
+          Apply::Run.any_instance.stubs(:sleep)
+
+          result = Apply.call
+
+          assert_equal 1, result.data[:applied]
+          assert_equal 2, calls
+          assert_not_nil verdict.reload.applied_at
+        end
+
+        test "follow-ups from every verdict are queued once" do
+          strip_verdict
+          strip_verdict
+          Apply::Strip.stubs(:call).returns(Apply::Entries.applied(follow_ups: [:user_favorites], reweigh_configuration_ids: [7]))
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).once.with([7], delay: 5.minutes)
+          ::GenerateUserFavoritesListsJob.expects(:perform_async).once.with("Books::UserList")
+
+          Apply.call
+        end
+      end
+    end
+  end
+end
