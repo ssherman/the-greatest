@@ -57,21 +57,24 @@ module Api
       # count(:all), not count: a relation carrying a custom select (a book's
       # listings ride their weight along) would otherwise be counted as
       # COUNT(<select list>), which Postgres rejects. It is what Pagy does too.
-      def render_page(relation, path:, query: {})
+      #
+      # `meta` is merged into the page's own meta members (a filtered list adds its
+      # `filters`); `query` is what links.* carry beyond page and per_page.
+      def render_page(relation, path:, query: {}, meta: {})
         page = ::Api::Page.from_params(params, total_count: relation&.count(:all) || 0)
         rows = (relation && page.page <= page.total_pages) ? relation.offset(page.offset).limit(page.per_page).to_a : []
 
         render json: {
           data: yield(rows),
-          meta: page.meta,
+          meta: page.meta.merge(meta),
           links: page.links("#{::Api::Host.base_url}#{path}", query: query)
         }
       end
 
       # One row at a time, for collections with no per-page lookups. The block
       # turns one row into its hash.
-      def render_ranked_page(relation, path:, query: {}, &row)
-        render_page(relation, path:, query:) { |rows| rows.map(&row) }
+      def render_ranked_page(relation, path:, query: {}, meta: {}, &row)
+        render_page(relation, path:, query:, meta:) { |rows| rows.map(&row) }
       end
     end
   end

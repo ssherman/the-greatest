@@ -174,7 +174,8 @@ for item in response.json()["data"]:
               not_found: "Nothing on this site has that slug or id.",
               invalid_parameter: "A query parameter is out of range; detail says which.",
               unprocessable: "The request was understood but cannot be carried out; detail says why.",
-              rate_limited: "A rate-limit window is exhausted; Retry-After says how long to wait."
+              rate_limited: "A rate-limit window is exhausted; Retry-After says how long to wait.",
+              search_unavailable: "Search is temporarily unavailable; retry shortly."
             }
           %>
           <% Api::Problem::DEFINITIONS.each do |code, (status, _title)| %>

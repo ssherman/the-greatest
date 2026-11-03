@@ -21,7 +21,8 @@ module Api
       not_found: [404, "Not found"],
       invalid_parameter: [400, "Invalid parameter"],
       unprocessable: [422, "Unprocessable"],
-      rate_limited: [429, "Rate limit exceeded"]
+      rate_limited: [429, "Rate limit exceeded"],
+      search_unavailable: [503, "Search unavailable"]
     }.freeze
 
     CODES = DEFINITIONS.keys.freeze
