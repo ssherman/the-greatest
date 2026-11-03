@@ -67,6 +67,8 @@ module Wikipedia
       response = @http.action_api(format(URL, language),
         action: "parse", page: title, prop: "wikitext", section: 0, redirects: 1)
       Infobox.fields(response.data.dig("parse", "wikitext"))
+    rescue ::Wikimedia::Exceptions::ApiError
+      {}  # the lead and plot are still worth keeping
     end
 
     # Lead = text before the first heading; plot = the first matching
@@ -93,7 +95,7 @@ module Wikipedia
           lead << line
         end
       end
-      [lead.join.strip.first(LEAD_BUDGET), plot&.join&.strip&.first(PLOT_BUDGET).presence]
+      [lead.join.strip.first(LEAD_BUDGET).presence, plot&.join&.strip&.first(PLOT_BUDGET).presence]
     end
   end
 end

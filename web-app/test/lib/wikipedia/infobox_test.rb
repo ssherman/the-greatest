@@ -26,7 +26,27 @@ module Wikipedia
       assert_equal({"set_in" => "Paris, France, London", "genre" => "Crime, thriller"}, Infobox.fields(wikitext))
     end
 
-    test "drops other templates, self-closing refs, and ignores text without an infobox" do
+    test "strips html comments and refs before splitting parameters" do
+      wikitext = "{{Infobox book\n| genre = <!-- See WP:NOVELS -->\n| country = United States<!-- first\npublication -->\n| language = USA<ref>Smith | Jones = x</ref>\n}}"
+
+      assert_equal({"country" => "United States", "language" => "USA"}, Infobox.fields(wikitext))
+    end
+
+    test "nested templates leave no residue" do
+      fields = Infobox.fields("{{Infobox book\n| country = France{{efn|Published {{small|first}} in Paris}}\n| set_in = {{plainlist|\n* {{lang|fr|Paris}}\n* London\n}}\n}}")
+
+      assert_equal "France", fields["country"]
+      assert_equal "London", fields["set_in"]
+      fields.each_value { |v| assert_no_match(/\{\{|\}\}/, v) }
+    end
+
+    test "strips emphasis and decodes entities" do
+      fields = Infobox.fields("{{Infobox book\n| genre = '''Gothic''' &amp; ''horror''&nbsp;novel\n}}")
+
+      assert_equal "Gothic & horror novel", fields["genre"]
+    end
+
+    test "drops other templates,self-closing refs, and ignores text without an infobox" do
       assert_equal({"country" => "France"}, Infobox.fields("{{Infobox book\n| country = France{{efn|note}}<ref name=a />\n}}"))
       assert_equal({}, Infobox.fields("Just text"))
       assert_equal({}, Infobox.fields(nil))

@@ -119,6 +119,39 @@ module Wikipedia
       assert_equal [2_000, 6_000], [article.lead.length, article.plot.length]
     end
 
+    test "article keeps lead and plot with an empty infobox when the parse request fails with an API error" do
+      stub_request(:get, API).with(query: hash_including(action: "query"))
+        .to_return(status: 200, body: file_fixture("wikipedia/article_lolita.json").read)
+      stub_request(:get, API).with(query: hash_including(action: "parse"))
+        .to_return(status: 200, body: {error: {code: "missingtitle", info: "gone"}}.to_json)
+
+      article = @client.article(language: "en", title: "Lolita")
+
+      assert_equal({}, article.infobox)
+      assert article.lead.start_with?("Lolita is")
+      assert article.plot.start_with?("Humbert")
+    end
+
+    test "article lead is nil when the text starts with a heading" do
+      body = {query: {pages: [{pageid: 5, title: "T", fullurl: "u", extract: "== Plot ==\nStory."}]}}.to_json
+      stub_request(:get, API).with(query: hash_including(action: "query")).to_return(status: 200, body: body)
+      stub_request(:get, API).with(query: hash_including(action: "parse")).to_return(status: 200, body: {parse: {wikitext: ""}}.to_json)
+
+      article = @client.article(language: "en", title: "T")
+
+      assert_nil article.lead
+      assert_equal "Story.", article.plot
+    end
+
+    test "article plot uses the first matching heading when matching headings nest" do
+      extract = "Lead.\n== Content ==\nOuter text.\n=== Plot ===\nInner text.\n== Other ==\nz"
+      body = {query: {pages: [{pageid: 5, title: "T", fullurl: "u", extract: extract}]}}.to_json
+      stub_request(:get, API).with(query: hash_including(action: "query")).to_return(status: 200, body: body)
+      stub_request(:get, API).with(query: hash_including(action: "parse")).to_return(status: 200, body: {parse: {wikitext: ""}}.to_json)
+
+      assert_equal "Outer text.\nInner text.", @client.article(language: "en", title: "T").plot
+    end
+
     test "article refuses a malformed language or blank title" do
       assert_raises(ArgumentError) { @client.article(language: "evil.com/x?", title: "X") }
       assert_raises(ArgumentError) { @client.article(language: "en", title: " ") }
