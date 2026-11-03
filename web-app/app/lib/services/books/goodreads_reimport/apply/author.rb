@@ -36,6 +36,7 @@ module Services
             ::ApplicationRecord.transaction do
               record_before(verdict, book)
               replace(book, authors)
+              remove_stale_alternates(verdict, authors)
             end
             Entries.applied(follow_ups: [:author_rankings])
           end
@@ -84,7 +85,22 @@ module Services
             book.authors.reset
           end
 
-          private_class_method :ordered_names, :resolve, :record_before, :replace
+          # Afterwards, an alternate name that is another author's own name, and that none of the author's rows
+          # names, goes (spec 4.7). What was removed is kept in the payload, by author id.
+          def self.remove_stale_alternates(verdict, authors)
+            removed = authors.each_with_object({}) do |author, all|
+              stale = CheckAuthor.stale_alternates(author)
+              next if stale.empty?
+
+              author.update!(alternate_names: author.alternate_names - stale)
+              all[author.id.to_s] = stale
+            end
+            return if removed.empty?
+
+            verdict.update_columns(payload: verdict.payload.merge("removed_alternate_names" => removed))
+          end
+
+          private_class_method :ordered_names, :resolve, :record_before, :replace, :remove_stale_alternates
         end
       end
     end

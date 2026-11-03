@@ -97,6 +97,17 @@ module Services
             assert_equal [@tolstoy.id], author_ids
           end
 
+          test "removes alternate names that are another author's name and records them" do
+            @garnett.update!(alternate_names: ["Leo Tolstoy", "Connie"])
+            ::Books::BookAuthor.create!(book: @book, author: @garnett, position: 2)
+            verdict = verdict(after: {"Constance Garnett" => @garnett.id, "Leo Tolstoy" => @tolstoy.id})
+
+            Author.call(verdict: verdict)
+
+            assert_equal ["Connie"], @garnett.reload.alternate_names
+            assert_equal({@garnett.id.to_s => ["Leo Tolstoy"]}, verdict.reload.payload["removed_alternate_names"])
+          end
+
           test "a proposed verdict is not applied" do
             verdict = verdict(after: {"Constance Garnett" => @garnett.id})
             verdict.update!(status: :proposed)
