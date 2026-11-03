@@ -69,7 +69,7 @@ module Services
           ::Books::GoodreadsImportRow
             .joins(:import).where(books_goodreads_imports: {source: ::Books::GoodreadsImport.sources[:legacy_replay],
                                                             status: ::Books::GoodreadsImport.statuses[:complete]})
-            .where(legacy_book_id: legacy_ids)
+            .where(legacy_book_id: legacy_ids).where.not(goodreads_edition_id: nil)
             .order(:import_id, :row_number).pluck(:import_id, :row_number)
         end
 

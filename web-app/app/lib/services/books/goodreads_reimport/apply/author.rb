@@ -20,7 +20,7 @@ module Services
             payload = verdict.payload
             book = GoodreadsReplay::Apply::MergedBook.call(payload["book_id"])
             return Entries.noop("book #{payload["book_id"]} no longer exists", final: true) unless book
-            if GoodreadsRebuild::Cohort.trusted?(book.id) && verdict.reviewed_at.blank?
+            if CheckAuthor.trusted?(book.id) && verdict.reviewed_at.blank?
               return Entries.noop("trusted book: needs an admin's approval")
             end
 

@@ -150,6 +150,16 @@ module Services
             assert_equal [:noop, true], Mixed.call(verdict: verdict).data.values_at(:outcome, :final)
           end
 
+          test "waits, deleting nothing, while its rows have no redirect target yet" do
+            verdict = mixed_verdict(redirect: nil)
+            verdict.update_columns(payload: verdict.payload.merge("row_keys" => [[@import.id, 1]]))
+
+            result = Mixed.call(verdict: verdict)
+
+            assert_equal [:noop, "waiting for redirect", false], result.data.values_at(:outcome, :reason, :final)
+            assert ::Books::Book.exists?(@mixed.id)
+          end
+
           test "no redirect is written when there is no target" do
             ::Services::BooksMigration::RedirectRecorder.expects(:merged).never
 

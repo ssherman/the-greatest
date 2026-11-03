@@ -30,7 +30,8 @@ module Services
           destination = most_read(verdicts)
           return done(:waiting) if destination.nil?
 
-          explained = verdicts.map { |verdict| verdict.payload["user_id"] }.to_set
+          # A superseded keep says the user re-imported that edition later: it explains no entry on this book.
+          explained = verdicts.reject { |verdict| verdict.payload["superseded_by"].present? }.map { |verdict| verdict.payload["user_id"] }.to_set
           guesses = unexplained_items(explained).sum { |type, id, user_id| record_guess(type, id, user_id, destination) }
           @mixed_verdict.update_columns(payload: @mixed_verdict.payload.merge("redirect_to_book_id" => destination))
           done(:decided, guesses: guesses, redirect_to_book_id: destination)

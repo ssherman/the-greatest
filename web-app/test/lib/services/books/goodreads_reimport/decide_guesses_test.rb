@@ -58,6 +58,18 @@ module Services
           assert_equal [@dest_a.id, @dest_b.id].min, DecideGuesses.call(mixed_verdict: @mixed_verdict).data[:redirect_to_book_id]
         end
 
+        test "a user whose only rows on the book are superseded keeps still has an unexplained entry" do
+          row_verdict(1, @dest_a)
+          row_verdict(2, @dest_a)
+          verdict(:reimport_row, "reimport:row:#{@import.id}:3",
+            {"user_id" => @user.id, "action" => "keep", "from_book_id" => @mixed.id, "to_book_id" => @dest_a.id,
+             "superseded_by" => "reimport:row:#{@import.id}:9"})
+
+          DecideGuesses.call(mixed_verdict: @mixed_verdict)
+
+          assert ::Books::RepairVerdict.reimport_guess.exists?(subject_key: "reimport:guess:UserListItem:#{@hand_added.id}")
+        end
+
         test "waits while any row is undecided" do
           row_verdict(1, @dest_a)
           row_verdict(2, @dest_a)

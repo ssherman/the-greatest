@@ -24,6 +24,12 @@ module Services
             book = ::Books::Book.find_by(id: verdict.payload["book_id"])
             return gone(verdict) unless book
 
+            # DecideGuesses writes the redirect once every row of the book is decided. A book that has rows but no
+            # redirect yet would be deleted with no address pointing anywhere.
+            if verdict.payload["redirect_to_book_id"].blank? && Array(verdict.payload["row_keys"]).any?
+              return Entries.noop("waiting for redirect")
+            end
+
             redirect_to = redirect_target(verdict, book.id)
             reason = nil
             ::ApplicationRecord.transaction do

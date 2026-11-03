@@ -41,8 +41,11 @@ module Services
           ::Books::BookAuthor.create!(book: @derived_lump, author: second, position: 2)
           ::Books::BookAuthor.create!(book: @derived_lump, author: first, position: 1)
           import = ::Books::GoodreadsImport.create!(user: @user, source: :legacy_replay, status: :complete, legacy_import_id: 91)
-          import.rows.create!(row_number: 7, legacy_book_id: @derived_lump.id)
-          import.rows.create!(row_number: 8, legacy_book_id: 999_999)
+          matched = ::Books::GoodreadsEdition.create!(goodreads_book_id: 88_001, signature: "mb-sig", title: "T", primary_author: "A")
+          import.rows.create!(row_number: 7, legacy_book_id: @derived_lump.id, goodreads_edition: matched)
+          import.rows.create!(row_number: 8, legacy_book_id: 999_999, goodreads_edition: matched)
+          # A row with no edition is never decided, so DecideGuesses would wait for it forever.
+          import.rows.create!(row_number: 9, legacy_book_id: @derived_lump.id)
           member = ::Books::GoodreadsImport.create!(user: users(:editor_user), source: :member, status: :complete)
           member.rows.create!(row_number: 1, legacy_book_id: @derived_lump.id)
 

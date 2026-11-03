@@ -24,6 +24,13 @@ module Services
           new(book: book, author_finder: author_finder, task_class: task_class).call
         end
 
+        # Trusted means a person put the book on a list by hand (Cohort). A book this run created is import-made
+        # whatever its id: it was made after the post-import range was fixed, so Cohort would call it trusted.
+        def self.trusted?(book_id)
+          ::Services::Books::GoodreadsRebuild::Cohort.trusted?(book_id) &&
+            !::Books::RepairVerdict.reimport_match.where("payload->>'created_book_id' = ?", book_id.to_s).exists?
+        end
+
         # Names on `author.alternate_names` that are another existing author's name and that no row of this
         # author's books names. They were put there by a merge or an import that confused two people.
         def self.stale_alternates(author)
@@ -136,7 +143,7 @@ module Services
             findings[name] = finding
           end
 
-          trusted = ::Services::Books::GoodreadsRebuild::Cohort.trusted?(@book.id)
+          trusted = self.class.trusted?(@book.id)
           auto = confident && !trusted
           recorded = ::Services::Books::GoodreadsReplay::RecordVerdict.call(
             kind: :reimport_author, subject_key: "reimport:author:#{@book.id}", decided_by: :ai, confidence: auto ? :high : :medium,

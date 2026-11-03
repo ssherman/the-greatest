@@ -76,6 +76,14 @@ module Services
             assert_equal [@garnett.id], author_ids
           end
 
+          test "a book this run created is applied without an admin's review" do
+            GoodreadsRebuild::Cohort.stubs(:trusted?).with(@book.id).returns(true)
+            ::Books::RepairVerdict.create!(kind: :reimport_match, subject_key: "reimport:edition:1", decided_by: :ai, status: :approved,
+              applied_at: Time.current, payload: {"outcome" => "create", "created_book_id" => @book.id})
+
+            assert_equal :applied, Author.call(verdict: verdict(after: {"Constance Garnett" => @garnett.id})).data[:outcome]
+          end
+
           test "authors already in place are a final noop" do
             result = Author.call(verdict: verdict(after: {"Leo Tolstoy" => @tolstoy.id}))
 

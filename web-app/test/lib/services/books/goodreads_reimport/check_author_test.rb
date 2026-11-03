@@ -177,6 +177,17 @@ module Services
           assert call.data[:verdict].proposed?
         end
 
+        test "a book this run created is import-made, not trusted, though its id lies above the post-import range" do
+          GoodreadsRebuild::Cohort.stubs(:trusted?).with(@book.id).returns(true)
+          ::Books::RepairVerdict.create!(kind: :reimport_match, subject_key: "reimport:edition:1", decided_by: :ai, status: :approved,
+            applied_at: Time.current, payload: {"outcome" => "create", "created_book_id" => @book.id})
+          edition("Constance Garnett")
+          @task_class.expects(:new).returns(ai)
+          @finder.expects(:call).returns(found(books_authors(:garnett)))
+
+          assert call.data[:verdict].approved?
+        end
+
         test "row names are the editions' primary authors, most common first, and an additional author joins only when the AI confirms it" do
           edition("Constance Garnett")
           edition("Brand New Writer", additional: ["Count L. N. Tolstoi"])
