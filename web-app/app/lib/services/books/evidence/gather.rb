@@ -15,7 +15,7 @@ module Services
         SCHEMA_VERSION = 1
         LIST_FIELDS = %w[countries languages genres main_subjects narrative_locations set_in_periods forms].freeze
 
-        def self.call(book:, wikidata: ::Wikidata::Client.new, wikipedia: ::Wikipedia::Client.new, worldcat: ::Books::WorldCat::Client.new)
+        def self.call(book:, wikidata: ::Wikidata::Client.new, wikipedia: ::Wikipedia::Client.new, worldcat: nil)
           new(book, wikidata, wikipedia, worldcat).call
         end
 
@@ -25,6 +25,7 @@ module Services
           @wikipedia = wikipedia
           @worldcat = worldcat
           @failed = []
+          @errors = {}
         end
 
         def call
@@ -40,12 +41,14 @@ module Services
             outcome: sections.any? ? :applied : :nothing_to_apply,
             facts: {
               "schema_version" => SCHEMA_VERSION,
+              "wikidata_qid" => resolution&.dig(:qid),
               "wikidata" => wikidata_section,
               "wikipedia" => wikipedia_section,
               "worldcat" => worldcat_section,
               "wikidata_rejected" => resolution ? resolution[:rejected] : [],
               "wikidata_conflict_book_id" => resolution&.dig(:conflict_book_id),
-              "sources_failed" => @failed
+              "sources_failed" => @failed,
+              "source_errors" => @errors
             }
           )
           Result.new(success?: true, data: {enrichment: enrichment}, errors: [])
@@ -55,9 +58,8 @@ module Services
 
         def resolve
           ResolveWikidataWork.call(book: @book, client: @wikidata).data
-        rescue ::Wikimedia::Exceptions::Error
-          @failed << "wikidata"
-          nil
+        rescue ::Wikimedia::Exceptions::Error => error
+          fail_source("wikidata", error)
         end
 
         def wikidata_section_for(work, resolution)
@@ -68,9 +70,8 @@ module Services
           section["publication_years"] = work.publication_years
           section["enwiki_title"] = work.enwiki_title
           section
-        rescue ::Wikimedia::Exceptions::Error
-          @failed << "wikidata"
-          nil
+        rescue ::Wikimedia::Exceptions::Error => error
+          fail_source("wikidata", error)
         end
 
         def wikipedia_section_for(title)
@@ -79,15 +80,21 @@ module Services
 
           {"title" => article.title, "url" => article.url, "lead" => article.lead,
            "plot" => article.plot, "infobox" => article.infobox}
-        rescue ::Wikimedia::Exceptions::Error
-          @failed << "wikipedia"
-          nil
+        rescue ::Wikimedia::Exceptions::Error => error
+          fail_source("wikipedia", error)
         end
 
         def worldcat_section_for
-          WorldCatSection.call(book: @book, client: @worldcat)
-        rescue ::Books::WorldCat::Exceptions::Error
-          @failed << "worldcat"
+          WorldCatSection.call(book: @book, client: @worldcat || ::Books::WorldCat::Client.new)
+        rescue ::Books::WorldCat::Exceptions::Error => error
+          fail_source("worldcat", error)
+        end
+
+        # Records the failure on the row and in the log; always returns nil (the section).
+        def fail_source(source, error)
+          @failed << source unless @failed.include?(source)
+          @errors[source] = "#{error.class}: #{error.message}".slice(0, 200)
+          Rails.logger.warn("Books::Evidence::Gather book #{@book.id}: #{source} failed (#{@errors[source]})")
           nil
         end
       end

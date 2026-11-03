@@ -98,7 +98,8 @@ second export on the same day reuses the day's file name and the trainer reports
    sync brings over new books without WorldCat-derived categories, and the backfill reads verified
    ISBN-13s only, which the new books do not have until the recheck verifies them. It is additive and
    idempotent, so a full run only adds links for books that have none yet; links are recorded as
-   source `worldcat`. It is a repeating step, not a one-off.
+   source `worldcat`. It is a repeating step, not a one-off. `books:verify` covers ranked books by default,
+   so unranked books added by the sync get no WorldCat links; that is by design.
 
 ## 5. Cleanup, after the switch-over
 

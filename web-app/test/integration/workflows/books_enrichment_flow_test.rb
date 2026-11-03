@@ -65,7 +65,7 @@ module Workflows
         calls << [:book_facts, kwargs[:book].title]
         true
       }.returns(book_result)
-      enrichment = stub(outcome: "nothing_to_apply", id: 0)
+      enrichment = stub(outcome: "nothing_to_apply", id: 0, facts: {"wikidata_qid" => nil})
       ::Services::Books::Evidence::Gather.stubs(:call).with { |**kwargs|
         calls << [:evidence, kwargs[:book].title]
         true

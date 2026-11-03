@@ -374,7 +374,8 @@ unverified ISBNs. New links are recorded as `CategoryItem` source `worldcat`.
 
 `bin/rails "worldcat:backfill[verified]"` (or a count) queues `Books::WorldCatBackfillJob` on the `low`
 queue, with retries off. It runs `Services::Books::WorldCat::Backfill`: books with a **verified**
-ISBN-13 (`Identifier.verified`: source `open_library` or `worldcat`), in id order, E2E leftovers excluded, 100 books per `lookup`, each book's records handed to
+ISBN-13 (`Identifier.verified`: source `open_library` or `worldcat`), in id order, E2E leftovers
+excluded, 100 books per `lookup`, each book's records handed to
 `Services::Books::WorldCat::ApplyCategories`. One run at a time: a Postgres advisory lock makes a
 second run exit at once. A failed lookup is retried with backoff (15 s up to 300 s, six retries);
 if those run out the run **stops** and the books it never reached stay untouched, so a tripped

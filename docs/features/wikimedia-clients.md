@@ -22,12 +22,15 @@ against a Wikimedia host directly.
   (P50) or is known for (P800).
 - `country_codes(item_ids)` -- one SPARQL query for a country item's ISO code (P297) and English
   label.
+- `work_items(author_item_ids)` -- one SPARQL query returning, per author item, the work items they wrote
+  (P50) or are known for (P800) as `{"id", "label"}` pairs with the English label (the book evidence
+  resolver matches these on title).
 - `labels(item_ids)` -- English labels for arbitrary items, else the all-languages (`mul`) label
   many items now carry instead (used for occupation and citizenship labels shown as evidence).
 
-`Wikipedia::Client` offers only `lead(language:, title:)`: the plain-text lead of one article by
+`Wikipedia::Client#lead(language:, title:)` returns the plain-text lead of one article by
 exact title, following redirects, with the page's Wikidata item and whether it is a
-disambiguation page. There is no search method.
+disambiguation page. `article` (below) is the other method. There is no search method.
 
 `article(language:, title:)` returns a `Wikipedia::Article` (title, url, page_id, lead, plot,
 infobox) or nil for a missing, invalid or disambiguation page. It exists for book evidence: the

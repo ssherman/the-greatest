@@ -52,6 +52,13 @@ module Services
           @book = books_books(:war_and_peace)
         end
 
+        test "a book with no usable ISBN-13 never loads the genre map" do
+          ::Identifier.where(identifiable: @book, identifier_type: [:books_work_isbn13, :books_work_isbn10]).delete_all
+          ::Books::WorldCat::GenreMap.expects(:load).never
+
+          assert_nil WorldCatSection.call(book: @book, client: FakeClient.new(lookup: {}))
+        end
+
         test "a verified ISBN is accepted without an identity check, even when its full record disagrees" do
           ::Identifier.where(identifiable: @book, identifier_type: :books_work_isbn13).update_all(source: ::Identifier.sources[:open_library])
           client = FakeClient.new(lookup: {MATCH => [slim(1, genre: "Fiction"), slim(2, genre: "Fiction")]},

@@ -43,6 +43,15 @@ class BooksEnrichRakeTest < ActiveSupport::TestCase
     assert_output(/Enqueued/) { @task.invoke("100000") }
   end
 
+  test "a book with only a books.evidence row still needs its book_facts run" do
+    evidence_only = ::Books::Book.create!(title: "Evidence Only")
+    evidence_only.enrichments.create!(kind: "books.evidence", outcome: :applied, facts: {})
+    ::Books::EnrichBookJob.stubs(:perform_async)
+    ::Books::EnrichBookJob.expects(:perform_async).with(evidence_only.id).once
+
+    assert_output(/Enqueued/) { @task.invoke("100000") }
+  end
+
   test "a deferred book counts as missing even with a description; a non-deferred described book does not" do
     # The Open Library provider can write a description onto a brand-new book
     # before AiEnrichment defers it to its new authors' chain. If that chain

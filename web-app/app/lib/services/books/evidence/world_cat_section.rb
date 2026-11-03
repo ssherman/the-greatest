@@ -16,7 +16,7 @@ module Services
         MAX_SUBJECTS = 40
         MAX_SUMMARY = 1_500
 
-        def self.call(book:, client: ::Books::WorldCat::Client.new, map: ::Books::WorldCat::GenreMap.load)
+        def self.call(book:, client: ::Books::WorldCat::Client.new, map: nil)
           new(book, client, map).call
         end
 
@@ -32,6 +32,7 @@ module Services
           isbns = held_isbns(verified)
           return if isbns.empty?
 
+          @map ||= ::Books::WorldCat::GenreMap.load
           found = @client.lookup(isbns).select { |_isbn, records| records.present? }
           trusted, unverified = found.keys.partition { |isbn| verified.include?(isbn) }
           accepted = trusted.dup

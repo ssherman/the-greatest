@@ -120,10 +120,14 @@ Wikidata, Wikipedia or WorldCat themselves. `facts` carries `"schema_version" =>
 genres, main subjects and narrative locations; nil when no work was confirmed), `wikipedia` (lead of at
 most 2,000 characters and plot of at most 6,000, reached only through the Wikidata item's enwiki
 sitelink, never a text search), `worldcat` (summary of at most 1,500 characters and the top 40 subjects,
-after a title/author identity check of the book's ISBNs), `wikidata_rejected`, `wikidata_conflict_book_id`
+after a title, author and year identity check of the book's unverified ISBNs; ISBNs on verified identifiers skip the check), `wikidata_rejected`, `wikidata_conflict_book_id`
 and `sources_failed`. The outcome is `applied` when any section is present, otherwise `nothing_to_apply`.
 `bin/rails books:evidence[id]` gathers it inline for one book and prints the QID, how it was found, the
 sections present and `sources_failed` (dev inspection; it writes a row).
+
+A row written before the WorldCat service is reachable in production records `worldcat` in
+`sources_failed` with no WorldCat section; stage 2 must re-gather those rows. `wikidata_qid` is the QID
+resolution ended with (or nil) and `source_errors` maps each failed source to its error class and message.
 
 ## Tuning
 

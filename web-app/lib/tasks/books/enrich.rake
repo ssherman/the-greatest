@@ -50,7 +50,9 @@ namespace :books do
     # missing: its author chain may never have reached it. The reason test
     # is NULL-safe on purpose -- where.not(reason:) would also drop every row
     # with no reason, which is most applied runs, and queue those books again.
-    ledgered = Enrichment.where(enrichable_type: "Books::Book")
+    # Only books.book_facts rows count: every book also gets a books.evidence row
+    # from the evidence step, which says nothing about whether book_facts ran.
+    ledgered = Enrichment.where(enrichable_type: "Books::Book", kind: ::Services::Books::EnrichBook::KIND)
       .where("enrichments.reason IS DISTINCT FROM ?", ::Services::Books::DeferredEnrichment::REASON)
     # The no-description rule only protects a book that was never deferred:
     # the Open Library provider writes a description onto a brand-new book

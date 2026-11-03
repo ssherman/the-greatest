@@ -49,7 +49,7 @@ location, and not the category itself or one of its descendants.
 ## Link sources
 
 `category_items.source` records why a link exists directly: `legacy` (0, from the old site and the
-weekly sync), `admin` (1, added in the admin), `inherited` (2). A row is `inherited` only because a
+weekly sync), `admin` (1, added in the admin), `inherited` (2), `goodreads` (3) and `worldcat` (4). A row is `inherited` only because a
 descendant location is linked to the same book. A later direct link upgrades the row to its source;
 it never goes the other way.
 

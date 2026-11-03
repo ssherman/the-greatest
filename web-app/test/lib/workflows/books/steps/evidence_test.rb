@@ -17,9 +17,8 @@ module Workflows
           adapter.call(step: run.step(:evidence), run: run, target: @book)
         end
 
-        test "succeeds with the enrichment's outcome, its id and the stored QID" do
-          @book.identifiers.create!(identifier_type: :books_work_wikidata_qid, value: "Q123", source: :wikidata)
-          enrichment = @book.enrichments.create!(kind: "books.evidence", outcome: :applied, facts: {"wikidata" => nil})
+        test "succeeds with the enrichment's outcome, its id and the QID the facts name" do
+          enrichment = @book.enrichments.create!(kind: "books.evidence", outcome: :applied, facts: {"wikidata" => nil, "wikidata_qid" => "Q123"})
           ::Services::Books::Evidence::Gather.expects(:call).with(book: @book).returns(stub(data: {enrichment: enrichment}))
 
           result = call
@@ -27,8 +26,9 @@ module Workflows
           assert_equal [:succeeded, "applied", {"enrichment_id" => enrichment.id, "qid" => "Q123"}], [result.kind, result.outcome, result.result]
         end
 
-        test "the qid is nil when the book has no stored QID" do
-          enrichment = @book.enrichments.create!(kind: "books.evidence", outcome: :nothing_to_apply, facts: {})
+        test "the qid is nil when the facts name none, whatever identifiers the book holds" do
+          @book.identifiers.create!(identifier_type: :books_work_wikidata_qid, value: "Q999", source: :wikidata)
+          enrichment = @book.enrichments.create!(kind: "books.evidence", outcome: :nothing_to_apply, facts: {"wikidata_qid" => nil})
           ::Services::Books::Evidence::Gather.stubs(:call).returns(stub(data: {enrichment: enrichment}))
 
           result = call

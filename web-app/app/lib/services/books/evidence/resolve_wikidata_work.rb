@@ -14,7 +14,13 @@ module Services
       # A candidate that fails the check is recorded in data[:rejected] with a
       # reason: not_written_work, author_mismatch, ambiguous_edition (an edition
       # of several works, or of another edition), edition_without_work,
-      # unparseable, ambiguous_statements, ambiguous_title.
+      # unparseable, title_mismatch (a stored or statement hit whose label is not
+      # the book's title or an alternate title), ambiguous_statements, ambiguous_title.
+      #
+      # A stored QID that fails acceptance, or whose entity is gone, is removed when
+      # it was written by this resolver (source wikidata). A QID already held by
+      # another book is stored on neither, and an unmerged identifier-collision
+      # candidate naming it keeps both books from taking it again.
       #
       # ISBN statements are not used: Wikidata stores P212 hyphenated and
       # haswbstatement needs the exact string.
@@ -44,17 +50,7 @@ module Services
           qid, work, via = resolve
           return finish(nil, nil, nil) if qid.nil?
 
-          conflict = holder_of(qid)
-          if conflict
-            ::Services::DuplicateCandidates::Flag.call(
-              item_type: "Books::Book", ids: [@book.id, conflict.identifiable_id], source: :identifier_collision,
-              evidence: {"wikidata_qid" => qid, "via" => via}
-            )
-            return finish(nil, nil, nil, conflict_book_id: conflict.identifiable_id)
-          end
-
-          store(qid)
-          finish(qid, work, via)
+          commit(qid, work, via)
         end
 
         private
@@ -68,10 +64,11 @@ module Services
           return if stored.blank?
 
           entity = @client.entities([stored])[stored]
-          return if entity.nil?
+          work = entity && accept(entity, check_title: true)
+          return [work.id, work, "stored"] if work
 
-          work = accept(entity)
-          [work.id, work, "stored"] if work
+          own_rows.first.destroy! if own_rows.first&.source_wikidata?
+          nil
         end
 
         # Every id the book holds, Goodreads first. The search is asked for as many
@@ -103,11 +100,12 @@ module Services
         end
 
         def unique_work(ids, ambiguity, via)
+          check_title = via != "author_works"
           ids = ids.uniq
           return if ids.empty?
 
           entities = @client.entities(ids)
-          works = ids.filter_map { |id| entities[id] && accept(entities[id]) }.uniq(&:id)
+          works = ids.filter_map { |id| entities[id] && accept(entities[id], check_title: check_title) }.uniq(&:id)
           return [works.first.id, works.first, via] if works.size == 1
 
           works.each { |work| @rejected << {"id" => work.id, "reason" => ambiguity} }
@@ -115,7 +113,7 @@ module Services
         end
 
         # The distilled Work when the entity passes the check, else nil with the reason recorded.
-        def accept(entity)
+        def accept(entity, check_title: false)
           work = distill(entity)
           return reject(entity.is_a?(Hash) ? entity["id"] : nil, "unparseable") if work.nil?
 
@@ -133,6 +131,7 @@ module Services
           end
           return reject(work.id, "not_written_work") unless work.written_work?
           return reject(work.id, "author_mismatch") unless authors_ok?(work)
+          return reject(work.id, "title_mismatch") if check_title && !title_ok?(work)
 
           work
         end
@@ -146,6 +145,10 @@ module Services
         def reject(id, reason)
           @rejected << {"id" => id, "reason" => reason}
           nil
+        end
+
+        def title_ok?(work)
+          Check.titles_agree?(@book, WorkLike.new(title: work.label, subtitle: nil, author_names: [], author_keys: []))
         end
 
         def authors_ok?(work)
@@ -171,14 +174,46 @@ module Services
             .where.not(identifiable_id: @book.id).order(:id).first
         end
 
+        # Holder check, block check and store happen under one per-QID advisory lock,
+        # so two books resolving the same QID at once cannot both store it.
+        def commit(qid, work, via)
+          conflict_id = nil
+          ::Identifier.transaction do
+            connection = ::Identifier.connection
+            connection.execute("SELECT pg_advisory_xact_lock(hashtext(#{connection.quote(qid)}))")
+            holder = holder_of(qid)
+            if holder
+              ::Services::DuplicateCandidates::Flag.call(
+                item_type: "Books::Book", ids: [@book.id, holder.identifiable_id], source: :identifier_collision,
+                evidence: {"wikidata_qid" => qid, "via" => via}
+              )
+              holder.destroy! if holder.source_wikidata?
+              conflict_id = holder.identifiable_id
+            elsif (blocker = blocking_candidate(qid))
+              conflict_id = [blocker.item_a_id, blocker.item_b_id].find { |id| id != @book.id }
+            else
+              store(qid)
+            end
+          end
+          return finish(nil, nil, nil, conflict_book_id: conflict_id) if conflict_id
+
+          finish(qid, work, via)
+        end
+
+        # A pair raised over this QID that nobody has merged keeps it off both books,
+        # so a dismissed pair still blocks: the QID was wrong for at least one of them.
+        def blocking_candidate(qid)
+          ::DuplicateCandidate.raised_by_identifier_collision
+            .where(item_type: "Books::Book", status: [:pending, :not_duplicate])
+            .where("evidence->>'wikidata_qid' = ?", qid).order(:id).first
+        end
+
         def store(qid)
           rows = own_rows.to_a
           return if rows.size == 1 && rows.first.value == qid
 
-          ::Identifier.transaction do
-            rows.each(&:destroy!)
-            ::Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: qid, source: :wikidata)
-          end
+          rows.each(&:destroy!)
+          ::Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: qid, source: :wikidata)
         end
 
         def finish(qid, work, via, conflict_book_id: nil)

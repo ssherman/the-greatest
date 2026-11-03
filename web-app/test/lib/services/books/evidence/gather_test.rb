@@ -30,10 +30,10 @@ module Services
         end
 
         test "a full hit writes one row with all three sections and English labels" do
-          ResolveWikidataWork.expects(:call).returns(resolved)
+          ResolveWikidataWork.expects(:call).with(book: @book, client: @wikidata).returns(resolved)
           @wikidata.expects(:labels).once.returns({"Q159" => "Russian Empire", "Q7737" => "Russian", "Q8261" => "novel"})
           @wikipedia.expects(:article).with(language: "en", title: "War and Peace").returns(@article)
-          WorldCatSection.expects(:call).returns(@section)
+          WorldCatSection.expects(:call).with(book: @book, client: @worldcat).returns(@section)
 
           result = nil
           assert_difference -> { @book.enrichments.for_kind("books.evidence").count }, 1 do
@@ -48,11 +48,99 @@ module Services
           assert_equal ["Russian Empire"], facts["wikidata"]["countries"]
           assert_equal ["Russian"], facts["wikidata"]["languages"]
           assert_equal "Q161531", facts["wikidata"]["qid"]
+          assert_equal "Q161531", facts["wikidata_qid"]
+          assert_equal %w[qid via label description countries languages genres main_subjects narrative_locations
+            set_in_periods forms publication_years enwiki_title].sort, facts["wikidata"].keys.sort
+          assert_equal %w[title url lead plot infobox].sort, facts["wikipedia"].keys.sort
+          assert_equal({}, facts["source_errors"])
           assert_equal "A plot", facts["wikipedia"]["plot"]
           assert_equal @section, facts["worldcat"]
           assert_equal [{"id" => "Q1", "reason" => "x"}], facts["wikidata_rejected"]
           assert_nil facts["wikidata_conflict_book_id"]
           assert_equal [], facts["sources_failed"]
+        end
+
+        test "a conflict records the other book's id" do
+          data = resolved(work: nil).data.merge(conflict_book_id: 42)
+          ResolveWikidataWork.expects(:call).returns(ResolveWikidataWork::Result.new(success?: true, errors: [], data: data))
+          WorldCatSection.expects(:call).returns(nil)
+
+          assert_equal 42, gather.data[:enrichment].facts["wikidata_conflict_book_id"]
+        end
+
+        test "a Wikidata network error in resolution fails wikidata, never asks Wikipedia and keeps WorldCat" do
+          ResolveWikidataWork.expects(:call).raises(Wikimedia::Exceptions::NetworkError.new("down"))
+          @wikipedia.expects(:article).never
+          WorldCatSection.expects(:call).returns(@section)
+
+          row = gather.data[:enrichment]
+
+          assert_equal ["wikidata"], row.facts["sources_failed"]
+          assert_equal [], row.facts["wikidata_rejected"]
+          assert_nil row.facts["wikidata_qid"]
+          assert_equal @section, row.facts["worldcat"]
+          assert_match(/NetworkError: down/, row.facts["source_errors"]["wikidata"])
+        end
+
+        test "a failed source is logged with the book id" do
+          ResolveWikidataWork.expects(:call).returns(resolved(work: nil))
+          WorldCatSection.expects(:call).raises(::Books::WorldCat::Exceptions::CircuitOpenError.new("open"))
+          Rails.logger.expects(:warn).with(regexp_matches(/book #{@book.id}: worldcat failed/))
+
+          gather
+        end
+
+        test "the QID is recorded even when the labels call fails" do
+          ResolveWikidataWork.expects(:call).returns(resolved)
+          @wikidata.expects(:labels).raises(Wikimedia::Exceptions::NetworkError.new("down"))
+          WorldCatSection.stubs(:call).returns(nil)
+
+          facts = gather.data[:enrichment].facts
+
+          assert_nil facts["wikidata"]
+          assert_equal "Q161531", facts["wikidata_qid"]
+          assert_match(/NetworkError: down/, facts["source_errors"]["wikidata"])
+        end
+
+        test "a Wikipedia error is described in source_errors, truncated to 200 characters" do
+          ResolveWikidataWork.expects(:call).returns(resolved)
+          @wikidata.stubs(:labels).returns({})
+          @wikipedia.expects(:article).raises(Wikimedia::Exceptions::NetworkError.new("x" * 500))
+          WorldCatSection.stubs(:call).returns(nil)
+
+          assert_equal 200, gather.data[:enrichment].facts["source_errors"]["wikipedia"].length
+        end
+
+        test "a WorldCat client that cannot be built fails worldcat, not the step" do
+          ResolveWikidataWork.expects(:call).returns(resolved(work: nil))
+          ::Books::WorldCat::Client.expects(:new).raises(::Books::WorldCat::Exceptions::ConfigurationError.new("no base url"))
+
+          row = Gather.call(book: @book, wikidata: @wikidata, wikipedia: @wikipedia).data[:enrichment]
+
+          assert_equal ["worldcat"], row.facts["sources_failed"]
+          assert_nil row.facts["worldcat"]
+          assert_match(/ConfigurationError: no base url/, row.facts["source_errors"]["worldcat"])
+        end
+
+        test "a rate limit from labels propagates and writes nothing" do
+          ResolveWikidataWork.expects(:call).returns(resolved)
+          @wikidata.expects(:labels).raises(Wikimedia::Exceptions::RateLimited.new("slow down", retry_after: 1))
+          WorldCatSection.stubs(:call).returns(nil)
+
+          assert_no_difference -> { @book.enrichments.for_kind("books.evidence").count } do
+            assert_raises(Wikimedia::Exceptions::RateLimited) { gather }
+          end
+        end
+
+        test "a rate limit from article propagates and writes nothing" do
+          ResolveWikidataWork.expects(:call).returns(resolved)
+          @wikidata.stubs(:labels).returns({})
+          @wikipedia.expects(:article).raises(Wikimedia::Exceptions::RateLimited.new("slow down", retry_after: 1))
+          WorldCatSection.stubs(:call).returns(nil)
+
+          assert_no_difference -> { @book.enrichments.for_kind("books.evidence").count } do
+            assert_raises(Wikimedia::Exceptions::RateLimited) { gather }
+          end
         end
 
         test "nothing found records nothing_to_apply with every section nil" do

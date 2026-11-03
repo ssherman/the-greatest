@@ -162,14 +162,16 @@ Never by text search. In order, stopping at the first hit that passes the check:
 **Check before accepting:** the item is a written work (instance of / subclass of literary work,
 book, novel, poem, play, essay, written work and so on; not an edition, film, or scholarly
 article), and if the item lists authors (P50), at least one is an author of ours (by QID, or by
-name key when the author has no QID). A hit that fails the check is ignored, not stored.
+name key when the author has no QID). A hit that fails the check is ignored, not stored. Stored and statement hits also need their label to match
+the book's title or an alternate title, and a stored `wikidata`-source QID that fails the check is removed.
 
 An accepted QID is stored as a `books_work_wikidata_qid` identifier (the enum value exists, unused
 today) so later runs and the backfill skip resolution. Step 4 is ambiguous when two works by the
 same author share a title; in that case store nothing. If the QID is already held by another of
 our books, that pair is very likely a duplicate: store it on neither, use no Wikidata evidence for
 this run, and record the other book's id in the ledger (`qid_conflict`) so the duplicate report can
-pick it up.
+pick it up. A `wikidata`-source row on the holder is removed too, and the unmerged identifier-collision
+candidate naming the QID keeps both books from taking it again until it is merged.
 
 ### 4.4 Judging origin
 
