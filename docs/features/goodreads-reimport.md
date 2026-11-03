@@ -61,7 +61,9 @@ Everything is written to `books_repair_verdicts` before it happens. Admin, Repai
 - `reimport_row`: one CSV row, with an action: keep (already right), move, copy (legacy put two editions on one
   book) or add (the row had no entry). A new book is made by a `reimport_match` with outcome create, not a row action.
 - `reimport_guess`: a hand-added entry from a mixed book, moved to its most-read book.
-- `reimport_strip`: a legacy identifier removed from a book because a row brought its own real one.
+- `reimport_strip`: a legacy identifier removed from a book. Applying a match records one for every OTHER book that
+  holds the edition's own Goodreads id, ISBN-13 or ISBN-10 (from the CSV) as a legacy-sourced identifier; apply removes
+  only legacy-sourced ones.
 - `reimport_author`: a correction to a book's credited authors.
 
 A status says what happens next: approved ones are carried out by `apply`; proposed ones wait for Shane;

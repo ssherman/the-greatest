@@ -8,6 +8,9 @@ module Services
         # cache's answer, beating whatever legacy cached. create: the book is made (not provisional: the approved
         # verdict is the approval, rebuild spec 12 call 5) and its id kept in the payload, where DecideRow reads it.
         #
+        # An applied match also records the strips (spec 3 decision 4): the edition's own identifiers from the CSV
+        # (Goodreads id, ISBN-13, ISBN-10) are real, so any other book holding one as a legacy identifier loses it.
+        #
         # Both record the cache they replace in the payload (`edition_before`). A create must first clear it:
         # legacy-replay editions are settled, often on the very mixed book being emptied, and CreateBook returns
         # a settled edition's book as it is. The clear, the create and the payload write share one transaction
@@ -29,14 +32,14 @@ module Services
               # The cache is already the decision: that is the wanted state, so the verdict counts as applied and
               # DecideRow (which only follows an applied match) can use it.
               remember(verdict, edition)
-              return Entries.applied
+              return applied(edition, book)
             end
 
             ::ApplicationRecord.transaction do
               remember(verdict, edition)
               edition.update!(book: book, resolution: :matched, resolved_at: edition.resolved_at || Time.current)
             end
-            Entries.applied
+            applied(edition, book)
           end
 
           # Only a book CreateBook made counts. The one other outcome accepted is adopting a same-signature
@@ -44,7 +47,7 @@ module Services
           # book (a legacy edition of the same title can share the signature).
           def self.create(verdict, edition)
             existing = GoodreadsReplay::Apply::MergedBook.call(verdict.payload["created_book_id"])
-            return Entries.applied if existing
+            return applied(edition, existing) if existing
             return Entries.noop("edition parked") if edition.parked?
 
             import = import_for(edition)
@@ -64,7 +67,28 @@ module Services
 
               verdict.update_columns(payload: verdict.payload.merge("created_book_id" => book_id))
             end
-            reason ? Entries.noop(reason) : Entries.applied
+            reason ? Entries.noop(reason) : applied(edition, edition.reload.book)
+          end
+
+          def self.applied(edition, book)
+            record_strips(edition, book)
+            Entries.applied
+          end
+
+          # One reimport_strip verdict per (other book, type, value). Recording is idempotent, and Strip itself
+          # removes only a legacy-sourced identifier, so a value an importer or a person attached since is safe.
+          def self.record_strips(edition, book)
+            real = {books_work_goodreads_id: edition.goodreads_book_id.to_s, books_work_isbn13: edition.isbn13, books_work_isbn10: edition.isbn10}
+              .transform_values(&:presence).compact
+            real.each do |type, value|
+              ::Identifier.where(identifiable_type: "Books::Book", identifier_type: type, value: value, source: :legacy)
+                .where.not(identifiable_id: book.id).distinct.pluck(:identifiable_id).sort.each do |other_id|
+                GoodreadsReplay::RecordVerdict.call(
+                  kind: :reimport_strip, subject_key: "reimport:strip:#{other_id}:#{type}:#{value}", decided_by: :rule, auto: true,
+                  payload: {book_id: other_id, identifier_type: type.to_s, value: value, because_row_key: nil, because_edition_id: edition.id}
+                )
+              end
+            end
           end
 
           def self.refusal(outcome, book_id, before, verdict)
@@ -101,7 +125,7 @@ module Services
               reason: verdict.reason.presence || "re-import: no book matched edition #{edition.id}", decision: decision)
           end
 
-          private_class_method :cache_match, :create, :refusal, :remember, :import_for, :unmatched
+          private_class_method :cache_match, :create, :applied, :record_strips, :refusal, :remember, :import_for, :unmatched
         end
       end
     end

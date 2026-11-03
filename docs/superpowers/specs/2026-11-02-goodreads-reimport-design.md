@@ -208,7 +208,7 @@ but nothing may be applied that its payload cannot reverse.
     the CSV row;
   - plus Shane's own spot-check of 50;
   - **target: zero wrong rows.** Any wrong row stops the run until its cause is fixed.
-- **Production:** run in batches of imports, with the same report after each batch.
+- **Production:** run in batches (the jobs batch by edition and user, not by import), with the same report after each batch.
 - **Acceptance queries**, each with expected zero:
   - rows whose book's title key differs from the CSV row's full title key and that no approved verdict explains;
   - list items or reviews lost: counted per user before and after;

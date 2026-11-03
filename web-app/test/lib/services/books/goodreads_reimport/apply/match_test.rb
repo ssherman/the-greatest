@@ -45,6 +45,46 @@ module Services
             assert_equal cached.book_id, @edition.reload.book_id
           end
 
+          test "an applied match records a strip for every other book holding the edition's real identifiers as legacy" do
+            @edition.update!(isbn10: "0441013597")
+            war = books_books(:war_and_peace)
+            other = books_books(:crime_and_punishment)
+            [war, other].each { |book| book.identifiers.where(identifier_type: %i[books_work_isbn13 books_work_isbn10 books_work_goodreads_id]).delete_all }
+            on_other = [[:books_work_isbn13, "9780441013593"], [:books_work_isbn10, "0441013597"], [:books_work_goodreads_id, "91000001"]].map do |type, value|
+              Identifier.create!(identifiable: other, identifier_type: type, value: value, source: :legacy)
+            end
+            Identifier.create!(identifiable: war, identifier_type: :books_work_isbn13, value: "9780441013593", source: :legacy)
+
+            Match.call(verdict: verdict(outcome: "matched", book_id: war.id))
+
+            strips = ::Books::RepairVerdict.reimport_strip.order(:id)
+            assert_equal on_other.map { |identifier| [other.id, identifier.identifier_type, identifier.value] }.sort,
+              strips.map { |strip| strip.payload.values_at("book_id", "identifier_type", "value") }.sort
+            strip = strips.first
+            assert_equal [true, "rule", nil, @edition.id], [strip.approved?, strip.decided_by, strip.payload["because_row_key"], strip.payload["because_edition_id"]]
+          end
+
+          test "no strip for an identifier another book holds from a source other than legacy," do
+            other = books_books(:crime_and_punishment)
+            other.identifiers.where(identifier_type: :books_work_isbn13).delete_all
+            Identifier.create!(identifiable: other, identifier_type: :books_work_isbn13, value: "9780441013593", source: :open_library)
+
+            Match.call(verdict: verdict(outcome: "matched", book_id: books_books(:war_and_peace).id))
+
+            assert_equal 0, ::Books::RepairVerdict.reimport_strip.count
+          end
+
+          test "a created book strips the legacy copies of its identifiers from other books" do
+            other = books_books(:crime_and_punishment)
+            other.identifiers.where(identifier_type: :books_work_isbn13).delete_all
+            Identifier.create!(identifiable: other, identifier_type: :books_work_isbn13, value: "9780441013593", source: :legacy)
+            row_in(@import)
+
+            Match.call(verdict: verdict(outcome: "create"))
+
+            assert_equal [other.id], ::Books::RepairVerdict.reimport_strip.map { |strip| strip.payload["book_id"] }
+          end
+
           test "matched follows a book merged away" do
             gone = ::Books::Book.create!(title: "Gone #{SecureRandom.hex(3)}")
             target = books_books(:war_and_peace)
