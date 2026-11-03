@@ -655,6 +655,8 @@ Rails.application.routes.draw do
           resources :ranking_configurations, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/books", to: "books#index",
             as: :ranking_configuration_books, constraints: {ranking_configuration_id: /\d+/}
+          get "ranking_configurations/:ranking_configuration_id/categories/:slug/books", to: "category_books#index",
+            as: :ranking_configuration_category_books, constraints: {ranking_configuration_id: /\d+/}
           resources :lists, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/lists", to: "lists#index",
             as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}

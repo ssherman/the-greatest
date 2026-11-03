@@ -92,7 +92,13 @@ module Api
         ["GET", "/api/v1/categories/{slug}/books", "401"] => -> { get "/api/v1/categories/novels/books" },
         ["GET", "/api/v1/categories/{slug}/books", "403"] => -> { get "/api/v1/categories/novels/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
         ["GET", "/api/v1/categories/{slug}/books", "404"] => -> { get "/api/v1/categories/no-such-category/books", headers: bearer(ApiTokenSecrets::MEMBER) },
-        ["GET", "/api/v1/categories/{slug}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) } }
+        ["GET", "/api/v1/categories/{slug}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "200"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "400"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "401"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books" },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "403"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "404"] => -> { get "/api/v1/ranking_configurations/999999999/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) } }
       }.freeze
 
       setup do

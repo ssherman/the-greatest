@@ -584,11 +584,17 @@ paths:
     get:
       operationId: listCategoryBooks
       summary: Books in a category
-      description: The same ranked books as `GET /api/v1/books` (same fields, same `rank`, best first), limited to the books that carry the category. Old and merged slugs resolve as they do on `GET /api/v1/categories/{slug}`, and the `links` point at the category's current slug.
+      description: The same ranked books as `GET /api/v1/books` (same fields, same `rank`, best first), limited to the books that carry the category. The filter parameters apply on top, so `category_id` adds categories that a book must also carry; the category in the path is never repeated in `meta.filters`. Old and merged slugs resolve as they do on `GET /api/v1/categories/{slug}`, and the `links` point at the category's current slug.
       parameters:
         - $ref: "#/components/parameters/slug"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/category_id"
+        - $ref: "#/components/parameters/country_id"
+        - $ref: "#/components/parameters/year"
+        - $ref: "#/components/parameters/published_start"
+        - $ref: "#/components/parameters/published_end"
+        - $ref: "#/components/parameters/collection"
       responses:
         "200":
           description: A page of the category's ranked books.
@@ -608,7 +614,54 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BookCollection"
+                $ref: "#/components/schemas/RankedBookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}/categories/{slug}/books:
+    x-domain: books
+    get:
+      operationId: listRankingConfigurationCategoryBooks
+      summary: Books in a category on one configuration
+      description: The same rows and shape as `/api/v1/categories/{slug}/books`, ranked by the named configuration; `rank` is relative to it. Limited to the books that carry the category. The filter parameters apply on top, so `category_id` adds categories that a book must also carry; the category in the path is never repeated in `meta.filters`. Old and merged slugs resolve as they do on `GET /api/v1/categories/{slug}`, and the `links` point at the category's current slug.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/category_id"
+        - $ref: "#/components/parameters/country_id"
+        - $ref: "#/components/parameters/year"
+        - $ref: "#/components/parameters/published_start"
+        - $ref: "#/components/parameters/published_end"
+        - $ref: "#/components/parameters/collection"
+      responses:
+        "200":
+          description: A page of the category's ranked books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankedBookCollection"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
