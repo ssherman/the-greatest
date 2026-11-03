@@ -138,6 +138,12 @@ to:
 
 ### 4.4 Matching an edition
 For each distinct Goodreads edition in the rows:
+- **Change 2026-11-03: mixed books stay matchable.** The finder no longer excludes mixed records. The survey's mixed
+  rule ignores titles, so many are the right English book (Golden Son, Season of Storms, Collected Dialogues), and
+  excluding them sent readers to translations or created duplicates. The AI check decides per edition. A mixed record
+  that some reader's row keeps is not deleted (marked `kept`: no guesses, no redirect); one nobody's edition
+  matches is emptied and deleted with a redirect as before. A create still may not adopt a mixed record.
+  Also: an AI "none of these" auto-approves a create only at high confidence.
 - **Finder:** the existing book finder in blinded mode (`identifier_sources: TRUSTED_IDENTIFIER_SOURCES`, legacy and
   merge alternate titles ignored). The query is built from the CSV row's full title, authors, ISBNs, year and
   Goodreads id (`ExportFacts`).

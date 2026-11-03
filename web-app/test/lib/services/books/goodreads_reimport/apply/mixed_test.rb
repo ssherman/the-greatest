@@ -65,7 +65,7 @@ module Services
             outcome = perform_enqueued_jobs { Mixed.call(verdict: verdict).data[:outcome] }
 
             assert_equal :applied, outcome
-            archive =verdict.reload.payload["archive"]
+            archive = verdict.reload.payload["archive"]
             image_ids = archive["images"].map { |i| i["id"] } + archive["editions"].flat_map { |e| e["images"].map { |i| i["id"] } }
             assert_not ::Books::Book.exists?(@mixed.id)
             assert_equal 2, image_ids.size

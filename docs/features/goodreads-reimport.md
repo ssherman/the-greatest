@@ -45,8 +45,16 @@ All tasks are `books:goodreads_reimport:<name>`.
 A mixed book is an import-made record whose readers came from several different books (1,654 in the
 survey). They come from the fresh survey's lump classification, so refresh the survey first
 (`books:goodreads_rebuild:survey[all,redo]`). Archiving writes an `reimport_mixed` verdict with a copy of
-everything on the record, and takes the record out of matching, so the finder never returns it. The record is
-deleted later, once every row on it has moved.
+everything on the record, including each image's columns and its stored file's identity (blob id, key, checksum).
+The record stays matchable (change 2026-11-03: the survey's mixed rule groups by author and year and ignores
+titles, so many "mixed" records are the right English book, and the per-edition AI check decides). The record is
+deleted later, once every row on it has moved. Deleting detaches each image's file first, so the stored file is
+kept and the archive can re-attach it.
+
+If a reader's row matched the mixed record itself (a current, non-rejected, non-superseded `reimport_row` verdict
+whose destination is the record), `decide` marks the verdict `kept`: no guesses, earlier unapplied guesses from the
+record superseded, no redirect, and `apply` closes it with "kept: readers matched this book" without deleting
+anything. If the rows are later re-decided with none keeping it, the next `decide` flips it back and reopens it.
 
 Entries a user added by hand to a mixed book (not from a CSV row) cannot be matched. They go to the record's
 most-read book and are marked as guesses (`reimport_guess`). `decide` queues these, but a book whose rows are
@@ -101,7 +109,7 @@ read it from either container and it survives a deploy. It lists:
   - rows whose book's title differs from the CSV title with no approved verdict explaining it;
   - users whose list-item or review count dropped, beyond the destroys the verdicts recorded (a destroy from
     a collision is listed separately as explained);
-  - mixed books still present.
+  - mixed books still present (kept ones are counted on their own line and are not a failure).
 
 If a deploy interrupts the job, run the task again. The snapshot (`counts.json` in the same folder) is what
 the "count dropped" query compares against. Take it before the first apply that moves rows. `snapshot` leaves an existing
