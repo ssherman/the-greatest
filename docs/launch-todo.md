@@ -449,3 +449,47 @@ The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve o
    6. After a day or two, read `fixes_report`'s enrichment section. If nothing failed and the gate never
       blocked, raise `GOODREADS_DAILY_FETCH_CAP` in the production env (SOPS) and restart the worker.
       Above 5,760 a day, lower `GOODREADS_FETCH_INTERVAL` too.
+
+## 12. Goodreads re-import (one run, then repeats only if the sync is changed)
+
+Matches every legacy CSV row to the exact book it names and moves each reader's entries there. Design:
+`docs/superpowers/specs/2026-11-02-goodreads-reimport-design.md`; how it works, and where each output lands:
+`docs/features/goodreads-reimport.md`. It replaces stage two of section 11.
+
+**Do not run `data_migration:sync` until it has been checked against this run and changed so it cannot revert
+it** (spec section 3.9). As it stands it rewrites legacy users' lists and would undo moved rows.
+
+Do not start until the new enrichment steps (categories, origin) and the Goodreads search page fix are deployed.
+Every step below only queues a Sidekiq job; wait for the jobs to finish before the next step.
+
+1. **Gate on, enrichment off.** Set `GOODREADS_REIMPORT_ENABLED=true` in the production env (SOPS) and restart
+   the worker. Leave `GOODREADS_REIMPORT_ENRICHMENT` unset.
+2. **Refresh the survey.** `bin/rails "books:goodreads_rebuild:survey[all,redo]"`. The mixed books are read
+   from it.
+3. **Archive the mixed books.** `bin/rails books:goodreads_reimport:archive_mixed`. It records verdicts and
+   deletes nothing.
+4. **Match every edition.** `bin/rails "books:goodreads_reimport:match[200]"` first, then
+   `bin/rails "books:goodreads_reimport:match[all]"`. Run `[all]` again for any editions left.
+5. **Report and review.** `bin/rails books:goodreads_reimport:report`; find the file at
+   `storage/goodreads_reimport/report-<UTC time>.md` (the path is in the Sidekiq log). Then in Admin, Repair
+   verdicts, review the proposed `reimport_match` ones: approve the right ones, reject the wrong ones. Rejected
+   matches leave their rows waiting; the report lists them.
+6. **Apply the matches.** `bin/rails books:goodreads_reimport:apply`. This writes approved matches and creates
+   the new books.
+7. **Decide.** `bin/rails "books:goodreads_reimport:decide[200]"`, then `decide[all]`. Run `decide[all]` a
+   second time once the first has finished: the second pass decides the guesses for mixed books, which wait
+   until their rows are decided.
+8. **Snapshot.** `bin/rails books:goodreads_reimport:snapshot`, before the first apply that moves rows. It
+   refuses to replace an existing snapshot; `snapshot[redo]` does, but never use it after a row has moved.
+9. **Apply.** `bin/rails books:goodreads_reimport:apply`. Re-running is safe.
+10. **Check the authors, then apply.** `bin/rails "books:goodreads_reimport:check_authors[200]"`, then
+    `check_authors[all]`, then `bin/rails books:goodreads_reimport:apply` again.
+11. **Report.** `bin/rails books:goodreads_reimport:report` again. The acceptance lines at the bottom should
+    each print 0. Conflicts and verdicts closed as final no-ops are listed in it; read them.
+12. **Sample.** `bin/rails books:goodreads_reimport:sample`. The result is in the Sidekiq log (search
+    "Goodreads re-import sample check"), not in a file. If a deploy interrupted it, enqueue it again. **Any
+    "no" stops the run** until its cause is fixed.
+13. **Enrichment on.** Only after the new enrichment steps have landed: set
+    `GOODREADS_REIMPORT_ENRICHMENT=true` and restart the worker. The new books then enrich.
+
+Each job can be stopped and run again safely. If a deploy interrupts a long job, run the same task again.
