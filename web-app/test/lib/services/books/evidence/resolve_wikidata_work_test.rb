@@ -146,12 +146,107 @@ module Services
         end
 
         test "an author known only by name passes when the label agrees" do
+          Identifier.where(identifiable: books_authors(:tolstoy), identifier_type: :books_author_wikidata_qid).destroy_all
           Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
           @client.stubs(:by_statements).returns(["Q161531"])
           @client.stubs(:entities).with(["Q161531"]).returns("Q161531" => entity("Q161531", "War and Peace", instance_of: NOVEL, authors: ["Q999"]))
           @client.stubs(:labels).with(["Q999"]).returns("Q999" => "Leo Tolstoy")
 
           assert_equal "Q161531", call.data[:qid]
+        end
+
+        test "an author with a QID is never matched by name" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          @client.stubs(:by_statements).returns(["Q161531"])
+          @client.stubs(:entities).with(["Q161531"]).returns("Q161531" => entity("Q161531", "War and Peace", instance_of: NOVEL, authors: ["Q2"]))
+          @client.expects(:labels).never
+
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_includes data[:rejected], {"id" => "Q161531", "reason" => "author_mismatch"}
+        end
+
+        test "a name match is allowed for the book's author that holds no QID" do
+          @book.book_authors.create!(author: books_authors(:garnett))
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          @client.stubs(:by_statements).returns(["Q161531"])
+          @client.stubs(:entities).with(["Q161531"]).returns("Q161531" => entity("Q161531", "War and Peace", instance_of: NOVEL, authors: ["Q9"]))
+          @client.stubs(:labels).with(["Q9"]).returns("Q9" => "Constance Garnett")
+
+          assert_equal "Q161531", call.data[:qid]
+        end
+
+        test "a pending pair raised by another source gains the QID, which then blocks both books" do
+          other = conflict_setup(:wikidata)
+          Services::DuplicateCandidates::Flag.call(item_type: "Books::Book", ids: [@book.id, other.id], source: :bulk_verify)
+
+          call
+
+          row = pair_candidates(other).sole
+          assert_equal ["bulk_verify", ["Q161531"]], [row.source, row.evidence["wikidata_qids"]]
+          assert_empty stored_values
+          assert_empty Identifier.where(identifiable: other, identifier_type: :books_work_wikidata_qid)
+          assert_equal @book.id, resolve_other(other)
+          assert_empty Identifier.where(identifiable: other, identifier_type: :books_work_wikidata_qid)
+        end
+
+        test "a dismissed pair of any source gains the QID and blocks" do
+          other = conflict_setup(:wikidata)
+          Services::DuplicateCandidates::Flag.call(item_type: "Books::Book", ids: [@book.id, other.id], source: :ai)
+          pair_candidates(other).update_all(status: DuplicateCandidate.statuses[:not_duplicate])
+
+          call
+
+          assert_equal ["Q161531"], pair_candidates(other).sole.evidence["wikidata_qids"]
+          assert_equal @book.id, resolve_other(other)
+          assert_empty stored_values
+          assert_empty Identifier.where(identifiable: other, identifier_type: :books_work_wikidata_qid)
+        end
+
+        test "one pair colliding on two QIDs blocks both" do
+          other = conflict_setup(:wikidata)
+          call
+          Identifier.create!(identifiable: other, identifier_type: :books_work_wikidata_qid, value: "Q2", source: :wikidata)
+          @client.stubs(:by_statements).returns(["Q2"])
+          @client.stubs(:entities).with(["Q2"]).returns("Q2" => entity("Q2", "War and Peace", instance_of: NOVEL, authors: ["Q7243"]))
+          call
+
+          assert_equal ["Q161531", "Q2"], pair_candidates(other).sole.evidence["wikidata_qids"]
+          @client.stubs(:by_statements).returns(["Q161531"])
+          assert_nil call.data[:qid]
+          @client.stubs(:by_statements).returns(["Q2"])
+          assert_nil call.data[:qid]
+          assert_empty stored_values
+        end
+
+        test "a merged pair naming the QID in qids does not block" do
+          other = conflict_setup(:wikidata)
+          call
+          pair_candidates(other).update_all(status: DuplicateCandidate.statuses[:merged])
+
+          assert_equal "Q161531", call.data[:qid]
+        end
+
+        test "both books holding the QID with a wikidata source ends with neither holding it" do
+          other = conflict_setup(:wikidata)
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q161531", source: :wikidata)
+
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_equal other.id, data[:conflict_book_id]
+          assert_empty stored_values
+          assert_empty Identifier.where(identifiable: other, identifier_type: :books_work_wikidata_qid)
+        end
+
+        test "a stored QID is kept on conflict when it is not a wikidata-source row" do
+          conflict_setup(:legacy)
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q161531", source: :legacy)
+
+          call
+
+          assert_equal ["Q161531"], stored_values
         end
 
         test "a QID held by another book with a non-wikidata source stays with the holder and is flagged once" do
@@ -386,6 +481,14 @@ module Services
           @client.stubs(:by_statements).returns(["Q161531"])
           @client.stubs(:entities).with(["Q161531"]).returns("Q161531" => entity("Q161531", "War and Peace", instance_of: NOVEL, authors: ["Q7243"]))
           other
+        end
+
+        # Runs the other book through the resolver, which must find the same QID by its own Goodreads id.
+        def resolve_other(other)
+          Identifier.create!(identifiable: other, identifier_type: :books_work_goodreads_id, value: "999")
+          other.update!(title: "War and Peace")
+          other.book_authors.create!(author: books_authors(:tolstoy)) unless other.authors.include?(books_authors(:tolstoy))
+          ResolveWikidataWork.call(book: other, client: @client).data[:conflict_book_id]
         end
 
         def pair_candidates(other)

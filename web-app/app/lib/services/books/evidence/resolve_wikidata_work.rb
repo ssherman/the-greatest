@@ -19,7 +19,7 @@ module Services
       #
       # A stored QID that fails acceptance, or whose entity is gone, is removed when
       # it was written by this resolver (source wikidata). A QID already held by
-      # another book is stored on neither, and an unmerged identifier-collision
+      # another book is stored on neither, and an unmerged duplicate
       # candidate naming it keeps both books from taking it again.
       #
       # ISBN statements are not used: Wikidata stores P212 hyphenated and
@@ -156,8 +156,22 @@ module Services
           return false if @book.authors.empty?
           return true if work.authors.intersect?(author_qids)
 
+          # An author we hold a QID for is identified by it: a different P50 QID is a
+          # different person, however alike the names. Names only stand in for the
+          # authors that have no QID.
+          unkeyed = unkeyed_authors
+          return false if unkeyed.empty?
+
           names = @client.labels(work.authors).values
-          Check.authors_agree?(@book, WorkLike.new(title: nil, subtitle: nil, author_names: names, author_keys: []))
+          Check.authors_agree?(UnkeyedAuthors.new(authors: unkeyed), WorkLike.new(title: nil, subtitle: nil, author_names: names, author_keys: []))
+        end
+
+        UnkeyedAuthors = Data.define(:authors)
+
+        def unkeyed_authors
+          keyed = ::Identifier.where(identifiable_type: "Books::Author", identifiable_id: @book.authors.map(&:id),
+            identifier_type: :books_author_wikidata_qid).pluck(:identifiable_id)
+          @book.authors.reject { |author| keyed.include?(author.id) }
         end
 
         def author_qids
@@ -183,13 +197,10 @@ module Services
             connection.execute("SELECT pg_advisory_xact_lock(hashtext(#{connection.quote(qid)}))")
             holder = holder_of(qid)
             if holder
-              ::Services::DuplicateCandidates::Flag.call(
-                item_type: "Books::Book", ids: [@book.id, holder.identifiable_id], source: :identifier_collision,
-                evidence: {"wikidata_qid" => qid, "via" => via}
-              )
-              holder.destroy! if holder.source_wikidata?
+              record_collision(qid, via, holder)
               conflict_id = holder.identifiable_id
             elsif (blocker = blocking_candidate(qid))
+              drop_own_row(qid)
               conflict_id = [blocker.item_a_id, blocker.item_b_id].find { |id| id != @book.id }
             else
               store(qid)
@@ -200,12 +211,43 @@ module Services
           finish(qid, work, via)
         end
 
-        # A pair raised over this QID that nobody has merged keeps it off both books,
-        # so a dismissed pair still blocks: the QID was wrong for at least one of them.
+        # Flag retries after a lost insert race, which cannot recover inside the lock's
+        # transaction once the failed statement has aborted it; the savepoint can.
+        def record_collision(qid, via, holder)
+          ::Identifier.transaction(requires_new: true) do
+            result = ::Services::DuplicateCandidates::Flag.call(
+              item_type: "Books::Book", ids: [@book.id, holder.identifiable_id], source: :identifier_collision,
+              evidence: {"wikidata_qid" => qid, "via" => via}
+            )
+            note_qid(result.data, qid)
+            holder.destroy! if holder.source_wikidata?
+            drop_own_row(qid)
+          end
+        end
+
+        # Flag leaves a dismissed pair untouched and keeps a pending pair's first source
+        # and evidence, so the QID is written onto whatever row the pair has. A pair can
+        # collide on several QIDs over time, hence the list.
+        def note_qid(candidate, qid)
+          return if candidate.nil? || candidate.merged?
+
+          qids = Array(candidate.evidence["wikidata_qids"])
+          return if qids.include?(qid)
+
+          candidate.update_columns(evidence: candidate.evidence.merge("wikidata_qids" => qids + [qid]))
+        end
+
+        def drop_own_row(qid)
+          own_rows.where(value: qid, source: :wikidata).destroy_all
+        end
+
+        # A pair of any source that nobody has merged keeps the QID off both books, so a
+        # dismissed pair still blocks: the QID was wrong for at least one of them. Older
+        # rows carry it as wikidata_qid, later ones in the wikidata_qids list.
         def blocking_candidate(qid)
-          ::DuplicateCandidate.raised_by_identifier_collision
-            .where(item_type: "Books::Book", status: [:pending, :not_duplicate])
-            .where("evidence->>'wikidata_qid' = ?", qid).order(:id).first
+          ::DuplicateCandidate.where(item_type: "Books::Book", status: [:pending, :not_duplicate])
+            .where("evidence->>'wikidata_qid' = :qid OR jsonb_exists(evidence->'wikidata_qids', :qid)", qid: qid)
+            .order(:id).first
         end
 
         def store(qid)
