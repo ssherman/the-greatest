@@ -44,6 +44,7 @@ module Services
 
               verdict.update_columns(payload: verdict.payload.merge("deleted" => items.map { |item| attributes(item) }, "redirect_written" => false))
               items.each(&:destroy!)
+              keep_image_files(book)
               book.reload.destroy!
             end
             return Entries.noop(reason) if reason
@@ -74,6 +75,13 @@ module Services
             id = verdict.payload["redirect_to_book_id"]
             target = id && GoodreadsReplay::Apply::MergedBook.call(id)
             target&.id unless target&.id == book_id
+          end
+
+          # Image has_one_attached :file purges its blob when the image is destroyed, which destroying the book does.
+          # Detaching first drops only the attachment row; the blob and its stored file stay, named in the archive
+          # (MixedBooks.image_records), so the deletion can be reversed by hand.
+          def self.keep_image_files(book)
+            ::Image.where(parent: [book, *book.editions]).find_each { |image| image.file.detach }
           end
 
           # Items of users who have an applied copy verdict from this book; they are the only items that may go.
@@ -122,7 +130,7 @@ module Services
 
           def self.attributes(item) = Entries.item_attributes(item).merge("user_id" => item.user_list.user_id)
 
-          private_class_method :gone, :write_redirect, :redirect_target, :copy_originals, :blocker, :pending_guess?, :pending_row?, :attributes
+          private_class_method :gone, :write_redirect, :redirect_target, :copy_originals, :blocker, :keep_image_files, :pending_guess?, :pending_row?, :attributes
         end
       end
     end

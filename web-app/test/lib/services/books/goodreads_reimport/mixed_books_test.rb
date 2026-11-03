@@ -71,6 +71,29 @@ module Services
           assert_equal [], archive["editions"].first["images"]
         end
 
+        test "archive keeps each image's attributes and its blob's identity, for the book and its editions" do
+          edition = ::Books::Edition.create!(book: @derived_lump, title: "An Edition")
+          book_image = attach_image(@derived_lump, "cover.jpg", primary: true)
+          edition_image = attach_image(edition, "ed.jpg")
+
+          archive = MixedBooks.archive(@derived_lump, legacy_map: GoodreadsRebuild::LegacyBookMap.new({})).payload["archive"]
+
+          blob = book_image.file.blob
+          assert_equal [{"id" => book_image.id, "primary" => true, "notes" => "n", "metadata" => book_image.metadata,
+                         "parent_type" => "Books::Book", "parent_id" => @derived_lump.id, "created_at" => book_image.created_at.as_json,
+                         "blob" => {"id" => blob.id, "key" => blob.key, "filename" => "cover.jpg", "content_type" => "image/jpeg",
+                                    "checksum" => blob.checksum, "byte_size" => blob.byte_size}}], archive["images"]
+          assert_equal [edition_image.id], archive["editions"].first["images"].map { |i| i["id"] }
+          assert_equal edition_image.file.blob.key, archive["editions"].first["images"].first.dig("blob", "key")
+        end
+
+        def attach_image(parent, filename, primary: false)
+          image = Image.new(parent: parent, primary: primary, notes: "n")
+          image.file.attach(io: StringIO.new("fake image data #{filename}"), filename: filename, content_type: "image/jpeg")
+          image.save!
+          image
+        end
+
         test "archive twice keeps the first snapshot" do
           author = ::Books::Author.create!(name: "Original")
           ::Books::BookAuthor.create!(book: @derived_lump, author: author, position: 1)

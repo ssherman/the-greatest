@@ -8,6 +8,7 @@ module Services
       module Apply
         class MixedTest < ActiveSupport::TestCase
           include GoodreadsReimportApplyHelper
+          include ActiveJob::TestHelper
 
           setup do
             setup_reader
@@ -46,6 +47,35 @@ module Services
             result = Mixed.call(verdict: verdict)
 
             assert_equal [true, "kept: readers matched this book"], result.data.values_at(:final, :reason)
+          end
+
+          test "deleting the book keeps its images' blobs, so the archive can re-attach them" do
+            edition = ::Books::Edition.create!(book: @mixed, title: "Ed")
+            blobs = [@mixed, edition].map do |parent|
+              image = Image.new(parent: parent, primary: false)
+              image.file.attach(io: StringIO.new("data #{parent.class}"), filename: "x.jpg", content_type: "image/jpeg")
+              image.save!
+              image.file.blob
+            end
+            verdict = mixed_verdict
+            verdict.update!(payload: verdict.payload.merge("archive" => MixedBooks.snapshot(@mixed.reload)))
+            ::Services::BooksMigration::RedirectRecorder.stubs(:merged)
+
+            # Image purges its file with purge_later; run those jobs, or the test cannot see a purge.
+            outcome = perform_enqueued_jobs { Mixed.call(verdict: verdict).data[:outcome] }
+
+            assert_equal :applied, outcome
+            archive =verdict.reload.payload["archive"]
+            image_ids = archive["images"].map { |i| i["id"] } + archive["editions"].flat_map { |e| e["images"].map { |i| i["id"] } }
+            assert_not ::Books::Book.exists?(@mixed.id)
+            assert_equal 2, image_ids.size
+            assert_equal 0, Image.where(id: image_ids).count
+            blobs.each do |blob|
+              assert ActiveStorage::Blob.exists?(blob.id), "blob #{blob.id} was purged"
+              assert ActiveStorage::Blob.find(blob.id).service.exist?(blob.key)
+            end
+            keys = archive["images"].map { |i| i.dig("blob", "key") } + archive["editions"].flat_map { |e| e["images"].map { |i| i.dig("blob", "key") } }
+            assert_equal blobs.map(&:key).sort, keys.sort
           end
 
           test "deletes an empty book and records the redirect after commit" do

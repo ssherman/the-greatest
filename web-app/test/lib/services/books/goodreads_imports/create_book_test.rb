@@ -23,6 +23,7 @@ module Services
           book = edition.book
           author = book.authors.sole
           assert_equal :created, result.data[:outcome]
+          assert_equal [author.id], result.data[:created_author_ids]
           assert_equal ["The Quiet Year", 1977, true], [book.title, book.first_published_year, book.provisional?]
           assert_equal ["Anna Brenner", true], [author.name, author.provisional?]
           assert_equal [["books_work_goodreads_id", "90000001"], ["books_work_isbn13", "9780441013593"]],

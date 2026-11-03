@@ -45,12 +45,12 @@ module Services
                "publication_year" => edition.publication_year, "publisher_name" => edition.publisher_name,
                "identifiers" => identifier_tuples(edition.identifiers.sort_by(&:id)),
                "external_links" => edition.external_links.order(:id).pluck(:url, :source),
-               "images" => edition.images.order(:id).pluck(:id)}
+               "images" => image_records(edition)}
             },
             "external_links" => book.external_links.order(:id).map { |link|
               {"id" => link.id, "name" => link.name, "url" => link.url, "source_name" => link.source_name}
             },
-            "images" => book.images.order(:id).pluck(:id),
+            "images" => image_records(book),
             "category_items" => book.category_items.order(:id).pluck(:category_id, :source),
             "list_items" => ::UserListItem.where(listable: book).joins(:user_list).order(:id)
               .pluck("user_list_items.user_list_id", "user_lists.user_id", "user_list_items.position",
@@ -62,6 +62,19 @@ module Services
               [review.user_id, review.rating&.to_s, review.title, review.body, review.created_at.as_json]
             }
           }
+        end
+
+        # What it takes to put an image back: its own columns and the identity of the stored file. Deleting the
+        # book destroys the Image rows; Apply::Mixed detaches each file first so the blob itself survives, and
+        # this record names it (id, key, checksum) so a hand restore can attach it to a new Image.
+        def image_records(parent)
+          parent.images.includes(file_attachment: :blob).order(:id).map do |image|
+            blob = image.file.blob
+            {"id" => image.id, "primary" => image.primary, "notes" => image.notes, "metadata" => image.metadata,
+             "parent_type" => image.parent_type, "parent_id" => image.parent_id, "created_at" => image.created_at.as_json,
+             "blob" => blob && {"id" => blob.id, "key" => blob.key, "filename" => blob.filename.to_s,
+                                "content_type" => blob.content_type, "checksum" => blob.checksum, "byte_size" => blob.byte_size}}
+          end
         end
 
         def row_keys(book, legacy_map)
