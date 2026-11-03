@@ -14,8 +14,7 @@ module Services
       # A candidate that fails the check is recorded in data[:rejected] with a
       # reason: not_written_work, author_mismatch, ambiguous_edition (an edition
       # of several works, or of another edition), edition_without_work,
-      # unparseable, ambiguous_statements, ambiguous_title. A stored QID whose
-      # source is admin is trusted: used as-is and never replaced.
+      # unparseable, ambiguous_statements, ambiguous_title.
       #
       # ISBN statements are not used: Wikidata stores P212 hyphenated and
       # haswbstatement needs the exact string.
@@ -65,21 +64,14 @@ module Services
         end
 
         def from_stored
-          row = own_rows.first
-          stored = row&.value
+          stored = own_rows.first&.value
           return if stored.blank?
 
           entity = @client.entities([stored])[stored]
-          return trusted(stored, entity) if row.source_admin?
           return if entity.nil?
 
           work = accept(entity)
           [work.id, work, "stored"] if work
-        end
-
-        # A person set this QID: no checks, no replacement, even after a merge.
-        def trusted(stored, entity)
-          [stored, (distill(entity) if entity), "stored"]
         end
 
         # Every id the book holds, Goodreads first. The search returns at most

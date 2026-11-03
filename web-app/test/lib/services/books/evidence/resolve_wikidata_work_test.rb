@@ -241,31 +241,6 @@ module Services
           assert_includes data[:rejected], {"id" => "Q900", "reason" => "unparseable"}
         end
 
-        test "an admin-sourced stored QID is trusted without the checks" do
-          Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q5", source: :admin)
-          @client.stubs(:entities).with(["Q5"]).returns("Q5" => entity("Q5", "Anything", instance_of: FILM, authors: ["Q999"]))
-          @client.expects(:by_statements).never
-
-          data = call.data
-
-          assert_equal ["Q5", "stored"], [data[:qid], data[:via]]
-          assert_equal ["Q5"], stored_values
-        end
-
-        test "an admin-sourced stored QID is never replaced by an automatic hit" do
-          Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q5", source: :admin)
-          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
-          @client.stubs(:entities).with(["Q5"]).returns({})
-          @client.stubs(:by_statements).returns(["Q161531"])
-          @client.stubs(:entities).with(["Q161531"]).returns("Q161531" => entity("Q161531", "War and Peace", instance_of: NOVEL, authors: ["Q7243"]))
-
-          data = call.data
-
-          assert_equal "Q5", data[:qid]
-          assert_equal ["Q5"], stored_values
-          assert_equal ["admin"], Identifier.where(identifiable: @book, identifier_type: :books_work_wikidata_qid).map(&:source)
-        end
-
         private
 
         def call = ResolveWikidataWork.call(book: @book, client: @client)
