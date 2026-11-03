@@ -11,6 +11,7 @@ module Api
   # client (and links.next) can see what the server understood.
   class RankedBookFilters
     PARAMS = %i[category_id country_id year published_start published_end collection].freeze
+    SLUG_PARAMS = %i[category_id country_id].freeze
     RANGE_PARAMS = %i[published_start published_end].freeze
 
     Result = Struct.new(:categories, :countries, :year_start, :year_end, :collection, :applied, keyword_init: true)
@@ -43,9 +44,24 @@ module Api
 
     private
 
+    # Every filter value is one scalar string. An array or hash (`category_id[]=x`)
+    # is malformed, not a slug named "[\"x\"]". A slug list that is only separators
+    # (`country_id=,`) is as blank as `country_id=`: FilterParams would strip it to
+    # nothing and the list would silently come back unfiltered.
     def reject_blank_values
-      blank = PARAMS.find { |name| @params.key?(name) && @params[name].blank? }
-      raise Api::Page::InvalidParameter, "#{blank} must not be blank" if blank
+      PARAMS.each do |name|
+        next unless sent?(name)
+
+        value = @params[name]
+        raise Api::Page::InvalidParameter, "#{name} must be a single value" unless value.is_a?(String) || value.is_a?(Numeric)
+        raise Api::Page::InvalidParameter, "#{name} must not be blank" if blank_value?(name, value)
+      end
+    end
+
+    def blank_value?(name, value)
+      return value.blank? unless SLUG_PARAMS.include?(name)
+
+      value.to_s.split(",").all?(&:blank?)
     end
 
     def reject_year_with_range

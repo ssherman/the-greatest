@@ -98,6 +98,30 @@ module Api
       end
     end
 
+    test "a slug value of only separators is blank" do
+      [",", ",,", " , "].each do |value|
+        %w[category_id country_id].each do |param|
+          error = assert_raises(Api::Page::InvalidParameter, "#{param}=#{value.inspect}") { filter(param => value) }
+
+          assert_includes error.message, param
+        end
+      end
+    end
+
+    test "an array value is invalid and names the parameter" do
+      error = assert_raises(Api::Page::InvalidParameter) { filter(category_id: ["fiction"]) }
+      assert_includes error.message, "category_id"
+
+      error = assert_raises(Api::Page::InvalidParameter) { filter(year: ["1869"]) }
+      assert_includes error.message, "year"
+    end
+
+    test "a hash value is invalid and names the parameter" do
+      error = assert_raises(Api::Page::InvalidParameter) { filter(country_id: {a: "french"}) }
+
+      assert_includes error.message, "country_id"
+    end
+
     test "more than six categories is invalid" do
       error = assert_raises(Api::Page::InvalidParameter) { filter(category_id: %w[a b c d e f g].join(",")) }
 
