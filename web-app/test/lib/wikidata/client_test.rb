@@ -85,6 +85,16 @@ module Wikidata
       assert_includes ids, "Q7243"
     end
 
+    test "by_statements sends srlimit 10 by default and the given limit when asked" do
+      stub10 = stub_request(:get, API).with(query: hash_including(list: "search", srlimit: "10")).to_return(json_response(fixture("haswbstatement_tolstoy.json")))
+      @client.by_statements([["P648", "OL26783A"]])
+      assert_requested stub10
+
+      stub50 = stub_request(:get, API).with(query: hash_including(list: "search", srlimit: "50")).to_return(json_response(fixture("haswbstatement_tolstoy.json")))
+      @client.by_statements([["P648", "OL26783A"]], limit: 50)
+      assert_requested stub50
+    end
+
     test "by_statements drops values that would break the search syntax, and sends nothing when none remain" do
       stub = stub_request(:get, API).with(query: hash_including(action: "query"))
 

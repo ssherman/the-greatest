@@ -187,7 +187,7 @@ module Services
         test "every Goodreads id the book holds is sent, in id order" do
           Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
           Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "657")
-          @client.expects(:by_statements).with([["P2969", "656"], ["P2969", "657"]]).returns([])
+          @client.expects(:by_statements).with([["P2969", "656"], ["P2969", "657"]], limit: 50).returns([])
 
           call
         end
@@ -195,14 +195,14 @@ module Services
         test "Goodreads and OCLC ids go out in one call, Goodreads first" do
           Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "12345")
           Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
-          @client.expects(:by_statements).once.with([["P2969", "656"], ["P243", "12345"]]).returns([])
+          @client.expects(:by_statements).once.with([["P2969", "656"], ["P243", "12345"]], limit: 50).returns([])
 
           call
         end
 
         test "statement pairs are capped" do
           60.times { |i| Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: (1000 + i).to_s) }
-          @client.expects(:by_statements).with { |pairs| pairs.size == 50 }.returns([])
+          @client.expects(:by_statements).with { |pairs, **opts| pairs.size == 50 && opts == {limit: 50} }.returns([])
 
           call
         end
@@ -239,6 +239,29 @@ module Services
 
           assert_nil data[:qid]
           assert_includes data[:rejected], {"id" => "Q900", "reason" => "unparseable"}
+        end
+
+        test "a full-limit statement answer may be cut off, so it is ambiguous and entities are not fetched" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          @client.stubs(:by_statements).returns((1..50).map { |i| "Q#{i}" })
+          @client.expects(:entities).never
+
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_includes data[:rejected], {"id" => nil, "reason" => "ambiguous_statements"}
+        end
+
+        test "an edition whose work target fails to distill is recorded as unparseable" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_oclc_id, value: "12345")
+          @client.stubs(:by_statements).returns(["Q900"])
+          @client.stubs(:entities).with(["Q900"]).returns("Q900" => entity("Q900", "War and Peace", instance_of: EDITION, edition_of: ["Q901"]))
+          @client.stubs(:entities).with(["Q901"]).returns("Q901" => {"id" => "Q901", "missing" => ""})
+
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_includes data[:rejected], {"id" => "Q901", "reason" => "unparseable"}
         end
 
         private

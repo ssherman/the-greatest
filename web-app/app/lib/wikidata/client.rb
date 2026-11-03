@@ -45,13 +45,13 @@ module Wikidata
 
     # One CirrusSearch query: `haswbstatement:P648=OL1A|P214=123` matches an
     # item carrying any of the pairs.
-    def by_statements(pairs)
+    def by_statements(pairs, limit: STATEMENT_LIMIT)
       safe = Array(pairs).select { |property, value| property.to_s.match?(/\AP\d+\z/) && value.to_s.match?(STATEMENT_VALUE) }
       return [] if safe.empty?
 
       expression = safe.map { |property, value| "#{property}=#{value}" }.join("|")
       data = @http.action_api(API_URL, action: "query", list: "search", srsearch: "haswbstatement:#{expression}",
-        srnamespace: 0, srlimit: STATEMENT_LIMIT, srprop: "").data
+        srnamespace: 0, srlimit: limit, srprop: "").data
       Array(data.dig("query", "search")).map { |hit| hit["title"] }.grep(ITEM_ID)
     end
 

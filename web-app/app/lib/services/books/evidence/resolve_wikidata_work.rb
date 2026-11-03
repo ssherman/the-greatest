@@ -74,15 +74,22 @@ module Services
           [work.id, work, "stored"] if work
         end
 
-        # Every id the book holds, Goodreads first. The search returns at most
-        # STATEMENT_LIMIT (10) items; edition hits collapse after the hop, so 10 is enough.
+        # Every id the book holds, Goodreads first. The search is asked for as many
+        # hits as there are pairs; an answer that long may have been cut off, and a
+        # second, conflicting work could sit in the missing part, so it is ambiguous.
         def from_statements
           pairs = STATEMENT_IDS.flat_map do |property, type|
             own_identifiers.where(identifier_type: type).order(:id).pluck(:value).compact_blank.map { |value| [property, value] }
           end.first(MAX_STATEMENT_PAIRS)
           return if pairs.empty?
 
-          unique_work(@client.by_statements(pairs), "ambiguous_statements", "statements")
+          ids = @client.by_statements(pairs, limit: MAX_STATEMENT_PAIRS)
+          if ids.size >= MAX_STATEMENT_PAIRS
+            @rejected << {"id" => nil, "reason" => "ambiguous_statements"}
+            return
+          end
+
+          unique_work(ids, "ambiguous_statements", "statements")
         end
 
         def from_author_works
