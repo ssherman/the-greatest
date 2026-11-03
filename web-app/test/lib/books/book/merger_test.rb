@@ -704,13 +704,46 @@ module Books
       end
 
       test "fills a blank field on the target from the source" do
-        @source.update!(subtitle: "A Novel in Six Parts")
+        @source.update!(title: @target.title, subtitle: "A Novel in Six Parts")
 
         merger = ::Books::Book::Merger.new(source: @source, target: @target)
         merger.call
 
         assert_equal "A Novel in Six Parts", @target.reload.subtitle
         assert_includes merger.stats[:filled_fields], :subtitle
+      end
+
+      # Merging a translation into the English book must not leave the translation's subtitle, sort title or
+      # description on it ("The Bible: Einheitsübersetzung…", "The One: Finde dein perfektes Match").
+      test "takes no subtitle, sort title or description from a source with a different title" do
+        @target.update_columns(subtitle: nil, sort_title: nil, description: nil)
+        @source.update!(title: "Die Bibel", subtitle: "Einheitsübersetzung", sort_title: "Bibel, Die",
+          description: "Die Heilige Schrift in der Einheitsübersetzung.")
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        merger.call
+
+        @target.reload
+        assert_equal [nil, nil, nil], [@target.subtitle, @target.sort_title, @target.description]
+        assert_empty merger.stats[:filled_fields] & %i[subtitle sort_title description]
+      end
+
+      test "a source whose title differs only in case, punctuation or a leading article still fills the subtitle" do
+        @target.update_columns(title: "The Poseidon Adventure", subtitle: nil)
+        @source.update!(title: "Poseidon Adventure!", subtitle: "A Novel")
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal "A Novel", @target.reload.subtitle
+      end
+
+      test "a source with a different title still fills fields that do not depend on the title" do
+        @target.update_columns(word_count: nil)
+        @source.update!(title: "Die Bibel", word_count: 1500)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal 1500, @target.reload.word_count
       end
 
       test "never overwrites a non-blank field on the target" do
