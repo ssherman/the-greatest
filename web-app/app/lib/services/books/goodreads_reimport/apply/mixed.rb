@@ -42,11 +42,11 @@ module Services
             Entries.applied
           end
 
-          # The book went before this verdict ran (or the run died between the delete and the redirect): the
-          # redirect is still owed if it was never written.
+          # The run died between the delete and the redirect: this verdict recorded redirect_written false, so the
+          # redirect is still owed. A book some other merge removed has no such key, and that merger's redirect stands.
           def self.gone(verdict)
             book_id = verdict.payload["book_id"]
-            unless verdict.payload["redirect_written"]
+            if verdict.payload["redirect_written"] == false
               write_redirect(verdict, book_id, redirect_target(verdict, book_id))
             end
             Entries.noop("book #{book_id} no longer exists", final: true)

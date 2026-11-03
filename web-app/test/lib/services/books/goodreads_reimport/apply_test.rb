@@ -119,6 +119,37 @@ module Services
           assert_not_nil author.reload.applied_at
         end
 
+        test "another database error is recorded on its verdict and the walk continues" do
+          failing = strip_verdict
+          author = author_verdict
+          Apply::Strip.stubs(:call).raises(ActiveRecord::RecordNotUnique, "dup")
+
+          result = Apply.call
+
+          assert_equal [1, 1], result.data.values_at(:applied, :failed)
+          assert_match(/RecordNotUnique/, failing.reload.error)
+          assert_not_nil author.reload.applied_at
+        end
+
+        test "a deadlock that outlasts its retries still raises, after queueing the follow-ups collected" do
+          strip_verdict
+          strip_verdict
+          Apply::Strip.stubs(:call).returns(Apply::Entries.applied(follow_ups: [:user_favorites], reweigh_configuration_ids: [7])).then.raises(ActiveRecord::Deadlocked)
+          Apply::Run.any_instance.stubs(:sleep)
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call_for_ids).once.with([7], delay: 5.minutes)
+          ::GenerateUserFavoritesListsJob.expects(:perform_async).once
+
+          assert_raises(ActiveRecord::Deadlocked) { Apply.call }
+        end
+
+        test "an unknown cursor kind restarts from the first kind" do
+          strip = strip_verdict
+
+          Apply.call(after: {"kind" => "bogus", "id" => 10**9})
+
+          assert_not_nil strip.reload.applied_at
+        end
+
         test "retries a deadlocked handler" do
           verdict = strip_verdict
           calls = 0

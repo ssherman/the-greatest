@@ -128,13 +128,26 @@ module Services
             assert_equal true, verdict.reload.payload["redirect_written"]
           end
 
-          test "a book gone before the redirect was written still gets it, once" do
+          test "a run that died after the delete writes the owed redirect once, then closes" do
             verdict = mixed_verdict
-            @mixed.destroy!
-            ::Services::BooksMigration::RedirectRecorder.expects(:merged).once.with(item_type: "Books::Book", from_id: @mixed.id, to_id: @to.id)
+            ::Services::BooksMigration::RedirectRecorder.stubs(:merged).raises(RuntimeError, "boom").then.returns(nil)
 
+            assert_raises(RuntimeError) { Mixed.call(verdict: verdict) }
+            assert_not ::Books::Book.exists?(@mixed.id)
+            assert_equal false, verdict.reload.payload["redirect_written"]
+
+            ::Services::BooksMigration::RedirectRecorder.expects(:merged).once.with(item_type: "Books::Book", from_id: @mixed.id, to_id: @to.id)
             Mixed.call(verdict: verdict)
             Mixed.call(verdict: verdict.reload)
+            assert_equal true, verdict.reload.payload["redirect_written"]
+          end
+
+          test "a book another merge removed first gets no redirect from this verdict" do
+            verdict = mixed_verdict
+            @mixed.destroy!
+            ::Services::BooksMigration::RedirectRecorder.expects(:merged).never
+
+            assert_equal [:noop, true], Mixed.call(verdict: verdict).data.values_at(:outcome, :final)
           end
 
           test "no redirect is written when there is no target" do

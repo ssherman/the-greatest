@@ -39,6 +39,7 @@ module Services
           def call
             last = nil
             tried = 0
+            nil
             HANDLERS.each do |kind, handler|
               floor = floor_for(kind)
               next if floor.nil?
@@ -52,21 +53,37 @@ module Services
               break if tried >= @limit
             end
             cursor = (last if tried >= @limit && more_after?(last))
-            queue_follow_ups(@rankings, @follow_ups)
             Result.new(success?: true, data: @tally.merge(cursor: cursor, noop_reasons: @reasons.to_h), errors: [])
+          ensure
+            # An aborted call (a deadlock that outlasted its retries) still asks for what it already changed.
+            queue_follow_ups(@rankings, @follow_ups)
           end
 
           private
 
+          # Only a deadlock that outlasted its retries and a lost connection stop the walk. Any other database
+          # error belongs to one verdict: it is recorded there and the walk goes on.
+          def fatal?(error)
+            error.is_a?(ActiveRecord::Deadlocked) || error.is_a?(ActiveRecord::ConnectionNotEstablished) ||
+              error.cause.is_a?(PG::ConnectionBad) || error.is_a?(PG::ConnectionBad)
+          end
+
           # Lowest verdict id still to look at in this kind; nil when the cursor is already past the kind.
           def floor_for(kind)
-            return 0 unless @after
+            return 0 unless cursor_index
 
             order = HANDLERS.keys
-            here, there = order.index(kind), order.index(@after["kind"].to_sym)
+            here, there = order.index(kind), cursor_index
             return nil if here < there
 
             (here == there) ? @after["id"].to_i : 0
+          end
+
+          # An unknown cursor kind restarts the walk from the first kind.
+          def cursor_index
+            return @cursor_index if defined?(@cursor_index)
+
+            @cursor_index = @after && HANDLERS.keys.index(@after["kind"].to_s.to_sym)
           end
 
           def pending(kind, floor)
@@ -94,9 +111,9 @@ module Services
             verdict.update!(applied_at: done ? Time.current : verdict.applied_at, error: nil)
             @tally[(outcome == :applied) ? :applied : :noop] += 1
             @reasons[data[:reason]] += 1 if outcome == :noop && data[:reason]
-          rescue *POSTGRES_ERRORS
-            raise
           rescue => e
+            raise if fatal?(e)
+
             verdict.update!(error: "#{e.class}: #{e.message}")
             @tally[:failed] += 1
           end
