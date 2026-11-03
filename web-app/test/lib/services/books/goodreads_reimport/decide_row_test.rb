@@ -39,6 +39,8 @@ module Services
 
         def decide(row) = DecideRow.call(row: row)
 
+        def payload_for_decision(row) = decide(row)
+
         def payload_for(row)
           ::Books::RepairVerdict.find_by!(kind: :reimport_row, subject_key: "reimport:row:#{row.import_id}:#{row.row_number}")
         end
@@ -111,7 +113,8 @@ module Services
           match(e2, @crime)
 
           assert decide(row(e1, legacy: @crime)).data[:verdict].proposed?
-          assert decide(row(e2, legacy: @crime)).data[:verdict].approved?
+          other = replay_import(users(:admin_user))
+          assert decide(row(e2, legacy: @crime, import: other)).data[:verdict].approved?
         end
 
         test "Review Focus 1: two editions legacy put on one book are copied, each reviewed from its own row" do
@@ -126,10 +129,10 @@ module Services
 
           assert_equal %w[copy copy], [v1["action"], v2["action"]]
           assert_equal [@war.id, @crime.id], [v1["to_book_id"], v2["to_book_id"]]
-          assert_equal [true, true], [v1["review"], v2["review"]]
+          assert_equal [true, false], [v1["review"], v2["review"]]
         end
 
-        test "a copy group's unrated row carries no review" do
+        test "a copy group's review goes to the row that has something" do
           e1, e2 = edition, edition
           match(e1, @war)
           match(e2, @crime)
@@ -139,6 +142,17 @@ module Services
           assert_equal [true, false], [decide(r1).data[:verdict].payload["review"], decide(r2).data[:verdict].payload["review"]]
         end
 
+        test "a from-book group with nothing to carry gives the review flag to its newest row" do
+          e1, e2 = edition, edition
+          match(e1, @war)
+          match(e2, @crime)
+          newer = replay_import(@user, finished_at: 1.day.from_now)
+          r1 = row(e1, legacy: @war)
+          r2 = row(e2, legacy: @war, import: newer)
+
+          assert_equal [false, true], [decide(r1).data[:verdict].payload["review"], decide(r2).data[:verdict].payload["review"]]
+        end
+
         test "a copy group waits until every sibling row has a destination" do
           e1, e2 = edition, edition
           match(e1, @war)
@@ -146,6 +160,86 @@ module Services
           row(e2, legacy: @crime)
 
           assert_equal :waiting, decide(r1).data[:outcome]
+        end
+
+        test "every row of a user waits while any live row lacks a destination, a rejected edition excepted" do
+          e1, e2, e3 = edition, edition, edition
+          match(e1, @war)
+          match(e3, @war, status: :rejected)
+          r1 = row(e1, legacy: @crime)
+          r2 = row(e2)
+          r3 = row(e3)
+
+          assert_equal %i[waiting waiting waiting], [r1, r2, r3].map { |r| decide(r).data[:outcome] }
+          assert_equal 0, ::Books::RepairVerdict.where(kind: :reimport_row).count
+
+          match(e2, @war)
+          assert_equal :recorded, decide(r1).data[:outcome]
+          assert_equal :waiting, decide(r3).data[:outcome]
+        end
+
+        test "siblings are grouped by the merged legacy book" do
+          e1, e2 = edition, edition
+          match(e1, @war)
+          match(e2, @crime)
+          ::Services::Books::GoodreadsReplay::Apply::MergedBook.stubs(:call).with(701).returns(@war)
+          ::Services::Books::GoodreadsReplay::Apply::MergedBook.stubs(:call).with(702).returns(@war)
+          r1 = row(e1)
+          r1.update!(legacy_book_id: 701)
+          r2 = row(e2)
+          r2.update!(legacy_book_id: 702)
+
+          assert_equal %w[copy copy], [decide(r1).data[:verdict].payload["action"], decide(r2).data[:verdict].payload["action"]]
+        end
+
+        test "applied verdicts are final: an unchanged decision is kept" do
+          e = edition
+          match(e, @war)
+          r = row(e, legacy: @crime)
+          payload_for_decision(r)
+          payload_for(r).update!(applied_at: Time.current)
+
+          assert_equal :kept, decide(r).data[:outcome]
+        end
+
+        test "applied verdicts are final: a review flag that would flip is a conflict" do
+          e = edition
+          match(e, @war)
+          r = row(e, legacy: @crime)
+          payload_for_decision(r)
+          verdict = payload_for(r)
+          verdict.update!(applied_at: Time.current, payload: verdict.payload.merge("review" => false))
+          before = verdict.reload.payload
+
+          assert_equal :conflict, decide(r).data[:outcome]
+          assert_equal before, verdict.reload.payload
+        end
+
+        test "applied verdicts are final: a move that would become a copy is a conflict" do
+          e1, e2 = edition, edition
+          match(e1, @war)
+          r1 = row(e1, legacy: @crime)
+          payload_for_decision(r1)
+          payload_for(r1).update!(applied_at: Time.current)
+          before = payload_for(r1).payload
+          match(e2, @crime)
+          row(e2, legacy: @crime)
+
+          assert_equal :conflict, decide(r1).data[:outcome]
+          assert_equal before, payload_for(r1).payload
+        end
+
+        test "applied verdicts are final: a newer import appearing after a move applied is a conflict" do
+          e = edition
+          match(e, @war)
+          r = row(e, legacy: @crime)
+          payload_for_decision(r)
+          payload_for(r).update!(applied_at: Time.current)
+          before = payload_for(r).payload
+          row(e, legacy: @crime, import: replay_import(@user, finished_at: 1.day.from_now))
+
+          assert_equal :conflict, decide(r).data[:outcome]
+          assert_equal before, payload_for(r).payload
         end
 
         test "two rows from one legacy book going to the same destination stay moves" do
@@ -196,16 +290,15 @@ module Services
           assert_nil decide(mine).data[:verdict].payload["superseded_by"]
         end
 
-        test "only the user's newest rated row for a destination carries the review" do
+        test "adds: one row per destination writes the review, the newest one that has something" do
           e1, e2, e3 = edition, edition, edition
           [e1, e2, e3].each { |e| match(e, @war) }
+          newer_import = replay_import(@user, finished_at: 1.day.from_now)
           older = row(e1, rating: 5)
-          newer = row(e2, review: "text")
-          unrated = row(e3)
+          newer = row(e2, review: "text", import: newer_import)
+          unrated = row(e3, import: newer_import)
 
-          assert_equal false, decide(older).data[:verdict].payload["review"]
-          assert_equal true, decide(newer).data[:verdict].payload["review"]
-          assert_equal false, decide(unrated).data[:verdict].payload["review"]
+          assert_equal [false, true, false], [older, newer, unrated].map { |r| decide(r).data[:verdict].payload["review"] }
         end
 
         test "a zero rating without review text carries no review" do
