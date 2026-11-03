@@ -109,6 +109,19 @@ module Services
           assert_includes report, "user #{@user.id} reviews: 1 -> 0 (1 recorded destroys)"
         end
 
+        test "a mixed book's deleted copy originals give no slack, and a destroy applied before the snapshot gives none either" do
+          list = ::Books::UserList.create!(user: @user, name: "Shelf", list_type: :custom)
+          item = UserListItem.create!(user_list: list, listable: @book)
+          Report.snapshot
+          item.destroy!
+          verdict(:reimport_mixed, "reimport:book:#{@other.id}", {"book_id" => @other.id, "deleted" => [{"id" => 1, "user_id" => @user.id}]},
+            applied_at: Time.current)
+          verdict(:reimport_row, "reimport:row:#{@import.id}:5", {"user_id" => @user.id, "moved" => {"destroyed_items" => [{"id" => item.id}]}},
+            applied_at: 1.hour.ago)
+
+          assert_includes Report.call, "beyond the destroys recorded: 1"
+        end
+
         test "snapshot refuses to overwrite without redo" do
           assert_equal 1, Report.snapshot
           first = @snapshot.read

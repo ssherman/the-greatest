@@ -243,9 +243,10 @@ module Services
           path = snapshot_path
           return nil unless path.exist?
 
-          before = JSON.parse(path.read).fetch("users").transform_keys(&:to_i)
+          snapshot = JSON.parse(path.read)
+          before = snapshot.fetch("users").transform_keys(&:to_i)
           now = user_counts(before.keys)
-          destroyed = recorded_destroys(before.keys)
+          destroyed = recorded_destroys(before.keys, Time.iso8601(snapshot.fetch("taken_at")))
           result = {unexplained: [], explained: []}
           before.each do |user_id, was|
             %w[items reviews].each do |what|
@@ -264,11 +265,13 @@ module Services
           "user #{user_id} #{what}: #{was} -> #{now} (#{recorded} recorded destroys)"
         end
 
-        # {[user_id, "items"|"reviews"] => count} from the trails applied verdicts keep of what they destroyed.
-        def recorded_destroys(user_ids)
+        # {[user_id, "items"|"reviews"] => count} from the trails of verdicts applied after the snapshot. A mixed
+        # book's deleted leftovers are not counted: each already has its replacement on the destination, so it is no
+        # net drop and must give no slack.
+        def recorded_destroys(user_ids, taken_at)
           wanted = user_ids.to_set
           totals = Hash.new(0)
-          trailed = ::Books::RepairVerdict.where(kind: %w[reimport_row reimport_guess]).where.not(applied_at: nil)
+          trailed = ::Books::RepairVerdict.where(kind: %w[reimport_row reimport_guess]).where("applied_at > ?", taken_at)
             .where("jsonb_array_length(COALESCE(payload -> 'moved' -> 'destroyed_items', '[]'::jsonb)) > 0 OR " \
               "jsonb_array_length(COALESCE(payload -> 'moved' -> 'destroyed_reviews', '[]'::jsonb)) > 0")
           trailed.find_each do |verdict|
@@ -277,11 +280,6 @@ module Services
 
             totals[[user_id, "items"]] += Array(verdict.payload.dig("moved", "destroyed_items")).size
             totals[[user_id, "reviews"]] += Array(verdict.payload.dig("moved", "destroyed_reviews")).size
-          end
-          ::Books::RepairVerdict.reimport_mixed.where.not(applied_at: nil).where("payload ? 'deleted'").find_each do |verdict|
-            Array(verdict.payload["deleted"]).each do |item|
-              totals[[item["user_id"], "items"]] += 1 if wanted.include?(item["user_id"])
-            end
           end
           totals
         end
