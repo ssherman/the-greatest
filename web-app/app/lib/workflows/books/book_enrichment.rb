@@ -4,7 +4,10 @@
 # step and the Amazon step of an import. Each wraps an existing service in an
 # adapter under Steps. Version 2 added goodreads, which book_facts and amazon
 # wait on (`waits_on: {goodreads: :finish}`); a run planned under version 1
-# has only the other two steps and still runs.
+# has only the other two steps and still runs. Version 3 added evidence (a
+# books.evidence ledger row for the later origin and category stages), which
+# waits on goodreads too; a run planned under version 2 has no evidence step
+# and still runs.
 #
 # book_facts also waits for the AI step of every author the import created, but
 # those are other runs' steps, so those waits are passed at plan time (start)
@@ -16,12 +19,17 @@ module Workflows
   module Books
     class BookEnrichment < Workflows::Definition
       workflow "books.book_enrichment"
-      version 2
+      version 3
       target_class ::Books::Book
 
       # On the goodreads_fetch capsule, one job at a time: FetchGate pacing relies on it.
       add_step key: :goodreads, queue: :goodreads_fetch, lease: 10.minutes,
         adapter: Steps::Goodreads.new
+
+      # Gathers Wikidata, Wikipedia and WorldCat evidence. Nothing waits on it yet;
+      # the categorize step of the next stage will.
+      add_step key: :evidence, queue: :low, lease: 10.minutes, waits_on: {goodreads: :finish},
+        adapter: Steps::Evidence.new
 
       add_step key: :book_facts, queue: :low, lease: 15.minutes, waits_on: {goodreads: :finish},
         adapter: Steps::BookFacts.new

@@ -17,6 +17,18 @@ class BooksEnrichRakeTest < ActiveSupport::TestCase
     @task.reenable
   end
 
+  test "books:evidence prints the QID, sections and failed sources" do
+    book = books_books(:got)
+    enrichment = book.enrichments.create!(kind: "books.evidence", outcome: :applied, facts: {
+      "wikidata" => {"qid" => "Q42", "via" => "isbn"}, "wikipedia" => nil, "worldcat" => {}, "sources_failed" => ["wikipedia"]
+    })
+    ::Services::Books::Evidence::Gather.expects(:call).with(book: book).returns(stub(data: {enrichment: enrichment}))
+    task = Rake::Task["books:evidence"]
+    task.reenable
+
+    assert_output(/QID: Q42 \(via isbn\).*sections: wikidata, worldcat.*sources_failed: wikipedia/m) { task.invoke(book.id.to_s) }
+  end
+
   test "a book whose only ledger row defers to its authors is still missing; an enriched one is not" do
     deferred = ::Books::Book.create!(title: "Deferred Book")
     ::Services::Books::DeferredEnrichment.defer!(deferred)
