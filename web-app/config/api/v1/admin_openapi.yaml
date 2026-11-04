@@ -16,6 +16,7 @@ paths:
     x-domain: books
     get:
       operationId: getAdminOpenapi
+      security: [{bearerAuth: ["books:admin:read"]}]
       summary: This document
       description: Requires `books:admin:read`.
       responses:
@@ -48,6 +49,7 @@ paths:
     x-domain: books
     get:
       operationId: searchAdminBooks
+      security: [{bearerAuth: ["books:admin:read"]}]
       summary: Search books
       description: Full-text search over titles, subtitles and author names. Unlike the public API this includes provisional (unreviewed import) books and every book kind. Requires `books:admin:read`. At most the first 1000 matches are paged.
       parameters:
@@ -92,6 +94,7 @@ paths:
     x-domain: books
     get:
       operationId: searchAdminAuthors
+      security: [{bearerAuth: ["books:admin:read"]}]
       summary: Search authors
       description: Full-text search over author names, including provisional authors. Requires `books:admin:read`. At most the first 1000 matches are paged.
       parameters:
@@ -136,6 +139,7 @@ paths:
     x-domain: books
     get:
       operationId: searchAdminCategories
+      security: [{bearerAuth: ["books:admin:read"]}]
       summary: Search categories
       description: |
         Books categories of every status, by name. `q` is optional and matches the name and the alternative names as a case-insensitive substring; without it every category of the given filters is listed by name. With `q`, an exact name match comes first, then a name that starts with it, then a word that starts with it, then the rest. Requires `books:admin:read`.
@@ -193,6 +197,7 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
     post:
       operationId: createAdminCategory
+      security: [{bearerAuth: ["books:admin:write"]}]
       summary: Create a category
       description: |
         Creates a books category. `name` is required; `category_type` defaults to `genre`. Refused (422) when an active category of the same type already uses the name, as its name or as an alias. Requires `books:admin:write`, and the token's owner must be allowed to write books categories.
@@ -236,6 +241,7 @@ paths:
     x-domain: books
     get:
       operationId: getAdminCategory
+      security: [{bearerAuth: ["books:admin:read"]}]
       summary: One category, any status
       description: The category with its children and, for a location, its ancestors from the top down. Deleted and merged categories answer too. Requires `books:admin:read`.
       parameters:
@@ -270,6 +276,7 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
     patch:
       operationId: updateAdminCategory
+      security: [{bearerAuth: ["books:admin:write"]}]
       summary: Edit a category
       description: |
         Changes only the keys sent. A rename keeps the id, and the old slug still resolves. Deleted and merged categories cannot be edited (422). Refused (422) when the new name belongs to another active category of the same type, as its name or as an alias; changing only the case of its own name is allowed. Requires `books:admin:write`, and the token's owner must be allowed to write books categories.
@@ -315,6 +322,7 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
     delete:
       operationId: deleteAdminCategory
+      security: [{bearerAuth: ["books:admin:merge"]}]
       summary: Soft-delete a category
       description: |
         Marks the category deleted AND REMOVES EVERY ONE OF ITS LINKS to books and authors. The category row stays, but deleting it cannot be undone with the links intact: restoring it would not bring them back.
@@ -363,6 +371,7 @@ paths:
     x-domain: books
     post:
       operationId: mergeCategories
+      security: [{bearerAuth: ["books:admin:merge"]}]
       summary: Merge categories into this one
       description: |
         Folds each category in `source_ids` (1 to 50, no repeats, never the target) into the category in the path, one at a time in the order given. Every source's links move to the target, the source is soft-deleted with `merged_into` pointing at the target, and its slug keeps resolving to the target. There is no undelete.
@@ -415,6 +424,7 @@ paths:
     x-domain: books
     post:
       operationId: mergeBook
+      security: [{bearerAuth: ["books:admin:merge"]}]
       summary: Merge a duplicate book
       description: |
         Folds the book named by `source_id` into the book in the path and PERMANENTLY DELETES the source.
@@ -465,6 +475,7 @@ paths:
     x-domain: books
     post:
       operationId: mergeAuthor
+      security: [{bearerAuth: ["books:admin:merge"]}]
       summary: Merge a duplicate author
       description: |
         Folds the author named by `source_id` into the author in the path and PERMANENTLY DELETES the source.
@@ -515,6 +526,7 @@ paths:
     x-domain: books
     post:
       operationId: tagBook
+      security: [{bearerAuth: ["books:admin:write"]}]
       summary: Tag a book with a category
       description: |
         Links the category in `category_id` to the book. Tagging twice is a success and changes nothing; tagging with a category that was inferred from a more specific location makes the link direct.
@@ -564,6 +576,7 @@ paths:
     x-domain: books
     delete:
       operationId: untagBook
+      security: [{bearerAuth: ["books:admin:write"]}]
       summary: Remove a category from a book
       description: |
         Removes a direct link. A link inferred from a more specific location cannot be removed directly (422, the message names the location to remove instead); a category the book does not have is 404.
@@ -607,6 +620,7 @@ paths:
     x-domain: books
     post:
       operationId: tagAuthor
+      security: [{bearerAuth: ["books:admin:write"]}]
       summary: Tag an author with a category
       description: |
         Links the category in `category_id` to the author. Tagging twice is a success and changes nothing; tagging with a category that was inferred from a more specific location makes the link direct.
@@ -656,6 +670,7 @@ paths:
     x-domain: books
     delete:
       operationId: untagAuthor
+      security: [{bearerAuth: ["books:admin:write"]}]
       summary: Remove a category from an author
       description: |
         Removes a direct link. A link inferred from a more specific location cannot be removed directly (422, the message names the location to remove instead); a category the author does not have is 404.

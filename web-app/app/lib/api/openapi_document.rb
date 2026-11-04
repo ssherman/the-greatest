@@ -16,6 +16,39 @@ module Api
       admin: Rails.root.join("config/api/v1/admin_openapi.yaml")
     }.freeze
     DOMAIN_KEY = "x-domain"
+    HTTP_METHODS = %w[get put post delete patch].freeze
+
+    # One operation of a document. `scope` is the single scope its `security`
+    # declares (`[{bearerAuth: [scope]}]`), or nil for `security: []`, which is
+    # how an operation that needs no token says so. Anything more elaborate (several
+    # requirement objects, several scopes) raises instead of being guessed at: a
+    # consumer filtering operations by scope would otherwise expose or hide them
+    # on a guess.
+    Operation = Struct.new(:http_method, :path, :operation_id, :path_item, :definition, keyword_init: true) do
+      def scope
+        requirements = definition.fetch("security")
+        return nil if requirements.empty?
+
+        raise ArgumentError, "#{operation_id} declares #{requirements.size} security requirements; expected one" unless requirements.one?
+
+        scopes = requirements.first.values.flatten
+        raise ArgumentError, "#{operation_id} declares #{scopes.size} scopes; expected one" unless scopes.one?
+
+        scopes.first
+      end
+    end
+
+    # Every operation in `source` (a document Hash: `raw` or `for_host` output),
+    # in document order. Path-item keys that are not HTTP methods (`parameters`,
+    # `x-domain`, `summary`, ...) are skipped.
+    def self.operations(source)
+      source.fetch("paths").flat_map do |path, item|
+        item.slice(*HTTP_METHODS).map do |http_method, definition|
+          Operation.new(http_method: http_method, path: path, operation_id: definition["operationId"],
+            path_item: item, definition: definition)
+        end
+      end
+    end
 
     def self.raw(document = :public)
       return load(document) if Rails.env.development?
