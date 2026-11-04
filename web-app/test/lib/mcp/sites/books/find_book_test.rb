@@ -24,9 +24,10 @@ module Mcp
 
         def hits(*books) = books.map { |book| {id: book.id.to_s, score: 1.0, source: {}} }
 
-        def find_book(title, secret: ApiTokenSecrets::MEMBER)
+        def find_book(title, secret: ApiTokenSecrets::MEMBER, **extra)
+          arguments = title.nil? ? extra : {title: title}.merge(extra)
           response = Mcp::Sites::Books::FindBook.tool(catalog).call(
-            title: title, server_context: {principal: principal_for(secret), request: outer_request}
+            **arguments, server_context: {principal: principal_for(secret), request: outer_request}
           )
           [response, JSON.parse(response.content.first[:text])]
         end
@@ -58,6 +59,26 @@ module Mcp
             ["getBook", {slug: "war"}],
             ["listBookLists", {slug: "war", limit: 100}]
           ], seen
+        end
+
+        test "an unknown argument is an invalid_parameter error without dispatching" do
+          Mcp::Dispatcher.expects(:call).never
+
+          response, payload = find_book("war", bogus: 1)
+
+          assert_equal true, response.error?
+          assert_equal({"code" => "invalid_parameter", "detail" => "Unknown argument: bogus"}, payload)
+        end
+
+        test "a blank or missing title is an invalid_parameter error naming title" do
+          Mcp::Dispatcher.expects(:call).never
+
+          [find_book("  "), find_book(nil)].each do |response, payload|
+            assert_equal true, response.error?
+            assert_equal "invalid_parameter", payload["code"]
+            assert_includes payload["detail"], "title"
+            assert_not_includes payload["detail"], "q"
+          end
         end
 
         test "no hits is a not_found error naming the title" do
@@ -110,6 +131,14 @@ module Mcp
 
           assert_same tool, Mcp::Sites::Books::FindBook.tool(catalog)
           assert_equal "find_book", tool.name_value
+        end
+
+        test "a different catalogue gets its own tool, kept for that catalogue" do
+          other = Mcp::Catalog.new(::Api::OpenapiDocument.for_host(::Api::Host.base_url(:books), domain: :books, document: :public))
+          tool = Mcp::Sites::Books::FindBook.tool(other)
+
+          assert_not_same tool, Mcp::Sites::Books::FindBook.tool(catalog)
+          assert_same tool, Mcp::Sites::Books::FindBook.tool(other)
         end
       end
     end

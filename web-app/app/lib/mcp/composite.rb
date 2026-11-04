@@ -28,11 +28,11 @@ module Mcp
         operation_ids.all? { |id| principal.scope?(catalog.fetch(id).scope) }
       end
 
-      # The MCP tool for this catalogue, built once per catalogue. The catalogue
-      # is held weakly, so one rebuilt on every request (development) is not
-      # kept alive by this cache.
+      # The MCP tool for this catalogue, built once per catalogue. The cache
+      # lives on the catalogue (Catalog#cached), so it lasts exactly as long as
+      # the catalogue does, including when development rebuilds it per request.
       def tool(catalog)
-        (@tools ||= ObjectSpace::WeakMap.new)[catalog] ||= build_tool(catalog)
+        catalog.cached(self) { build_tool(catalog) }
       end
 
       def dispatch(catalog, operation_id, args, principal:, request:)

@@ -34,7 +34,14 @@ module Mcp
 
         def self.run(catalog, args, principal:, request:)
           call = ->(operation_id, arguments) { dispatch(catalog, operation_id, arguments, principal: principal, request: request) }
-          title = args[:title].to_s
+          # Nothing validates a composite's arguments for us (the server does not
+          # check them against the schema), so refuse here in the dispatcher's own
+          # shape rather than send the search something it was not asked.
+          unknown = args.keys.map(&:to_s) - ["title"]
+          return invalid_parameter("Unknown argument: #{unknown.sort.join(", ")}") if unknown.any?
+
+          title = args[:title].to_s.strip
+          return invalid_parameter("Missing argument: title") if title.empty?
 
           found = call.call("searchBooks", {q: title, limit: 1})
           return ::Mcp::ToolResult.from(found) unless success?(found)
@@ -59,6 +66,11 @@ module Mcp
 
         def self.success?(response) = (200..299).cover?(response.status)
         private_class_method :success?
+
+        def self.invalid_parameter(detail)
+          ::Mcp::ToolResult.error({"code" => "invalid_parameter", "detail" => detail})
+        end
+        private_class_method :invalid_parameter
       end
     end
   end

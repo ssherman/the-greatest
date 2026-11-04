@@ -49,6 +49,7 @@ module Mcp
       @components = source["components"] || {}
       @operations = {}
       @tools = {}
+      @cache = Concurrent::Map.new
       ::Api::OpenapiDocument.operations(source).each do |api_operation|
         next unless api_operation.definition.key?(EXTENSION)
 
@@ -61,6 +62,13 @@ module Mcp
       end
       @operations.freeze
       @tools.freeze
+    end
+
+    # Something derived from this catalogue, built once for `key` and kept for
+    # the catalogue's own lifetime (a composite's tool, say). When the catalogue
+    # is rebuilt on every request (development) the cache goes with it.
+    def cached(key, &build)
+      @cache.compute_if_absent(key, &build)
     end
 
     def operations = @operations.values

@@ -122,6 +122,20 @@ module Mcp
       assert_equal "Unknown argument: alpha, zeta", result.body["detail"]
     end
 
+    test "an unknown key that is the wire name of a renamed argument says what to use" do
+      Rails.application.routes.expects(:call).never
+
+      result = dispatch(list_books, {per_page: 5})
+
+      assert_equal "Unknown argument: per_page (use limit)", result.body["detail"]
+    end
+
+    test "the rename hint is per key and sits among the plain unknown ones" do
+      result = dispatch(list_books, {zeta: 1, per_page: 5})
+
+      assert_equal "Unknown argument: per_page (use limit), zeta", result.body["detail"]
+    end
+
     test "the inner request sees the outer remote_ip and request id" do
       events = capture_process_actions { dispatch(list_books, {}) }
 

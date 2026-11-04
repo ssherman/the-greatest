@@ -89,6 +89,20 @@ module Api
       assert_equal response.parsed_body.except("links"), from_tool
     end
 
+    test "tools/call list_books with a filter and a limit returns the REST body" do
+      RankedItem.create!(item: @war_and_peace, ranking_configuration: ranking_configurations(:books_global), rank: 1, score: 100)
+      RankedItem.create!(item: books_books(:crime_and_punishment), ranking_configuration: ranking_configurations(:books_global), rank: 2, score: 90)
+
+      call_tool("list_books", {year: 1869, limit: 5})
+      assert_equal false, json.dig("result", "isError")
+      from_tool = tool_text
+
+      get "/api/v1/books?year=1869&per_page=5", headers: bearer(ApiTokenSecrets::MEMBER)
+      assert_equal response.parsed_body.except("links"), from_tool
+      assert_equal %w[war-and-peace], from_tool["data"].map { |book| book["slug"] }
+      assert_equal({"year" => 1869}, from_tool.dig("meta", "filters"))
+    end
+
     test "tools/call get_book on a missing slug carries the REST problem" do
       call_tool("get_book", {slug: "no-such-book"})
       assert_equal true, json.dig("result", "isError")
@@ -131,6 +145,69 @@ module Api
         assert_response :success, headers.inspect
         assert_equal false, json.dig("result", "isError"), headers.inspect
       end
+    end
+
+    MODERN_VERSION = "2026-07-28"
+
+    # The 2026-07-28 lifecycle (what Claude Code speaks): no initialize, the
+    # version on a header and in every request's _meta, the method and name
+    # mirrored in headers.
+    def modern_rpc(method, params = {}, name: nil, token: ApiTokenSecrets::MEMBER)
+      meta = {
+        "io.modelcontextprotocol/protocolVersion" => MODERN_VERSION,
+        "io.modelcontextprotocol/clientCapabilities" => {},
+        "io.modelcontextprotocol/clientInfo" => {name: "test", version: "1"}
+      }
+      headers = {"MCP-Protocol-Version" => MODERN_VERSION, "Mcp-Method" => method}
+      headers["Mcp-Name"] = name if name
+      rpc(method, params.merge(_meta: meta), token: token, headers: headers)
+    end
+
+    test "modern tools/call get_book is stateless and returns the REST body" do
+      modern_rpc("tools/call", {name: "get_book", arguments: {slug: @war_and_peace.slug}}, name: "get_book")
+
+      assert_response :success
+      assert_nil response.headers["Mcp-Session-Id"]
+      assert_equal "private, no-store", response.headers["Cache-Control"]
+      assert_equal false, json.dig("result", "isError")
+      from_tool = tool_text
+
+      get "/api/v1/books/#{@war_and_peace.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+      assert_equal response.parsed_body.except("links"), from_tool
+    end
+
+    test "modern server/discover returns the instructions" do
+      modern_rpc("server/discover")
+
+      assert_response :success
+      assert_nil response.headers["Mcp-Session-Id"]
+      assert_includes json.dig("result", "instructions"), "url"
+    end
+
+    test "a modern request with no token is the REST 401" do
+      modern_rpc("tools/call", {name: "get_book", arguments: {slug: @war_and_peace.slug}}, name: "get_book", token: nil)
+
+      assert_response :unauthorized
+      assert_equal "unauthenticated", json["code"]
+    end
+
+    test "the response keeps the Content-Type the transport chose" do
+      sse = "event: message\ndata: {}\n\n"
+      ::MCP::Server::Transports::StreamableHTTPTransport.any_instance.stubs(:handle_request)
+        .returns([200, {"content-type" => "text/event-stream"}, [sse]])
+
+      rpc("tools/list")
+
+      assert_response :success
+      assert response.headers["Content-Type"].start_with?("text/event-stream")
+      assert_equal sse, response.body
+    end
+
+    test "the global MCP exception reporter forwards to Rails.error" do
+      error = RuntimeError.new("boom")
+      Rails.error.expects(:report).with(error)
+
+      ::MCP.configuration.exception_reporter.call(error, {})
     end
 
     test "an unknown tool is a JSON-RPC invalid params error" do

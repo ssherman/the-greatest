@@ -6,7 +6,7 @@ module Mcp
   # OpenAPI document; Mcp::Dispatcher consumes them.
   #
   #   http_method  lowercase ("get")
-  #   path         the OpenAPI template ("/api/v1/books/{slug}")
+  #   path         the OpenAPI template ("/api/v1/widgets/{slug}")
   #   arguments    Hash{String => Argument}, keyed by the tool argument's name
   Operation = Struct.new(
     :operation_id, :tool_name, :title, :description, :http_method, :path, :scope,

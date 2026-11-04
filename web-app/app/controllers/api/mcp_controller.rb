@@ -30,7 +30,7 @@ module Api
       text = read(body)
       return head(status) if text.empty?
 
-      render body: text, status: status, content_type: "application/json"
+      render body: text, status: status, content_type: content_type_of(headers) || "application/json"
     end
 
     def method_not_allowed
@@ -53,6 +53,12 @@ module Api
         serve_subscriptions_listen: false,
         allowed_hosts: ::Rails.application.config.domains.fetch(Current.domain).split(",")
       )
+    end
+
+    # The transport's own Content-Type (a modern response that carries
+    # notifications is an event stream), whatever its header's case.
+    def content_type_of(headers)
+      headers.find { |name, _| name.to_s.casecmp?("Content-Type") }&.last.presence
     end
 
     def read(body)

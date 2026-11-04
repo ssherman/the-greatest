@@ -9,8 +9,9 @@ module Api
   #
   # A request dispatched in-process by the MCP server (Api::DispatchedRequest)
   # is not counted: the outer /api/mcp POST already took its one hit and its
-  # response carries the headers. The MCP dispatcher is the only writer of the
-  # dispatched flag, so this sets no headers and counts nothing.
+  # response carries the headers. Such a request therefore sets no headers and
+  # counts nothing here. The MCP dispatcher is the only writer of the dispatched
+  # flag, and no client header can set it.
   module RateLimited
     extend ActiveSupport::Concern
 

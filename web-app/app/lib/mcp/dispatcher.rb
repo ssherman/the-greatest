@@ -13,10 +13,11 @@ module Mcp
   #   action_dispatch.parameter_filter; without it the inner "Parameters:" log
   #   line would print tokens and other filtered values in the clear.
   # - request.remote_ip comes from the RemoteIp middleware, which does not run
-  #   here, so action_dispatch.remote_ip is copied from the outer request. So is
-  #   REMOTE_ADDR, because the inner unauthenticated-visitor rate-limit window
-  #   is keyed on the IP and must be the same window the outer request used.
-  #   action_dispatch.request_id is copied so the inner log lines and any
+  #   here, so action_dispatch.remote_ip is copied from the outer request.
+  #   `visitor_ip` (the key of the inner unauthenticated-visitor rate-limit
+  #   window) reads exactly that, so it is the same window the outer request
+  #   used. REMOTE_ADDR is copied as well, as defence in depth for anything that
+  #   reads `request.ip` instead. action_dispatch.request_id is copied so the inner log lines and any
   #   problem body carry the outer request's id.
   #
   # The skipped stack also includes ShowExceptions, so an exception in a
@@ -45,10 +46,10 @@ module Mcp
 
     def call
       unknown = @arguments.keys - @operation.arguments.keys
-      return invalid_parameter("Unknown argument: #{unknown.sort.join(", ")}") if unknown.any?
+      return invalid_parameter("Unknown argument: #{unknown.sort.map { |name| with_rename_hint(name) }.join(", ")}") if unknown.any?
 
       # A blank path value would interpolate to an empty segment, and the router
-      # collapses that ("/books/" is the index, "/books//lists" is "/books/lists"),
+      # collapses that ("/widgets/" is the index, "/widgets//parts" is "/widgets/parts"),
       # reaching a different operation. Blank means missing.
       missing = path_names.select { |name| @arguments[name].to_s.strip.empty? }
       return invalid_parameter("Missing argument: #{missing.sort.join(", ")}") if missing.any?
@@ -57,6 +58,13 @@ module Mcp
     end
 
     private
+
+    # An agent that knows the REST API may send the wire name of an argument the
+    # tool renamed (`per_page` for `limit`): say what to use instead.
+    def with_rename_hint(name)
+      renamed = @operation.arguments.find { |tool_name, argument| argument.wire_name == name && tool_name != name }&.first
+      renamed ? "#{name} (use #{renamed})" : name
+    end
 
     def dispatch
       env = build_env
