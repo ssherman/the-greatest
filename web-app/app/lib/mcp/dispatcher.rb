@@ -60,7 +60,7 @@ module Mcp
 
     def dispatch
       env = build_env
-      status, headers, body = ::Rails.application.routes.call(env)
+      status, headers, body = keeping_execution_context { ::Rails.application.routes.call(env) }
       Response.new(status: status, body: parse(headers, read(body)))
     rescue => error
       ::Rails.error.report(error, handled: true, severity: :error, context: {operation_id: @operation.operation_id})
@@ -69,6 +69,16 @@ module Mcp
         "detail" => INTERNAL_ERROR_DETAIL,
         "request_id" => @request.request_id
       }.compact)
+    end
+
+    # The inner controller records itself as the execution context's controller
+    # and never restores it, so an error reported after the tool call would name
+    # the inner controller instead of the outer one.
+    def keeping_execution_context
+      outer = ::ActiveSupport::ExecutionContext.to_h[:controller]
+      yield
+    ensure
+      ::ActiveSupport::ExecutionContext[:controller] = outer
     end
 
     def build_env

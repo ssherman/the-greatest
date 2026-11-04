@@ -137,6 +137,17 @@ module Mcp
       assert_not_empty events.first[:request].env["action_dispatch.parameter_filter"]
     end
 
+    test "a dispatch leaves the outer request's execution context controller in place" do
+      outer = Object.new
+      ActiveSupport::ExecutionContext[:controller] = outer
+
+      dispatch(list_books, {limit: 1})
+
+      assert_same outer, ActiveSupport::ExecutionContext.to_h[:controller]
+    ensure
+      ActiveSupport::ExecutionContext[:controller] = nil
+    end
+
     test "a dispatch counts no rate-limit hit and no token use" do
       principal = principal_for(ApiTokenSecrets::MEMBER)
       Services::Api::RateLimiter.expects(:hit).never
