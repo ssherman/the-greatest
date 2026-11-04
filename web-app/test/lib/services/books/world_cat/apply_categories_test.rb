@@ -28,6 +28,19 @@ module Services
           @book.reload.categories.where(category_type: type).order(:name).pluck(:name)
         end
 
+        test "a new link is recorded as a worldcat link" do
+          ApplyCategories.call(book: @book, records: [record(1, genre: "Romans")], map: @map)
+          link = CategoryItem.joins(:category).find_by!(item: @book, categories: {name: "Fiction"})
+          assert link.source_worldcat?
+        end
+
+        test "an existing link keeps its source" do
+          fiction = ::Books::Category.active.genre.by_name("Fiction").first
+          existing = CategoryItem.find_or_create_by!(category: fiction, item: @book) { |l| l.source = :admin }
+          ApplyCategories.call(book: @book, records: [record(1, genre: "Romans")], map: @map)
+          assert existing.reload.source_admin?
+        end
+
         test "links a genre carried by at least two records" do
           records = [record(1, genre: "Fiction"), record(2, genre: "Romans"), record(3, genre: "novels")]
           result = ApplyCategories.call(book: @book, records: records, map: @map)
