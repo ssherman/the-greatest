@@ -123,3 +123,6 @@ gem "rails_icons", "~> 1.8"
 # HTML -> Markdown, needed only for the one-time legacy blog migration.
 # Removable once the production run is done.
 gem "reverse_markdown", "~> 3.0"
+
+# Model Context Protocol server: the /api/mcp endpoint and its tool results.
+gem "mcp", "~> 1.8"
