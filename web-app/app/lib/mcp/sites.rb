@@ -18,7 +18,7 @@ module Mcp
       def self.composites(_document) = []
     end
 
-    REGISTRY = {}
+    REGISTRY = {books: ::Mcp::Sites::Books}.freeze
 
     def self.for(domain) = REGISTRY.fetch(domain, None)
   end

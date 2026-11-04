@@ -13,10 +13,20 @@ module Mcp
       )
     end
 
-    test "build registers exactly the catalogue's tools for the principal when the site has no composites" do
+    test "build registers the catalogue's tools for the principal plus the site's composites" do
       catalog = Mcp::Catalog.for(document: :public, domain: :books)
 
-      assert_equal catalog.tools_for(principal).map(&:name_value).sort, build.tools.keys.sort
+      assert_equal (catalog.tools_for(principal).map(&:name_value) + ["find_book"]).sort, build.tools.keys.sort
+    end
+
+    test "a principal without the composite's scopes is not offered it" do
+      music_only = Api::Principal.new(user: users(:regular_user), token: nil, scopes: ["music:read"], tier: :member)
+      server = Mcp::ServerFactory.build(
+        document: :public, domain: :books, principal: music_only,
+        request: ActionDispatch::Request.new(Rack::MockRequest.env_for("https://dev-new.thegreatestbooks.org/api/mcp"))
+      )
+
+      assert_not_includes server.tools.keys, "find_book"
     end
 
     test "the server is named for the domain" do

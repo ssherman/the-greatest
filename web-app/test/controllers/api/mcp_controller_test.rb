@@ -182,6 +182,49 @@ module Api
       assert_equal false, json.dig("result", "isError")
     end
 
+    test "prompts/get usage answers with the rules" do
+      rpc("prompts/get", {name: "usage"})
+
+      assert_response :success
+      assert_includes json.dig("result", "messages", 0, "content", "text"), "never invent a rank"
+    end
+
+    test "resources/list includes the methodology and resources/read returns its text" do
+      rpc("resources/list")
+      assert_includes json.dig("result", "resources").map { |resource| resource["uri"] }, "greatest://books/ranking-methodology"
+
+      rpc("resources/read", {uri: "greatest://books/ranking-methodology"})
+      assert_response :success
+      assert_equal "text/markdown", json.dig("result", "contents", 0, "mimeType")
+      assert_includes json.dig("result", "contents", 0, "text"), "ranking configuration"
+    end
+
+    test "initialize carries the instructions" do
+      rpc("initialize", initialize_params)
+
+      assert_includes json.dig("result", "instructions"), "url"
+    end
+
+    test "tools/list includes find_book for a books reader" do
+      rpc("tools/list")
+
+      assert_includes json.dig("result", "tools").map { |tool| tool["name"] }, "find_book"
+    end
+
+    test "tools/call find_book is one rate-limit hit however many dispatches it makes" do
+      ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: @war_and_peace.id.to_s, score: 1.0, source: {}}])
+      verdict = Services::Api::RateLimiter::Verdict.new(
+        minute: Services::Api::RateLimiter::Window.new(limit: 60, remaining: 59, reset_at: 30.seconds.from_now, exceeded: false),
+        day: Services::Api::RateLimiter::Window.new(limit: 5000, remaining: 4999, reset_at: 1.day.from_now, exceeded: false)
+      )
+      Services::Api::RateLimiter.expects(:hit).once.returns(verdict)
+
+      call_tool("find_book", {title: "War and Peace"})
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal @war_and_peace.slug, tool_text.dig("book", "slug")
+    end
+
     test "GET and DELETE are 405 with Allow: POST" do
       get "/api/mcp", headers: bearer(ApiTokenSecrets::MEMBER)
       assert_response :method_not_allowed
