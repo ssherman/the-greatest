@@ -30,8 +30,17 @@ paths:
     x-domain: books
     get:
       operationId: listBooks
+      security: [{bearerAuth: ["books:read"]}]
       summary: Books in rank order
       description: The Greatest Books' primary ranking, best first. Only ranked books appear. The filter parameters narrow the list as they do on the site; `meta.filters` echoes the ones applied.
+      x-mcp:
+        description: >-
+          Returns the primary ranking of The Greatest Books, best first, one page at a time; each book
+          carries its `rank`, title, authors and first-published year. Use it for "top N" questions,
+          narrowing with `country_id`, `year`, `category_id`, `collection` or the published range
+          (list_categories finds category slugs; a book's `countries`, from get_book, shows country
+          slugs), and prefer search_books when you have a title or author. `limit` is at most 100;
+          `meta.total_count` gives the size of the whole result.
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
@@ -75,7 +84,13 @@ paths:
     x-domain: books
     get:
       operationId: getBook
+      security: [{bearerAuth: ["books:read"]}]
       summary: One book
+      x-mcp:
+        description: >-
+          Returns one book by slug with its full record: rank, subtitle, description, categories,
+          countries, original language, length and alternate titles. Use it once you have a slug from
+          list_books or search_books.
       parameters:
         - $ref: "#/components/parameters/slug"
       responses:
@@ -110,8 +125,14 @@ paths:
     x-domain: books
     get:
       operationId: listBookLists
+      security: [{bearerAuth: ["books:read"]}]
       summary: Lists a book is on
       description: Every active list the book appears on, with its `position` there. Lists that feed the primary ranking come first, heaviest first; the rest follow by id with `weight` null.
+      x-mcp:
+        description: >-
+          Returns the active lists one book appears on and its `position` on each, with the lists that
+          feed the primary ranking first, heaviest first. Use it to see which sources recommend a book and
+          why it ranks where it does.
       parameters:
         - $ref: "#/components/parameters/slug"
         - $ref: "#/components/parameters/page"
@@ -150,8 +171,14 @@ paths:
     x-domain: books
     get:
       operationId: listAuthors
+      security: [{bearerAuth: ["books:read"]}]
       summary: Authors in rank order
       description: The Greatest Books' primary author ranking, best first. Only ranked authors appear. Empty until an author ranking has been calculated.
+      x-mcp:
+        description: >-
+          Returns the primary author ranking, best first, with each author's `rank` and birth and death
+          years. It is empty until an author ranking has been calculated; use get_author for one author's
+          detail.
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
@@ -187,8 +214,14 @@ paths:
     x-domain: books
     get:
       operationId: getAuthor
+      security: [{bearerAuth: ["books:read"]}]
       summary: One author
       description: The author alone. Their books are not embedded; a paginated sub-collection is a later addition.
+      x-mcp:
+        description: >-
+          Returns one author by slug: rank, birth and death years, kind (person, organization, pseudonym
+          or collective), alternate names and description. It does not list their books; use search_books
+          with the author's name to find them.
       parameters:
         - $ref: "#/components/parameters/slug"
       responses:
@@ -223,8 +256,14 @@ paths:
     x-domain: books
     get:
       operationId: listRankingConfigurations
+      security: [{bearerAuth: ["books:read"]}]
       summary: Ranking configurations
       description: The global book rankings the site publishes, primary first. A book's `rank` and a list's `weight` are always relative to one of these.
+      x-mcp:
+        description: >-
+          Lists the book rankings the site publishes, the primary one first, with each one's `id`, year,
+          and book and list counts. Use it to find the `id` the ranking_configuration tools take;
+          list_books already reads the primary ranking.
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
@@ -260,7 +299,13 @@ paths:
     x-domain: books
     get:
       operationId: getRankingConfiguration
+      security: [{bearerAuth: ["books:read"]}]
       summary: One ranking configuration
+      x-mcp:
+        description: >-
+          Returns one ranking configuration by `id`: its name, whether it is the primary ranking, when it
+          was last calculated, and how many books and lists it has. Use it to learn what a configuration
+          is before reading its books or lists.
       parameters:
         - $ref: "#/components/parameters/id"
       responses:
@@ -295,8 +340,14 @@ paths:
     x-domain: books
     get:
       operationId: listRankingConfigurationBooks
+      security: [{bearerAuth: ["books:read"]}]
       summary: Books in rank order on one configuration
       description: The same rows and shape as `/api/v1/books`, ranked by the named configuration; `rank` is relative to it. Only ranked books appear.
+      x-mcp:
+        description: >-
+          Returns the books ranked best first by one named ranking configuration (an `id` from
+          list_ranking_configurations), taking the same filters as list_books. A book's `rank` here is
+          relative to that configuration; for the primary ranking use list_books.
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/page"
@@ -341,8 +392,13 @@ paths:
     x-domain: books
     get:
       operationId: listRankingConfigurationLists
+      security: [{bearerAuth: ["books:read"]}]
       summary: Lists behind one configuration
       description: The same rows and shape as `/api/v1/lists`, on the named configuration; `weight` is relative to it.
+      x-mcp:
+        description: >-
+          Returns the lists that feed one named ranking configuration, heaviest first; `weight` is
+          relative to that configuration. For the primary ranking use list_lists.
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/page"
@@ -381,8 +437,14 @@ paths:
     x-domain: books
     get:
       operationId: listLists
+      security: [{bearerAuth: ["books:read"]}]
       summary: Lists behind the primary ranking
       description: The active lists that feed The Greatest Books' primary ranking, heaviest first. `weight` is the list's weight on that ranking; `item_count` is the number of books `items_api_url` serves.
+      x-mcp:
+        description: >-
+          Returns the active lists that feed the primary ranking, heaviest first, each with its source,
+          year, voter count, `weight` and `item_count`. Use get_list for one list and list_list_items for
+          the books on it.
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
@@ -418,8 +480,14 @@ paths:
     x-domain: books
     get:
       operationId: getList
+      security: [{bearerAuth: ["books:read"]}]
       summary: One list
       description: Any active list, whether or not it feeds the primary ranking; `weight` is null when it does not.
+      x-mcp:
+        description: >-
+          Returns one list by `id`, whether or not it feeds the primary ranking: its source, year,
+          description, original web address and `weight` (null when it has none on the primary ranking).
+          Use list_list_items for its books.
       parameters:
         - $ref: "#/components/parameters/id"
       responses:
@@ -454,8 +522,14 @@ paths:
     x-domain: books
     get:
       operationId: listListItems
+      security: [{bearerAuth: ["books:read"]}]
       summary: Books on one list
       description: The list's books in list order — `position` ascending, unpositioned rows last, then by row id. `position` is null on an unordered list. `rank` on the embedded book is the primary ranking's.
+      x-mcp:
+        description: >-
+          Returns the books on one list in the list's own order, each with its `position` on the list
+          (null on an unordered list) and its primary-ranking `rank`. Use it to see what a particular list
+          recommends.
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/page"
@@ -494,9 +568,15 @@ paths:
     x-domain: books
     get:
       operationId: listCategories
+      security: [{bearerAuth: ["books:read"]}]
       summary: Categories of one type
       description: |
         The categories of one `type` that have ranked books, in the site's primary ranking. `type` is one of `genre`, `audience`, `location` or `subject` and defaults to `genre`; the site calls locations "settings", but the API only accepts `location`. `sort` is `book_count` (most ranked books first, the default) or `name`. Subjects and locations with only a handful of ranked books are left out, as on the site. Empty until a primary ranking has been calculated. Any other `type` or `sort` is a 400.
+      x-mcp:
+        description: >-
+          Lists the categories of one type (genre by default, or audience, location or subject) that have
+          ranked books, with their slugs and `book_count`. Use it to discover the category slugs that
+          `category_id` accepts in list_books, and the slug get_category and list_category_books take.
       parameters:
         - name: type
           in: query
@@ -546,9 +626,15 @@ paths:
     x-domain: books
     get:
       operationId: getCategory
+      security: [{bearerAuth: ["books:read"]}]
       summary: One category
       description: |
         One category by slug. A slug the category used to have, or the slug of a category that was merged into another, resolves to the category it now lives under, so the returned `slug` may differ from the one you asked for. Any kind of category answers here, themes included. `book_count` is the number of books in the site's primary ranking that carry the category (0 when none, or when no ranking exists yet), not the size of the whole catalogue.
+      x-mcp:
+        description: >-
+          Returns one category by slug: its type, description, parent and `book_count`. An old or merged
+          slug resolves to the category it now lives under, so the returned slug may differ from the one
+          you gave.
       parameters:
         - $ref: "#/components/parameters/slug"
       responses:
@@ -583,8 +669,14 @@ paths:
     x-domain: books
     get:
       operationId: listCategoryBooks
+      security: [{bearerAuth: ["books:read"]}]
       summary: Books in a category
       description: The same ranked books as `GET /api/v1/books` (same fields, same `rank`, best first), limited to the books that carry the category. The filter parameters apply on top, so `category_id` adds categories that a book must also carry; the category in the path is never repeated in `meta.filters`. Old and merged slugs resolve as they do on `GET /api/v1/categories/{slug}`, and the `links` point at the category's current slug.
+      x-mcp:
+        description: >-
+          Returns the ranked books that carry one category, best first: list_books limited to that
+          category, with the same filters on top. Use it for "best books in this genre" once you have the
+          slug from list_categories.
       parameters:
         - $ref: "#/components/parameters/slug"
         - $ref: "#/components/parameters/page"
@@ -629,8 +721,14 @@ paths:
     x-domain: books
     get:
       operationId: listRankingConfigurationCategoryBooks
+      security: [{bearerAuth: ["books:read"]}]
       summary: Books in a category on one configuration
       description: The same rows and shape as `/api/v1/categories/{slug}/books`, ranked by the named configuration; `rank` is relative to it. Limited to the books that carry the category. The filter parameters apply on top, so `category_id` adds categories that a book must also carry; the category in the path is never repeated in `meta.filters`. Old and merged slugs resolve as they do on `GET /api/v1/categories/{slug}`, and the `links` point at the category's current slug.
+      x-mcp:
+        description: >-
+          Returns the books in one category ranked by one named ranking configuration (an `id` from
+          list_ranking_configurations); `rank` is relative to that configuration. Prefer
+          list_category_books unless you need a non-primary ranking.
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/slug"
@@ -676,9 +774,15 @@ paths:
     x-domain: books
     get:
       operationId: searchBooks
+      security: [{bearerAuth: ["books:read"]}]
       summary: Search books
       description: |
         Full-text search over the catalogue, best match first. `q` is required; a missing or blank `q` is a 400. Only standalone, catalogued books are returned (not collections, and not books still awaiting review). A query yields at most 100 matches, so `total_count` never exceeds 100: refine the query rather than paging for more. `rank` is the book's position in the site's primary ranking, or null when it is unranked. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+      x-mcp:
+        description: >-
+          Full-text search over the catalogue for a title or author, best match first, with each book's
+          primary-ranking `rank` (null when unranked). A query returns at most 100 matches in all, so
+          refine the query rather than paging for more; once you have a slug, use get_book.
       parameters:
         - name: q
           in: query
@@ -739,6 +843,7 @@ components:
     per_page:
       name: per_page
       in: query
+      description: Results per page, at most 100.
       schema:
         type: integer
         minimum: 1

@@ -644,6 +644,13 @@ Rails.application.routes.draw do
     # 404, not a 406). Domain comes from the host, like everything else.
     # Spec: docs/superpowers/specs/2026-09-12-public-api-framework-design.md
     namespace :api, defaults: {format: :json}, constraints: {format: :json} do
+      # The MCP endpoint (spec: docs/superpowers/specs/2026-11-02-mcp-server-design.md).
+      # It sits under /api/ so it gets the edge's existing API treatment; a path
+      # outside /api/ would meet the site's browser-oriented protections, which a
+      # machine client cannot pass. GET and DELETE answer 405: no streams, no sessions.
+      post "mcp", to: "mcp#create", as: :mcp
+      match "mcp", to: "mcp#method_not_allowed", via: [:get, :delete]
+
       namespace :v1 do
         scope module: :books do
           resources :books, only: [:index, :show], param: :slug

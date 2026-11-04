@@ -230,6 +230,8 @@ GEM
       net-smtp
     marcel (1.2.1)
     matrix (0.4.3)
+    mcp (1.9.0)
+      json_schemer (>= 2.4)
     memory_profiler (1.1.0)
     mini_mime (1.1.5)
     minitest (6.0.6)
@@ -525,6 +527,7 @@ DEPENDENCIES
   jbuilder
   jsbundling-rails
   jwt
+  mcp (~> 1.8)
   memory_profiler
   minitest (~> 6.0)
   mocha
