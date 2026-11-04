@@ -25,6 +25,21 @@ module DataImporters
           @open_library_client = open_library_client
         end
 
+        # A placeholder name ("Anonymous", "Unknown Author") is not a person:
+        # it always means the canonical Unknown author. Without this the AI
+        # judge read each one as a different person and every import made a
+        # new "Anonymous". No search, no AI, no MatchDecision row: there is no
+        # decision to audit.
+        def call(query:, verify: false, subject: nil, exclude: nil)
+          if ::Services::Books::Authors::UnknownAuthor.placeholder?(query.name) &&
+              (unknown = ::Services::Books::Authors::UnknownAuthor.canonical)
+            return DataImporters::Match.new(outcome: :matched, record: unknown, confidence: :high, decided_by: :rule,
+              reason: "placeholder author name")
+          end
+
+          super
+        end
+
         def exact_match?(query, candidate)
           super && !year_conflict?(query.death_year, candidate.record.death_year)
         end

@@ -312,6 +312,30 @@ module DataImporters
           assert_includes summary[:book_titles], books_books(:war_and_peace).title
           assert_equal [1828, 1910, "Leo Tolstoy"], summary.values_at(:birth_year, :death_year, :title)
         end
+
+        # ---- placeholder names ------------------------------------------------
+
+        test "a placeholder name always matches the canonical Unknown author, with no search, AI or decision row" do
+          expect_no_ai
+          SEARCH.expects(:call).never
+          ::Books::Author.create!(name: "Anonymous")
+
+          ["Anonymous", "unknown author", "Unknown", "Anon."].each do |name|
+            match = assert_no_difference("MatchDecision.count") { @finder.call(query: ImportQuery.new(name: name, open_library_author_key: "OL123A")) }
+            assert match.matched?, name
+            assert_equal books_authors(:excluded_placeholder), match.record, name
+            assert_equal [:rule, :high], [match.decided_by, match.confidence]
+          end
+        end
+
+        test "a placeholder name with no canonical Unknown author goes through the normal finder" do
+          books_authors(:excluded_placeholder).update_columns(name: "Unknown Author")
+          SEARCH.expects(:call).at_least_once.returns([])
+
+          match = assert_difference("MatchDecision.count", 1) { @finder.call(query: ImportQuery.new(name: "Anonymous")) }
+
+          assert_not_equal :rule_placeholder, match.reason
+        end
       end
     end
   end
