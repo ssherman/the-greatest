@@ -35,6 +35,18 @@ module Services
           assert_nil UnknownAuthor.canonical
         end
 
+        test "the merge's selection and the finder's check agree on every edge-case name" do
+          names = ["Anon..", "Anonymous .", "\tUnknown", "Unknown Author", "unknown\nauthor", "ANON.", "Anonymous!", "Unknown Pleasures", "Anonymous Lover"]
+          authors = names.map { |name| ::Books::Author.create!(name: name) }
+          selected = UnknownAuthor.placeholders.pluck(:id)
+
+          authors.each do |author|
+            assert_equal UnknownAuthor.placeholder?(author.name), selected.include?(author.id), author.name.inspect
+          end
+          assert UnknownAuthor.placeholder?("Anonymous ."), "a space before the period still counts"
+          assert_not UnknownAuthor.placeholder?("Anon.."), "only one trailing period is dropped"
+        end
+
         test "placeholders lists every author with a placeholder name and nothing else" do
           anonymous = ::Books::Author.create!(name: "Anonymous")
           unknown_author = ::Books::Author.create!(name: "unknown author")

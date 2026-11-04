@@ -10,9 +10,10 @@ module Services
       # nothing left. It repeats after each legacy sync, which can bring new
       # placeholder authors straight from legacy without the import finder.
       #
-      # The AI descriptions those authors carry ("Anonymous is a placeholder
-      # name used when...") are dropped once their merge succeeds, so the
-      # survivor does not collect a copy from each. A failed merge keeps them.
+      # The descriptions those authors carry (mostly AI text: "Anonymous is a
+      # placeholder name used when...") are dropped once their merge
+      # succeeds, whatever their source, so the survivor does not collect a
+      # copy from each. A failed merge keeps them.
       class MergeUnknown
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -36,17 +37,22 @@ module Services
           }
           return Result.new(success?: true, data: data, errors: []) unless @apply
 
-          sources.each do |source|
-            description_ids = source.descriptions.pluck(:id)
-            result = ::Books::Author::Merger.call(source: source, target: target, defer_rankings: true)
-            if result.success?
-              data[:merged] += 1
-              ::Description.where(id: description_ids, describable_type: "Books::Author", describable_id: target.id).find_each(&:destroy!)
-            else
-              data[:failed] << {id: source.id, errors: result.errors}
+          begin
+            sources.each do |source|
+              description_ids = source.descriptions.pluck(:id)
+              result = ::Books::Author::Merger.call(source: source, target: target, defer_rankings: true)
+              if result.success?
+                data[:merged] += 1
+                ::Description.where(id: description_ids, describable_type: "Books::Author", describable_id: target.id).find_each(&:destroy!)
+              else
+                data[:failed] << {id: source.id, errors: result.errors}
+              end
             end
+          ensure
+            # Even when a later step raises: the merges already done each
+            # deferred their refresh.
+            refresh_author_rankings if data[:merged].positive?
           end
-          refresh_author_rankings if data[:merged].positive?
 
           Result.new(success?: true, data: data, errors: [])
         end

@@ -105,7 +105,7 @@ second export on the same day reuses the day's file name and the trainer reports
    that maps those names onto the one Unknown author. The dry run lists what it would merge; `APPLY=1`
    queues `Books::MergeUnknownAuthorsJob`, which merges them through the author merger and asks for one
    author ranking refresh. Idempotent: with nothing left it prints "Nothing to merge." The first run
-   after the deploy that adds it merges the backlog (in dev, 28 authors into "Unknown").
+   after the deploy that adds it merges the backlog (in dev, 35 authors into "Unknown").
 
 ## 5. Cleanup, after the switch-over
 

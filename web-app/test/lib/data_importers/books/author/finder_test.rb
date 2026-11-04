@@ -334,7 +334,25 @@ module DataImporters
 
           match = assert_difference("MatchDecision.count", 1) { @finder.call(query: ImportQuery.new(name: "Anonymous")) }
 
-          assert_not_equal :rule_placeholder, match.reason
+          assert_not_nil match.decision
+        end
+
+        test "a verify run (admin Re-check) of a placeholder name takes the full path and records a decision" do
+          SEARCH.expects(:call).at_least_once.returns([])
+
+          match = assert_difference("MatchDecision.count", 1) { @finder.call(query: ImportQuery.new(name: "Anonymous"), verify: true) }
+
+          assert_not_nil match.decision
+        end
+
+        test "a caller that excludes the Unknown author does not get it back from the shortcut" do
+          SEARCH.expects(:call).at_least_once.returns([])
+          unknown = books_authors(:excluded_placeholder)
+
+          match = @finder.call(query: ImportQuery.new(name: "Anonymous"), exclude: unknown)
+
+          assert_not_nil match.decision
+          assert_not_equal unknown, match.record
         end
       end
     end

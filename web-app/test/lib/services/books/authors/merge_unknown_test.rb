@@ -26,7 +26,7 @@ module Services
 
         test "apply merges every placeholder into the canonical Unknown and drops the descriptions they brought" do
           ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
-          before = @unknown.descriptions.count
+          own = @unknown.descriptions.create!(content: "Works whose author is not known.", kind: :summary, locale: "en", source: :manual)
 
           result = MergeUnknown.call(apply: true)
 
@@ -35,19 +35,33 @@ module Services
           assert_empty result.data[:failed]
           assert_not ::Books::Author.exists?(@anonymous.id)
           assert_includes @book.reload.authors, @unknown
-          assert_equal before, @unknown.reload.descriptions.count
+          assert_equal [own.id], @unknown.reload.descriptions.pluck(:id), "keeps its own description, drops the merged one"
+        end
+
+        test "a book holding both a placeholder and Unknown ends with Unknown once" do
+          ::Services::RankingConfigurations::RequestRefresh.stubs(:call)
+          ::Books::BookAuthor.create!(book: @book, author: @unknown, position: 2)
+
+          MergeUnknown.call(apply: true)
+
+          assert_equal [@unknown.id], @book.reload.book_authors.pluck(:author_id)
         end
 
         test "apply asks for one author ranking refresh, not one per merge" do
           ::Books::Author.create!(name: "unknown author")
           authors_config = ::Books::Authors::RankingConfiguration.default_primary
-          if authors_config
-            ::Services::RankingConfigurations::RequestRefresh.expects(:call).with(config: authors_config, delay: 5.minutes).once
-          else
-            ::Services::RankingConfigurations::RequestRefresh.expects(:call).never
-          end
+          assert authors_config, "fixture books_authors_global is the authors primary"
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call).with(config: authors_config, delay: 5.minutes).once
 
           assert_equal 2, MergeUnknown.call(apply: true).data[:merged]
+        end
+
+        test "the ranking refresh is still requested when a step after a merge raises" do
+          ::Books::Author.create!(name: "unknown author")
+          ::Description.any_instance.stubs(:destroy!).raises(ActiveRecord::ActiveRecordError, "boom")
+          ::Services::RankingConfigurations::RequestRefresh.expects(:call).once
+
+          assert_raises(ActiveRecord::ActiveRecordError) { MergeUnknown.call(apply: true) }
         end
 
         test "a rerun with nothing left to merge is a no-op" do

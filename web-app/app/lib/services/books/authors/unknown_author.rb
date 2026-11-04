@@ -31,12 +31,18 @@ module Services
             .first
         end
 
+        # The database only narrows the candidates; `placeholder?` decides, so
+        # the merge and the finder can never disagree about a name.
         def placeholders
-          ::Books::Author.where("LOWER(REGEXP_REPLACE(TRIM(TRAILING '.' FROM TRIM(name)), '\\s+', ' ', 'g')) IN (?)", PLACEHOLDER_NAMES)
+          ids = ::Books::Author.where("name ILIKE '%unknown%' OR name ILIKE '%anon%'").pluck(:id, :name)
+            .filter_map { |id, name| id if placeholder?(name) }
+          ::Books::Author.where(id: ids)
         end
 
+        # Whitespace collapsed (tabs, newlines and no-break spaces too), one
+        # trailing period dropped, lowercased.
         def normalize(name)
-          name.to_s.strip.delete_suffix(".").squish.downcase
+          name.to_s.gsub(/[[:space:]]+/, " ").strip.delete_suffix(".").strip.downcase
         end
       end
     end
