@@ -3,7 +3,8 @@
 module Services
   module Books
     module WorldCat
-      # One backfill run: every book with an ISBN-13, in id order, looked up in
+      # One backfill run: every book with a verified ISBN-13 (Identifier.verified;
+      # an unverified ISBN can point at another book), in id order, looked up in
       # batches and handed to ApplyCategories. Reruns are safe (ApplyCategories is
       # additive and idempotent). A service failure is retried with backoff; when
       # the retries run out the run STOPS and the books it never reached stay
@@ -66,6 +67,7 @@ module Services
 
         def books_with_isbns
           scope = @scope || ::Identifier
+            .verified
             .where(identifiable_type: "Books::Book", identifier_type: :books_work_isbn13)
             .joins("INNER JOIN books_books ON books_books.id = identifiers.identifiable_id")
             .where.not("books_books.title ~ ?", ::Books::OpenLibrary::EvalExport::E2E_LEFTOVER_TITLE)

@@ -31,7 +31,9 @@ module Services
         attempts = 0
         begin
           attempts += 1
-          Result.new(success?: true, data: upsert(a, b), errors: [])
+          # A savepoint per attempt: inside a caller's transaction a failed INSERT aborts it, and the retry needs it clean.
+          row = ::DuplicateCandidate.transaction(requires_new: true) { upsert(a, b) }
+          Result.new(success?: true, data: row, errors: [])
         rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
           # Two finders raised the same pair at once; the second insert lost
           # the race, and the row it wanted now exists. The uniqueness

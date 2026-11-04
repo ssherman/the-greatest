@@ -1,0 +1,17 @@
+{
+  "results": {
+    "bindings": [
+      {
+        "author": {
+          "value": "http://www.wikidata.org/entity/Q42"
+        },
+        "work": {
+          "value": "http://www.wikidata.org/entity/Q25169"
+        },
+        "workLabel": {
+          "value": "The Hitchhiker's Guide to the Galaxy"
+        }
+      }
+    ]
+  }
+}

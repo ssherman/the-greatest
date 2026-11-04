@@ -90,13 +90,16 @@ second export on the same day reuses the day's file name and the trainer reports
    legacy-origin reviews with legacy's truncated integer rating (3 for a 3.75), and this puts the
    fractional rating back.
 6. **Rankings.** The books list weights and book rankings. Author rankings follow.
-7. **`bin/rails worldcat:backfill[all]`** (once section 9 is live). The sync brings over new books
-   without WorldCat-derived categories; the backfill is additive and idempotent, so a full run only
-   adds links for books that have none yet. It is a repeating step, not a one-off.
-8. **`bin/rails "books:verify[all,recheck]"`** after the sync, once the pass has run. The sync keeps
+7. **`bin/rails "books:verify[all,recheck]"`** after the sync, once the pass has run. The sync keeps
    adding legacy identifiers; this re-verifies the books that got new ones. Once the `post_import`
    books have been verified, the recheck needs `post_import` too
    (`books:verify[all,recheck,post_import]`).
+8. **`bin/rails "worldcat:backfill[verified]"`** (once section 9 is live), after the recheck above. The
+   sync brings over new books without WorldCat-derived categories, and the backfill reads verified
+   ISBN-13s only, which the new books do not have until the recheck verifies them. It is additive and
+   idempotent, so a full run only adds links for books that have none yet; links are recorded as
+   source `worldcat`. It is a repeating step, not a one-off. `books:verify` covers ranked books by default,
+   so unranked books added by the sync get no WorldCat links; that is by design.
 
 ## 5. Cleanup, after the switch-over
 
@@ -215,7 +218,7 @@ the sync never undoes them.
 1. Take legacy offline.
 2. `FINAL=1 bin/rails data_migration:sync`. `FINAL=1` drops the 24-hour delay, so the last day's
    books come over too. Run `sync_report` with `FINAL=1` first.
-3. Section 4, steps 3-7.
+3. Section 4, steps 3-8.
 4. **Finish the failed and stuck legacy Goodreads imports.** Only now: they write into legacy users'
    lists, which every sync rewrites to match legacy, so a finishing import run earlier is undone by
    the next sync.
@@ -267,7 +270,7 @@ the sync never undoes them.
 Adds the WorldCat exact-lookup service on the home server and backfills genre categories from it.
 Independent of section 2: the switch-over ran on 2026-10-10 (`data_migration:sync_init`), so the
 category links the backfill writes in production are kept across the weekly `data_migration:sync`.
-The sync does add new books, though, so the backfill (step 15) is also section 4 step 7: it re-runs
+The sync does add new books, though, so the backfill (step 15) is also section 4 step 8: it re-runs
 after every sync and again at cutover (section 6, step 3).
 Details: `docs/features/worldcat-data-service.md`; the VM runbook is
 `docs/features/home-server.md`, "Loading the WorldCat artifact (once)".
@@ -356,7 +359,9 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
     After a clean apply, set the parent of **Noir** and **Hardboiled** to **Crime Fiction** in the admin
     category form (the plan file cannot set parents).
 14. **Aliases, in production. Shane runs with `!`.** `bin/rails worldcat:apply_aliases`.
-15. **The backfill, in production. Shane runs with `!`.** `bin/rails "worldcat:backfill[all]"`.
+15. **The backfill, in production. Shane runs with `!`.** `bin/rails "worldcat:backfill[verified]"`. It
+    reads verified ISBN-13s only (`[all]` is retired), so it no longer waits on the ISBN cleanup; it
+    needs the branch that makes it verified-only deployed.
 16. **The report, if the map changed.** After the backfill, if the map was edited during review, re-run
     `bin/rails worldcat:report` in development and commit the regenerated
     `docs/data-quality/worldcat-genre-mapping.md`. It depends only on the map file, not on the backfill.

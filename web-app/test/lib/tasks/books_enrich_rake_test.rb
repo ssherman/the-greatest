@@ -17,6 +17,18 @@ class BooksEnrichRakeTest < ActiveSupport::TestCase
     @task.reenable
   end
 
+  test "books:evidence prints the QID, sections and failed sources" do
+    book = books_books(:got)
+    enrichment = book.enrichments.create!(kind: "books.evidence", outcome: :applied, facts: {
+      "wikidata" => {"qid" => "Q42", "via" => "isbn"}, "wikipedia" => nil, "worldcat" => {}, "sources_failed" => ["wikipedia"]
+    })
+    ::Services::Books::Evidence::Gather.expects(:call).with(book: book).returns(stub(data: {enrichment: enrichment}))
+    task = Rake::Task["books:evidence"]
+    task.reenable
+
+    assert_output(/QID: Q42 \(via isbn\).*sections: wikidata, worldcat.*sources_failed: wikipedia/m) { task.invoke(book.id.to_s) }
+  end
+
   test "a book whose only ledger row defers to its authors is still missing; an enriched one is not" do
     deferred = ::Books::Book.create!(title: "Deferred Book")
     ::Services::Books::DeferredEnrichment.defer!(deferred)
@@ -27,6 +39,15 @@ class BooksEnrichRakeTest < ActiveSupport::TestCase
     ::Books::EnrichBookJob.stubs(:perform_async)
     ::Books::EnrichBookJob.expects(:perform_async).with(deferred.id).once
     ::Books::EnrichBookJob.expects(:perform_async).with(enriched.id).never
+
+    assert_output(/Enqueued/) { @task.invoke("100000") }
+  end
+
+  test "a book with only a books.evidence row still needs its book_facts run" do
+    evidence_only = ::Books::Book.create!(title: "Evidence Only")
+    evidence_only.enrichments.create!(kind: "books.evidence", outcome: :applied, facts: {})
+    ::Books::EnrichBookJob.stubs(:perform_async)
+    ::Books::EnrichBookJob.expects(:perform_async).with(evidence_only.id).once
 
     assert_output(/Enqueued/) { @task.invoke("100000") }
   end

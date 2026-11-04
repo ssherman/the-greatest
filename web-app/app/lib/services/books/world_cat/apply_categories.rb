@@ -24,7 +24,7 @@ module Services
 
         def initialize(book:, records:, map:)
           @book = book
-          @records = without_merged_duplicates(records.uniq(&:oclc))
+          @records = MergedDuplicates.reject(records.uniq(&:oclc))
           @map = map
         end
 
@@ -104,13 +104,6 @@ module Services
 
         private
 
-        # A later pass redirected an older OCLC number into a newer record; both come
-        # back from the lookup, but they are one edition and must count once.
-        def without_merged_duplicates(records)
-          merged = records.flat_map(&:merged_oclc).to_set
-          records.reject { |record| merged.include?(record.oclc) }
-        end
-
         def type_conflict?(category)
           return false unless ::Books::Book::BOOK_TYPE_CATEGORY_NAMES.include?(category.name)
 
@@ -126,7 +119,7 @@ module Services
 
         # @return [Boolean] true when a new link was made
         def link(category)
-          item = ::CategoryItem.find_or_create_by!(category: category, item: @book)
+          item = ::CategoryItem.find_or_create_by!(category: category, item: @book) { |item| item.source = :worldcat }
           item.previously_new_record?
         end
       end

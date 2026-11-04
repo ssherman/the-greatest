@@ -38,6 +38,10 @@ class CategoryItemTest < ActiveSupport::TestCase
     assert category_item.valid?
   end
 
+  test "worldcat is source value 4" do
+    assert_equal 4, CategoryItem.sources["worldcat"]
+  end
+
   test "should require category" do
     category_item = CategoryItem.new(item: @dark_side_album)
     assert_not category_item.valid?

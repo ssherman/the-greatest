@@ -192,11 +192,12 @@ step directly, and nothing in the import path writes that deferral any more.
 
 ## The book workflow
 
-`books.book_enrichment` (definition version 2) has three steps, each wrapping an existing service:
+`books.book_enrichment` (definition version 3) has four steps, each wrapping an existing service:
 
 | Step | Queue | Waits on | Runs when |
 |---|---|---|---|
 | `goodreads` | `goodreads_fetch` | - | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
+| `evidence` | `low` | `goodreads` reaching a terminal state (**finish**; a skipped `goodreads` counts) | Always. Nothing waits on it yet; stage 2 (`categorize`) will |
 | `book_facts` | `low` | `goodreads` reaching a terminal state (**finish**), and the `author_facts` step of the runs of authors **linked to the book** that the import created (**release**) | Always |
 | `amazon` | `serial` | `goodreads` reaching a terminal state (**finish**) | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
 
@@ -254,11 +255,20 @@ attempts included, is terminal and so frees them, so a Goodreads outage never ho
   matched (the `books_work_goodreads_id` identifier with source `goodreads` joined to
   `books_goodreads_pages`) with no fetch.
 
+### The evidence step
+
+`evidence` runs `Services::Books::Evidence::Gather` and writes one `books.evidence` ledger row (what it
+holds is in `docs/features/books_enrichment.md`). It succeeds with outcome `applied` or `nothing_to_apply`
+and the result `{"enrichment_id", "qid"}`, where `qid` is the book's stored `books_work_wikidata_qid`
+identifier (the row's wikidata section can be nil even when one is stored). A Wikimedia rate limit
+becomes a wait (`retry_after` plus up to 30 s of jitter) and writes no row, like the author `wikidata`
+step. `bin/rails books:evidence[id]` runs it inline for one book.
+
 ### Version tolerance
 
-A run planned under version 1 has only `book_facts` and `amazon`, and keeps running after the deploy:
+A run planned under version 2 has no `evidence` step (added in version 3) and keeps running. A run planned under version 1 has no `goodreads` step (added in version 2) and only `book_facts` and `amazon`, and keeps running after the deploy:
 `book_facts` finds no `goodreads` step and runs as it always did (knowledge, then research), and
-`amazon` has no `goodreads` edge. Only runs planned after the deploy get the new step.
+`amazon` has no `goodreads` edge. Only runs planned after a deploy get that version's step: `goodreads` from version 2, `evidence` from version 3.
 
 Callers: `DataImporters::Books::Book::Providers::Enrichment` (importer with `enrich: true`, and the
 list wizard's text rows) and `Services::Books::GoodreadsImports::PromoteRecords` (admin approval of a

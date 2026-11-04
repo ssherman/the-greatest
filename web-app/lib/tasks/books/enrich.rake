@@ -23,6 +23,24 @@ namespace :books do
     abort "Enrichment failed: #{result.errors.join("; ")}" unless result.success?
   end
 
+  desc "Gather Wikidata/Wikipedia/WorldCat evidence for one book now (dev inspection; writes a books.evidence row): bin/rails books:evidence[123] or [some-slug]"
+  task :evidence, [:book_id] => :environment do |_task, args|
+    identifier = args[:book_id].to_s
+    abort "Usage: bin/rails books:evidence[id-or-slug]" if identifier.blank?
+    book = if identifier.match?(/\A\d+\z/)
+      ::Books::Book.find_by!(id: identifier)
+    else
+      ::Books::Book.friendly.find(identifier)
+    end
+
+    puts "Gathering evidence for #{book.title} (##{book.id})..."
+    facts = ::Services::Books::Evidence::Gather.call(book: book).data[:enrichment].facts
+    wikidata = facts["wikidata"]
+    puts "  QID: #{wikidata ? wikidata["qid"] : "none"}#{" (via #{wikidata["via"]})" if wikidata&.dig("via")}"
+    puts "  sections: #{%w[wikidata wikipedia worldcat].select { facts[it] }.join(", ").presence || "none"}"
+    puts "  sources_failed: #{facts["sources_failed"].join(", ").presence || "none"}"
+  end
+
   desc "Enqueue enrichment for books with no ledger row and no description, plus any book still waiting on its new authors' chain (a description does not exempt those), and skip any book with a running book run: bin/rails books:enrich_missing[100]"
   task :enrich_missing, [:limit] => :environment do |_task, args|
     limit = args[:limit].to_i
@@ -32,7 +50,9 @@ namespace :books do
     # missing: its author chain may never have reached it. The reason test
     # is NULL-safe on purpose -- where.not(reason:) would also drop every row
     # with no reason, which is most applied runs, and queue those books again.
-    ledgered = Enrichment.where(enrichable_type: "Books::Book")
+    # Only books.book_facts rows count: every book also gets a books.evidence row
+    # from the evidence step, which says nothing about whether book_facts ran.
+    ledgered = Enrichment.where(enrichable_type: "Books::Book", kind: ::Services::Books::EnrichBook::KIND)
       .where("enrichments.reason IS DISTINCT FROM ?", ::Services::Books::DeferredEnrichment::REASON)
     # The no-description rule only protects a book that was never deferred:
     # the Open Library provider writes a description onto a brand-new book
