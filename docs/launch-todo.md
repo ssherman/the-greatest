@@ -100,6 +100,12 @@ second export on the same day reuses the day's file name and the trainer reports
    idempotent, so a full run only adds links for books that have none yet; links are recorded as
    source `worldcat`. It is a repeating step, not a one-off. `books:verify` covers ranked books by default,
    so unranked books added by the sync get no WorldCat links; that is by design.
+9. **`bin/rails books:authors:merge_unknown`, then again with `APPLY=1`.** The sync brings legacy
+   authors over directly, so a new "Anonymous" or "Unknown Author" from legacy skips the import finder
+   that maps those names onto the one Unknown author. The dry run lists what it would merge; `APPLY=1`
+   queues `Books::MergeUnknownAuthorsJob`, which merges them through the author merger and asks for one
+   author ranking refresh. Idempotent: with nothing left it prints "Nothing to merge." The first run
+   after the deploy that adds it merges the backlog (in dev, 35 authors into "Unknown").
 
 ## 5. Cleanup, after the switch-over
 
@@ -218,7 +224,7 @@ the sync never undoes them.
 1. Take legacy offline.
 2. `FINAL=1 bin/rails data_migration:sync`. `FINAL=1` drops the 24-hour delay, so the last day's
    books come over too. Run `sync_report` with `FINAL=1` first.
-3. Section 4, steps 3-8.
+3. Section 4, steps 3-9.
 4. **Finish the failed and stuck legacy Goodreads imports.** Only now: they write into legacy users'
    lists, which every sync rewrites to match legacy, so a finishing import run earlier is undone by
    the next sync.
