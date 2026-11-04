@@ -82,6 +82,18 @@ module Mcp
       assert_equal ["a/b", "x.json"], events.map { |e| e[:params]["slug"] }
     end
 
+    test "a blank path argument is a missing argument, never an empty segment" do
+      Rails.application.routes.expects(:call).never
+      book_lists = operation(path: "/api/v1/books/{slug}/lists", arguments: {"slug" => Argument.new(location: :path, wire_name: "slug")})
+
+      [[get_book, ""], [get_book, "  "], [book_lists, ""]].each do |op, slug|
+        result = dispatch(op, {slug: slug})
+
+        assert_equal 400, result.status
+        assert_equal({"code" => "invalid_parameter", "detail" => "Missing argument: slug"}, result.body)
+      end
+    end
+
     test "null arguments are omitted" do
       assert_equal 200, dispatch(list_books, {category_id: nil}).status
     end

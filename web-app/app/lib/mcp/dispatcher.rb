@@ -47,7 +47,10 @@ module Mcp
       unknown = @arguments.keys - @operation.arguments.keys
       return invalid_parameter("Unknown argument: #{unknown.sort.join(", ")}") if unknown.any?
 
-      missing = path_names - @arguments.keys
+      # A blank path value would interpolate to an empty segment, and the router
+      # collapses that ("/books/" is the index, "/books//lists" is "/books/lists"),
+      # reaching a different operation. Blank means missing.
+      missing = path_names.select { |name| @arguments[name].to_s.strip.empty? }
       return invalid_parameter("Missing argument: #{missing.sort.join(", ")}") if missing.any?
 
       dispatch
