@@ -81,6 +81,20 @@ persisted.
 An author an admin has flagged `exclude_from_rankings` is skipped by every step without an
 external or model call: a `skipped` ledger row with reason `placeholder`.
 
+**One Unknown author.** A book with no known author is credited to the author named "Unknown"
+(`Services::Books::Authors::UnknownAuthor.canonical`: the "Unknown" with the most books). The author
+finder maps every placeholder name onto it before any search or AI call: "Unknown", "Unknown Author",
+"Anonymous", and "Anon", ignoring case, spacing and a trailing period. So an import never creates a new
+"Anonymous" author, and no author run starts for one. Before this, the AI match judge read each
+"Anonymous" as a different person, and each one got its own record and an AI biography. "Various"
+(anthologies) and place names used as authors ("China" for the I Ching) are not placeholders.
+`bin/rails books:authors:merge_unknown` lists the placeholder authors that already exist, and `APPLY=1`
+queues `Books::MergeUnknownAuthorsJob` to merge them through `Books::Author::Merger`. It drops the
+descriptions they brought, whatever their source, and asks for one author ranking refresh. Their
+identifiers (Open Library keys) and any alternate names move onto Unknown, as in any author merge. An
+admin Re-check of a placeholder decision runs the full finder and records a decision. It repeats after each legacy sync
+(`docs/launch-todo.md` section 4), because the sync brings legacy authors over without the finder.
+
 ## Resolution
 
 `Services::Books::Authors::ResolveWikidata.call(author:, refresh: false)` answers one question:

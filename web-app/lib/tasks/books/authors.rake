@@ -1,5 +1,28 @@
 namespace :books do
   namespace :authors do
+    desc "Merge every placeholder author (Anonymous, Unknown Author, ...) into the canonical Unknown author. " \
+      "Dry run by default; APPLY=1 queues the merge on Sidekiq: bin/rails books:authors:merge_unknown APPLY=1"
+    task merge_unknown: :environment do
+      result = ::Services::Books::Authors::MergeUnknown.call(apply: false)
+      abort "books:authors:merge_unknown: #{result.errors.join("; ")}" unless result.success?
+
+      data = result.data
+      puts "Target: author #{data[:target_id]} \"#{::Services::Books::Authors::UnknownAuthor::CANONICAL_NAME}\" (#{data[:target_books]} books)."
+      if data[:sources].empty?
+        puts "Nothing to merge."
+        next
+      end
+
+      puts "Would merge #{data[:sources].size} author(s), #{data[:sources].sum { |source| source[:books] }} book link(s):"
+      data[:sources].each { |source| puts "  #{source[:name]} (id #{source[:id]}, #{source[:books]} books)" }
+      if ENV["APPLY"] == "1"
+        Books::MergeUnknownAuthorsJob.perform_async
+        puts "Queued Books::MergeUnknownAuthorsJob. Progress: the worker log."
+      else
+        puts "Dry run. Re-run with APPLY=1 to queue the merge."
+      end
+    end
+
     desc "Queue the author chain (Wikidata, VIAF on a miss, then AI with research off) for authors the Wikidata step " \
       "has not processed, ranked authors first: bin/rails \"books:authors:enrich[100]\" or [all]"
     task :enrich, [:limit] => :environment do |_task, args|
