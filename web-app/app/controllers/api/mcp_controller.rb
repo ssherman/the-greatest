@@ -78,14 +78,16 @@ module Api
       rpc_method = loggable(payload["method"])
       tool = (rpc_method == "tools/call" && payload["params"].is_a?(Hash)) ? loggable(payload["params"]["name"]) : "-"
       [rpc_method, tool]
-    rescue JSON::ParserError
+    rescue JSON::ParserError, EncodingError, ArgumentError
+      # Logging must never fail the request: whatever the body is, the
+      # transport answers it.
       ["-", "-"]
     end
 
     # A value from the wire, kept to a short token so it cannot forge a second
     # log field or a second line.
     def loggable(value)
-      (value.is_a?(String) && value.match?(%r{\A[\w./-]{1,100}\z})) ? value : "-"
+      (value.is_a?(String) && value.valid_encoding? && value.match?(%r{\A[\w./-]{1,100}\z})) ? value : "-"
     end
   end
 end

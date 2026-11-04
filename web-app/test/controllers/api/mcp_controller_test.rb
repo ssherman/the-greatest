@@ -227,6 +227,14 @@ module Api
       assert_match(/\Aevent=api_mcp rpc_method=- tool=- user_id=\d+\z/, mcp_log_line(lines))
     end
 
+    test "an invalid-UTF-8 method is logged as - and answered with a 4xx, never a 500" do
+      body = %({"jsonrpc":"2.0","id":1,"method":"\xFF"}).b
+      lines = capture_log_lines { post_raw(body, headers: {"Content-Type" => "text/plain"}) }
+
+      assert_includes 400..499, response.status
+      assert_match(/\Aevent=api_mcp rpc_method=- tool=- user_id=\d+\z/, mcp_log_line(lines))
+    end
+
     test "a batch body is logged as a batch" do
       lines = capture_log_lines { post_raw([{jsonrpc: "2.0", id: 1, method: "tools/list"}].to_json) }
 
