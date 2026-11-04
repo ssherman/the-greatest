@@ -12,6 +12,12 @@ module Services
     # The only place that knows what a token IS. A session cookie is never
     # consulted: the API is stateless by design.
     #
+    # One exception: a request dispatched in-process by the MCP server already
+    # carries a principal in the Rack env (::Api::DispatchedRequest). It is
+    # returned as is, with no second token lookup and no record_use. The MCP
+    # dispatcher is the only writer of that key, and it has no HTTP_ prefix, so
+    # no client header can set it.
+    #
     # NOTE the root anchor on ::Api::Principal -- inside Services::Api a bare
     # `Api::Principal` resolves to Services::Api::Principal and raises.
     class Authenticator
@@ -24,6 +30,9 @@ module Services
       end
 
       def call
+        dispatched = ::Api::DispatchedRequest.principal(@request.env)
+        return success(dispatched) if dispatched
+
         header = @request.authorization
         return failure(:unauthenticated) if header.blank?
 

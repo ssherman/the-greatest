@@ -35,6 +35,26 @@ module Api
           assert_response :not_found
         end
 
+        test "a header named like the dispatch keys does not authenticate" do
+          get "/api/v1/books", headers: {"The-Greatest-Api-Principal" => "1", "The-Greatest-Api-Dispatched" => "true"}
+
+          assert_response :unauthorized
+          assert_equal "unauthenticated", json[:code]
+        end
+
+        test "a dispatched request is not counted against the rate limit" do
+          principal = Services::Api::Authenticator.call(
+            ActionDispatch::Request.new(Rack::MockRequest.env_for("/", "HTTP_AUTHORIZATION" => "Bearer #{ApiTokenSecrets::MEMBER}"))
+          ).data
+          env = Rack::MockRequest.env_for("https://dev-new.thegreatestbooks.org/api/v1/books")
+          ::Api::DispatchedRequest.mark(env, principal)
+          Services::Api::RateLimiter.expects(:hit).never
+
+          status, = Rails.application.routes.call(env)
+
+          assert_equal 200, status
+        end
+
         # --- index ---------------------------------------------------------------
 
         test "index lists ranked books best first with meta and links" do
