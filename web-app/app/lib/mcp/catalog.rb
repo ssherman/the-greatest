@@ -26,10 +26,7 @@ module Mcp
     LOCATIONS = %w[path query].freeze
     JSON_CONTENT = "application/json"
 
-    # Idempotence follows the HTTP method; destructiveness is declared per
-    # operation. Every hint is set explicitly because the gem defaults
-    # destructive_hint (and open_world_hint) to true.
-    IDEMPOTENT_METHODS = %w[get put delete].freeze
+    ALLOWED_KEYS = %w[name description destructive].freeze
 
     # The catalogue for one document on one site. Memoised outside development,
     # like Api::OpenapiDocument.raw: the document changes only with a deploy.
@@ -88,7 +85,7 @@ module Mcp
     def generate(api_operation)
       definition = api_operation.definition
       id = api_operation.operation_id
-      extension = definition[EXTENSION] || {}
+      extension = validated_extension(definition[EXTENSION], id, api_operation.http_method)
       description = extension["description"].to_s.strip
       raise GenerationError, "#{id}: x-mcp.description is required" if description.empty?
 
@@ -110,6 +107,22 @@ module Mcp
         arguments: arguments,
         input_schema: input_schema(properties, required)
       )
+    end
+
+    # A malformed block must fail here: `destructive: "true"` would otherwise
+    # read as not destructive and mark a merge as safe.
+    def validated_extension(extension, id, http_method)
+      raise GenerationError, "#{id}: x-mcp must be a mapping" unless extension.is_a?(Hash)
+
+      unknown = extension.keys - ALLOWED_KEYS
+      raise GenerationError, "#{id}: unknown x-mcp key: #{unknown.join(", ")} (allowed: #{ALLOWED_KEYS.join(", ")})" if unknown.any?
+
+      if extension.key?("destructive")
+        raise GenerationError, "#{id}: x-mcp destructive must be true or false" unless [true, false].include?(extension["destructive"])
+        raise GenerationError, "#{id}: a GET cannot be destructive" if extension["destructive"] && http_method == "get"
+      end
+
+      extension
     end
 
     # A tool without a scope would be listed to everyone: fail closed.
@@ -224,29 +237,17 @@ module Mcp
     end
 
     def build_tool(operation)
-      annotations = annotations_for(operation)
       ::MCP::Tool.define(
         name: operation.tool_name,
         title: operation.title,
         description: operation.description,
         input_schema: operation.input_schema,
-        annotations: annotations
+        annotations: operation.annotations.merge(title: operation.title)
       ) do |server_context:, **arguments|
         ::Mcp::ToolResult.from(
           ::Mcp::Dispatcher.call(operation, arguments, principal: server_context[:principal], request: server_context[:request])
         )
       end
-    end
-
-    def annotations_for(operation)
-      read_only = operation.http_method == "get"
-      {
-        read_only_hint: read_only,
-        idempotent_hint: IDEMPOTENT_METHODS.include?(operation.http_method),
-        destructive_hint: !read_only && operation.destructive,
-        open_world_hint: false,
-        title: operation.title
-      }
     end
   end
 end

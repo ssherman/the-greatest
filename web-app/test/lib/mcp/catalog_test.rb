@@ -204,6 +204,46 @@ module Mcp
       assert_includes error.message, "getWidget"
     end
 
+    test "a non-Hash x-mcp fails generation" do
+      source = document
+      source["paths"]["/api/v1/widgets"]["get"]["x-mcp"] = true
+
+      error = assert_raises(Mcp::Catalog::GenerationError) { Mcp::Catalog.new(source) }
+      assert_match(/listWidgets: x-mcp must be a mapping/, error.message)
+    end
+
+    test "a non-boolean destructive fails generation" do
+      source = document
+      source["paths"]["/api/v1/widgets"]["post"]["x-mcp"] = mcp(destructive: "true")
+
+      error = assert_raises(Mcp::Catalog::GenerationError) { Mcp::Catalog.new(source) }
+      assert_match(/createWidget: .*destructive must be true or false/, error.message)
+    end
+
+    test "destructive on a GET fails generation" do
+      source = document
+      source["paths"]["/api/v1/widgets/{id}"]["get"]["x-mcp"] = mcp(destructive: true)
+
+      error = assert_raises(Mcp::Catalog::GenerationError) { Mcp::Catalog.new(source) }
+      assert_match(/getWidget: .*a GET cannot be destructive/, error.message)
+    end
+
+    test "an unknown x-mcp key fails generation" do
+      source = document
+      source["paths"]["/api/v1/widgets"]["post"]["x-mcp"] = mcp(destrutive: true)
+
+      error = assert_raises(Mcp::Catalog::GenerationError) { Mcp::Catalog.new(source) }
+      assert_match(/createWidget: .*unknown x-mcp key: destrutive/, error.message)
+    end
+
+    test "destructive: false is accepted" do
+      source = document
+      source["paths"]["/api/v1/widgets"]["post"]["x-mcp"] = mcp(destructive: false)
+      built = Mcp::Catalog.new(source)
+
+      assert_equal false, built.tool("createWidget").annotations_value.destructive_hint
+    end
+
     test "an x-mcp operation with no scope fails generation" do
       source = document
       source["paths"]["/api/v1/widgets/{id}"]["get"]["security"] = []
