@@ -2,6 +2,8 @@
 
 Spec: `docs/superpowers/specs/2026-09-12-public-api-framework-design.md`. Code is the source of truth; this page is the map.
 
+MCP: `docs/features/mcp-server.md`. Every operation with an `x-mcp` block is also an MCP tool.
+
 ## Shape
 
 - Per-site path, JSON only: `https://thegreatestbooks.org/api/v1/books`, `/api/v1/books/{slug}`, `/api/v1/authors`, `/api/v1/authors/{slug}`. The domain comes from the host. Indexes are the site's primary ranking, best first; when there is no primary author ranking yet `/api/v1/authors` is a 200 with empty `data`. Lookup is by slug only, and author show does not embed books — a paginated `/api/v1/authors/{slug}/books` is the planned follow-up. Music and games resources are later increments. `/api/v1/ranking_configurations` lists the global book rankings (primary first; `kind` is `books` for all of them today), `/api/v1/ranking_configurations/{id}` shows one, and `/api/v1/ranking_configurations/{id}/books` is `/api/v1/books` on that configuration — the same action, resolved from the path, with `rank` relative to it. Only global, unarchived book configurations are addressable; a member's own, an archived one, or the authors configuration is a 404. Configurations are the first resource looked up by integer id (lists have no slug either); a non-numeric id is a routing 404, an unknown one the `not_found` problem. `/api/v1/lists` is the primary configuration's active lists, heaviest first, and `/api/v1/ranking_configurations/{id}/lists` the same rows on the named configuration — `weight` is always relative to the configuration the row was read through; `/api/v1/lists/{id}` answers for any active list with its weight on the primary or `null`. `/api/v1/lists/{id}/items` is the list's books in the site's order (`position` ascending, unpositioned rows last, then id), restricted to rows that resolve to a book so `total_count` matches the rows and equals the list's `item_count`; `/api/v1/books/{slug}/lists` is the other side, every active list a book is on with its `position`, weighted lists first. Lists have no slug and are addressed by integer id. The list payload carries no editorial flags and no weight breakdown; a list's `source_url` is the original list on the web and is not validated as a URI (a few hold more than one address). Spec: `docs/superpowers/specs/2026-09-20-public-api-lists-and-rankings-design.md`.
@@ -91,36 +93,21 @@ secret and the Turbo Stream shapes. Playwright: `e2e/tests/books/developers.spec
 `books/account/developers.spec.ts` (signed-in non-member), `books/member/developers-tokens.spec.ts`
 (the member account, see `docs/features/e2e-testing.md`).
 
-## Edge (Cloudflare)
+## Edge
 
-The rules live in the `the-greatest-cloudflare` repo (managed with `cfrules`) — that is the
-source of truth; this section only records what they must do and why.
+API paths sit under `/api/` because the edge treats that prefix as the API. The edge rules live in the
+private `the-greatest-cloudflare` repo, which is the source of truth; this public repo records none of
+their details. What gates `/api/` inside the app:
 
-- **Skip Super Bot Fight Mode AND Cloudflare rate limiting** for
-  `starts_with(http.request.uri.path, "/api/")`. SBFM alone is not enough: the books zone
-  has an edge rate limit of 20 requests per 30 s with a managed challenge, below the API's own
-  60/min (member) and 600/min (system) — Cloudflare would challenge a member at their
-  permitted rate, and a challenge is a block for an API client. The rule also skips the
-  bad-ASN and country challenge rules (`ruleset: current`) for the same reason. What gates
-  the prefix instead: auth plus the per-IP unauthenticated window
-  (`Services::Api::RateLimiter`) for every authenticated endpoint, and that same per-IP window
-  on `/api/v1/openapi.json`, the one unauthenticated route — so nothing under `/api/` is
-  unlimited once the edge steps aside.
-- **Scoped to the API-serving host.** The books zone also fronts the legacy site (apex,
-  `www`), which has no `/api/`; the rule applies to `new.thegreatestbooks.org` only. Music and
-  games are zone-wide, and answer Rails' 404 on `/api/` until their resources ship.
-- A skip rule has no log mode and `starts_with("/api/")` cannot over-match, so there is no
-  log-first step.
-- **Verified 2026-09-14** with a scripted user agent through Cloudflare: `GET
-  https://new.thegreatestbooks.org/api/v1/books` → 401 with `WWW-Authenticate: Bearer` and
-  `X-RateLimit-Limit: 60`.
-- **Caching:** API responses are `private, no-store`, so nothing edge-caches them.
-  `/api/v1/openapi.json` sends `public, max-age=3600` (and no rate headers, so a cached copy
-  cannot mislead) but is served `DYNAMIC` today because
-  `new.thegreatestbooks.org` has no Cloudflare cache rule at all (books' cache-everything
-  covers apex and `www` only). Pre-existing, affects the new site's HTML too, and worth fixing
-  before books launches — not an app bug.
+- Auth on every endpoint but one, then the per-account rate limit (see "Rate limits").
+- `Services::Api::RateLimiter`'s per-IP window for unauthenticated failures, and that same per-IP window
+  on `/api/v1/openapi.json`, the one unauthenticated route.
+
+Caching: API responses are `private, no-store`. `/api/v1/openapi.json` sends `public, max-age=3600` and
+no rate-limit headers, so a cached copy cannot mislead.
 
 ## Not yet
 
-`/api/v1/authors/{slug}/books` (increment 6); music/games resources, OAuth/MCP.
+`/api/v1/authors/{slug}/books` (increment 6); music/games resources; OAuth sign-in
+(`docs/superpowers/specs/2026-11-02-mcp-oauth-design.md`). The MCP server is shipped; see
+`docs/features/mcp-server.md`.
