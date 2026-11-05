@@ -645,9 +645,9 @@ Rails.application.routes.draw do
     # Spec: docs/superpowers/specs/2026-09-12-public-api-framework-design.md
     namespace :api, defaults: {format: :json}, constraints: {format: :json} do
       # The MCP endpoint (spec: docs/superpowers/specs/2026-11-02-mcp-server-design.md).
-      # It sits under /api/ so it gets the edge's existing API treatment; a path
-      # outside /api/ would meet the site's browser-oriented protections, which a
-      # machine client cannot pass. GET and DELETE answer 405: no streams, no sessions.
+      # It sits under /api/ for the edge's existing treatment of API paths; the edge
+      # rules live in the private the-greatest-cloudflare repo. GET and DELETE
+      # answer 405: no streams, no sessions.
       post "mcp", to: "mcp#create", as: :mcp
       match "mcp", to: "mcp#method_not_allowed", via: [:get, :delete]
 

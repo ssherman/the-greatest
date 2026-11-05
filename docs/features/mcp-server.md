@@ -127,11 +127,11 @@ A composite is separate: a subclass of `Mcp::Composite` listed by its site modul
 
 ## Clients
 
-Claude Code, public endpoint (the same command is on `/developers`):
+Claude Code, public endpoint. `/developers` prints this command with the real host, built from `Api::Host.base_url`; `<books host>` stands for it here:
 
 ```
 export THE_GREATEST_TOKEN=tg_...
-claude mcp add --transport http --scope user the-greatest-books https://thegreatestbooks.org/api/mcp \
+claude mcp add --transport http --scope user the-greatest-books https://<books host>/api/mcp \
   --header "Authorization: Bearer $THE_GREATEST_TOKEN"
 ```
 
@@ -140,7 +140,8 @@ claude mcp add --transport http --scope user the-greatest-books https://thegreat
 Admin endpoint:
 
 ```
-claude mcp add --transport http --scope user the-greatest-books-admin https://thegreatestbooks.org/api/mcp/admin \
+export THE_GREATEST_ADMIN_TOKEN=tg_...
+claude mcp add --transport http --scope user the-greatest-books-admin https://<books host>/api/mcp/admin \
   --header "Authorization: Bearer $THE_GREATEST_ADMIN_TOKEN"
 ```
 
@@ -178,7 +179,7 @@ event=api_mcp document=public|admin rpc_method=tools/call tool=list_books user_i
 
 ## Edge
 
-The endpoints live under `/api/` so they get the edge's existing treatment of API paths. A path outside `/api/` would meet protections written for browsers, which a machine client cannot pass. The edge rules live in the private `the-greatest-cloudflare` repo, which is the source of truth, and this public repo describes none of them. Adding a hostname or a new path outside `/api/` for MCP would be an edge change made there.
+The endpoints live under `/api/` so they get the edge's existing treatment of API paths. The edge rules live in the private `the-greatest-cloudflare` repo, which is the source of truth, and this public repo describes none of them.
 
 ## Testing
 
