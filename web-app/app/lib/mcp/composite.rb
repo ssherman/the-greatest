@@ -13,8 +13,6 @@ module Mcp
   # MCP::Tool::Response. Its listing scope is the union of its operations'
   # scopes: it is offered only to a principal who could call every one.
   class Composite
-    ANNOTATIONS = {read_only_hint: true, idempotent_hint: true, destructive_hint: false, open_world_hint: false}.freeze
-
     class << self
       # Declares the operations when given ids; reads them back with none.
       def operations(*operation_ids)
@@ -33,6 +31,20 @@ module Mcp
       # the catalogue does, including when development rebuilds it per request.
       def tool(catalog)
         catalog.cached(self) { build_tool(catalog) }
+      end
+
+      # Safety hints derived from the declared operations, so a composite that
+      # reaches a write or a merge cannot advertise itself as read-only: it is
+      # read-only and idempotent only if every operation is, and destructive if
+      # any is.
+      def annotations(catalog)
+        hints = operation_ids.map { |id| catalog.fetch(id).annotations }
+        {
+          read_only_hint: hints.all? { |hint| hint[:read_only_hint] },
+          idempotent_hint: hints.all? { |hint| hint[:idempotent_hint] },
+          destructive_hint: hints.any? { |hint| hint[:destructive_hint] },
+          open_world_hint: false
+        }
       end
 
       def dispatch(catalog, operation_id, args, principal:, request:)
@@ -56,7 +68,7 @@ module Mcp
           title: title,
           description: description,
           input_schema: input_schema,
-          annotations: ANNOTATIONS.merge(title: title)
+          annotations: annotations(catalog).merge(title: title)
         ) do |server_context:, **arguments|
           composite.run(catalog, arguments, principal: server_context[:principal], request: server_context[:request])
         end

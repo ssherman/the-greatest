@@ -2,6 +2,8 @@ require "test_helper"
 
 module Api
   class McpControllerTest < ActionDispatch::IntegrationTest
+    include McpRpcHelpers
+
     RATE_HEADERS = %w[X-RateLimit-Limit X-RateLimit-Remaining X-RateLimit-Reset
       X-RateLimit-Daily-Limit X-RateLimit-Daily-Remaining X-RateLimit-Daily-Reset].freeze
 
@@ -9,29 +11,6 @@ module Api
       host! "dev-new.thegreatestbooks.org"
       @war_and_peace = books_books(:war_and_peace)
     end
-
-    def json = response.parsed_body
-
-    def post_raw(body, token: ApiTokenSecrets::MEMBER, headers: {})
-      post "/api/mcp", params: body, headers: {
-        "Content-Type" => "application/json",
-        "Accept" => "application/json, text/event-stream"
-      }.merge(token ? bearer(token) : {}).merge(headers)
-    end
-
-    def rpc(method, params = {}, id: 1, token: ApiTokenSecrets::MEMBER, headers: {})
-      post_raw({jsonrpc: "2.0", id: id, method: method, params: params}.to_json, token: token, headers: headers)
-    end
-
-    def call_tool(name, arguments = {}, **options)
-      rpc("tools/call", {name: name, arguments: arguments}, **options)
-    end
-
-    def initialize_params
-      {protocolVersion: "2025-06-18", capabilities: {}, clientInfo: {name: "test", version: "1"}}
-    end
-
-    def tool_text = JSON.parse(json.dig("result", "content", 0, "text"))
 
     # Every info line the block logs, so a test can pick out the MCP one.
     def capture_log_lines
@@ -145,22 +124,6 @@ module Api
         assert_response :success, headers.inspect
         assert_equal false, json.dig("result", "isError"), headers.inspect
       end
-    end
-
-    MODERN_VERSION = "2026-07-28"
-
-    # The 2026-07-28 lifecycle (what Claude Code speaks): no initialize, the
-    # version on a header and in every request's _meta, the method and name
-    # mirrored in headers.
-    def modern_rpc(method, params = {}, name: nil, token: ApiTokenSecrets::MEMBER)
-      meta = {
-        "io.modelcontextprotocol/protocolVersion" => MODERN_VERSION,
-        "io.modelcontextprotocol/clientCapabilities" => {},
-        "io.modelcontextprotocol/clientInfo" => {name: "test", version: "1"}
-      }
-      headers = {"MCP-Protocol-Version" => MODERN_VERSION, "Mcp-Method" => method}
-      headers["Mcp-Name"] = name if name
-      rpc(method, params.merge(_meta: meta), token: token, headers: headers)
     end
 
     test "modern tools/call get_book is stateless and returns the REST body" do
@@ -331,20 +294,33 @@ module Api
     test "a tools/call is logged with the method, the tool and the user, never the token" do
       lines = capture_log_lines { call_tool("get_book", {slug: @war_and_peace.slug}) }
 
-      assert_match(%r{\Aevent=api_mcp rpc_method=tools/call tool=get_book user_id=\d+\z}, mcp_log_line(lines))
+      assert_match(%r{\Aevent=api_mcp document=public rpc_method=tools/call tool=get_book user_id=\d+\z}, mcp_log_line(lines))
       assert lines.none? { |message| message.include?(ApiTokenSecrets::MEMBER) }
+    end
+
+    test "an admin token on the public endpoint lists none of the admin tools" do
+      rpc("tools/list", token: ApiTokenSecrets::ADMIN)
+
+      assert_response :success
+      names = json.dig("result", "tools").map { |tool| tool["name"] }
+      admin_names = %w[search_admin_books search_admin_authors search_admin_categories get_admin_category
+        create_admin_category update_admin_category delete_admin_category merge_categories merge_book
+        merge_author tag_book untag_book tag_author untag_author]
+
+      assert_empty names & admin_names
+      assert names.none? { |name| name.include?("admin") || name.include?("merge") }
     end
 
     test "a tools/list is logged without a tool" do
       lines = capture_log_lines { rpc("tools/list") }
 
-      assert_match(%r{\Aevent=api_mcp rpc_method=tools/list tool=- user_id=\d+\z}, mcp_log_line(lines))
+      assert_match(%r{\Aevent=api_mcp document=public rpc_method=tools/list tool=- user_id=\d+\z}, mcp_log_line(lines))
     end
 
     test "an unparsable body is logged without a method or tool" do
       lines = capture_log_lines { post_raw('{"jsonrpc":') }
 
-      assert_match(/\Aevent=api_mcp rpc_method=- tool=- user_id=\d+\z/, mcp_log_line(lines))
+      assert_match(/\Aevent=api_mcp document=public rpc_method=- tool=- user_id=\d+\z/, mcp_log_line(lines))
     end
 
     test "an invalid-UTF-8 method is logged as - and answered with a 4xx, never a 500" do
@@ -352,13 +328,13 @@ module Api
       lines = capture_log_lines { post_raw(body, headers: {"Content-Type" => "text/plain"}) }
 
       assert_includes 400..499, response.status
-      assert_match(/\Aevent=api_mcp rpc_method=- tool=- user_id=\d+\z/, mcp_log_line(lines))
+      assert_match(/\Aevent=api_mcp document=public rpc_method=- tool=- user_id=\d+\z/, mcp_log_line(lines))
     end
 
     test "a batch body is logged as a batch" do
       lines = capture_log_lines { post_raw([{jsonrpc: "2.0", id: 1, method: "tools/list"}].to_json) }
 
-      assert_match(/\Aevent=api_mcp rpc_method=batch tool=- user_id=\d+\z/, mcp_log_line(lines))
+      assert_match(/\Aevent=api_mcp document=public rpc_method=batch tool=- user_id=\d+\z/, mcp_log_line(lines))
     end
   end
 end

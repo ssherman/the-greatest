@@ -2,15 +2,17 @@
 
 module Mcp
   module Sites
-    # The books site's part of /api/mcp (spec D13, D14): the find_book composite,
-    # the `usage` prompt, the ranking-methodology resource and the server
-    # instructions. The texts are Markdown files under config/mcp/books, read
-    # once when this file loads. Only the public document has any of it until the
-    # admin endpoint arrives.
+    # The books site's part of /api/mcp and /api/mcp/admin (spec D13, D14): the
+    # find_book composite (public only), each document's own `usage` prompt and
+    # server instructions, and the ranking-methodology resource, which both
+    # documents serve. The texts are Markdown files under config/mcp/books, read
+    # once when this file loads.
     module Books
       TEXTS = ::Rails.root.join("config/mcp/books")
       INSTRUCTIONS = TEXTS.join("instructions.md").read.strip.freeze
       USAGE = TEXTS.join("usage.md").read.strip.freeze
+      ADMIN_INSTRUCTIONS = TEXTS.join("admin_instructions.md").read.strip.freeze
+      ADMIN_USAGE = TEXTS.join("admin_usage.md").read.strip.freeze
       METHODOLOGY = TEXTS.join("ranking_methodology.md").read.freeze
 
       METHODOLOGY_URI = "greatest://books/ranking-methodology"
@@ -27,6 +29,18 @@ module Mcp
         )
       end
 
+      ADMIN_USAGE_PROMPT = ::MCP::Prompt.define(
+        name: "usage",
+        title: "Using The Greatest Books admin tools",
+        description: "How to use the admin tools safely: take ids from the search tools, dry-run every merge " \
+          "and delete, show the user, and run it only after they agree."
+      ) do |_arguments, server_context: nil|
+        ::MCP::Prompt::Result.new(
+          description: "How to use The Greatest Books admin tools",
+          messages: [::MCP::Prompt::Message.new(role: "user", content: ::MCP::Content::Text.new(ADMIN_USAGE))]
+        )
+      end
+
       class RankingMethodology < ::MCP::Resource
         uri METHODOLOGY_URI
         resource_name "ranking-methodology"
@@ -39,12 +53,24 @@ module Mcp
         end
       end
 
-      def self.instructions(document) = (INSTRUCTIONS if document == :public)
+      def self.instructions(document)
+        case document
+        when :public then INSTRUCTIONS
+        when :admin then ADMIN_INSTRUCTIONS
+        end
+      end
 
-      def self.prompts(document) = (document == :public) ? [USAGE_PROMPT] : []
+      def self.prompts(document)
+        case document
+        when :public then [USAGE_PROMPT]
+        when :admin then [ADMIN_USAGE_PROMPT]
+        else []
+        end
+      end
 
-      def self.resources(document) = (document == :public) ? [RankingMethodology] : []
+      def self.resources(document) = [:public, :admin].include?(document) ? [RankingMethodology] : []
 
+      # find_book's operations are public ones, not in the admin catalogue.
       def self.composites(document) = (document == :public) ? [::Mcp::Sites::Books::FindBook] : []
     end
   end

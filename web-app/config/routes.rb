@@ -651,6 +651,11 @@ Rails.application.routes.draw do
       post "mcp", to: "mcp#create", as: :mcp
       match "mcp", to: "mcp#method_not_allowed", via: [:get, :delete]
 
+      # The admin tools are a separate endpoint so their descriptions never
+      # reach a member's client: /api/mcp lists only the public document (D3).
+      post "mcp/admin", to: "mcp_admin#create", as: :mcp_admin
+      match "mcp/admin", to: "mcp_admin#method_not_allowed", via: [:get, :delete]
+
       namespace :v1 do
         scope module: :books do
           resources :books, only: [:index, :show], param: :slug
