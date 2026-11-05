@@ -644,6 +644,18 @@ Rails.application.routes.draw do
     # 404, not a 406). Domain comes from the host, like everything else.
     # Spec: docs/superpowers/specs/2026-09-12-public-api-framework-design.md
     namespace :api, defaults: {format: :json}, constraints: {format: :json} do
+      # The MCP endpoint (spec: docs/superpowers/specs/2026-11-02-mcp-server-design.md).
+      # It sits under /api/ so it gets the edge's existing API treatment; a path
+      # outside /api/ would meet the site's browser-oriented protections, which a
+      # machine client cannot pass. GET and DELETE answer 405: no streams, no sessions.
+      post "mcp", to: "mcp#create", as: :mcp
+      match "mcp", to: "mcp#method_not_allowed", via: [:get, :delete]
+
+      # The admin tools are a separate endpoint so their descriptions never
+      # reach a member's client: /api/mcp lists only the public document (D3).
+      post "mcp/admin", to: "mcp_admin#create", as: :mcp_admin
+      match "mcp/admin", to: "mcp_admin#method_not_allowed", via: [:get, :delete]
+
       namespace :v1 do
         scope module: :books do
           resources :books, only: [:index, :show], param: :slug
@@ -655,10 +667,13 @@ Rails.application.routes.draw do
           resources :ranking_configurations, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/books", to: "books#index",
             as: :ranking_configuration_books, constraints: {ranking_configuration_id: /\d+/}
+          get "ranking_configurations/:ranking_configuration_id/categories/:slug/books", to: "category_books#index",
+            as: :ranking_configuration_category_books, constraints: {ranking_configuration_id: /\d+/}
           resources :lists, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/lists", to: "lists#index",
             as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
           get "lists/:list_id/items", to: "list_items#index", as: :list_items, constraints: {list_id: /\d+/}
+          get "search/books", to: "book_searches#index", as: :search_books
         end
 
         # Admin API: needs a books:admin:* scope. Its contract is

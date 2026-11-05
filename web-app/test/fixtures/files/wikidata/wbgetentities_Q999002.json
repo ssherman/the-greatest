@@ -1,0 +1,10 @@
+{"entities": {"Q999002": {
+  "id": "Q999002",
+  "type": "item",
+  "labels": {"en": {"language": "en", "value": "Lolita (1962 film)"}},
+  "descriptions": {"en": {"language": "en", "value": "film by Stanley Kubrick"}},
+  "claims": {
+    "P31": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q11424"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P577": [{"mainsnak": {"snaktype": "value", "datatype": "time", "datavalue": {"value": {"time": "+1962-00-00T00:00:00Z", "precision": 9}, "type": "time"}}, "type": "statement", "rank": "normal"}]
+  }
+}}, "success": 1}

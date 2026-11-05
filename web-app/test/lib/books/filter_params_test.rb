@@ -244,5 +244,36 @@ module Books
 
       assert_raises(ActiveRecord::RecordNotFound) { resolve(category_id: "junk-twin") }
     end
+
+    test "too many category slugs raises InvalidFilter naming category_id" do
+      error = assert_raises(Books::FilterParams::InvalidFilter) { resolve(category_id: (1..7).map { "c#{it}" }.join(",")) }
+      assert_equal "category_id", error.param
+    end
+
+    test "too many country slugs raises InvalidFilter naming country_id" do
+      error = assert_raises(Books::FilterParams::InvalidFilter) { resolve(country_id: (1..11).map { "c#{it}" }.join(",")) }
+      assert_equal "country_id", error.param
+    end
+
+    test "a malformed or out-of-range year raises InvalidFilter naming the param" do
+      assert_equal "year", assert_raises(Books::FilterParams::InvalidFilter) { resolve(year: "18x5") }.param
+      assert_equal "published_start", assert_raises(Books::FilterParams::InvalidFilter) { resolve(published_start: "-5000") }.param
+      assert_equal "published_end", assert_raises(Books::FilterParams::InvalidFilter) { resolve(published_end: (Date.current.year + 6).to_s) }.param
+    end
+
+    test "an unknown category slug raises UnknownFilter with the slug" do
+      error = assert_raises(Books::FilterParams::UnknownFilter) { resolve(category_id: "fiction,no-such-genre") }
+      assert_equal ["category_id", "no-such-genre"], [error.param, error.slug]
+    end
+
+    test "an unknown country slug raises UnknownFilter with the slug" do
+      error = assert_raises(Books::FilterParams::UnknownFilter) { resolve(country_id: "french,atlantis") }
+      assert_equal ["country_id", "atlantis"], [error.param, error.slug]
+    end
+
+    test "both error classes are still RecordNotFound, so the web keeps its 404" do
+      assert_operator Books::FilterParams::InvalidFilter, :<, ActiveRecord::RecordNotFound
+      assert_operator Books::FilterParams::UnknownFilter, :<, ActiveRecord::RecordNotFound
+    end
   end
 end

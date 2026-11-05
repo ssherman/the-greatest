@@ -321,7 +321,7 @@ Run from `web-app/`. The first four write or use files under `web-app/config/wor
 | `bin/rails worldcat:apply_aliases` | `ApplyAliases` adds each genre-verdict term to its genre category's `alternative_names`, so the mapping shows in the admin and survives merges. Idempotent. Reports genres the map names that do not exist. |
 
 Two more tasks: `worldcat:export_isbns[<path>]` (the catalogue file for the build gate) and
-`worldcat:backfill[<count>|all]` (below).
+`worldcat:backfill[verified|<count>]` (below).
 
 `docs/data-quality/worldcat-genre-mapping.md`, `genre_terms.csv` and `genre_map.yml` do not exist
 until those tasks have run.
@@ -366,9 +366,16 @@ honours `weak` only on an audience primary. The run's data reports `weak_skipped
 
 ### The backfill and its support rule
 
-`bin/rails "worldcat:backfill[all]"` (or a count) queues `Books::WorldCatBackfillJob` on the `low`
-queue, with retries off. It runs `Services::Books::WorldCat::Backfill`: books with an ISBN-13, in id
-order, E2E leftovers excluded, 100 books per `lookup`, each book's records handed to
+The backfill reads verified ISBNs only, and `worldcat:backfill[all]` is retired (it aborts and names
+`[verified]`). An unverified ISBN can point at another book, and the links are additive, so a wrong
+ISBN would leave genres from someone else's book that a later run never removes. On 2026-11-03 the
+owner decided against `[all]` because it would have touched about 120,000 unranked books with
+unverified ISBNs. New links are recorded as `CategoryItem` source `worldcat`.
+
+`bin/rails "worldcat:backfill[verified]"` (or a count) queues `Books::WorldCatBackfillJob` on the `low`
+queue, with retries off. It runs `Services::Books::WorldCat::Backfill`: books with a **verified**
+ISBN-13 (`Identifier.verified`: source `open_library` or `worldcat`), in id order, E2E leftovers
+excluded, 100 books per `lookup`, each book's records handed to
 `Services::Books::WorldCat::ApplyCategories`. One run at a time: a Postgres advisory lock makes a
 second run exit at once. A failed lookup is retried with backoff (15 s up to 300 s, six retries);
 if those run out the run **stops** and the books it never reached stay untouched, so a tripped
