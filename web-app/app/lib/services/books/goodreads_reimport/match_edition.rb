@@ -8,8 +8,9 @@ module Services
       # the survey's mixed rule ignores titles and many such records are the right English book. The AI then
       # double-checks the candidates, because a finder match on a near-identical title can be a different volume or
       # an adaptation. Only an AI "high" on the finder's own pick, or on the book the reader is already on when the
-      # finder picked nothing, is approved without an admin; any other pick, doubt, or "none of these" next to a
-      # finder match waits for review. A finder or AI failure records nothing, so the edition simply comes up again.
+      # finder picked nothing and it is not mixed, is approved without an admin; any other pick, doubt, or "none of
+      # these" next to a finder match waits for review. A finder or AI failure records nothing, so the edition simply
+      # comes up again.
       class MatchEdition
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -67,6 +68,10 @@ module Services
           records.reject { |book| book.id == current.id }.first(MAX_CANDIDATES - 1) + [current]
         end
 
+        def trusted_current_book_id
+          current_book&.id unless current_book.nil? || MixedBooks.include?(current_book.id)
+        end
+
         def current_book
           @current_book = ::Services::Books::GoodreadsReplay::Apply::MergedBook.call(@edition.book_id) unless defined?(@current_book)
           @current_book
@@ -77,9 +82,10 @@ module Services
           book_id = ai[:book_id]
           confidence = ai[:confidence]
           # The AI confirming the finder's pick at high, or the book the reader is already on when the finder picked
-          # nothing; the AI choosing the current book over a different finder pick is a disagreement, so reviewed.
+          # nothing and it is not a mixed book (a legacy link to a mixed book is the suspect kind). The AI choosing
+          # the current book over a different finder pick is a disagreement, so reviewed.
           auto = if book_id.present?
-            confidence == "high" && book_id == (match.record&.id || current_book&.id)
+            confidence == "high" && book_id == (match.record&.id || trusted_current_book_id)
           else
             # "None of these" creates a book, so an AI answer needs high confidence; no candidates = rule only.
             match.unmatched? && (answer.nil? || confidence == "high")

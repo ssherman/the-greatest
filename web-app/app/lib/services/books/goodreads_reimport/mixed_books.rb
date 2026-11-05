@@ -17,6 +17,13 @@ module Services
             .pluck(:book_id).to_set
         end
 
+        def include?(book_id)
+          return false if book_id.nil?
+
+          ::Books::RebuildBookSurvey.lump.where(book_id: book_id)
+            .where(book_id: GoodreadsRebuild::Cohort.derived.select(:id)).exists?
+        end
+
         # RecordVerdict overwrites an unreviewed verdict's payload, so a re-run
         # carries the first snapshot forward itself: the "before" title and
         # authors, the archive, the row keys and the redirect. legacy_map is

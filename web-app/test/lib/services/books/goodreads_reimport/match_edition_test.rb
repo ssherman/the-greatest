@@ -229,6 +229,15 @@ module Services
           assert_equal @other.id, verdict.payload["book_id"]
         end
 
+        test "the AI confirming a reader's current book that is a mixed book waits for review" do
+          @edition.update!(book_id: @other.id)
+          MixedBooks.stubs(:include?).with(@other.id).returns(true)
+          run_match(match, task_returning(@other.id))
+
+          assert verdict.proposed?
+          assert_equal @other.id, verdict.payload["book_id"]
+        end
+
         test "the AI picking the reader's current book over the finder's different pick waits for review" do
           @edition.update!(book_id: @other.id)
           run_match(match(record: @pick), task_returning(@other.id))

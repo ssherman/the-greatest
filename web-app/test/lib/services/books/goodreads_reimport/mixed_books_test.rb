@@ -25,6 +25,14 @@ module Services
           refute_includes ids, @unsurveyed.id
         end
 
+        test "include? is true for a derived lump only" do
+          assert MixedBooks.include?(@derived_lump.id)
+          refute MixedBooks.include?(@trusted_lump.id)
+          refute MixedBooks.include?(@coherent.id)
+          refute MixedBooks.include?(@unsurveyed.id)
+          refute MixedBooks.include?(nil)
+        end
+
         test "archive stores everything on the book and its row keys" do
           ::Identifier.create!(identifiable: @derived_lump, identifier_type: :books_work_goodreads_id, value: "55", source: :goodreads_import)
           edition = ::Books::Edition.create!(book: @derived_lump, title: "An Edition")
