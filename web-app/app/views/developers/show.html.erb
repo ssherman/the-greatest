@@ -149,14 +149,20 @@ for item in response.json()["data"]:
         <code><%= @mcp_url %></code>.
         <% if composites.empty? %>
           Each tool below is one of the endpoints above, answered with the same
-          data and the same errors.
+          data and the same errors. The tools differ from the endpoints in two ways: results leave out
+        <code>links</code>, and paging takes <code>limit</code> instead of
+        <code>per_page</code>.
         <% elsif composites.size == 1 %>
           Apart from <%= named %>, each tool below is one of the endpoints above,
-          answered with the same data and the same errors. <%= named %> combines
+          answered with the same data and the same errors. The tools differ from the endpoints in two ways: results leave out
+        <code>links</code>, and paging takes <code>limit</code> instead of
+        <code>per_page</code>. <%= named %> combines
           several endpoints in one call and returns its own result.
         <% else %>
           Apart from <%= named %>, each tool below is one of the endpoints above,
-          answered with the same data and the same errors. <%= named %> combine
+          answered with the same data and the same errors. The tools differ from the endpoints in two ways: results leave out
+        <code>links</code>, and paging takes <code>limit</code> instead of
+        <code>per_page</code>. <%= named %> combine
           several endpoints in one call and return their own results.
         <% end %>
       </p>
@@ -168,6 +174,14 @@ for item in response.json()["data"]:
       </p>
       <p>To connect Claude Code, run this once:</p>
 <pre id="mcp-command"><code>claude mcp add --transport http --scope user the-greatest-books <%= @mcp_url %> --header "Authorization: Bearer $THE_GREATEST_TOKEN"</code></pre>
+      <p id="mcp-token-setup">
+        Run the <code>export THE_GREATEST_TOKEN=...</code> line from the
+        <a href="#quick-start">Quick start</a> first. The command saves the
+        token's value at the moment it runs. To change the token, for example
+        after you revoke one that leaked, run
+        <code>claude mcp remove --scope user the-greatest-books</code> and then
+        the add command again.
+      </p>
       <p>
         Other clients: the server speaks Streamable HTTP and keeps no session, so
         there is nothing to keep alive between calls. Send each request as

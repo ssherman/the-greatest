@@ -202,6 +202,27 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     Mcp::ToolDirectory::Entry.new(name: name, title: name.titleize, description: "d", destructive: false, composite: composite)
   end
 
+  test "the MCP intro names the two ways a tool differs from its endpoint" do
+    host! host_for(:books)
+
+    get developers_path
+
+    assert_match(/results leave out links, and paging takes limit instead of per_page/, intro_text)
+    assert_select "p#mcp-intro code", text: "links"
+    assert_select "p#mcp-intro code", text: "limit"
+    assert_select "p#mcp-intro code", text: "per_page"
+  end
+
+  test "the MCP section says to export the token first and how to change it" do
+    host! host_for(:books)
+
+    get developers_path
+
+    assert_select "p#mcp-token-setup a[href=?]", "#quick-start"
+    assert_select "p#mcp-token-setup code", text: "claude mcp remove --scope user the-greatest-books"
+    assert_select "#quick-start", 1
+  end
+
   test "the MCP intro names the one composite tool, in the singular" do
     host! host_for(:books)
 
@@ -233,7 +254,7 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     get developers_path
 
     assert_match(/Each tool below is one of the endpoints above/, intro_text)
-    assert_equal 1, css_select("p#mcp-intro code").size
+    assert_equal %w[links limit per_page], css_select("p#mcp-intro code").map(&:text).drop(1)
   end
 
   test "the authentication copy no longer says every token is read-only" do

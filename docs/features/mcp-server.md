@@ -1,6 +1,6 @@
 # MCP server
 
-Spec: `docs/superpowers/specs/2026-11-02-mcp-server-design.md` (decisions are numbered D1 to D15 there; code comments cite them). Code is the source of truth; this page is the map. Read `docs/features/public-api.md` first, because every MCP tool is an API operation.
+Spec: `docs/superpowers/specs/2026-11-02-mcp-server-design.md` (decisions are numbered D1 to D15 there; code comments cite them). Code is the source of truth; this page is the map. Read `docs/features/public-api.md` first, because every MCP tool reaches data only through API operations.
 
 ## What it is
 
@@ -8,12 +8,12 @@ An MCP server inside the Rails app, built with the `mcp` gem (`Gemfile`: `~> 1.8
 
 | Endpoint | Who | Tools |
 |---|---|---|
-| `POST /api/mcp` | a token with `<domain>:read` (`books:read`), which needs an active membership or a service account | the public OpenAPI document's operations that carry `x-mcp`, plus `find_book` |
+| `POST /api/mcp` | a token with `<domain>:read` (`books:read`). Who may hold it: an active member or a service account, or a non-member books admin through `books:admin:read`, which implies `books:read` (`Api::Scopes::ALL`) | the public OpenAPI document's operations that carry `x-mcp`, plus `find_book` |
 | `POST /api/mcp/admin` | a token with `<domain>:admin:read` (`books:admin:read`) or more | the admin document's operations, filtered to what the token's scopes allow |
 
 Both are routed on the books host only (`config/routes.rb`, inside the books `DomainConstraint`). On music and games they are a routing 404, because those sites have no API operations yet. The admin tools are a separate endpoint so their descriptions never reach a member's client: `/api/mcp` serves only the public document, whatever the token holds.
 
-No tool exists that is not an API operation. A tool call runs the real API controller in-process, so authorization, validation, serialization and error bodies are the REST API's own.
+Every tool reaches data only through API operations; composites such as `find_book` combine several. A tool call runs the real API controller in-process, so authorization, validation, serialization and error bodies are the REST API's own.
 
 ## How a request flows
 
@@ -135,7 +135,7 @@ claude mcp add --transport http --scope user the-greatest-books https://<books h
   --header "Authorization: Bearer $THE_GREATEST_TOKEN"
 ```
 
-`--header` is variadic, so it goes after the URL. The shell expands `$THE_GREATEST_TOKEN` when the command runs, so the variable must be exported first, and rotating the token means running the command again.
+`--header` is variadic, so it goes after the URL. The shell expands `$THE_GREATEST_TOKEN` when the command runs, so the variable must be exported first, and the client stores the value it saw then. To change the token (for example after revoking a leaked one), run `claude mcp remove --scope user the-greatest-books` and then the add command again.
 
 Admin endpoint:
 
