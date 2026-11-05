@@ -187,5 +187,45 @@ module Api
       assert_equal false, json.dig("result", "isError")
       assert_equal "600", response.headers["X-RateLimit-Limit"]
     end
+
+    test "prompts/get usage answers with the admin rules, not the public ones" do
+      rpc("prompts/get", {name: "usage"}, token: ApiTokenSecrets::ADMIN_READ)
+
+      assert_response :success
+      text = json.dig("result", "messages", 0, "content", "text")
+      assert_equal Rails.root.join("config/mcp/books/admin_usage.md").read.strip, text
+      assert_includes text, "dry_run"
+    end
+
+    test "prompts/list names usage" do
+      rpc("prompts/list", token: ApiTokenSecrets::ADMIN_READ)
+
+      assert_equal ["usage"], json.dig("result", "prompts").map { |prompt| prompt["name"] }
+    end
+
+    test "initialize carries the admin instructions" do
+      rpc("initialize", initialize_params, token: ApiTokenSecrets::ADMIN_READ)
+
+      assert_equal Rails.root.join("config/mcp/books/admin_instructions.md").read.strip, json.dig("result", "instructions")
+    end
+
+    test "modern server/discover carries the admin instructions" do
+      modern_rpc("server/discover", token: ApiTokenSecrets::ADMIN_READ)
+
+      assert_includes json.dig("result", "instructions"), "dry-run"
+    end
+
+    test "resources/read answers for the ranking methodology" do
+      rpc("resources/read", {uri: "greatest://books/ranking-methodology"}, token: ApiTokenSecrets::ADMIN_READ)
+
+      assert_response :success
+      assert_includes json.dig("result", "contents", 0, "text"), "rank"
+    end
+
+    test "the public endpoint still serves the public usage text" do
+      rpc("prompts/get", {name: "usage"}, path: "/api/mcp")
+
+      assert_equal Rails.root.join("config/mcp/books/usage.md").read.strip, json.dig("result", "messages", 0, "content", "text")
+    end
   end
 end

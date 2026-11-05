@@ -10,6 +10,11 @@ module Mcp
         prompt.template({}, server_context: {}).messages.first.content.text
       end
 
+      def admin_usage_text
+        prompt = Mcp::Sites::Books.prompts(:admin).find { |candidate| candidate.name_value == "usage" }
+        prompt.template({}, server_context: {}).messages.first.content.text
+      end
+
       def methodology
         Mcp::Sites::Books.resources(:public).find { |resource| resource.uri == METHODOLOGY_URI }
       end
@@ -51,11 +56,57 @@ module Mcp
         assert_includes text.downcase, "cite"
       end
 
-      test "any other document has nothing until increment 2" do
-        assert_nil Mcp::Sites::Books.instructions(:admin)
-        assert_equal [], Mcp::Sites::Books.prompts(:admin)
-        assert_equal [], Mcp::Sites::Books.resources(:admin)
+      test "the public texts are the files under config/mcp/books" do
+        texts = Rails.root.join("config/mcp/books")
+
+        assert_equal texts.join("instructions.md").read.strip, Mcp::Sites::Books.instructions(:public)
+        assert_equal texts.join("usage.md").read.strip, usage_text
+        assert_equal [Mcp::Sites::Books::USAGE_PROMPT], Mcp::Sites::Books.prompts(:public)
+      end
+
+      test "the admin usage prompt is named usage and has its own text" do
+        prompts = Mcp::Sites::Books.prompts(:admin)
+
+        assert_equal ["usage"], prompts.map(&:name_value)
+        assert_not_equal usage_text, admin_usage_text
+        assert_equal Rails.root.join("config/mcp/books/admin_usage.md").read.strip, admin_usage_text
+      end
+
+      test "the admin usage text states the protocol for destructive tools" do
+        text = admin_usage_text
+
+        ["dry-run", "dry_run", "show the user", "only then", "permanent", "ids", "search_admin_", "merged", "failed", "not_attempted",
+          "warnings", "null"].each do |phrase|
+          assert_includes text, phrase
+        end
+        assert_not_includes text.downcase, "cloudflare"
+      end
+
+      test "the admin usage text says an untag has no dry run" do
+        text = admin_usage_text
+
+        assert_match(/untag_book.*untag_author.*no dry run|no dry run.*untag/m, text)
+      end
+
+      test "the admin instructions are one paragraph that mentions dry-running first" do
+        text = Mcp::Sites::Books.instructions(:admin)
+
+        assert_not_includes text, "\n"
+        assert_includes text, "dry-run"
+        assert_includes text, "show the user"
+        assert_equal Rails.root.join("config/mcp/books/admin_instructions.md").read.strip, text
+      end
+
+      test "the admin document serves the methodology resource and no composites" do
+        assert_equal [Mcp::Sites::Books::RankingMethodology], Mcp::Sites::Books.resources(:admin)
         assert_equal [], Mcp::Sites::Books.composites(:admin)
+      end
+
+      test "an unknown document has nothing" do
+        assert_nil Mcp::Sites::Books.instructions(:other)
+        assert_equal [], Mcp::Sites::Books.prompts(:other)
+        assert_equal [], Mcp::Sites::Books.resources(:other)
+        assert_equal [], Mcp::Sites::Books.composites(:other)
       end
     end
   end
