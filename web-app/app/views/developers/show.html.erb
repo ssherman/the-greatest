@@ -142,8 +142,10 @@ for item in response.json()["data"]:
       <p>
         This site also runs an MCP server, so an AI assistant such as Claude Code
         can read the rankings for you. Its address is
-        <code><%= @mcp_url %></code>. Each tool below is one of the endpoints
-        above, answered with the same data and the same errors.
+        <code><%= @mcp_url %></code>. Most tools below are one of the endpoints
+        above, answered with the same data and the same errors. A few, like
+        <code>find_book</code>, combine several endpoints in one call and have
+        their own result.
       </p>
       <p>
         It uses the same token as the REST API, and the token needs the

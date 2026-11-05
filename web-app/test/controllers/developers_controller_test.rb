@@ -191,6 +191,18 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     assert_select "#mcp-tool-x b", 0
   end
 
+  # find_book is a composite of three endpoint calls with its own result shape,
+  # so "every tool is an endpoint" was false of the catalogue it documents.
+  test "the MCP copy does not claim every tool is one of the endpoints" do
+    host! host_for(:books)
+
+    get developers_path
+
+    refute_match(/Each tool below is one of the endpoints/, response.body)
+    assert_select "h2#mcp ~ p", text: /Most tools below are one of the endpoints/
+    assert_select "h2#mcp ~ p code", text: "find_book"
+  end
+
   test "the authentication copy no longer says every token is read-only" do
     host! host_for(:books)
 
