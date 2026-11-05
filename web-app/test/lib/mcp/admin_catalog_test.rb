@@ -62,6 +62,16 @@ module Mcp
       end
     end
 
+    test "merge descriptions say to report warnings and that a dry run has none" do
+      %w[merge_book merge_author].each do |name|
+        description = tool_named(name).description
+
+        assert_match(/report its `warnings`/, description, name)
+        assert_match(/dry run never has warnings/i, description, name)
+      end
+      assert_match(/did not transfer/, tool_named("merge_book").description)
+    end
+
     test "update_admin_category says how null and omission differ" do
       description = tool_named("update_admin_category").description
 
