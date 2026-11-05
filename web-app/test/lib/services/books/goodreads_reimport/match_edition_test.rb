@@ -221,12 +221,30 @@ module Services
           assert_equal [@other.id], verdict.payload["candidate_book_ids"]
         end
 
-        test "the AI confirming the reader's current book at high is auto-approved" do
+        test "the AI confirming the reader's current book at high when the finder found nothing is auto-approved" do
           @edition.update!(book_id: @other.id)
-          run_match(match(record: @pick), task_returning(@other.id))
+          run_match(match(candidates: [@pick]), task_returning(@other.id))
 
           assert verdict.approved?
           assert_equal @other.id, verdict.payload["book_id"]
+        end
+
+        test "the AI picking the reader's current book over the finder's different pick waits for review" do
+          @edition.update!(book_id: @other.id)
+          run_match(match(record: @pick), task_returning(@other.id))
+
+          assert verdict.proposed?
+          assert_equal @other.id, verdict.payload["book_id"]
+        end
+
+        test "the current book already among the finder's candidates keeps its place and appears once" do
+          @edition.update!(book_id: @other.id)
+          klass, captured = capturing_task(@other.id)
+
+          run_match(match(candidates: [@other, @pick]), klass)
+
+          assert_equal [@other.id, @pick.id], captured.map(&:id)
+          assert verdict.approved?
         end
 
         test "the AI picking the reader's current book at medium waits for review" do

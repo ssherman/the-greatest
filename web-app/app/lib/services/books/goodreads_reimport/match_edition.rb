@@ -7,9 +7,9 @@ module Services
       # 4.2). The finder runs blinded (no Open Library, trusted sources only); a mixed book stays matchable, since
       # the survey's mixed rule ignores titles and many such records are the right English book. The AI then
       # double-checks the candidates, because a finder match on a near-identical title can be a different volume or
-      # an adaptation. Only an AI "high" on the finder's own pick, or on the book the reader is already on, is
-      # approved without an admin; any other pick, doubt, or "none of these" next to a finder match waits for
-      # review. A finder or AI failure records nothing, so the edition simply comes up again.
+      # an adaptation. Only an AI "high" on the finder's own pick, or on the book the reader is already on when the
+      # finder picked nothing, is approved without an admin; any other pick, doubt, or "none of these" next to a
+      # finder match waits for review. A finder or AI failure records nothing, so the edition simply comes up again.
       class MatchEdition
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -76,9 +76,10 @@ module Services
           ai = answer&.data || {}
           book_id = ai[:book_id]
           confidence = ai[:confidence]
-          # The AI confirming the finder's pick, or the book the reader is already on, at high; anything else is reviewed.
+          # The AI confirming the finder's pick at high, or the book the reader is already on when the finder picked
+          # nothing; the AI choosing the current book over a different finder pick is a disagreement, so reviewed.
           auto = if book_id.present?
-            [match.record&.id, current_book&.id].compact.include?(book_id) && confidence == "high"
+            confidence == "high" && book_id == (match.record&.id || current_book&.id)
           else
             # "None of these" creates a book, so an AI answer needs high confidence; no candidates = rule only.
             match.unmatched? && (answer.nil? || confidence == "high")
