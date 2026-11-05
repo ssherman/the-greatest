@@ -28,6 +28,9 @@ module Services
           keys = Array(@mixed_verdict.payload["row_keys"]).map { |import_id, row_number| "reimport:row:#{import_id}:#{row_number}" }
           verdicts = ::Books::RepairVerdict.reimport_row.current.where.not(status: :rejected).where(subject_key: keys).to_a
           return done(:waiting) if verdicts.map(&:subject_key).uniq.size < keys.size
+          # Its readers' imports all failed, so no CSV row says where they belong: the book stays as it is. With no
+          # entries either, Apply::Mixed deletes it (it needs no redirect).
+          return keep_book("no CSV rows") if keys.empty? && entries?
 
           # A reader is headed to this book (a row of any reader, or a match): it is a real book with real readers,
           # not a lump. Nothing is guessed.
@@ -40,7 +43,7 @@ module Services
           explained = verdicts.reject { |verdict| verdict.payload["superseded_by"].present? }.map { |verdict| verdict.payload["user_id"] }.to_set
           guesses = unexplained_items(explained).sum { |type, id, user_id| record_guess(type, id, user_id, destination) }
           reopen_if_kept
-          @mixed_verdict.update_columns(payload: @mixed_verdict.payload.except("kept").merge("redirect_to_book_id" => destination))
+          @mixed_verdict.update_columns(payload: @mixed_verdict.payload.except("kept", "kept_reason").merge("redirect_to_book_id" => destination))
           done(:decided, guesses: guesses, redirect_to_book_id: destination)
         end
 
@@ -58,10 +61,15 @@ module Services
 
         # Earlier guesses from this book are superseded (not deleted); a later re-decide without a keep brings them
         # back through record_guess's replace_superseded. Applied and rejected guesses stand as they are.
-        def keep_book
+        def entries?
+          ::UserListItem.exists?(listable_type: "Books::Book", listable_id: book_id) ||
+            ::Review.exists?(reviewable_type: "Books::Book", reviewable_id: book_id)
+        end
+
+        def keep_book(reason = "a reader is headed to it")
           ::Books::RepairVerdict.reimport_guess.current.unapplied.where.not(status: :rejected)
             .where("payload->>'from_book_id' = ?", book_id.to_s).update_all(superseded_at: Time.current, updated_at: Time.current)
-          @mixed_verdict.update_columns(payload: @mixed_verdict.payload.except("redirect_to_book_id").merge("kept" => true))
+          @mixed_verdict.update_columns(payload: @mixed_verdict.payload.except("redirect_to_book_id").merge("kept" => true, "kept_reason" => reason))
           done(:kept)
         end
 

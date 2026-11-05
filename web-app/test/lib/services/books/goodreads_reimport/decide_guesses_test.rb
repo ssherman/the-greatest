@@ -40,6 +40,24 @@ module Services
           assert_equal @dest_b.id, @mixed_verdict.reload.payload["redirect_to_book_id"]
         end
 
+        test "a book with entries but no CSV rows is kept, since nothing says where its readers belong" do
+          @mixed_verdict.update_columns(payload: @mixed_verdict.payload.merge("row_keys" => []))
+
+          result = DecideGuesses.call(mixed_verdict: @mixed_verdict)
+
+          assert_equal :kept, result.data[:outcome]
+          assert_equal [true, "no CSV rows"], @mixed_verdict.reload.payload.values_at("kept", "kept_reason")
+          refute ::Books::RepairVerdict.reimport_guess.exists?
+        end
+
+        test "a book with no CSV rows and no entries is left for Apply::Mixed to delete" do
+          @mixed_verdict.update_columns(payload: @mixed_verdict.payload.merge("row_keys" => []))
+          [@hand_added, @explained, @review].each(&:destroy!)
+
+          assert_equal :waiting, DecideGuesses.call(mixed_verdict: @mixed_verdict).data[:outcome]
+          assert_nil @mixed_verdict.reload.payload["kept"]
+        end
+
         test "an item a row explains gets no guess" do
           row_verdict(1, @dest_a)
           row_verdict(2, @dest_a)

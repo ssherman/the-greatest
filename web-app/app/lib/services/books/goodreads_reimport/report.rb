@@ -155,6 +155,8 @@ module Services
           end
           lines << "  mixed books still present: #{still_mixed.size}"
           lines << "  (not a failure) mixed books kept (readers matched them): #{kept_mixed.size}"
+          no_rows = verdicts.reimport_mixed.approved.current.where("payload->>'kept_reason' = 'no CSV rows'").count
+          lines << "    of which kept because their readers' imports all failed (no CSV rows): #{no_rows}"
           # A guess applied before its book turned out to be kept moved a hand-added entry off a book that survives.
           # Those are not undone automatically; they are listed here for a hand review.
           moved = verdicts.reimport_guess.where.not(applied_at: nil).where("payload->>'from_book_id' IN (?)", kept_mixed.map(&:to_s).presence || ["-"])

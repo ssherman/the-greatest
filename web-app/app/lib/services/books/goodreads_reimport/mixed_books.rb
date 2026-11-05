@@ -41,7 +41,7 @@ module Services
           }
           payload["redirect_to_book_id"] = kept["redirect_to_book_id"] if kept.key?("redirect_to_book_id")
           # A kept verdict keeps its mark and its closing reason through a re-archive, or DecideGuesses could not reopen it.
-          %w[kept closed_reason].each { |key| payload[key] = kept[key] if kept.key?(key) }
+          %w[kept kept_reason closed_reason].each { |key| payload[key] = kept[key] if kept.key?(key) }
           GoodreadsReplay::RecordVerdict.call(kind: :reimport_mixed, subject_key: subject_key, payload: payload,
             decided_by: :rule, auto: true).data[:verdict]
         end
