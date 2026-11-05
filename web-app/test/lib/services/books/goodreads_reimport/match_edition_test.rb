@@ -201,6 +201,63 @@ module Services
           assert_equal DataImporters::Books::Book::Finder::TRUSTED_IDENTIFIER_SOURCES, captured[:identifier_sources]
           assert_equal DataImporters::Books::Book::Finder::TRUSTED_ALTERNATE_TITLE_SOURCES, captured[:alternate_title_sources]
         end
+
+        def capturing_task(book_id, confidence = "high")
+          captured = []
+          task = stub(call: Services::Ai::Result.new(success: true, data: {book_id: book_id, confidence: confidence, reason: "r"}))
+          klass = stub
+          klass.stubs(:new).with { |args| captured.replace(args[:books]) }.returns(task)
+          [klass, captured]
+        end
+
+        test "the reader's current book is offered to the AI even when the finder found nothing" do
+          @edition.update!(book_id: @other.id)
+          klass, captured = capturing_task(@other.id)
+
+          result = run_match(match, klass)
+
+          assert_equal [@other.id], captured.map(&:id)
+          assert_equal :matched, result.data[:outcome]
+          assert_equal [@other.id], verdict.payload["candidate_book_ids"]
+        end
+
+        test "the AI confirming the reader's current book at high is auto-approved" do
+          @edition.update!(book_id: @other.id)
+          run_match(match(record: @pick), task_returning(@other.id))
+
+          assert verdict.approved?
+          assert_equal @other.id, verdict.payload["book_id"]
+        end
+
+        test "the AI picking the reader's current book at medium waits for review" do
+          @edition.update!(book_id: @other.id)
+          run_match(match, task_returning(@other.id, "medium"))
+
+          assert verdict.proposed?
+        end
+
+        test "the AI saying none with the current book offered: high creates, medium waits" do
+          @edition.update!(book_id: @other.id)
+          run_match(match, task_returning(nil, "high"))
+          assert verdict.approved?
+          assert_equal "create", verdict.payload["outcome"]
+
+          verdict.destroy!
+          run_match(match, task_returning(nil, "medium"))
+          assert verdict.proposed?
+        end
+
+        test "the current book follows merges, counts once, and keeps a place in a full list" do
+          extra = Array.new(7) { |i| ::Books::Book.create!(title: "Extra #{i}") }
+          @edition.update!(book_id: @pick.id)
+          GoodreadsReplay::Apply::MergedBook.stubs(:call).with(@pick.id).returns(@other)
+          klass, captured = capturing_task(nil, "low")
+          finder_match = DataImporters::Match.new(outcome: :unmatched, candidates: (extra + [@other]).map { |r| Cand.new(r) }, decided_by: :rule)
+
+          run_match(finder_match, klass)
+
+          assert_equal extra.first(5).map(&:id) + [@other.id], captured.map(&:id)
+        end
       end
     end
   end

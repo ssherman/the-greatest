@@ -4,12 +4,12 @@ module Services
   module Books
     module GoodreadsReimport
       # Matches one Goodreads edition to our catalog and records it as a reimport_match verdict (re-import spec
-      # 4.2). The finder runs blinded (no Open Library, trusted sources only); a mixed book stays matchable, since the survey's
-      # mixed rule ignores titles and many such records are the right English book. The AI
-      # then double-checks its candidates, because a finder match on a near-identical title can be a different
-      # volume or an adaptation. Only an AI "high" on the finder's own pick is approved without an admin; any
-      # disagreement, doubt, or "none of these" next to a finder match waits for review. A finder or AI failure
-      # records nothing, so the edition simply comes up again.
+      # 4.2). The finder runs blinded (no Open Library, trusted sources only); a mixed book stays matchable, since
+      # the survey's mixed rule ignores titles and many such records are the right English book. The AI then
+      # double-checks the candidates, because a finder match on a near-identical title can be a different volume or
+      # an adaptation. Only an AI "high" on the finder's own pick, or on the book the reader is already on, is
+      # approved without an admin; any other pick, doubt, or "none of these" next to a finder match waits for
+      # review. A finder or AI failure records nothing, so the edition simply comes up again.
       class MatchEdition
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -55,18 +55,30 @@ module Services
 
         private
 
-        # The finder's pick goes first. External-only candidates have no record and cannot be matched to.
+        # The finder's pick goes first. External-only candidates have no record and cannot be matched to. The book
+        # the reader is on today always gets a place: the blinded finder misses it when the edition's title is a
+        # translation, and without it the AI would answer "none" and a duplicate translated book would be created.
+        # It is only a candidate; the AI still has to say it is the same work.
         def candidate_books(match)
           records = [match.record, *match.candidates.map(&:record)].compact.uniq(&:id)
-          records.first(MAX_CANDIDATES)
+          current = current_book
+          return records.first(MAX_CANDIDATES) if current.nil? || records.first(MAX_CANDIDATES).any? { |book| book.id == current.id }
+
+          records.reject { |book| book.id == current.id }.first(MAX_CANDIDATES - 1) + [current]
+        end
+
+        def current_book
+          @current_book = ::Services::Books::GoodreadsReplay::Apply::MergedBook.call(@edition.book_id) unless defined?(@current_book)
+          @current_book
         end
 
         def record(match, books, answer)
           ai = answer&.data || {}
           book_id = ai[:book_id]
           confidence = ai[:confidence]
+          # The AI confirming the finder's pick, or the book the reader is already on, at high; anything else is reviewed.
           auto = if book_id.present?
-            book_id == match.record&.id && confidence == "high"
+            [match.record&.id, current_book&.id].compact.include?(book_id) && confidence == "high"
           else
             # "None of these" creates a book, so an AI answer needs high confidence; no candidates = rule only.
             match.unmatched? && (answer.nil? || confidence == "high")

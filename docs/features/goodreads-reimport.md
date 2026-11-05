@@ -86,8 +86,10 @@ rejected ones are never carried out.
 
 ## Reviewing proposed matches
 
-When the AI and the finder agree on a match, it is approved by itself. When they disagree or the AI doubts it,
-the match is proposed. Review them in Admin, Repair verdicts, filtered to `reimport_match`:
+The AI always sees the book the reader is on today as one of its choices, even when the finder missed it (a
+translated title finds nothing in an English catalog). When the AI confirms the finder's match, or the reader's
+current book, with high confidence, it is approved by itself; so is a new book when the AI says "none of these"
+with high confidence. When they disagree or the AI doubts it, the match is proposed. Review them in Admin, Repair verdicts, filtered to `reimport_match`:
 
 - Approve a match that is right; `apply` then writes it.
 - Reject one that is wrong. A rejected match stays rejected and its rows **wait**: they are not moved, and the
