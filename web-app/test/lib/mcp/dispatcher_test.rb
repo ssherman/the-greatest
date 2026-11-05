@@ -30,6 +30,13 @@ module Mcp
       })
     end
 
+    def update_category
+      operation(http_method: "patch", path: "/api/v1/admin/categories/{id}", scope: "books:admin:write", arguments: {
+        "id" => Argument.new(location: :path, wire_name: "id"),
+        "parent_id" => Argument.new(location: :body, wire_name: "parent_id")
+      })
+    end
+
     def outer_request(remote_ip: "203.0.113.9")
       env = Rack::MockRequest.env_for("https://dev-new.thegreatestbooks.org/api/mcp", "action_dispatch.request_id" => "req-123")
       env["action_dispatch.remote_ip"] = remote_ip
@@ -96,6 +103,46 @@ module Mcp
 
     test "null arguments are omitted" do
       assert_equal 200, dispatch(list_books, {category_id: nil}).status
+    end
+
+    test "a null body argument is sent as JSON null and clears the field" do
+      category = categories(:books_novels_genre)
+      category.update!(parent: categories(:books_fiction_genre))
+
+      result = dispatch(update_category, {id: category.id, parent_id: nil}, secret: ApiTokenSecrets::ADMIN)
+
+      assert_equal 200, result.status
+      assert_nil category.reload.parent_id
+    end
+
+    test "a null body argument is in the JSON sent" do
+      sent = nil
+      capture = lambda do |env|
+        text = env["rack.input"].read
+        sent = JSON.parse(text) if text.present?
+        true
+      end
+      Rails.application.routes.expects(:call).with(&capture).returns([200, {"Content-Type" => "application/json"}, ["{}"]])
+
+      dispatch(update_category, {id: 1, parent_id: nil}, secret: ApiTokenSecrets::ADMIN)
+
+      assert_equal({"parent_id" => nil}, sent)
+    end
+
+    test "a null path argument is still a missing argument" do
+      Rails.application.routes.expects(:call).never
+
+      result = dispatch(update_category, {id: nil, parent_id: 1}, secret: ApiTokenSecrets::ADMIN)
+
+      assert_equal({"code" => "invalid_parameter", "detail" => "Missing argument: id"}, result.body)
+    end
+
+    test "a null unknown argument is still rejected" do
+      Rails.application.routes.expects(:call).never
+
+      result = dispatch(list_books, {bogus: nil})
+
+      assert_equal "Unknown argument: bogus", result.body["detail"]
     end
 
     test "an array argument reaches the API as its 400" do

@@ -20,6 +20,12 @@ module Mcp
   #   reads `request.ip` instead. action_dispatch.request_id is copied so the inner log lines and any
   #   problem body carry the outer request's id.
   #
+  # A nil argument is omitted from the path and the query (an unset filter, not
+  # a value), but sent as JSON null in the body: the admin API's PATCH uses null
+  # to clear a field (parent_id, description), so dropping it would turn a clear
+  # into a silent no-op 200. An unknown argument is rejected whether or not its
+  # value is nil, and a nil path argument counts as missing.
+  #
   # The skipped stack also includes ShowExceptions, so an exception in a
   # controller escapes routes.call. It is rescued here, reported, and turned into
   # a generic internal_error that never carries the exception's message.
@@ -39,7 +45,7 @@ module Mcp
 
     def initialize(operation, arguments, principal, request)
       @operation = operation
-      @arguments = arguments.to_h.transform_keys(&:to_s).compact
+      @arguments = arguments.to_h.transform_keys(&:to_s)
       @principal = principal
       @request = request
     end
@@ -134,11 +140,15 @@ module Mcp
       body.empty? ? nil : JSON.generate(body)
     end
 
-    # The arguments that go at `location`, under their wire names.
+    # The arguments that go at `location`, under their wire names. A nil is
+    # dropped everywhere except the body (see the class comment).
     def arguments_at(location)
       @arguments.each_with_object({}) do |(name, value), wire|
         argument = @operation.arguments.fetch(name)
-        wire[argument.wire_name] = value if argument.location == location
+        next unless argument.location == location
+        next if value.nil? && location != :body
+
+        wire[argument.wire_name] = value
       end
     end
 
