@@ -199,12 +199,19 @@ git commit -m "Developers page: how to connect an MCP client, and the tools it g
 **`public-api.md`:**
 - Near the top: "MCP: `docs/features/mcp-server.md` — every operation with an `x-mcp` block is also an MCP tool."
 - In "Not yet": drop "MCP" (keep "OAuth", linking the OAuth spec).
+- **Strip the books-zone details from "Edge (Cloudflare)"**, at Shane's request on 2026-11-04. The public repo must hold no zone details: no rule names, limits, challenged ranges or paths, hostnames a rule is scoped to, ASN or country rules, or cache-rule coverage. Replace the section with app-side facts only:
+  - API paths sit under `/api/` because the edge treats that prefix as the API.
+  - The edge rules live in the private `the-greatest-cloudflare` repo, which is the source of truth.
+  - What gates `/api/` in the app: auth, the per-IP unauthenticated window (`Services::Api::RateLimiter`), and that same window on `/api/v1/openapi.json`.
+  - Caching: API responses are `private, no-store`, and `/api/v1/openapi.json` sends `public, max-age=3600` with no rate headers.
+
+  Grep the rest of `docs/features/public-api.md` for the same kinds of details and remove them too. Do not touch `docs/superpowers/` specs or plans. Their history stays as it is, and rewriting git history is out of scope.
 
 - [ ] **Step 1: Write the docs**
 
 - [ ] **Step 2: Check the claims**
 
-Grep the docs for every class, path, env key and log field they name. Each must exist in `web-app/` at HEAD. Then confirm no Cloudflare zone details are in the new doc: `grep -inE "rate limit of|challenge|ruleset|requests per" docs/features/mcp-server.md` should match nothing beyond the generic edge sentence.
+Grep the docs for every class, path, env key and log field they name. Each must exist in `web-app/` at HEAD. Then confirm no Cloudflare zone details remain in either doc. `grep -inE "rate limit of|challenge|ruleset|requests per|SBFM|Super Bot|ASN|country|cache rule|cache-everything|new\.thegreatestbooks|zone" docs/features/mcp-server.md docs/features/public-api.md` should match nothing beyond the generic edge sentence.
 
 - [ ] **Step 3: Commit**
 
