@@ -182,7 +182,7 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
 
   test "tool descriptions render as text, not markup" do
     host! host_for(:books)
-    entry = Mcp::ToolDirectory::Entry.new(name: "x", title: "X", description: "<b>bold</b> & `code`", destructive: false)
+    entry = Mcp::ToolDirectory::Entry.new(name: "x", title: "X", description: "<b>bold</b> & `code`", destructive: false, composite: false)
     Mcp::ToolDirectory.stubs(:entries).returns([entry])
 
     get developers_path
@@ -192,15 +192,48 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
   end
 
   # find_book is a composite of three endpoint calls with its own result shape,
-  # so "every tool is an endpoint" was false of the catalogue it documents.
-  test "the MCP copy does not claim every tool is one of the endpoints" do
+  # so "every tool is an endpoint" was false of the catalogue it documents. The
+  # exception is named from the directory, with the grammar of its count.
+  def intro_text
+    css_select("p#mcp-intro").first.text.squish
+  end
+
+  def mcp_entry(name, composite:)
+    Mcp::ToolDirectory::Entry.new(name: name, title: name.titleize, description: "d", destructive: false, composite: composite)
+  end
+
+  test "the MCP intro names the one composite tool, in the singular" do
     host! host_for(:books)
 
     get developers_path
 
-    refute_match(/Each tool below is one of the endpoints/, response.body)
-    assert_select "h2#mcp ~ p", text: /Most tools below are one of the endpoints/
-    assert_select "h2#mcp ~ p code", text: "find_book"
+    composites = Mcp::ToolDirectory.entries(document: :public, domain: :books).select(&:composite).map(&:name)
+    assert_equal ["find_book"], composites
+    assert_select "p#mcp-intro code", text: "find_book"
+    assert_match(/Apart from find_book, each tool below is one of the endpoints above/, intro_text)
+    assert_match(/find_book combines several endpoints in one call and returns its own result\./, intro_text)
+    refute_match(/Each tool below is one of the endpoints/, intro_text)
+  end
+
+  test "the MCP intro names two composite tools, in the plural" do
+    host! host_for(:books)
+    Mcp::ToolDirectory.stubs(:entries).returns([mcp_entry("list_x", composite: false), mcp_entry("find_a", composite: true), mcp_entry("find_b", composite: true)])
+
+    get developers_path
+
+    assert_equal %w[find_a find_b], css_select("p#mcp-intro code").map(&:text).drop(1).first(2)
+    assert_match(/Apart from find_a and find_b, each tool below/, intro_text)
+    assert_match(/find_a and find_b combine several endpoints in one call and return their own results\./, intro_text)
+  end
+
+  test "the MCP intro says every tool is an endpoint when there is no composite" do
+    host! host_for(:books)
+    Mcp::ToolDirectory.stubs(:entries).returns([mcp_entry("list_x", composite: false)])
+
+    get developers_path
+
+    assert_match(/Each tool below is one of the endpoints above/, intro_text)
+    assert_equal 1, css_select("p#mcp-intro code").size
   end
 
   test "the authentication copy no longer says every token is read-only" do

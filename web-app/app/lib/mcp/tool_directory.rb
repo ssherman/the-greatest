@@ -11,18 +11,21 @@ module Mcp
   # site's composites, so a page that renders them cannot drift from the
   # endpoint.
   module ToolDirectory
-    Entry = Struct.new(:name, :title, :description, :destructive, keyword_init: true)
+    # `composite` is true for a site tool that combines several operations of
+    # the catalogue (find_book) rather than being one of them, so a page can
+    # say which tools are not simply an endpoint.
+    Entry = Struct.new(:name, :title, :description, :destructive, :composite, keyword_init: true)
 
     def self.entries(document:, domain:)
       catalog = ::Mcp::Catalog.for(document: document, domain: domain)
 
       operations = catalog.operations.map do |operation|
         Entry.new(name: operation.tool_name, title: operation.title, description: operation.description,
-          destructive: operation.annotations.fetch(:destructive_hint))
+          destructive: operation.annotations.fetch(:destructive_hint), composite: false)
       end
       composites = ::Mcp::Sites.for(domain).composites(document).map do |composite|
         Entry.new(name: composite.tool_name, title: composite.title, description: composite.description,
-          destructive: composite.annotations(catalog).fetch(:destructive_hint))
+          destructive: composite.annotations(catalog).fetch(:destructive_hint), composite: true)
       end
 
       operations + composites

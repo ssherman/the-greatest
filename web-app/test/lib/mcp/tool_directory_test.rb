@@ -31,6 +31,14 @@ module Mcp
       assert_equal false, get_book.destructive
     end
 
+    test "find_book is the only composite on public books and admin has none" do
+      public_entries = Mcp::ToolDirectory.entries(document: :public, domain: :books)
+
+      assert_equal ["find_book"], public_entries.select(&:composite).map(&:name)
+      assert_equal 17, public_entries.count { |entry| !entry.composite }
+      assert_empty Mcp::ToolDirectory.entries(document: :admin, domain: :books).select(&:composite)
+    end
+
     test "a composite's destructive flag is its derived destructive hint" do
       find_book = Mcp::ToolDirectory.entries(document: :public, domain: :books).find { |entry| entry.name == "find_book" }
 
