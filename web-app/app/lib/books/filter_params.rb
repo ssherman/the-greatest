@@ -5,6 +5,29 @@ module Books
     MAX_CATEGORIES = 6
     MAX_COUNTRIES = 10
 
+    # Input that cannot be a filter at all: too many slugs, or a year that is not an
+    # integer in range. The website 404s on it (both classes are RecordNotFound); the
+    # API answers 400.
+    class InvalidFilter < ActiveRecord::RecordNotFound
+      attr_reader :param
+
+      def initialize(param, detail)
+        @param = param
+        super("Invalid #{param}: #{detail}")
+      end
+    end
+
+    # A well-formed slug that names nothing. The website 404s; the API answers 404.
+    class UnknownFilter < ActiveRecord::RecordNotFound
+      attr_reader :param, :slug
+
+      def initialize(param, slug)
+        @param = param
+        @slug = slug
+        super("Unknown #{param}: #{slug}")
+      end
+    end
+
     Result = Struct.new(:categories, :countries, :year_start, :year_end, :redirect, keyword_init: true) do
       # True when a category slug resolved through a merge or a pre-rename slug;
       # the page should 301 to the canonical URL built from `categories`.
@@ -20,14 +43,14 @@ module Books
     end
 
     def call
-      year = validated_year(@params[:year])
+      year = validated_year("year", @params[:year])
       categories, redirect = resolve_categories(@params[:category_id])
 
       Result.new(
         categories: categories,
-        countries: resolve(Books::Country.all, @params[:country_id], MAX_COUNTRIES),
-        year_start: year || validated_year(@params[:published_start]),
-        year_end: year || validated_year(@params[:published_end]),
+        countries: resolve("country_id", Books::Country.all, @params[:country_id], MAX_COUNTRIES),
+        year_start: year || validated_year("published_start", @params[:published_start]),
+        year_end: year || validated_year("published_end", @params[:published_end]),
         redirect: redirect
       )
     end
@@ -35,42 +58,42 @@ module Books
     private
 
     def resolve_categories(raw)
-      slugs = parse_slugs(raw, MAX_CATEGORIES)
+      slugs = parse_slugs("category_id", raw, MAX_CATEGORIES)
       return [[], false] if slugs.empty?
 
       active = Books::Category.active.where(slug: slugs).index_by(&:slug)
       missing = slugs - active.keys
       return [active.values.sort_by(&:slug), false] if missing.empty?
 
-      replacements = missing.map { |slug| Books::CategorySlugResolver.call(slug) || raise(ActiveRecord::RecordNotFound) }
+      replacements = missing.map { |slug| Books::CategorySlugResolver.call(slug) || raise(UnknownFilter.new("category_id", slug)) }
       [(active.values + replacements).uniq.sort_by(&:slug), true]
     end
 
-    def parse_slugs(raw, max)
+    def parse_slugs(param, raw, max)
       slugs = raw.to_s.split(",").map(&:strip).reject(&:blank?).uniq
-      raise ActiveRecord::RecordNotFound if slugs.size > max
+      raise InvalidFilter.new(param, "at most #{max} values allowed") if slugs.size > max
 
       slugs
     end
 
-    def resolve(scope, raw, max)
-      slugs = parse_slugs(raw, max)
+    def resolve(param, scope, raw, max)
+      slugs = parse_slugs(param, raw, max)
       return [] if slugs.empty?
 
       records = scope.where(slug: slugs).sort_by(&:slug)
-      raise ActiveRecord::RecordNotFound if records.size != slugs.size
+      raise UnknownFilter.new(param, (slugs - records.map(&:slug)).first) if records.size != slugs.size
 
       records
     end
 
-    def validated_year(raw)
+    def validated_year(param, raw)
       return nil if raw.blank?
 
       value = raw.to_s
-      raise ActiveRecord::RecordNotFound unless value.match?(YEAR_FORMAT)
+      raise InvalidFilter.new(param, "must be an integer year") unless value.match?(YEAR_FORMAT)
 
       year = value.to_i
-      raise ActiveRecord::RecordNotFound unless YEAR_RANGE.cover?(year)
+      raise InvalidFilter.new(param, "must be between #{YEAR_RANGE.begin} and #{YEAR_RANGE.end}") unless YEAR_RANGE.cover?(year)
 
       year.to_s
     end

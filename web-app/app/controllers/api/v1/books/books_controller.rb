@@ -12,9 +12,24 @@ module Api
       class BooksController < BaseController
         def index
           configuration = ranking_configuration
-          relation = configuration && ::Books::RankedBooksQuery.call(ranking_configuration: configuration)
+          # Filters are resolved before the page is parsed, so a bad filter beats
+          # a bad page (a missing parent configuration still beats both).
+          filters = ::Api::RankedBookFilters.call(params)
+          relation = configuration && ::Books::RankedBooksQuery.call(
+            ranking_configuration: configuration,
+            categories: filters.categories,
+            countries: filters.countries,
+            year_start: filters.year_start,
+            year_end: filters.year_end,
+            collection: filters.collection
+          )
 
-          render_ranked_page(relation, path: collection_path("books")) do |ranked_item|
+          render_ranked_page(
+            relation,
+            path: collection_path("books"),
+            query: filters.applied,
+            meta: filters.applied.any? ? {filters: filters.applied} : {}
+          ) do |ranked_item|
             BookResource.new(ranked_item.item, params: {rank: ranked_item.rank}).to_h
           end
         end

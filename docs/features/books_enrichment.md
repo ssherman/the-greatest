@@ -80,7 +80,7 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 
 ## The ledger
 
-`Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts` or `books.goodreads`), `mode`
+`Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`, `books.goodreads` or `books.evidence`), `mode`
 (knowledge/research/sourced), `outcome` (applied, nothing_to_apply, unrecognized, skipped, failed),
 `recognized`, `confidence`, `facts` JSON, `citations`, `provider`, `model`, `ai_chat_id`,
 `error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (`origin_countries`
@@ -110,6 +110,24 @@ the series (`created` or `linked`, found by the Goodreads series id), and the id
 `nothing_to_apply`, which is what lets a later backfill re-run it safely. The ISBN-13 it writes (source
 `goodreads`, checksum-valid, and not held by another book from a verified source) is what the Amazon step
 searches by first.
+
+### The `books.evidence` kind
+
+The `evidence` step of the book workflow (`Services::Books::Evidence::Gather`) writes one row per run:
+the facts about the book that stage 2 (origin) and stage 3 (categories) will read, so they never call
+Wikidata, Wikipedia or WorldCat themselves. `facts` carries `"schema_version" => 1` and these keys:
+`wikidata` (the QID, how it was found, label, description and list fields such as countries, languages,
+genres, main subjects and narrative locations; nil when no work was confirmed), `wikipedia` (lead of at
+most 2,000 characters and plot of at most 6,000, reached only through the Wikidata item's enwiki
+sitelink, never a text search), `worldcat` (summary of at most 1,500 characters and the top 40 subjects,
+after a title, author and year identity check of the book's unverified ISBNs; ISBNs on verified identifiers skip the check), `wikidata_rejected`, `wikidata_conflict_book_id`
+and `sources_failed`. The outcome is `applied` when any section is present, otherwise `nothing_to_apply`.
+`bin/rails books:evidence[id]` gathers it inline for one book and prints the QID, how it was found, the
+sections present and `sources_failed` (dev inspection; it writes a row).
+
+A row written before the WorldCat service is reachable in production records `worldcat` in
+`sources_failed` with no WorldCat section; stage 2 must re-gather those rows. `wikidata_qid` is the QID
+resolution ended with (or nil) and `source_errors` maps each failed source to its error class and message.
 
 ## Tuning
 

@@ -35,6 +35,29 @@ module Services
         assert Authenticator.call(request_with("bearer  #{ApiTokenSecrets::MEMBER} ")).success?
       end
 
+      test "a dispatched request returns the env principal without a token lookup or record_use" do
+        principal = Authenticator.call(request_with("Bearer #{ApiTokenSecrets::MEMBER}")).data
+        env = ::Api::DispatchedRequest.mark(Rack::MockRequest.env_for("/"), principal)
+        Tokens.expects(:authenticate).never
+        Tokens.expects(:record_use).never
+
+        result = Authenticator.call(ActionDispatch::Request.new(env))
+
+        assert result.success?
+        assert_same principal, result.data
+      end
+
+      test "a principal under any other env key is ignored" do
+        principal = Authenticator.call(request_with("Bearer #{ApiTokenSecrets::MEMBER}")).data
+        env = Rack::MockRequest.env_for("/")
+        env["HTTP_THE_GREATEST_API_PRINCIPAL"] = principal
+
+        result = Authenticator.call(ActionDispatch::Request.new(env))
+
+        refute result.success?
+        assert_equal [:unauthenticated], result.errors
+      end
+
       test "no Authorization header is :unauthenticated" do
         result = Authenticator.call(request_with(nil))
 

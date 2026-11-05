@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # The WorldCat genre/subject backfill (docs/features/worldcat-data-service.md).
-# Queued by worldcat:backfill. One run walks every book with an ISBN; `low`
+# Queued by worldcat:backfill. One run walks every book with a verified ISBN-13; `low`
 # keeps it behind members' work, and retry is off because the run is its own
 # retry loop and a second run while the first holds the lock exits at once.
 class Books::WorldCatBackfillJob

@@ -14,6 +14,7 @@ module Api
         ["GET", "/api/v1/openapi.json", "429"] => -> { with_exhausted_ip_window { get "/api/v1/openapi.json" } },
         ["GET", "/api/v1/books", "200"] => -> { get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/books", "400"] => -> { get "/api/v1/books?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/books", "404"] => -> { get "/api/v1/books?country_id=atlantis", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/books", "401"] => -> { get "/api/v1/books" },
         ["GET", "/api/v1/books", "403"] => -> { get "/api/v1/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
         ["GET", "/api/v1/books", "429"] => -> { with_exhausted_limit { get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER) } },
@@ -91,7 +92,25 @@ module Api
         ["GET", "/api/v1/categories/{slug}/books", "401"] => -> { get "/api/v1/categories/novels/books" },
         ["GET", "/api/v1/categories/{slug}/books", "403"] => -> { get "/api/v1/categories/novels/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
         ["GET", "/api/v1/categories/{slug}/books", "404"] => -> { get "/api/v1/categories/no-such-category/books", headers: bearer(ApiTokenSecrets::MEMBER) },
-        ["GET", "/api/v1/categories/{slug}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) } }
+        ["GET", "/api/v1/categories/{slug}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "200"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "400"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "401"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books" },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "403"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "404"] => -> { get "/api/v1/ranking_configurations/999999999/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/search/books", "200"] => lambda {
+          ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: books_books(:war_and_peace).id.to_s, score: 1.0, source: {}}])
+          get "/api/v1/search/books?q=war", headers: bearer(ApiTokenSecrets::MEMBER)
+        },
+        ["GET", "/api/v1/search/books", "400"] => -> { get "/api/v1/search/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/search/books", "401"] => -> { get "/api/v1/search/books?q=war" },
+        ["GET", "/api/v1/search/books", "403"] => -> { get "/api/v1/search/books?q=war", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/search/books", "429"] => -> { with_exhausted_limit { get "/api/v1/search/books?q=war", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/search/books", "503"] => lambda {
+          ::Search::Books::Search::BookGeneral.stubs(:call).raises(Faraday::ConnectionFailed, "down")
+          get "/api/v1/search/books?q=war", headers: bearer(ApiTokenSecrets::MEMBER)
+        }
       }.freeze
 
       setup do
@@ -123,6 +142,9 @@ module Api
           instance_exec(&exercise)
           # Request validation would reject the deliberately bad page=0 request.
           assert_api_response_conform(status: Integer(status))
+          # The 200 and 503 search entries stub the index; clear it so the next
+          # entry is not answered by a stub.
+          ::Search::Books::Search::BookGeneral.unstub(:call)
         end
       end
 
