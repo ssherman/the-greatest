@@ -72,6 +72,19 @@ module Mcp
       assert_match(/did not transfer/, tool_named("merge_book").description)
     end
 
+    test "the tag descriptions do not claim untagging is an unconditional undo" do
+      %w[tag_book tag_author].each do |name|
+        description = tool_named(name).description
+
+        refute_match(/undoes it/, description, name)
+        assert_match(/already had the category/, description, name)
+        assert_match(/`source`/, description, name)
+      end
+      %w[untag_book untag_author].each do |name|
+        refute_match(/to undo/, tool_named(name).description, name)
+      end
+    end
+
     test "update_admin_category says how null and omission differ" do
       description = tool_named("update_admin_category").description
 

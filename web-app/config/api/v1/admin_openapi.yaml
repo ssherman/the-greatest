@@ -609,8 +609,9 @@ paths:
           Links category `category_id` to the book `id` and returns the book's category links. Tagging a
           category the book already has succeeds and changes nothing, and tagging one that was only inferred
           from a more specific location makes the link direct. It is refused (422) for a deleted or merged
-          category or one from another section; ids come from search_admin_books and search_admin_categories,
-          and untag_book undoes it.
+          category or one from another section; ids come from search_admin_books and search_admin_categories.
+          untag_book removes a link this call created. If the book already had the category, tagging changed
+          nothing and there is nothing to undo: check the returned links' `source` before untagging.
       parameters:
         - $ref: "#/components/parameters/id"
       requestBody:
@@ -664,8 +665,9 @@ paths:
         description: >-
           Removes a direct category link from the book `id` and returns its remaining category links. A link
           inferred from a more specific location cannot be removed directly (422 names the location to remove
-          instead), and a category the book does not have is a 404. Tag it again with tag_book to undo; ids
-          come from search_admin_books and search_admin_categories.
+          instead), and a category the book does not have is a 404. Tagging again with tag_book restores the
+          link, but records its source as `admin`, so the original source is lost; ids come from
+          search_admin_books and search_admin_categories.
         destructive: true
       parameters:
         - $ref: "#/components/parameters/id"
@@ -718,7 +720,9 @@ paths:
           category the author already has succeeds and changes nothing, and tagging one that was only inferred
           from a more specific location makes the link direct. It is refused (422) for a deleted or merged
           category or one from another section; ids come from search_admin_authors and
-          search_admin_categories, and untag_author undoes it.
+          search_admin_categories. untag_author removes a link this call created. If the author already had
+          the category, tagging changed nothing and there is nothing to undo: check the returned links'
+          `source` before untagging.
       parameters:
         - $ref: "#/components/parameters/id"
       requestBody:
@@ -772,8 +776,9 @@ paths:
         description: >-
           Removes a direct category link from the author `id` and returns their remaining category links. A
           link inferred from a more specific location cannot be removed directly (422 names the location to
-          remove instead), and a category the author does not have is a 404. Tag it again with tag_author to
-          undo; ids come from search_admin_authors and search_admin_categories.
+          remove instead), and a category the author does not have is a 404. Tagging again with tag_author
+          restores the link, but records its source as `admin`, so the original source is lost; ids come
+          from search_admin_authors and search_admin_categories.
         destructive: true
       parameters:
         - $ref: "#/components/parameters/id"

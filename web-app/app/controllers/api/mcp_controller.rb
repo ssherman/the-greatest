@@ -73,7 +73,9 @@ module Api
     # The token is never logged. The body is read raw for this and only here.
     def log_request
       rpc_method, tool = describe_rpc
-      ::Rails.logger.info("event=api_mcp rpc_method=#{rpc_method} tool=#{tool} user_id=#{current_principal.user.id}")
+      ::Rails.logger.info(
+        "event=api_mcp document=#{mcp_document} rpc_method=#{rpc_method} tool=#{tool} user_id=#{current_principal.user.id}"
+      )
     end
 
     def describe_rpc
