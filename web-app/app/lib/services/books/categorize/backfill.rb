@@ -33,7 +33,7 @@ module Services
         def self.candidates(scope: SCOPE, book_ids: nil)
           raise ArgumentError, refusal(scope) if refusal(scope)
 
-          relation = ::Books::Book.where.not(id: done_book_ids).where.not(id: importing_book_ids)
+          relation = ::Books::Book.where("NOT EXISTS (#{done_rows.to_sql})").where("NOT EXISTS (#{importing_runs.to_sql})")
           relation = relation.where(id: book_ids) if book_ids
           configuration = ::Books::RankingConfiguration.default_primary
           rank_join = ActiveRecord::Base.sanitize_sql_array([
@@ -52,19 +52,21 @@ module Services
           ))
         end
 
-        def self.done_book_ids
+        # Correlated on books_books.id (NOT EXISTS anti-joins, not NOT IN).
+        def self.done_rows
           Enrichment.where(enrichable_type: "Books::Book", kind: Origin::Judge::KIND)
+            .where("enrichments.enrichable_id = books_books.id")
             .where("NOT EXISTS (SELECT 1 FROM enrichments newer WHERE newer.enrichable_type = enrichments.enrichable_type " \
               "AND newer.enrichable_id = enrichments.enrichable_id AND newer.kind = enrichments.kind AND newer.id > enrichments.id)")
             .where("enrichments.facts->>'prompt_version' = ?", Ai::Tasks::Books::BookOriginTask::PROMPT_VERSION.to_s)
             .where.not(outcome: [:failed, :skipped])
             .where("enrichments.facts->>'deferred_research' IS DISTINCT FROM 'true'")
-            .select(:enrichable_id)
+            .select("1")
         end
 
-        def self.importing_book_ids
+        def self.importing_runs
           ::WorkflowRun.running.where(workflow: ::Workflows::Books::BookEnrichment.workflow, enrichable_type: "Books::Book")
-            .select(:enrichable_id)
+            .where("workflow_runs.enrichable_id = books_books.id").select("1")
         end
 
         def initialize(scope:, limit:, label:, book_ids:)
@@ -86,9 +88,12 @@ module Services
             books = ::Books::Book.where(id: ids).index_by(&:id)
             running = running_book_ids(ids)
             ids.each do |id|
+              # Merged or deleted since the pluck: not planned, not counted.
+              next unless (book = books[id])
+
               ActiveRecord::Base.transaction do
                 ::Workflows::Books::BookCategorize.start(
-                  books.fetch(id), initiated_by: "backfill",
+                  book, initiated_by: "backfill",
                   options: {"context" => "backfill", "label" => @label},
                   start_after: (planned * SPACING).seconds.from_now
                 )

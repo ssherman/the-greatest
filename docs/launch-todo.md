@@ -109,7 +109,9 @@ second export on the same day reuses the day's file name and the trainer reports
 
 10. **`bin/rails "books:categorize:backfill[origin_only,all,weekly]" APPLY=1`**, after the sync, once
    section 12 step 2 has run once. It plans only the books the sync added, and the books a deferred
-   research or a failure left undone. Books with a running import are left to their import.
+   research or a failure left undone. Books with a running import are left to their import. While the
+   section 12 backfill is still running, the weekly run reports almost every book as reused, and new books
+   start after the backfill's last slot.
 
 ## 5. Cleanup, after the switch-over
 
@@ -473,7 +475,7 @@ once here; the weekly run is section 4, step 10.
 1. The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10).
 2. In production (you run it with `!`), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
    to see the count, then again with `APPLY=1`. It paces itself at one book every 8 seconds, so the whole
-   catalog takes days. The ranked books go first. The research cap for the backfill is
+   catalog (about 159,000 books) takes about 15 days; the dry run prints the hours. The ranked books go first. The research cap for the backfill is
    `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised. Until WorldCat is
    reachable from production, rows list `worldcat` in `sources_failed`, and a later run gathers those
    books again.

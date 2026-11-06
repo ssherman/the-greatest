@@ -10,12 +10,21 @@ module Services
 
         setup do
           stub_workflow_dispatch
-          @ranked = book("Ranked")
-          @unknown_only = book("Unknown only")
+          # Created in the reverse of the expected order, so id order alone cannot pass.
           @american = book("American")
-          @unknown_only.countries << country("Unknown")
           @american.countries << country("United States")
-          ::RankedItem.create!(item: @ranked, ranking_configuration: ::Books::RankingConfiguration.default_primary, rank: 1, score: 1)
+          @unknown_only = book("Unknown only")
+          @unknown_only.countries << country("Unknown")
+          @no_country = book("No country")
+          @rank_two = book("Rank two")
+          @rank_one = book("Rank one")
+          @other_config_only = book("Other config only")
+          primary = ::Books::RankingConfiguration.default_primary
+          ::RankedItem.create!(item: @rank_two, ranking_configuration: primary, rank: 2, score: 1)
+          ::RankedItem.create!(item: @rank_one, ranking_configuration: primary, rank: 1, score: 2)
+          other = ::Books::RankingConfiguration.where(primary: false).first
+          ::RankedItem.create!(item: @other_config_only, ranking_configuration: other, rank: 1, score: 1)
+          @ranked = @rank_one
         end
 
         def book(title)
@@ -31,9 +40,11 @@ module Services
             facts: {"prompt_version" => 1, "context" => "backfill"}.merge(facts.stringify_keys))
         end
 
-        test "orders ranked books first, then books without a real origin, then the rest" do
-          ids = Backfill.candidates.where(id: [@american, @unknown_only, @ranked]).pluck(:id)
-          assert_equal [@ranked.id, @unknown_only.id, @american.id], ids
+        test "orders ranked books by rank, then books without a real origin, then the rest, ties by id" do
+          ids = [@american, @unknown_only, @no_country, @rank_two, @rank_one, @other_config_only].map(&:id)
+          # other_config_only has no country, so it sits in the placeholder bucket by id order.
+          expected = [@rank_one, @rank_two, @unknown_only, @no_country, @other_config_only, @american]
+          assert_equal expected.map(&:id), Backfill.candidates.where(id: ids).pluck(:id)
         end
 
         test "leaves out books done under the current prompt version" do
@@ -91,6 +102,16 @@ module Services
 
         test "the limit caps what is planned" do
           result = Backfill.call(scope: "origin_only", limit: 1, label: "t", book_ids: [@american.id, @unknown_only.id])
+          assert_equal 1, result.data[:planned]
+        end
+
+        test "skips a book that disappears between the id pluck and the load" do
+          relation = stub(limit: nil)
+          relation.stubs(:pluck).with(:id).returns([0, @american.id])
+          Backfill.stubs(:candidates).returns(relation)
+
+          result = Backfill.call(scope: "origin_only", limit: nil, label: "t")
+          assert result.success?
           assert_equal 1, result.data[:planned]
         end
 
