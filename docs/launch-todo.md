@@ -107,6 +107,10 @@ second export on the same day reuses the day's file name and the trainer reports
    author ranking refresh. Idempotent: with nothing left it prints "Nothing to merge." The first run
    after the deploy that adds it merges the backlog (in dev, 35 authors into "Unknown").
 
+10. **`bin/rails "books:categorize:backfill[origin_only,all,weekly]" APPLY=1`**, after the sync, once
+   section 12 step 2 has run once. It plans only the books the sync added, and the books a deferred
+   research or a failure left undone. Books with a running import are left to their import.
+
 ## 5. Cleanup, after the switch-over
 
 These change the catalog, so they wait for section 2. Each runs once, not after every sync, because
@@ -224,7 +228,7 @@ the sync never undoes them.
 1. Take legacy offline.
 2. `FINAL=1 bin/rails data_migration:sync`. `FINAL=1` drops the 24-hour delay, so the last day's
    books come over too. Run `sync_report` with `FINAL=1` first.
-3. Section 4, steps 3-9.
+3. Section 4, steps 3-10.
 4. **Finish the failed and stuck legacy Goodreads imports.** Only now: they write into legacy users'
    lists, which every sync rewrites to match legacy, so a finishing import run earlier is undone by
    the next sync.
@@ -460,3 +464,21 @@ The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve o
    6. After a day or two, read `fixes_report`'s enrichment section. If nothing failed and the gate never
       blocked, raise `GOODREADS_DAILY_FETCH_CAP` in the production env (SOPS) and restart the worker.
       Above 5,760 a day, lower `GOODREADS_FETCH_INTERVAL` too.
+
+## 12. Book origins (the backfill once, then weekly)
+
+Fills in each book's country of origin through the `books.book_categorize` workflow. The backfill runs
+once here; the weekly run is section 4, step 10.
+
+1. The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10).
+2. In production (you run it with `!`), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
+   to see the count, then again with `APPLY=1`. It paces itself at one book every 8 seconds, so the whole
+   catalog takes days. The ranked books go first. The research cap for the backfill is
+   `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised. Until WorldCat is
+   reachable from production, rows list `worldcat` in `sources_failed`, and a later run gathers those
+   books again.
+3. `bin/rails "books:origin:report[origin-v1]"`.
+4. Accept or skip the disagreements: `bin/rails "books:origin:accept_disagreements[origin-v1]"`, with
+   `IDS=` and `APPLY=1`.
+5. **Rankings.** Refresh the books list weights and the book rankings, then the author rankings. Filling
+   origins changes `percentage_western` and so the western-canon penalty.
