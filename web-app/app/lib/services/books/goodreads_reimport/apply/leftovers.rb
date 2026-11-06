@@ -90,17 +90,40 @@ module Services
           def attributes(item) = Entries.item_attributes(item).merge("user_id" => item.user_list.user_id)
 
           # The reader has an applied copy from the book, every current row of theirs touching it is approved and
-          # applied, and no CSV row of theirs that touches it is still without a verdict.
+          # applied, no CSV row of theirs that touches it is still without a verdict, and none of their rows names a
+          # book that is gone without a trace.
           def settled?(book, user, ids = book_ids(book))
             memo = {}
             touching = rows_touching(user.id, book, ids, memo)
             return false unless touching.any? { |row| copy_from?(row, book, memo) && row.approved? && row.applied_at }
             return false unless touching.all? { |row| row.approved? && row.applied_at }
+            return false if untraceable?(user, memo)
 
             csv_rows_decided?(user, book, ids, memo)
           end
 
-          def copy_from?(row, book, memo) = row.payload["action"] == "copy" && resolve(row.payload["from_book_id"], memo) == book.id
+          # Is the copy from this book? Decided through MergedBook alone, never through a redirect: a deleted mixed
+          # book's redirect points at a guess, and a copy from it is not a copy from the guessed book. This is the gate
+          # that lets the sweep touch a reader at all, so it must not widen. Redirects only widen which rows touch or
+          # head to the book, the side that keeps items or makes the sweep wait.
+          def copy_from?(row, book, memo)
+            return false unless row.payload["action"] == "copy"
+
+            id = row.payload["from_book_id"]
+            id && memo.fetch([:merged, id]) { memo[[:merged, id]] = GoodreadsReplay::Apply::MergedBook.call(id)&.id } == book.id
+          end
+
+          # Does a current, non-rejected row of the reader name a book that no longer exists and that nothing follows to
+          # a live book? A merge of a book created after the migration, with no duplicate pair, leaves no verdict, no
+          # pair and no redirect, so a row naming it could head here and nothing would say so. When in doubt, keep:
+          # the sweep waits. One query on the reader's rows, one existence check; `resolve` only for the gone ids.
+          def untraceable?(user, memo)
+            named = ::Books::RepairVerdict.reimport_row.current.where.not(status: :rejected)
+              .where("kind = 8 AND payload->>'user_id' = ?", user.id.to_s)
+              .pluck(Arel.sql("payload->>'from_book_id'"), Arel.sql("payload->>'to_book_id'")).flatten.compact.map(&:to_i).uniq
+            gone = named - ::Books::Book.where(id: named).pluck(:id)
+            gone.any? { |id| resolve(id, memo).nil? }
+          end
 
           # Book ids that may resolve to this book: itself and the books merged into it, followed through chains. This
           # is the inverse of `resolve` (merge_books verdicts name the source and the target; a merged duplicate pair

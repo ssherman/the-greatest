@@ -172,14 +172,14 @@ module Services
             assert_not_includes ids, merged + 5
           end
 
-          test "a deleted book's redirect (no target) explains nothing: the keep row naming it does not keep the item" do
+          test "a row naming a deleted book (a redirect with no target) follows nowhere, so the sweep waits" do
             gone_id, = gone_ids(1)
             RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: nil)
 
             read, reading = keep_row_naming(gone_id)
 
-            assert_not UserListItem.exists?(read.id)
-            assert_not UserListItem.exists?(reading.id)
+            assert UserListItem.exists?(read.id)
+            assert UserListItem.exists?(reading.id)
           end
 
           test "a redirect alone, like the one a mixed delete writes, does not change where MergedBook sends a row" do
@@ -187,6 +187,65 @@ module Services
             RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: @from.id)
 
             assert_nil GoodreadsReplay::Apply::MergedBook.call(gone_id)
+          end
+
+          test "R6 through the real merger: a new book merged into this one with no pair or verdict keeps the keep row's item" do
+            new_book = ::Books::Book.create!(title: "Re-import Created", book_kind: :standalone)
+            read = UserListItem.create!(user_list: list(:read), listable: new_book)
+            keep = row_verdict(csv_row(exclusive_shelf: "read"), action: "keep", from: new_book, to: new_book)
+            keep.update!(applied_at: Time.current)
+            copy = row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @from, to: @to)
+            ::Books::Book::Merger.call(source: new_book, target: @from)
+            assert_not RecordRedirect.exists?(from_id: new_book.id), "a post-migration id records no redirect"
+
+            apply(copy)
+
+            assert UserListItem.exists?(read.id)
+            assert_equal @from.id, read.reload.listable_id
+          end
+
+          test "a row naming a gone book nothing follows makes the sweep wait, and a resolvable one does not" do
+            gone_id, = gone_ids(1)
+            reading = UserListItem.create!(user_list: list(:reading), listable: @from)
+            stray = row_verdict(csv_row(exclusive_shelf: "read"), action: "copy", from: @other, to: @other)
+            stray.update!(applied_at: Time.current, payload: stray.payload.merge("from_book_id" => gone_id, "to_book_id" => gone_id))
+            copy = row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @from, to: @to)
+
+            apply(copy)
+            assert UserListItem.exists?(reading.id)
+
+            RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: @other.id)
+            Leftovers.sweep(copy.reload, @from, @user)
+            assert_not UserListItem.exists?(reading.id)
+          end
+
+          test "a rejected row naming a gone book does not hold the sweep" do
+            gone_id, = gone_ids(1)
+            reading = UserListItem.create!(user_list: list(:reading), listable: @from)
+            stray = row_verdict(csv_row(exclusive_shelf: "read"), action: "copy", from: @other, to: @other)
+            stray.update!(status: :rejected, payload: stray.payload.merge("from_book_id" => gone_id, "to_book_id" => gone_id))
+            copy = row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @from, to: @to)
+
+            apply(copy)
+
+            assert_not UserListItem.exists?(reading.id)
+          end
+
+          test "R8: copies from a mixed book later redirected here are not a copy from this book, so a move in sweeps nothing" do
+            mixed_id, = gone_ids(1)
+            [@to, books_books(:crime_and_punishment)].each_with_index do |dest, i|
+              row = row_verdict(csv_row(exclusive_shelf: (i.zero? ? "read" : "currently-reading")), action: "copy", from: @from, to: dest)
+              row.update!(applied_at: Time.current, payload: row.payload.merge("from_book_id" => mixed_id))
+            end
+            RecordRedirect.create!(item_type: "Books::Book", from_id: mixed_id, to_id: @from.id)
+            hand_added = UserListItem.create!(user_list: list(:reading), listable: @from)
+            source = ::Books::Book.create!(title: "Move Source", book_kind: :standalone)
+            UserListItem.create!(user_list: list(:want_to_read), listable: source)
+            move = row_verdict(csv_row(exclusive_shelf: "to-read"), action: "move", from: source, to: @from)
+
+            apply(move)
+
+            assert UserListItem.exists?(hand_added.id)
           end
 
           def count_queries
