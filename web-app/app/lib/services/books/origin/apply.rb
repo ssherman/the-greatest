@@ -59,11 +59,19 @@ module Services
 
         def supported?
           return true if wikidata_matches.include?(@answer.name)
+          return true if research_backed_match?
 
           infobox = @dossier.wikipedia&.dig("infobox_country").to_s
           return false if infobox.blank?
 
           CountryLookup.from_text(infobox.split(INFOBOX_SPLIT)).countries.map(&:name).include?(@answer.name)
+        end
+
+        # book_facts researched this book on the web and named the same country.
+        def research_backed_match?
+          return false unless @dossier.research_backed?
+
+          CountryLookup.from_text(Array(@dossier.book_facts["origin_countries"])).countries.map(&:name).include?(@answer.name)
         end
 
         def wikidata_matches

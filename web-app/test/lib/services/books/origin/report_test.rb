@@ -30,6 +30,19 @@ module Services
             [data[:books], data[:by_path], data[:by_reason], data[:applied_countries]]
         end
 
+        test "a row with no reason is labelled none in by_reason" do
+          @book.enrichments.create!(kind: "books.origin", mode: :knowledge, outcome: :unrecognized,
+            facts: {"label" => "r1", "path" => "judge", "context" => "backfill", "origin" => nil})
+          assert_equal({"none" => 1}, Report.call(label: "r1").data[:by_reason])
+        end
+
+        test "disagreements carry accepted_at, nil while pending" do
+          row(@book, label: "r1", reason: "disagreement", outcome: :nothing_to_apply, origin: {"country" => "British", "held" => ["American"]},
+            extra: {"accepted_at" => "2026-11-05T10:00:00Z"})
+          row(@other, label: "r1", reason: "disagreement", outcome: :nothing_to_apply, origin: {"country" => "British", "held" => ["American"]})
+          assert_equal ["2026-11-05T10:00:00Z", nil], Report.call(label: "r1").data[:disagreements].map { it[:accepted_at] }
+        end
+
         test "report without a label spans every label" do
           row(@book, label: "r1")
           row(@other, label: "r2")

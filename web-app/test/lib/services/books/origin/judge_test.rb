@@ -146,6 +146,39 @@ module Services
           assert_equal ["Peruvian"], @book.reload.countries.map(&:name)
         end
 
+        test "a not-recognized answer is applied when book_facts researched and recognized the book" do
+          @book.enrichments.create!(kind: "books.book_facts", outcome: :applied, recognized: true, mode: :research,
+            facts: {"origin_countries" => {"value" => ["Peruvian"]}})
+          stub_answer(recognized: false, nationality: "Peruvian", confidence: "high")
+          row = judge(context: "import", research_allowed: false).data[:enrichments].sole
+          assert_equal ["applied", "filled"], [row.outcome, row.reason]
+          assert_equal ["Peruvian"], @book.reload.countries.map(&:name)
+        end
+
+        test "a medium answer is applied when research-backed book_facts names the country" do
+          @book.enrichments.create!(kind: "books.book_facts", outcome: :applied, recognized: true, mode: :research,
+            facts: {"origin_countries" => {"value" => ["Peruvian"]}})
+          stub_answer(recognized: true, nationality: "Peruvian", confidence: "medium")
+          assert_equal "filled", judge(context: "import", research_allowed: false).data[:enrichments].sole.reason
+        end
+
+        test "a previously deferred book goes straight to research when research is permitted" do
+          @book.enrichments.create!(kind: "books.origin", mode: :knowledge, outcome: :nothing_to_apply,
+            facts: {"prompt_version" => 1, "deferred_research" => true, "context" => "backfill"})
+          Rails.application.config.x.ai.stubs(:categorize_backfill_research_daily_cap).returns(5)
+          stub_answer(nationality: "French", confidence: "high")
+          rows = judge(context: "backfill").data[:enrichments]
+          assert_equal ["research"], rows.map(&:mode)
+          assert rows.sole.applied?
+        end
+
+        test "a previously deferred book stays knowledge-only while research is not permitted" do
+          @book.enrichments.create!(kind: "books.origin", mode: :knowledge, outcome: :nothing_to_apply,
+            facts: {"prompt_version" => 1, "deferred_research" => true, "context" => "backfill"})
+          stub_answer(nationality: "French", confidence: "high")
+          assert_equal ["knowledge"], judge(context: "backfill").data[:enrichments].map(&:mode)
+        end
+
         test "a past-cutoff book goes straight to research" do
           book = new_book("Brand New", year: 2026)
           stub_answer(nationality: "French", confidence: "high")

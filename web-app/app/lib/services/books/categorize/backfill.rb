@@ -9,7 +9,9 @@ module Services
       # the several requests a book's evidence takes).
       #
       # A book is done when its latest books.origin row ran the current prompt
-      # version, did not fail or skip, and did not defer its research. Books
+      # version, did not fail or skip, and did not defer its research (a deferred
+      # book counts as done while categorize_backfill_research_daily_cap is 0, since
+      # nothing could change its outcome). Books
       # with a running books.book_enrichment run are left out: that import's
       # categorize step judges them. Order: ranked books by rank, then books
       # with no real country (none, or placeholders only), then the rest; ties
@@ -54,14 +56,19 @@ module Services
 
         # Correlated on books_books.id (NOT EXISTS anti-joins, not NOT IN).
         def self.done_rows
-          Enrichment.where(enrichable_type: "Books::Book", kind: Origin::Judge::KIND)
+          rows = Enrichment.where(enrichable_type: "Books::Book", kind: Origin::Judge::KIND)
             .where("enrichments.enrichable_id = books_books.id")
             .where("NOT EXISTS (SELECT 1 FROM enrichments newer WHERE newer.enrichable_type = enrichments.enrichable_type " \
               "AND newer.enrichable_id = enrichments.enrichable_id AND newer.kind = enrichments.kind AND newer.id > enrichments.id)")
             .where("enrichments.facts->>'prompt_version' = ?", Ai::Tasks::Books::BookOriginTask::PROMPT_VERSION.to_s)
             .where.not(outcome: [:failed, :skipped])
-            .where("enrichments.facts->>'deferred_research' IS DISTINCT FROM 'true'")
             .select("1")
+          # A deferred book waits for research, which the cap at 0 never grants.
+          # Read at call time so raising the cap makes them candidates again.
+          if Rails.application.config.x.ai.categorize_backfill_research_daily_cap.to_i > 0
+            rows = rows.where("enrichments.facts->>'deferred_research' IS DISTINCT FROM 'true'")
+          end
+          rows
         end
 
         def self.importing_runs
@@ -84,6 +91,7 @@ module Services
           relation = relation.limit(@limit) if @limit
           planned = 0
           reused = 0
+          first_slot = first_slot_time
           relation.pluck(:id).each_slice(BATCH) do |ids|
             books = ::Books::Book.where(id: ids).index_by(&:id)
             running = running_book_ids(ids)
@@ -95,7 +103,7 @@ module Services
                 ::Workflows::Books::BookCategorize.start(
                   book, initiated_by: "backfill",
                   options: {"context" => "backfill", "label" => @label},
-                  start_after: (planned * SPACING).seconds.from_now
+                  start_after: first_slot + (planned * SPACING).seconds
                 )
               end
               reused += 1 if running.include?(id)
@@ -103,10 +111,22 @@ module Services
             end
           end
 
-          Result.new(success?: true, errors: [], data: {planned: planned, reused: reused, done_at: Time.current + (planned * SPACING).seconds})
+          Result.new(success?: true, errors: [], data: {planned: planned, reused: reused, done_at: first_slot + (planned * SPACING).seconds})
         end
 
         private
+
+        # A planning job re-run mid-plan would otherwise lay its slots over the
+        # earlier run's: start after the latest evidence step still waiting.
+        def first_slot_time
+          now = Time.current
+          latest = ::WorkflowStep.joins(:run)
+            .merge(::WorkflowRun.running.where(workflow: ::Workflows::Books::BookCategorize.workflow))
+            .where(key: "evidence").maximum(:run_after)
+          return now unless latest && latest > now
+
+          latest + SPACING.seconds
+        end
 
         def running_book_ids(ids)
           ::WorkflowRun.running.where(workflow: ::Workflows::Books::BookCategorize.workflow, enrichable_type: "Books::Book", enrichable_id: ids)

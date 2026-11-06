@@ -20,8 +20,8 @@ module Workflows
           ::Services::Books::Origin::Judge::Result.new(success?: false, data: {enrichments: []}, errors: ["boom"])
         end
 
-        def import_run(options = {})
-          BookEnrichment.start(@book, initiated_by: "test", options: options)
+        def import_run(options = {}, initiated_by: "importer")
+          BookEnrichment.start(@book, initiated_by: initiated_by, options: options)
         end
 
         def categorize_run(options = {})
@@ -36,6 +36,30 @@ module Workflows
           ::Services::Books::Origin::Judge.expects(:call).with(has_entries(context: "import", research_allowed: true, force: false, force_research: false)).returns(ok_result)
 
           call(import_run)
+        end
+
+        test "a bulk re-run initiator gets the backfill context" do
+          ::Services::Books::Origin::Judge.expects(:call).with(has_entries(context: "backfill")).returns(ok_result)
+
+          call(import_run({}, initiated_by: "goodreads_rebuild"))
+        end
+
+        test "goodreads_promote is an import" do
+          ::Services::Books::Origin::Judge.expects(:call).with(has_entries(context: "import")).returns(ok_result)
+
+          call(import_run({}, initiated_by: "goodreads_promote"))
+        end
+
+        test "an explicit context option wins over the initiator" do
+          ::Services::Books::Origin::Judge.expects(:call).with(has_entries(context: "admin")).returns(ok_result)
+
+          call(import_run({"context" => "admin"}, initiated_by: "goodreads_rebuild"))
+        end
+
+        test "no research when the run's options say the book was already researched" do
+          ::Services::Books::Origin::Judge.expects(:call).with(has_entries(research_allowed: false)).returns(ok_result)
+
+          call(categorize_run("book_facts_researched" => true))
         end
 
         test "no research when book_facts researched in this run" do
@@ -57,7 +81,7 @@ module Workflows
         test "force_research in a book_enrichment run belongs to book_facts, not the judge" do
           ::Services::Books::Origin::Judge.expects(:call).with(has_entries(force_research: false)).returns(ok_result)
 
-          call(import_run("force_research" => true))
+          call(import_run({"force_research" => true}))
         end
 
         test "backfill context and label come from a book_categorize run, which allows research and passes force options" do

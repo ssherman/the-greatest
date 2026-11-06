@@ -38,6 +38,15 @@ class Books::EnrichBookJobTest < ActiveSupport::TestCase
     @job.perform(@book.id, true)
   end
 
+  test "a research enrichment tells the categorize run the web was already searched" do
+    research = Enrichment.new(mode: :research)
+    Services::Books::EnrichBook.stubs(:call).returns(Services::Books::EnrichBook::Result.new(success?: true, data: {enrichments: [research]}, errors: []))
+    Workflows::Books::BookCategorize.expects(:start)
+      .with(@book, initiated_by: "enrich_book_job", options: {"context" => "admin", "book_facts_researched" => true})
+
+    @job.perform(@book.id, true)
+  end
+
   test "a failed enrichment does not start the categorize workflow" do
     Services::Books::EnrichBook.stubs(:call).returns(Services::Books::EnrichBook::Result.new(success?: false, data: {enrichments: []}, errors: ["x"]))
     Workflows::Books::BookCategorize.expects(:start).never

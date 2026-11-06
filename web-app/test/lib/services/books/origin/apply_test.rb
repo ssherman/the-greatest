@@ -43,6 +43,20 @@ module Services
           assert SearchIndexRequest.exists?(parent: @book, action: :index_item)
         end
 
+        test "a medium answer is supported by a research-backed book_facts row naming the same country" do
+          @book.enrichments.create!(kind: "books.book_facts", outcome: :applied, recognized: true, mode: :research,
+            facts: {"origin_countries" => {"value" => ["French"]}})
+          assert_equal "filled", apply(dossier(wikidata: false), "French", "medium").data[:reason]
+        end
+
+        test "a medium answer is not supported by a knowledge book_facts row or a different country" do
+          row = @book.enrichments.create!(kind: "books.book_facts", outcome: :applied, recognized: true, mode: :knowledge,
+            facts: {"origin_countries" => {"value" => ["French"]}})
+          assert_equal "unsupported", apply(dossier(wikidata: false), "French", "medium").data[:reason]
+          row.update!(mode: :research)
+          assert_equal "unsupported", apply(dossier(wikidata: false), "American", "medium").data[:reason]
+        end
+
         test "a medium answer needs Wikidata or the infobox" do
           assert_equal "unsupported", apply(dossier(wikidata: false), "French", "medium").data[:reason]
           assert_equal "filled", apply(dossier(infobox_country: "France"), "French", "medium").data[:reason]

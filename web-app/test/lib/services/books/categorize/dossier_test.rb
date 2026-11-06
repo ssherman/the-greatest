@@ -112,6 +112,31 @@ module Services
           assert_equal "knowledge", facts["mode"]
         end
 
+        def facts_row(mode:, recognized:, outcome: :applied)
+          @book.enrichments.create!(kind: Services::Books::EnrichBook::KIND, outcome: outcome, recognized: recognized, mode: mode,
+            citations: (1..7).map { "https://example.org/#{it}" },
+            facts: {"origin_countries" => {"value" => ["Peruvian"]}, "description" => {"value" => "d" * 700}})
+        end
+
+        test "book_facts carries the first five citations and a description cut to 600 characters" do
+          facts_row(mode: :research, recognized: true)
+          facts = Dossier.build(book: @book).book_facts
+          assert_equal (1..5).map { "https://example.org/#{it}" }, facts["citations"]
+          assert_equal 600, facts["description"].length
+        end
+
+        test "research_backed? needs a recognized research-mode book_facts row" do
+          assert_not Dossier.build(book: @book).research_backed?
+          facts_row(mode: :knowledge, recognized: true)
+          assert_not Dossier.build(book: @book).research_backed?
+          facts_row(mode: :research, recognized: false, outcome: :unrecognized)
+          assert_not Dossier.build(book: @book).research_backed?
+          facts_row(mode: :research, recognized: true)
+          dossier = Dossier.build(book: @book)
+          assert dossier.research_backed?
+          assert_not dossier.external?
+        end
+
         test "to_ledger trims the Wikipedia lead" do
           evidence("wikipedia" => {"title" => "T", "lead" => "y" * 1500, "infobox" => {}})
           ledger = Dossier.build(book: @book).to_ledger

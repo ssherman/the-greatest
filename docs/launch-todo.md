@@ -109,7 +109,7 @@ second export on the same day reuses the day's file name and the trainer reports
 
 10. **`bin/rails "books:categorize:backfill[origin_only,all,weekly]" APPLY=1`**, after the sync, once
    section 12 step 2 has run once. It plans only the books the sync added, and the books a deferred
-   research or a failure left undone. Books with a running import are left to their import. While the
+   research or a failure left undone (deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it). Books with a running import are left to their import. While the
    section 12 backfill is still running, the weekly run reports almost every book as reused, and new books
    start after the backfill's last slot.
 
@@ -476,9 +476,10 @@ once here; the weekly run is section 4, step 10.
 2. In production (you run it with `!`), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
    to see the count, then again with `APPLY=1`. It paces itself at one book every 8 seconds, so the whole
    catalog (about 159,000 books) takes about 15 days; the dry run prints the hours. The ranked books go first. The research cap for the backfill is
-   `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised. Until WorldCat is
-   reachable from production, rows list `worldcat` in `sources_failed`, and a later run gathers those
-   books again.
+   `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised; books whose
+   judgment deferred research wait until you raise it, and the backfill leaves them alone meanwhile. Until
+   WorldCat is reachable from production, evidence rows list `worldcat` in `sources_failed`; the origin
+   judge works without it.
 3. `bin/rails "books:origin:report[origin-v1]"`.
 4. Accept or skip the disagreements: `bin/rails "books:origin:accept_disagreements[origin-v1]"`, with
    `IDS=` and `APPLY=1`.

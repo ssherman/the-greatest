@@ -45,7 +45,7 @@ module Services
           Result.new(success?: true, errors: [], data: {
             books: latest.count,
             by_path: latest.group("enrichments.facts->>'path'").count.compact,
-            by_reason: latest.group(REASON).count.compact,
+            by_reason: latest.group(REASON).count.transform_keys { |reason| reason || "none" },
             applied_countries: top(latest.applied, COUNTRY, 15),
             disagreements: disagreements(latest),
             no_match: top(latest.where("#{REASON} = 'no_match'"), RAW, 20),
@@ -68,7 +68,8 @@ module Services
           rows.map do |row|
             origin = row.facts["origin"] || {}
             {enrichment_id: row.id, book_id: row.enrichable_id, title: titles[row.enrichable_id],
-             held: Array(origin["held"]), proposed: origin["country"]}
+             held: Array(origin["held"]), proposed: origin["country"],
+             accepted_at: row.facts["accepted_at"]}
           end
         end
       end

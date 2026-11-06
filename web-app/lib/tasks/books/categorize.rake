@@ -43,7 +43,7 @@ namespace :books do
       data[:applied_countries].each { |name, count| puts "  #{name}: #{count}" }
       puts "Disagreements (#{data[:disagreements].size}):"
       data[:disagreements].each do |d|
-        puts "  ##{d[:book_id]} #{d[:title]}: #{d[:held].join(", ")} -> #{d[:proposed]} (enrichment #{d[:enrichment_id]})"
+        puts "  ##{d[:book_id]} #{d[:title]}: #{d[:held].join(", ")} -> #{d[:proposed]} (enrichment #{d[:enrichment_id]})#{" [accepted #{d[:accepted_at].to_s[0, 10]}]" if d[:accepted_at]}"
       end
       puts "Unmatched answers (top 20):"
       data[:no_match].each { |raw, count| puts "  #{raw}: #{count}" }

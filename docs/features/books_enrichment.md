@@ -156,14 +156,20 @@ reason: `filled`, `already_set`, `null`, `placeholder_answer` ("Unknown", "Multi
 that differs from the held country, which is never overwritten). A knowledge answer that is `low`
 confidence, or unrecognized, while the book has no real country, is followed by a research run when the
 budget allows. A book published at or after `config.x.ai.knowledge_cutoff_year` starts with research. When
-research is wanted but not allowed (no budget, or `book_facts` already researched in this run), the
-knowledge row gets `deferred_research => true`.
+research is wanted but there is no budget, the knowledge row gets `deferred_research => true`; a later run
+of a deferred book (current prompt version, research permitted) goes straight to research. When
+`book_facts` already researched in this run, nothing is deferred: the judge runs from knowledge with that
+research-backed `book_facts` row as evidence (its sources and description reach the prompt as "Web-verified
+facts"). A recognized research-mode `book_facts` row (`Dossier#research_backed?`) keeps a not-recognized
+judge answer from being marked `unrecognized`, and supports a `medium` answer that names the same country
+(`Dossier#external?` still means Wikidata, Wikipedia or WorldCat only). `EnrichBookJob` passes
+`book_facts_researched` to its categorize run after a research enrichment, so that run does not search again.
 
 Books adopted through `Workflows::Books::AdoptDeferred` (which plans only `book_facts`) get their origin
 from the origin backfill, not from their adopted run.
 
 Two research caps apply. Imports and admin runs spend `config.x.ai.research_daily_cap`, counted as
-`Enrichment.research.today.count` as `EnrichBook` does. The backfill spends its own
+`Enrichment.against_research_cap` as `EnrichBook` does (backfill origin research is excluded). The backfill spends its own
 `config.x.ai.categorize_backfill_research_daily_cap` (default 0), counted from research-mode `books.origin`
 rows created today whose `facts->>'context'` is `backfill`; backfill rows do not spend the shared cap.
 

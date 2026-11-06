@@ -9,6 +9,8 @@ module Services
       class Dossier < Data.define(:book, :evidence_id, :record, :book_facts, :wikidata, :wikipedia, :worldcat)
         LEAD_LIMIT = 1_000
         LEDGER_LEAD_LIMIT = 500
+        CITATION_LIMIT = 5
+        DESCRIPTION_LIMIT = 600
         WIKIDATA_LISTS = %w[countries country_ids country_matches languages publication_years].freeze
         WIKIDATA_KEYS = %w[qid label description].freeze
 
@@ -53,7 +55,9 @@ module Services
             "recognized" => row.recognized, "mode" => row.mode,
             "original_language" => value.call("original_language"),
             "origin_countries" => value.call("origin_countries"),
-            "book_type" => value.call("book_type")
+            "book_type" => value.call("book_type"),
+            "citations" => Array(row.citations).first(CITATION_LIMIT),
+            "description" => value.call("description")&.to_s&.slice(0, DESCRIPTION_LIMIT)
           }
         end
 
@@ -86,6 +90,13 @@ module Services
 
         def external?
           [wikidata, wikipedia, worldcat].any?(&:present?)
+        end
+
+        # True when book_facts answered from a web search and recognized the
+        # book. Its answer then counts as evidence for the judge, though it is
+        # not external in the Wikidata/Wikipedia/WorldCat sense.
+        def research_backed?
+          book_facts.present? && book_facts["mode"] == "research" && book_facts["recognized"] == true
         end
 
         # The held countries that are real, in the order the record lists them.

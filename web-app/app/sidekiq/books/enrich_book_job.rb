@@ -30,6 +30,10 @@ class Books::EnrichBookJob
     # EnrichBook no longer sets an origin country; the origin judge does.
     # force_research is not forwarded: EnrichBook already spent the forced web
     # search, and the judge reads its researched book_facts row from the dossier.
-    ::Workflows::Books::BookCategorize.start(book, initiated_by: "enrich_book_job", options: {"context" => "admin"})
+    # When EnrichBook researched, the judge must not search the web again.
+    options = {"context" => "admin"}
+    researched = Array(result.data[:enrichments]).any? { |row| row.mode.to_s == "research" }
+    options["book_facts_researched"] = true if researched
+    ::Workflows::Books::BookCategorize.start(book, initiated_by: "enrich_book_job", options: options)
   end
 end

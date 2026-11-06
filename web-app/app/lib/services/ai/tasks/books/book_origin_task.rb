@@ -110,7 +110,14 @@ module Services
             parts << "original language #{facts["original_language"]}" if facts["original_language"].present?
             origin = Array(facts["origin_countries"]).reject(&:blank?)
             parts << "origin #{origin.join(", ")}" if origin.any?
-            parts.any? ? ["Earlier AI facts: #{parts.join("; ")}"] : []
+            return [] if parts.empty?
+            return ["Earlier AI facts: #{parts.join("; ")}"] unless dossier.research_backed?
+
+            lines = ["Web-verified facts (from a web search for this book): #{parts.join("; ")}"]
+            urls = Array(facts["citations"]).filter_map { |c| c.is_a?(Hash) ? (c["url"] || c[:url]) : c }.reject(&:blank?)
+            lines << "Sources: #{urls.join(", ")}" if urls.any?
+            lines << "Description: #{facts["description"]}" if facts["description"].present?
+            lines
           end
 
           def wikidata_lines

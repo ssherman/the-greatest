@@ -92,8 +92,18 @@ module Services
         def first_mode
           return :research if force_research
           return :research if past_cutoff? && research_permitted?
+          # Its knowledge call already ran and deferred this book's research.
+          return :research if previously_deferred? && research_permitted?
 
           :knowledge
+        end
+
+        # The book's latest books.origin row, from the current prompt version,
+        # owes research. Read before this call writes any row.
+        def previously_deferred?
+          latest = book.enrichments.where(kind: KIND).order(:id).last
+          latest.present? && latest.facts["deferred_research"] == true &&
+            latest.facts["prompt_version"] == Services::Ai::Tasks::Books::BookOriginTask::PROMPT_VERSION
         end
 
         def past_cutoff?
@@ -126,7 +136,7 @@ module Services
           citations = Array(task_result.data[:citations])
           confidence = confidence_for(answer[:confidence])
           recognized = answer[:recognized]
-          unrecognized = recognized == false && !dossier.external?
+          unrecognized = recognized == false && !dossier.external? && !dossier.research_backed?
           answer_facts = {"nationality" => answer[:nationality], "confidence" => answer[:confidence],
                           "reason" => answer[:reason], "recognized" => recognized,
                           "original_language" => answer[:original_language]}

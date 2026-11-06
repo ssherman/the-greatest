@@ -52,7 +52,26 @@ module Services
           refute_includes Backfill.candidates.pluck(:id), @american.id
         end
 
-        test "keeps books whose latest row deferred research, failed, was skipped or ran an older prompt" do
+        test "a deferred book is left out at cap 0 and included once the cap is above 0" do
+          deferred = book("Deferred")
+          origin_row(deferred, deferred_research: true)
+          refute_includes Backfill.candidates.pluck(:id), deferred.id
+
+          Rails.application.config.x.ai.stubs(:categorize_backfill_research_daily_cap).returns(5)
+          assert_includes Backfill.candidates.pluck(:id), deferred.id
+        end
+
+        test "a rerun does not lay its slots over a running plan" do
+          Backfill.call(scope: "origin_only", limit: 2, label: "t", book_ids: [@american.id, @unknown_only.id])
+          last = WorkflowRun.where(workflow: "books.book_categorize").map { it.step(:evidence).run_after }.max
+
+          Backfill.call(scope: "origin_only", limit: 1, label: "t", book_ids: [@no_country.id])
+          newest = WorkflowRun.where(workflow: "books.book_categorize", enrichable: @no_country).sole.step(:evidence).run_after
+          assert_operator newest, :>=, last + Backfill::SPACING.seconds
+        end
+
+        test "keeps books whose latest row failed, was skipped or ran an older prompt" do
+          Rails.application.config.x.ai.stubs(:categorize_backfill_research_daily_cap).returns(5)
           deferred = book("Deferred")
           failed = book("Failed")
           skipped = book("Skipped")

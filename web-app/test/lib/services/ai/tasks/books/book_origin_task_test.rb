@@ -95,6 +95,24 @@ module Services
             assert_includes task(dossier: build_dossier(book_facts: facts.merge("origin_countries" => []))).send(:user_prompt), "Earlier AI facts: original language Spanish\n"
           end
 
+          test "research-backed book_facts read as web-verified with sources and description" do
+            facts = {"recognized" => true, "mode" => "research", "original_language" => "Spanish", "origin_countries" => ["Peruvian"],
+                     "citations" => ["https://a.example", "https://b.example"], "description" => "A novel."}
+            prompt = task(dossier: build_dossier(book_facts: facts)).send(:user_prompt)
+            assert_includes prompt, "Web-verified facts (from a web search for this book): original language Spanish; origin Peruvian"
+            assert_includes prompt, "Sources: https://a.example, https://b.example"
+            assert_includes prompt, "Description: A novel."
+            refute_includes prompt, "Earlier AI facts"
+          end
+
+          test "research-backed book_facts without sources or description print only the facts line" do
+            facts = {"recognized" => true, "mode" => "research", "origin_countries" => ["Peruvian"], "citations" => [], "description" => nil}
+            prompt = task(dossier: build_dossier(book_facts: facts)).send(:user_prompt)
+            assert_includes prompt, "Web-verified facts (from a web search for this book): origin Peruvian"
+            refute_includes prompt, "Sources:"
+            refute_includes prompt, "Description:"
+          end
+
           test "a blank wikidata description drops the parenthetical" do
             wd = {"label" => "X", "description" => "", "countries" => [], "country_ids" => [], "country_matches" => [], "languages" => [], "publication_years" => []}
             assert_includes task(dossier: build_dossier(wikidata: wd)).send(:user_prompt), "Wikidata: \"X\"\n"
