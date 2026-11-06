@@ -12,7 +12,7 @@ module Services
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
         KIND = "books.evidence"
-        SCHEMA_VERSION = 1
+        SCHEMA_VERSION = 2
         LIST_FIELDS = %w[countries languages genres main_subjects narrative_locations set_in_periods forms].freeze
 
         def self.call(book:, wikidata: ::Wikidata::Client.new, wikipedia: ::Wikipedia::Client.new, worldcat: nil)
@@ -69,9 +69,18 @@ module Services
           LIST_FIELDS.each { |field| section[field] = work.public_send(field).filter_map { |id| labels[id].presence } }
           section["publication_years"] = work.publication_years
           section["enwiki_title"] = work.enwiki_title
+          section["country_ids"] = work.countries
+          section["country_matches"] = country_matches(work.countries)
           section
         rescue ::Wikimedia::Exceptions::Error => error
           fail_source("wikidata", error)
+        end
+
+        # Books::Country names for the work's P495 items. Raises like any Wikidata call.
+        def country_matches(ids)
+          return [] if ids.empty?
+
+          ::Services::Books::CountryLookup.from_wikidata(ids, client: @wikidata).countries.map(&:name)
         end
 
         def wikipedia_section_for(title)

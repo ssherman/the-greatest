@@ -7,6 +7,7 @@ module Services
         setup do
           @book = books_books(:war_and_peace)
           @wikidata = mock("wikidata")
+          @wikidata.stubs(:country_codes).returns({})
           @wikipedia = mock("wikipedia")
           @worldcat = mock("worldcat")
           @work = ::Wikidata::Work.from_payload(
@@ -32,6 +33,7 @@ module Services
         test "a full hit writes one row with all three sections and English labels" do
           ResolveWikidataWork.expects(:call).with(book: @book, client: @wikidata).returns(resolved)
           @wikidata.expects(:labels).once.returns({"Q159" => "Russian Empire", "Q7737" => "Russian", "Q8261" => "novel"})
+          @wikidata.stubs(:country_codes).returns("Q159" => {"code" => "RU", "label" => "Russia"})
           @wikipedia.expects(:article).with(language: "en", title: "War and Peace").returns(@article)
           WorldCatSection.expects(:call).with(book: @book, client: @worldcat).returns(@section)
 
@@ -44,13 +46,13 @@ module Services
           row = result.data[:enrichment]
           assert row.applied?
           facts = row.facts
-          assert_equal 1, facts["schema_version"]
+          assert_equal 2, facts["schema_version"]
           assert_equal ["Russian Empire"], facts["wikidata"]["countries"]
           assert_equal ["Russian"], facts["wikidata"]["languages"]
           assert_equal "Q161531", facts["wikidata"]["qid"]
           assert_equal "Q161531", facts["wikidata_qid"]
           assert_equal %w[qid via label description countries languages genres main_subjects narrative_locations
-            set_in_periods forms publication_years enwiki_title].sort, facts["wikidata"].keys.sort
+            set_in_periods forms publication_years enwiki_title country_ids country_matches].sort, facts["wikidata"].keys.sort
           assert_equal %w[title url lead plot infobox].sort, facts["wikipedia"].keys.sort
           assert_equal({}, facts["source_errors"])
           assert_equal "A plot", facts["wikipedia"]["plot"]
@@ -58,6 +60,46 @@ module Services
           assert_equal [{"id" => "Q1", "reason" => "x"}], facts["wikidata_rejected"]
           assert_nil facts["wikidata_conflict_book_id"]
           assert_equal [], facts["sources_failed"]
+        end
+
+        test "the wikidata section carries P495 ids and the countries they map to" do
+          work = ::Wikidata::Work.from_payload(
+            "id" => "Q161531", "label" => "Le Livre", "countries" => ["Q142"], "languages" => [], "genres" => [],
+            "main_subjects" => [], "narrative_locations" => [], "set_in_periods" => [], "forms" => [],
+            "publication_years" => [], "enwiki_title" => nil
+          )
+          ResolveWikidataWork.expects(:call).returns(resolved(work: work))
+          @wikidata.stubs(:labels).returns({"Q142" => "France"})
+          @wikidata.expects(:country_codes).with(["Q142"]).returns("Q142" => {"code" => "FR", "label" => "France"})
+          WorldCatSection.expects(:call).returns(nil)
+
+          facts = gather.data[:enrichment].facts
+
+          assert_equal 2, facts["schema_version"]
+          assert_equal ["Q142"], facts["wikidata"]["country_ids"]
+          assert_equal ["French"], facts["wikidata"]["country_matches"]
+        end
+
+        test "a Wikidata error while mapping countries fails the wikidata source" do
+          ResolveWikidataWork.expects(:call).returns(resolved)
+          @wikidata.stubs(:labels).returns({})
+          @wikidata.expects(:country_codes).raises(Wikimedia::Exceptions::NetworkError.new("down"))
+          WorldCatSection.expects(:call).returns(nil)
+
+          row = gather.data[:enrichment]
+
+          assert_equal ["wikidata"], row.facts["sources_failed"]
+          assert_nil row.facts["wikidata"]
+        end
+
+        test "a rate limit while mapping countries propagates and writes nothing" do
+          ResolveWikidataWork.expects(:call).returns(resolved)
+          @wikidata.stubs(:labels).returns({})
+          @wikidata.expects(:country_codes).raises(Wikimedia::Exceptions::RateLimited.new("slow", retry_after: 5))
+
+          assert_no_difference -> { Enrichment.count } do
+            assert_raises(Wikimedia::Exceptions::RateLimited) { gather }
+          end
         end
 
         test "a conflict records the other book's id" do

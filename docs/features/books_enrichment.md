@@ -115,15 +115,21 @@ searches by first.
 
 The `evidence` step of the book workflow (`Services::Books::Evidence::Gather`) writes one row per run:
 the facts about the book that stage 2 (origin) and stage 3 (categories) will read, so they never call
-Wikidata, Wikipedia or WorldCat themselves. `facts` carries `"schema_version" => 1` and these keys:
+Wikidata, Wikipedia or WorldCat themselves. `facts` carries `"schema_version" => 2` and these keys:
 `wikidata` (the QID, how it was found, label, description and list fields such as countries, languages,
-genres, main subjects and narrative locations; nil when no work was confirmed), `wikipedia` (lead of at
+genres, main subjects and narrative locations, plus schema 2's `country_ids` (the work's P495 QIDs) and
+`country_matches` (the `Books::Country` names they map to through `CountryLookup.from_wikidata`); version-1
+rows lack both keys and readers treat a missing key as `[]`; nil when no work was confirmed), `wikipedia` (lead of at
 most 2,000 characters and plot of at most 6,000, reached only through the Wikidata item's enwiki
 sitelink, never a text search), `worldcat` (summary of at most 1,500 characters and the top 40 subjects,
 after a title, author and year identity check of the book's unverified ISBNs; ISBNs on verified identifiers skip the check), `wikidata_rejected`, `wikidata_conflict_book_id`
 and `sources_failed`. The outcome is `applied` when any section is present, otherwise `nothing_to_apply`.
 `bin/rails books:evidence[id]` gathers it inline for one book and prints the QID, how it was found, the
 sections present and `sources_failed` (dev inspection; it writes a row).
+
+Books whose authors are all placeholders ("Unknown", "Various") or place names ("China") accept a Wikidata
+work that has no P50 or whose P50 values are all `Q4233718` (anonymous); any other P50 is an
+`author_mismatch`. Books with a person author are matched as before.
 
 A row written before the WorldCat service is reachable in production records `worldcat` in
 `sources_failed` with no WorldCat section; stage 2 must re-gather those rows. `wikidata_qid` is the QID
