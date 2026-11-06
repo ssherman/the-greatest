@@ -43,6 +43,19 @@ module Services
             assert_not UserListItem.exists?(original.id)
           end
 
+          test "a kept book sweeps nothing while a sibling row of the reader is rejected" do
+            kept = mixed_verdict
+            kept.update!(payload: kept.payload.merge("kept" => true))
+            original = UserListItem.create!(user_list: list(:read), listable: @mixed)
+            row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @mixed, to: @mixed).update!(applied_at: Time.current)
+            row_verdict(csv_row(exclusive_shelf: "read"), action: "copy", from: @mixed, to: @to).update!(status: :rejected)
+
+            result = Mixed.call(verdict: kept)
+
+            assert_equal false, result.data[:final]
+            assert UserListItem.exists?(original.id)
+          end
+
           test "a kept mixed book is a final noop and deletes nothing, redirect or not" do
             verdict = mixed_verdict
             verdict.update!(payload: verdict.payload.merge("kept" => true))

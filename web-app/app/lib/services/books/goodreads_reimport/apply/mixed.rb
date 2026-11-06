@@ -73,17 +73,22 @@ module Services
               book.lock!
               verdict.reload
               originals = copy_originals(book)
-              if pending_row?(book, originals)
-                result = Entries.noop("kept: a copy or move is not applied yet")
-                raise ActiveRecord::Rollback
-              end
+              ids = Leftovers.book_ids(book)
+              # Per reader: only one whose every row touching the book is settled (approved and applied) is cleaned.
+              user_ids = originals.map { |item| item.user_list.user_id }.uniq
+              ready = user_ids.select { |id| (user = ::User.find_by(id: id)) && Leftovers.settled?(book, user, ids) }
 
-              stale = Leftovers.stale(book, originals)
+              stale = Leftovers.stale(book, originals.select { |item| ready.include?(item.user_list.user_id) }, ids)
               if stale.any?
-                verdict.update_columns(payload: verdict.payload.merge("deleted" => stale.map { |item| attributes(item) }))
+                earlier = Array(verdict.payload["deleted"])
+                verdict.update_columns(payload: verdict.payload.merge("deleted" => earlier + stale.map { |item| attributes(item) }))
                 stale.each(&:destroy!)
               end
-              result = Entries.noop("kept: readers matched this book", final: true)
+              result = if ready.size == user_ids.size
+                Entries.noop("kept: readers matched this book", final: true)
+              else
+                Entries.noop("kept: a copy or move is not applied yet")
+              end
             end
             result
           end

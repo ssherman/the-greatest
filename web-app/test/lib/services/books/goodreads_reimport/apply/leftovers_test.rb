@@ -113,6 +113,29 @@ module Services
             assert_not UserListItem.exists?(reading.id)
           end
 
+          def count_queries
+            count = 0
+            counter = ->(*, payload) { count += 1 unless %w[SCHEMA TRANSACTION].include?(payload[:name]) || payload[:cached] }
+            ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { yield }
+            count
+          end
+
+          test "a sweep costs the same number of queries however many unrelated rows the reader has" do
+            _read, _want, a, b = split_rows_with_both_items
+            apply(a)
+            apply(b)
+            few = count_queries { Leftovers.sweep(b, @from, @user) }
+
+            20.times do
+              row = csv_row(exclusive_shelf: "read", legacy_book_id: @other.id)
+              keep = row_verdict(row, action: "keep", from: @other, to: @other)
+              keep.update!(applied_at: Time.current)
+            end
+            many = count_queries { Leftovers.sweep(b, @from, @user) }
+
+            assert_equal few, many
+          end
+
           test "a crash between the copy and the sweep leaves the verdict unapplied, and the retry cleans" do
             read, _want, a, b = split_rows_with_both_items
             apply(a)

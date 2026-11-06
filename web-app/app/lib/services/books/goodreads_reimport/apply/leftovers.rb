@@ -48,10 +48,10 @@ module Services
           end
 
           # The items among `items` that go: the ones no row heading to the book explains.
-          def stale(book, items)
+          def stale(book, items, ids = book_ids(book))
             memo = {}
             items.group_by { |item| item.user_list.user_id }.flat_map do |user_id, user_items|
-              heading = rows_of(user_id).select { |row| !row.rejected? && resolve(row.payload["to_book_id"], memo) == book.id }
+              heading = rows_touching(user_id, book, ids, memo).select { |row| !row.rejected? && resolve(row.payload["to_book_id"], memo) == book.id }
               explained = heading.flat_map { |row| explained_by(row, user_id, book) }.to_set
               user_items.reject do |item|
                 explained.include?(item.id) || (heading.any? && [:favorites, :custom].include?(item.user_list.try(:list_type)&.to_sym))
@@ -64,15 +64,18 @@ module Services
           # sibling applying at the same moment sees it; a raise rolls the mark back with the rest. Returns how many
           # items went. Idempotent: a second call finds nothing.
           def sweep(verdict, book, user)
-            return 0 if mixed?(book) || rows_of(user.id).none? { |row| row.payload["action"] == "copy" }
+            return 0 if mixed?(book)
+
+            ids = book_ids(book)
+            return 0 unless rows_touching(user.id, book, ids).any? { |row| copy_from?(row, book, {}) }
 
             removed = 0
             user.with_lock do
               book.lock!
               verdict.update_columns(applied_at: Time.current) if verdict.applied_at.nil?
-              next unless settled?(book, user)
+              next unless settled?(book, user, ids)
 
-              gone = stale(book, items_of(book, [user.id]))
+              gone = stale(book, items_of(book, [user.id]), ids)
               next if gone.empty?
 
               earlier = Array(verdict.payload["leftovers_removed"])
@@ -88,35 +91,61 @@ module Services
 
           # The reader has an applied copy from the book, every current row of theirs touching it is approved and
           # applied, and no CSV row of theirs that touches it is still without a verdict.
-          def settled?(book, user)
+          def settled?(book, user, ids = book_ids(book))
             memo = {}
-            touching = rows_of(user.id).select { |row| [resolve(row.payload["from_book_id"], memo), resolve(row.payload["to_book_id"], memo)].include?(book.id) }
+            touching = rows_touching(user.id, book, ids, memo)
             return false unless touching.any? { |row| copy_from?(row, book, memo) && row.approved? && row.applied_at }
             return false unless touching.all? { |row| row.approved? && row.applied_at }
 
-            keys = ::Books::RepairVerdict.reimport_row.current.where("(payload->>'user_id')::bigint = ?", user.id).pluck(:subject_key).to_set
-            csv_rows(user).none? { |csv| !keys.include?("reimport:row:#{csv.import_id}:#{csv.row_number}") && touches?(csv, book, memo) }
+            csv_rows_decided?(user, book, ids, memo)
           end
 
           def copy_from?(row, book, memo) = row.payload["action"] == "copy" && resolve(row.payload["from_book_id"], memo) == book.id
 
-          # The reader's current row verdicts, superseded keeps (replaced by a newer import's row) left out.
-          def rows_of(user_id)
-            ::Books::RepairVerdict.reimport_row.current.where("(payload->>'user_id')::bigint = ?", user_id)
+          # Book ids that may resolve to this book: itself and the books merged into it, followed through chains. This
+          # is the inverse of MergedBook (merge_books verdicts name the source and the target; a merged duplicate pair
+          # names both halves), over-inclusive on purpose: every use confirms through `resolve`.
+          def book_ids(book)
+            seen = Set[book.id]
+            frontier = [book.id]
+            GoodreadsReplay::Apply::MergedBook::MAX_HOPS.times do
+              break if frontier.empty?
+
+              sources = ::Books::RepairVerdict.merge_books.approved.where("kind = 1 AND payload->>'target_id' IN (?)", frontier.map(&:to_s))
+                .pluck(Arel.sql("payload->>'source_id'")).map(&:to_i)
+              pairs = ::DuplicateCandidate.merged.where(item_type: "Books::Book").where("item_a_id IN (:ids) OR item_b_id IN (:ids)", ids: frontier)
+                .pluck(:item_a_id, :item_b_id).flatten
+              frontier = (sources + pairs).uniq.reject { |id| seen.include?(id) }
+              seen.merge(frontier)
+            end
+            seen.to_a
+          end
+
+          # The reader's current, non-superseded row verdicts whose from or to book is (or merged into) the book.
+          # Narrowed in SQL by the reader and the candidate ids, then confirmed through `resolve`.
+          def rows_touching(user_id, book, ids, memo = {})
+            strings = ids.map(&:to_s)
+            ::Books::RepairVerdict.reimport_row.current
+              .where("kind = 8 AND payload->>'user_id' = ?", user_id.to_s)
+              .where("payload->>'from_book_id' IN (:ids) OR payload->>'to_book_id' IN (:ids)", ids: strings)
               .where("COALESCE(payload->>'superseded_by', '') = ''").to_a
+              .select { |row| [resolve(row.payload["from_book_id"], memo), resolve(row.payload["to_book_id"], memo)].include?(book.id) }
           end
 
-          def csv_rows(user)
-            ::Books::GoodreadsImportRow.joins(:import).merge(::Books::GoodreadsImport.legacy_replay.complete)
-              .where(books_goodreads_imports: {user_id: user.id}).to_a
-          end
-
-          # A CSV row touches the book when legacy put it there, or its edition's match (any status) names it.
-          def touches?(csv, book, memo)
-            return true if resolve(csv.legacy_book_id, memo) == book.id
-
-            match = csv.goodreads_edition_id && ::Books::RepairVerdict.reimport_match.current.find_by(subject_key: "reimport:edition:#{csv.goodreads_edition_id}")
-            match.present? && resolve(match.payload["book_id"] || match.payload["created_book_id"], memo) == book.id
+          # Does a CSV row of the reader that touches the book still lack a verdict? Legacy put it on the book, or its
+          # edition's match (any status) names it.
+          def csv_rows_decided?(user, book, ids, memo)
+            matches = ::Books::RepairVerdict.reimport_match.current
+              .where("kind = 7 AND (payload->>'book_id' IN (:ids) OR payload->>'created_book_id' IN (:ids))", ids: ids.map(&:to_s)).to_a
+              .select { |match| resolve(match.payload["book_id"] || match.payload["created_book_id"], memo) == book.id }
+            editions = matches.map { |match| match.subject_key.delete_prefix("reimport:edition:").to_i }
+            csv = ::Books::GoodreadsImportRow.joins(:import).merge(::Books::GoodreadsImport.legacy_replay.complete)
+              .where(books_goodreads_imports: {user_id: user.id})
+              .where("books_goodreads_import_rows.legacy_book_id IN (:ids) OR books_goodreads_import_rows.goodreads_edition_id IN (:editions)",
+                ids: ids, editions: editions.presence || [0]).to_a
+              .select { |row| resolve(row.legacy_book_id, memo) == book.id || editions.include?(row.goodreads_edition_id) }
+            keys = ::Books::RepairVerdict.reimport_row.current.where(subject_key: csv.map { |row| "reimport:row:#{row.import_id}:#{row.row_number}" }).pluck(:subject_key).to_set
+            csv.all? { |row| keys.include?("reimport:row:#{row.import_id}:#{row.row_number}") }
           end
 
           # The items on the book that this row says the reader has: those on the lists its CSV row maps to, and

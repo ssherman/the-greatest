@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_03_234851) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_06_141944) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -486,7 +486,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_03_234851) do
     t.datetime "updated_at", null: false
     t.datetime "superseded_at"
     t.index "((payload ->> 'book_id'::text))", name: "index_books_repair_verdicts_on_reimport_match_book", where: "(kind = 7)"
+    t.index "((payload ->> 'created_book_id'::text))", name: "index_books_repair_verdicts_on_reimport_match_created_book", where: "(kind = 7)"
+    t.index "((payload ->> 'from_book_id'::text))", name: "index_books_repair_verdicts_on_reimport_row_source", where: "(kind = 8)"
+    t.index "((payload ->> 'target_id'::text))", name: "index_books_repair_verdicts_on_merge_target", where: "(kind = 1)"
     t.index "((payload ->> 'to_book_id'::text))", name: "index_books_repair_verdicts_on_reimport_row_destination", where: "(kind = 8)"
+    t.index "((payload ->> 'user_id'::text))", name: "index_books_repair_verdicts_on_reimport_row_user", where: "(kind = 8)"
     t.index ["kind", "subject_key"], name: "index_books_repair_verdicts_on_kind_and_subject_key", unique: true
     t.index ["status", "kind"], name: "index_books_repair_verdicts_on_status_and_kind"
   end

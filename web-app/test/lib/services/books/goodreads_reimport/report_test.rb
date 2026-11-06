@@ -102,6 +102,18 @@ module Services
           assert_match(/user #{@user.id} items: \d+ -> \d+ \(0 recorded destroys\)/, report)
         end
 
+        test "a snapshot without ids is called out, with the command that replaces it" do
+          FileUtils.mkdir_p(@snapshot.dirname)
+          File.write(@snapshot, JSON.generate({"taken_at" => Time.current.iso8601, "users" => {@user.id.to_s => {"items" => 0, "reviews" => 0}}}))
+
+          report = Report.call
+
+          assert_includes report, "predates id tracking"
+          assert_includes report, "books:goodreads_reimport:snapshot[redo]"
+          assert_includes report, "only before any row has been applied"
+          assert_not_includes report, "dropped: no snapshot"
+        end
+
         test "a lost review is not hidden by a gained item, and a recorded collision destroy is an explained drop" do
           Review.where(user: @user).delete_all
           review = Review.create!(user: @user, reviewable: @book, rating: 4, title: "T", body: "B")

@@ -148,7 +148,10 @@ module Services
           lines << "  rows whose book's title differs from the CSV title with no approved verdict explaining it: #{mismatched.size}"
           mismatched.first(SAMPLE).each { |line| lines << "    #{line}" }
           dropped = dropped_users
-          if dropped.nil?
+          if dropped == :no_ids
+            lines << "  users whose list item or review was lost: NOT CHECKED. The snapshot predates id tracking. Replace it with " \
+              "books:goodreads_reimport:snapshot[redo], only before any row has been applied"
+          elsif dropped.nil?
             lines << "  users whose list item or review count dropped: no snapshot (run books:goodreads_reimport:snapshot before apply)"
           else
             lines << "  users whose list item or review count dropped beyond the destroys recorded: #{dropped[:unexplained].size}"
@@ -257,7 +260,7 @@ module Services
 
           snapshot = JSON.parse(path.read)
           held = snapshot["ids"]
-          return nil unless held
+          return :no_ids unless held
 
           before = snapshot.fetch("users").transform_keys(&:to_i)
           now = user_counts(before.keys)
