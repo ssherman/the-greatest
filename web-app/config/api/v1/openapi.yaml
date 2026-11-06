@@ -38,8 +38,8 @@ paths:
           Returns the primary ranking of The Greatest Books, best first, one page at a time; each book
           carries its `rank`, title, authors and first-published year. Use it for "top N" questions,
           narrowing with `country_id`, `year`, `category_id`, `collection` or the published range
-          (list_categories and search_categories find category slugs; a book's `countries`, from
-          get_book, shows country slugs), and prefer search_books when you have a title or author.
+          (list_categories and search_categories find category slugs; list_countries finds country
+          slugs), and prefer search_books when you have a title or author.
           `limit` is at most 100; `meta.total_count` gives the size of the whole result.
       parameters:
         - $ref: "#/components/parameters/page"
@@ -1097,6 +1097,57 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/countries:
+    x-domain: books
+    get:
+      operationId: listCountries
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Countries with ranked books
+      description: |
+        The countries that have ranked books in the site's primary ranking, with the slug that `country_id` accepts on the book endpoints. `book_count` counts the ranked books from the country on the primary ranking, and `url` is the site's ranked page for it. `sort` is `book_count` (most ranked books first, the default) or `name`. A country with no ranked books is left out, and so is "unknown". Empty until a primary ranking has been calculated. Any other `sort` is a 400.
+      x-mcp:
+        description: >-
+          Lists the countries that have ranked books, most books first, with their slugs and
+          `book_count`. Use it to discover the country slugs that `country_id` accepts in list_books
+          and the other book listings, instead of guessing a slug.
+      parameters:
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [book_count, name]
+            default: book_count
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of countries.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CountryCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -1150,7 +1201,7 @@ components:
       name: country_id
       in: query
       required: false
-      description: Comma-separated country slugs, up to 10. A book from any of them matches. Cannot be combined with collection.
+      description: Comma-separated country slugs, up to 10, as listed by `GET /api/v1/countries`. A book from any of them matches. Cannot be combined with collection.
       schema: {type: string, minLength: 1}
     year:
       name: year
@@ -1695,6 +1746,29 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Category"
+    Country:
+      type: object
+      required: [slug, name, book_count, url]
+      properties:
+        slug: {type: string, description: The value `country_id` accepts on the book endpoints.}
+        name: {type: string}
+        book_count:
+          type: integer
+          minimum: 0
+          description: Books in the site's primary ranking from this country.
+        url: {type: string, format: uri, description: The site's ranked page for books from this country.}
+    CountryCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Country"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
     BookListingCollection:
       type: object
       required: [data, meta, links]

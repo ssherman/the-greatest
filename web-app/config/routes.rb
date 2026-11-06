@@ -680,6 +680,7 @@ Rails.application.routes.draw do
           get "search/books", to: "book_searches#index", as: :search_books
           get "search/authors", to: "author_searches#index", as: :search_authors
           get "search/categories", to: "category_searches#index", as: :search_categories
+          get "countries", to: "countries#index"
         end
 
         # Admin API: needs a books:admin:* scope. Its contract is

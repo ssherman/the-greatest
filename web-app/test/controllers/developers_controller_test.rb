@@ -154,7 +154,7 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     rendered = css_select("[id^=mcp-tool-]").map { |node| node["id"].delete_prefix("mcp-tool-") }
     expected = Mcp::ToolDirectory.entries(document: :public, domain: :books).map(&:name)
     assert_equal expected.sort, rendered.sort
-    assert_equal 23, rendered.size
+    assert_equal 24, rendered.size
   end
 
   test "music and games have no MCP section" do
