@@ -230,6 +230,14 @@ module Api
           assert_equal "q must be a single value", json[:detail]
         end
 
+        test "a q containing a null byte is a 400 naming q" do
+          get "/api/v1/lists?q=a%00b", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 400)
+
+          assert_response :bad_request
+          assert_equal ["invalid_parameter", "q must not contain a null byte"], [json[:code], json[:detail]]
+        end
+
         test "q over 200 characters is a 400" do
           get "/api/v1/lists", params: {q: "a" * 201}, headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_response_conform(status: 400)

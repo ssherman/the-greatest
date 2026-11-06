@@ -102,6 +102,12 @@ module Api
           assert_equal ["invalid_parameter", "q must be a single value"], [json[:code], json[:detail]]
         end
 
+        test "a q containing a null byte is a 400 naming q" do
+          get "/api/v1/search/categories?q=no%00vel", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 400)
+          assert_equal ["invalid_parameter", "q must not contain a null byte"], [json[:code], json[:detail]]
+        end
+
         test "a missing q is a 400 naming q" do
           get "/api/v1/search/categories", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_response_conform(status: 400)

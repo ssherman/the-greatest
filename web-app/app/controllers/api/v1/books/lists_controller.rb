@@ -16,10 +16,12 @@ module Api
       # Api::V1::Books a bare `List` resolves (to ::List, the STI base) while a
       # bare `Books::List` raises NameError -- so it is ::Books::List throughout.
       class ListsController < BaseController
+        MAX_QUERY_LENGTH = 200
+
         def index
           configuration = ranking_configuration
           sort = enum_param!(:sort, ::ListsQuery::SORTS)
-          query = text_param!(:q, required: false, max_length: 200)
+          query = text_param!(:q, required: false, max_length: MAX_QUERY_LENGTH)
           relation = configuration && ::Books::ListsQuery.call(ranking_configuration: configuration, sort: sort || "weight", query: query)
 
           # Only what the client sent rides on the links, so a bare request's

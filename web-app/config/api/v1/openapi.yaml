@@ -729,7 +729,7 @@ paths:
       description: The active lists that feed The Greatest Books' primary ranking, heaviest first unless `sort=newest`; `q` narrows them. `weight` is the list's weight on that ranking; `item_count` is the number of books `items_api_url` serves.
       x-mcp:
         description: >-
-          Returns the active lists that feed the primary ranking, heaviest first, each with its source,
+          Returns the active lists that feed the primary ranking, each with its source,
           year, voter count, `weight` and `item_count`. Heaviest first by default; `sort=newest` puts the
           most recently activated first, and `q` narrows to lists whose name, source or web address
           contains it. Use get_list for one list and list_list_items for the books on it.
@@ -966,7 +966,7 @@ paths:
         description: >-
           Returns the ranked books that carry one category, best first: list_books limited to that
           category, with the same filters on top. Use it for "best books in this genre" once you have the
-          slug from list_categories.
+          slug from list_categories or search_categories.
       parameters:
         - $ref: "#/components/parameters/slug"
         - $ref: "#/components/parameters/page"

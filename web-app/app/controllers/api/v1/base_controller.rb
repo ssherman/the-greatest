@@ -37,12 +37,16 @@ module Api
 
       # A free-text query parameter, stripped. nil when it is absent and not
       # required; otherwise the String, or ::Api::Page::InvalidParameter (a 400)
-      # naming the parameter. Every endpoint that takes text bounds it the same way.
+      # naming the parameter. Every endpoint that takes text bounds it the same way
+      # (array, hash and null-byte values are refused too).
       def text_param!(name, required:, max_length:, min_length: 1)
         raw = params[name]
         # `q[]=war` arrives as an Array and `q[a]=war` as Parameters: neither is
         # a text value, and to_s would turn it into one.
         raise ::Api::Page::InvalidParameter, "#{name} must be a single value" unless raw.nil? || raw.is_a?(String)
+        # Postgres and the search clients refuse a NUL; left alone it surfaces
+        # as an ArgumentError (a 500) deep in a query.
+        raise ::Api::Page::InvalidParameter, "#{name} must not contain a null byte" if raw&.include?("\u0000")
 
         text = raw.to_s.strip
         if text.blank?
