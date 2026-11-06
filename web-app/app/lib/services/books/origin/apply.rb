@@ -72,14 +72,29 @@ module Services
 
         def write
           replaced = []
+          fresh = nil
           ActiveRecord::Base.transaction do
-            @book.book_countries.includes(:country).select { |bc| CountryLookup::PLACEHOLDERS.include?(bc.country.name.downcase) }.each do |bc|
+            # The dossier predates the AI call; re-read under a lock so a country
+            # that landed in the gap is never overwritten.
+            @book.lock!
+            rows = @book.book_countries.includes(:country).to_a
+            fresh = rows.reject { |bc| CountryLookup::PLACEHOLDERS.include?(bc.country.name.downcase) }
+            next if fresh.any?
+
+            rows.each do |bc|
               replaced << bc.country.name
-              bc.destroy
+              bc.destroy!
             end
-            @book.book_countries.find_or_create_by!(country: @answer)
+            @book.book_countries.create_or_find_by!(country: @answer)
             SearchIndexRequest.create!(parent: @book, action: :index_item)
           end
+          if fresh.any?
+            @held = fresh.map { |bc| bc.country.name }
+            return decide_held
+          end
+
+          @book.book_countries.reset
+          @book.countries.reset
           finish("filled", applied: true, replaced: replaced)
         end
 

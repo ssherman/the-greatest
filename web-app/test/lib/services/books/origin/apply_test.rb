@@ -83,6 +83,14 @@ module Services
           assert_equal ["American"], @book.reload.countries.map(&:name)
         end
 
+        test "a real country that lands after the dossier was built is not overwritten" do
+          stale = dossier
+          @book.countries << ::Books::Country.find_or_create_by!(name: "Irish")
+          result = apply(stale, "French", "high")
+          assert_equal ["already_set", false, ["Irish"]], [result.data[:reason], result.data[:applied], result.data[:held]]
+          assert_equal ["Irish", "Unknown"], @book.reload.countries.map(&:name).sort
+        end
+
         test "a blank answer is null" do
           result = apply(dossier, " ", "high")
           assert_equal ["null", false], [result.data[:reason], result.data[:applied]]
