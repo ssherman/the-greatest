@@ -494,6 +494,9 @@ Every step below only queues a Sidekiq job; wait for the jobs to finish before t
    until their rows are decided.
 8. **Snapshot.** `bin/rails books:goodreads_reimport:snapshot`, before the first apply that moves rows. It
    refuses to replace an existing snapshot; `snapshot[redo]` does, but never use it after a row has moved.
+   A `counts.json` taken before the by-id check holds counts but no ids, and the report then prints "NOT CHECKED. The
+   snapshot predates id tracking". Run `bin/rails "books:goodreads_reimport:snapshot[redo]"` once, before any row
+   has been applied, to replace it.
 9. **Apply.** `bin/rails books:goodreads_reimport:apply`. Re-running is safe.
 10. **Check the authors, then apply.** `bin/rails "books:goodreads_reimport:check_authors[200]"`, then
     `check_authors[all]`, then `bin/rails books:goodreads_reimport:apply` again.

@@ -14,6 +14,7 @@ require "test_helper"
 # Indexes
 #
 #  index_record_redirects_on_item_type_and_from_id  (item_type,from_id) UNIQUE
+#  index_record_redirects_on_item_type_and_to_id    (item_type,to_id)
 #
 class RecordRedirectTest < ActiveSupport::TestCase
   test "accepts a books book or author" do
