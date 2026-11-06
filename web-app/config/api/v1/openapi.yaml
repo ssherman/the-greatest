@@ -216,12 +216,12 @@ paths:
       operationId: getAuthor
       security: [{bearerAuth: ["books:read"]}]
       summary: One author
-      description: The author alone. Their books are not embedded; a paginated sub-collection is a later addition.
+      description: The author alone. Their books are not embedded; they are a paginated sub-collection at `GET /api/v1/authors/{slug}/books`.
       x-mcp:
         description: >-
           Returns one author by slug: rank, birth and death years, kind (person, organization, pseudonym
-          or collective), alternate names and description. It does not list their books; use search_books
-          with the author's name to find them.
+          or collective), alternate names and description. It does not list their books; use
+          list_author_books with the same slug.
       parameters:
         - $ref: "#/components/parameters/slug"
       responses:
@@ -244,6 +244,100 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthorItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/authors/{slug}/books:
+    x-domain: books
+    get:
+      operationId: listAuthorBooks
+      security: [{bearerAuth: ["books:read"]}]
+      summary: An author's books
+      description: The books the author wrote (not ones they only edited), ranked books first in rank order on the site's primary ranking, then the unranked ones (`rank` null) by first publication year and then title. Books still awaiting review are left out. There are no filter parameters.
+      x-mcp:
+        description: >-
+          Returns an author's whole bibliography: their ranked books first, in rank order on the primary
+          ranking, then their unranked books with a null `rank`. Use it for "what did this author write"
+          once you have the author's slug from search_authors or from a book's `authors`; for a
+          non-primary ranking use list_ranking_configuration_author_books.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the author's books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}/authors/{slug}/books:
+    x-domain: books
+    get:
+      operationId: listRankingConfigurationAuthorBooks
+      security: [{bearerAuth: ["books:read"]}]
+      summary: An author's books on one configuration
+      description: The same rows and shape as `/api/v1/authors/{slug}/books`, ranked by the named configuration; `rank` is relative to it, and null for a book that configuration does not rank. Ranked books come first in rank order, then the unranked ones by first publication year and then title.
+      x-mcp:
+        description: >-
+          Returns an author's whole bibliography ranked by one named ranking configuration (an `id` from
+          list_ranking_configurations): books that configuration ranks first, in its order, then the
+          rest with a null `rank`. Prefer list_author_books unless you need a non-primary ranking.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the author's books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":

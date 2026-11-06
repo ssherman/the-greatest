@@ -7,7 +7,7 @@ module Mcp
       entries = Mcp::ToolDirectory.entries(document: :public, domain: :books)
 
       assert_equal catalog.operations.map(&:tool_name) + ["find_book"], entries.map(&:name)
-      assert_equal 19, entries.size
+      assert_equal 21, entries.size
     end
 
     test "the admin books directory is the 14 admin tools, six destructive" do
@@ -35,7 +35,7 @@ module Mcp
       public_entries = Mcp::ToolDirectory.entries(document: :public, domain: :books)
 
       assert_equal ["find_book"], public_entries.select(&:composite).map(&:name)
-      assert_equal 18, public_entries.count { |entry| !entry.composite }
+      assert_equal 20, public_entries.count { |entry| !entry.composite }
       assert_empty Mcp::ToolDirectory.entries(document: :admin, domain: :books).select(&:composite)
     end
 

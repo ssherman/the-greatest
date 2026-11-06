@@ -661,6 +661,9 @@ Rails.application.routes.draw do
           resources :books, only: [:index, :show], param: :slug
           get "books/:slug/lists", to: "book_lists#index", as: :book_lists
           resources :authors, only: [:index, :show], param: :slug
+          get "authors/:slug/books", to: "author_books#index", as: :author_books
+          get "ranking_configurations/:ranking_configuration_id/authors/:slug/books", to: "author_books#index",
+            as: :ranking_configuration_author_books, constraints: {ranking_configuration_id: /\d+/}
           get "categories", to: "categories#index"
           get "categories/:slug", to: "categories#show", as: :category
           get "categories/:slug/books", to: "category_books#index", as: :category_books

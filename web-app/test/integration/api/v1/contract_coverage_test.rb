@@ -99,6 +99,18 @@ module Api
         ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "403"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
         ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "404"] => -> { get "/api/v1/ranking_configurations/999999999/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/categories/novels/books", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/authors/{slug}/books", "200"] => -> { get "/api/v1/authors/stephen-king/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/authors/{slug}/books", "400"] => -> { get "/api/v1/authors/stephen-king/books?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/authors/{slug}/books", "401"] => -> { get "/api/v1/authors/stephen-king/books" },
+        ["GET", "/api/v1/authors/{slug}/books", "403"] => -> { get "/api/v1/authors/stephen-king/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/authors/{slug}/books", "404"] => -> { get "/api/v1/authors/no-such-author/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/authors/{slug}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/authors/stephen-king/books", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/ranking_configurations/{id}/authors/{slug}/books", "200"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/authors/stephen-king/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/authors/{slug}/books", "400"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/authors/stephen-king/books?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/authors/{slug}/books", "401"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/authors/stephen-king/books" },
+        ["GET", "/api/v1/ranking_configurations/{id}/authors/{slug}/books", "403"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/authors/stephen-king/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/ranking_configurations/{id}/authors/{slug}/books", "404"] => -> { get "/api/v1/ranking_configurations/999999999/authors/stephen-king/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/authors/{slug}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/authors/stephen-king/books", headers: bearer(ApiTokenSecrets::MEMBER) } },
         ["GET", "/api/v1/search/books", "200"] => lambda {
           ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: books_books(:war_and_peace).id.to_s, score: 1.0, source: {}}])
           get "/api/v1/search/books?q=war", headers: bearer(ApiTokenSecrets::MEMBER)
@@ -151,6 +163,9 @@ module Api
 
       test "every documented response is reachable and conforms" do
         EXERCISES.each do |(_method, _path, status), exercise|
+          # The map outgrew the member tier's 60 requests a minute, which counts
+          # per account across all entries; each entry gets a fresh window.
+          Rails.application.config.x.rate_limit_store.clear
           instance_exec(&exercise)
           # Request validation would reject the deliberately bad page=0 request.
           assert_api_response_conform(status: Integer(status))
