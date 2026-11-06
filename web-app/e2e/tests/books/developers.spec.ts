@@ -48,4 +48,42 @@ test.describe('Books API developer pages, signed out', () => {
     expect(response.status()).toBe(401);
     expect(response.headers()['www-authenticate']).toBe('Bearer');
   });
+
+  test('the documentation page explains how to connect an MCP client', async ({ page }) => {
+    await page.goto('/developers');
+
+    await expect(page.getByRole('heading', { level: 2, name: /MCP/ })).toBeVisible();
+    await expect(page.locator('#mcp-command')).toContainText(
+      'claude mcp add --transport http --scope user the-greatest-books https://dev-new.thegreatestbooks.org/api/mcp'
+    );
+    await expect(page.locator('#mcp-tool-find_book')).toBeVisible();
+    await expect(page.locator('#mcp-tool-search_books')).toBeVisible();
+  });
+
+  // The copy a member reads before connecting. Pinned here, not in the
+  // controller test: AGENTS.md keeps controller tests to behaviour.
+  test('the MCP section says how tools differ from the endpoints and how to set the token', async ({ page }) => {
+    await page.goto('/developers');
+
+    const intro = page.locator('#mcp-intro');
+    await expect(intro).toContainText('find_book');
+    await expect(intro).toContainText('limit');
+    await expect(intro).toContainText('per_page');
+
+    const setup = page.locator('#mcp-token-setup');
+    await expect(setup.getByRole('link')).toHaveAttribute('href', '#quick-start');
+    await expect(setup).toContainText('claude mcp remove --scope user the-greatest-books');
+
+    await expect(page.getByText(/A member's token only reads/)).toBeVisible();
+  });
+
+  test('the MCP endpoint refuses a request without a token', async ({ page }) => {
+    const response = await page.request.post('/api/mcp', {
+      data: { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+      headers: { Accept: 'application/json, text/event-stream' },
+    });
+
+    expect(response.status()).toBe(401);
+    expect(response.headers()['www-authenticate']).toBe('Bearer');
+  });
 });
