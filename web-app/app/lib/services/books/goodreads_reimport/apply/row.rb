@@ -20,6 +20,8 @@ module Services
         #   stay (the mixed-book delete or a later move removes them). review: true carries the user's review
         #   from the old book (moved); with none there, the CSV's is written. A row that does not carry it
         #   writes its own CSV rating and review, when it has any (spec 8 call 2).
+        #   When the user's last copy from the old book applies, the items on it that no row heading to it explains
+        #   are removed (Leftovers), whatever kind of book it is; a mixed book's are Apply::Mixed's.
         # A user has one review per book. An existing review on the destination wins its title and body, but not its
         # rating: the carrying row's CSV rating (> 0) is set on it (see rate).
         class Row
@@ -59,7 +61,11 @@ module Services
             else
               copy(verdict, user, from, to)
             end
-            reopen_kept(from) if result.data[:outcome] == :applied
+            if result.data[:outcome] == :applied
+              reopen_kept(from)
+              # A copy leaves the reader's originals on the old book; the last one to apply removes what no row says.
+              Leftovers.sweep(verdict, from, user) if action == "copy"
+            end
             rate(verdict, user, to, result)
           end
 

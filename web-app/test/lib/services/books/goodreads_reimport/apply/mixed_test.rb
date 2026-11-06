@@ -29,6 +29,20 @@ module Services
             verdict
           end
 
+          test "a kept book keeps a Favorites item of a reader whose row heads to it, and removes the Read original" do
+            kept = mixed_verdict
+            kept.update!(payload: kept.payload.merge("kept" => true))
+            fav = UserListItem.create!(user_list: list(:favorites), listable: @mixed)
+            original = UserListItem.create!(user_list: list(:read), listable: @mixed)
+            row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @mixed, to: @mixed).update!(applied_at: Time.current)
+            row_verdict(csv_row(exclusive_shelf: "read"), action: "copy", from: @mixed, to: @to).update!(applied_at: Time.current)
+
+            Mixed.call(verdict: kept)
+
+            assert UserListItem.exists?(fav.id)
+            assert_not UserListItem.exists?(original.id)
+          end
+
           test "a kept mixed book is a final noop and deletes nothing, redirect or not" do
             verdict = mixed_verdict
             verdict.update!(payload: verdict.payload.merge("kept" => true))

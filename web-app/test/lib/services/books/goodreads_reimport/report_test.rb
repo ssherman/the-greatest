@@ -63,6 +63,13 @@ module Services
           assert_includes Report.call, "ratings set from the CSV: 1"
         end
 
+        test "counts the leftover entries removed from books a reader's rows left" do
+          row_verdict(@row, @book, applied_at: Time.current).update_columns(payload: {"action" => "copy", "leftovers_removed" => [{"id" => 1}, {"id" => 2}]})
+          verdict(:reimport_row, "reimport:row:#{@import.id}:2", {"action" => "copy"}, applied_at: Time.current)
+
+          assert_includes Report.call, "leftover entries removed from books a reader's rows left: 2"
+        end
+
         test "acceptance: a destination whose title differs from the CSV is listed unless a high-confidence match explains it" do
           row_verdict(@row, @other, applied_at: Time.current)
           unmatched = verdict(:reimport_match, "reimport:edition:#{@edition.id}", {"book_id" => @other.id, "ai" => {"answer" => nil}})

@@ -80,6 +80,13 @@ Everything is written to `books_repair_verdicts` before it happens. Admin, Repai
   and adds as well as moves and copies (a keep with a differing rating is applied, otherwise it stays a final no-op). A CSV
   rating of 0 means "not rated" and changes nothing; title and body are never touched. The old rating is kept in
   the verdict's `moved.rating_before`, and the report prints "ratings set from the CSV".
+  A copy leaves the reader's original items on the old book. On any book that is not a mixed book, when the
+  reader's last copy from it applies, `apply` removes that reader's items there that no row heading to the book
+  explains (the in-place rows' `explained_item_ids`, what a move or add put there; Favorites and custom-list items
+  stay while any row of the reader heads to the book). Reviews and other readers' items are never touched. The
+  removed items are recorded on the applying verdict as `leftovers_removed` before they are destroyed, and the report
+  prints "leftover entries removed from books a reader's rows left". It is idempotent, and a copy applied later runs it
+  again. Mixed books keep their own path (Apply::Mixed, above), which shares this code (`Apply::Leftovers`).
 - `reimport_guess`: a hand-added entry from a mixed book, moved to its most-read book.
 - `reimport_strip`: a legacy identifier removed from a book. Applying a match records one for every OTHER book that
   holds the edition's own Goodreads id, ISBN-13 or ISBN-10 (from the CSV) as a legacy-sourced identifier; apply removes
