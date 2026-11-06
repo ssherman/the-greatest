@@ -276,21 +276,27 @@ module Services
           "user #{user_id} #{what}: #{was} -> #{now} (#{recorded} recorded destroys)"
         end
 
-        # {[user_id, "items"|"reviews"] => count} from the trails of verdicts applied after the snapshot. A mixed
-        # book's deleted leftovers are not counted: each already has its replacement on the destination, so it is no
-        # net drop and must give no slack.
+        # {[user_id, "items"|"reviews"] => count} from the trails of verdicts applied after the snapshot: the
+        # collision destroys a row or guess recorded, the leftovers a row removed from a book it left
+        # (`leftovers_removed`), and a kept or deleted mixed book's copy originals (`deleted`, per user).
         def recorded_destroys(user_ids, taken_at)
           wanted = user_ids.to_set
           totals = Hash.new(0)
           trailed = ::Books::RepairVerdict.where(kind: %w[reimport_row reimport_guess]).where("applied_at > ?", taken_at)
             .where("jsonb_array_length(COALESCE(payload -> 'moved' -> 'destroyed_items', '[]'::jsonb)) > 0 OR " \
-              "jsonb_array_length(COALESCE(payload -> 'moved' -> 'destroyed_reviews', '[]'::jsonb)) > 0")
+              "jsonb_array_length(COALESCE(payload -> 'moved' -> 'destroyed_reviews', '[]'::jsonb)) > 0 OR " \
+              "jsonb_array_length(COALESCE(payload -> 'leftovers_removed', '[]'::jsonb)) > 0")
           trailed.find_each do |verdict|
             user_id = verdict.payload["user_id"]
             next unless wanted.include?(user_id)
 
-            totals[[user_id, "items"]] += Array(verdict.payload.dig("moved", "destroyed_items")).size
+            totals[[user_id, "items"]] += Array(verdict.payload.dig("moved", "destroyed_items")).size + Array(verdict.payload["leftovers_removed"]).size
             totals[[user_id, "reviews"]] += Array(verdict.payload.dig("moved", "destroyed_reviews")).size
+          end
+          ::Books::RepairVerdict.reimport_mixed.where("applied_at > ?", taken_at).where("payload ? 'deleted'").find_each do |verdict|
+            Array(verdict.payload["deleted"]).each do |item|
+              totals[[item["user_id"], "items"]] += 1 if wanted.include?(item["user_id"])
+            end
           end
           totals
         end

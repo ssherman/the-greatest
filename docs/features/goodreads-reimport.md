@@ -130,7 +130,7 @@ read it from either container and it survives a deploy. It lists:
 - the acceptance queries, each of which should print 0:
   - rows whose book's title differs from the CSV title with no approved verdict explaining it;
   - users whose list-item or review count dropped, beyond the destroys the verdicts recorded (a destroy from
-    a collision is listed separately as explained);
+    a collision, a leftover removed from a book a row left, or a mixed book's deleted original is listed separately as explained);
   - mixed books still present (kept ones are counted on their own line and are not a failure).
 
 If a deploy interrupts the job, run the task again. The snapshot (`counts.json` in the same folder) is what
