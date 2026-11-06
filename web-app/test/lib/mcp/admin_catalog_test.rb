@@ -105,7 +105,7 @@ module Mcp
     end
 
     test "the public catalogue is unchanged" do
-      assert_equal 21, Mcp::Catalog.for(document: :public, domain: :books).operations.size
+      assert_equal 22, Mcp::Catalog.for(document: :public, domain: :books).operations.size
     end
   end
 end

@@ -147,7 +147,12 @@ module Api
         ["GET", "/api/v1/search/authors", "503"] => lambda {
           ::Search::Books::Search::AuthorGeneral.stubs(:call).raises(Faraday::ConnectionFailed, "down")
           get "/api/v1/search/authors?q=tolstoy", headers: bearer(ApiTokenSecrets::MEMBER)
-        }
+        },
+        ["GET", "/api/v1/search/categories", "200"] => -> { get "/api/v1/search/categories?q=novel", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/search/categories", "400"] => -> { get "/api/v1/search/categories", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/search/categories", "401"] => -> { get "/api/v1/search/categories?q=novel" },
+        ["GET", "/api/v1/search/categories", "403"] => -> { get "/api/v1/search/categories?q=novel", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/search/categories", "429"] => -> { with_exhausted_limit { get "/api/v1/search/categories?q=novel", headers: bearer(ApiTokenSecrets::MEMBER) } }
       }.freeze
 
       setup do
