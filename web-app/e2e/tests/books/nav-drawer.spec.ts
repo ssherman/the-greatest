@@ -148,6 +148,8 @@ test.describe('Books mobile nav drawer', () => {
     await expect(current).toHaveCount(1);
     await expect(current).toHaveText('Authors');
     await expect(current).toBeVisible();
+    // Lists only starts open when it holds the current page.
+    await expect(page.locator('#books-nav-drawer-panel details[open]')).toHaveCount(0);
     // Measured because a ribbon that compiled away would fail silently.
     const ribbonWidth = await current.evaluate((el) => getComputedStyle(el, '::before').width);
     expect(parseFloat(ribbonWidth)).toBeGreaterThan(0);
