@@ -174,12 +174,12 @@ paths:
       security: [{bearerAuth: ["books:read"]}]
       summary: Books similar to a book
       description: |
-        Books like this one, scored from the genres, subjects and locations they share, most similar first. At most two books per author appear. Only catalogued books are returned (not books still awaiting review), each with its primary-ranking `rank` (null when unranked). This is a top-N, not a paginated list: `limit` caps it and there are no `links`. `meta.more_available` is true when the site's "similar books" page would show more than this response does. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+        Books like this one, scored from the genres, subjects and locations they share, most similar first. At most two books per author appear. Only catalogued books are returned (not books still awaiting review), each with its primary-ranking `rank` (null when unranked). This is a top-N, not a paginated list: `limit` caps it and there are no `links`. `meta.more_available` is true when more similar books may exist beyond this response. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
       x-mcp:
         description: >-
           Returns the books most similar to one book, most similar first, at most two per author, each with
-          its primary-ranking `rank` (null when unranked). `meta.more_available` is true when the site shows
-          more than this. Take the slug from search_books or find_book; `limit` is at most 25. Use get_book
+          its primary-ranking `rank` (null when unranked). `meta.more_available` is true when more
+          similar books may exist beyond this response. Take the slug from search_books or find_book; `limit` is at most 25. Use get_book
           for any one result's detail.
       parameters:
         - $ref: "#/components/parameters/slug"
@@ -1361,7 +1361,7 @@ components:
           properties:
             more_available:
               type: boolean
-              description: True when the site's similar-books page would show more books than this response does.
+              description: True when more similar books may exist beyond this response.
     AppliedFilters:
       type: object
       additionalProperties: false

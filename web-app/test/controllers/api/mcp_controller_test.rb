@@ -251,6 +251,35 @@ module Api
       assert_includes json.dig("result", "tools").map { |tool| tool["name"] }, "find_book"
     end
 
+    test "tools/list includes the author and similar tools" do
+      rpc("tools/list")
+
+      names = json.dig("result", "tools").map { |tool| tool["name"] }
+      %w[search_authors list_author_books list_ranking_configuration_author_books list_similar_books].each do |name|
+        assert_includes names, name
+      end
+    end
+
+    test "list_similar_books passes limit through to the endpoint" do
+      hits = [books_books(:got), books_books(:clash), books_books(:crime_and_punishment)].map do |book|
+        {id: book.id.to_s, score: 1.0, source: {}}
+      end
+      ::Search::Books::Search::BookSimilar.stubs(:call).returns(hits)
+
+      call_tool("list_similar_books", {slug: @war_and_peace.slug, limit: 3})
+
+      assert_equal false, json.dig("result", "isError")
+      assert_operator tool_text["data"].size, :<=, 3
+      assert_operator tool_text["data"].size, :>, 0
+    end
+
+    test "list_author_books pages with limit" do
+      call_tool("list_author_books", {slug: books_authors(:king).slug, limit: 1})
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal 1, tool_text.dig("meta", "per_page")
+    end
+
     test "tools/call find_book is one rate-limit hit however many dispatches it makes" do
       ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: @war_and_peace.id.to_s, score: 1.0, source: {}}])
       verdict = Services::Api::RateLimiter::Verdict.new(
