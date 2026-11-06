@@ -14,6 +14,17 @@ test.describe('Books API developer pages, signed out', () => {
     await expect(page.locator('#errors-rate_limited')).toBeVisible();
   });
 
+  test('the documentation page fits a phone screen', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 900 });
+    await page.goto('/developers');
+    await expect(page.locator('#mcp-command')).toBeVisible();
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
   test('the contract link serves the OpenAPI document for this host', async ({ page }) => {
     await page.goto('/developers');
 

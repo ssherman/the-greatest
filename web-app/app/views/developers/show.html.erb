@@ -112,7 +112,7 @@ for item in response.json()["data"]:
       <dl class="space-y-6">
         <% @operations.each do |operation| %>
           <div id="endpoint-<%= operation.operation_id %>">
-            <dt class="font-mono">
+            <dt class="font-mono [overflow-wrap:anywhere]">
               <span class="badge badge-neutral"><%= operation.method %></span>
               <code><%= operation.path %></code>
               <% if operation.public %>
@@ -200,7 +200,7 @@ for item in response.json()["data"]:
         <dl class="space-y-6">
           <% @mcp_tools.each do |tool| %>
             <div id="mcp-tool-<%= tool.name %>">
-              <dt class="font-mono">
+              <dt class="font-mono [overflow-wrap:anywhere]">
                 <code><%= tool.name %></code>
               </dt>
               <dd class="mt-1">
