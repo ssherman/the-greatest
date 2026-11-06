@@ -38,7 +38,9 @@ module Services
           accepted = trusted.dup
           rejected = []
           ranked = unverified.sort_by.with_index { |isbn, index| [-found[isbn].size, index] }
-          ranked.first(MAX_IDENTITY_CHECKS).each do |isbn|
+          checked = ranked.first(MAX_IDENTITY_CHECKS)
+          load_full_records(checked.map { |isbn| found[isbn].first.oclc })
+          checked.each do |isbn|
             (identity_agrees?(found[isbn].first) ? accepted : rejected) << isbn
           end
           unchecked = ranked.drop(MAX_IDENTITY_CHECKS)
@@ -67,20 +69,24 @@ module Services
 
         # A missing (nil) or timed-out full record is no evidence the ISBN is this book's.
         def identity_agrees?(slim)
-          full = full_record(slim.oclc)
+          full = @full[slim.oclc]
           full.present? && Services::Books::Verification::WorldCatCheck.agrees?(@book, full)
         end
 
-        def full_record(oclc)
-          return @full[oclc] if @full.key?(oclc)
+        # One batch for the numbers not fetched yet. A number the service has no record for,
+        # and every number in a batch that timed out, is cached as nil.
+        def load_full_records(oclcs)
+          missing = oclcs.uniq - @full.keys
+          return if missing.empty?
 
-          @full[oclc] = begin
-            @client.record_by_oclc(oclc)
+          fetched = begin
+            @client.records_by_oclc(missing)
           rescue ::Books::WorldCat::Exceptions::ServerError => error
             raise unless error.status_code == 504
 
-            nil
+            {}
           end
+          missing.each { |oclc| @full[oclc] = fetched[oclc] }
         end
 
         def build(records, accepted, rejected, unchecked)
@@ -112,7 +118,7 @@ module Services
         def full_records(records)
           oclcs = records.map(&:oclc)
           if @full.values_at(*oclcs).compact.size < MIN_FULL_RECORDS
-            (oclcs - @full.keys).first(MAX_EXTRA_FULL_RECORDS).each { |oclc| full_record(oclc) }
+            load_full_records((oclcs - @full.keys).first(MAX_EXTRA_FULL_RECORDS))
           end
           @full.values_at(*oclcs).compact
         end

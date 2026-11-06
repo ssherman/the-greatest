@@ -48,6 +48,32 @@ module Books
         assert_not_requested :post, "#{BASE_URL}/lookup"
       end
 
+      test "#records_by_oclc posts in slices of 50, keys by the requested number, and uses the batch timeout" do
+        numbers = (1..51).to_a
+        stub_request(:post, "#{BASE_URL}/records").with(body: {oclcs: numbers.first(50)}.to_json)
+          .to_return(status: 200, body: {results: {"1" => record_hash(1), "2" => record_hash(7).merge("redirected_from" => 2)}}.to_json)
+        stub_request(:post, "#{BASE_URL}/records").with(body: {oclcs: [51]}.to_json)
+          .to_return(status: 200, body: {results: {}}.to_json)
+
+        result = @client.records_by_oclc(numbers)
+
+        assert_equal [1, 2], result.keys
+        assert_equal 7, result[2].oclc
+        assert_equal 2, result[2].redirected_from
+        assert_requested :post, "#{BASE_URL}/records", times: 2
+      end
+
+      test "#records_by_oclc with no numbers makes no request" do
+        assert_equal({}, @client.records_by_oclc([]))
+        assert_not_requested :post, "#{BASE_URL}/records"
+      end
+
+      test "#records_by_oclc raises like #lookup on a server error" do
+        stub_request(:post, "#{BASE_URL}/records").to_return(status: 504, body: {detail: "deadline"}.to_json)
+        error = assert_raises(Exceptions::ServerError) { @client.records_by_oclc([1]) }
+        assert_equal 504, error.status_code
+      end
+
       test "#version returns the symbolised version hash" do
         stub_request(:get, "#{BASE_URL}/version").to_return(status: 200, body: {dump_date: "2025-09-04", gates_passed: true}.to_json)
         assert_equal "2025-09-04", @client.version[:dump_date]

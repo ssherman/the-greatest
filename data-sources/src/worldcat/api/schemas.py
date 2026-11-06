@@ -42,6 +42,14 @@ class LookupRequest(BaseModel):
     isbn13s: list[str] = Field(max_length=500)
 
 
+class RecordsRequest(BaseModel):
+    oclcs: list[int]
+
+
+class RecordsResponse(BaseModel):
+    results: dict[str, Record]
+
+
 class LookupRecord(BaseModel):
     """What a batch lookup returns per record: the category-bearing fields and the
     identifiers, none of the text. `/oclc/{number}` has the full record."""

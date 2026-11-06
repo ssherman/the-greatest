@@ -6,6 +6,7 @@ module Books
     # Exact lookups only; every method returns value objects or nil, never raw JSON.
     class Client
       MAX_BATCH = 500
+      MAX_RECORDS_BATCH = 50
 
       attr_reader :config, :base_client
 
@@ -31,6 +32,16 @@ module Books
         isbn13s.each_slice(MAX_BATCH).each_with_object({}) do |slice, out|
           results = post("/lookup", {isbn13s: slice}, timeout: config.batch_timeout)["results"] || {}
           slice.each { |isbn| out[isbn] = (results[isbn] || []).map { |hash| Record.from_hash(hash) } }
+        end
+      end
+
+      # Full records for several OCLC numbers, one request per slice. Unknown numbers and
+      # redirect cycles are absent from the result.
+      # @return [Hash{Integer => Record}] keyed by the number as requested
+      def records_by_oclc(numbers)
+        numbers.each_slice(MAX_RECORDS_BATCH).each_with_object({}) do |slice, out|
+          results = post("/records", {oclcs: slice}, timeout: config.batch_timeout)["results"] || {}
+          results.each { |number, hash| out[number.to_i] = Record.from_hash(hash) }
         end
       end
 
