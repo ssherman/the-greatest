@@ -88,7 +88,7 @@ module Services
           # are what the entries held before this verdict touched them, and the retry sees only what was left.
           def record_moved(verdict, moved)
             first = verdict.payload["moved"]
-            moved = moved.merge(first.slice("destroyed_items", "destroyed_reviews", "list_item_ids_before", "review_id_before")) if first.is_a?(Hash)
+            moved = moved.merge(first.slice("destroyed_items", "destroyed_reviews", "list_item_ids_before", "review_id_before", "rating_before")) if first.is_a?(Hash)
             verdict.update_columns(payload: verdict.payload.merge("moved" => moved))
           end
 

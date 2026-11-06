@@ -26,6 +26,74 @@ module Services
             assert_equal @from, item.reload.listable
           end
 
+          test "a move that carries the review gives it the CSV row's rating and records the old one" do
+            review = make_review(@from, rating: 3)
+            UserListItem.create!(user_list: list(:read), listable: @from)
+            verdict = row_verdict(csv_row(rating: 5), action: "move", review: true)
+
+            Row.call(verdict: verdict)
+
+            assert_equal [@to, 5, "mine"], [review.reload.reviewable, review.rating, review.body]
+            assert_equal 3, verdict.reload.payload["moved"]["rating_before"].to_f
+          end
+
+          test "a copy that carries the review takes the CSV rating too" do
+            review = make_review(@from, rating: 2)
+            UserListItem.create!(user_list: list(:read), listable: @from)
+
+            Row.call(verdict: row_verdict(csv_row(rating: 4.5), action: "copy", review: true))
+
+            assert_equal 4.5, review.reload.rating.to_f
+          end
+
+          test "a keep that carries the review updates a differing rating, is applied, and is idempotent" do
+            review = make_review(@from, rating: 3)
+            verdict = row_verdict(csv_row(rating: 5), action: "keep", to: @from, review: true)
+
+            result = Row.call(verdict: verdict)
+
+            assert_equal :applied, result.data[:outcome]
+            assert_equal 5, review.reload.rating
+            assert_equal 3, verdict.reload.payload["moved"]["rating_before"].to_f
+            verdict.update!(applied_at: Time.current)
+            assert_equal "already applied", Row.call(verdict: verdict).data[:reason]
+            assert_equal 5, review.reload.rating
+          end
+
+          test "a keep that carries the review with the same rating stays a final no-op" do
+            make_review(@from, rating: 5)
+
+            result = Row.call(verdict: row_verdict(csv_row(rating: 5), action: "keep", to: @from, review: true))
+
+            assert_equal [:noop, true], result.data.values_at(:outcome, :final)
+          end
+
+          test "a CSV rating of 0 leaves the review's rating alone" do
+            review = make_review(@from, rating: 3)
+            UserListItem.create!(user_list: list(:read), listable: @from)
+
+            Row.call(verdict: row_verdict(csv_row(rating: 0), action: "move", review: true))
+            Row.call(verdict: row_verdict(csv_row(rating: 0), action: "keep", to: @to, review: true))
+
+            assert_equal 3, review.reload.rating
+          end
+
+          test "a row that does not carry the review never changes the rating" do
+            review = make_review(@to, rating: 3)
+
+            result = Row.call(verdict: row_verdict(csv_row(rating: 5), action: "keep", to: @to, review: false))
+
+            assert_equal :noop, result.data[:outcome]
+            assert_equal 3, review.reload.rating
+          end
+
+          test "a rating change recalculates the book's review summary" do
+            make_review(@from, rating: 3)
+            ::Services::Reviews::SummaryRecalculator.expects(:recalculate).with("Books::Book", @from.id).at_least_once
+
+            Row.call(verdict: row_verdict(csv_row(rating: 5), action: "keep", to: @from, review: true))
+          end
+
           test "a verdict whose row's match is no longer approved waits, unapplied" do
             UserListItem.create!(user_list: list(:read), listable: @from)
             row = csv_row

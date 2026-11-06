@@ -88,6 +88,7 @@ module Services
             lines << "  #{action} #{status} #{count}"
           end
           lines << "applied: #{verdicts.where.not(applied_at: nil).count}"
+          lines << "ratings set from the CSV: #{verdicts.reimport_row.where("payload -> 'moved' ? 'rating_before'").count}"
         end
 
         # Matches approved without anyone looking, over every match. A low rate means the AI and the finder

@@ -9,8 +9,9 @@ module Services
         #
         # Every branch looks at what the user has NOW, never at the payload alone: the verdict was decided
         # earlier, and the reader, an admin or a sibling verdict may have changed things since.
-        # - keep (and any superseded row): nothing. A final no-op: the verdict is applied, so DecideRow and the
-        #   author check see the row.
+        # - keep (and any superseded row): nothing, except that a keep carrying the review takes the CSV's rating
+        #   (see rate). Every verdict that carries the review does, after its own work.
+        #   A final no-op: the verdict is applied, so DecideRow and the author check see the row.
         # - add: the row's entries on the destination, by LibraryRules; a list that already holds the book is
         #   left as it is (a final no-op). review: true writes the CSV's rating and review.
         # - move: ALL the user's items on the old book (every list) go to the destination, with Relink's
@@ -31,7 +32,7 @@ module Services
 
             # Before the keep return: a keep closed on a since-rejected match could never be corrected.
             return Entries.noop("match no longer approved") unless Entries.match_approved?(payload["goodreads_edition_id"])
-            return Entries.noop("keep", final: true) if action == "keep"
+            return Entries.noop("keep", final: true) if action == "keep" && payload["review"] != true
 
             user = ::User.find_by(id: payload["user_id"])
             return Entries.noop("user #{payload["user_id"]} no longer exists") unless user
@@ -40,6 +41,7 @@ module Services
             return Entries.noop("book #{payload["to_book_id"]} no longer exists") unless to
 
             return add(verdict, user, to) if action == "add"
+            return rate(verdict, user, to, Entries.noop("keep", final: true)) if action == "keep"
 
             from = GoodreadsReplay::Apply::MergedBook.call(payload["from_book_id"])
             return nothing_to_move(verdict) unless from
@@ -53,7 +55,32 @@ module Services
               copy(verdict, user, from, to)
             end
             reopen_kept(from) if result.data[:outcome] == :applied
-            result
+            rate(verdict, user, to, result)
+          end
+
+          # The CSV's rating wins: the review the carrying row (review: true) points at takes its rating when
+          # that is above 0 ("not rated" leaves the review alone) and differs. The old rating goes in the trail.
+          # A final no-op (a keep, or entries already in place) becomes applied when the rating changed; any other
+          # outcome keeps its own result, and its retry finds the rating already set.
+          def self.rate(verdict, user, to, result)
+            return result unless verdict.payload["review"] == true
+            settled = result.data[:outcome] == :applied || (result.data[:outcome] == :noop && result.data[:final])
+            return result unless settled
+
+            row = csv_row(verdict)
+            review = Entries.review_on(user, to)
+            return result unless row && review && row.rating.to_f > 0 && review.rating != row.rating
+
+            before = review.rating
+            ::ApplicationRecord.transaction do
+              review.update!(rating: row.rating)
+              moved = verdict.payload["moved"].is_a?(Hash) ? verdict.payload["moved"] : {}
+              verdict.update_columns(payload: verdict.payload.merge("moved" => moved.merge("rating_before" => before&.to_s)))
+            end
+            recalculate(to)
+            return result if result.data[:outcome] == :applied
+
+            Entries.applied(rating_changed: true)
           end
 
           # A kept mixed book's keep step (Apply::Mixed) removes copy originals once every copy from it has applied. A
@@ -214,7 +241,7 @@ module Services
             books.each { |book| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book.id) }
           end
 
-          private_class_method :reopen_kept, :in_place, :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :sibling_carries?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
+          private_class_method :reopen_kept, :rate, :in_place, :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :sibling_carries?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
         end
       end
     end
