@@ -28,6 +28,8 @@ module Services
             nil
           end
 
+          # The id one merge hop from `id`, or nil. Public for Reimport::Apply::Leftovers, which walks the same edges
+          # plus record_redirects.
           def self.merge_target(id)
             target = ::Books::RepairVerdict.merge_books.approved.where("payload->>'source_id' = ?", id.to_s)
               .order(:id).pick(Arel.sql("payload->>'target_id'"))
@@ -37,8 +39,6 @@ module Services
               .where("item_a_id = :id OR item_b_id = :id", id: id).order(id: :desc).first
             pair && ((pair.item_a_id == id) ? pair.item_b_id : pair.item_a_id)
           end
-
-          private_class_method :merge_target
         end
       end
     end

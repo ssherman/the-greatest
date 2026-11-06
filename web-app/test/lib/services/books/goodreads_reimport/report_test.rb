@@ -63,6 +63,13 @@ module Services
           assert_includes Report.call, "ratings set from the CSV: 1"
         end
 
+        test "counts the leftover entries removed from books a reader's rows left" do
+          row_verdict(@row, @book, applied_at: Time.current).update_columns(payload: {"action" => "copy", "leftovers_removed" => [{"id" => 1}, {"id" => 2}]})
+          verdict(:reimport_row, "reimport:row:#{@import.id}:2", {"action" => "copy"}, applied_at: Time.current)
+
+          assert_includes Report.call, "leftover entries removed from books a reader's rows left: 2"
+        end
+
         test "acceptance: a destination whose title differs from the CSV is listed unless a high-confidence match explains it" do
           row_verdict(@row, @other, applied_at: Time.current)
           unmatched = verdict(:reimport_match, "reimport:edition:#{@edition.id}", {"book_id" => @other.id, "ai" => {"answer" => nil}})
@@ -95,6 +102,18 @@ module Services
           assert_match(/user #{@user.id} items: \d+ -> \d+ \(0 recorded destroys\)/, report)
         end
 
+        test "a snapshot without ids is called out, with the command that replaces it" do
+          FileUtils.mkdir_p(@snapshot.dirname)
+          File.write(@snapshot, JSON.generate({"taken_at" => Time.current.iso8601, "users" => {@user.id.to_s => {"items" => 0, "reviews" => 0}}}))
+
+          report = Report.call
+
+          assert_includes report, "predates id tracking"
+          assert_includes report, "books:goodreads_reimport:snapshot[redo]"
+          assert_includes report, "only before any row has been applied"
+          assert_not_includes report, "dropped: no snapshot"
+        end
+
         test "a lost review is not hidden by a gained item, and a recorded collision destroy is an explained drop" do
           Review.where(user: @user).delete_all
           review = Review.create!(user: @user, reviewable: @book, rating: 4, title: "T", body: "B")
@@ -116,13 +135,48 @@ module Services
           assert_includes report, "user #{@user.id} reviews: 1 -> 0 (1 recorded destroys)"
         end
 
-        test "a mixed book's deleted copy originals give no slack, and a destroy applied before the snapshot gives none either" do
+        test "leftovers removed by a row and a kept mixed book's deleted originals are explained drops, once per user" do
+          list = ::Books::UserList.create!(user: @user, name: "Shelf", list_type: :custom)
+          first = UserListItem.create!(user_list: list, listable: @book)
+          second = UserListItem.create!(user_list: list, listable: @other)
+          Report.snapshot
+          first.destroy!
+          second.destroy!
+          row_verdict(@row, @book, applied_at: Time.current).update_columns(
+            payload: {"user_id" => @user.id, "action" => "copy", "leftovers_removed" => [{"id" => first.id, "user_id" => @user.id}]}
+          )
+          verdict(:reimport_mixed, "reimport:book:#{@other.id}", {"book_id" => @other.id, "deleted" => [{"id" => second.id, "user_id" => @user.id}]},
+            applied_at: Time.current)
+
+          report = Report.call
+
+          assert_includes report, "beyond the destroys recorded: 0"
+          assert_includes report, "(2 recorded destroys)"
+        end
+
+        test "a missing item is explained only by its own id: a recorded destroy of a different id gives no slack" do
+          list = ::Books::UserList.create!(user: @user, name: "Shelf", list_type: :custom)
+          lost = UserListItem.create!(user_list: list, listable: @book)
+          removed = UserListItem.create!(user_list: list, listable: @other)
+          Report.snapshot
+          lost.destroy!
+          row_verdict(@row, @book, applied_at: Time.current).update_columns(
+            payload: {"user_id" => @user.id, "action" => "copy", "leftovers_removed" => [{"id" => removed.id, "user_id" => @user.id}]}
+          )
+
+          report = Report.call
+
+          assert_includes report, "beyond the destroys recorded: 1"
+          assert_includes report, "explained drops (destroyed by a collision the verdicts recorded; not a loss): 0"
+        end
+
+        test "a destroy applied before the snapshot gives no slack, a mixed book's deleted originals only count after it" do
           list = ::Books::UserList.create!(user: @user, name: "Shelf", list_type: :custom)
           item = UserListItem.create!(user_list: list, listable: @book)
           Report.snapshot
           item.destroy!
           verdict(:reimport_mixed, "reimport:book:#{@other.id}", {"book_id" => @other.id, "deleted" => [{"id" => 1, "user_id" => @user.id}]},
-            applied_at: Time.current)
+            applied_at: 2.hours.ago)
           verdict(:reimport_row, "reimport:row:#{@import.id}:5", {"user_id" => @user.id, "moved" => {"destroyed_items" => [{"id" => item.id}]}},
             applied_at: 1.hour.ago)
 

@@ -29,6 +29,48 @@ module Services
             verdict
           end
 
+          test "a kept book keeps a Favorites item of a reader whose row heads to it, and removes the Read original" do
+            kept = mixed_verdict
+            kept.update!(payload: kept.payload.merge("kept" => true))
+            fav = UserListItem.create!(user_list: list(:favorites), listable: @mixed)
+            original = UserListItem.create!(user_list: list(:read), listable: @mixed)
+            row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @mixed, to: @mixed).update!(applied_at: Time.current)
+            row_verdict(csv_row(exclusive_shelf: "read"), action: "copy", from: @mixed, to: @to).update!(applied_at: Time.current)
+
+            Mixed.call(verdict: kept)
+
+            assert UserListItem.exists?(fav.id)
+            assert_not UserListItem.exists?(original.id)
+          end
+
+          test "a kept book keeps the item of a keep row naming a book an admin merged into it (recorded only as a redirect)" do
+            kept = mixed_verdict
+            kept.update!(payload: kept.payload.merge("kept" => true))
+            gone_id = ::Books::Book.maximum(:id) + 1000
+            RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: @mixed.id)
+            original = UserListItem.create!(user_list: list(:read), listable: @mixed)
+            keep = row_verdict(csv_row(exclusive_shelf: "read"), action: "keep", from: @mixed, to: @mixed)
+            keep.update!(applied_at: Time.current, payload: keep.payload.merge("from_book_id" => gone_id, "to_book_id" => gone_id))
+            row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @mixed, to: @to).update!(applied_at: Time.current)
+
+            Mixed.call(verdict: kept)
+
+            assert UserListItem.exists?(original.id)
+          end
+
+          test "a kept book sweeps nothing while a sibling row of the reader is rejected" do
+            kept = mixed_verdict
+            kept.update!(payload: kept.payload.merge("kept" => true))
+            original = UserListItem.create!(user_list: list(:read), listable: @mixed)
+            row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @mixed, to: @mixed).update!(applied_at: Time.current)
+            row_verdict(csv_row(exclusive_shelf: "read"), action: "copy", from: @mixed, to: @to).update!(status: :rejected)
+
+            result = Mixed.call(verdict: kept)
+
+            assert_equal false, result.data[:final]
+            assert UserListItem.exists?(original.id)
+          end
+
           test "a kept mixed book is a final noop and deletes nothing, redirect or not" do
             verdict = mixed_verdict
             verdict.update!(payload: verdict.payload.merge("kept" => true))
@@ -218,6 +260,36 @@ module Services
             assert_not UserListItem.exists?(item.id)
             deleted = verdict.reload.payload["deleted"].first
             assert_equal [item.id, @user.id, @mixed.id], deleted.values_at("id", "user_id", "listable_id")
+          end
+
+          def public_goal
+            ::Books::ReadingGoal.create!(user: @user, name: "2020", target_count: 10, public: true,
+              starts_on: Date.new(2020, 1, 1), ends_on: Date.new(2020, 12, 31))
+          end
+
+          test "deleting a dated Read original purges the reader's reading-goal pages" do
+            public_goal
+            item = UserListItem.create!(user_list: list(:read), listable: @mixed, completed_on: Date.new(2020, 5, 5))
+            copy_verdict
+            urls = Entries.goal_urls(@user, [item])
+            assert urls.any?
+            ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with("books", urls).once
+
+            assert_equal :applied, Mixed.call(verdict: mixed_verdict).data[:outcome]
+          end
+
+          test "a kept book removing a dated Read original purges the reader's reading-goal pages" do
+            public_goal
+            kept = mixed_verdict
+            kept.update!(payload: kept.payload.merge("kept" => true))
+            original = UserListItem.create!(user_list: list(:read), listable: @mixed, completed_on: Date.new(2020, 5, 5))
+            row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @mixed, to: @to).update!(applied_at: Time.current)
+            urls = Entries.goal_urls(@user, [original])
+            ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with("books", urls).once
+
+            Mixed.call(verdict: kept)
+
+            assert_not UserListItem.exists?(original.id)
           end
 
           test "another user's item is not a copy original" do

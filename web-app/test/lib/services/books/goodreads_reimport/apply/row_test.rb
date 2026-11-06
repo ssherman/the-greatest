@@ -13,6 +13,12 @@ module Services
 
           def review_on(book) = Review.find_by(user: @user, reviewable_type: "Books::Book", reviewable_id: book.id)
 
+          # A copy leaves the reader's original on a mixed book for Apply::Mixed; on any other book Leftovers removes it.
+          def mark_mixed(book)
+            ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{book.id}", decided_by: :rule, status: :approved,
+              payload: {"book_id" => book.id, "redirect_to_book_id" => @to.id, "archive" => {}})
+          end
+
           def make_review(book, body: "mine", rating: 4) = Review.create!(user: @user, reviewable: book, rating: rating, body: body)
 
           test "keep and a superseded keep change nothing and are final, so downstream sees them" do
@@ -378,6 +384,7 @@ module Services
           end
 
           test "copy keeps the old item until the mixed book is deleted" do
+            mark_mixed(@from)
             old = UserListItem.create!(user_list: list(:read), listable: @from)
 
             result = Row.call(verdict: row_verdict(csv_row(date_read: Date.new(2024, 5, 3)), action: "copy"))
@@ -393,14 +400,17 @@ module Services
             UserListItem.where(listable: other).delete_all
             UserListItem.create!(user_list: list(:read), listable: @from)
 
-            Row.call(verdict: row_verdict(csv_row(date_read: Date.new(2024, 1, 1)), action: "copy"))
-            Row.call(verdict: row_verdict(csv_row(date_read: Date.new(2023, 3, 3)), action: "copy", to: other))
+            first = row_verdict(csv_row(date_read: Date.new(2024, 1, 1)), action: "copy")
+            second = row_verdict(csv_row(date_read: Date.new(2023, 3, 3)), action: "copy", to: other)
+            Row.call(verdict: first)
+            Row.call(verdict: second)
 
             assert_equal [Date.new(2024, 1, 1), Date.new(2023, 3, 3)],
               [UserListItem.find_by!(listable: @to, user_list: list(:read)).completed_on, UserListItem.find_by!(listable: other, user_list: list(:read)).completed_on]
           end
 
           test "copy also puts the destination on the user's Favorites and custom lists, keeping the originals" do
+            mark_mixed(@from)
             custom = ::Books::UserList.create!(user: @user, list_type: :custom, name: "Mine")
             fav = UserListItem.create!(user_list: list(:favorites), listable: @from)
             mine = UserListItem.create!(user_list: custom, listable: @from, completed_on: Date.new(2020, 2, 2))
