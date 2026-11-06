@@ -134,6 +134,47 @@ module Services
         assert_empty result.data[:books]
       end
 
+      test "raise_on_failure re-raises the search error" do
+        ::Search::Books::Search::BookSimilar.stubs(:call).raises(Faraday::ConnectionFailed, "down")
+
+        assert_raises(Faraday::ConnectionFailed) do
+          ::Services::Books::SimilarBooks.call(@book, raise_on_failure: true)
+        end
+      end
+
+      test "raise_on_failure re-raises an unrelated error too, rather than dressing it up" do
+        ::Search::Books::Search::BookSimilar.stubs(:call).raises(StandardError, "bug")
+
+        assert_raises(StandardError) do
+          ::Services::Books::SimilarBooks.call(@book, raise_on_failure: true)
+        end
+      end
+
+      test "raise_on_failure is not passed to the similarity query" do
+        ::Search::Books::Search::BookSimilar.expects(:call).with(@book, Not(has_key(:raise_on_failure))).returns([])
+
+        result = ::Services::Books::SimilarBooks.call(@book, limit: 3, raise_on_failure: true)
+
+        assert result.success?
+      end
+
+      test "raise_on_failure leaves a successful search alone" do
+        stub_hits([@war_and_peace])
+
+        result = ::Services::Books::SimilarBooks.call(@book, raise_on_failure: true)
+
+        assert_equal [@war_and_peace.id], result.data[:books].map(&:id)
+      end
+
+      test "a provisional book among the hits is left out" do
+        @got.update!(provisional: true)
+        stub_hits([@got, @war_and_peace])
+
+        result = ::Services::Books::SimilarBooks.call(@book)
+
+        assert_equal [@war_and_peace.id], result.data[:books].map(&:id)
+      end
+
       test "preloads authors and the primary image with its attachment so views do not N+1" do
         image = Image.new(parent: @war_and_peace, primary: true)
         image.file.attach(io: StringIO.new("fake image data"), filename: "cover.jpg", content_type: "image/jpeg")

@@ -167,6 +167,63 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/books/{slug}/similar:
+    x-domain: books
+    get:
+      operationId: listSimilarBooks
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Books similar to a book
+      description: |
+        Books like this one, scored from the genres, subjects and locations they share, most similar first. At most two books per author appear. Only catalogued books are returned (not books still awaiting review), each with its primary-ranking `rank` (null when unranked). This is a top-N, not a paginated list: `limit` caps it and there are no `links`. `meta.more_available` is true when more similar books may exist beyond this response. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+      x-mcp:
+        description: >-
+          Returns the books most similar to one book, most similar first, at most two per author, each with
+          its primary-ranking `rank` (null when unranked). `meta.more_available` is true when more
+          similar books may exist beyond this response. Take the slug from search_books or find_book; `limit` is at most 25. Use get_book
+          for any one result's detail.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+        - name: limit
+          in: query
+          required: false
+          description: How many similar books to return, at most 25.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 25
+            default: 10
+      responses:
+        "200":
+          description: The book's similar books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarBookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /api/v1/authors:
     x-domain: books
     get:
@@ -216,12 +273,12 @@ paths:
       operationId: getAuthor
       security: [{bearerAuth: ["books:read"]}]
       summary: One author
-      description: The author alone. Their books are not embedded; a paginated sub-collection is a later addition.
+      description: The author alone. Their books are not embedded; they are a paginated sub-collection at `GET /api/v1/authors/{slug}/books`.
       x-mcp:
         description: >-
           Returns one author by slug: rank, birth and death years, kind (person, organization, pseudonym
-          or collective), alternate names and description. It does not list their books; use search_books
-          with the author's name to find them.
+          or collective), alternate names and description. It does not list their books; use
+          list_author_books with the same slug.
       parameters:
         - $ref: "#/components/parameters/slug"
       responses:
@@ -244,6 +301,100 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthorItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/authors/{slug}/books:
+    x-domain: books
+    get:
+      operationId: listAuthorBooks
+      security: [{bearerAuth: ["books:read"]}]
+      summary: An author's books
+      description: The books the author wrote (not ones they only edited), ranked books first in rank order on the site's primary ranking, then the unranked ones (`rank` null) by first publication year and then title. Books still awaiting review are left out. There are no filter parameters.
+      x-mcp:
+        description: >-
+          Returns an author's whole bibliography: their ranked books first, in rank order on the primary
+          ranking, then their unranked books with a null `rank`. Use it for "what did this author write"
+          once you have the author's slug from search_authors or from a book's `authors`; for a
+          non-primary ranking use list_ranking_configuration_author_books.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the author's books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}/authors/{slug}/books:
+    x-domain: books
+    get:
+      operationId: listRankingConfigurationAuthorBooks
+      security: [{bearerAuth: ["books:read"]}]
+      summary: An author's books on one configuration
+      description: The same rows and shape as `/api/v1/authors/{slug}/books`, ranked by the named configuration; `rank` is relative to it, and null for a book that configuration does not rank. Ranked books come first in rank order, then the unranked ones by first publication year and then title.
+      x-mcp:
+        description: >-
+          Returns an author's whole bibliography ranked by one named ranking configuration (an `id` from
+          list_ranking_configurations): books that configuration ranks first, in its order, then the
+          rest with a null `rank`. Prefer list_author_books unless you need a non-primary ranking.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the author's books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -824,6 +975,61 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/search/authors:
+    x-domain: books
+    get:
+      operationId: searchAuthors
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Search authors
+      description: |
+        Full-text search over author names and alternate names, best match first. `q` is required; a missing or blank `q` is a 400. Only catalogued authors are returned (not authors still awaiting review). A query yields at most 100 matches, so `total_count` never exceeds 100: refine the query rather than paging for more. `rank` is the author's position in the site's primary author ranking, or null when the author is unranked. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+      x-mcp:
+        description: >-
+          Finds authors by name or alternate name, best match first, with each author's primary-ranking
+          `rank` (null when unranked). A query returns at most 100 matches in all, so refine the query
+          rather than paging for more; once you have a slug, use get_author for one author, or
+          list_author_books for their books.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search text, at most 200 characters once surrounding whitespace is stripped.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of matching authors.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 components:
   securitySchemes:
     bearerAuth:
@@ -1141,6 +1347,21 @@ components:
           $ref: "#/components/schemas/PaginationMeta"
         links:
           $ref: "#/components/schemas/PaginationLinks"
+    SimilarBookCollection:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Book"
+        meta:
+          type: object
+          required: [more_available]
+          properties:
+            more_available:
+              type: boolean
+              description: True when more similar books may exist beyond this response.
     AppliedFilters:
       type: object
       additionalProperties: false

@@ -251,6 +251,39 @@ module Api
       assert_includes json.dig("result", "tools").map { |tool| tool["name"] }, "find_book"
     end
 
+    test "tools/list includes the author and similar tools" do
+      rpc("tools/list")
+
+      names = json.dig("result", "tools").map { |tool| tool["name"] }
+      %w[search_authors list_author_books list_ranking_configuration_author_books list_similar_books].each do |name|
+        assert_includes names, name
+      end
+    end
+
+    test "list_similar_books passes limit through to the endpoint" do
+      # Five books by five different authors, so the author cap trims nothing and
+      # only `limit` (default 10 on the endpoint) can make the answer three long.
+      books = Array.new(5) do |i|
+        book = ::Books::Book.create!(title: "Similar #{i}")
+        ::Books::BookAuthor.create!(book: book, author: ::Books::Author.create!(name: "Similar Author #{i}"), role: :author)
+        book
+      end
+      ::Search::Books::Search::BookSimilar.stubs(:call).returns(books.map { |book| {id: book.id.to_s, score: 1.0, source: {}} })
+
+      call_tool("list_similar_books", {slug: @war_and_peace.slug, limit: 3})
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal 3, tool_text["data"].size
+    end
+
+    test "list_author_books pages with limit" do
+      call_tool("list_author_books", {slug: books_authors(:king).slug, limit: 1})
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal 1, tool_text.dig("meta", "per_page")
+      assert_equal 1, tool_text["data"].size
+    end
+
     test "tools/call find_book is one rate-limit hit however many dispatches it makes" do
       ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: @war_and_peace.id.to_s, score: 1.0, source: {}}])
       verdict = Services::Api::RateLimiter::Verdict.new(
