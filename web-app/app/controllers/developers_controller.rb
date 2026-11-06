@@ -12,6 +12,11 @@
 # it cannot drift from the contract and the music host never documents
 # /api/v1/books. Api::Problem#to_h points its `type` URI at this page's
 # #errors-<code> anchors; the test pins every code to one.
+#
+# The MCP section lists Mcp::ToolDirectory's public entries, the same catalogue
+# the endpoint serves, so it cannot drift from the tools. A site whose public
+# catalogue is empty (music and games, where /api/mcp is not routed) gets no
+# section.
 class DevelopersController < ApplicationController
   include Cacheable
   include DomainLayout
@@ -31,6 +36,8 @@ class DevelopersController < ApplicationController
     @rate_limits = Rails.application.config.x.api.rate_limits
     @unauthenticated_per_minute = Rails.application.config.x.api.unauthenticated_per_minute
     @example_url = example_url
+    @mcp_tools = Mcp::ToolDirectory.entries(document: :public, domain: Current.domain)
+    @mcp_url = "#{@base_url}/api/mcp"
   end
 
   private

@@ -5,10 +5,9 @@ module Api
     # GET /api/v1/openapi.json -- public, no token, cacheable for an hour.
     # Not a BaseController subclass on purpose: that base authenticates.
     #
-    # It is still behind the API's per-IP unauthenticated window: the edge skips
-    # Cloudflare's own rate limiting for /api/*, and until the new books host
-    # has a cache rule this document is served from Rails on every request, so
-    # without this an unauthenticated client could hit it without limit. The
+    # It is still behind the API's per-IP unauthenticated window: the app cannot
+    # count on anything upstream to limit or cache this document, so without the
+    # window an unauthenticated client could hit it without limit. The
     # window is shared with 401s from the same address, which is the intent --
     # it is one budget for "requests this IP made without a token".
     class OpenapiController < ActionController::API
