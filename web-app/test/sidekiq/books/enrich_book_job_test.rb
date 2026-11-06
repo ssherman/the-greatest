@@ -27,6 +27,21 @@ class Books::EnrichBookJobTest < ActiveSupport::TestCase
     @job.perform(@book.id, true, ["Leo Tolstoy"])
   end
 
+  test "a successful enrichment starts the categorize workflow" do
+    Services::Books::EnrichBook.stubs(:call).returns(Services::Books::EnrichBook::Result.new(success?: true, data: {enrichments: []}, errors: []))
+    Workflows::Books::BookCategorize.expects(:start)
+      .with(@book, initiated_by: "enrich_book_job", options: {"context" => "admin", "force_research" => true})
+
+    @job.perform(@book.id, true)
+  end
+
+  test "a failed enrichment does not start the categorize workflow" do
+    Services::Books::EnrichBook.stubs(:call).returns(Services::Books::EnrichBook::Result.new(success?: false, data: {enrichments: []}, errors: ["x"]))
+    Workflows::Books::BookCategorize.expects(:start).never
+
+    assert_raises(StandardError) { @job.perform(@book.id) }
+  end
+
   test "re-raises on a failed result so Sidekiq retries" do
     Services::Books::EnrichBook.stubs(:call)
       .returns(Services::Books::EnrichBook::Result.new(success?: false, data: {enrichments: []}, errors: ["OpenAI timeout"]))

@@ -49,8 +49,9 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    pass-through of the text the reviewer objected to; an empty review reply (no spoilers
    verdict at all) is `review_failed`, the same as a call that errored outright.
 4. **Apply.** `Services::Books::ApplyBookFacts` fills blanks only: year, original language,
-   word count, page range, subtitle, alternate titles (union), and origin countries (only when
-   the book has none). Book type and series are recorded but not applied. Nothing overwrites a
+   word count, page range, subtitle and alternate titles (union). Origin countries are recorded
+   with reason `superseded` and never applied: the `categorize` step (`books.origin` kind, below) decides
+   the origin. Book type and series are recorded but not applied. Nothing overwrites a
    value that is set, which is what protects human corrections. If `recognized` was false
    nothing is applied at all. If the knowledge run was recognized but `low` confidence and the
    research run is about to follow, nothing is applied either (facts recorded as `deferred`,
@@ -80,13 +81,13 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 
 ## The ledger
 
-`Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`, `books.goodreads` or `books.evidence`), `mode`
+`Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`, `books.goodreads`, `books.evidence` or `books.origin`), `mode`
 (knowledge/research/sourced), `outcome` (applied, nothing_to_apply, unrecognized, skipped, failed),
 `recognized`, `confidence`, `facts` JSON, `citations`, `provider`, `model`, `ai_chat_id`,
 `error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (`origin_countries`
 also carries `unmatched`, and `description` carries `review`); reasons are `filled`,
 `already_set`, `null`, `invalid`, `no_match`, `not_applied_yet`, `human_cleared`, `unrecognized`,
-`rejected`, `review_failed`, `deferred`. `deferred` means a low-confidence knowledge answer was
+`rejected`, `review_failed`, `deferred`, `superseded`. `deferred` means a low-confidence knowledge answer was
 recorded but left for the research run to verify. `human_cleared` means the field was deliberately blanked by an
 applied correction (the corrections flow accepts blanks on purpose) and the AI value is never
 used to refill it. Useful queries:
@@ -134,6 +135,34 @@ work that has no P50 or whose P50 values are all `Q4233718` (anonymous); any oth
 A row written before the WorldCat service is reachable in production records `worldcat` in
 `sources_failed` with no WorldCat section; stage 2 must re-gather those rows. `wikidata_qid` is the QID
 resolution ended with (or nil) and `source_errors` maps each failed source to its error class and message.
+
+
+### The `books.origin` kind
+
+The `categorize` step (`Services::Books::Origin::Judge`) writes one row per mode run (one for knowledge,
+a second when research follows). Every row's `facts` carries `prompt_version` (the origin task's
+`PROMPT_VERSION`), `context` (`import`, `backfill` or `admin`), `label`, `path`, `dossier`, `answer`,
+`origin` and `deferred_research`. `path` says how the row was reached:
+
+- `shortcut`: the Wikidata country agrees with the evidence, so no AI call is made (confidence `high`).
+- `judge`: the origin task answered, from knowledge or from research.
+- `has_origin`: the book already holds a real country and `force` is off; nothing is asked.
+- A book with no title writes a `skipped` row with reason `missing_inputs`.
+
+`Services::Books::Origin::Apply` decides whether an answer may be written, and its reason is the row's
+reason: `filled`, `already_set`, `null`, `placeholder_answer` ("Unknown", "Multiple", ... never written),
+`no_match` (the answer names no existing `Books::Country`; one is never created), `low_confidence`,
+`unsupported` (a medium answer with no supporting evidence), and `disagreement` (a high-confidence answer
+that differs from the held country, which is never overwritten). A knowledge answer that is `low`
+confidence, or unrecognized, while the book has no real country, is followed by a research run when the
+budget allows. A book published at or after `config.x.ai.knowledge_cutoff_year` starts with research. When
+research is wanted but not allowed (no budget, or `book_facts` already researched in this run), the
+knowledge row gets `deferred_research => true`.
+
+Two research caps apply. Imports and admin runs spend `config.x.ai.research_daily_cap`, counted as
+`Enrichment.research.today.count` as `EnrichBook` does. The backfill spends its own
+`config.x.ai.categorize_backfill_research_daily_cap` (default 0), counted from research-mode `books.origin`
+rows created today whose `facts->>'context'` is `backfill`; backfill rows do not spend the shared cap.
 
 ## Tuning
 

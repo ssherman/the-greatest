@@ -23,8 +23,12 @@ class Books::EnrichBookJob
       force_research: force_research,
       author_names: Array(author_names)
     )
-    return if result.success?
+    unless result.success?
+      raise StandardError, "Enrichment failed for book #{book_id}: #{result.errors.join("; ")}"
+    end
 
-    raise StandardError, "Enrichment failed for book #{book_id}: #{result.errors.join("; ")}"
+    # EnrichBook no longer sets an origin country; the origin judge does.
+    ::Workflows::Books::BookCategorize.start(book, initiated_by: "enrich_book_job",
+      options: {"context" => "admin", "force_research" => force_research})
   end
 end

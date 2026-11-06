@@ -192,14 +192,16 @@ step directly, and nothing in the import path writes that deferral any more.
 
 ## The book workflow
 
-`books.book_enrichment` (definition version 3) has four steps, each wrapping an existing service:
+`books.book_enrichment` (definition version 4) has five steps, each wrapping an existing service:
 
 | Step | Queue | Waits on | Runs when |
 |---|---|---|---|
 | `goodreads` | `goodreads_fetch` | - | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
-| `evidence` | `low` | `goodreads` reaching a terminal state (**finish**; a skipped `goodreads` counts) | Always. Nothing waits on it yet; stage 2 (`categorize`) will |
+| `evidence` | `low` | `goodreads` reaching a terminal state (**finish**; a skipped `goodreads` counts) | Always. `categorize` waits on it |
 | `book_facts` | `low` | `goodreads` reaching a terminal state (**finish**), and the `author_facts` step of the runs of authors **linked to the book** that the import created (**release**) | Always |
 | `amazon` | `serial` | `goodreads` reaching a terminal state (**finish**) | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
+
+| `categorize` | `low` | `book_facts` and `evidence` reaching a terminal state (**finish**) | Always |
 
 The author waits cross runs, so they are passed at plan time rather than declared in the definition; the
 `goodreads` waits are in the definition (`waits_on: {goodreads: :finish}`). `start` is
@@ -264,18 +266,45 @@ identifier (the row's wikidata section can be nil even when one is stored). A Wi
 becomes a wait (`retry_after` plus up to 30 s of jitter) and writes no row, like the author `wikidata`
 step. `bin/rails books:evidence[id]` runs it inline for one book.
 
+### The categorize step
+
+`categorize` runs `Services::Books::Origin::Judge` (the `books.origin` kind, described in
+`docs/features/books_enrichment.md`) and writes one ledger row per mode run. It succeeds with the last
+row's `reason` (its `outcome` when the reason is blank) and the result `{"enrichment_ids", "applied"}`; a
+failed row makes the step raise, so the coordinator retries it. Options read: `"context"` (default
+`import` in `books.book_enrichment`, `backfill` in `books.book_categorize`), `"label"`, `"force_judge"`,
+and `"force_research"` (read only in `books.book_categorize`; in `books.book_enrichment` that option
+belongs to `book_facts`). Research is not allowed when this run's `book_facts` step already researched the
+book (an `Enrichment` with that step's `workflow_step_id` and mode `research`), so one import never spends
+two web searches on a book. A `books.book_categorize` run has no `book_facts` step, so research is allowed.
+
+### The book_categorize workflow
+
+`books.book_categorize` (version 1, target `Books::Book`) has two steps: `evidence` (queue `low`, built
+with `Steps::Evidence.new(reuse_fresh: true)`) and `categorize` (queue `low`, waits on `evidence`
+**finish**). `Workflows::Books::BookCategorize.start(book, initiated_by:, options: {}, start_after: nil)`
+is shaped like the author workflow's `start`: it returns the active run when the book has one. It is for
+books that did not come through an import: the origin backfill, and `Books::EnrichBookJob` (the admin
+**Enrich With AI** button, `books:enrich_missing` and the deferred hand-off), which starts it with
+`"context" => "admin"` after a successful `EnrichBook`.
+
+With `reuse_fresh: true` the evidence step does not call `Gather` when the book's latest `books.evidence`
+row has `facts["schema_version"] == Gather::SCHEMA_VERSION` and an empty `sources_failed`; it succeeds with
+outcome `reused` and the same `{"enrichment_id", "qid"}` result. The default (`false`, used by
+`books.book_enrichment`) always gathers.
+
 ### Version tolerance
 
-A run planned under version 2 has no `evidence` step (added in version 3) and keeps running. A run planned under version 1 has no `goodreads` step (added in version 2) and only `book_facts` and `amazon`, and keeps running after the deploy:
+A run planned under version 3 has no `categorize` step (added in version 4) and keeps running. A run planned under version 2 has no `evidence` step (added in version 3) and keeps running. A run planned under version 1 has no `goodreads` step (added in version 2) and only `book_facts` and `amazon`, and keeps running after the deploy:
 `book_facts` finds no `goodreads` step and runs as it always did (knowledge, then research), and
-`amazon` has no `goodreads` edge. Only runs planned after a deploy get that version's step: `goodreads` from version 2, `evidence` from version 3.
+`amazon` has no `goodreads` edge. Only runs planned after a deploy get that version's step: `goodreads` from version 2, `evidence` from version 3, `categorize` from version 4.
 
 Callers: `DataImporters::Books::Book::Providers::Enrichment` (importer with `enrich: true`, and the
 list wizard's text rows) and `Services::Books::GoodreadsImports::PromoteRecords` (admin approval of a
 Goodreads import). Member Goodreads imports run with `enrich: false` and plan nothing until approval.
 The admin **Enrich With AI** button still queues `EnrichBookJob`, `books:enrich_missing` enqueues
-`EnrichBookJob`, and `books:amazon_enrich*` queue or run `AmazonProductEnrichmentJob`; `books:enrich[id]`
-runs `Services::Books::EnrichBook` inline. None of them creates a run. `books:enrich_missing` does
+`EnrichBookJob` (which now starts a `books.book_categorize` run after its `EnrichBook` call), and `books:amazon_enrich*` queue or run `AmazonProductEnrichmentJob`; `books:enrich[id]`
+runs `Services::Books::EnrichBook` inline. None of them creates a `books.book_enrichment` run. `books:enrich_missing` does
 skip a book that has a running book run.
 
 ### Adopting deferred books

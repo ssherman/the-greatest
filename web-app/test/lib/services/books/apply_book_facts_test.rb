@@ -189,49 +189,18 @@ module Services
         refute result.data[:facts]["alternate_titles"]["applied"]
       end
 
-      test "origin countries are added when the book has none" do
-        result = apply
+      test "origin_countries is recorded, not applied" do
+        result = apply(origin_countries: {value: ["French"], confidence: "high"})
 
-        assert_equal [books_countries(:french)], @book.reload.countries.to_a
-        assert_equal "filled", result.data[:facts]["origin_countries"]["reason"]
-        assert_equal [], result.data[:facts]["origin_countries"]["unmatched"]
-      end
-
-      test "origin countries are left alone when the book already has some" do
-        @book.book_countries.create!(country: books_countries(:japanese))
-
-        result = apply
-
-        assert_equal [books_countries(:japanese)], @book.reload.countries.to_a
-        assert_equal "already_set", result.data[:facts]["origin_countries"]["reason"]
-      end
-
-      test "origin countries de-duplicate case-insensitively before matching" do
-        result = apply(origin_countries: {value: ["French", "french", "FRENCH"], confidence: "high"})
-
-        assert_equal [books_countries(:french)], @book.reload.countries.to_a
-        assert_equal 1, @book.book_countries.count
-        assert_equal "filled", result.data[:facts]["origin_countries"]["reason"]
-        assert_equal ["French"], result.data[:facts]["origin_countries"]["value"]
-      end
-
-      test "origin countries with no match record the unmatched names and create nothing" do
-        result = apply(origin_countries: {value: ["USA", "Martian"], confidence: "high"})
-
+        assert_equal [false, "superseded", ["French"]], result.data[:facts]["origin_countries"].values_at("applied", "reason", "value")
         assert_empty @book.reload.countries
-        assert_equal "no_match", result.data[:facts]["origin_countries"]["reason"]
-        assert_equal ["USA", "Martian"], result.data[:facts]["origin_countries"]["unmatched"]
+        refute_includes result.data[:applied], "origin_countries"
       end
 
-      test "origin countries map through the country lookup's aliases" do
-        argentinian = ::Books::Country.create!(name: "Argentinian")
-        book = ::Books::Book.create!(title: "Alias Country Book")
+      test "an empty origin_countries answer is recorded as null" do
+        result = apply(origin_countries: {value: [], confidence: "low"})
 
-        result = Services::Books::ApplyBookFacts.call(book: book, facts: {origin_countries: {value: ["Argentine"], confidence: "high"}})
-
-        assert_equal [argentinian], book.reload.countries.to_a
-        assert_equal({"value" => ["Argentine"], "applied" => true, "reason" => "filled", "unmatched" => []},
-          result.data[:facts]["origin_countries"].except("confidence"))
+        assert_equal "null", result.data[:facts]["origin_countries"]["reason"]
       end
 
       test "book type and series are recorded but not applied" do

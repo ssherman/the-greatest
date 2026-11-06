@@ -50,19 +50,40 @@ module Workflows
         Workflows::Coordinator.finish(claimed, token: "gr", outcome: Workflows::Outcome.succeeded("no_match", {"matched" => false}))
       end
 
-      test "is registered as books.book_enrichment version 3 on books, with goodreads, evidence, book_facts and amazon" do
-        assert_equal [BookEnrichment, "books.book_enrichment", 3, ::Books::Book], [
+      test "is registered as books.book_enrichment version 4 on books, with goodreads, evidence, book_facts, amazon and categorize" do
+        assert_equal [BookEnrichment, "books.book_enrichment", 4, ::Books::Book], [
           Workflows::Registry.fetch("books.book_enrichment"), BookEnrichment.workflow, BookEnrichment.version, BookEnrichment.target_class
         ]
-        assert_equal %i[goodreads evidence book_facts amazon], BookEnrichment.steps.map(&:key)
-        assert_equal [:goodreads_fetch, :low, :low, :serial], BookEnrichment.steps.map(&:queue)
-        assert_equal [10.minutes, 10.minutes, 15.minutes, 10.minutes], BookEnrichment.steps.map(&:lease)
-        assert_equal [{}, {goodreads: :finish}, {goodreads: :finish}, {goodreads: :finish}], BookEnrichment.steps.map(&:waits_on)
+        assert_equal %i[goodreads evidence book_facts amazon categorize], BookEnrichment.steps.map(&:key)
+        assert_equal [:goodreads_fetch, :low, :low, :serial, :low], BookEnrichment.steps.map(&:queue)
+        assert_equal [10.minutes, 10.minutes, 15.minutes, 10.minutes, 10.minutes], BookEnrichment.steps.map(&:lease)
+        assert_equal [{}, {goodreads: :finish}, {goodreads: :finish}, {goodreads: :finish}, {book_facts: :finish, evidence: :finish}],
+          BookEnrichment.steps.map(&:waits_on)
       end
 
       test "amazon gets seven attempts (about 11 hours of backoff) where the others get three" do
-        assert_equal [3, 3, 3, 7], BookEnrichment.steps.map(&:max_attempts)
-        assert_equal [3, 3, 3, 7], start.steps.order(:id).pluck(:max_attempts)
+        assert_equal [3, 3, 3, 7, 3], BookEnrichment.steps.map(&:max_attempts)
+        assert_equal [3, 3, 3, 7, 3], start.steps.order(:id).pluck(:max_attempts)
+      end
+
+      test "version 4 plans categorize after book_facts and evidence" do
+        run = start
+
+        assert_equal "blocked", run.step(:categorize).state
+        assert_equal %w[book_facts evidence], WorkflowDependency.where(step: run.step(:categorize)).map { it.prerequisite_step.key }.sort
+      end
+
+      test "a run planned under version 3 (no categorize step) still completes" do
+        now = Time.current
+        run = WorkflowRun.create!(workflow: "books.book_enrichment", definition_version: 3, enrichable: @book, initiated_by: "test")
+        run.steps.create!(key: "evidence", queue: "low", max_attempts: 3, lease_seconds: 600, state: :succeeded, outcome: "applied",
+          released_at: now, finished_at: now)
+        facts = run.steps.create!(key: "book_facts", queue: "low", max_attempts: 3, lease_seconds: 900, state: :ready)
+        ::Services::Books::EnrichBook.expects(:call).returns(stub(success?: true, errors: []))
+
+        WorkflowStepJob.new.tap { it.jid = "old" }.perform(facts.id)
+
+        assert_equal [%w[succeeded], "completed"], [[facts.reload.state], run.reload.status]
       end
 
       test "a book with no new authors makes goodreads ready, and book_facts and amazon wait on it" do
