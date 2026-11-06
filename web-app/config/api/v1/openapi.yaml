@@ -1176,7 +1176,7 @@ paths:
       security: [{bearerAuth: ["books:read"]}]
       summary: Search categories
       description: |
-        Searches categories of every type by name or alternative name, with the same query as the site's category search. `q` is required, 2 to 100 characters once surrounding whitespace is stripped; a missing, blank, too short or too long `q` is a 400. A name match comes before a match through an alternative name only, and `type` (`genre`, `audience`, `location` or `subject`) lists that type's matches first rather than filtering the rest out; without it genre comes first, as on the site. Only categories with ranked books in the site's primary ranking are returned, and `book_count` counts those ranked books. Subjects and locations with only a handful of ranked books are left out, as on the site, so a small subject may return nothing. A query yields at most 60 matches, so `total_count` never exceeds 60: refine the query rather than paging for more. Empty until a primary ranking has been calculated.
+        Searches categories of every type by name or alternative name, with the same query as the site's category search. `q` is required, 2 to 100 characters once surrounding whitespace is stripped; a missing, blank, too short or too long `q` is a 400. Matches are ranked by how well the name matches (exact name, then a name starting with the query, then a word starting with it, then a name containing it, then a match through an alternative name only). Within each of those tiers, `type` (`genre`, `audience`, `location` or `subject`) puts that type's matches first; it never filters the other types out, and a better name match of another type still comes before a weaker match of the chosen type. Without `type`, genre comes first within each tier, as on the site. Only categories with ranked books in the site's primary ranking are returned, and `book_count` counts those ranked books. Subjects and locations with only a handful of ranked books are left out, as on the site, so a small subject may return nothing. A query yields at most 60 matches, so `total_count` never exceeds 60: refine the query rather than paging for more. Empty until a primary ranking has been calculated.
       x-mcp:
         description: >-
           Finds category slugs by name or alternative name, best match first, with each category's type
@@ -1196,7 +1196,7 @@ paths:
         - name: type
           in: query
           required: false
-          description: The category type whose matches come first. Matches of the other types still follow.
+          description: The category type whose matches come first within each tier of name match quality. It does not filter; matches of the other types are still returned.
           schema:
             type: string
             enum: [genre, audience, location, subject]

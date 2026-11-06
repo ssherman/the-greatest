@@ -291,12 +291,16 @@ module Api
     test "list_lists passes sort and q" do
       primary = ranking_configurations(:books_global)
       now = Time.utc(2025, 1, 1)
-      lists = {"Alpha Canon" => 10, "Alpha Modern" => 90, "Beta Modern" => 50}.each_with_index.to_h do |(name, weight), i|
+      # Weight order (Canon, Beta, Modern) and newest order (Beta, Modern, Canon)
+      # disagree, so a dropped sort or a dropped q changes the answer.
+      lists = {"Alpha Canon" => 90, "Alpha Modern" => 10, "Beta Modern" => 50}.each_with_index.to_h do |(name, weight), i|
         list = ::Books::List.create!(name: name, status: :active)
         RankedList.create!(list: list, ranking_configuration: primary, weight: weight)
         list.update_columns(activated_at: now + i.days)
         [name, list]
       end
+      ids = lists.values.map(&:id)
+      ours = -> { tool_text["data"].map { |row| row["id"] }.select { |id| ids.include?(id) } }
 
       call_tool("list_lists", {sort: "newest", q: "ALPHA"})
 
@@ -305,11 +309,15 @@ module Api
 
       call_tool("list_lists", {q: "alpha"})
 
-      assert_equal [lists["Alpha Modern"].id, lists["Alpha Canon"].id], tool_text["data"].map { |row| row["id"] }, "weight order by default"
+      assert_equal [lists["Alpha Canon"].id, lists["Alpha Modern"].id], tool_text["data"].map { |row| row["id"] }, "weight order by default"
 
       call_tool("list_lists", {sort: "newest"})
 
-      assert_equal lists.values_at("Beta Modern", "Alpha Modern", "Alpha Canon").map(&:id), tool_text["data"].map { |row| row["id"] }
+      assert_equal lists.values_at("Beta Modern", "Alpha Modern", "Alpha Canon").map(&:id), ours.call
+
+      call_tool("list_lists", {})
+
+      assert_equal lists.values_at("Alpha Canon", "Beta Modern", "Alpha Modern").map(&:id), ours.call, "weight order by default"
 
       call_tool("list_lists", {q: "  "})
 
