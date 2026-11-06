@@ -110,6 +110,18 @@ module Api
         ["GET", "/api/v1/search/books", "503"] => lambda {
           ::Search::Books::Search::BookGeneral.stubs(:call).raises(Faraday::ConnectionFailed, "down")
           get "/api/v1/search/books?q=war", headers: bearer(ApiTokenSecrets::MEMBER)
+        },
+        ["GET", "/api/v1/search/authors", "200"] => lambda {
+          ::Search::Books::Search::AuthorGeneral.stubs(:call).returns([{id: books_authors(:tolstoy).id.to_s, score: 1.0, source: {}}])
+          get "/api/v1/search/authors?q=tolstoy", headers: bearer(ApiTokenSecrets::MEMBER)
+        },
+        ["GET", "/api/v1/search/authors", "400"] => -> { get "/api/v1/search/authors", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/search/authors", "401"] => -> { get "/api/v1/search/authors?q=tolstoy" },
+        ["GET", "/api/v1/search/authors", "403"] => -> { get "/api/v1/search/authors?q=tolstoy", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/search/authors", "429"] => -> { with_exhausted_limit { get "/api/v1/search/authors?q=tolstoy", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/search/authors", "503"] => lambda {
+          ::Search::Books::Search::AuthorGeneral.stubs(:call).raises(Faraday::ConnectionFailed, "down")
+          get "/api/v1/search/authors?q=tolstoy", headers: bearer(ApiTokenSecrets::MEMBER)
         }
       }.freeze
 

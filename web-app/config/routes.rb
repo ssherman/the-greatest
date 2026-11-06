@@ -674,6 +674,7 @@ Rails.application.routes.draw do
             as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
           get "lists/:list_id/items", to: "list_items#index", as: :list_items, constraints: {list_id: /\d+/}
           get "search/books", to: "book_searches#index", as: :search_books
+          get "search/authors", to: "author_searches#index", as: :search_authors
         end
 
         # Admin API: needs a books:admin:* scope. Its contract is

@@ -9,31 +9,10 @@ module Api
       # inside this module a bare Books:: resolves to Api::V1::Books:: and raises
       # NameError.
       class BookSearchesController < BaseController
-        # The most hits a query pages through. Search is a lookup, not an export:
-        # a query that matches more than this should be refined.
-        SEARCH_LIMIT = 100
-
-        # OpenSearch being down is not our bug, so it is a documented 503 and not
-        # the generic 500 an unexpected exception gets.
-        rescue_from(*::Search::Shared::Client::UNAVAILABLE_ERRORS) do |error|
-          Rails.logger.warn("API book search unavailable: #{error.class}")
-          render_problem(::Api::Problem.new(:search_unavailable, detail: "Search is temporarily unavailable. Retry shortly."))
-        end
-
-        # A query this long is a pasted paragraph, not a search. Left uncapped it
-        # exceeds OpenSearch's max_clause_count, and the 400 that comes back is a
-        # failure of ours that the client could do nothing about.
-        MAX_QUERY_LENGTH = 200
+        include ::Api::SearchBacked
 
         def index
-          raw = params[:q]
-          # `q[]=war` arrives as an Array and `q[a]=war` as Parameters: neither is
-          # a search string, and to_s would turn it into one.
-          raise ::Api::Page::InvalidParameter, "q must be a single value" unless raw.nil? || raw.is_a?(String)
-
-          query = raw.to_s.strip
-          return render_problem(::Api::Problem.new(:invalid_parameter, detail: "q is required")) if query.blank?
-          raise ::Api::Page::InvalidParameter, "q must be at most #{MAX_QUERY_LENGTH} characters" if query.length > MAX_QUERY_LENGTH
+          query = search_text!
 
           ids = ::Books::BookSearchQuery.hit_ids(query, size: SEARCH_LIMIT)
 

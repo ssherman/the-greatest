@@ -824,6 +824,61 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/search/authors:
+    x-domain: books
+    get:
+      operationId: searchAuthors
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Search authors
+      description: |
+        Full-text search over author names and alternate names, best match first. `q` is required; a missing or blank `q` is a 400. Only catalogued authors are returned (not authors still awaiting review). A query yields at most 100 matches, so `total_count` never exceeds 100: refine the query rather than paging for more. `rank` is the author's position in the site's primary author ranking, or null when the author is unranked. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+      x-mcp:
+        description: >-
+          Finds authors by name or alternate name, best match first, with each author's primary-ranking
+          `rank` (null when unranked). A query returns at most 100 matches in all, so refine the query
+          rather than paging for more; once you have a slug, use get_author for one author, or
+          list_author_books for their books.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search text, at most 200 characters once surrounding whitespace is stripped.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of matching authors.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 components:
   securitySchemes:
     bearerAuth:
