@@ -7,7 +7,10 @@
 class Admin::Books::RepairVerdictRowComponent < ViewComponent::Base
   LABELS = {
     "merge_books" => "Merge", "fix_identity" => "Fix", "merge_authors" => "Merge authors",
-    "relink" => "Relink", "strip_identifier" => "Strip identifier", "mark_provisional" => "Mark provisional"
+    "relink" => "Relink", "strip_identifier" => "Strip identifier", "mark_provisional" => "Mark provisional",
+    "reimport_mixed" => "Re-import: mixed book", "reimport_match" => "Re-import: edition match",
+    "reimport_row" => "Re-import row", "reimport_guess" => "Re-import: guessed move",
+    "reimport_strip" => "Re-import: legacy identifier", "reimport_author" => "Re-import: author"
   }.freeze
 
   # books and authors are id => record hashes; list_counts is book id => ListItem count.

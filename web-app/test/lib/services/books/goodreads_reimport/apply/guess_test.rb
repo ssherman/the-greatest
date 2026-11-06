@@ -1,0 +1,128 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+module Services
+  module Books
+    module GoodreadsReimport
+      module Apply
+        class GuessTest < ActiveSupport::TestCase
+          include GoodreadsReimportApplyHelper
+
+          setup { setup_reader }
+
+          test "a hand-added list item moves to the guessed book" do
+            item = UserListItem.create!(user_list: list(:read), listable: @from, completed_on: Date.new(2021, 1, 1))
+            verdict = guess_verdict(item_type: "UserListItem", item_id: item.id)
+
+            result = Guess.call(verdict: verdict)
+
+            assert_equal :applied, result.data[:outcome]
+            assert_equal [@to, Date.new(2021, 1, 1)], [item.reload.listable, item.completed_on]
+            assert_equal [[item.id], [item.id]], verdict.reload.payload["moved"].values_at("list_item_ids_before", "list_item_ids_after")
+          end
+
+          test "a list that already holds the guessed book keeps its item, gets the blank date, and loses the stray" do
+            kept = UserListItem.create!(user_list: list(:read), listable: @to)
+            stray = UserListItem.create!(user_list: list(:read), listable: @from, completed_on: Date.new(2021, 1, 1))
+
+            Guess.call(verdict: guess_verdict(item_type: "UserListItem", item_id: stray.id))
+
+            assert_equal Date.new(2021, 1, 1), kept.reload.completed_on
+            assert_not UserListItem.exists?(stray.id)
+          end
+
+          test "a guessed review and item destroyed on collisions are kept whole in the verdict" do
+            UserListItem.create!(user_list: list(:read), listable: @to)
+            stray = UserListItem.create!(user_list: list(:read), listable: @from, completed_on: Date.new(2021, 1, 1))
+            item_verdict = guess_verdict(item_type: "UserListItem", item_id: stray.id)
+            Guess.call(verdict: item_verdict)
+            assert_equal [stray.id], item_verdict.reload.payload["moved"]["destroyed_items"].map { |item| item["id"] }
+
+            lost = Review.create!(user: @user, reviewable: @from, rating: 3, body: "stray words")
+            Review.create!(user: @user, reviewable: @to, rating: 5, body: "winner")
+            review_verdict = guess_verdict(item_type: "Review", item_id: lost.id)
+            Guess.call(verdict: review_verdict)
+            assert_equal ["stray words"], review_verdict.reload.payload["moved"]["destroyed_reviews"].map { |review| review["body"] }
+          end
+
+          test "a review moves to the guessed book" do
+            review = Review.create!(user: @user, reviewable: @from, rating: 3, body: "hand written")
+
+            result = Guess.call(verdict: guess_verdict(item_type: "Review", item_id: review.id))
+
+            assert_equal :applied, result.data[:outcome]
+            assert_equal @to, review.reload.reviewable
+          end
+
+          test "a review loses to one the user already wrote on the guessed book" do
+            stray = Review.create!(user: @user, reviewable: @from, rating: 3, body: "stray")
+            winner = Review.create!(user: @user, reviewable: @to, rating: 5, body: "winner")
+
+            Guess.call(verdict: guess_verdict(item_type: "Review", item_id: stray.id))
+
+            assert_not Review.exists?(stray.id)
+            assert_equal "winner", winner.reload.body
+          end
+
+          test "an entry that has left the book already is a no-op" do
+            item = UserListItem.create!(user_list: list(:read), listable: books_books(:crime_and_punishment))
+
+            result = Guess.call(verdict: guess_verdict(item_type: "UserListItem", item_id: item.id))
+
+            assert_equal [:noop, "nothing to move"], [result.data[:outcome], result.data[:reason]]
+          end
+
+          test "an entry gone after the guess already recorded its trail is applied" do
+            verdict = guess_verdict(item_type: "UserListItem", item_id: 0)
+            verdict.update_columns(payload: verdict.payload.merge("moved" => {"list_item_ids_before" => [0]}))
+
+            assert_equal :applied, Guess.call(verdict: verdict).data[:outcome]
+          end
+
+          test "a guess whose destination only rejected matches supported waits" do
+            item = UserListItem.create!(user_list: list(:read), listable: @from)
+            row = csv_row
+            ::Books::RepairVerdict.create!(kind: :reimport_row, subject_key: "reimport:row:#{row.import_id}:#{row.row_number}", decided_by: :rule,
+              status: :approved, payload: {"action" => "move", "from_book_id" => @from.id, "to_book_id" => @to.id,
+                                           "goodreads_edition_id" => row.goodreads_edition_id})
+            approved_match(row.goodreads_edition_id, status: :rejected)
+
+            result = Guess.call(verdict: guess_verdict(item_type: "UserListItem", item_id: item.id))
+
+            assert_equal [:noop, "match no longer approved", false], result.data.values_at(:outcome, :reason, :final)
+            assert_equal @from, item.reload.listable
+          end
+
+          test "another user's entry is never moved, whatever the payload says" do
+            other = User.create!(email: "other-#{SecureRandom.hex(3)}@example.com", role: :user, email_verified: false)
+            theirs = UserListItem.create!(user_list: ::Books::UserList.find_by!(user: other, list_type: :read), listable: @from)
+            review = Review.create!(user: other, reviewable: @from, rating: 3)
+
+            [guess_verdict(item_type: "UserListItem", item_id: theirs.id), guess_verdict(item_type: "Review", item_id: review.id)].each do |verdict|
+              assert_equal :noop, Guess.call(verdict: verdict).data[:outcome]
+            end
+            assert_equal [@from, @from], [theirs.reload.listable, review.reload.reviewable]
+          end
+
+          test "an applied verdict is a no-op" do
+            item = UserListItem.create!(user_list: list(:read), listable: @from)
+            verdict = guess_verdict(item_type: "UserListItem", item_id: item.id)
+            verdict.update_columns(applied_at: Time.current)
+
+            assert_equal :noop, Guess.call(verdict: verdict).data[:outcome]
+            assert_equal @from, item.reload.listable
+          end
+
+          test "a favorites item reports the follow-up" do
+            item = UserListItem.create!(user_list: list(:favorites), listable: @from)
+
+            result = Guess.call(verdict: guess_verdict(item_type: "UserListItem", item_id: item.id))
+
+            assert_includes result.data[:follow_ups], :user_favorites
+          end
+        end
+      end
+    end
+  end
+end

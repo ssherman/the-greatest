@@ -11,7 +11,7 @@ The rebuild runs in this order, and repeats after each weekly `data_migration:sy
 1. Stage one: fix import-made books' titles and authors from the rows, and split lumps.
 2. A verification run over the fixed books, so they hold trusted identifiers.
 3. Stage two: put every edition on the right book, write users' skipped rows, create missing books,
-   merge duplicates.
+   merge duplicates. This is now the re-import: see `docs/features/goodreads-reimport.md`.
 4. The sweep: merge or delete the import-made books nothing needs any more.
 
 Built so far: the foundation (cohorts, retiring the replay's proposals) and the stage one survey, pass 1. Production steps are in `docs/launch-todo.md` §11.
@@ -287,5 +287,5 @@ Commands:
 ## Later increments
 
 - **Verification scope:** for repaired books.
-- **Stage two:** moves, `create_book`, `add_item`, dedupe, and the member-import guards.
+- **Stage two:** replaced by the re-import (`docs/features/goodreads-reimport.md`): moves, new books, adds and the author check. Dedupe and the member-import guards are not part of it.
 - **The sweep and the weekly catch-up.**
