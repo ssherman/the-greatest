@@ -80,6 +80,17 @@ Everything is written to `books_repair_verdicts` before it happens. Admin, Repai
   and adds as well as moves and copies (a keep with a differing rating is applied, otherwise it stays a final no-op). A CSV
   rating of 0 means "not rated" and changes nothing; title and body are never touched. The old rating is kept in
   the verdict's `moved.rating_before`, and the report prints "ratings set from the CSV".
+  A copy leaves the reader's original items on the old book. On any book that is not a mixed book, once every current
+  row of the reader that touches it (as from-book or destination, followed through merges) is approved and settled
+  (applied, or closed as a final no-op), and no CSV row of theirs that touches it is still without a verdict, `apply`
+  removes the reader's items there that no row heading to the book says they have. A row says it by its CSV shelves
+  (the same shelf-to-list mapping `write_row` uses) on any keep, copy, add or move that heads to the book, plus
+  anything it recorded writing or moving there; Favorites and custom-list items stay while any such row exists. A
+  rejected, proposed, undecided or unapplied row means nothing is swept. Reviews and other readers' items are never
+  touched. The removed items are recorded on the verdict that settled last as `leftovers_removed` before they are
+  destroyed, and the report prints "leftover entries removed from books a reader's rows left". It runs after any
+  settled outcome of a row, under the reader's lock, is idempotent, and a row settled later runs it again. Mixed books
+  keep their own path (Apply::Mixed, above), which shares this code (`Apply::Leftovers`).
 - `reimport_guess`: a hand-added entry from a mixed book, moved to its most-read book.
 - `reimport_strip`: a legacy identifier removed from a book. Applying a match records one for every OTHER book that
   holds the edition's own Goodreads id, ISBN-13 or ISBN-10 (from the CSV) as a legacy-sourced identifier; apply removes
@@ -122,8 +133,8 @@ read it from either container and it survives a deploy. It lists:
 - a random sample of each kind;
 - the acceptance queries, each of which should print 0:
   - rows whose book's title differs from the CSV title with no approved verdict explaining it;
-  - users whose list-item or review count dropped, beyond the destroys the verdicts recorded (a destroy from
-    a collision is listed separately as explained);
+  - users with a list item or review held at the snapshot that is gone, compared by id: it is explained only when
+    its own id is recorded as destroyed (a destroy from a collision, a leftover removed from a book a row left, or a mixed book's deleted original is listed separately as explained);
   - mixed books still present (kept ones are counted on their own line and are not a failure).
 
 If a deploy interrupts the job, run the task again. The snapshot (`counts.json` in the same folder) is what

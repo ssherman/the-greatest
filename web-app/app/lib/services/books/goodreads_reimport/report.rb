@@ -41,7 +41,7 @@ module Services
 
           counts = user_counts(in_scope_user_ids)
           FileUtils.mkdir_p(path.dirname)
-          File.write(path, JSON.generate({"taken_at" => Time.current.iso8601, "users" => counts}))
+          File.write(path, JSON.generate({"taken_at" => Time.current.iso8601, "users" => counts, "ids" => user_ids_held(counts.keys)}))
           counts.size
         end
 
@@ -89,6 +89,8 @@ module Services
           end
           lines << "applied: #{verdicts.where.not(applied_at: nil).count}"
           lines << "ratings set from the CSV: #{verdicts.reimport_row.where("payload -> 'moved' ? 'rating_before'").count}"
+          removed = verdicts.reimport_row.where("payload ? 'leftovers_removed'").sum("jsonb_array_length(payload -> 'leftovers_removed')")
+          lines << "leftover entries removed from books a reader's rows left: #{removed}"
         end
 
         # Matches approved without anyone looking, over every match. A low rate means the AI and the finder
@@ -146,7 +148,10 @@ module Services
           lines << "  rows whose book's title differs from the CSV title with no approved verdict explaining it: #{mismatched.size}"
           mismatched.first(SAMPLE).each { |line| lines << "    #{line}" }
           dropped = dropped_users
-          if dropped.nil?
+          if dropped == :no_ids
+            lines << "  users whose list item or review was lost: NOT CHECKED. The snapshot predates id tracking. Replace it with " \
+              "books:goodreads_reimport:snapshot[redo], only before any row has been applied"
+          elsif dropped.nil?
             lines << "  users whose list item or review count dropped: no snapshot (run books:goodreads_reimport:snapshot before apply)"
           else
             lines << "  users whose list item or review count dropped beyond the destroys recorded: #{dropped[:unexplained].size}"
@@ -245,25 +250,31 @@ module Services
         end
 
         # nil without a snapshot; otherwise {unexplained:, explained:}, each [[user_id, "items"|"reviews", before, now,
-        # recorded destroys]]. Items and reviews are compared separately, so a gained item cannot hide a lost review.
-        # A drop that applied verdicts recorded as a destroy (a collision with an entry already on the destination, a
-        # mixed book's leftovers) is explained; anything beyond that is not.
+        # recorded destroys]]. Items and reviews are compared separately, and by id: an item that was held at the
+        # snapshot and is gone now is explained only when its own id is recorded as destroyed (a collision with an
+        # entry already on the destination, a leftover removed from a book a row left, a mixed book's deleted
+        # original). Counts give no slack, so a recorded destroy cannot hide an unrelated loss.
         def dropped_users
           path = snapshot_path
           return nil unless path.exist?
 
           snapshot = JSON.parse(path.read)
+          held = snapshot["ids"]
+          return :no_ids unless held
+
           before = snapshot.fetch("users").transform_keys(&:to_i)
           now = user_counts(before.keys)
           destroyed = recorded_destroys(before.keys, Time.iso8601(snapshot.fetch("taken_at")))
+          missing_items = missing_ids(held, "items", ::UserListItem)
+          missing_reviews = missing_ids(held, "reviews", ::Review)
           result = {unexplained: [], explained: []}
           before.each do |user_id, was|
-            %w[items reviews].each do |what|
-              drop = was[what] - now.fetch(user_id)[what]
-              next unless drop.positive?
+            {"items" => missing_items, "reviews" => missing_reviews}.each do |what, missing|
+              gone = missing.fetch(user_id.to_s, [])
+              next if gone.empty?
 
-              recorded = destroyed.fetch([user_id, what], 0)
-              result[(drop > recorded) ? :unexplained : :explained] << [user_id, what, was[what], now.fetch(user_id)[what], recorded]
+              recorded = gone.count { |id| destroyed.fetch([user_id, what], Set.new).include?(id) }
+              result[(recorded < gone.size) ? :unexplained : :explained] << [user_id, what, was[what], now.fetch(user_id)[what], recorded]
             end
           end
           result
@@ -274,23 +285,42 @@ module Services
           "user #{user_id} #{what}: #{was} -> #{now} (#{recorded} recorded destroys)"
         end
 
-        # {[user_id, "items"|"reviews"] => count} from the trails of verdicts applied after the snapshot. A mixed
-        # book's deleted leftovers are not counted: each already has its replacement on the destination, so it is no
-        # net drop and must give no slack.
+        # {"user_id" => [ids held at the snapshot that no longer exist]} for "items" or "reviews".
+        def missing_ids(held, what, model)
+          all = held.values.flat_map { |ids| ids[what] }
+          existing = all.each_slice(10_000).flat_map { |slice| model.where(id: slice).pluck(:id) }.to_set
+          held.transform_values { |ids| ids[what].reject { |id| existing.include?(id) } }
+        end
+
+        # {[user_id, "items"|"reviews"] => Set of ids} the verdicts applied after the snapshot recorded as destroyed:
+        # the collision destroys of a row or guess, the leftovers a row removed from a book it left
+        # (`leftovers_removed`), and a mixed book's deleted copy originals (`deleted`, with their user_id).
         def recorded_destroys(user_ids, taken_at)
           wanted = user_ids.to_set
-          totals = Hash.new(0)
-          trailed = ::Books::RepairVerdict.where(kind: %w[reimport_row reimport_guess]).where("applied_at > ?", taken_at)
-            .where("jsonb_array_length(COALESCE(payload -> 'moved' -> 'destroyed_items', '[]'::jsonb)) > 0 OR " \
-              "jsonb_array_length(COALESCE(payload -> 'moved' -> 'destroyed_reviews', '[]'::jsonb)) > 0")
-          trailed.find_each do |verdict|
+          totals = Hash.new { |hash, key| hash[key] = Set.new }
+          ::Books::RepairVerdict.where(kind: %w[reimport_row reimport_guess]).where("applied_at > ?", taken_at).find_each do |verdict|
             user_id = verdict.payload["user_id"]
             next unless wanted.include?(user_id)
 
-            totals[[user_id, "items"]] += Array(verdict.payload.dig("moved", "destroyed_items")).size
-            totals[[user_id, "reviews"]] += Array(verdict.payload.dig("moved", "destroyed_reviews")).size
+            totals[[user_id, "items"]].merge(Array(verdict.payload.dig("moved", "destroyed_items")).map { |item| item["id"] })
+            totals[[user_id, "items"]].merge(Array(verdict.payload["leftovers_removed"]).map { |item| item["id"] })
+            totals[[user_id, "reviews"]].merge(Array(verdict.payload.dig("moved", "destroyed_reviews")).map { |review| review["id"] })
+          end
+          ::Books::RepairVerdict.reimport_mixed.where("applied_at > ?", taken_at).where("payload ? 'deleted'").find_each do |verdict|
+            Array(verdict.payload["deleted"]).each do |item|
+              totals[[item["user_id"], "items"]] << item["id"] if wanted.include?(item["user_id"])
+            end
           end
           totals
+        end
+
+        # {"user_id" => {"items" => [ids], "reviews" => [ids]}}: what each user holds on books now.
+        def user_ids_held(user_ids)
+          items = ::UserListItem.where(listable_type: "Books::Book").joins(:user_list).where(user_lists: {user_id: user_ids}).pluck("user_lists.user_id", :id)
+            .group_by(&:first).transform_values { |pairs| pairs.map(&:last) }
+          reviews = ::Review.where(reviewable_type: "Books::Book", user_id: user_ids).pluck(:user_id, :id)
+            .group_by(&:first).transform_values { |pairs| pairs.map(&:last) }
+          user_ids.to_h { |id| [id.to_s, {"items" => items.fetch(id, []), "reviews" => reviews.fetch(id, [])}] }
         end
 
         def in_scope_user_ids

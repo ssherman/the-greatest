@@ -15,6 +15,7 @@
 # Indexes
 #
 #  index_record_redirects_on_item_type_and_from_id  (item_type,from_id) UNIQUE
+#  index_record_redirects_on_item_type_and_to_id    (item_type,to_id)
 #
 class RecordRedirect < ApplicationRecord
   ITEM_TYPES = %w[Books::Book Books::Author].freeze

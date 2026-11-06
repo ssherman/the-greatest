@@ -20,10 +20,45 @@ module Services
         #   stay (the mixed-book delete or a later move removes them). review: true carries the user's review
         #   from the old book (moved); with none there, the CSV's is written. A row that does not carry it
         #   writes its own CSV rating and review, when it has any (spec 8 call 2).
+        #   After any settled outcome, once every row of the user touching the old (or the destination) book is
+        #   settled, the user's items there that no row heading to it explains are removed (Leftovers); a mixed
+        #   book's are Apply::Mixed's.
         # A user has one review per book. An existing review on the destination wins its title and body, but not its
         # rating: the carrying row's CSV rating (> 0) is set on it (see rate).
         class Row
           def self.call(verdict:)
+            result = perform(verdict)
+            sweep_leftovers(verdict, result)
+            result
+          end
+
+          # After any settled outcome (applied, or a final no-op) of a row, the reader's originals on the books the
+          # row touches are swept once all their rows there are settled (Leftovers.sweep decides).
+          #
+          # A sweep marks the verdict applied. With two books to sweep, both run in one transaction, so the mark
+          # commits only with the second: if that one raises or the process dies, the verdict stays unapplied and the
+          # retry sweeps both. The reader is locked first and then the books in id order, the order every sweep takes
+          # (a single sweep locks the reader, then its one book), so two rows of different readers cannot deadlock.
+          def self.sweep_leftovers(verdict, result)
+            settled = result.data[:outcome] == :applied || (result.data[:outcome] == :noop && result.data[:final])
+            payload = verdict.payload
+            return unless settled && payload["superseded_by"].blank?
+
+            user = ::User.find_by(id: payload["user_id"])
+            return unless user
+
+            books = [payload["from_book_id"], payload["to_book_id"]].filter_map { |id| GoodreadsReplay::Apply::MergedBook.call(id) }
+              .uniq.select { |book| Leftovers.sweepable?(book, user) }.sort_by(&:id)
+            return if books.empty?
+
+            ::ApplicationRecord.transaction do
+              user.lock!
+              books.each(&:lock!)
+              books.each { |book| Leftovers.sweep(verdict, book, user) }
+            end
+          end
+
+          def self.perform(verdict)
             return Entries.noop("already applied") if verdict.applied_at.present?
 
             payload = verdict.payload
@@ -246,7 +281,7 @@ module Services
             books.each { |book| ::Services::Reviews::SummaryRecalculator.recalculate("Books::Book", book.id) }
           end
 
-          private_class_method :reopen_kept, :rate, :in_place, :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :sibling_carries?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
+          private_class_method :perform, :sweep_leftovers, :reopen_kept, :rate, :in_place, :add, :move, :copy, :copy_other_lists, :nothing_to_move, :writes_csv_review?, :sibling_carries?, :csv_row, :carried_review, :write, :snapshot, :items_by_id, :recalculate
         end
       end
     end
