@@ -165,7 +165,10 @@ otherwise. Development keeps plain `http://localhost:9200` and is unaffected.
 
 - New app: `web-app/app/lib/search/shared/client.rb`. Add `OPENSEARCH_SSL_VERIFY` to `.env.example` and
   `deployment/ENV.md`.
-- Old site (`the-greatest-books` repo): `admin/app/lib/search/books_index.rb` and `authors_index.rb`.
+- Old site (`the-greatest-books` repo): all four clients, `admin/app/lib/search/books_index.rb`, `authors_index.rb`,
+  and `search_client` in `admin/app/models/book.rb` and `author.rb`. The model clients serve its real searches. The
+  first version of this list missed them, and a rehearsal on 2026-11-06 also found its login needed
+  `indices:data/read/scroll/clear` for advanced search.
 
 ## 8. Verification
 

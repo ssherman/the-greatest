@@ -143,6 +143,17 @@ SEARCH_IPV4=<ipv4> OPENSEARCH_APP_PASSWORD=<pw> OPENSEARCH_LEGACY_PASSWORD=<pw> 
 It checks that both logins work, each is refused on the other site's indexes and on the security API,
 and a request with no login is refused. Read the passwords from `sops -d secrets/.env.opensearch`.
 
+From the old site's server, which has no checkout of this repo and should only hold its own password:
+
+```bash
+read -rs LEGACY_PW
+printf 'user = "tgb_legacy:%s"\n' "$LEGACY_PW" | curl -sk -K - -o /dev/null -w '%{http_code}\n' https://<ipv4>:9200/_cluster/health
+printf 'user = "tgb_legacy:%s"\n' "$LEGACY_PW" | curl -sk -K - -o /dev/null -w '%{http_code}\n' https://<ipv4>:9200/books_books_production/_count
+```
+
+The first must print `200` and the second `403`. A timeout means the old site's IP is missing from
+`OPENSEARCH_ALLOWED_IPS`. `--inside` cannot catch that, because it only runs from the new app server.
+
 Reboot check. From a laptop, run the probe while the server reboots. Every value must be `000`:
 
 ```bash
@@ -220,10 +231,43 @@ sites.
 Merge the branch before starting: the workflow pulls `main`. Merging changes nothing for the web app
 except the client switch, which stays inert until `OPENSEARCH_SSL_VERIFY=false` is set.
 
-1. **Old site first.** Deploy the old repo's `opensearch-server-client` branch. On the old site's server,
-   run its reindex once with `OPENSEARCH_URL=https://tgb_legacy:<pw>@<ipv4>:9200 OPENSEARCH_SSL_VERIFY=false`
-   set for that one command only, while the live site still uses the old server. When it finishes, set both
-   variables in the old site's environment and redeploy it. Check a search on the old site.
+1. **Old site first.** The live site keeps using the old server until step 1e. Merging in the old repo
+   (`ssherman/the-greatest-books`) deploys it.
+
+   a. Merge the PR that adds `OPENSEARCH_SSL_VERIFY` to its four search clients. Nothing changes until the
+      variable is set.
+
+   b. On the old site's server, in `/home/ssherman/apps/the-greatest-books`, inside `tmux`, build the new
+      indexes. This takes about 30 minutes, and the variables apply to this one command only:
+
+      ```bash
+      read -rs LEGACY_PW
+      docker compose -f docker-compose.prod.yml run --rm --no-deps \
+        -e OPENSEARCH_URL="https://tgb_legacy:$LEGACY_PW@<ipv4>:9200" -e OPENSEARCH_SSL_VERIFY=false \
+        worker bin/rails runner 'Search::BooksIndex.delete; Search::BooksIndex.create; Search::AuthorsIndex.delete; Search::AuthorsIndex.create; Author.search_index_authors; Book.search_index_books; p [Book.count, Search::BooksIndex.document_count, Author.count, Search::AuthorsIndex.document_count]'
+      ```
+
+      The last line prints each table's count next to its index's count, and each pair should match.
+      `Failed to index book ID` lines in the output mean a document was rejected.
+
+   c. Add both variables to that directory's `.env`. The compose file's hardcoded `OPENSEARCH_URL` still wins
+      over `.env`, so nothing changes yet:
+
+      ```
+      OPENSEARCH_URL=https://tgb_legacy:<pw>@<ipv4>:9200
+      OPENSEARCH_SSL_VERIFY=false
+      ```
+
+   d. Check that both variables are there. If this does not print `2`, merging step 1e breaks old-site search:
+
+      ```bash
+      grep -c -E '^OPENSEARCH_(URL|SSL_VERIFY)=' .env
+      ```
+
+   e. Merge the PR that removes the hardcoded `OPENSEARCH_URL` from the old repo's `docker-compose.prod.yml`.
+
+   f. Check on the old site: a title search, autocomplete, and an advanced search with broad filters (the only
+      path that uses scroll). To roll back, revert that PR.
 2. **New app.** In `secrets/.env.production` (`sops secrets/.env.production`), set
    `OPENSEARCH_URL=https://the_greatest_app:<pw>@<ipv4>:9200` and `OPENSEARCH_SSL_VERIFY=false`, then
    merge (merging deploys). On the web server run each of these, one after the other:
@@ -233,6 +277,12 @@ except the client switch, which stays inert until `OPENSEARCH_SSL_VERIFY=false` 
    docker compose -f docker-compose.prod.yml exec web bin/rails search:music:recreate_and_reindex_all
    docker compose -f docker-compose.prod.yml exec web bin/rails search:games:recreate_and_reindex_all
    ```
+
+   Search on the new app is empty or partial until these finish, about 6 minutes in total on a local rehearsal
+   with the development data (2026-11-06). **Do not run imports, the Goodreads
+   re-import or the weekly `data_migration:sync` until then:** the book and author import finders use search to
+   find fuzzy matches, so a half-filled index could produce duplicate books. A deploy kills a running task, and
+   running it again starts that domain over.
 
    Check a search on each site.
 3. **Soak** for a day or two. Until step 4, rollback is setting `OPENSEARCH_URL` back to the old server.
@@ -252,9 +302,5 @@ except the client switch, which stays inert until `OPENSEARCH_SSL_VERIFY=false` 
 - Changes to `opensearch.yml` or the certificates need a container recreate. `deploy.sh` detects them by
   fingerprint and does it.
 - `terraform output -raw ipv6` ends in `/128`. Strip it before using the address by hand.
-
-## Known gaps
-
-- cloud-init does not stop if the firewall install fails. `deploy.sh` installs the firewall again before it
-  starts OpenSearch, so the first deploy still closes the port first.
-- The SSH step in the deploy workflow uses the action's default 10-minute command timeout.
+- If cloud-init stops because the firewall install failed, `cloud-init status --wait` reports an error and
+  Docker is not installed. Rebuild rather than fixing it over SSH.

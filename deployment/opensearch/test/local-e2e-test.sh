@@ -63,6 +63,10 @@ expect "app: cannot change its own password" 403 the_greatest_app "$app_pw" PUT 
 expect "app: old password still works" 200 the_greatest_app "$app_pw" GET /_cluster/health
 expect "app: refused on cluster settings" 403 the_greatest_app "$app_pw" PUT /_cluster/settings '{"persistent":{"cluster.routing.allocation.enable":"all"}}'
 expect "legacy: creates its own index" 200 tgb_legacy "$legacy_pw" PUT /books
+expect "legacy: opens a scroll" 200 tgb_legacy "$legacy_pw" POST '/books/_search?scroll=1m' '{"size":1}'
+scroll_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["_scroll_id"])' "$work/response" 2>/dev/null)"
+expect "legacy: reads the next page" 200 tgb_legacy "$legacy_pw" POST /_search/scroll "{\"scroll\":\"1m\",\"scroll_id\":\"$scroll_id\"}"
+expect "legacy: clears the scroll" 200 tgb_legacy "$legacy_pw" DELETE /_search/scroll "{\"scroll_id\":[\"$scroll_id\"]}"
 expect "legacy: refused on the new app's index" 403 tgb_legacy "$legacy_pw" GET /books_books_production/_search
 expect "legacy: refused on cluster settings" 403 tgb_legacy "$legacy_pw" PUT /_cluster/settings '{"persistent":{"cluster.routing.allocation.enable":"all"}}'
 expect "wrong password is refused" 401 the_greatest_app "$legacy_pw" GET /_cluster/health

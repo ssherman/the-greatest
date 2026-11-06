@@ -38,6 +38,8 @@ jobs:
           # secret (docs/features/opensearch-server.md, "Rebuild").
           fingerprint: ${{ secrets.OPENSEARCH_SSH_HOST_FINGERPRINT }}
           envs: AGE_PRIVATE_KEY
+          # A first deploy pulls the image, runs three hash JVMs and waits for the node to start.
+          command_timeout: 20m
           script: |
             set -e
             cd /home/deploy/apps/the-greatest

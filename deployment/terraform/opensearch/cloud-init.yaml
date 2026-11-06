@@ -69,7 +69,8 @@ runcmd:
   - bash -lc 'for i in 1 2 3; do sudo -u deploy -H /usr/local/bin/gb-clone-or-pull.sh && break || sleep 5; done'
 
   # Close 9200 before Docker exists: with no allowlist yet, the unit drops every connection.
-  - /home/deploy/apps/the-greatest/deployment/opensearch/bin/install-firewall.sh
+  # Stop here if that fails: `cloud-init status --wait` then reports an error, and Docker is never installed.
+  - '/home/deploy/apps/the-greatest/deployment/opensearch/bin/install-firewall.sh || { echo "opensearch firewall install failed" >&2; exit 1; }'
 
   # Docker from Docker's own repository.
   - install -m 0755 -d /etc/apt/keyrings
