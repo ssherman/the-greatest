@@ -1176,13 +1176,14 @@ paths:
       security: [{bearerAuth: ["books:read"]}]
       summary: Search categories
       description: |
-        Searches categories of every type by name or alternative name, with the same query as the site's category search. `q` is required, 2 to 100 characters once surrounding whitespace is stripped; a missing, blank, too short or too long `q` is a 400. A name match comes before a match through an alternative name only, and `type` (`genre`, `audience`, `location` or `subject`) lists that type's matches first rather than filtering the rest out; without it genre comes first, as on the site. Only categories with ranked books in the site's primary ranking are returned, and `book_count` counts those ranked books. A query yields at most 60 matches, so `total_count` never exceeds 60: refine the query rather than paging for more. Empty until a primary ranking has been calculated.
+        Searches categories of every type by name or alternative name, with the same query as the site's category search. `q` is required, 2 to 100 characters once surrounding whitespace is stripped; a missing, blank, too short or too long `q` is a 400. A name match comes before a match through an alternative name only, and `type` (`genre`, `audience`, `location` or `subject`) lists that type's matches first rather than filtering the rest out; without it genre comes first, as on the site. Only categories with ranked books in the site's primary ranking are returned, and `book_count` counts those ranked books. Subjects and locations with only a handful of ranked books are left out, as on the site, so a small subject may return nothing. A query yields at most 60 matches, so `total_count` never exceeds 60: refine the query rather than paging for more. Empty until a primary ranking has been calculated.
       x-mcp:
         description: >-
           Finds category slugs by name or alternative name, best match first, with each category's type
           and ranked `book_count`. Use it to turn a name like "Gothic" into the slug that `category_id`
-          accepts in list_books and list_category_books. A query returns at most 60 matches in all, so
-          refine the query rather than paging for more.
+          accepts in list_books and list_category_books. Subjects and locations with only a handful of
+          ranked books are left out, so an empty result for a small subject is expected. A query returns
+          at most 60 matches in all, so refine the query rather than paging for more.
       parameters:
         - name: q
           in: query

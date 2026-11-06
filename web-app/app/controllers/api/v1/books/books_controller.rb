@@ -51,7 +51,7 @@ module Api
           resource = if configuration
             # That configuration's rank, or nil when it does not rank the book;
             # never the primary's (params[:rank] present, even when nil).
-            rank = RankedItem.where(ranking_configuration_id: configuration.id, item: book).pick(:rank)
+            rank = ::RankedItem.where(ranking_configuration_id: configuration.id, item: book).pick(:rank)
             BookResource.new(book, params: {rank: rank}, with_traits: :full)
           else
             BookResource.new(book, with_traits: :full)
