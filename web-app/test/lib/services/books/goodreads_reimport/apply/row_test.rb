@@ -94,6 +94,71 @@ module Services
             Row.call(verdict: row_verdict(csv_row(rating: 5), action: "keep", to: @from, review: true))
           end
 
+          test "an add that carries the review sets the CSV rating on a review the reader already has" do
+            review = make_review(@to, rating: 3)
+            verdict = row_verdict(csv_row(rating: 5, review_body: "csv"), action: "add", from: nil, review: true)
+
+            result = Row.call(verdict: verdict)
+
+            assert_equal :applied, result.data[:outcome]
+            assert_equal [5, "mine"], [review.reload.rating, review.body]
+            assert_equal 3, verdict.reload.payload["moved"]["rating_before"].to_f
+          end
+
+          test "a keep whose reader or book is gone closes as a final no-op" do
+            row = csv_row(rating: 5)
+            verdict = row_verdict(row, action: "keep", to: @from, review: true)
+            verdict.update_columns(payload: verdict.payload.merge("user_id" => 0))
+            assert_equal [:noop, true], Row.call(verdict: verdict).data.values_at(:outcome, :final)
+
+            verdict.update_columns(payload: verdict.payload.merge("user_id" => @user.id, "to_book_id" => 0))
+            assert_equal [:noop, true], Row.call(verdict: verdict).data.values_at(:outcome, :final)
+          end
+
+          test "a move that does not carry the review leaves the rating alone" do
+            review = make_review(@to, rating: 3)
+            UserListItem.create!(user_list: list(:read), listable: @from)
+
+            Row.call(verdict: row_verdict(csv_row(rating: 5), action: "move", review: false))
+
+            assert_equal 3, review.reload.rating
+          end
+
+          test "a copy onto the book the entries sit on, carrying the review, sets the rating in place" do
+            review = make_review(@from, rating: 2)
+            UserListItem.create!(user_list: list(:read), listable: @from)
+            verdict = row_verdict(csv_row(rating: 4), action: "copy", from: @from, to: @from, review: true)
+
+            assert_equal :applied, Row.call(verdict: verdict).data[:outcome]
+            assert_equal 4, review.reload.rating
+            assert_equal 2, verdict.reload.payload["moved"]["rating_before"].to_f
+          end
+
+          test "a move onto an existing destination review keeps its text and takes the CSV rating" do
+            make_review(@from, body: "old", rating: 1)
+            winner = make_review(@to, body: "winner", rating: 2)
+            UserListItem.create!(user_list: list(:read), listable: @from)
+            verdict = row_verdict(csv_row(rating: 5), action: "move", review: true)
+
+            Row.call(verdict: verdict)
+
+            assert_equal ["winner", 5], [winner.reload.body, winner.rating]
+            assert_equal 2, verdict.reload.payload["moved"]["rating_before"].to_f
+          end
+
+          test "a retried copy keeps the first trail's rating_before" do
+            review = make_review(@from, rating: 3)
+            UserListItem.create!(user_list: list(:read), listable: @from)
+            verdict = row_verdict(csv_row(rating: 4.5), action: "copy", review: true)
+            Row.call(verdict: verdict)
+            assert_equal 3, verdict.reload.payload["moved"]["rating_before"].to_f
+
+            Row.call(verdict: verdict)
+
+            assert_equal 3, verdict.reload.payload["moved"]["rating_before"].to_f
+            assert_equal 4.5, review.reload.rating.to_f
+          end
+
           test "a verdict whose row's match is no longer approved waits, unapplied" do
             UserListItem.create!(user_list: list(:read), listable: @from)
             row = csv_row

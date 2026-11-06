@@ -75,12 +75,12 @@ Everything is written to `books_repair_verdicts` before it happens. Admin, Repai
 - `reimport_match`: one Goodreads edition matched to a book.
 - `reimport_row`: one CSV row, with an action: keep (already right), move, copy (legacy put two editions on one
   book) or add (the row had no entry). A new book is made by a `reimport_match` with outcome create, not a row action.
-- `reimport_guess`: a hand-added entry from a mixed book, moved to its most-read book.
   The CSV's rating wins: when the row that carries the review (`review: true`) has a rating above 0 and the
   reader's review on the destination has a different one, apply sets the review's rating to the CSV's, for keeps
-  as well as moves and copies (a keep with a differing rating is applied, otherwise it stays a final no-op). A CSV
+  and adds as well as moves and copies (a keep with a differing rating is applied, otherwise it stays a final no-op). A CSV
   rating of 0 means "not rated" and changes nothing; title and body are never touched. The old rating is kept in
   the verdict's `moved.rating_before`, and the report prints "ratings set from the CSV".
+- `reimport_guess`: a hand-added entry from a mixed book, moved to its most-read book.
 - `reimport_strip`: a legacy identifier removed from a book. Applying a match records one for every OTHER book that
   holds the edition's own Goodreads id, ISBN-13 or ISBN-10 (from the CSV) as a legacy-sourced identifier; apply removes
   only legacy-sourced ones.

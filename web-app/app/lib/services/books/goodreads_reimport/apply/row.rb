@@ -20,7 +20,8 @@ module Services
         #   stay (the mixed-book delete or a later move removes them). review: true carries the user's review
         #   from the old book (moved); with none there, the CSV's is written. A row that does not carry it
         #   writes its own CSV rating and review, when it has any (spec 8 call 2).
-        # A user has one review per book. An existing review on the destination always wins.
+        # A user has one review per book. An existing review on the destination wins its title and body, but not its
+        # rating: the carrying row's CSV rating (> 0) is set on it (see rate).
         class Row
           def self.call(verdict:)
             return Entries.noop("already applied") if verdict.applied_at.present?
@@ -34,14 +35,18 @@ module Services
             return Entries.noop("match no longer approved") unless Entries.match_approved?(payload["goodreads_edition_id"])
             return Entries.noop("keep", final: true) if action == "keep" && payload["review"] != true
 
+            keep = action == "keep"
             user = ::User.find_by(id: payload["user_id"])
+            # A keep closes as it always did when the reader or book is gone: there is no rating left to set.
+            return Entries.noop("keep", final: true) if keep && !user
             return Entries.noop("user #{payload["user_id"]} no longer exists") unless user
 
             to = GoodreadsReplay::Apply::MergedBook.call(payload["to_book_id"])
+            return Entries.noop("keep", final: true) if keep && !to
             return Entries.noop("book #{payload["to_book_id"]} no longer exists") unless to
 
-            return add(verdict, user, to) if action == "add"
-            return rate(verdict, user, to, Entries.noop("keep", final: true)) if action == "keep"
+            return rate(verdict, user, to, add(verdict, user, to)) if action == "add"
+            return rate(verdict, user, to, Entries.noop("keep", final: true)) if keep
 
             from = GoodreadsReplay::Apply::MergedBook.call(payload["from_book_id"])
             return nothing_to_move(verdict) unless from
