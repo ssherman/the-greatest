@@ -4,12 +4,25 @@ module Api
   module V1
     module Books
       class CountriesControllerTest < ActionDispatch::IntegrationTest
+        # Ranked counts: french 2 (war_and_peace, got), japanese 2 (of_mice_and_men,
+        # crime_and_punishment), algerian 1 (crime_and_punishment). So the default
+        # order is french, japanese, algerian and the name order is algerian,
+        # french, japanese: the two differ, and a dropped `sort` shows.
+        #
+        # The catalog counter columns are set to values that disagree with those
+        # counts (and with their order), so a book_count read from the counter
+        # shows too.
         setup do
           host! "dev-new.thegreatestbooks.org"
           @rc = ranking_configurations(:books_global)
-          RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
-          RankedItem.create!(item: books_books(:got), ranking_configuration: @rc, rank: 2, score: 90)
-          RankedItem.create!(item: books_books(:of_mice_and_men), ranking_configuration: @rc, rank: 3, score: 80)
+          [:war_and_peace, :got, :of_mice_and_men, :crime_and_punishment].each_with_index do |book, i|
+            RankedItem.create!(item: books_books(book), ranking_configuration: @rc, rank: i + 1, score: 100 - i)
+          end
+          ::Books::BookCountry.create!(book: books_books(:crime_and_punishment), country: books_countries(:japanese))
+          ::Books::BookCountry.create!(book: books_books(:crime_and_punishment), country: books_countries(:algerian))
+          books_countries(:algerian).update_column(:book_count, 99)
+          books_countries(:french).update_column(:book_count, 5)
+          books_countries(:japanese).update_column(:book_count, 6)
         end
 
         def json = response.parsed_body.deep_symbolize_keys
@@ -18,27 +31,31 @@ module Api
           get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)
 
-          assert_equal %w[french japanese], json[:data].map { |c| c[:slug] }
+          assert_equal %w[french japanese algerian], json[:data].map { |c| c[:slug] }
+          assert_equal [2, 2, 1], json[:data].map { |c| c[:book_count] }
           french = json[:data].first
           assert_equal %i[slug name book_count url], french.keys
           assert_equal "French", french[:name]
-          assert_equal 2, french[:book_count]
-          assert_equal 1, json[:data].last[:book_count]
           assert_equal "https://dev-new.thegreatestbooks.org#{::Books::FilterPath.call(countries: [books_countries(:french)])}", french[:url]
-          assert_equal 2, json[:meta][:total_count]
+          assert_equal 3, json[:meta][:total_count]
         end
 
         test "a country whose books are all unranked is not listed" do
-          assert_not_includes json_slugs, "algerian"
+          unranked = ::Books::Country.create!(name: "Peruvian")
+          ::Books::BookCountry.create!(book: books_books(:cannery_row), country: unranked)
+
+          get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_not_includes json[:data].map { |c| c[:slug] }, "peruvian"
         end
 
         test "sort=name orders by name" do
           get "/api/v1/countries?sort=name", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)
 
-          expected = ::Books::BrowseQuery.countries(ranking_configuration: @rc, sort: "name").map(&:name)
-          assert_equal expected, json[:data].map { |c| c[:name] }
-          assert_equal expected.sort, expected
+          assert_equal %w[algerian french japanese], json[:data].map { |c| c[:slug] }
+          assert_equal [1, 2, 2], json[:data].map { |c| c[:book_count] }
         end
 
         test "sort rides on the paging links, and following next continues the same list" do
@@ -46,11 +63,11 @@ module Api
           assert_api_conform(status: 200)
           next_link = json[:links][:next]
           assert_includes next_link, "sort=name"
-          assert_equal %w[french], json[:data].map { |c| c[:slug] }
+          assert_equal %w[algerian], json[:data].map { |c| c[:slug] }
 
           get URI.parse(next_link).request_uri, headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)
-          assert_equal %w[japanese], json[:data].map { |c| c[:slug] }
+          assert_equal %w[french], json[:data].map { |c| c[:slug] }
         end
 
         test "paging links omit sort when the request did not send it" do
@@ -64,7 +81,7 @@ module Api
           get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)
 
-          assert_not_includes json_slugs, "unknown"
+          assert_not_includes json[:data].map { |c| c[:slug] }, "unknown"
         end
 
         test "an unknown sort is a 400 naming sort" do
@@ -72,7 +89,8 @@ module Api
           assert_api_response_conform(status: 400)
 
           assert_response :bad_request
-          assert_includes response.body, "sort must be one of book_count, name"
+          assert_equal "invalid_parameter", json[:code]
+          assert_includes json[:detail], "sort"
         end
 
         test "with no primary configuration data is empty" do
@@ -100,13 +118,6 @@ module Api
           get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MUSIC_ONLY)
           assert_api_conform(status: 403)
           assert_response :forbidden
-        end
-
-        private
-
-        def json_slugs
-          get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MEMBER)
-          json[:data].map { |c| c[:slug] }
         end
       end
     end

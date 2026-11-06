@@ -1201,7 +1201,7 @@ components:
       name: country_id
       in: query
       required: false
-      description: Comma-separated country slugs, up to 10, as listed by `GET /api/v1/countries`. A book from any of them matches. Cannot be combined with collection.
+      description: Comma-separated country slugs, up to 10, as listed by list_countries (`GET /api/v1/countries`). A book from any of them matches. Cannot be combined with collection.
       schema: {type: string, minLength: 1}
     year:
       name: year
