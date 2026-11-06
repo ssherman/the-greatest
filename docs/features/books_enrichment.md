@@ -84,8 +84,8 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 `Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`, `books.goodreads`, `books.evidence` or `books.origin`), `mode`
 (knowledge/research/sourced), `outcome` (applied, nothing_to_apply, unrecognized, skipped, failed),
 `recognized`, `confidence`, `facts` JSON, `citations`, `provider`, `model`, `ai_chat_id`,
-`error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (`origin_countries`
-also carries `unmatched`, and `description` carries `review`); reasons are `filled`,
+`error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (historical
+`origin_countries` entries also carry `unmatched`, which new rows do not, and `description` carries `review`); reasons are `filled`,
 `already_set`, `null`, `invalid`, `no_match`, `not_applied_yet`, `human_cleared`, `unrecognized`,
 `rejected`, `review_failed`, `deferred`, `superseded`. `deferred` means a low-confidence knowledge answer was
 recorded but left for the research run to verify. `human_cleared` means the field was deliberately blanked by an
@@ -158,6 +158,9 @@ confidence, or unrecognized, while the book has no real country, is followed by 
 budget allows. A book published at or after `config.x.ai.knowledge_cutoff_year` starts with research. When
 research is wanted but not allowed (no budget, or `book_facts` already researched in this run), the
 knowledge row gets `deferred_research => true`.
+
+Books adopted through `Workflows::Books::AdoptDeferred` (which plans only `book_facts`) get their origin
+from the origin backfill, not from their adopted run.
 
 Two research caps apply. Imports and admin runs spend `config.x.ai.research_daily_cap`, counted as
 `Enrichment.research.today.count` as `EnrichBook` does. The backfill spends its own

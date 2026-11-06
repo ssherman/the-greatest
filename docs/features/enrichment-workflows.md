@@ -200,7 +200,6 @@ step directly, and nothing in the import path writes that deferral any more.
 | `evidence` | `low` | `goodreads` reaching a terminal state (**finish**; a skipped `goodreads` counts) | Always. `categorize` waits on it |
 | `book_facts` | `low` | `goodreads` reaching a terminal state (**finish**), and the `author_facts` step of the runs of authors **linked to the book** that the import created (**release**) | Always |
 | `amazon` | `serial` | `goodreads` reaching a terminal state (**finish**) | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
-
 | `categorize` | `low` | `book_facts` and `evidence` reaching a terminal state (**finish**) | Always |
 
 The author waits cross runs, so they are passed at plan time rather than declared in the definition; the

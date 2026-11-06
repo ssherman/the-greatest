@@ -4,6 +4,9 @@ class Books::EnrichBookJobTest < ActiveSupport::TestCase
   def setup
     @book = books_books(:war_and_peace)
     @job = Books::EnrichBookJob.new
+    # Sidekiq runs inline in tests, so an unstubbed start would run the whole
+    # categorize workflow (Gather's HTTP, the judge).
+    Workflows::Books::BookCategorize.stubs(:start)
   end
 
   test "runs on the low queue with three retries" do
@@ -30,7 +33,7 @@ class Books::EnrichBookJobTest < ActiveSupport::TestCase
   test "a successful enrichment starts the categorize workflow" do
     Services::Books::EnrichBook.stubs(:call).returns(Services::Books::EnrichBook::Result.new(success?: true, data: {enrichments: []}, errors: []))
     Workflows::Books::BookCategorize.expects(:start)
-      .with(@book, initiated_by: "enrich_book_job", options: {"context" => "admin", "force_research" => true})
+      .with(@book, initiated_by: "enrich_book_job", options: {"context" => "admin"})
 
     @job.perform(@book.id, true)
   end

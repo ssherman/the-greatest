@@ -28,7 +28,8 @@ class Books::EnrichBookJob
     end
 
     # EnrichBook no longer sets an origin country; the origin judge does.
-    ::Workflows::Books::BookCategorize.start(book, initiated_by: "enrich_book_job",
-      options: {"context" => "admin", "force_research" => force_research})
+    # force_research is not forwarded: EnrichBook already spent the forced web
+    # search, and the judge reads its researched book_facts row from the dossier.
+    ::Workflows::Books::BookCategorize.start(book, initiated_by: "enrich_book_job", options: {"context" => "admin"})
   end
 end
