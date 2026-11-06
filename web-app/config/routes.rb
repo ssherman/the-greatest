@@ -660,7 +660,11 @@ Rails.application.routes.draw do
         scope module: :books do
           resources :books, only: [:index, :show], param: :slug
           get "books/:slug/lists", to: "book_lists#index", as: :book_lists
+          get "books/:slug/similar", to: "similar_books#index", as: :similar_books
           resources :authors, only: [:index, :show], param: :slug
+          get "authors/:slug/books", to: "author_books#index", as: :author_books
+          get "ranking_configurations/:ranking_configuration_id/authors/:slug/books", to: "author_books#index",
+            as: :ranking_configuration_author_books, constraints: {ranking_configuration_id: /\d+/}
           get "categories", to: "categories#index"
           get "categories/:slug", to: "categories#show", as: :category
           get "categories/:slug/books", to: "category_books#index", as: :category_books
@@ -674,6 +678,7 @@ Rails.application.routes.draw do
             as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
           get "lists/:list_id/items", to: "list_items#index", as: :list_items, constraints: {list_id: /\d+/}
           get "search/books", to: "book_searches#index", as: :search_books
+          get "search/authors", to: "author_searches#index", as: :search_authors
         end
 
         # Admin API: needs a books:admin:* scope. Its contract is

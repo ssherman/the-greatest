@@ -399,6 +399,15 @@ module Books
       assert_empty @controller.view_assigns["similar_books"]
     end
 
+    test "the book page still renders when the similarity search is down" do
+      ::Search::Books::Search::BookSimilar.stubs(:call).raises(Faraday::ConnectionFailed, "down")
+
+      get book_url(slug: books_books(:crime_and_punishment).slug)
+
+      assert_response :success
+      assert_empty @controller.view_assigns["similar_books"]
+    end
+
     # --- The full similar-books page ---
 
     test "similar responds successfully" do
