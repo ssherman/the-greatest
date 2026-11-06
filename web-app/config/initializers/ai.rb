@@ -25,4 +25,9 @@ Rails.application.configure do
   # combined. Each costs roughly 15 cents. The admin action's force option
   # ignores this cap.
   config.x.ai.research_daily_cap = 50
+
+  # The origin backfill's own research cap per UTC day, counted apart from
+  # research_daily_cap so a backfill never starves imports of web searches.
+  # 0 until the rehearsal has shown what a run costs; then it is raised.
+  config.x.ai.categorize_backfill_research_daily_cap = 0
 end
