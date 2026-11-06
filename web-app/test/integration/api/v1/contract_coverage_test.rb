@@ -29,6 +29,19 @@ module Api
         ["GET", "/api/v1/books/{slug}/lists", "403"] => -> { get "/api/v1/books/war-and-peace/lists", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
         ["GET", "/api/v1/books/{slug}/lists", "404"] => -> { get "/api/v1/books/no-such-book/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/books/{slug}/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/books/war-and-peace/lists", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/books/{slug}/similar", "200"] => lambda {
+          ::Search::Books::Search::BookSimilar.stubs(:call).returns([{id: books_books(:war_and_peace).id.to_s, score: 1.0, source: {}}])
+          get "/api/v1/books/#{books_books(:crime_and_punishment).slug}/similar", headers: bearer(ApiTokenSecrets::MEMBER)
+        },
+        ["GET", "/api/v1/books/{slug}/similar", "400"] => -> { get "/api/v1/books/war-and-peace/similar?limit=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/books/{slug}/similar", "401"] => -> { get "/api/v1/books/war-and-peace/similar" },
+        ["GET", "/api/v1/books/{slug}/similar", "403"] => -> { get "/api/v1/books/war-and-peace/similar", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/books/{slug}/similar", "404"] => -> { get "/api/v1/books/no-such-book/similar", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/books/{slug}/similar", "429"] => -> { with_exhausted_limit { get "/api/v1/books/war-and-peace/similar", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/books/{slug}/similar", "503"] => lambda {
+          ::Search::Books::Search::BookSimilar.stubs(:call).raises(Faraday::ConnectionFailed, "down")
+          get "/api/v1/books/war-and-peace/similar", headers: bearer(ApiTokenSecrets::MEMBER)
+        },
         ["GET", "/api/v1/authors", "200"] => -> { get "/api/v1/authors", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/authors", "400"] => -> { get "/api/v1/authors?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/authors", "401"] => -> { get "/api/v1/authors" },

@@ -660,6 +660,7 @@ Rails.application.routes.draw do
         scope module: :books do
           resources :books, only: [:index, :show], param: :slug
           get "books/:slug/lists", to: "book_lists#index", as: :book_lists
+          get "books/:slug/similar", to: "similar_books#index", as: :similar_books
           resources :authors, only: [:index, :show], param: :slug
           get "authors/:slug/books", to: "author_books#index", as: :author_books
           get "ranking_configurations/:ranking_configuration_id/authors/:slug/books", to: "author_books#index",

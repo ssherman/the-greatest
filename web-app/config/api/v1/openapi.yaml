@@ -167,6 +167,63 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/books/{slug}/similar:
+    x-domain: books
+    get:
+      operationId: listSimilarBooks
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Books similar to a book
+      description: |
+        Books like this one, scored from the genres, subjects and locations they share, most similar first. At most two books per author appear. Only catalogued books are returned (not books still awaiting review), each with its primary-ranking `rank` (null when unranked). This is a top-N, not a paginated list: `limit` caps it and there are no `links`. `meta.more_available` is true when the site's "similar books" page would show more than this response does. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+      x-mcp:
+        description: >-
+          Returns the books most similar to one book, most similar first, at most two per author, each with
+          its primary-ranking `rank` (null when unranked). `meta.more_available` is true when the site shows
+          more than this. Take the slug from search_books or find_book; `limit` is at most 25. Use get_book
+          for any one result's detail.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+        - name: limit
+          in: query
+          required: false
+          description: How many similar books to return, at most 25.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 25
+            default: 10
+      responses:
+        "200":
+          description: The book's similar books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarBookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /api/v1/authors:
     x-domain: books
     get:
@@ -1290,6 +1347,21 @@ components:
           $ref: "#/components/schemas/PaginationMeta"
         links:
           $ref: "#/components/schemas/PaginationLinks"
+    SimilarBookCollection:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Book"
+        meta:
+          type: object
+          required: [more_available]
+          properties:
+            more_available:
+              type: boolean
+              description: True when the site's similar-books page would show more books than this response does.
     AppliedFilters:
       type: object
       additionalProperties: false
