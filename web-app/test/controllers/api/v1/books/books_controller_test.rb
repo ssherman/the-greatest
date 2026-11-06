@@ -386,6 +386,74 @@ module Api
           assert_nil json[:data][:rank]
         end
 
+        # --- show, nested under a ranking configuration ----------------------------
+
+        test "nested show carries that configuration's rank" do
+          year = ranking_configurations(:books_year_2025)
+          RankedItem.create!(item: @war_and_peace, ranking_configuration: year, rank: 7, score: 10)
+
+          get "/api/v1/ranking_configurations/#{year.id}/books/#{@war_and_peace.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal "war-and-peace", json[:data][:slug]
+          assert_equal 7, json[:data][:rank], "the year configuration's rank, not the primary's 1"
+          assert json[:data].key?(:description), "still the full shape"
+        end
+
+        test "nested show of a book unranked there has rank null" do
+          year = ranking_configurations(:books_year_2025)
+          RankedItem.create!(item: @mice, ranking_configuration: year, rank: 1, score: 10)
+
+          get "/api/v1/ranking_configurations/#{year.id}/books/#{@war_and_peace.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert json[:data].key?(:rank)
+          assert_nil json[:data][:rank], "ranked 1 on the primary but not here: no fallback to the primary"
+        end
+
+        test "the primary's id nested gives the same rank as the bare show" do
+          get "/api/v1/books/#{@crime.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+          bare = json[:data]
+
+          get "/api/v1/ranking_configurations/#{@rc.id}/books/#{@crime.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal 2, bare[:rank]
+          assert_equal bare, json[:data]
+        end
+
+        test "an archived, member-owned or unknown configuration is a 404, even for a known book" do
+          archived = ranking_configurations(:books_inherited)
+          archived.update!(archived: true)
+
+          [archived.id, ranking_configurations(:books_user).id, ranking_configurations(:books_user_shared).id,
+            ranking_configurations(:books_authors_global).id, 999_999_999].each do |id|
+            get "/api/v1/ranking_configurations/#{id}/books/#{@war_and_peace.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_conform(status: 404)
+
+            assert_response :not_found, id
+            assert_equal "No ranking configuration at that address", json[:detail], id
+          end
+        end
+
+        test "nested show of an unknown or provisional book is a 404" do
+          get "/api/v1/ranking_configurations/#{@rc.id}/books/no-such-book", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+          assert_equal "No book at that address", json[:detail]
+
+          @crime.update!(provisional: true)
+          get "/api/v1/ranking_configurations/#{@rc.id}/books/#{@crime.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+        end
+
+        test "a bad configuration beats an unknown book" do
+          get "/api/v1/ranking_configurations/999999999/books/no-such-book", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+
+          assert_equal "No ranking configuration at that address", json[:detail]
+        end
+
         test "show of an unknown slug is a 404 problem" do
           get "/api/v1/books/no-such-book", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 404)

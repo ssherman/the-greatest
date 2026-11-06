@@ -29,7 +29,8 @@ module Api
         assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/books/{slug}/lists", "/api/v1/books/{slug}/similar", "/api/v1/authors", "/api/v1/authors/{slug}",
           "/api/v1/authors/{slug}/books", "/api/v1/ranking_configurations/{id}/authors/{slug}/books",
           "/api/v1/ranking_configurations", "/api/v1/ranking_configurations/{id}", "/api/v1/ranking_configurations/{id}/books",
-          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
+          "/api/v1/ranking_configurations/{id}/books/{slug}", "/api/v1/ranking_configurations/{id}/books/{slug}/lists",
+          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
           "/api/v1/categories", "/api/v1/categories/{slug}", "/api/v1/categories/{slug}/books",
           "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books", "/api/v1/search/authors", "/api/v1/search/categories", "/api/v1/countries"], response.parsed_body["paths"].keys
       end
@@ -101,7 +102,8 @@ module Api
         assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/books/{slug}/lists", "/api/v1/books/{slug}/similar", "/api/v1/authors", "/api/v1/authors/{slug}",
           "/api/v1/authors/{slug}/books", "/api/v1/ranking_configurations/{id}/authors/{slug}/books",
           "/api/v1/ranking_configurations", "/api/v1/ranking_configurations/{id}", "/api/v1/ranking_configurations/{id}/books",
-          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
+          "/api/v1/ranking_configurations/{id}/books/{slug}", "/api/v1/ranking_configurations/{id}/books/{slug}/lists",
+          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
           "/api/v1/categories", "/api/v1/categories/{slug}", "/api/v1/categories/{slug}/books",
           "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books", "/api/v1/search/authors", "/api/v1/search/categories", "/api/v1/countries"], ::Api::OpenapiDocument.raw["paths"].keys
       end

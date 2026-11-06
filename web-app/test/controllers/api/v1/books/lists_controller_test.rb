@@ -367,6 +367,59 @@ module Api
           end
         end
 
+        # --- show, nested under a ranking configuration -----------------------------
+
+        test "nested show carries that configuration's weight" do
+          RankedList.create!(list: @heavy, ranking_configuration: @year, weight: 5)
+
+          get "/api/v1/ranking_configurations/#{@year.id}/lists/#{@heavy.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal @heavy.id, json[:data][:id]
+          assert_equal 5, json[:data][:weight], "the year configuration's weight, not the primary's 90"
+          assert_equal 2, json[:data][:item_count]
+          assert json[:data].key?(:description), "still the full shape"
+
+          get "/api/v1/ranking_configurations/#{@primary.id}/lists/#{@heavy.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+          assert_equal 90, json[:data][:weight]
+        end
+
+        test "nested show of a list the configuration does not feed has weight null" do
+          get "/api/v1/ranking_configurations/#{@year.id}/lists/#{@heavy.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert json[:data].key?(:weight)
+          assert_nil json[:data][:weight], "weighted 90 on the primary but not fed by the year configuration"
+        end
+
+        test "nested show of an inactive or unknown list is a 404" do
+          get "/api/v1/ranking_configurations/#{@primary.id}/lists/#{@approved.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+          assert_equal "not_found", json[:code]
+
+          get "/api/v1/ranking_configurations/#{@primary.id}/lists/999999999", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+        end
+
+        test "a bad configuration beats an unknown list" do
+          archived = ranking_configurations(:books_inherited)
+          archived.update!(archived: true)
+
+          [archived.id, ranking_configurations(:books_user).id, ranking_configurations(:books_authors_global).id, 999_999_999].each do |id|
+            get "/api/v1/ranking_configurations/#{id}/lists/999999999", headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_conform(status: 404)
+
+            assert_equal "No ranking configuration at that address", json[:detail], id
+          end
+        end
+
+        test "a non-numeric nested list id is a routing 404" do
+          get "/api/v1/ranking_configurations/#{@primary.id}/lists/abc", headers: bearer(ApiTokenSecrets::MEMBER)
+
+          assert_response :not_found
+        end
+
         test "show with no primary ranking configuration has a null weight" do
           ::Books::RankingConfiguration.stubs(:default_primary).returns(nil)
 
