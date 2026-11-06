@@ -35,6 +35,38 @@ module Api
 
       private
 
+      # A free-text query parameter, stripped. nil when it is absent and not
+      # required; otherwise the String, or ::Api::Page::InvalidParameter (a 400)
+      # naming the parameter. Every endpoint that takes text bounds it the same way.
+      def text_param!(name, required:, max_length:, min_length: 1)
+        raw = params[name]
+        # `q[]=war` arrives as an Array and `q[a]=war` as Parameters: neither is
+        # a text value, and to_s would turn it into one.
+        raise ::Api::Page::InvalidParameter, "#{name} must be a single value" unless raw.nil? || raw.is_a?(String)
+
+        text = raw.to_s.strip
+        if text.blank?
+          raise ::Api::Page::InvalidParameter, "#{name} is required" if required
+          raise ::Api::Page::InvalidParameter, "#{name} must not be blank" unless raw.nil?
+
+          return nil
+        end
+        raise ::Api::Page::InvalidParameter, "#{name} must be at least #{min_length} characters" if text.length < min_length
+        raise ::Api::Page::InvalidParameter, "#{name} must be at most #{max_length} characters" if text.length > max_length
+
+        text
+      end
+
+      # An absent param is nil; a value in `allowed` comes back as a String; any
+      # other value is ::Api::Page::InvalidParameter (a 400).
+      def enum_param!(name, allowed)
+        value = params[name]
+        return nil if value.nil?
+        return value.to_s if allowed.include?(value.to_s)
+
+        raise ::Api::Page::InvalidParameter, "#{name} must be one of #{allowed.join(", ")}"
+      end
+
       def require_scope!
         scope = action_scopes ? action_scopes[action_name] : required_scope
         raise "#{self.class.name} declares no required scope for #{action_name}" if scope.nil?

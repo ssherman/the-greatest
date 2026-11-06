@@ -32,16 +32,7 @@ module Api
 
     # The stripped `q`, or ::Api::Page::InvalidParameter (a 400).
     def search_text!
-      raw = params[:q]
-      # `q[]=war` arrives as an Array and `q[a]=war` as Parameters: neither is
-      # a search string, and to_s would turn it into one.
-      raise ::Api::Page::InvalidParameter, "q must be a single value" unless raw.nil? || raw.is_a?(String)
-
-      query = raw.to_s.strip
-      raise ::Api::Page::InvalidParameter, "q is required" if query.blank?
-      raise ::Api::Page::InvalidParameter, "q must be at most #{MAX_QUERY_LENGTH} characters" if query.length > MAX_QUERY_LENGTH
-
-      query
+      text_param!(:q, required: true, max_length: MAX_QUERY_LENGTH)
     end
   end
 end

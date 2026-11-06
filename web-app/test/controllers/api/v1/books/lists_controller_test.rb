@@ -133,6 +133,130 @@ module Api
           assert_equal one.size, three.size, "query count grew with page size:\n#{three.join("\n")}"
         end
 
+        # --- sort and q ----------------------------------------------------------
+
+        test "sort=newest orders by activation date, newest first" do
+          @heavy.update_columns(activated_at: Time.utc(2024, 1, 1))
+          @mid_a.update_columns(activated_at: Time.utc(2023, 1, 1))
+          @mid_b.update_columns(activated_at: Time.utc(2025, 1, 1))
+
+          get "/api/v1/lists?sort=newest", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal [@mid_b.id, @heavy.id, @mid_a.id], json[:data].map { |row| row[:id] }
+          assert_equal [50, 90, 50], json[:data].map { |row| row[:weight] }
+        end
+
+        test "sort=weight is the default order" do
+          get "/api/v1/lists?sort=weight", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal [@heavy.id, @mid_a.id, @mid_b.id], json[:data].map { |row| row[:id] }
+        end
+
+        test "q narrows to lists whose name, source or url contains it, case-insensitively" do
+          @mid_b.update_columns(source: "Reading Circle")
+
+          {"HEAVY" => [@heavy], "circle" => [@mid_b], "EXAMPLE.com/mid-a" => [@mid_a],
+           "  mid  " => [@mid_a, @mid_b], "nothing matches this" => []}.each do |q, expected|
+            get "/api/v1/lists", params: {q: q}, headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_conform(status: 200)
+
+            assert_equal expected.map(&:id), json[:data].map { |row| row[:id] }, q
+            assert_equal expected.size, json[:meta][:total_count], q
+          end
+        end
+
+        test "q does not reach lists off the configuration" do
+          get "/api/v1/lists", params: {q: "Year only"}, headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal [], json[:data]
+        end
+
+        test "sort and q ride on the paging links, and under a configuration the links stay nested" do
+          @heavy.update_columns(activated_at: Time.utc(2024, 1, 1))
+          @mid_a.update_columns(activated_at: Time.utc(2023, 1, 1))
+          @mid_b.update_columns(activated_at: Time.utc(2025, 1, 1))
+
+          [["/api/v1/lists", "/api/v1/lists"],
+            ["/api/v1/ranking_configurations/#{@primary.id}/lists", "/api/v1/ranking_configurations/#{@primary.id}/lists"]].each do |request_path, link_path|
+            get request_path, params: {sort: "newest", q: "mid", per_page: 1}, headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_conform(status: 200)
+
+            assert_equal [@mid_b.id], json[:data].map { |row| row[:id] }
+            assert_equal 2, json[:meta][:total_count]
+            nxt = URI.parse(json[:links][:next])
+            assert_equal link_path, nxt.path
+            assert_equal({"sort" => "newest", "q" => "mid", "page" => "2", "per_page" => "1"}, Rack::Utils.parse_query(nxt.query))
+            assert_equal "newest", Rack::Utils.parse_query(URI.parse(json[:links][:self]).query)["sort"]
+
+            get json[:links][:next], headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_conform(status: 200)
+
+            assert_equal [@mid_a.id], json[:data].map { |row| row[:id] }
+            prev = URI.parse(json[:links][:prev])
+            assert_equal link_path, prev.path
+            assert_equal "newest", Rack::Utils.parse_query(prev.query)["sort"]
+            assert_equal "mid", Rack::Utils.parse_query(prev.query)["q"]
+          end
+        end
+
+        test "an unknown sort is a 400 naming sort" do
+          get "/api/v1/lists?sort=oldest", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 400)
+
+          assert_response :bad_request
+          assert_equal "invalid_parameter", json[:code]
+          assert_equal "sort must be one of weight, newest", json[:detail]
+        end
+
+        test "a blank q is a 400 naming q" do
+          ["/api/v1/lists?q=", "/api/v1/lists?q=%20", "/api/v1/ranking_configurations/#{@primary.id}/lists?q=%20%20"].each do |path|
+            get path, headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_response_conform(status: 400)
+
+            assert_response :bad_request, path
+            assert_equal "invalid_parameter", json[:code]
+            assert_equal "q must not be blank", json[:detail]
+          end
+        end
+
+        test "an array q is a 400" do
+          get "/api/v1/lists?q[]=war", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 400)
+
+          assert_response :bad_request
+          assert_equal "q must be a single value", json[:detail]
+        end
+
+        test "q over 200 characters is a 400" do
+          get "/api/v1/lists", params: {q: "a" * 201}, headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 400)
+
+          assert_response :bad_request
+          assert_equal "q must be at most 200 characters", json[:detail]
+
+          get "/api/v1/lists", params: {q: "a" * 200}, headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+        end
+
+        test "no sort and no q returns exactly today's body" do
+          get "/api/v1/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal [@heavy.id, @mid_a.id, @mid_b.id], json[:data].map { |row| row[:id] }
+          assert_equal "https://dev-new.thegreatestbooks.org/api/v1/lists?page=1&per_page=50", json[:links][:self]
+          json[:links].each_value { |link| refute_match(/sort=|q=/, link.to_s) }
+        end
+
+        test "an unknown configuration is a 404 even when sort is bad" do
+          get "/api/v1/ranking_configurations/999999999/lists?sort=bogus&q=", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 404)
+
+          assert_equal "not_found", json[:code]
+        end
+
         # --- nested under a ranking configuration --------------------------------
 
         test "the nested index on the primary returns the same rows with nested links" do

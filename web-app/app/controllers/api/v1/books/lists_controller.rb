@@ -17,9 +17,13 @@ module Api
       class ListsController < BaseController
         def index
           configuration = ranking_configuration
-          relation = configuration && ::Books::ListsQuery.call(ranking_configuration: configuration)
+          sort = enum_param!(:sort, ::ListsQuery::SORTS)
+          query = text_param!(:q, required: false, max_length: 200)
+          relation = configuration && ::Books::ListsQuery.call(ranking_configuration: configuration, sort: sort || "weight", query: query)
 
-          render_page(relation, path: collection_path("lists")) do |ranked_lists|
+          # Only what the client sent rides on the links, so a bare request's
+          # links stay what they were.
+          render_page(relation, path: collection_path("lists"), query: {sort: sort, q: query}.compact) do |ranked_lists|
             counts = item_counts_for(ranked_lists.map(&:list_id))
             ranked_lists.map do |ranked_list|
               ListResource.new(ranked_list.list, params: {weight: ranked_list.weight, item_count: counts.fetch(ranked_list.list_id, 0)}).to_h

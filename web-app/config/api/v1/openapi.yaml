@@ -545,13 +545,16 @@ paths:
       operationId: listRankingConfigurationLists
       security: [{bearerAuth: ["books:read"]}]
       summary: Lists behind one configuration
-      description: The same rows and shape as `/api/v1/lists`, on the named configuration; `weight` is relative to it.
+      description: The same rows, shape, `sort` and `q` as `/api/v1/lists`, on the named configuration; `weight` is relative to it.
       x-mcp:
         description: >-
-          Returns the lists that feed one named ranking configuration, heaviest first; `weight` is
-          relative to that configuration. For the primary ranking use list_lists.
+          Returns the lists that feed one named ranking configuration, heaviest first or newest first
+          (`sort`), optionally narrowed by `q` against name, source or web address; `weight` is relative
+          to that configuration. For the primary ranking use list_lists.
       parameters:
         - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/list_sort"
+        - $ref: "#/components/parameters/list_q"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
       responses:
@@ -590,13 +593,16 @@ paths:
       operationId: listLists
       security: [{bearerAuth: ["books:read"]}]
       summary: Lists behind the primary ranking
-      description: The active lists that feed The Greatest Books' primary ranking, heaviest first. `weight` is the list's weight on that ranking; `item_count` is the number of books `items_api_url` serves.
+      description: The active lists that feed The Greatest Books' primary ranking, heaviest first unless `sort=newest`; `q` narrows them. `weight` is the list's weight on that ranking; `item_count` is the number of books `items_api_url` serves.
       x-mcp:
         description: >-
           Returns the active lists that feed the primary ranking, heaviest first, each with its source,
-          year, voter count, `weight` and `item_count`. Use get_list for one list and list_list_items for
-          the books on it.
+          year, voter count, `weight` and `item_count`. Heaviest first by default; `sort=newest` puts the
+          most recently activated first, and `q` narrows to lists whose name, source or web address
+          contains it. Use get_list for one list and list_list_items for the books on it.
       parameters:
+        - $ref: "#/components/parameters/list_sort"
+        - $ref: "#/components/parameters/list_q"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
       responses:
@@ -1055,6 +1061,24 @@ components:
         minimum: 1
         maximum: 100
         default: 50
+    list_sort:
+      name: sort
+      in: query
+      required: false
+      description: "`weight` is heaviest on the ranking first; `newest` is newest by when the list became active."
+      schema:
+        type: string
+        enum: [weight, newest]
+        default: weight
+    list_q:
+      name: q
+      in: query
+      required: false
+      description: Keeps lists whose name, source or web address contains this text, case-insensitively. At most 200 characters once surrounding whitespace is stripped; blank is a 400.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
     category_id:
       name: category_id
       in: query
