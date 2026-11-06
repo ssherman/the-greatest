@@ -135,12 +135,14 @@ module Api
         end
 
         test "with no primary configuration every rank is null" do
+          rank(@clash, 1)
           ::Books::RankingConfiguration.stubs(:default_primary).returns(nil)
 
           get "/api/v1/authors/#{@king.slug}/books", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)
 
-          assert_equal [@clash, @got].map(&:slug).sort, json[:data].map { |b| b[:slug] }.sort
+          # Unranked order: year, then title (got 1996, clash 1998).
+          assert_equal [@got, @clash].map(&:slug), json[:data].map { |b| b[:slug] }
           assert_equal [nil, nil], json[:data].map { |b| b[:rank] }
         end
 

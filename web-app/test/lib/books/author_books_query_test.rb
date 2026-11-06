@@ -34,6 +34,44 @@ module Books
       assert_equal [1, 2, nil, nil, nil, nil], books.map(&:ranked_position)
     end
 
+    # Duplicate book records are expected in this catalogue, so equal title and
+    # year is a real tie. The rows are inserted with explicit ids, highest first,
+    # so an unordered scan reaches the high id before the low one and only an id
+    # tie-breaker puts them in id order.
+    def write_twins(year:)
+      high, low = [2_000_000_002, 2_000_000_001].map do |id|
+        book = ::Books::Book.create!(id: id, title: "Twin", first_published_year: year)
+        ::Books::BookAuthor.create!(book: book, author: @author, role: :author)
+        book
+      end
+      assert_equal [high.id, low.id], ::Books::Book.where(title: "Twin").pluck(:id), "precondition: heap order is not id order"
+      [low, high]
+    end
+
+    test "unranked books with the same title and year come back in id order with a configuration" do
+      low, high = write_twins(year: 1900)
+
+      books = Books::AuthorBooksQuery.call(author: @author, ranking_configuration: @config).to_a
+
+      assert_equal [low.id, high.id], books.map(&:id)
+    end
+
+    test "undated books with the same title come back in id order with a configuration" do
+      low, high = write_twins(year: nil)
+
+      books = Books::AuthorBooksQuery.call(author: @author, ranking_configuration: @config).to_a
+
+      assert_equal [low.id, high.id], books.map(&:id)
+    end
+
+    test "books with the same title and year come back in id order with no configuration" do
+      low, high = write_twins(year: 1900)
+
+      books = Books::AuthorBooksQuery.call(author: @author, ranking_configuration: nil).to_a
+
+      assert_equal [low.id, high.id], books.map(&:id)
+    end
+
     test "leaves out a book the author only edited" do
       authored = write_book("Authored")
       edited = write_book("Edited Anthology", role: :editor)

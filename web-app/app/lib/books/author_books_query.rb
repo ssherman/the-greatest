@@ -4,7 +4,9 @@ module Books
   # given configuration, nil when unranked or when there is no configuration).
   #
   # Ordered ranked books first by rank, then the rest by first_published_year
-  # (undated last) and title.
+  # (undated last) and title. books_books.id is the final tie-breaker: duplicate
+  # book records are expected, and without a unique key Postgres may order tied
+  # rows differently per LIMIT/OFFSET, so a paged listing could repeat or skip one.
   class AuthorBooksQuery
     # ranked_only: true keeps just the books ranked on the configuration (the
     # author page's list); false is the full bibliography. The JOIN is a LEFT
@@ -20,7 +22,7 @@ module Books
       if ranking_configuration.nil?
         return relation
             .select("books_books.*, NULL::integer AS ranked_position")
-            .order(Arel.sql("books_books.first_published_year ASC NULLS LAST"), :title)
+            .order(Arel.sql("books_books.first_published_year ASC NULLS LAST"), :title, :id)
       end
 
       relation = relation
@@ -30,7 +32,7 @@ module Books
           "AND ranked_items.item_type = 'Books::Book' " \
           "AND ranked_items.ranking_configuration_id = #{ranking_configuration.id.to_i}"
         )
-        .order(Arel.sql("ranked_items.rank ASC NULLS LAST, books_books.first_published_year ASC NULLS LAST"), :title)
+        .order(Arel.sql("ranked_items.rank ASC NULLS LAST, books_books.first_published_year ASC NULLS LAST"), :title, :id)
 
       relation = relation.where.not(ranked_items: {rank: nil}) if ranked_only
       relation

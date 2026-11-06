@@ -281,6 +281,7 @@ module Api
 
       assert_equal false, json.dig("result", "isError")
       assert_equal 1, tool_text.dig("meta", "per_page")
+      assert_equal 1, tool_text["data"].size
     end
 
     test "tools/call find_book is one rate-limit hit however many dispatches it makes" do
