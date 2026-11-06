@@ -197,7 +197,7 @@ step directly, and nothing in the import path writes that deferral any more.
 | Step | Queue | Waits on | Runs when |
 |---|---|---|---|
 | `goodreads` | `goodreads_fetch` | - | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
-| `evidence` | `low` | `goodreads` reaching a terminal state (**finish**; a skipped `goodreads` counts) | Always. `categorize` waits on it |
+| `evidence` | `evidence` | `goodreads` reaching a terminal state (**finish**; a skipped `goodreads` counts) | Always. `categorize` waits on it |
 | `book_facts` | `low` | `goodreads` reaching a terminal state (**finish**), and the `author_facts` step of the runs of authors **linked to the book** that the import created (**release**) | Always |
 | `amazon` | `serial` | `goodreads` reaching a terminal state (**finish**) | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
 | `categorize` | `low` | `book_facts` and `evidence` reaching a terminal state (**finish**) | Always |
@@ -279,7 +279,7 @@ two web searches on a book. A `books.book_categorize` run has no `book_facts` st
 
 ### The book_categorize workflow
 
-`books.book_categorize` (version 1, target `Books::Book`) has two steps: `evidence` (queue `low`, built
+`books.book_categorize` (version 1, target `Books::Book`) has two steps: `evidence` (queue `evidence`, built
 with `Steps::Evidence.new(reuse_fresh: true)`) and `categorize` (queue `low`, waits on `evidence`
 **finish**). `Workflows::Books::BookCategorize.start(book, initiated_by:, options: {}, start_after: nil)`
 is shaped like the author workflow's `start`: it returns the active run when the book has one. It is for

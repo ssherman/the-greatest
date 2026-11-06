@@ -33,9 +33,10 @@ module Services
           ::Wikipedia::Client.stubs(:new).with { |**kwargs| builder.call(**kwargs) || true }.returns(@wikipedia)
           @wikidata.stubs(:find_work).returns(nil)
           ResolveWikidataWork.stubs(:call).returns(resolved(work: nil))
+          @worldcat.stubs(:lookup).returns({})
           @worldcat.stubs(:records_by_oclc).returns({})
 
-          Gather.call(book: @book, worldcat: nil)
+          Gather.call(book: @book, worldcat: @worldcat)
 
           assert_equal [30.0, 30.0], waits
           assert_equal 5.0, Rails.application.config.x.wikimedia.max_inline_wait

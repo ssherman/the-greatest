@@ -16,8 +16,9 @@ module Services
         LIST_FIELDS = %w[countries languages genres main_subjects narrative_locations set_in_periods forms].freeze
 
         def self.call(book:, wikidata: nil, wikipedia: nil, worldcat: nil)
-          wikidata ||= ::Wikidata::Client.new(http: evidence_http)
-          wikipedia ||= ::Wikipedia::Client.new(http: evidence_http)
+          http = evidence_http
+          wikidata ||= ::Wikidata::Client.new(http: http)
+          wikipedia ||= ::Wikipedia::Client.new(http: http)
           new(book, wikidata, wikipedia, worldcat).call
         end
 
