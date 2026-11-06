@@ -109,7 +109,7 @@ module Services
             used = Enrichment.research.today.where(kind: KIND).where("facts->>'context' = 'backfill'").count
             used < Rails.application.config.x.ai.categorize_backfill_research_daily_cap
           else
-            Enrichment.research.today.count < Rails.application.config.x.ai.research_daily_cap
+            Enrichment.against_research_cap.count < Rails.application.config.x.ai.research_daily_cap
           end
         end
 
@@ -140,13 +140,17 @@ module Services
             attributes.merge!(outcome: applied.data[:applied] ? :applied : :nothing_to_apply,
               reason: applied.data[:reason], facts: facts.merge("origin" => applied.data.deep_stringify_keys))
           end
-          row = book.enrichments.create!(attributes)
-
-          needs = mode == :knowledge && !real_country? && (confidence == "low" || unrecognized)
-          [row, needs]
+          needs = row_needs_research?(mode, confidence, unrecognized)
+          [book.enrichments.create!(attributes), needs]
         rescue => e
           [book.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message,
             facts: base_facts("judge"))), false]
+        end
+
+        # Read before the row is written, so an error here is the failed row
+        # and the mode run still leaves exactly one.
+        def row_needs_research?(mode, confidence, unrecognized)
+          mode == :knowledge && !real_country? && (confidence == "low" || unrecognized)
         end
 
         def apply(nationality, confidence)

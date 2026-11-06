@@ -112,6 +112,20 @@ module Services
           assert rows.sole.facts["deferred_research"]
         end
 
+        test "backfill research rows do not spend the import budget" do
+          Rails.application.config.x.ai.stubs(:research_daily_cap).returns(Enrichment.against_research_cap.count + 1)
+          @book.enrichments.create!(kind: "books.origin", mode: :research, outcome: :applied, facts: {"context" => "backfill"})
+          stub_answers({nationality: "French", confidence: "low"}, {nationality: "French", confidence: "high"})
+          assert_equal %w[knowledge research], judge(context: "import").data[:enrichments].map(&:mode)
+        end
+
+        test "an error computing needs-research leaves one failed row" do
+          stub_answer
+          Judge.any_instance.stubs(:real_country?).raises("late")
+          rows = judge(context: "import").data[:enrichments]
+          assert_equal ["failed"], rows.map(&:outcome)
+        end
+
         test "an exhausted import cap defers research" do
           Rails.application.config.x.ai.stubs(:research_daily_cap).returns(0)
           stub_answer(nationality: "French", confidence: "low")

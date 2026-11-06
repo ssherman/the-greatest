@@ -260,6 +260,17 @@ module Services
         assert_nil skipped.ai_chat
       end
 
+      test "origin backfill research rows do not spend the research budget" do
+        Rails.application.config.x.ai.stubs(:research_daily_cap).returns(Enrichment.against_research_cap.count + 1)
+        @book.enrichments.create!(kind: "books.origin", mode: :research, outcome: :applied, facts: {"context" => "backfill"})
+        expect_facts_runs([:knowledge, success_result(facts(recognized: false, confidence: "low"))], [:research, success_result(facts)])
+
+        result = EnrichBook.call(book: @book)
+
+        assert_equal %w[knowledge research], result.data[:enrichments].map(&:mode)
+        refute result.data[:enrichments].last.skipped?
+      end
+
       test "force_research ignores the budget" do
         Rails.application.config.x.ai.stubs(:research_daily_cap).returns(0)
         expect_facts_runs([:research, success_result(facts)])
