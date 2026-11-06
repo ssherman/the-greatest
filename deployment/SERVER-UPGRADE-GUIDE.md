@@ -56,6 +56,13 @@ Cloud-init takes ~2-3 minutes and will:
 - Create the deploy user
 - Set up firewall and fail2ban
 
+#### If the web server's IP changed: update the search allowlist
+
+The search server only answers allowlisted IPs. Once the new IP is known, edit
+`OPENSEARCH_ALLOWED_IPS` with `sops secrets/.env.opensearch` (comma-separated, no spaces), commit,
+merge, and run the "Deploy OpenSearch" workflow. Until you do, app search times out. See
+`docs/features/opensearch-server.md`.
+
 ### 4. Update Cloudflare DNS
 
 **This is manual until we automate it.**

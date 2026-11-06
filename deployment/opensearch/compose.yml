@@ -1,0 +1,39 @@
+# deployment/opensearch/compose.yml -- the search server. Started by bin/deploy.sh.
+# Spec: docs/superpowers/specs/2026-10-13-opensearch-server-design.md
+name: opensearch
+services:
+  opensearch:
+    # Pinned. Upgrading is a one-line change here plus a deploy (docs/features/opensearch-server.md).
+    image: opensearchproject/opensearch:3.9.0
+    restart: unless-stopped
+    environment:
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms${OPENSEARCH_HEAP:-4g} -Xmx${OPENSEARCH_HEAP:-4g}"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    mem_limit: ${OPENSEARCH_MEM_LIMIT:-7g}
+    memswap_limit: ${OPENSEARCH_MEM_LIMIT:-7g}
+    ports:
+      # IPv4 only. A bare "9200:9200" also listens on [::]:9200 through docker-proxy, a path the
+      # DOCKER-USER allowlist never sees.
+      - "0.0.0.0:${OPENSEARCH_PORT:-9200}:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+      - ./config/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro
+      - ${OPENSEARCH_CERTS_DIR:-/srv/opensearch/certs}:/usr/share/opensearch/config/certs:ro
+      # A directory mount, not single files: deploy.sh replaces files in it, and a single-file
+      # bind mount would keep showing the container the old inode.
+      - ${OPENSEARCH_SECURITY_DIR:-/srv/opensearch/security}:/usr/share/opensearch/config/opensearch-security:ro
+    healthcheck:
+      # $$ is a literal $ (Compose would otherwise try to interpolate it).
+      test: ["CMD-SHELL", "curl -sk -o /dev/null -w '%{http_code}' https://localhost:9200/ | grep -qE '^(200|401)$$'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "5" }
+volumes:
+  opensearch-data:

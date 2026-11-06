@@ -1,0 +1,18 @@
+# deployment/opensearch/systemd/opensearch-firewall.service
+# Closes port 9200 to everyone but the allowlisted app servers BEFORE Docker starts. Ordering it
+# after docker.service would be wrong: restart-unless-stopped containers come up with the daemon,
+# so 9200 would be open for a few seconds on every boot. docker.service requires this unit, so if
+# the rules cannot be applied Docker stays down instead of coming up unprotected. Docker keeps a
+# DOCKER-USER chain that already exists. Spec §5.1; installed by bin/install-firewall.sh.
+[Unit]
+Description=OpenSearch port 9200 allowlist (DOCKER-USER), applied before Docker
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/opensearch-firewall/apply-firewall.sh
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=docker.service

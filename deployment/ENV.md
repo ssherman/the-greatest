@@ -70,9 +70,18 @@ This document lists all environment variables required for production deployment
 ### OpenSearch Configuration
 
 #### OPENSEARCH_URL
-- **Description**: OpenSearch cluster URL
+- **Description**: The search server, with this app's login in the URL. Production:
+  `https://the_greatest_app:<OPENSEARCH_APP_PASSWORD>@<search server IPv4>:9200` (the password is in
+  `secrets/.env.opensearch`). Development: `http://localhost:9200`.
 - **Required**: Yes
-- **Example**: `https://opensearch.example.com:9200`
+- **Used By**: web, worker
+- **Runbook**: `docs/features/opensearch-server.md`
+
+#### OPENSEARCH_SSL_VERIFY
+- **Description**: Set to `false` in production: the search server presents a certificate it generated
+  itself, so there is no CA to verify it against. Any other value, or unset, verifies normally.
+- **Required**: Production only
+- **Example**: `false`
 - **Used By**: web, worker
 
 ### Home server data services
@@ -379,7 +388,8 @@ POSTGRES_PASSWORD=your_postgres_password_here
 REDIS_URL=redis://redis:6379/1
 
 # OpenSearch
-OPENSEARCH_URL=https://opensearch.example.com:9200
+OPENSEARCH_URL=https://the_greatest_app:your_app_password@203.0.113.50:9200
+OPENSEARCH_SSL_VERIFY=false
 
 # SSL Certificates
 CLOUDFLARE_API_TOKEN=your_cloudflare_token_here
