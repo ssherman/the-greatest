@@ -146,6 +146,12 @@ module DataImporters
       raise NotImplementedError, "#{self.class.name} must implement #model_class"
     end
 
+    # Ids of model_class records no source may contribute; a domain with such
+    # a set overrides this.
+    def excluded_ids
+      Set.new
+    end
+
     def entity_noun
       model_class.name.demodulize.underscore.humanize.downcase
     end
@@ -156,6 +162,13 @@ module DataImporters
 
     def domain_guidance
       ""
+    end
+
+    # A candidate that can never be the query's record, however well it
+    # matches, is dropped before the rules or the AI see it. A domain with
+    # such a deterministic rule overrides this.
+    def incompatible?(_query, _candidate)
+      false
     end
 
     def creators_required?
@@ -257,7 +270,7 @@ module DataImporters
         run.external_resolution ||= source.resolution if source.respond_to?(:resolution)
 
         found.each do |candidate|
-          next if excluded?(run, candidate)
+          next if excluded?(run, candidate) || incompatible?(run.query, candidate)
 
           candidate.evidence = evidence_for(candidate.record).merge(candidate.evidence) { |_key, base, given| given.nil? ? base : given } if candidate.local?
           set.add(candidate)
@@ -268,9 +281,15 @@ module DataImporters
       run.candidates = order(set.to_a)
     end
 
+    # Dropped here, before the rules, the AI and the collision pairs see a
+    # candidate, so an excluded record never lands in a flagged pair either.
     def excluded?(run, candidate)
-      run.exclude && candidate.local? &&
-        candidate.record.instance_of?(run.exclude.class) && candidate.record.id == run.exclude.id
+      return false unless candidate.local?
+
+      record = candidate.record
+      return true if run.exclude && record.instance_of?(run.exclude.class) && record.id == run.exclude.id
+
+      record.is_a?(model_class) && excluded_ids.include?(record.id)
     end
 
     def decisive?(query, candidate)

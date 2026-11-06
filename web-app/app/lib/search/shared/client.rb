@@ -3,6 +3,33 @@
 module Search
   module Shared
     class Client
+      # opensearch-ruby raises this exact class, with no HTTP status, when every
+      # connection in its pool is dead ("Cannot get new connection from pool").
+      # It is also the superclass of every HTTP-status error, including the 4xx
+      # ones, so it cannot go in a class list as it is: `===` here matches only an
+      # instance of exactly that class, and a BadRequest is not one. A Module with
+      # its own `===` is accepted anywhere a class is: `rescue_from` and `rescue`.
+      module ConnectionPoolExhausted
+        def self.===(error) = error.instance_of?(::OpenSearch::Transport::Transport::Error)
+      end
+
+      # What a search call raises when OpenSearch cannot answer, and a retry might
+      # succeed: a failure to reach the cluster, a timeout, or a 5xx / 429 from it.
+      # The public API turns these into a 503. A 4xx from the cluster (a BadRequest
+      # for a query it will not run, say) is deliberately absent: that is our bug,
+      # and it should surface as a 500 that error tracking sees, not as an outage
+      # a client would retry forever.
+      UNAVAILABLE_ERRORS = [
+        ::Faraday::Error,
+        ::Timeout::Error,
+        ::OpenSearch::Transport::Transport::Errors::InternalServerError,
+        ::OpenSearch::Transport::Transport::Errors::BadGateway,
+        ::OpenSearch::Transport::Transport::Errors::ServiceUnavailable,
+        ::OpenSearch::Transport::Transport::Errors::GatewayTimeout,
+        ::OpenSearch::Transport::Transport::Errors::TooManyRequests,
+        ConnectionPoolExhausted
+      ].freeze
+
       class << self
         def instance
           @instance ||= begin

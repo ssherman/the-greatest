@@ -97,6 +97,28 @@ class ApiTokenTest < ActiveSupport::TestCase
     assert_includes token.errors[:scopes].join, "music:read"
   end
 
+  test "an admin token with an admin scope needs an expiry" do
+    token = build(user: users(:admin_user), scopes: ["books:admin:read"])
+
+    refute token.valid?
+    assert_includes token.errors[:expires_at], "must be set for tokens with admin scopes"
+  end
+
+  test "an admin token with an admin scope and an expiry is valid" do
+    assert build(user: users(:admin_user), scopes: ["books:admin:read"], expires_at: 30.days.from_now).valid?
+  end
+
+  test "a member's non-admin token may still never expire" do
+    assert build(scopes: ["books:read"], expires_at: nil).valid?
+  end
+
+  test "a member may not mint an admin scope" do
+    token = build(scopes: ["books:admin:read"], expires_at: 30.days.from_now)
+
+    refute token.valid?
+    assert_includes token.errors[:scopes].join, "not available to this account"
+  end
+
   test "an account holds at most the configured number of tokens" do
     cap = Rails.application.config.x.api.max_tokens_per_user
     existing = @user.api_tokens.count
@@ -111,7 +133,7 @@ class ApiTokenTest < ActiveSupport::TestCase
   end
 
   test "destroying a user destroys their tokens" do
-    user = User.create!(email: "temp-token-owner@example.com", role: :user, email_verified: false, display_name: "Temp")
+    user = User.create!(email: "temp-token-owner@example.com", role: :user, account_kind: :service, email_verified: false, display_name: "Temp")
     ApiToken.create!(user: user, name: "t", scopes: ["books:read"],
       token_digest: Digest::SHA256.hexdigest("tg_#{SecureRandom.alphanumeric(40)}"), token_prefix: "tg_abcdefghi")
 

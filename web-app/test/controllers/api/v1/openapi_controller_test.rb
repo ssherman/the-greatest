@@ -28,7 +28,9 @@ module Api
 
         assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/books/{slug}/lists", "/api/v1/authors", "/api/v1/authors/{slug}",
           "/api/v1/ranking_configurations", "/api/v1/ranking_configurations/{id}", "/api/v1/ranking_configurations/{id}/books",
-          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items"], response.parsed_body["paths"].keys
+          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
+          "/api/v1/categories", "/api/v1/categories/{slug}", "/api/v1/categories/{slug}/books",
+          "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books"], response.parsed_body["paths"].keys
       end
 
       test "on the music and games hosts the document advertises only what those hosts serve" do
@@ -97,7 +99,9 @@ module Api
         assert_kind_of Hash, ::Api::OpenapiDocument.raw
         assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/books/{slug}/lists", "/api/v1/authors", "/api/v1/authors/{slug}",
           "/api/v1/ranking_configurations", "/api/v1/ranking_configurations/{id}", "/api/v1/ranking_configurations/{id}/books",
-          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items"], ::Api::OpenapiDocument.raw["paths"].keys
+          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
+          "/api/v1/categories", "/api/v1/categories/{slug}", "/api/v1/categories/{slug}/books",
+          "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books"], ::Api::OpenapiDocument.raw["paths"].keys
       end
     end
   end

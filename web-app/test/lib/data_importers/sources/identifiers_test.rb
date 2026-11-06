@@ -41,6 +41,20 @@ module DataImporters
         assert_includes records, other
       end
 
+      test "sources filter drops identifier rows from other sources" do
+        legacy_book = books_books(:war_and_peace)
+        trusted_book = books_books(:crime_and_punishment)
+        legacy_book.identifiers.create!(identifier_type: :books_work_isbn13, value: "9780000000001", source: :legacy)
+        trusted_book.identifiers.create!(identifier_type: :books_work_isbn13, value: "9780000000001", source: :open_library)
+        lookups = [[:books_work_isbn13, "9780000000001"]]
+
+        filtered = Identifiers.new(model_class: ::Books::Book, lookups: lookups, sources: ["open_library"]).call
+        unfiltered = Identifiers.new(model_class: ::Books::Book, lookups: lookups, sources: nil).call
+
+        assert_equal [trusted_book], filtered.map(&:record)
+        assert_equal [legacy_book, trusted_book].sort_by(&:id), unfiltered.map(&:record).sort_by(&:id)
+      end
+
       test "name is :identifier" do
         assert_equal :identifier, Identifiers.new(model_class: ::Books::Book, lookups: []).name
       end

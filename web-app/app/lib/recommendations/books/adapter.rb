@@ -8,7 +8,7 @@ module Recommendations
     # Root-anchored constants throughout: inside Recommendations::Books a bare
     # `Books::Book` resolves to Recommendations::Books::Book.
     class Adapter
-      SCORING_TYPES = ::Books::Book::SIMILARITY_CATEGORY_TYPES
+      SCORING_TYPES = ::Books::Book::SCORED_CATEGORY_TYPES
       LIST_KINDS = {"favorites" => :favorite, "read" => :read, "reading" => :reading, "want_to_read" => :want_to_read}.freeze
 
       attr_reader :config
@@ -55,7 +55,7 @@ module Recommendations
 
         rows.group_by(&:first).transform_values do |group|
           group.map do |_, id, type, count|
-            CategoryFact.new(id: id, category_type: type_name(type),
+            CategoryFact.new(id: id, category_type: ::Books::Book.scoring_type(type_name(type)),
               item_count: ranked_counts ? ranked_counts.fetch(id, 0) : count.to_i)
           end
         end
@@ -84,7 +84,7 @@ module Recommendations
         authors = ::Books::BookAuthor.where(book_id: item_ids).pluck(:book_id, :author_id).group_by(&:first)
         genres = ::CategoryItem.joins(:category)
           .where(item_type: "Books::Book", item_id: item_ids)
-          .where(categories: {deleted: false, category_type: :genre})
+          .where(categories: {deleted: false, category_type: ::Books::Book::GENRE_SCORED_TYPES})
           .pluck(:item_id, :category_id).group_by(&:first)
         predecessors = series_predecessors(item_ids)
         ranks = ::RankedItem.where(item_type: "Books::Book", item_id: item_ids,

@@ -8,9 +8,10 @@ module DataImporters
       class Importer < DataImporters::ImporterBase
         def self.call(title: nil, subtitle: nil, author_names: [], year: nil, isbn13: [], isbn10: [], asin: [], goodreads_id: [],
           open_library_work_key: nil, item: nil, force_providers: false, providers: nil, subject: nil, verify: false,
-          match: nil, provisional: false, stamp_identifiers: false, enrich: true, trust_work_key: false)
+          match: nil, provisional: false, stamp_identifiers: false, enrich: true, trust_work_key: false,
+          query_identifier_source: :goodreads_import)
           importer = new(provisional: provisional, stamp_identifiers: stamp_identifiers, enrich: enrich,
-            trust_work_key: trust_work_key)
+            trust_work_key: trust_work_key, query_identifier_source: query_identifier_source)
           if item.present?
             importer.call(item: item, force_providers: force_providers, providers: providers)
           else
@@ -34,15 +35,20 @@ module DataImporters
         # provisional (Goodreads import spec §5, §9). stamp_identifiers: the
         # query's identifiers are stamped whatever Open Library says, so a
         # book made while the service is down can be found again by them.
-        # enrich: false skips AiEnrichment and AuthorEnrichment; an import's
-        # enrichment runs on admin approval instead. trust_work_key: the
+        # enrich: false skips the Enrichment provider; an import's
+        # enrichment is planned on admin approval instead. trust_work_key: the
         # query's Open Library work key wins over the service's decision (a
-        # person confirmed it; the list wizard).
-        def initialize(provisional: false, stamp_identifiers: false, enrich: true, trust_work_key: false)
+        # person confirmed it; the list wizard). query_identifier_source: the
+        # source given to the query's own identifiers (the caller's claim,
+        # not Open Library's). Only the Goodreads import passes identifiers
+        # today.
+        def initialize(provisional: false, stamp_identifiers: false, enrich: true, trust_work_key: false,
+          query_identifier_source: :goodreads_import)
           @provisional = provisional
           @stamp_identifiers = stamp_identifiers
           @enrich = enrich
           @trust_work_key = trust_work_key
+          @query_identifier_source = query_identifier_source
         end
 
         def call(**)
@@ -60,24 +66,23 @@ module DataImporters
         # OpenLibrary first: its fills are free and licensed, and on accept it
         # links the work's authors. Authors next: the query's author names
         # when the book still has none (an abstain, a reject, or the service
-        # unreachable). AiEnrichment then runs, so the AI fills fewer blanks;
-        # it defers the book to its new authors' chain when one is linked.
-        # AuthorEnrichment runs last, after the deferral row is written, so it
-        # starts that chain for the authors this import created -- both it
-        # and AiEnrichment run after the save that follows Authors, so the
-        # chain sees this book among their titles (spec §10). QueryIdentifiers
-        # runs after Authors when stamp_identifiers is asked for; enrich: false
-        # drops the two enrichment providers.
+        # unreachable). QueryIdentifiers runs after Authors when
+        # stamp_identifiers is asked for. Enrichment is last, when enrich is
+        # on: it plans an author run for each author this import created and
+        # one book run (Workflows::Books::BookEnrichment): its AI step waits
+        # for those authors' chains, and its Amazon step runs independently.
+        # It needs the book's book_authors saved, which the importer does
+        # after each successful provider. enrich: false plans nothing.
         def providers
           @providers ||= begin
             list = [
-              Providers::OpenLibrary.new(new_author_ids: new_author_ids, provisional: @provisional, trust_work_key: @trust_work_key),
+              Providers::OpenLibrary.new(new_author_ids: new_author_ids, provisional: @provisional, trust_work_key: @trust_work_key,
+                query_identifier_source: @query_identifier_source),
               Providers::Authors.new(new_author_ids: new_author_ids, provisional: @provisional)
             ]
-            list << Providers::QueryIdentifiers.new if @stamp_identifiers
+            list << Providers::QueryIdentifiers.new(source: @query_identifier_source) if @stamp_identifiers
             if @enrich
-              list << Providers::AiEnrichment.new(new_author_ids: new_author_ids)
-              list << Providers::AuthorEnrichment.new(new_author_ids: new_author_ids)
+              list << Providers::Enrichment.new(new_author_ids: new_author_ids)
             end
             list
           end

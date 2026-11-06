@@ -31,8 +31,9 @@ module Services
         # pg_advisory_xact_lock returns void (see Services::Billing::ReconcileCustomer).
         LOCK_SQL = "SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext($1)::bigint)) AS lock_taken"
 
-        def self.call(edition:, import:, match:, importer: ::DataImporters::Books::Book::Importer, page: nil, author_names: nil)
-          new(edition: edition, import: import, match: match, importer: importer, page: page, author_names: author_names).call
+        def self.call(edition:, import:, match:, importer: ::DataImporters::Books::Book::Importer, page: nil, author_names: nil, provisional: true)
+          new(edition: edition, import: import, match: match, importer: importer, page: page, author_names: author_names,
+            provisional: provisional).call
         end
 
         # Held until the caller's transaction ends. SettleEdition parks and
@@ -41,13 +42,14 @@ module Services
           ActiveRecord::Base.connection.exec_query(LOCK_SQL, "goodreads-create-lock", ["goodreads-edition:#{edition.signature}"])
         end
 
-        def initialize(edition:, import:, match:, importer:, page:, author_names:)
+        def initialize(edition:, import:, match:, importer:, page:, author_names:, provisional: true)
           @edition = edition
           @import = import
           @match = match
           @importer = importer
           @page = page
           @author_names = author_names
+          @provisional = provisional
         end
 
         # requires_new: inside a caller's transaction (the dry run, a test, a
@@ -99,7 +101,7 @@ module Services
             goodreads_id: [@edition.goodreads_book_id.to_s],
             subject: @edition,
             match: @match,
-            provisional: true,
+            provisional: @provisional,
             stamp_identifiers: true,
             enrich: false
           )
@@ -114,9 +116,10 @@ module Services
             raise CreateFailed, "the book for Goodreads edition #{@edition.id} got no author: #{result.all_errors.join("; ")}"
           end
 
-          record_provenance(book, result.created_author_ids)
+          created_author_ids = result.created_author_ids
+          record_provenance(book, created_author_ids)
           resolve!(book, :created, @page ? :verified : :unverified)
-          done(:created)
+          done(:created, created_author_ids: created_author_ids)
         end
 
         def record_provenance(book, created_author_ids)
@@ -132,8 +135,8 @@ module Services
             match_decision: @match.decision, resolved_at: Time.current, pending_import: nil)
         end
 
-        def done(outcome)
-          Result.new(success?: true, data: {edition: @edition, outcome: outcome}, errors: [])
+        def done(outcome, **extra)
+          Result.new(success?: true, data: {edition: @edition, outcome: outcome}.merge(extra), errors: [])
         end
       end
     end

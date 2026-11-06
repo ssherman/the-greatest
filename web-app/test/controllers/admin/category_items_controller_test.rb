@@ -88,7 +88,7 @@ module Admin
     end
 
     # Duplicate prevention
-    test "should prevent duplicate category assignment for artist" do
+    test "re-adding an existing category for an artist succeeds without a new row" do
       CategoryItem.find_or_create_by!(category: @rock_category, item: @artist)
 
       assert_no_difference "CategoryItem.count" do
@@ -97,11 +97,11 @@ module Admin
           as: :turbo_stream
       end
 
-      assert_response :unprocessable_entity
-      assert_match "already been taken", response.body
+      assert_response :success
+      assert_match "Category added successfully", response.body
     end
 
-    test "should prevent duplicate category assignment for album" do
+    test "re-adding an existing category for an album succeeds without a new row" do
       # Album already has rock category from fixtures
       assert_no_difference "CategoryItem.count" do
         post admin_album_category_items_path(@album),
@@ -109,8 +109,8 @@ module Admin
           as: :turbo_stream
       end
 
-      assert_response :unprocessable_entity
-      assert_match "already been taken", response.body
+      assert_response :success
+      assert_match "Category added successfully", response.body
     end
 
     # Destroy tests
@@ -387,6 +387,36 @@ module Admin
           as: :turbo_stream
       end
       assert_response :unprocessable_entity
+    end
+
+    test "an inherited row shows its source and has no remove button" do
+      paris = ::Books::Category.create!(name: "Paris", category_type: :location)
+      france = ::Books::Category.create!(name: "France", category_type: :location)
+      paris.update!(parent: france)
+      CategoryItem.create!(category: paris, item: @book, source: :admin)
+      ::Categories::AncestorReconciler.call(item_ids: [@book.id])
+
+      get admin_books_book_category_items_path(@book)
+
+      assert_response :success
+      assert_match "via Paris", response.body
+      assert_select "form[action=?]", admin_category_item_path(CategoryItem.find_by!(category: paris, item: @book)), count: 1
+      assert_select "form[action=?]", admin_category_item_path(CategoryItem.find_by!(category: france, item: @book)), count: 0
+    end
+
+    test "removing an inherited row is refused with the service message" do
+      paris = ::Books::Category.create!(name: "Paris", category_type: :location)
+      france = ::Books::Category.create!(name: "France", category_type: :location)
+      paris.update!(parent: france)
+      CategoryItem.create!(category: paris, item: @book, source: :admin)
+      ::Categories::AncestorReconciler.call(item_ids: [@book.id])
+      inherited = CategoryItem.find_by!(category: france, item: @book)
+
+      assert_no_difference "CategoryItem.count" do
+        delete admin_category_item_path(inherited), as: :turbo_stream
+      end
+      assert_response :unprocessable_entity
+      assert_match "France comes from Paris", response.body
     end
 
     test "adding a category the book already has as inherited upgrades it to admin" do

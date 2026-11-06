@@ -30,7 +30,7 @@ module Services
           @person = person
           @decision = decision
           @country_lookup = country_lookup || ::Services::Books::CountryLookup.new
-          @sheet = FactSheet.new(author)
+          @sheet = FactSheet.new(author, source: :viaf)
         end
 
         def call

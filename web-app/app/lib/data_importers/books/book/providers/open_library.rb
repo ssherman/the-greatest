@@ -26,11 +26,13 @@ module DataImporters
             goodreads_id: :books_work_goodreads_id
           }.freeze
 
-          def initialize(client: nil, new_author_ids: [], provisional: false, trust_work_key: false)
+          def initialize(client: nil, new_author_ids: [], provisional: false, trust_work_key: false,
+            query_identifier_source: :goodreads_import)
             @client = client
             @new_author_ids = new_author_ids
             @provisional = provisional
             @trust_work_key = trust_work_key
+            @query_identifier_source = query_identifier_source
           end
 
           # Lazy: building the default client constructs a CircuitBreaker
@@ -97,7 +99,7 @@ module DataImporters
             return apply_candidate(book, candidate, query) if candidate
             return failure_result(errors: ["Open Library work #{key} was chosen but the book has no title"]) if book.title.blank?
 
-            book.identifiers.find_or_initialize_by(identifier_type: :books_work_openlibrary_id, value: key)
+            stamp(book, :books_work_openlibrary_id, key, :open_library)
             persist_query_identifiers(book, query)
             success_result(data_populated: ["open_library_work_key"])
           end
@@ -126,10 +128,7 @@ module DataImporters
 
             data_populated = filled + report_skipped(candidate)
 
-            book.identifiers.find_or_initialize_by(
-              identifier_type: :books_work_openlibrary_id,
-              value: candidate.work_key
-            )
+            stamp(book, :books_work_openlibrary_id, candidate.work_key, :open_library)
 
             persist_query_identifiers(book, query)
 
@@ -149,9 +148,16 @@ module DataImporters
 
             IDENTIFIER_TYPE_BY_QUERY_FIELD.each do |query_field, identifier_type|
               Array(query.public_send(query_field)).each do |value|
-                book.identifiers.find_or_initialize_by(identifier_type: identifier_type, value: value)
+                stamp(book, identifier_type, value, @query_identifier_source)
               end
             end
+          end
+
+          # A new row takes `source`; a row the book already holds keeps its own.
+          def stamp(book, identifier_type, value, source)
+            identifier = book.identifiers.find_or_initialize_by(identifier_type: identifier_type, value: value)
+            identifier.source = source if identifier.new_record?
+            identifier
           end
 
           # Import-finder redesign §8: on accept, a book with no authors gets

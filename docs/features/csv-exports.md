@@ -105,8 +105,8 @@ it then cached files on a 24-hour TTL behind nginx and served them stale. Here:
 - `app/components/csv_exports/download_button_component.rb` + `csv_export_controller.js` — the
   button and the top-500 dialog. Rankings pages are edge-cached and identical for everyone, so the
   dialog is static and the Stimulus controller decides on click: no `tg_uid` cookie → login modal;
-  `/membership_state` says member → follow the link; `/membership_state` 401 (a marker that
-  outlived the session) → login modal; otherwise → dialog. The `<a href>` is real and the server
+  a conditional `/user_list_state` check says `membership.member` → follow the link; a 401 (a
+  marker that outlived the session) → login modal; otherwise → dialog. The `<a href>` is real and the server
   enforces the cap; the dialog only explains, and it is closed on `turbo:before-cache` so Back
   never restores it non-modal.
 - `app/lib/actions/admin/regenerate_csv_export.rb` + the "CSV Export" card on the admin ranking

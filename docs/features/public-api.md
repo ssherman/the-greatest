@@ -2,12 +2,31 @@
 
 Spec: `docs/superpowers/specs/2026-09-12-public-api-framework-design.md`. Code is the source of truth; this page is the map.
 
+MCP: `docs/features/mcp-server.md`. Every operation with an `x-mcp` block is also an MCP tool.
+
 ## Shape
 
-- Per-site path, JSON only: `https://thegreatestbooks.org/api/v1/books`, `/api/v1/books/{slug}`, `/api/v1/authors`, `/api/v1/authors/{slug}`. The domain comes from the host. Indexes are the site's primary ranking, best first; when there is no primary author ranking yet `/api/v1/authors` is a 200 with empty `data`. Lookup is by slug only, and author show does not embed books — a paginated `/api/v1/authors/{slug}/books` is the planned follow-up. Music and games resources are later increments. `/api/v1/ranking_configurations` lists the global book rankings (primary first; `kind` is `books` for all of them today), `/api/v1/ranking_configurations/{id}` shows one, and `/api/v1/ranking_configurations/{id}/books` is `/api/v1/books` on that configuration — the same action, resolved from the path, with `rank` relative to it. Only global, unarchived book configurations are addressable; a member's own, an archived one, or the authors configuration is a 404. Configurations are the first resource looked up by integer id (lists have no slug either); a non-numeric id is a routing 404, an unknown one the `not_found` problem. `/api/v1/lists` is the primary configuration's active lists, heaviest first, and `/api/v1/ranking_configurations/{id}/lists` the same rows on the named configuration — `weight` is always relative to the configuration the row was read through; `/api/v1/lists/{id}` answers for any active list with its weight on the primary or `null`. `/api/v1/lists/{id}/items` is the list's books in the site's order (`position` ascending, unpositioned rows last, then id), restricted to rows that resolve to a book so `total_count` matches the rows and equals the list's `item_count`; `/api/v1/books/{slug}/lists` is the other side, every active list a book is on with its `position`, weighted lists first. Lists have no slug and are addressed by integer id. The list payload carries no editorial flags and no weight breakdown; a list's `source_url` is the original list on the web and is not validated as a URI (a few hold more than one address). Spec: `docs/superpowers/specs/2026-09-20-public-api-lists-and-rankings-design.md`.
+- Per-site path, JSON only: `https://<books host>/api/v1/books` (`/developers` prints the real host), `/api/v1/books/{slug}`, `/api/v1/authors`, `/api/v1/authors/{slug}`. The domain comes from the host. Indexes are the site's primary ranking, best first; when there is no primary author ranking yet `/api/v1/authors` is a 200 with empty `data`. Lookup is by slug only, and author show does not embed books — a paginated `/api/v1/authors/{slug}/books` is the planned follow-up. Music and games resources are later increments. `/api/v1/ranking_configurations` lists the global book rankings (primary first; `kind` is `books` for all of them today), `/api/v1/ranking_configurations/{id}` shows one, and `/api/v1/ranking_configurations/{id}/books` is `/api/v1/books` on that configuration — the same action, resolved from the path, with `rank` relative to it. Only global, unarchived book configurations are addressable; a member's own, an archived one, or the authors configuration is a 404. Configurations are the first resource looked up by integer id (lists have no slug either); a non-numeric id is a routing 404, an unknown one the `not_found` problem. `/api/v1/lists` is the primary configuration's active lists, heaviest first, and `/api/v1/ranking_configurations/{id}/lists` the same rows on the named configuration — `weight` is always relative to the configuration the row was read through; `/api/v1/lists/{id}` answers for any active list with its weight on the primary or `null`. `/api/v1/lists/{id}/items` is the list's books in the site's order (`position` ascending, unpositioned rows last, then id), restricted to rows that resolve to a book so `total_count` matches the rows and equals the list's `item_count`; `/api/v1/books/{slug}/lists` is the other side, every active list a book is on with its `position`, weighted lists first. Lists have no slug and are addressed by integer id. The list payload carries no editorial flags and no weight breakdown; a list's `source_url` is the original list on the web and is not validated as a URI (a few hold more than one address). Spec: `docs/superpowers/specs/2026-09-20-public-api-lists-and-rankings-design.md`.
 - Contract: `web-app/config/api/v1/openapi.yaml`, served at `GET /api/v1/openapi.json` (public, cached an hour). Path items carry `x-domain`, and the served document keeps only the paths routed on the host it was fetched from — the music host's copy does not advertise `/api/v1/books`. Every API integration test validates against it (`assert_api_conform`), and `test/integration/api/v1/contract_coverage_test.rb` fails if a documented response is not exercised.
 - Pages: `GET /developers` is the documentation, on every site, edge-cached for a day and rendered from the host's OpenAPI document (so it lists only that host's endpoints; every `Api::Problem` code has an `#errors-<code>` anchor there, which is what a problem's `type` URI points at). `GET /developers/tokens` is where a member creates and revokes tokens (`MembershipGate[:api]`, never cached). Create answers with a Turbo Stream that carries the secret exactly once; a revoke refreshes the list and form but never the secret panel. The two write actions answer only in Turbo Streams, by design; there is no JS-off fallback. Links in: the `/members` card and each footer's "API" entry. There is no header nav item, on purpose. `/developers` is cached for a day and `/api/v1/openapi.json` for an hour, so after a contract change the docs page can trail the served contract by up to about 25 hours.
 - Envelope `{"data": …}`; collections add `meta` and `links`. Errors are RFC 9457 `application/problem+json` with a stable `code` (`Api::Problem`).
+
+## Filters and search
+
+Spec: `docs/superpowers/specs/2026-11-02-public-api-web-parity-design.md` (increment 1). The website's book filters, as API parameters, plus a search endpoint.
+
+- **Where filters apply.** The ranked book collections: `GET /api/v1/books`, `/api/v1/ranking_configurations/{id}/books`, `/api/v1/categories/{slug}/books`, and `/api/v1/ranking_configurations/{id}/categories/{slug}/books` (the category books on a named configuration, `rank` relative to it). Parsing and the limits are the website's (`Books::FilterParams`); `Api::RankedBookFilters` adds the API-only rules and the error mapping.
+- **Parameters.** Slugs are comma-separated; repeats and empty entries are dropped.
+  - `category_id`: up to 6 slugs, and a book must carry every one. A merged or renamed slug resolves to the live category.
+  - `country_id`: up to 10 slugs, and a book from any of them matches. It cannot be sent with `collection`.
+  - `year`: books first published that year. It cannot be sent with `published_start` or `published_end`.
+  - `published_start`, `published_end`: books first published in or after, or in or before, a year. Years run from -4000 to the current year plus 5.
+  - `collection`: one of `women`, `africa`, `asia`, `latin-america`, `western`, `non-western`, the site's curated collections.
+- **On category books the path category counts.** It is one more category filter, so `category_id` on `/categories/{slug}/books` intersects with it, and the limit of 6 applies to the union. Passing the path category's own slug adds nothing, but a merged or old slug of it still counts toward the 6 (the results are unaffected).
+- **400 versus 404.** Malformed input is a 400 `invalid_parameter` whose `detail` names the parameter: a blank value (`category_id=`) or one made only of separators (`country_id=,`), an array or hash value (`category_id[]=x`), too many slugs, a non-integer or out-of-range year, an unknown `collection`, and the forbidden combinations above. A blank value is an error, not "unfiltered". A well-formed slug that names nothing is a 404 `not_found` whose `detail` names the parameter and the slug (`No category_id matches "x"`). A missing path resource (ranking configuration, then path category) is answered before any filter, and a bad filter before a bad page.
+- **`meta.filters`.** Echoes only the filters that were sent, in canonical form: slugs sorted with merged ones replaced by the live slug, years as integers, `collection` as its slug. On category books the path category is left out of `category_id`. An unfiltered request has no `meta.filters` key, so existing responses are unchanged. `links.first/prev/next/last` carry the same filters, so following `next` gives the next page of the same filtered list.
+- **Search.** `GET /api/v1/search/books?q=` (`Api::V1::Books::BookSearchesController`; same OpenSearch query as the site's search, `Books::BookSearchQuery.hit_ids`). Catalog books only (standalone, not provisional), best match first, in the normal collection envelope with `rank` from the primary ranking (null when unranked). A query yields at most 100 hits, so `total_count` is at most 100 and paging stops there; the count and pages come from the books that exist in Postgres, so a stale index id never makes a page shorter than its meta promises. `q` is required and at most 200 characters (after stripping): missing, blank, over the limit, or sent as an array is a 400. Paging links carry `q`. Search takes no filter parameters.
+- **503 `search_unavailable`.** OpenSearch being unreachable, timing out, or answering 5xx/429 (`Search::Shared::Client::UNAVAILABLE_ERRORS`) is a documented 503, not a generic 500; a 4xx from the cluster is not in that list and surfaces as a 500; the client should retry shortly. It has an `#errors-search_unavailable` anchor on `/developers` like every other problem code.
 
 ## Authentication
 
@@ -19,7 +38,37 @@ Members mint tokens at `/developers/tokens`: a name (≤60 chars), any of the th
 
 ## Scopes
 
-`Api::Scopes` — `books:read`, `music:read`, `games:read`. Members may mint the three reads; service accounts get whatever an admin assigns. `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy (`x:write` implies `x:read`) is already honoured for when write scopes exist.
+`Api::Scopes` — `books:read`, `music:read`, `games:read` (plus the admin scopes under "Admin permissions"). Members may mint the three reads; service accounts get the read scopes only (never an admin scope, even if the account holds an admin role). `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy (`x:write` implies `x:read`) is already honoured for when write scopes exist.
+
+## Admin permissions
+
+Spec: `docs/superpowers/specs/2026-11-01-api-admin-permissions-design.md`. A token may now carry admin scopes, and an admin needs no membership.
+
+- **Three checks, every request.** (1) The token's granted scopes are expanded through `implies:` and intersected with what the owner is eligible for right now (`Api::Scopes.effective`); (2) the endpoint's `require_scope` must be satisfied by that set; (3) the Books policy behind the action (`destroy?` on the source and the target for a merge) must allow the user. A demoted owner's token shrinks on the next request; nothing is cached on the token.
+- **Eligibility** lives on each scope in `Api::Scopes::ALL` (`eligible`, `->(user, member)`):
+
+  | Scope | Who may hold it |
+  |---|---|
+  | `books:read`, `music:read`, `games:read` | an active member, or a service account |
+  | `books:admin:read` | `Books::BookPolicy#index?`; implies `books:read` |
+  | `books:admin:write` | `Books::BookPolicy#update?`; implies `books:admin:read` |
+  | `books:admin:merge` | `Books::BookPolicy#destroy?`; implies `books:admin:write` (so it implies read too) |
+
+  `eligible_for(user)` is the passing scopes plus everything they imply; `mintable_by(user)` is the same set. `/developers/tokens` is open to anyone who can mint at least one scope, and never pre-ticks an admin scope.
+- **Must expire.** `ApiToken` rejects a token with any admin scope and no `expires_at`.
+- **Authenticator.** Scopes on the `Api::Principal` are the effective ones. A person with no effective scope and no active membership gets 403 `membership_required`. A person whose token holds any admin scope gets the `admin` rate-limit tier (`config/initializers/api.rb`, 600/min and 200,000/day); service accounts stay on `system` (and cannot hold admin scopes). The tier selects only the limits: counters are keyed on the account, as for every tier.
+- **Endpoints** (`Api::V1::Admin::Books::*`, business logic in `Services::Books::AdminMerge`; bearer auth, same envelope and problem format):
+  - `GET /api/v1/admin/books?q=` and `GET /api/v1/admin/authors?q=` need `books:admin:read`. `q` is required; pagination links carry it.
+  - `POST /api/v1/admin/books/{id}/merge` and `POST /api/v1/admin/authors/{id}/merge` need `books:admin:merge`. `{id}` is the target. Body `{"source_id": …, "dry_run": false}`; `source_id` is a JSON integer or a string of plain decimal digits, at least 1 (`"010"` is 10, not octal; 0 and negatives are 400 `invalid_parameter`). A dry run validates and reports without changing anything, but it runs after authorization, so it enforces the same scope and policy checks. A real merge writes one `event=api_admin_merge` log line (token, user, record type, source, target). The 200 carries `warnings` for follow-up work that could not complete after the commit; a refusal says which record was refused.
+- **Category endpoints** (`Api::V1::Admin::Books::CategoriesController`, `BookCategoriesController`, `AuthorCategoriesController`; spec `docs/superpowers/specs/2026-11-02-categories-api-design.md`). Ids are numeric and parsed strictly, as for merge. Every write also passes `Books::CategoryPolicy` (and `Books::BookPolicy`/`AuthorPolicy#update?` for tagging).
+  - `GET /api/v1/admin/categories?q=&type=&status=` and `GET /api/v1/admin/categories/{id}` need `books:admin:read`. `status` is `active` (default), `deleted` (deleted without a merge), `merged` or `all`; `type` is `genre`, `location`, `subject`, `theme` or `audience`; `q` is optional (without it the list is by name) and matches name or alias. Detail answers for a category in any status.
+  - `POST /api/v1/admin/categories` and `PATCH /api/v1/admin/categories/{id}` need `books:admin:write`. Body keys `name`, `description`, `category_type`, `alternative_names`, `parent_id` (null clears it); names are stripped, unknown keys ignored. Both go through `Categories::Editor`, the same service as the admin UI. A name that another active category of the same type already uses, as a name or an alias, is a 422 (`Categories::NameGuard`); a case-only rename of the category itself is not. A deleted or merged category cannot be edited (422). Moving a location or retyping into or out of location queues the ancestor reconcile in the background.
+  - `POST /api/v1/admin/books/{id}/categories` and `POST /api/v1/admin/authors/{id}/categories` (body `{"category_id": …}`) tag; `DELETE …/categories/{category_id}` untags. Both need `books:admin:write` and run through `Categories::ItemLinker`, shared with the admin UI. Tagging a category the item already has is a 200 no-op. A deleted or merged category, or one from another site, is a 422. Untagging a category the item lacks is a 404; untagging an inherited ancestor location is a 422 naming the more specific location to remove instead. The 200 body lists the item's categories with their `source`.
+  - `POST /api/v1/admin/categories/{id}/merge` needs `books:admin:merge`. `{id}` is the target; body `{"source_ids": [1 to 50 distinct ids, not the target], "dry_run": false}`. `dry_run` must be `true` or `false` (a JSON boolean or the string), anything else is a 400. Nothing merges until every record exists, the policy allows each one and `Categories::Merger.refusal` accepts each pair (422 naming the refused sources); a dry run reports each source's book and author link counts. Merges then run one at a time, each in its own transaction. If one fails, the 422 lists `merged`, `failed` and `not_attempted`. If only the work after commit fails (reindex queueing, ancestor reconcile) the source counts as merged and appears under `post_commit_errors`.
+  - `DELETE /api/v1/admin/categories/{id}` needs `books:admin:merge` and soft deletes. **Warning:** it removes every book and author link to the category, and restoring the category does not bring the links back. Child places of a deleted location keep pointing at it. `?dry_run=true` returns the link counts it would remove (`book_links_removed`, `author_links_removed`) without changing anything; the four protected categories (Fiction, Nonfiction, Poetry, Religion & Spirituality) and an already deleted category are 422. Prefer a merge when the links should survive.
+  - Each successful write logs one `event=api_admin_category_*` line (`create`, `update`, `merge`, `delete`, and `api_admin_category_link` for tagging) with the token and user; update lists the changed attribute names, never values. Refused writes log nothing, except a failed merge, which logs `outcome=failed`.
+- **Public category endpoints** (any `books:read` token, in the public `openapi.yaml`): `GET /api/v1/categories?type=&sort=` lists categories with ranked books on the primary ranking (`type` is `genre` (default), `location`, `subject` or `audience`; the site's word "settings" is a 400; `sort` is `book_count` or `name`), `GET /api/v1/categories/{slug}` shows one, and `GET /api/v1/categories/{slug}/books` is the primary ranking filtered to it, best first, in the `/api/v1/books` shape (and takes the filters under "Filters and search"). Show accepts any active books category, and an old or merged slug resolves to the live category; a slug naming a category that was deleted without a merge is a 404. `parent` is the live parent, or null. `book_count` counts ranked books, not all links.
+- **Contract.** `web-app/config/api/v1/admin_openapi.yaml`, served at `GET /api/v1/admin/openapi.json`. Admin paths are not in the public `openapi.yaml`, so `/developers` and `/api/v1/openapi.json` never advertise them.
 
 ## Rate limits
 
@@ -44,36 +93,21 @@ secret and the Turbo Stream shapes. Playwright: `e2e/tests/books/developers.spec
 `books/account/developers.spec.ts` (signed-in non-member), `books/member/developers-tokens.spec.ts`
 (the member account, see `docs/features/e2e-testing.md`).
 
-## Edge (Cloudflare)
+## Edge
 
-The rules live in the `the-greatest-cloudflare` repo (managed with `cfrules`) — that is the
-source of truth; this section only records what they must do and why.
+API paths sit under `/api/` because the edge treats that prefix as the API. The edge rules live in the
+private `the-greatest-cloudflare` repo, which is the source of truth; this public repo records none of
+their details. What gates `/api/` inside the app:
 
-- **Skip Super Bot Fight Mode AND Cloudflare rate limiting** for
-  `starts_with(http.request.uri.path, "/api/")`. SBFM alone is not enough: the books zone
-  has an edge rate limit of 20 requests per 30 s with a managed challenge, below the API's own
-  60/min (member) and 600/min (system) — Cloudflare would challenge a member at their
-  permitted rate, and a challenge is a block for an API client. The rule also skips the
-  bad-ASN and country challenge rules (`ruleset: current`) for the same reason. What gates
-  the prefix instead: auth plus the per-IP unauthenticated window
-  (`Services::Api::RateLimiter`) for every authenticated endpoint, and that same per-IP window
-  on `/api/v1/openapi.json`, the one unauthenticated route — so nothing under `/api/` is
-  unlimited once the edge steps aside.
-- **Scoped to the API-serving host.** The books zone also fronts the legacy site (apex,
-  `www`), which has no `/api/`; the rule applies to `new.thegreatestbooks.org` only. Music and
-  games are zone-wide, and answer Rails' 404 on `/api/` until their resources ship.
-- A skip rule has no log mode and `starts_with("/api/")` cannot over-match, so there is no
-  log-first step.
-- **Verified 2026-09-14** with a scripted user agent through Cloudflare: `GET
-  https://new.thegreatestbooks.org/api/v1/books` → 401 with `WWW-Authenticate: Bearer` and
-  `X-RateLimit-Limit: 60`.
-- **Caching:** API responses are `private, no-store`, so nothing edge-caches them.
-  `/api/v1/openapi.json` sends `public, max-age=3600` (and no rate headers, so a cached copy
-  cannot mislead) but is served `DYNAMIC` today because
-  `new.thegreatestbooks.org` has no Cloudflare cache rule at all (books' cache-everything
-  covers apex and `www` only). Pre-existing, affects the new site's HTML too, and worth fixing
-  before books launches — not an app bug.
+- Auth on every endpoint but one, then the per-account rate limit (see "Rate limits").
+- `Services::Api::RateLimiter`'s per-IP window for unauthenticated failures, and that same per-IP window
+  on `/api/v1/openapi.json`, the one unauthenticated route.
+
+Caching: API responses are `private, no-store`. `/api/v1/openapi.json` sends `public, max-age=3600` and
+no rate-limit headers, so a cached copy cannot mislead.
 
 ## Not yet
 
-`/api/v1/authors/{slug}/books` (increment 6); search, filters, music/games resources, OAuth/MCP.
+`/api/v1/authors/{slug}/books` (increment 6); music/games resources; OAuth sign-in
+(`docs/superpowers/specs/2026-11-02-mcp-oauth-design.md`). The MCP server is shipped; see
+`docs/features/mcp-server.md`.

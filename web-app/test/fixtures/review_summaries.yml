@@ -13,7 +13,7 @@
 #  rating_4_count     :integer          default(0), not null
 #  rating_5_count     :integer          default(0), not null
 #  ratings_count      :integer          default(0), not null
-#  ratings_sum        :decimal(10, 2)   default(0), not null
+#  ratings_sum        :decimal(10, 2)   default(0.0), not null
 #  reviewable_type    :string           not null
 #  text_reviews_count :integer          default(0), not null
 #  created_at         :datetime         not null

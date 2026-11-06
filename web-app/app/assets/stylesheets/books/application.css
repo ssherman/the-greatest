@@ -106,3 +106,26 @@
     font-family: 'Playfair Display', Georgia, serif;
   }
 }
+
+/* The mobile menu's current-page marker: a bookmark ribbon on the link's left
+   edge. Its shape carries the meaning, so it never rests on colour. The label
+   stays regular weight on purpose: bold pushes "The Greatest Books of the 21st
+   Century" 8px past the 320px panel, where it is clipped.
+   daisyUI styles aria-current="page" as a solid dark bar, hence the resets.
+   Un-layered to beat daisyUI's menu rules. */
+#books-nav-drawer-panel a[aria-current="page"] {
+  position: relative;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+}
+
+#books-nav-drawer-panel a[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -0.25rem;
+  width: 0.5rem;
+  background-color: var(--color-secondary);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 0.375rem), 0 100%);
+}

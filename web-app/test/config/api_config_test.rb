@@ -1,10 +1,10 @@
 require "test_helper"
 
 class ApiConfigTest < ActiveSupport::TestCase
-  test "both tiers declare a per-minute and a per-day limit" do
+  test "every tier declares a per-minute and a per-day limit" do
     limits = Rails.application.config.x.api.rate_limits
 
-    assert_equal [:member, :system], limits.keys
+    assert_equal [:admin, :member, :system], limits.keys.sort
     limits.each_value do |tier|
       assert_operator tier.fetch(:per_minute), :>, 0
       assert_operator tier.fetch(:per_day), :>, tier.fetch(:per_minute)

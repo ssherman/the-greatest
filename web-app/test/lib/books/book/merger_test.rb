@@ -8,6 +8,23 @@ module Books
         @target = books_books(:war_and_peace)
       end
 
+      test "the merged-away book's verification, findings and candidates go; the target's stay" do
+        source_row = ::Books::Verification.create!(book: @source, work_outcome: :keyed, run_id: "r")
+        target_row = ::Books::Verification.create!(book: @target, work_outcome: :keyed, run_id: "r")
+        ::Books::VerificationFinding.create!(verification: source_row, book: @source, kind: :added, identifier_type: :books_work_isbn13, value: "1")
+        pointing = ::Books::VerificationFinding.create!(verification: target_row, book: @target, kind: :also_held,
+          identifier_type: :books_work_isbn13, value: "2", other_book_id: @source.id)
+        kept = ::Books::VerificationFinding.create!(verification: target_row, book: @target, kind: :added, identifier_type: :books_work_isbn13, value: "3")
+        ::Books::EditionCandidate.create!(book: @source, edition_key: "OL1M")
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not ::Books::Verification.exists?(source_row.id)
+        assert_not ::Books::VerificationFinding.exists?(pointing.id)
+        assert ::Books::VerificationFinding.exists?(kept.id)
+        assert_equal 0, ::Books::EditionCandidate.where(book_id: @source.id).count
+      end
+
       test "merges successfully and returns the target book" do
         result = ::Books::Book::Merger.call(source: @source, target: @target)
 
@@ -184,6 +201,32 @@ module Books
           identifiable_type: "Books::Book", identifiable_id: @target.id,
           identifier_type: "books_work_isbn10", value: "0140449132"
         ).count
+      end
+
+      test "a duplicate identifier keeps the more trusted source" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_work_isbn10, value: "0140449132", source: :open_library)
+        Identifier.create!(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132", source: :legacy)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal ["open_library"], Identifier.where(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132").pluck(:source)
+      end
+
+      test "a less trusted duplicate never downgrades the target's row" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_work_isbn10, value: "0140449132", source: :legacy)
+        Identifier.create!(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132", source: :worldcat)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal ["worldcat"], Identifier.where(identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132").pluck(:source)
+      end
+
+      test "a moved identifier keeps its source" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_work_oclc_id, value: "424242", source: :worldcat)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert Identifier.find_by!(identifiable: @target, identifier_type: :books_work_oclc_id, value: "424242").source_worldcat?
       end
 
       test "moves a country the target does not already have" do
@@ -661,13 +704,46 @@ module Books
       end
 
       test "fills a blank field on the target from the source" do
-        @source.update!(subtitle: "A Novel in Six Parts")
+        @source.update!(title: @target.title, subtitle: "A Novel in Six Parts")
 
         merger = ::Books::Book::Merger.new(source: @source, target: @target)
         merger.call
 
         assert_equal "A Novel in Six Parts", @target.reload.subtitle
         assert_includes merger.stats[:filled_fields], :subtitle
+      end
+
+      # Merging a translation into the English book must not leave the translation's subtitle, sort title or
+      # description on it ("The Bible: Einheitsübersetzung…", "The One: Finde dein perfektes Match").
+      test "takes no subtitle, sort title or description from a source with a different title" do
+        @target.update_columns(subtitle: nil, sort_title: nil, description: nil)
+        @source.update!(title: "Die Bibel", subtitle: "Einheitsübersetzung", sort_title: "Bibel, Die",
+          description: "Die Heilige Schrift in der Einheitsübersetzung.")
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        merger.call
+
+        @target.reload
+        assert_equal [nil, nil, nil], [@target.subtitle, @target.sort_title, @target.description]
+        assert_empty merger.stats[:filled_fields] & %i[subtitle sort_title description]
+      end
+
+      test "a source whose title differs only in case, punctuation or a leading article still fills the subtitle" do
+        @target.update_columns(title: "The Poseidon Adventure", subtitle: nil)
+        @source.update!(title: "Poseidon Adventure!", subtitle: "A Novel")
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal "A Novel", @target.reload.subtitle
+      end
+
+      test "a source with a different title still fills fields that do not depend on the title" do
+        @target.update_columns(word_count: nil)
+        @source.update!(title: "Die Bibel", word_count: 1500)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal 1500, @target.reload.word_count
       end
 
       test "never overwrites a non-blank field on the target" do
@@ -700,6 +776,44 @@ module Books
         ::Books::Book::Merger.call(source: @source, target: @target)
 
         assert_equal 1869, @target.reload.first_published_year
+      end
+
+      test "merge moves rows with their status" do
+        ::AlternateTitle.create!(titleable: @source, title: "Prestuplenie", source: :legacy, status: :review,
+          verdict: :not_same_work, category: :variant, confidence: 0.6, decided_by: :ai)
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        merger.call
+
+        row = ::AlternateTitle.find_by!(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: "prestuplenie")
+        assert_equal ["review", "not_same_work"], [row.status, row.verdict]
+        main = ::AlternateTitle.find_by!(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: "crime and punishment")
+        assert main.from_merge?
+        added = merger.stats[:alternate_titles_added]
+        assert_includes added, "Prestuplenie"
+        assert_includes added, "Crime and Punishment"
+      end
+
+      test "merge removed wins over kept" do
+        title = "The Treasure of the City of Ladies"
+        ::AlternateTitle.create!(titleable: @source, title: title, source: :legacy, status: :removed, reason: "x")
+        ::AlternateTitle.create!(titleable: @target, title: title, source: :legacy, status: :kept)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        rows = ::AlternateTitle.where(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: title.downcase)
+        assert_equal ["removed"], rows.map(&:status)
+        assert_not_includes @target.reload.alternate_titles, title
+      end
+
+      test "merge does not readd a removed source title" do
+        ::AlternateTitle.create!(titleable: @target, title: "Crime and Punishment", source: :legacy, status: :removed)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        row = ::AlternateTitle.find_by!(titleable_type: "Books::Book", titleable_id: @target.id, normalized_title: "crime and punishment")
+        assert row.removed?
+        assert_not_includes @target.reload.alternate_titles, "Crime and Punishment"
       end
 
       test "absorbs the source title and its alternates into the target's alternate titles" do

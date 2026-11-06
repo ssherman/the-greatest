@@ -55,6 +55,7 @@ class User < ApplicationRecord
   has_many :memberships, dependent: :nullify
   has_many :books_reading_goals, class_name: "Books::ReadingGoal", dependent: :destroy
   has_many :api_tokens, dependent: :destroy
+  has_many :sessions, dependent: :destroy
   has_many :goodreads_imports, class_name: "Books::GoodreadsImport", dependent: :destroy
   has_many :reviewed_goodreads_imports, class_name: "Books::GoodreadsImport", foreign_key: :reviewed_by_id,
     dependent: :nullify
@@ -79,6 +80,7 @@ class User < ApplicationRecord
   has_many :reviewed_match_decisions, class_name: "MatchDecision", foreign_key: :reviewed_by_id, dependent: :nullify
   has_many :resolved_duplicate_candidates, class_name: "DuplicateCandidate", foreign_key: :resolved_by_id, dependent: :nullify
   has_many :news_posts, dependent: :destroy
+  has_many :decided_alternate_titles, class_name: "::AlternateTitle", foreign_key: :decided_by_user_id, dependent: :nullify
 
   enum :role, [:user, :admin, :editor]
   enum :external_provider, [:facebook, :twitter, :google, :apple, :password]

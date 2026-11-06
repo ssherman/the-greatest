@@ -1,5 +1,16 @@
 # Helpers for API integration tests.
 module ApiConformance
+  # Both rate-limit windows read as exhausted for the block, so the response
+  # is the 429 the contract documents.
+  def with_exhausted_limit
+    minute = Services::Api::RateLimiter::Window.new(limit: 60, remaining: 0, reset_at: 30.seconds.from_now, exceeded: true)
+    day = Services::Api::RateLimiter::Window.new(limit: 5000, remaining: 10, reset_at: 1.day.from_now, exceeded: false)
+    Services::Api::RateLimiter.stubs(:hit).returns(Services::Api::RateLimiter::Verdict.new(minute: minute, day: day))
+    yield
+  ensure
+    Services::Api::RateLimiter.unstub(:hit)
+  end
+
   def bearer(secret) = {"Authorization" => "Bearer #{secret}"}
 
   # Validates only the RESPONSE against the OpenAPI document. For the tests
@@ -12,9 +23,9 @@ module ApiConformance
   # Test::Configuration#response_raise_error, set to false in test_helper.rb,
   # which is what actually turns an invalid response into a normal assertion
   # FAILURE here instead of an ERROR raised inside the gem.
-  def assert_api_response_conform(status:)
+  def assert_api_response_conform(status:, api: :default)
     assert_equal status, response.status, "#{request.request_method} #{request.fullpath}"
-    validated = OpenapiFirst::Test[:default].validate_response(request, response, raise_error: false)
+    validated = OpenapiFirst::Test[api].validate_response(request, response, raise_error: false)
     refute_nil validated, "#{request.request_method} #{request.fullpath} matched no documented operation"
     assert validated.valid?, validated.error&.exception_message
   end

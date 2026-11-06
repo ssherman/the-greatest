@@ -14,20 +14,23 @@
 #  type              :string           not null
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
+#  merged_into_id    :bigint
 #  parent_id         :bigint
 #
 # Indexes
 #
-#  index_categories_on_category_type  (category_type)
-#  index_categories_on_deleted        (deleted)
-#  index_categories_on_name           (name)
-#  index_categories_on_parent_id      (parent_id)
-#  index_categories_on_slug           (slug)
-#  index_categories_on_type           (type)
-#  index_categories_on_type_and_slug  (type,slug)
+#  index_categories_on_category_type   (category_type)
+#  index_categories_on_deleted         (deleted)
+#  index_categories_on_merged_into_id  (merged_into_id)
+#  index_categories_on_name            (name)
+#  index_categories_on_parent_id       (parent_id)
+#  index_categories_on_slug            (slug)
+#  index_categories_on_type            (type)
+#  index_categories_on_type_and_slug   (type,slug)
 #
 # Foreign Keys
 #
+#  fk_rails_...  (merged_into_id => categories.id)
 #  fk_rails_...  (parent_id => categories.id)
 #
 class Category < ApplicationRecord
@@ -43,7 +46,7 @@ class Category < ApplicationRecord
   # theme: games, movies, books (Action, Fantasy, Open world)
   # game_mode: games only (Single player, Multiplayer, Co-operative)
   # player_perspective: games only (First person, Third person, VR)
-  enum :category_type, {genre: 0, location: 1, subject: 2, theme: 3, game_mode: 4, player_perspective: 5}
+  enum :category_type, {genre: 0, location: 1, subject: 2, theme: 3, game_mode: 4, player_perspective: 5, audience: 6}
   enum :import_source, {amazon: 0, open_library: 1, openai: 2, goodreads: 3, musicbrainz: 4, igdb: 5}
 
   # Associations

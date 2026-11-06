@@ -4,24 +4,12 @@ require "rails/test_help"
 require "mocha/minitest"
 require "webmock/minitest"
 require "openapi_first"
-
-# openapi_first prefers multi_json whenever it is in the bundle (it is, via
-# opensearch-ruby) and calls MultiJson.load / .dump, which multi_json 1.21+
-# deprecates with a printed line per test process. Same library, its current
-# names -- a new warning line is a regression here, and this is the cause,
-# not a filter. Delete once openapi_first calls MultiJSON.parse itself.
-module OpenapiFirst
-  module JSON
-    def self.parse(string) = MultiJSON.parse(string)
-
-    def self.generate(object) = MultiJSON.generate(object)
-  end
-end
 require_relative "support/turbo_frame_links"
 require_relative "support/stripe_webhook_helper"
 require_relative "support/firebase_token_helper"
 require_relative "support/api_token_secrets"
 require_relative "support/api_conformance"
+require_relative "support/mcp_rpc_helpers"
 require_relative "support/sql_capture"
 require_relative "support/sequence_isolation"
 require_relative "support/books_legacy_sync_helper"
@@ -31,8 +19,11 @@ require_relative "support/viaf_builders"
 require_relative "support/fake_viaf_client"
 require_relative "support/books/open_library/fake_redis"
 require_relative "support/goodreads_import_helper"
+require_relative "support/goodreads_reimport_apply_helper"
 require_relative "support/list_wizard_helper"
 require_relative "support/ol_backfill_helper"
+require_relative "support/workflows/test_definition"
+require_relative "support/workflows/dispatch_helper"
 require_relative "support/validator_response_stub"
 
 # Configure Sidekiq to run jobs inline during tests
@@ -51,6 +42,7 @@ WebMock.disable_net_connect!(allow_localhost: true)
 # is the gate instead: it exercises every documented response itself.
 OpenapiFirst::Test.setup do |test|
   test.register(Rails.root.join("config/api/v1/openapi.yaml").to_s)
+  test.register(Rails.root.join("config/api/v1/admin_openapi.yaml").to_s, as: :admin)
   test.report_coverage = false
   # Without this, an invalid response raises inside the gem's own
   # after_response_validation hook (an ERROR), not through our assertion (a
@@ -63,6 +55,7 @@ end
 module ActiveSupport
   class TestCase
     include SqlCapture
+    include Workflows::DispatchHelper
 
     # Capped, not :number_of_processors. Several agents run suites at once in
     # separate worktrees, and every worker holds one Postgres connection, so an

@@ -315,6 +315,26 @@ module Books
       assert_equal 3, books_books(:crime_and_punishment).as_indexed_json[:similarity_category_count]
     end
 
+    test "an audience category indexes and counts as a genre" do
+      book = books_books(:crime_and_punishment)
+      audience = Books::Category.create!(name: "Young Adult", category_type: :audience)
+      CategoryItem.create!(category: audience, item: book)
+      book.reload
+      json = book.as_indexed_json
+
+      assert_includes json[:genre_category_ids], audience.id
+      assert_includes json[:category_ids], audience.id
+      assert_equal 4, json[:similarity_category_count]
+    end
+
+    test "scoring_type buckets audience with genre and ignores unscored types" do
+      assert_equal "genre", Books::Book.scoring_type("audience")
+      assert_equal "genre", Books::Book.scoring_type(:genre)
+      assert_equal "subject", Books::Book.scoring_type("subject")
+      assert_equal "location", Books::Book.scoring_type("location")
+      assert_nil Books::Book.scoring_type("theme")
+    end
+
     test "as_indexed_json excludes the book-type categories from the scoring count" do
       # Fiction/Nonfiction never contribute to the score numerator, so counting them
       # in the denominator divides a correctly-tagged book by more than an
@@ -429,6 +449,31 @@ module Books
       assert_no_difference -> { RecordRedirect.count } do
         book.destroy!
       end
+    end
+
+    test "ordered_by_primary_rank puts ranked books first by rank, then the unranked by title" do
+      primary = ranking_configurations(:books_global)
+      RankedItem.create!(item: books_books(:crime_and_punishment), ranking_configuration: primary, rank: 2)
+      RankedItem.create!(item: books_books(:got), ranking_configuration: primary, rank: 1)
+      # A rank in another configuration does not count.
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: ranking_configurations(:books_user), rank: 1)
+
+      ids = [:crime_and_punishment, :got, :war_and_peace, :clash].map { |name| books_books(name).id }
+      books = ::Books::Book.where(id: ids).ordered_by_primary_rank.to_a
+
+      expected = [:got, :crime_and_punishment, :clash, :war_and_peace].map { |name| books_books(name).id }
+      assert_equal expected, books.map(&:id)
+      assert_equal [1, 2, nil, nil], books.map(&:primary_rank)
+    end
+
+    test "ordered_by_primary_rank treats every book as unranked when there is no primary configuration" do
+      RankedItem.create!(item: books_books(:got), ranking_configuration: ranking_configurations(:books_global), rank: 1)
+      ::Books::RankingConfiguration.stubs(:default_primary).returns(nil)
+
+      books = ::Books::Book.where(id: [books_books(:got).id, books_books(:clash).id]).ordered_by_primary_rank.to_a
+
+      assert_equal [books_books(:clash).id, books_books(:got).id], books.map(&:id)
+      assert_equal [nil, nil], books.map(&:primary_rank)
     end
   end
 end

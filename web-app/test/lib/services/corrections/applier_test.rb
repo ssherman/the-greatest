@@ -168,6 +168,53 @@ module Services
         assert_predicate result, :success?
         assert_predicate correction.reload.correction_fields.sole, :rejected?
       end
+
+      def alternate_title_correction(new_titles)
+        ::Correction.create!(correctable: @book, notes: nil,
+          correction_fields_attributes: [{field_name: "alternate_titles", old_value: [], new_value: new_titles}])
+      end
+
+      def seed_alternate_titles
+        @book.update!(alternate_titles: [])
+        ::Services::AlternateTitles::Writer.replace(record: @book, titles: %w[A B], source: :admin)
+        @book.save!
+      end
+
+      test "accepted alternate titles remove the titles left out" do
+        seed_alternate_titles
+        correction = alternate_title_correction(%w[A C])
+
+        result = Applier.call(correction: correction, accepted: {"alternate_titles" => %w[A C]}, admin: @admin)
+
+        assert_predicate result, :success?
+        rows = ::AlternateTitle.where(titleable: @book).index_by(&:title)
+        assert_predicate rows["B"], :removed?
+        assert_equal "removed by correction", rows["B"].reason
+        assert_predicate rows["C"], :from_correction?
+        assert_equal %w[A C], @book.reload.alternate_titles
+      end
+
+      test "accepted alternate titles reinstate a removed title" do
+        seed_alternate_titles
+        ::Services::AlternateTitles::Writer.replace(record: @book, titles: %w[A], source: :admin)
+        @book.save!
+        assert_predicate ::AlternateTitle.find_by!(titleable: @book, title: "B"), :removed?
+
+        Applier.call(correction: alternate_title_correction(%w[A B]), accepted: {"alternate_titles" => %w[A B]}, admin: @admin)
+
+        assert_predicate ::AlternateTitle.find_by!(titleable: @book, title: "B"), :kept?
+        assert_equal %w[A B], @book.reload.alternate_titles
+      end
+
+      test "a rejected alternate titles correction changes no rows" do
+        seed_alternate_titles
+        before = ::AlternateTitle.where(titleable: @book).order(:id).pluck(:id, :title, :status)
+
+        Applier.call(correction: alternate_title_correction(%w[A C]), accepted: {}, admin: @admin)
+
+        assert_equal before, ::AlternateTitle.where(titleable: @book).order(:id).pluck(:id, :title, :status)
+        assert_equal %w[A B], @book.reload.alternate_titles
+      end
     end
   end
 end

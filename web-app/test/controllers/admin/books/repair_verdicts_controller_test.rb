@@ -44,6 +44,62 @@ module Admin
         assert_equal [@relink.id], verdict_ids
       end
 
+      test "guess filter shows only guesses" do
+        sign_in_as(@admin, stub_auth: true)
+        guess = verdict(:reimport_guess, "reimport:guess:Review:1", payload: {"item_type" => "Review", "item_id" => 1, "from_book_id" => @book.id, "to_book_id" => books_books(:got).id, "guess" => true})
+        verdict(:reimport_guess, "reimport:guess:Review:2", payload: {"item_type" => "Review", "item_id" => 2, "from_book_id" => @book.id, "to_book_id" => books_books(:got).id, "guess" => false})
+
+        get admin_books_repair_verdicts_path(guess: "true", kind: "reimport_guess")
+
+        assert_equal [guess.id], verdict_ids
+      end
+
+      test "index renders every kind, with books present and gone" do
+        sign_in_as(@admin, stub_auth: true)
+        got = books_books(:got)
+        verdict(:merge_books, "books:present", payload: {"source_id" => @book.id, "target_id" => got.id, "full_title" => "T", "author_names" => ["A"]})
+        verdict(:merge_books, "books:gone", payload: {"source_id" => 999_999_001, "target_id" => 999_999_002})
+        verdict(:fix_identity, "fix:1", payload: {"book_id" => @book.id, "full_title" => "T", "author_names" => ["A"]})
+        verdict(:fix_identity, "fix:gone", payload: {"book_id" => 999_999_003, "full_title" => "T", "author_names" => ["A"]})
+        verdict(:merge_authors, "authors:1", payload: {"source_id" => books_authors(:tolstoy).id, "target_id" => 999_999_004})
+        verdict(:strip_identifier, "strip:1", payload: {"book_id" => @book.id, "remove" => [["isbn13", "9780000000002"]]})
+        verdict(:mark_provisional, "prov:1", payload: {"book_id" => 999_999_005, "reason" => "x"})
+
+        get admin_books_repair_verdicts_path
+
+        assert_response :success
+        assert_equal 8, verdict_ids.size
+      end
+
+      test "index query count does not grow with the number of verdicts" do
+        sign_in_as(@admin, stub_auth: true)
+        # Distinct books and authors per verdict: repeated ids would let a lazy,
+        # memoized lookup pass for a batched one.
+        fresh_book = lambda do |title|
+          ::Books::Book.create!(title: title, book_kind: "standalone").tap do |book|
+            ::Books::BookAuthor.create!(book: book, author: ::Books::Author.create!(name: "Author of #{title}"), position: 1)
+          end
+        end
+        add = lambda do |n|
+          n.times do |i|
+            key = "#{SecureRandom.hex(4)}-#{i}"
+            source, target = fresh_book.call("Source #{key}"), fresh_book.call("Target #{key}")
+            ::ListItem.create!(list: lists(:books_list), listable: target, position: 100 + i)
+            verdict(:merge_books, "m:#{key}", payload: {"source_id" => source.id, "target_id" => target.id})
+            verdict(:fix_identity, "f:#{key}", payload: {"book_id" => source.id, "full_title" => "T", "author_names" => ["A"]})
+            verdict(:merge_authors, "a:#{key}", payload: {"source_id" => source.authors.first.id, "target_id" => target.authors.first.id})
+          end
+        end
+        get admin_books_repair_verdicts_path # warm up
+        add.call(1)
+        few = capture_sql { get admin_books_repair_verdicts_path }.size
+        add.call(8)
+        many = capture_sql { get admin_books_repair_verdicts_path }.size
+
+        assert_operator verdict_ids.size, :>, 20
+        assert_equal few, many
+      end
+
       test "show renders the verdict with its source rows" do
         import = ::Books::GoodreadsImport.create!(user: users(:regular_user), source: :legacy_replay, status: :complete, legacy_import_id: 501)
         import.rows.create!(row_number: 3, raw: {"Title" => "War and Peace", "Author" => "Leo Tolstoy"})
@@ -122,6 +178,28 @@ module Admin
         assert_predicate @relink.reload, :approved?
         assert_predicate other.reload, :proposed?
         assert_equal @admin.id, @relink.decided_by_user_id
+      end
+
+      test "index hides superseded verdicts" do
+        superseded = verdict(:relink, "user:5:book:6:goodreads:7", status: :rejected)
+        superseded.update!(superseded_at: Time.current)
+        rejected = verdict(:relink, "user:5:book:6:goodreads:8", status: :rejected)
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_repair_verdicts_path(status: "rejected")
+
+        assert_equal [rejected.id], verdict_ids
+      end
+
+      test "bulk approve all matching never approves a superseded verdict" do
+        superseded = verdict(:relink, "user:5:book:6:goodreads:7")
+        superseded.update!(superseded_at: Time.current)
+        sign_in_as(@admin, stub_auth: true)
+
+        post bulk_approve_admin_books_repair_verdicts_path, params: {all_matching: "1", kind: "relink"}
+
+        assert_predicate @relink.reload, :approved?
+        assert_predicate superseded.reload, :proposed?
       end
 
       test "bulk approve of all matching approves only proposed verdicts the filter selects" do

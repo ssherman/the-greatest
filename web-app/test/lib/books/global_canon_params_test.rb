@@ -111,6 +111,26 @@ module Books
       end
     end
 
+    test "an audience slug is a valid exclusion" do
+      audience = Books::Category.create!(name: "Young Adult", category_type: :audience)
+
+      assert_equal [audience], Books::GlobalCanonParams.call(excluded_genres: audience.slug).excluded_genres
+    end
+
+    test "a slug merged away resolves to the category it was merged into" do
+      old = Books::Category.create!(name: "Childrens Books Old", category_type: :genre)
+      current = Books::Category.create!(name: "Children's", category_type: :audience)
+      old.update!(deleted: true, merged_into: current)
+
+      assert_equal [current], Books::GlobalCanonParams.call(excluded_genres: old.slug).excluded_genres
+    end
+
+    test "a slug that resolves to a subject still 404s" do
+      assert_raises(ActiveRecord::RecordNotFound) do
+        Books::GlobalCanonParams.call(excluded_genres: categories(:books_politics_subject).slug)
+      end
+    end
+
     test "default? is false once a genre is excluded" do
       genre("Poetry")
 

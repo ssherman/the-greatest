@@ -1,0 +1,22 @@
+{"entities": {"Q161531": {
+  "id": "Q161531",
+  "type": "item",
+  "labels": {"en": {"language": "en", "value": "Lolita"}},
+  "descriptions": {"en": {"language": "en", "value": "1955 novel by Vladimir Nabokov"}},
+  "claims": {
+    "P31": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q8261"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P50": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q2678"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P495": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q30"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}, {"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q145"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "deprecated"}],
+    "P407": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q1860"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P136": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q8253"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P921": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q1"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "preferred"}, {"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q2"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P840": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q1297"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P2408": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q1"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P7937": [{"mainsnak": {"snaktype": "value", "datatype": "wikibase-item", "datavalue": {"value": {"entity-type": "item", "id": "Q8261"}, "type": "wikibase-entityid"}}, "type": "statement", "rank": "normal"}],
+    "P577": [{"mainsnak": {"snaktype": "value", "datatype": "time", "datavalue": {"value": {"time": "+1955-00-00T00:00:00Z", "precision": 9}, "type": "time"}}, "type": "statement", "rank": "normal"}, {"mainsnak": {"snaktype": "value", "datatype": "time", "datavalue": {"value": {"time": "+1950-00-00T00:00:00Z", "precision": 8}, "type": "time"}}, "type": "statement", "rank": "normal"}],
+    "P2969": [{"mainsnak": {"snaktype": "value", "datatype": "external-id", "datavalue": {"value": "929", "type": "string"}}, "type": "statement", "rank": "normal"}],
+    "P648": [{"mainsnak": {"snaktype": "value", "datatype": "external-id", "datavalue": {"value": "OL1168083W", "type": "string"}}, "type": "statement", "rank": "normal"}],
+    "P243": [{"mainsnak": {"snaktype": "value", "datatype": "external-id", "datavalue": {"value": "1234", "type": "string"}}, "type": "statement", "rank": "normal"}]
+  },
+  "sitelinks": {"enwiki": {"site": "enwiki", "title": "Lolita"}, "frwiki": {"site": "frwiki", "title": "Lolita (roman)"}}
+}}, "success": 1}

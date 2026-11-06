@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 
 // The books Playwright project runs Desktop Chrome, which is above the `lg`
 // breakpoint where the drawer is hidden. Every test here must set a phone
@@ -130,6 +130,65 @@ test.describe('Books mobile nav drawer', () => {
 
     await expect(lastLink).toBeInViewport();
   });
+
+  test('the panel header links home', async ({ page }) => {
+    await page.goto('/authors');
+    await page.locator('#books-nav-drawer-button').click();
+
+    await page.locator('#books-nav-drawer-panel header').getByRole('link', { name: 'The Greatest Books' }).click();
+
+    await expect(page).toHaveURL(/\/$/);
+  });
+
+  test('the current page carries the ribbon and no other link does', async ({ page }) => {
+    await page.goto('/authors');
+    await page.locator('#books-nav-drawer-button').click();
+
+    const current = page.locator('#books-nav-drawer-panel a[aria-current="page"]');
+    await expect(current).toHaveCount(1);
+    await expect(current).toHaveText('Authors');
+    await expect(current).toBeVisible();
+    // Lists only starts open when it holds the current page.
+    await expect(page.locator('#books-nav-drawer-panel details[open]')).toHaveCount(0);
+    // Measured because a ribbon that compiled away would fail silently.
+    const ribbonWidth = await current.evaluate((el) => getComputedStyle(el, '::before').width);
+    expect(parseFloat(ribbonWidth)).toBeGreaterThan(0);
+  });
+
+  test('a current page inside Lists opens the submenu so the ribbon shows', async ({ page }) => {
+    await page.goto('/lists');
+    await page.locator('#books-nav-drawer-button').click();
+
+    await expect(page.locator('#books-nav-drawer-panel a[aria-current="page"]')).toBeVisible();
+    // The desktop bar shares the partial; open there would float a dropdown over the page.
+    await expect(page.locator('.navbar-center details[open]')).toHaveCount(0);
+  });
+
+  // .drawer-side is overflow-x: hidden, so a marked label that outgrows the panel
+  // is clipped with no error. This is the longest one; bold pushed it 8px over.
+  test('the longest current-page label still fits the panel', async ({ page }) => {
+    await page.goto('/the-greatest-books/since/2000');
+    await page.locator('#books-nav-drawer-button').click();
+
+    const current = page.locator('#books-nav-drawer-panel a[aria-current="page"]');
+    await expect(current).toBeVisible();
+    const textRight = await current.evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().right;
+    });
+    const panel = (await page.locator('#books-nav-drawer-panel').boundingBox())!;
+    expect(textRight).toBeLessThanOrEqual(panel.x + panel.width);
+  });
+
+  // Signed out, My Books is hidden and its divider has to go with it, or two
+  // dividers stack with nothing between them.
+  test('signed out, one divider separates the two groups', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#books-nav-drawer-button').click();
+
+    await expect(page.locator('#books-nav-drawer-panel li:empty:visible')).toHaveCount(1);
+  });
 });
 
 test.describe('Books header stays visible', () => {
@@ -170,4 +229,41 @@ test.describe('Books header stays visible', () => {
     const card = await page.getByTestId('book-sidebar-card').boundingBox();
     expect(card!.y).toBeGreaterThanOrEqual(nav!.y + nav!.height);
   });
+});
+
+// daisyUI splits the navbar 50/50 with no navbar-center below lg, so the
+// brand used to spill under the search icon on phones, and under the first
+// menu link at 1024. Each group's right edge must clear the next group's left.
+test.describe('Books header fits without overlapping', () => {
+  const brand = (page: Page) => page.locator('nav.navbar .navbar-start a[href="/"]');
+  const right = async (locator: Locator) => {
+    const box = (await locator.boundingBox())!;
+    return box.x + box.width;
+  };
+  const left = async (locator: Locator) => (await locator.boundingBox())!.x;
+
+  for (const width of [320, 375, 393, 768]) {
+    test(`the brand clears the search and login buttons at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/');
+
+      const firstEndItem = page.locator('nav.navbar .navbar-end > :visible').first();
+      expect(await right(brand(page))).toBeLessThanOrEqual(await left(firstEndItem));
+      expect(await right(page.locator('#navbar_login_button'))).toBeLessThanOrEqual(width);
+      await expect(brand(page)).toHaveAccessibleName('The Greatest Books');
+    });
+  }
+
+  for (const width of [1024, 1280]) {
+    test(`the brand, menu and search clear each other at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/');
+
+      const menuItems = page.locator('nav.navbar .navbar-center > ul > li');
+      expect(await right(brand(page))).toBeLessThanOrEqual(await left(menuItems.first()));
+      expect(await right(menuItems.last())).toBeLessThanOrEqual(
+        await left(page.locator('nav.navbar .navbar-end form'))
+      );
+    });
+  }
 });

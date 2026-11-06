@@ -8,10 +8,22 @@ module Services
       class FactSheetTest < ActiveSupport::TestCase
         def setup
           @author = ::Books::Author.create!(name: "Fact Sheet Author")
-          @sheet = FactSheet.new(@author)
+          @sheet = FactSheet.new(@author, source: :viaf)
         end
 
         def lookup(countries, unmatched = []) = ::Services::Books::CountryLookup::Result.new(countries: countries, unmatched: unmatched)
+
+        test "a stamped identifier carries the sheet's source" do
+          sheet = FactSheet.new(@author, source: :viaf)
+
+          sheet.stamp("books_author_viaf", "123456789")
+
+          assert @author.identifiers.find { |identifier| identifier.value == "123456789" }.source_viaf?
+        end
+
+        test "a sheet with no source refuses to stamp an identifier" do
+          assert_raises(ArgumentError) { FactSheet.new(@author).stamp("books_author_viaf", "123456789") }
+        end
 
         test "a death year more than two years before one of the author's own books is recorded, not applied" do
           @author.book_authors.create!(book: ::Books::Book.create!(title: "Later Book", first_published_year: 2021), position: 1)

@@ -3,25 +3,25 @@
 module Services
   module Books
     module Authors
-      # The backfill (spec §13). Queues the author chain for every author the
-      # Wikidata step has not processed (LedgerRun.processed; a placeholder
+      # The backfill (spec §13). Plans an author enrichment run for every author
+      # the Wikidata step has not processed (LedgerRun.processed; a placeholder
       # never is, so placeholders are left out): ranked authors first by
-      # rank, then the rest by how many books they wrote. Each WikidataJob
-      # starts SPACING seconds after the one before, the Wikidata pace, with
-      # research off for the whole chain.
+      # rank, then the rest by how many books they wrote. Each run's Wikidata
+      # step starts SPACING seconds after the one before, the Wikidata pace, with
+      # research off for the whole run.
       #
       # An author whose Wikidata step missed and whose VIAF step never
-      # finished (a failure, or a job lost) gets the VIAF step again. An
-      # author whose AI step already ran this era (a books.author_facts row
-      # newer than the author row) has the job told so (enrich_queued), so a
-      # VIAF match queues the AI step again only through the forced Wikidata
-      # hop; a lost chain, whose AI step never ran, carries enrich_queued
-      # false, so VIAF's own miss path queues the AI step.
+      # finished (a failure, or a job lost) gets a run that starts at the VIAF
+      # step. When that author's AI step already ran this era (a
+      # books.author_facts row newer than the author row) the run is told so
+      # (skip_ai_if_ran), so a VIAF match queues the AI step again only through
+      # the forced Wikidata hop; a lost chain, whose AI step never ran, runs it
+      # after VIAF's own miss.
       #
-      # An author with a chain job already waiting in Sidekiq is left out,
-      # so a second run while the first is still scheduled queues no one
-      # twice: a duplicate would skip the Wikidata step and pay for the AI
-      # step again. The limit applies to each kind after that.
+      # An author with an active run, or a chain job still waiting in Sidekiq
+      # from before the workflow shipped, is left out, so a second backfill
+      # while the first is still running plans no one twice. The limit applies
+      # to each kind after that.
       class Backfill
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -43,15 +43,21 @@ module Services
         end
 
         def call
-          waiting = @queued || QueuedChain.author_ids
+          waiting = (@queued || QueuedChain.author_ids) | active_run_author_ids
           wikidata = take(ranked(self.class.unprocessed).pluck(:id), waiting)
           viaf = take(viaf_retries.order(:id).pluck(:id), waiting)
-          ran = ai_step_ran(viaf)
 
+          authors = ::Books::Author.where(id: wikidata + viaf).index_by(&:id)
           wikidata.each_with_index do |id, index|
-            ::Books::Authors::WikidataJob.perform_in(index * SPACING, id, false, false, false)
+            ::Workflows::Books::AuthorEnrichment.start(authors.fetch(id), initiated_by: "backfill",
+              options: {allow_research: false}, start_after: (index * SPACING).seconds.from_now)
           end
-          viaf.each { |id| ::Books::Authors::ViafJob.perform_async(id, false, ran.include?(id), false) }
+          # The ledger test for "the AI step already ran" is the run's own
+          # skip_if, evaluated when its turn comes, not a set computed here.
+          viaf.each do |id|
+            ::Workflows::Books::AuthorEnrichment.start(authors.fetch(id), initiated_by: "backfill",
+              options: {allow_research: false, start_at: "viaf", skip_ai_if_ran: true})
+          end
 
           Result.new(success?: true, errors: [], data: {
             wikidata: wikidata.size, viaf: viaf.size, left_out: @left_out,
@@ -60,6 +66,10 @@ module Services
         end
 
         private
+
+        def active_run_author_ids
+          ::WorkflowRun.running.where(workflow: ::Workflows::Books::AuthorEnrichment.workflow).pluck(:enrichable_id).to_set
+        end
 
         def take(ids, waiting)
           fresh = ids.reject { |id| waiting.include?(id) }
@@ -86,21 +96,6 @@ module Services
             .where(id: wikidata.where(outcome: :unrecognized).select(:enrichable_id))
             .where.not(id: wikidata.where(outcome: %w[applied nothing_to_apply]).select(:enrichable_id))
             .where.not(id: LedgerRun.processed(EnrichFromViaf::KIND).select(:enrichable_id))
-        end
-
-        # Authors whose AI step already completed this era (a non-failed
-        # books.author_facts row newer than the author row): their VIAF
-        # retry must not queue it again. A failed row means every retry was
-        # exhausted and the step never completed, so it does not count. A
-        # lost chain never reached it, so theirs does.
-        def ai_step_ran(ids)
-          return Set.new if ids.empty?
-
-          ::Enrichment.for_kind(EnrichAuthor::KIND).where(enrichable_type: "Books::Author", enrichable_id: ids)
-            .where.not(outcome: :failed)
-            .joins("INNER JOIN books_authors ON books_authors.id = enrichments.enrichable_id")
-            .where("enrichments.created_at > books_authors.created_at")
-            .distinct.pluck(:enrichable_id).to_set
         end
       end
     end

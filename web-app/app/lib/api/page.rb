@@ -56,18 +56,23 @@ module Api
 
     def meta = {page: page, per_page: per_page, total_count: total_count, total_pages: total_pages}
 
-    def links(base_url)
+    # `query` is extra params every link must carry (a search's q), appended
+    # after page and per_page so the public links are unchanged without it.
+    def links(base_url, query: {})
+      extra = query.to_query
       {
-        self: url(base_url, page),
-        next: next_page && url(base_url, next_page),
-        prev: prev_page && url(base_url, prev_page),
-        first: url(base_url, 1),
-        last: url(base_url, total_pages)
+        self: url(base_url, page, extra),
+        next: next_page && url(base_url, next_page, extra),
+        prev: prev_page && url(base_url, prev_page, extra),
+        first: url(base_url, 1, extra),
+        last: url(base_url, total_pages, extra)
       }
     end
 
     private
 
-    def url(base_url, number) = "#{base_url}?page=#{number}&per_page=#{per_page}"
+    def url(base_url, number, extra)
+      "#{base_url}?page=#{number}&per_page=#{per_page}#{"&#{extra}" if extra.present?}"
+    end
   end
 end

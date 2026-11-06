@@ -1,11 +1,30 @@
-<%# `variant` controls the "Lists" submenu only. :horizontal keeps the floating
-    dropdown styling used by the desktop bar; :vertical drops it so the submenu
-    expands inline inside the drawer panel, which is what makes this read better
-    than the legacy site's floating-menu-over-a-panel. %>
+<%# `variant` picks between the two places this renders. :horizontal keeps the
+    floating dropdown styling used by the desktop bar; :vertical drops it so the
+    submenu expands inline inside the drawer panel, which is what makes this read
+    better than the legacy site's floating-menu-over-a-panel. :vertical also
+    groups the links with dividers and marks the current page. %>
 <% variant = local_assigns.fetch(:variant, :horizontal) %>
-<li><%= link_to "Books", books_root_path %></li>
+<%# Legacy menu order (women, africa, asia, latin-america, non-western, western) --
+    NOT the registry's order. See Books::CollectionsRegistry / Collections::Registry
+    for behaviour; this list is presentation order only. %>
+<% collections = [
+     ["The Global Canon", books_global_canon_path],
+     ["The Greatest Books of the 21st Century", "/the-greatest-books/since/2000"],
+     ["Greatest Books Written by Women", "/women"],
+     ["Greatest African Books", "/africa"],
+     ["Greatest Asian Books", "/asia"],
+     ["Greatest Latin American Books", "/latin-america"],
+     ["Greatest Non-Western Canon Books", "/non-western"],
+     ["Greatest Western Canon Books", "/western"],
+     ["Our Users' Favorite Books of All Time", "/lists/463"]
+   ] %>
+<%# Open in the drawer when it holds the current page, or the mark would sit
+    inside a collapsed submenu. Never in the bar, where open means a dropdown
+    floating over the page. %>
+<% lists_open = variant == :vertical && [books_lists_path, *collections.map(&:last)].any? { |path| books_nav_current?(path) } %>
+<li><%= books_nav_link "Books", books_root_path, variant %></li>
 <li>
-  <details>
+  <%= tag.details open: lists_open do %>
     <summary>Lists</summary>
     <%# :vertical (the drawer panel): daisyUI sets white-space: nowrap on
         `.menu :where(li ul)`, and .drawer-side is overflow-x: hidden, so a
@@ -15,25 +34,17 @@
         collection name added later would be silently cut off with no test
         failure and no build error. %>
     <ul class="<%= "bg-base-100 rounded-box z-[1] w-max max-w-[calc(100vw-2rem)] p-2 shadow" if variant == :horizontal %>">
-      <li><%= link_to "All Lists", books_lists_path %></li>
+      <li><%= books_nav_link "All Lists", books_lists_path, variant %></li>
       <li class="menu-title"><span class="sr-only">Curated collections</span></li>
-      <li><%= link_to "The Global Canon", books_global_canon_path %></li>
-      <li><%= link_to "The Greatest Books of the 21st Century", "/the-greatest-books/since/2000" %></li>
-      <%# Legacy menu order (women, africa, asia, latin-america, non-western, western) --
-          NOT the registry's order. See Books::CollectionsRegistry / Collections::Registry
-          for behaviour; this list is presentation order only. %>
-      <li><%= link_to "Greatest Books Written by Women", "/women" %></li>
-      <li><%= link_to "Greatest African Books", "/africa" %></li>
-      <li><%= link_to "Greatest Asian Books", "/asia" %></li>
-      <li><%= link_to "Greatest Latin American Books", "/latin-america" %></li>
-      <li><%= link_to "Greatest Non-Western Canon Books", "/non-western" %></li>
-      <li><%= link_to "Greatest Western Canon Books", "/western" %></li>
-      <li><%= link_to "Our Users' Favorite Books of All Time", "/lists/463" %></li>
+      <% collections.each do |name, path| %>
+        <li><%= books_nav_link name, path, variant %></li>
+      <% end %>
     </ul>
-  </details>
+  <% end %>
 </li>
-<li><%= link_to "Authors", books_authors_path %></li>
-<li><%= link_to "News", news_path %></li>
+<li><%= books_nav_link "Authors", books_authors_path, variant %></li>
+<li><%= books_nav_link "Categories", books_categories_path, variant %></li>
+<li><%= books_nav_link "News", news_path, variant %></li>
 <%# Revealed client-side by user_list_state_controller when signed in. Keeping
     the wrapper in cacheable HTML lets both responsive copies hydrate safely. %>
 <% if variant == :horizontal %>
@@ -52,19 +63,24 @@
     </details>
   </li>
 <% else %>
+  <%# An empty <li> is daisyUI's menu divider. This one follows My Books in and
+      out of `hidden` with no JavaScript of its own, so signed-out visitors don't
+      get two dividers in a row. %>
+  <li aria-hidden="true" class="has-[+.hidden]:hidden"></li>
   <li id="navbar_my_books" class="hidden">
-    <span class="menu-title">My Books</span>
+    <span class="menu-title text-xs uppercase tracking-wider text-base-content/70">My Books</span>
     <ul>
-      <li><%= link_to "Lists", my_lists_path %></li>
-      <li><%= link_to "Reading Goals", books_my_reading_goals_path %></li>
-      <li><%= link_to "Import from Goodreads", books_my_goodreads_imports_path %></li>
-      <li><%= link_to "My Rankings", my_ranking_configurations_path %></li>
-      <li><%= link_to "Reviews", my_reviews_path %></li>
-      <li><%= link_to "Saved Searches", saved_searches_path %></li>
-      <li><%= link_to "Recommendations", recommendations_path %></li>
+      <li><%= books_nav_link "Lists", my_lists_path, variant %></li>
+      <li><%= books_nav_link "Reading Goals", books_my_reading_goals_path, variant %></li>
+      <li><%= books_nav_link "Import from Goodreads", books_my_goodreads_imports_path, variant %></li>
+      <li><%= books_nav_link "My Rankings", my_ranking_configurations_path, variant %></li>
+      <li><%= books_nav_link "Reviews", my_reviews_path, variant %></li>
+      <li><%= books_nav_link "Saved Searches", saved_searches_path, variant %></li>
+      <li><%= books_nav_link "Recommendations", recommendations_path, variant %></li>
     </ul>
   </li>
+  <li aria-hidden="true"></li>
 <% end %>
 <%# Revealed client-side by membership_state_controller when the visitor is a member. %>
-<li id="navbar_members" class="hidden"><a href="/members">Members</a></li>
-<li><%= link_to "Support", membership_path %></li>
+<li id="navbar_members" class="hidden"><%= books_nav_link "Members", "/members", variant %></li>
+<li><%= books_nav_link "Support", membership_path, variant %></li>

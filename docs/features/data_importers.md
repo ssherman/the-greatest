@@ -82,8 +82,8 @@ end
 | Music | Release | MusicBrainz | Complete |
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
-| Books | Book | OpenLibrary, Authors, AiEnrichment, AuthorEnrichment | Complete |
-| Books | Author | OpenLibrary, Enrichment | Complete (Wikidata, VIAF, AI step; Reject link and backfill still to come) |
+| Books | Book | OpenLibrary, Authors, QueryIdentifiers, Enrichment | Complete |
+| Books | Author | OpenLibrary, Enrichment | Complete (Wikidata, VIAF and AI steps as a workflow run; Reject link and backfill plan runs too) |
 
 ### Music Providers
 
@@ -184,24 +184,55 @@ section for the full contract).
   matched under a variant name leaves the re-run to OpenSearch and the AI, and a book linked
   through an Open Library accept is found again by the service's accept on the same key.
 
-#### AI Enrichment (Async)
-Queues `Books::EnrichBookJob` and returns `[:ai_enrichment_queued]`. Runs after OpenLibrary and
-Authors, so the AI fills fewer blanks, and before AuthorEnrichment. Requires a title and either
-`book.authors` names (the usual case, since the author steps run first) or the query's
-`author_names` when the book still has no authors. When the import created one of the book's
-linked authors, it queues nothing: it writes a skipped `deferred_to_authors` ledger row and
-returns `[:ai_enrichment_deferred_to_authors]`, and the author chain hands the book on when the
-author is enriched. See `docs/features/books_enrichment.md` and
-`docs/features/books-author-enrichment.md`.
+#### Enrichment (plans workflow runs)
+`Providers::Enrichment` runs last, and only when `enrich:` is true. It replaces the three async providers
+that used to queue `Books::EnrichBookJob`, `Books::Authors::WikidataJob` and
+`Books::AmazonProductEnrichmentJob`. It calls `Workflows::Books::BookEnrichment.start`
+(see [Enrichment workflows](./enrichment-workflows.md)), which plans an author run for each author the
+import created and one `books.book_enrichment` run, and returns `[:enrichment_planned]`. The provider
+symbol is `:enrichment`, so `providers: [:enrichment]` selects it.
 
-#### Author Enrichment (Async)
-`Providers::AuthorEnrichment` runs last, after AiEnrichment, and queues
-`Books::Authors::WikidataJob` for each author this import created, returning
-`[:author_enrichment_queued]`. It runs after the importer has saved the book and its
-`book_authors` rows, so the author chain sees the book among the author's titles -- and after
-AiEnrichment has already written the book's `deferred_to_authors` row, so a chain that finishes
-fast cannot reach its hand-off before the book's wait is even recorded. It does nothing, and
-reports failure, for a book that was never persisted.
+- It needs a title, and either `book.authors` names (the usual case, since the author steps run first)
+  or the query's `author_names` when the book still has no authors; it fails without them, and for a
+  book that is not persisted. The names go into the run's `author_names` option for `book_facts`.
+- It runs after `Authors`, and the importer saves the book after each successful provider, so the book's
+  `book_authors` rows are in the database when `start` reads them. `book_facts` waits on the author runs
+  of the created authors linked to the book; a created author with no link is still enriched.
+- The plan rows are written immediately, in the caller's transaction, so a rolled-back import (the list
+  wizard's `CreateFailed`, Goodreads' `CreateBook`) leaves no run. Only the dispatch waits for the
+  outermost commit.
+- The `goodreads` step runs first and the `amazon` and `book_facts` steps wait for it to finish. It is
+  skipped `no_authors` for a book without `book_authors` rows, as is `amazon` (the searches are built from
+  the author). So a new book gets, in order: a Goodreads match (when one is found) that fills year, page
+  count, genre categories, series and identifiers; book AI in `sourced` mode from the matched page, with
+  no research run; and an Amazon search that tries the book's trusted ISBN-13 first. A book Goodreads does
+  not know goes on as before. Amazon's matching rules are summarised below.
+- A Goodreads member import (`enrich: false`) plans nothing; `PromoteRecords` plans the runs when an admin
+  approves the import. List-wizard text rows use `Services::Lists::Wizard::Books::Adapter::TEXT_PROVIDERS`
+  (`%i[authors enrichment]`).
+- Locally the steps need a running Sidekiq (`bin/dev` starts one; a bare `bin/rails server` plans the run and
+  never executes it).
+
+#### Amazon matching
+What the `amazon` step does to a book (`Services::Books::AmazonProductService`):
+
+- The search tries the book's trusted ISBN-13 first (an identifier from `open_library`, `worldcat` or
+  `goodreads`; legacy ISBNs are unverified and never count), because an ISBN finds the exact work faster
+  than a title search. The title-and-author searches follow as before.
+
+- Box sets and other multi-book products never become editions: `Services::Books::AmazonBookCheck` (`set?`,
+  `same_book?`) filters them, `AmazonProductService#persist_match` refuses a set product, and
+  `AmazonBookMatchTask` has non-match criteria for them.
+- An exact match (`same_book?`) writes the product's ASIN and ISBNs to the book as `books_work_*` identifiers
+  with source `amazon` (`Services::Books::AmazonBookIdentifiers`).
+- `same_book?` also rejects adaptations and study aids (`AmazonBookCheck.derivative?`: graphic novel, abridged,
+  young readers, coloring book, study guide and similar), so their ISBNs never land on the original book. A
+  term the book's own title carries does not count. The edition backstop does not use `derivative?`, because
+  original graphic novels carry series brackets such as "(Pantheon Graphic Novels)"; `AmazonBookMatchTask`
+  excludes adaptation editions instead.
+- If another book already holds any of those values from a verified source (Open Library, WorldCat), nothing
+  is written. A duplicate candidate with source `identifier_collision` is flagged for a human instead. A value
+  held only from an unverified source does not block the write.
 
 #### Authors (Sync)
 `Providers::Authors` runs after Open Library. When the book still has no authors (Open Library abstained,
@@ -225,19 +256,20 @@ unions alternate names, stamps `books_author_openlibrary_id`, and writes `name` 
 author already holds the key (or a key it redirects from), it applies nothing, flags the two authors as an
 `external_key_collision` pair on the duplicates page, and reports a failure.
 
-**Enrichment (async).** Queues `Books::Authors::WikidataJob` for the new author and returns
-`[:author_enrichment_queued]`. The job resolves the author to a Wikidata person or to none,
+**Enrichment (async).** Plans a `books.author_enrichment` run for the new author and returns
+`[:author_enrichment_planned]` (see [Enrichment workflows](./enrichment-workflows.md)). The run resolves the author to a Wikidata person or to none,
 fills blanks from the item, and links the English Wikipedia article only through that item. See
 `docs/features/books-author-enrichment.md`. Providers run only for a new author, so a matched
 author is never re-enriched from an import.
 
-On a Wikidata miss, `WikidataJob` chains into `Books::Authors::ViafJob` — VIAF is not a provider of
-its own, but a job the Wikidata step can lead to. Every chain is meant to end in
-`Books::Authors::EnrichJob`, the AI facts step, which also hands the author's waiting books on to
-book enrichment -- see `docs/features/books-author-enrichment.md`'s "The AI step" and "A stuck
-chain" for what the AI step does and the gaps that can keep a chain from reaching it. Spec:
-`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`. The Reject link action
-(increment 5) and the backfill rake task (increment 6) are still to come.
+On a Wikidata miss, the run's `viaf` step follows -- VIAF is not a provider of its own, but a step of
+the author run (`books.author_enrichment`: `wikidata`, `viaf`, `wikidata_via_viaf`, `author_facts`).
+Every run ends in `author_facts`, the AI facts step; a book created in the same import waits on it
+through the book run. See `docs/features/books-author-enrichment.md` ("The AI step") and
+[Enrichment workflows](./enrichment-workflows.md). The Reject link action
+(`Services::Books::Authors::RejectExternalLink`) and the backfill (`Services::Books::Authors::Backfill`,
+`books:authors:enrich`) both plan author runs. Spec:
+`docs/superpowers/specs/2026-09-27-books-author-importer-design.md`.
 
 ## Usage Examples
 

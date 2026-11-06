@@ -1,0 +1,39 @@
+# One running author run on Tolstoy, used by the workflow engine tests.
+# == Schema Information
+#
+# Table name: workflow_runs
+#
+#  id                 :bigint           not null, primary key
+#  definition_version :integer          not null
+#  enrichable_type    :string           not null
+#  error_summary      :text
+#  finished_at        :datetime
+#  initiated_by       :string           not null
+#  options            :jsonb            not null
+#  started_at         :datetime
+#  status             :integer          default("running"), not null
+#  workflow           :string           not null
+#  created_at         :datetime         not null
+#  updated_at         :datetime         not null
+#  enrichable_id      :bigint           not null
+#  parent_run_id      :bigint
+#
+# Indexes
+#
+#  index_workflow_runs_on_enrichable     (enrichable_type,enrichable_id)
+#  index_workflow_runs_on_parent_run_id  (parent_run_id)
+#  index_workflow_runs_on_status         (status)
+#  index_workflow_runs_one_active        (workflow,enrichable_type,enrichable_id) UNIQUE WHERE (status = 0)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (parent_run_id => workflow_runs.id) ON DELETE => nullify
+#
+tolstoy_author_run:
+  workflow: books.author_enrichment
+  definition_version: 1
+  enrichable: tolstoy (Books::Author)
+  status: 0
+  options: {}
+  initiated_by: test
+  started_at: <%= Time.utc(2026, 10, 1, 12).to_fs(:db) %>

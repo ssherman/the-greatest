@@ -443,6 +443,25 @@ module Books
       assert_select "p", /Excluding Poetry\./
     end
 
+    test "an excluded slug that was merged away 301s to the canonical path" do
+      old = ::Books::Category.create!(name: "Childrens Books Old", category_type: :genre)
+      current = ::Books::Category.create!(name: "Children's", category_type: :audience)
+      old.update!(deleted: true, merged_into: current)
+
+      get "/global-canon/total_books/150/nonfiction/20/max_per_country/3/excluding/#{old.slug}"
+
+      assert_response :moved_permanently
+      assert_includes response.location, "/excluding/#{current.slug}"
+    end
+
+    test "the genres endpoint finds audiences" do
+      audience = ::Books::Category.create!(name: "Young Adult", category_type: :audience)
+
+      get "/global-canon/genres", params: {q: "Young"}, as: :json
+
+      assert_includes response.parsed_body.map { |row| row["value"] }, audience.slug
+    end
+
     private
 
     def query_count_for(path)

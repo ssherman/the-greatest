@@ -1,0 +1,32 @@
+<%= turbo_frame_tag "author_books_list" do %>
+  <% if @books.empty? %>
+    <p class="text-base-content/60 text-sm">No books.</p>
+  <% else %>
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Title</th>
+            <th>First Published</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @books.each do |book| %>
+            <tr>
+              <td><%= book.primary_rank || "—" %></td>
+              <td><%= link_to book.title, admin_books_book_path(book), class: "link", data: {turbo_frame: "_top"} %></td>
+              <td><%= book.first_published_year || "—" %></td>
+              <td><span class="badge badge-ghost badge-sm"><%= @role_by_book[book.id].to_s.titleize %></span></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+    <%# Page links stay inside this frame on purpose: paging swaps only the table. %>
+    <% if @pagy.pages > 1 %>
+      <div class="mt-4 flex justify-center"><%== @pagy.series_nav %></div>
+    <% end %>
+  <% end %>
+<% end %>

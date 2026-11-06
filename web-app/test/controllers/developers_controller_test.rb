@@ -69,6 +69,9 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     assert_select "[id=?]", "endpoint-getList"
     assert_select "[id=?]", "endpoint-listListItems"
     assert_select "[id=?]", "endpoint-listBookLists"
+    assert_select "[id=?]", "endpoint-listCategories"
+    assert_select "[id=?]", "endpoint-getCategory"
+    assert_select "[id=?]", "endpoint-listCategoryBooks"
 
     host! host_for(:music)
     get developers_path
@@ -77,6 +80,7 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     assert_select "[id=?]", "endpoint-listAuthors", count: 0
     assert_select "[id=?]", "endpoint-listRankingConfigurations", count: 0
     assert_select "[id=?]", "endpoint-listLists", count: 0
+    assert_select "[id=?]", "endpoint-listCategories", count: 0
   end
 
   # `slug` is `in: path` in the contract and already shows in the path as
@@ -128,6 +132,63 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     assert_select "table#rate-limits-table td", text: limits.dig(:member, :per_minute).to_s
     assert_select "table#rate-limits-table td", text: limits.dig(:member, :per_day).to_s
     assert_select "table#rate-limits-table td", text: limits.dig(:system, :per_day).to_s
+  end
+
+  test "the books page documents the MCP server" do
+    host! host_for(:books)
+
+    get developers_path
+
+    assert_select "h2#mcp"
+    assert_select "pre#mcp-command code", text: /claude mcp add --transport http --scope user the-greatest-books https:\/\/dev-new\.thegreatestbooks\.org\/api\/mcp --header "Authorization: Bearer \$THE_GREATEST_TOKEN"/
+    Mcp::ToolDirectory.entries(document: :public, domain: :books).each do |entry|
+      assert_select "[id=?]", "mcp-tool-#{entry.name}", 1
+    end
+  end
+
+  test "the MCP tool list is the catalogue, so it cannot drift" do
+    host! host_for(:books)
+
+    get developers_path
+
+    rendered = css_select("[id^=mcp-tool-]").map { |node| node["id"].delete_prefix("mcp-tool-") }
+    expected = Mcp::ToolDirectory.entries(document: :public, domain: :books).map(&:name)
+    assert_equal expected.sort, rendered.sort
+    assert_equal 18, rendered.size
+  end
+
+  test "music and games have no MCP section" do
+    %i[music games].each do |domain|
+      host! host_for(domain)
+
+      get developers_path
+
+      assert_response :success
+      assert_select "#mcp", 0
+      refute_includes response.body, "/api/mcp"
+    end
+  end
+
+  test "the public page never mentions the admin endpoint or an admin tool" do
+    host! host_for(:books)
+
+    get developers_path
+
+    refute_includes response.body, "/api/mcp/admin"
+    Mcp::ToolDirectory.entries(document: :admin, domain: :books).each do |entry|
+      refute_includes response.body, entry.name
+    end
+  end
+
+  test "tool descriptions render as text, not markup" do
+    host! host_for(:books)
+    entry = Mcp::ToolDirectory::Entry.new(name: "x", title: "X", description: "<b>bold</b> & `code`", destructive: false, composite: false)
+    Mcp::ToolDirectory.stubs(:entries).returns([entry])
+
+    get developers_path
+
+    assert_includes response.body, "&lt;b&gt;bold&lt;/b&gt;"
+    assert_select "#mcp-tool-x b", 0
   end
 
   test "an unrepresentable format is a 404, not a 406" do

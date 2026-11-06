@@ -23,6 +23,7 @@
 #  ai_chat_id        :bigint
 #  enrichable_id     :bigint           not null
 #  match_decision_id :bigint
+#  workflow_step_id  :bigint
 #
 # Indexes
 #
@@ -32,11 +33,13 @@
 #  index_enrichments_on_match_decision_id    (match_decision_id)
 #  index_enrichments_on_mode_and_created_at  (mode,created_at)
 #  index_enrichments_on_outcome              (outcome)
+#  index_enrichments_on_workflow_step_id     (workflow_step_id)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (ai_chat_id => ai_chats.id) ON DELETE => nullify
 #  fk_rails_...  (match_decision_id => match_decisions.id) ON DELETE => nullify
+#  fk_rails_...  (workflow_step_id => workflow_steps.id) ON DELETE => nullify
 #
 war_and_peace_facts_applied:
   enrichable: war_and_peace (Books::Book)

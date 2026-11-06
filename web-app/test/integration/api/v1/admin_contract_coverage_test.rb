@@ -1,0 +1,142 @@
+require "test_helper"
+
+module Api
+  module V1
+    # The admin document's twin of ContractCoverageTest: every documented
+    # response of config/api/v1/admin_openapi.yaml must be reachable and
+    # conform. The merge operations are exercised with a dry run for 200, so the shared fixtures survive.
+    class AdminContractCoverageTest < ActionDispatch::IntegrationTest
+      READ = ApiTokenSecrets::ADMIN_READ
+      MEMBER = ApiTokenSecrets::MEMBER
+      MERGE = ApiTokenSecrets::ADMIN
+
+      EXERCISES = {
+        ["GET", "/api/v1/admin/openapi.json", "200"] => -> { get "/api/v1/admin/openapi.json", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/openapi.json", "401"] => -> { get "/api/v1/admin/openapi.json" },
+        ["GET", "/api/v1/admin/openapi.json", "403"] => -> { get "/api/v1/admin/openapi.json", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/openapi.json", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/openapi.json", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/books", "200"] => -> { get "/api/v1/admin/books?q=war", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/books", "400"] => -> { get "/api/v1/admin/books?q=", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/books", "401"] => -> { get "/api/v1/admin/books?q=war" },
+        ["GET", "/api/v1/admin/books", "403"] => -> { get "/api/v1/admin/books?q=war", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/books", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/books?q=war", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/authors", "200"] => -> { get "/api/v1/admin/authors?q=tol", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/authors", "400"] => -> { get "/api/v1/admin/authors?q=", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/authors", "401"] => -> { get "/api/v1/admin/authors?q=tol" },
+        ["GET", "/api/v1/admin/authors", "403"] => -> { get "/api/v1/admin/authors?q=tol", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/authors", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/authors?q=tol", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/categories", "200"] => -> { get "/api/v1/admin/categories?q=nov", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/categories", "400"] => -> { get "/api/v1/admin/categories?status=bogus", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/categories", "401"] => -> { get "/api/v1/admin/categories" },
+        ["GET", "/api/v1/admin/categories", "403"] => -> { get "/api/v1/admin/categories", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/categories", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/categories", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/categories/{id}", "200"] => -> { get "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/categories/{id}", "401"] => -> { get "/api/v1/admin/categories/#{categories(:books_novels_genre).id}" },
+        ["GET", "/api/v1/admin/categories/{id}", "403"] => -> { get "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/categories/{id}", "404"] => -> { get "/api/v1/admin/categories/999999999", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/categories/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", headers: bearer(READ) } },
+        ["POST", "/api/v1/admin/categories", "201"] => -> { post "/api/v1/admin/categories", params: {name: "Coverage Genre", category_type: "genre"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/categories", "400"] => -> { post "/api/v1/admin/categories", params: {name: "X", category_type: "bogus"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/categories", "401"] => -> { post "/api/v1/admin/categories", params: {name: "X"}, as: :json },
+        ["POST", "/api/v1/admin/categories", "403"] => -> { post "/api/v1/admin/categories", params: {name: "X"}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/categories", "422"] => -> { post "/api/v1/admin/categories", params: {name: "Novels"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/categories", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/categories", params: {name: "X"}, as: :json, headers: bearer(MERGE) } },
+        ["PATCH", "/api/v1/admin/categories/{id}", "200"] => -> { patch "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", params: {description: "Prose"}, as: :json, headers: bearer(MERGE) },
+        ["PATCH", "/api/v1/admin/categories/{id}", "400"] => -> { patch "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", params: {parent_id: "abc"}, as: :json, headers: bearer(MERGE) },
+        ["PATCH", "/api/v1/admin/categories/{id}", "401"] => -> { patch "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", params: {description: "x"}, as: :json },
+        ["PATCH", "/api/v1/admin/categories/{id}", "403"] => -> { patch "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", params: {description: "x"}, as: :json, headers: bearer(READ) },
+        ["PATCH", "/api/v1/admin/categories/{id}", "404"] => -> { patch "/api/v1/admin/categories/999999999", params: {description: "x"}, as: :json, headers: bearer(MERGE) },
+        ["PATCH", "/api/v1/admin/categories/{id}", "422"] => -> { patch "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", params: {parent_id: categories(:books_novels_genre).id}, as: :json, headers: bearer(MERGE) },
+        ["PATCH", "/api/v1/admin/categories/{id}", "429"] => -> { with_exhausted_limit { patch "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", params: {description: "x"}, as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/categories/{id}/merge", "200"] => -> { post "/api/v1/admin/categories/#{categories(:books_novels_genre).id}/merge", params: {source_ids: [categories(:books_classics_genre).id], dry_run: true}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/categories/{id}/merge", "400"] => -> { post "/api/v1/admin/categories/#{categories(:books_novels_genre).id}/merge", params: {source_ids: []}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/categories/{id}/merge", "401"] => -> { post "/api/v1/admin/categories/#{categories(:books_novels_genre).id}/merge", params: {source_ids: [categories(:books_classics_genre).id]}, as: :json },
+        ["POST", "/api/v1/admin/categories/{id}/merge", "403"] => -> { post "/api/v1/admin/categories/#{categories(:books_novels_genre).id}/merge", params: {source_ids: [categories(:books_classics_genre).id]}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/categories/{id}/merge", "404"] => -> { post "/api/v1/admin/categories/#{categories(:books_novels_genre).id}/merge", params: {source_ids: [999_999_999]}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/categories/{id}/merge", "422"] => -> { post "/api/v1/admin/categories/#{categories(:books_novels_genre).id}/merge", params: {source_ids: [categories(:books_deleted_genre).id]}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/categories/{id}/merge", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/categories/#{categories(:books_novels_genre).id}/merge", params: {source_ids: [categories(:books_classics_genre).id]}, as: :json, headers: bearer(MERGE) } },
+        ["DELETE", "/api/v1/admin/categories/{id}", "200"] => -> { delete "/api/v1/admin/categories/#{categories(:books_classics_genre).id}?dry_run=true", headers: bearer(MERGE) },
+        ["DELETE", "/api/v1/admin/categories/{id}", "401"] => -> { delete "/api/v1/admin/categories/#{categories(:books_classics_genre).id}" },
+        ["DELETE", "/api/v1/admin/categories/{id}", "403"] => -> { delete "/api/v1/admin/categories/#{categories(:books_classics_genre).id}", headers: bearer(READ) },
+        ["DELETE", "/api/v1/admin/categories/{id}", "404"] => -> { delete "/api/v1/admin/categories/999999999", headers: bearer(MERGE) },
+        ["DELETE", "/api/v1/admin/categories/{id}", "422"] => -> { delete "/api/v1/admin/categories/#{categories(:books_deleted_genre).id}", headers: bearer(MERGE) },
+        ["DELETE", "/api/v1/admin/categories/{id}", "429"] => -> { with_exhausted_limit { delete "/api/v1/admin/categories/#{categories(:books_classics_genre).id}", headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/books/{id}/merge", "200"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: books_books(:crime_and_punishment).id, dry_run: true}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/merge", "400"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: "abc"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/merge", "401"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: books_books(:crime_and_punishment).id}, as: :json },
+        ["POST", "/api/v1/admin/books/{id}/merge", "403"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: books_books(:crime_and_punishment).id}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/books/{id}/merge", "404"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: 999_999_999}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/merge", "422"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: books_books(:war_and_peace).id}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/merge", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/merge", params: {source_id: books_books(:crime_and_punishment).id}, as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "200"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:king).id, dry_run: true}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "400"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: "abc"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "401"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:king).id}, as: :json },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "403"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:king).id}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "404"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: 999_999_999}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "422"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:tolstoy).id}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/merge", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/merge", params: {source_id: books_authors(:king).id}, as: :json, headers: bearer(MERGE) } }
+      }.merge(
+        %w[books authors].flat_map do |segment|
+          tag = "/api/v1/admin/#{segment}/{id}/categories"
+          untag = "#{tag}/{category_id}"
+          entries = [
+            [["POST", tag, "200"], -> { post tag_path(segment), params: {category_id: politics_id}, as: :json, headers: bearer(MERGE) }],
+            [["POST", tag, "400"], -> { post tag_path(segment), params: {category_id: "abc"}, as: :json, headers: bearer(MERGE) }],
+            [["POST", tag, "401"], -> { post tag_path(segment), params: {category_id: politics_id}, as: :json }],
+            [["POST", tag, "403"], -> { post tag_path(segment), params: {category_id: politics_id}, as: :json, headers: bearer(READ) }],
+            [["POST", tag, "404"], -> { post tag_path(segment, 999_999_999), params: {category_id: politics_id}, as: :json, headers: bearer(MERGE) }],
+            [["POST", tag, "422"], -> { post tag_path(segment), params: {category_id: categories(:music_rock_genre).id}, as: :json, headers: bearer(MERGE) }],
+            [["POST", tag, "429"], -> { with_exhausted_limit { post tag_path(segment), params: {category_id: politics_id}, as: :json, headers: bearer(MERGE) } }],
+            [["DELETE", untag, "200"], -> {
+              CategoryItem.find_or_create_by!(item: tag_item(segment), category: categories(:books_politics_subject)) { |row| row.source = :admin }
+              delete "#{tag_path(segment)}/#{politics_id}", headers: bearer(MERGE)
+            }],
+            [["DELETE", untag, "400"], -> { delete "#{tag_path(segment)}/0", headers: bearer(MERGE) }],
+            [["DELETE", untag, "401"], -> { delete "#{tag_path(segment)}/#{politics_id}" }],
+            [["DELETE", untag, "403"], -> { delete "#{tag_path(segment)}/#{politics_id}", headers: bearer(READ) }],
+            [["DELETE", untag, "404"], -> { delete "#{tag_path(segment)}/999999999", headers: bearer(MERGE) }],
+            [["DELETE", untag, "429"], -> { with_exhausted_limit { delete "#{tag_path(segment)}/#{politics_id}", headers: bearer(MERGE) } }]
+          ]
+          # Only books have inherited links (ancestor locations), so only books can answer 422.
+          if segment == "books"
+            entries << [["DELETE", untag, "422"], -> {
+              parent = ::Books::Category.create!(name: "Coverage Land", category_type: :location)
+              child = ::Books::Category.create!(name: "Coverage Town", category_type: :location, parent: parent)
+              ::Categories::ItemLinker.link(item: tag_item(segment), category: child)
+              delete "#{tag_path(segment)}/#{parent.id}", headers: bearer(MERGE)
+            }]
+          end
+          entries
+        end.to_h
+      ).freeze
+
+      def tag_item(segment) = (segment == "books") ? books_books(:war_and_peace) : books_authors(:tolstoy)
+
+      def tag_path(segment, id = tag_item(segment).id) = "/api/v1/admin/#{segment}/#{id}/categories"
+
+      def politics_id = categories(:books_politics_subject).id
+
+      setup do
+        host! "dev-new.thegreatestbooks.org"
+        ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: books_books(:war_and_peace).id.to_s, score: 1.0, source: {}}])
+        ::Search::Books::Search::AuthorGeneral.stubs(:call).returns([{id: books_authors(:tolstoy).id.to_s, score: 1.0, source: {}}])
+      end
+
+      test "the map and the document describe the same responses" do
+        documented = OpenapiFirst::Test[:admin].routes.to_a.flat_map do |route|
+          route.responses.to_a.map { |resp| [route.request_method, route.path, resp.status.to_s] }
+        end.uniq
+
+        assert_equal documented.sort, EXERCISES.keys.sort,
+          "documented responses and EXERCISES disagree -- add the missing entry to whichever side lacks it"
+      end
+
+      test "every documented response is reachable and conforms" do
+        EXERCISES.each do |(_method, _path, status), exercise|
+          instance_exec(&exercise)
+          assert_api_response_conform(status: Integer(status), api: :admin)
+        end
+      end
+    end
+  end
+end

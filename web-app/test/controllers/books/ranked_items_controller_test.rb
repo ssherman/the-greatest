@@ -225,7 +225,7 @@ module Books
     test "the modal category pane carries the current filter state as a deferred source" do
       get "/the-greatest/novels/books"
 
-      assert_select "turbo-frame#books_filter_pane_category[data-pane-src]" do |frame|
+      assert_select "turbo-frame#books_filter_pane_genre[data-pane-src]" do |frame|
         assert_match "category_slugs", frame.first["data-pane-src"]
         assert_match "novels", frame.first["data-pane-src"]
       end

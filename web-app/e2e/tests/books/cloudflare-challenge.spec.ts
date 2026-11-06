@@ -26,17 +26,17 @@ async function stubChallenge(
 test.describe('Cloudflare challenge hand-off', () => {
   test('a challenged filter navigation takes the whole page to the challenged URL', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Filters' }).click();
+    await page.getByRole('button', { name: /Filter/ }).click();
     await expect(page.locator('dialog#books_filter_modal')).toBeVisible();
 
-    await page.getByRole('button', { name: /Category/ }).click();
-    const genre = page.locator("input[name='category_slugs[]'][value='fiction']");
+    await page.locator("[data-level-target='genre']").click();
+    const genre = page.locator('[data-filter-row]').filter({ hasText: 'Fiction' }).first();
     await genre.waitFor();
-    await genre.check();
+    await genre.locator('input[type=checkbox]').check();
 
     await stubChallenge(page, (url) => url.pathname === '/filters');
 
-    await page.getByRole('button', { name: 'Apply' }).click();
+    await page.getByRole('button', { name: /^Show/ }).click();
 
     await expect(page.getByTestId('stub-challenge')).toBeVisible();
 
@@ -61,7 +61,7 @@ test.describe('Cloudflare challenge hand-off', () => {
   }
 
   test('a challenged frame load reloads the current page instead of navigating to the frame URL', async ({ page }) => {
-    await page.goto('/the-greatest/novels/books');
+    await page.goto('/the-greatest/fiction/books');
     const target = new URL('/filters/categories', page.url()).href;
     await stubChallenge(page, target);
 
@@ -71,11 +71,11 @@ test.describe('Cloudflare challenge hand-off', () => {
       }, target),
     );
 
-    await expect(page).toHaveURL('/the-greatest/novels/books');
+    await expect(page).toHaveURL('/the-greatest/fiction/books');
   });
 
   test('a challenged JSON fetch reloads the current page', async ({ page }) => {
-    await page.goto('/the-greatest/novels/books');
+    await page.goto('/the-greatest/fiction/books');
     const target = new URL('/filters/categories', page.url()).href;
     await stubChallenge(page, target);
 
@@ -85,11 +85,11 @@ test.describe('Cloudflare challenge hand-off', () => {
       }, target),
     );
 
-    await expect(page).toHaveURL('/the-greatest/novels/books');
+    await expect(page).toHaveURL('/the-greatest/fiction/books');
   });
 
   test('a challenged POST reloads the current page instead of navigating to the endpoint', async ({ page }) => {
-    await page.goto('/the-greatest/novels/books');
+    await page.goto('/the-greatest/fiction/books');
     const target = new URL('/user_lists', page.url()).href;
     await stubChallenge(page, target);
 
@@ -99,7 +99,7 @@ test.describe('Cloudflare challenge hand-off', () => {
       }, target),
     );
 
-    await expect(page).toHaveURL('/the-greatest/novels/books');
+    await expect(page).toHaveURL('/the-greatest/fiction/books');
   });
 
   // Turbo 8 fetches a hovered link after 100ms and caches that FetchRequest
@@ -117,7 +117,7 @@ test.describe('Cloudflare challenge hand-off', () => {
   }
 
   test('hovering a link does not fetch it', async ({ page }) => {
-    await page.goto('/the-greatest/novels/books');
+    await page.goto('/the-greatest/fiction/books');
     const { link, target } = await firstBookLink(page);
 
     let hits = 0;
@@ -129,11 +129,11 @@ test.describe('Cloudflare challenge hand-off', () => {
     await page.waitForTimeout(HOVER_SETTLE_MS);
 
     expect(hits).toBe(0);
-    await expect(page).toHaveURL('/the-greatest/novels/books');
+    await expect(page).toHaveURL('/the-greatest/fiction/books');
   });
 
   test('a link hovered before it is clicked still hands the whole page off when challenged', async ({ page }) => {
-    await page.goto('/the-greatest/novels/books');
+    await page.goto('/the-greatest/fiction/books');
     const { link, target } = await firstBookLink(page);
     await stubChallenge(page, target);
 
@@ -147,7 +147,7 @@ test.describe('Cloudflare challenge hand-off', () => {
   });
 
   test('the same URL does not hand off twice inside the guard window', async ({ page }) => {
-    await page.goto('/the-greatest/novels/books');
+    await page.goto('/the-greatest/fiction/books');
     const target = new URL('/the-greatest/classics/books', page.url()).href;
     await stubChallenge(page, target);
 
@@ -165,6 +165,6 @@ test.describe('Cloudflare challenge hand-off', () => {
 
     expect(status).toBe(403);
     await expect(page.getByTestId('stub-challenge')).toHaveCount(0);
-    await expect(page).toHaveURL('/the-greatest/novels/books');
+    await expect(page).toHaveURL('/the-greatest/fiction/books');
   });
 });

@@ -122,8 +122,22 @@ and fails the test outright rather than degrading to a `failure` result.
 
 ## Known gaps
 
-- **Books does not use Amazon yet.** There is no `Services::Books::AmazonProductService`
-  and no Amazon provider in the books importer.
+- **Books enrichment runs through the book workflow's `amazon` step** (`Workflows::Books::Steps::Amazon`,
+  wrapping `Services::Books::AmazonProductService`; see `enrichment-workflows.md`). Two callers plan
+  a book run, and with it that step:
+  - the importer's `Providers::Enrichment`, whenever an import with `enrich: true` runs its providers
+    on a saved book. That covers new books, and existing ones imported with `item:` or
+    `force_providers: true`;
+  - `GoodreadsImports::PromoteRecords`, for each promoted book.
+
+  The step is skipped (`no_authors`) for a book with no `book_authors` row, and gets seven attempts
+  rather than three. `Books::AmazonProductEnrichmentJob` still backs the two rake tasks, which create
+  no run: `books:amazon_enrich[id]` and `books:amazon_enrich_ranked`. Because `amazon_enriched_at` is
+  stamped on the first pass, the ranked sweep is the only thing that retries a book whose step
+  exhausted its attempts.
+
+  Box sets and adaptations are filtered by `Services::Books::AmazonBookCheck` (see `data_importers.md`,
+  Amazon (Async)).
 - Existing `external_links.metadata["amazon"]` payloads written before 2026-05
   hold PA-API-shaped (PascalCase) JSON. Nothing reads them at render time, so they
   were left as-is. `Services::BooksMigration::EditionTransformer` still reads the

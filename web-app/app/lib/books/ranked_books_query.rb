@@ -4,9 +4,7 @@ module Books
   # engine here (OpenSearch id-set, materialized view) without touching views.
   class RankedBooksQuery
     def self.call(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, collection: nil)
-      relation = RankedItem
-        .where(ranking_configuration_id: ranking_configuration.id, item_type: "Books::Book")
-        .where.not(rank: nil)
+      relation = ranked_books(ranking_configuration)
 
       Array(categories).each do |category|
         relation = relation.where(
@@ -28,6 +26,24 @@ module Books
         .includes(item: [{book_authors: :author}, {primary_image: {file_attachment: :blob}}])
         .order(:rank)
     end
+
+    # {category_id => ranked books carrying it} for many categories in one
+    # query: the same count `call(categories: [category])` gives one at a time.
+    # A category with none has no key.
+    def self.counts_by_category(ranking_configuration:, category_ids:)
+      ranked_books(ranking_configuration)
+        .joins("INNER JOIN category_items ON category_items.item_id = ranked_items.item_id AND category_items.item_type = 'Books::Book'")
+        .where(category_items: {category_id: category_ids})
+        .group("category_items.category_id")
+        .count
+    end
+
+    def self.ranked_books(ranking_configuration)
+      RankedItem
+        .where(ranking_configuration_id: ranking_configuration.id, item_type: "Books::Book")
+        .where.not(rank: nil)
+    end
+    private_class_method :ranked_books
 
     # A collection's `filter` is opaque to the shared registry -- this is the only
     # place in the app that knows what its keys mean.

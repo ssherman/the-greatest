@@ -6,7 +6,7 @@
 <%# Identical HTML for every visitor: this page is served from the Cloudflare
     edge cache. Never read current_user here. The endpoint list comes from the
     OpenAPI document for this host, so it cannot say something the contract
-    does not. Anchors: the section ids below, endpoint-<operationId> per row,
+    does not. Anchors: the section ids below, mcp-tool-<name> per MCP tool, endpoint-<operationId> per row,
     and errors-<code> per problem code (Api::Problem#to_h links to those). %>
 <article id="developers" class="max-w-3xl mx-auto px-4 py-10">
   <div class="prose max-w-none">
@@ -53,7 +53,7 @@ for item in response.json()["data"]:
       <li>Keep it out of code and out of version control. An environment variable is the usual place.</li>
       <li>A token works on all three sites. Its scopes decide which: <code>books:read</code>, <code>music:read</code>, <code>games:read</code>.</li>
       <li>If a token leaks, revoke it at <%= link_to "/developers/tokens", developers_tokens_path %>. Anything using it gets a 401 from that moment.</li>
-      <li>A token cannot sign in to the site and cannot write anything.</li>
+      <li>A member's token only reads: it cannot sign in to the site or change anything.</li>
     </ul>
 
     <h2 id="rate-limits">Rate limits</h2>
@@ -112,7 +112,7 @@ for item in response.json()["data"]:
       <dl class="space-y-6">
         <% @operations.each do |operation| %>
           <div id="endpoint-<%= operation.operation_id %>">
-            <dt class="font-mono">
+            <dt class="font-mono [overflow-wrap:anywhere]">
               <span class="badge badge-neutral"><%= operation.method %></span>
               <code><%= operation.path %></code>
               <% if operation.public %>
@@ -136,6 +136,82 @@ for item in response.json()["data"]:
         <% end %>
       </dl>
     </div>
+
+    <% if @mcp_tools.any? %>
+      <h2 id="mcp">Use it from an AI assistant (MCP)</h2>
+      <%
+        composites = @mcp_tools.select(&:composite).map { |tool| tag.code(tool.name) }
+        named = (composites.size > 1) ? safe_join([safe_join(composites[0...-1], ", "), composites.last], " and ") : composites.first
+      %>
+      <p id="mcp-intro">
+        This site also runs an MCP server, so an AI assistant such as Claude Code
+        can read the rankings for you. Its address is
+        <code><%= @mcp_url %></code>.
+        <% if composites.empty? %>
+          Each tool below is one of the endpoints above, answered with the same
+          data and the same errors. The tools differ from the endpoints in two ways: results leave out
+        <code>links</code>, and paging takes <code>limit</code> instead of
+        <code>per_page</code>.
+        <% elsif composites.size == 1 %>
+          Apart from <%= named %>, each tool below is one of the endpoints above,
+          answered with the same data and the same errors. The tools differ from the endpoints in two ways: results leave out
+        <code>links</code>, and paging takes <code>limit</code> instead of
+        <code>per_page</code>. <%= named %> combines
+          several endpoints in one call and returns its own result.
+        <% else %>
+          Apart from <%= named %>, each tool below is one of the endpoints above,
+          answered with the same data and the same errors. The tools differ from the endpoints in two ways: results leave out
+        <code>links</code>, and paging takes <code>limit</code> instead of
+        <code>per_page</code>. <%= named %> combine
+          several endpoints in one call and return their own results.
+        <% end %>
+      </p>
+      <p>
+        It uses the same token as the REST API, and the token needs the
+        <code>books:read</code> scope. Each MCP request counts once against the
+        same limits as a REST request. One tool call is one request, including
+        <code>find_book</code>.
+      </p>
+      <p>To connect Claude Code, run this once:</p>
+<pre id="mcp-command"><code>claude mcp add --transport http --scope user the-greatest-books <%= @mcp_url %> --header "Authorization: Bearer $THE_GREATEST_TOKEN"</code></pre>
+      <p id="mcp-token-setup">
+        Run the <code>export THE_GREATEST_TOKEN=...</code> line from the
+        <a href="#quick-start">Quick start</a> first. The command saves the
+        token's value at the moment it runs. To change the token, for example
+        after you revoke one that leaked, run
+        <code>claude mcp remove --scope user the-greatest-books</code> and then
+        the add command again.
+      </p>
+      <p>
+        Other clients: the server speaks Streamable HTTP and keeps no session, so
+        there is nothing to keep alive between calls. Send each request as
+        a <code>POST</code> with
+        <code>Authorization: Bearer &lt;token&gt;</code>,
+        <code>Content-Type: application/json</code> and
+        <code>Accept: application/json, text/event-stream</code>.
+      </p>
+      <p>
+        The server also offers a <code>usage</code> prompt and a
+        <code>ranking-methodology</code> resource, and sends short instructions
+        when a client connects.
+      </p>
+      <h3 id="mcp-tools">Tools</h3>
+      <div class="not-prose">
+        <dl class="space-y-6">
+          <% @mcp_tools.each do |tool| %>
+            <div id="mcp-tool-<%= tool.name %>">
+              <dt class="font-mono [overflow-wrap:anywhere]">
+                <code><%= tool.name %></code>
+              </dt>
+              <dd class="mt-1">
+                <p class="font-semibold"><%= tool.title %></p>
+                <p><%= tool.description %></p>
+              </dd>
+            </div>
+          <% end %>
+        </dl>
+      </div>
+    <% end %>
 
     <h2 id="pagination">Pagination</h2>
     <p>
@@ -170,9 +246,12 @@ for item in response.json()["data"]:
               invalid_token: "The token is malformed, unknown, revoked or expired.",
               membership_required: "The token's owner has no active membership.",
               insufficient_scope: "The token lacks the scope this endpoint needs; the WWW-Authenticate header names it.",
+              forbidden: "The account behind the token is not allowed to perform this action on this record.",
               not_found: "Nothing on this site has that slug or id.",
               invalid_parameter: "A query parameter is out of range; detail says which.",
-              rate_limited: "A rate-limit window is exhausted; Retry-After says how long to wait."
+              unprocessable: "The request was understood but cannot be carried out; detail says why.",
+              rate_limited: "A rate-limit window is exhausted; Retry-After says how long to wait.",
+              search_unavailable: "Search is temporarily unavailable; retry shortly."
             }
           %>
           <% Api::Problem::DEFINITIONS.each do |code, (status, _title)| %>

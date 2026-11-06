@@ -4,7 +4,6 @@ class Admin::CategoryItemsController < Admin::BaseController
   before_action :require_domain_write!, only: [:create, :destroy]
   before_action :set_item, only: [:index, :create]
   before_action :set_category_item, only: [:destroy]
-  before_action :ensure_category_domain_matches, only: [:create]
 
   def index
     @category_items = @item.category_items.includes(:category).order("categories.name")
@@ -12,8 +11,11 @@ class Admin::CategoryItemsController < Admin::BaseController
   end
 
   def create
-    if save_category_item
-      reconcile_ancestors(@item)
+    category = Category.find_by(id: category_item_params[:category_id])
+    return refuse("Category must exist") if category.nil?
+
+    result = ::Categories::ItemLinker.link(item: @item, category: category)
+    if result.success?
       @item.reload
       respond_to do |format|
         format.turbo_stream do
@@ -39,25 +41,15 @@ class Admin::CategoryItemsController < Admin::BaseController
         end
       end
     else
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            "flash",
-            partial: "admin/shared/flash",
-            locals: {flash: {error: @category_item.errors.full_messages.join(", ")}}
-          ), status: :unprocessable_entity
-        end
-        format.html do
-          redirect_to redirect_path, alert: @category_item.errors.full_messages.join(", ")
-        end
-      end
+      refuse(result.errors.join(", "))
     end
   end
 
   def destroy
     @item = @category_item.item
-    @category_item.destroy!
-    reconcile_ancestors(@item)
+    result = ::Categories::ItemLinker.unlink(item: @item, category: @category_item.category)
+    return refuse(result.errors.join(", ")) unless result.success?
+
     @item.reload
 
     respond_to do |format|
@@ -87,44 +79,7 @@ class Admin::CategoryItemsController < Admin::BaseController
 
   private
 
-  # An admin pick is a direct link. If the item already carries the category
-  # only as an inherited ancestor, upgrade that row instead of failing the
-  # uniqueness check.
-  def save_category_item
-    existing = @item.category_items.find_by(category_id: category_item_params[:category_id])
-    if existing&.source_inherited?
-      @category_item = existing
-      return existing.update(source: :admin)
-    end
-
-    @category_item = @item.category_items.build(category_item_params.merge(source: :admin))
-    @category_item.save
-  end
-
-  def reconcile_ancestors(item)
-    ::Categories::AncestorReconciler.call(item_ids: [item.id]) if item.is_a?(::Books::Book)
-  end
-
-  def domain_auth_parent
-    if action_name == "destroy"
-      CategoryItem.find(params[:id]).item
-    else
-      Admin::DomainRouting.parent_from_params(params, domain: current_domain)
-    end
-  end
-
-  # Reject a category whose domain differs from the item's (e.g. a Music::Category
-  # POSTed to a Books::Book), which the typeahead never offers but a crafted
-  # request could send — it would corrupt the category's item_count.
-  def ensure_category_domain_matches
-    category = Category.find_by(id: category_item_params[:category_id])
-    return if category.nil?
-
-    item_domain = Admin::DomainRouting.domain_for(@item)&.to_s
-    category_domain = category.class.module_parent_name&.downcase
-    return if item_domain.present? && item_domain == category_domain
-
-    message = "That category belongs to a different section."
+  def refuse(message)
     respond_to do |format|
       format.turbo_stream do
         render turbo_stream: turbo_stream.replace(
@@ -134,6 +89,14 @@ class Admin::CategoryItemsController < Admin::BaseController
         ), status: :unprocessable_entity
       end
       format.html { redirect_to redirect_path, alert: message }
+    end
+  end
+
+  def domain_auth_parent
+    if action_name == "destroy"
+      CategoryItem.find(params[:id]).item
+    else
+      Admin::DomainRouting.parent_from_params(params, domain: current_domain)
     end
   end
 

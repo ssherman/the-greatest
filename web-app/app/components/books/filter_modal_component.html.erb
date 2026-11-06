@@ -1,10 +1,12 @@
 <dialog id="<%= modal_id %>" class="modal modal-bottom sm:modal-middle" aria-labelledby="books_filter_modal_heading_root">
-  <div class="modal-box max-w-xl"
+  <div class="modal-box relative max-w-xl p-0 flex flex-col max-h-[85dvh]"
        data-controller="books--filter"
        data-books--filter-max-categories-value="<%= max_categories %>"
-       data-books--filter-max-countries-value="<%= max_countries %>">
+       data-books--filter-max-countries-value="<%= max_countries %>"
+       data-books--filter-count-url-value="<%= helpers.books_filters_count_path %>"
+       data-books--filter-initial-count-value="<%= total_count %>">
 
-    <%= form_with url: helpers.books_filters_path, method: :get, data: {turbo_frame: "_top"} do %>
+    <%= form_with url: helpers.books_filters_path, method: :get, class: "flex flex-col min-h-0 flex-1", data: {turbo_frame: "_top"} do %>
       <% if rc_param %>
         <%= hidden_field_tag :ranking_configuration_id, rc_param %>
       <% end %>
@@ -12,89 +14,153 @@
         <%= hidden_field_tag :collection, collection.slug %>
       <% end %>
 
-      <div data-books--filter-target="level" data-level="root">
-        <h3 id="books_filter_modal_heading_root" class="font-bold text-lg mb-4">Filters</h3>
-        <ul class="menu w-full p-0">
-          <% axes.each do |row| %>
-            <li>
-              <button type="button" class="flex justify-between items-center w-full"
-                      data-action="books--filter#open" data-level-target="<%= row[:axis] %>">
-                <span class="flex flex-col items-start">
-                  <span class="font-semibold"><%= row[:label] %></span>
-                  <% if row[:hint] %>
-                    <span class="text-xs text-base-content/60"><%= row[:hint] %></span>
-                  <% end %>
-                </span>
-                <span class="flex items-center gap-2">
-                  <span class="text-sm text-base-content/70 truncate max-w-[10rem]"
-                        data-books--filter-target="summary" data-axis="<%= row[:axis] %>"><%= summary_for(row[:axis]) %></span>
-                  <span aria-hidden="true">&rsaquo;</span>
-                </span>
-              </button>
-            </li>
-          <% end %>
-        </ul>
+      <%# The applied filters live here, never inside a lazy turbo-frame: a pane that
+          loads late (or never) must not be able to drop a filter from the submit. %>
+      <div hidden data-books--filter-target="store">
+        <% categories.each do |category| %>
+          <input type="hidden" name="category_slugs[]" value="<%= category.slug %>"
+                 data-store-entry data-axis="category" data-type="<%= category.category_type %>" data-name="<%= category.name %>">
+        <% end %>
+        <% countries.each do |country| %>
+          <input type="hidden" name="country_slugs[]" value="<%= country.slug %>"
+                 data-store-entry data-axis="country" data-type="country" data-name="<%= country.name %>">
+        <% end %>
       </div>
 
-      <% drill_axes.each do |axis| %>
-        <div class="hidden" data-books--filter-target="level" data-level="<%= axis %>">
-          <h3 id="books_filter_modal_heading_<%= axis %>" class="sr-only"><%= AXES.find { |row| row[:axis] == axis }[:label] %></h3>
-          <button type="button" class="btn btn-ghost btn-sm mb-3" data-action="books--filter#back">
-            &lsaquo; <%= AXES.find { |row| row[:axis] == axis }[:label] %>
-          </button>
+      <div class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6" data-books--filter-target="scroll">
+        <div data-books--filter-target="level" data-level="root">
+          <h3 id="books_filter_modal_heading_root" class="font-bold text-lg mb-4">Filters</h3>
+          <ul class="menu w-full p-0">
+            <% rows.each do |row| %>
+              <li>
+                <button type="button" class="flex justify-between items-center w-full"
+                        data-action="books--filter#open" data-level-target="<%= row[:key] %>">
+                  <span class="flex flex-col items-start">
+                    <span class="font-semibold"><%= row[:label] %></span>
+                    <% if row[:hint] %>
+                      <span class="text-xs text-base-content/60"><%= row[:hint] %></span>
+                    <% end %>
+                  </span>
+                  <span class="flex items-center gap-2">
+                    <span class="text-sm text-base-content/70 truncate max-w-[10rem]"
+                          data-books--filter-target="summary" data-type="<%= row[:key] %>"><%= summary_for(row[:key]) %></span>
+                    <span aria-hidden="true">&rsaquo;</span>
+                  </span>
+                </button>
+              </li>
+            <% end %>
+          </ul>
+          <%= link_to "Advanced search", helpers.new_saved_search_path, class: "link mt-4 inline-block text-sm", data: {turbo_frame: "_top"} %>
+        </div>
 
-          <div class="mb-3">
-            <input type="search" class="input w-full"
-                   placeholder="<%= (axis == "category") ? "Search genres, subjects, settings" : "Search origins" %>"
-                   aria-label="<%= (axis == "category") ? "Search genres, subjects, settings" : "Search origins" %>"
-                   data-books--filter-target="query" data-axis="<%= axis %>"
-                   data-action="input->books--filter#search keydown->books--filter#suppressEnter">
-          </div>
+        <% type_rows.each do |row| %>
+          <% key = row[:key] %>
+          <div hidden data-books--filter-target="level" data-level="<%= key %>">
+            <%# tabindex: a touch reader entering the page is focused here, not on
+                the search box (see open() in the controller). %>
+            <h3 id="books_filter_modal_heading_<%= key %>" class="sr-only" tabindex="-1"><%= row[:label] %></h3>
+            <button type="button" class="btn btn-ghost btn-sm mb-3" aria-label="Back to filters" data-action="books--filter#back">
+              <span aria-hidden="true">&lsaquo;</span> <%= row[:label] %>
+            </button>
 
-          <div class="max-h-72 overflow-y-auto pr-1">
-            <div class="flex flex-col gap-1" data-books--filter-target="selected" data-axis="<%= axis %>">
-              <%= render Books::FilterOptionRowsComponent.new(axis: axis, rows: applied_for(axis), checked: true, show_counts: false) %>
-            </div>
+            <% if searchable?(key) %>
+              <div class="mb-3">
+                <input type="search" class="input w-full"
+                       placeholder="Search <%= row[:plural] %>"
+                       aria-label="Search <%= row[:plural] %>"
+                       data-books--filter-target="query" data-type="<%= key %>" data-mode="<%= search_mode(key) %>"
+                       data-action="input->books--filter#query keydown->books--filter#suppressEnter">
+              </div>
+            <% end %>
+
+            <%# One line of fixed height that scrolls sideways, never wraps: a chip
+                appears the moment a row is ticked, and a strip that grew would push
+                the very row the reader just ticked down the page. %>
+            <% if chips?(key) %>
+              <div class="flex flex-nowrap items-center gap-2 h-8 mb-3 overflow-x-auto overflow-y-hidden"
+                   role="group" aria-label="Selected <%= row[:plural] %>"
+                   data-books--filter-target="chips" data-type="<%= key %>"></div>
+            <% end %>
 
             <%# turbo:frame-load bubbles, so this one listener also catches the
                 nested results frame's own loads (see frameLoaded() in the
                 controller) -- both a first pane load and every search need it. %>
-            <%= helpers.turbo_frame_tag "books_filter_pane_#{axis}",
-                  data: {"books--filter-target": "pane", axis: axis, pane_src: pane_src(axis),
+            <%= helpers.turbo_frame_tag "books_filter_pane_#{key}",
+                  data: {"books--filter-target": "pane", type: key, pane_src: pane_src(key),
                          action: "turbo:frame-load->books--filter#frameLoaded"} do %>
               <div class="flex justify-center py-8">
                 <span class="loading loading-spinner loading-md"></span>
               </div>
             <% end %>
           </div>
-        </div>
-      <% end %>
+        <% end %>
 
-      <div class="hidden" data-books--filter-target="level" data-level="year">
-        <h3 id="books_filter_modal_heading_year" class="sr-only">Published</h3>
-        <button type="button" class="btn btn-ghost btn-sm mb-3" data-action="books--filter#back">
-          &lsaquo; Published
-        </button>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="label" for="year_start"><span>From year</span></label>
-            <%= number_field_tag :year_start, year_start, class: "input w-full", placeholder: "Any",
-                  data: {"books--filter-target": "year", axis: "year", action: "input->books--filter#refresh"} %>
+        <div hidden data-books--filter-target="level" data-level="year">
+          <h3 id="books_filter_modal_heading_year" class="sr-only" tabindex="-1">Published</h3>
+          <button type="button" class="btn btn-ghost btn-sm mb-3" aria-label="Back to filters" data-action="books--filter#back">
+            <span aria-hidden="true">&lsaquo;</span> Published
+          </button>
+
+          <p class="text-sm font-semibold mb-2">Eras</p>
+          <div class="flex flex-wrap gap-2 mb-4">
+            <% ERAS.each do |era| %>
+              <% on = pressed?(era[:start], era[:end]) %>
+              <button type="button" class="btn btn-sm <%= on ? "btn-primary" : "btn-outline" %>"
+                      aria-pressed="<%= on %>"
+                      data-books--filter-target="yearPreset" data-start="<%= era[:start] %>" data-end="<%= era[:end] %>"
+                      data-action="books--filter#pickYears"><%= era[:label] %></button>
+            <% end %>
           </div>
-          <div>
-            <label class="label" for="year_end"><span>To year</span></label>
-            <%= number_field_tag :year_end, year_end, class: "input w-full", placeholder: "Any",
-                  data: {"books--filter-target": "year", axis: "year", action: "input->books--filter#refresh"} %>
+
+          <p class="text-sm font-semibold mb-2">Best of a single year</p>
+          <div class="flex flex-wrap gap-2 mb-4">
+            <% recent_years.each do |year| %>
+              <% on = pressed?(year, year) %>
+              <button type="button" class="btn btn-sm <%= on ? "btn-primary" : "btn-outline" %>"
+                      aria-pressed="<%= on %>"
+                      data-books--filter-target="yearPreset" data-start="<%= year %>" data-end="<%= year %>"
+                      data-action="books--filter#pickYears"><%= year %></button>
+            <% end %>
           </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="label" for="year_start"><span>From</span></label>
+              <%= number_field_tag :year_start, year_start, class: "input w-full", placeholder: "Any",
+                    data: {"books--filter-target": "year", action: "input->books--filter#yearsChanged"} %>
+            </div>
+            <div>
+              <label class="label" for="year_end"><span>To</span></label>
+              <%= number_field_tag :year_end, year_end, class: "input w-full", placeholder: "Any",
+                    data: {"books--filter-target": "year", action: "input->books--filter#yearsChanged"} %>
+            </div>
+          </div>
+          <p class="text-xs text-base-content/60 mt-2">Same year in both boxes = just that year. Minus sign for BC.</p>
         </div>
       </div>
 
-      <div class="modal-action">
-        <%= link_to "Clear", clear_path, class: "btn btn-ghost", data: {turbo_frame: "_top"} %>
-        <button type="button" class="btn" data-action="books--filter#cancel">Cancel</button>
-        <%= submit_tag "Apply", class: "btn btn-primary", data: {disable_with: false} %>
+      <div class="border-t border-base-300 p-4 sm:px-6 flex flex-col">
+        <%# Never hidden, only emptied: a live region has to stay in the
+            accessibility tree for a screen reader to announce its new text.
+            Its one line is always reserved, so the footer is the same height
+            with or without the notice: on a short page the box is sized to its
+            content, and a footer that grew would slide every row, including the
+            one just ticked. On the narrowest phones the text is cut to that one
+            line with an ellipsis; a screen reader still gets the whole sentence. %>
+        <p class="h-4 mb-2 text-xs leading-4 text-warning truncate" role="status" data-books--filter-target="capNotice"></p>
+        <div class="flex justify-end gap-2">
+          <button type="button" class="btn btn-ghost" data-action="books--filter#clear">Clear</button>
+          <button type="submit" class="btn btn-primary" data-books--filter-target="submit"><%= show_label(total_count) %></button>
+        </div>
       </div>
     <% end %>
+
+    <%# After the main form, so opening the dialog still focuses the first row,
+        and outside it, so the button closes without submitting. Closing runs
+        discard() like Escape does. %>
+    <form method="dialog" class="absolute right-2 top-2">
+      <button class="btn btn-sm btn-circle btn-ghost" aria-label="Close filters"><span aria-hidden="true">&times;</span></button>
+    </form>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button aria-label="Close">close</button>

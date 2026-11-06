@@ -8,6 +8,7 @@ module Services
         case target
         when :column then Column
         when :description then PrimaryDescription
+        when :alternate_titles then AlternateTitles
         else raise ArgumentError, "unknown correction target: #{target.inspect}"
         end
       end

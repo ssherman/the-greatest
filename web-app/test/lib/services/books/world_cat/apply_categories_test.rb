@@ -28,6 +28,19 @@ module Services
           @book.reload.categories.where(category_type: type).order(:name).pluck(:name)
         end
 
+        test "a new link is recorded as a worldcat link" do
+          ApplyCategories.call(book: @book, records: [record(1, genre: "Romans")], map: @map)
+          link = CategoryItem.joins(:category).find_by!(item: @book, categories: {name: "Fiction"})
+          assert link.source_worldcat?
+        end
+
+        test "an existing link keeps its source" do
+          fiction = ::Books::Category.active.genre.by_name("Fiction").first
+          existing = CategoryItem.find_or_create_by!(category: fiction, item: @book) { |l| l.source = :admin }
+          ApplyCategories.call(book: @book, records: [record(1, genre: "Romans")], map: @map)
+          assert existing.reload.source_admin?
+        end
+
         test "links a genre carried by at least two records" do
           records = [record(1, genre: "Fiction"), record(2, genre: "Romans"), record(3, genre: "novels")]
           result = ApplyCategories.call(book: @book, records: records, map: @map)
@@ -130,6 +143,69 @@ module Services
           result = ApplyCategories.call(book: @book, records: [], map: @map)
           assert result.success?
           assert_equal 0, result.data[:records]
+        end
+
+        def audience_map
+          ::Books::WorldCat::GenreMap.new(
+            "genres" => ["Science Fiction", "Fantasy"], "audiences" => ["Children's", "Young Adult"],
+            "terms" => {
+              "Young adult fiction" => {"verdict" => "audience", "audience" => "Young Adult"},
+              "Juvenile fiction" => {"verdict" => "audience", "audience" => "Children's", "weak" => true},
+              "Children's stories" => {"verdict" => "audience", "audience" => "Children's"},
+              "Fantasy och science fiction" => {"verdict" => "genre", "genre" => "Science Fiction", "also" => ["Fantasy"]}
+            }
+          )
+        end
+
+        test "an audience verdict links the audience category" do
+          ya = ::Books::Category.create!(name: "Young Adult", category_type: :audience)
+          records = [record(1, genre: "Young adult fiction"), record(2, genre: "Young adult fiction")]
+
+          result = ApplyCategories.call(book: @book, records: records, map: audience_map)
+
+          assert_equal ["Young Adult"], result.data[:audiences_linked]
+          assert CategoryItem.exists?(category: ya, item: @book)
+        end
+
+        test "a weak Juvenile term alone adds nothing" do
+          childrens = ::Books::Category.create!(name: "Children's", category_type: :audience)
+          records = [record(1, genre: "Juvenile fiction"), record(2, genre: "Juvenile fiction")]
+
+          result = ApplyCategories.call(book: @book, records: records, map: audience_map)
+
+          refute CategoryItem.exists?(category: childrens, item: @book)
+          assert_equal 1, result.data[:weak_skipped]
+        end
+
+        test "a weak term counts when a record also supports Children's strongly" do
+          childrens = ::Books::Category.create!(name: "Children's", category_type: :audience)
+          records = [record(1, genre: "Juvenile fiction"), record(2, genre: "Children's stories")]
+
+          ApplyCategories.call(book: @book, records: records, map: audience_map)
+
+          assert CategoryItem.exists?(category: childrens, item: @book)
+        end
+
+        test "a weak term counts on a book that is already Children's" do
+          childrens = ::Books::Category.create!(name: "Children's", category_type: :audience)
+          CategoryItem.create!(category: childrens, item: @book)
+          records = [record(1, genre: "Juvenile fiction"), record(2, genre: "Juvenile fiction")]
+
+          result = ApplyCategories.call(book: @book, records: records, map: audience_map)
+
+          assert_equal 1, result.data[:already_linked]
+          assert_equal 0, result.data[:weak_skipped]
+          assert_equal 1, CategoryItem.where(category: childrens, item: @book).count
+        end
+
+        test "an also target gets support from the same term" do
+          ::Books::Category.create!(name: "Science Fiction", category_type: :genre)
+          ::Books::Category.create!(name: "Fantasy", category_type: :genre)
+          records = [record(1, genre: "Fantasy och science fiction"), record(2, genre: "Fantasy och science fiction")]
+
+          result = ApplyCategories.call(book: @book, records: records, map: audience_map)
+
+          assert_equal ["Fantasy", "Science Fiction"], result.data[:genres_linked]
         end
       end
     end

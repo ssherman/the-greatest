@@ -7,7 +7,7 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   STATUSES = ::Books::RepairVerdict.statuses.keys.freeze
   DECIDED_BY = ::Books::RepairVerdict.decided_bies.keys.freeze
   CONFIDENCES = ::Books::RepairVerdict.confidences.keys.freeze
-  FILTER_KEYS = %w[kind status decided_by confidence].freeze
+  FILTER_KEYS = %w[kind status decided_by confidence guess].freeze
   PER_PAGE = 50
 
   before_action :set_verdict, only: [:show, :approve, :reject]
@@ -23,6 +23,7 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
     scope = filtered_scope
     @counts = scope.group(:status).count
     @pagy, @verdicts = pagy(scope.where(status: @status).newest_first, limit: PER_PAGE)
+    load_row_context
   end
 
   def show
@@ -73,15 +74,28 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
 
   private
 
+  # What the page's verdicts point at, loaded once for all rows (the row
+  # component queries nothing): books with authors, authors, and the number
+  # of list items on each merge target.
+  def load_row_context
+    book_ids = @verdicts.flat_map(&:book_ids).uniq
+    @books = ::Books::Book.where(id: book_ids).includes(:authors).index_by(&:id)
+    @authors = ::Books::Author.where(id: @verdicts.flat_map(&:author_ids).uniq).index_by(&:id)
+    target_ids = @verdicts.select(&:merge_books?).filter_map { |verdict| verdict.payload["target_id"] }.uniq
+    @list_counts = ::ListItem.where(listable_type: "Books::Book", listable_id: target_ids).group(:listable_id).count
+  end
+
   def set_verdict
     @verdict = ::Books::RepairVerdict.find(params[:id])
   end
 
   def filtered_scope
-    scope = ::Books::RepairVerdict.all
+    # Superseded verdicts are replay proposals the Goodreads rebuild retired.
+    scope = ::Books::RepairVerdict.current
     scope = scope.where(kind: params[:kind]) if KINDS.include?(params[:kind])
     scope = scope.where(decided_by: params[:decided_by]) if DECIDED_BY.include?(params[:decided_by])
     scope = scope.where(confidence: params[:confidence]) if CONFIDENCES.include?(params[:confidence])
+    scope = scope.where("payload->>'guess' = 'true'") if params[:guess] == "true"
     scope
   end
 

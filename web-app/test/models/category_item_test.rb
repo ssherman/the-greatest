@@ -4,6 +4,7 @@
 #
 #  id          :bigint           not null, primary key
 #  item_type   :string           not null
+#  source      :integer          default("legacy"), not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  category_id :bigint           not null
@@ -35,6 +36,10 @@ class CategoryItemTest < ActiveSupport::TestCase
       item: music_albums(:animals)  # Use a different album that's not already categorized
     )
     assert category_item.valid?
+  end
+
+  test "worldcat is source value 4" do
+    assert_equal 4, CategoryItem.sources["worldcat"]
   end
 
   test "should require category" do

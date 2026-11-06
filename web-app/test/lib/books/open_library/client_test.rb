@@ -243,6 +243,13 @@ module Books
         assert_equal "9780743273565", hit.value
       end
 
+      test "#identifier escapes the value into one path segment" do
+        stub_request(:get, "#{BASE_URL}/identifiers/isbn13/Twelfth%20Night%2F2")
+          .to_return(status: 200, body: envelope([]).to_json)
+
+        assert_equal [], @client.identifier("isbn13", "Twelfth Night/2")
+      end
+
       test "#identifier with an unsupported type raises ArgumentError before any request" do
         assert_raises(ArgumentError) { @client.identifier("issn", "1234-5678") }
 

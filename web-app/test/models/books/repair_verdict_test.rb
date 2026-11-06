@@ -15,6 +15,7 @@ require "test_helper"
 #  reviewed_at        :datetime
 #  status             :integer          default("proposed"), not null
 #  subject_key        :string           not null
+#  superseded_at      :datetime
 #  created_at         :datetime         not null
 #  updated_at         :datetime         not null
 #  ai_chat_id         :bigint
@@ -22,8 +23,14 @@ require "test_helper"
 #
 # Indexes
 #
-#  index_books_repair_verdicts_on_kind_and_subject_key  (kind,subject_key) UNIQUE
-#  index_books_repair_verdicts_on_status_and_kind       (status,kind)
+#  index_books_repair_verdicts_on_kind_and_subject_key         (kind,subject_key) UNIQUE
+#  index_books_repair_verdicts_on_merge_target                 (((payload ->> 'target_id'::text))) WHERE (kind = 1)
+#  index_books_repair_verdicts_on_reimport_match_book          (((payload ->> 'book_id'::text))) WHERE (kind = 7)
+#  index_books_repair_verdicts_on_reimport_match_created_book  (((payload ->> 'created_book_id'::text))) WHERE (kind = 7)
+#  index_books_repair_verdicts_on_reimport_row_destination     (((payload ->> 'to_book_id'::text))) WHERE (kind = 8)
+#  index_books_repair_verdicts_on_reimport_row_source          (((payload ->> 'from_book_id'::text))) WHERE (kind = 8)
+#  index_books_repair_verdicts_on_reimport_row_user            (((payload ->> 'user_id'::text))) WHERE (kind = 8)
+#  index_books_repair_verdicts_on_status_and_kind              (status,kind)
 #
 module Books
   class RepairVerdictTest < ActiveSupport::TestCase
@@ -58,6 +65,48 @@ module Books
         verdict(kind: :mark_provisional, subject_key: "book:7", payload: {"book_id" => 7, "reason" => "authorless"}).summary
     end
 
+    test "fix_identity summary and book_ids" do
+      fix = verdict(kind: :fix_identity, subject_key: "rebuild:7",
+        payload: {"book_id" => 7, "full_title" => "Tenth of December: Stories", "author_names" => ["George Saunders", "Other"]})
+
+      assert_equal "Fix #7: \"Tenth of December: Stories\" by George Saunders, Other", fix.summary
+      assert_equal [7], fix.book_ids
+    end
+
+    test "every reimport kind has a summary and book ids" do
+      cases = {
+        reimport_mixed: [{"book_id" => 7, "title" => "Mixed", "author_names" => ["A"]}, [7]],
+        reimport_match: [{"goodreads_edition_id" => 5, "outcome" => "matched", "book_id" => 8}, [8]],
+        reimport_row: [{"import_id" => 1, "row_number" => 2, "user_id" => 3, "action" => "move", "from_book_id" => 4, "to_book_id" => 9}, [4, 9]],
+        reimport_guess: [{"item_type" => "Review", "item_id" => 6, "user_id" => 3, "from_book_id" => 4, "to_book_id" => 9, "guess" => true}, [4, 9]],
+        reimport_strip: [{"book_id" => 7, "identifier_type" => "isbn13", "value" => "9780000000002"}, [7]],
+        reimport_author: [{"book_id" => 7, "before_author_ids" => [1], "row_author_names" => ["B"], "after" => {"B" => nil}}, [7]]
+      }
+
+      cases.each_with_index do |(kind, (payload, ids)), index|
+        record = verdict(kind: kind, subject_key: "reimport:test:#{index}", payload: payload)
+
+        assert_predicate record.summary, :present?, kind
+        assert_equal ids, record.book_ids, kind
+      end
+    end
+
+    test "reimport match and row book ids drop the nils" do
+      assert_empty verdict(kind: :reimport_match, subject_key: "reimport:edition:1", payload: {"outcome" => "create", "book_id" => nil}).book_ids
+      assert_equal [9], verdict(kind: :reimport_row, subject_key: "reimport:row:1:1", payload: {"action" => "add", "from_book_id" => nil, "to_book_id" => 9}).book_ids
+    end
+
+    test "a create match lists the book it made once the create applied" do
+      created = verdict(kind: :reimport_match, subject_key: "reimport:edition:2", payload: {"outcome" => "create", "book_id" => nil, "created_book_id" => 12})
+
+      assert_equal [12], created.book_ids
+    end
+
+    test "the reimport gate is off by default" do
+      refute Rails.configuration.x.goodreads_reimport.enabled
+      refute Rails.configuration.x.goodreads_reimport.enrichment
+    end
+
     test "unapplied excludes applied verdicts" do
       applied = verdict(applied_at: Time.current)
       pending = verdict(kind: :merge_books, subject_key: "books:1:2")
@@ -74,8 +123,8 @@ module Books
       assert_empty verdict(subject_key: "user:2:book:3:goodreads:4").author_ids
     end
 
-    test "the replay never applies by default" do
-      refute Rails.configuration.x.goodreads_replay.auto_apply
+    test "the replay applies approved verdicts once its auto verdicts are hand-checked" do
+      assert Rails.configuration.x.goodreads_replay.auto_apply
       assert_equal 80, Rails.configuration.x.goodreads_replay.max_author_group
     end
   end

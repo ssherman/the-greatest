@@ -22,6 +22,7 @@ export default class extends Controller {
 
   async _create(listableId, label) {
     try {
+      this._stateController()?.beginWrite?.()
       const res = await fetch(`/user_lists/${this.userListIdValue}/items`, {
         method: "POST",
         headers: {
@@ -38,7 +39,7 @@ export default class extends Controller {
       // Update the shared user-list-state cache BEFORE reloading the frame, so
       // the new item's "on these lists" widget renders correctly the moment it
       // connects (the widget reads the cache synchronously on connect).
-      this._syncState(data.user_list_item, data.removed_user_list_items || [])
+      this._syncState(data.user_list_item, data.removed_user_list_items || [], {now: data.state_mark, was: data.state_mark_was})
       this._toast("success", data.message)
       this._resetInput()
       this._refreshList()
@@ -68,15 +69,15 @@ export default class extends Controller {
 
   // Optimistically record the new membership in the singleton user-list-state
   // cache (mirrors the modal's _afterMutation) so the per-item widget shows the
-  // item as "on this list". Falls back to a server refresh if the cache isn't
-  // ready yet (rare: first visit before /user_list_state has returned).
-  _syncState(item, removedItems = []) {
+  // item as "on this list". Falls back to fetching the state if this page has
+  // none: an uncached page like this one never fetches it on load.
+  _syncState(item, removedItems = [], marks) {
     if (!item) return
     const stateCtrl = this._stateController()
     if (!stateCtrl) return
 
     if (!stateCtrl.state?.()) {
-      stateCtrl.refresh?.()
+      stateCtrl.ensureState?.()
       return
     }
 
@@ -94,7 +95,8 @@ export default class extends Controller {
     stateCtrl.applyMutation({
       listableType: type,
       listableId: id,
-      memberships: next
+      memberships: next,
+      marks
     })
   }
 

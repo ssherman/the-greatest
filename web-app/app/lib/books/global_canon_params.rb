@@ -13,6 +13,7 @@ module Books
     PERCENTAGES = (0..100)
     COUNTRY_CAPS = (1..10)
     MAX_EXCLUDED_GENRES = 6
+    EXCLUDABLE_TYPES = %w[genre audience].freeze
 
     DEFAULT_TOTAL = 150
     DEFAULT_PERCENTAGE = 20
@@ -56,21 +57,26 @@ module Books
 
     # Accepts BOTH shapes the two entry points produce: a comma-joined string
     # from the path segment, and an array from the picker's `name="...[]"`
-    # hidden inputs. Resolution semantics match Books::FilterParams#resolve --
-    # a count mismatch 404s rather than silently dropping a slug, because a URL
+    # hidden inputs. A slug that is not live resolves like Books::FilterParams
+    # does (merged -> its target, renamed -> friendly_id history), so the
+    # controller's canonical-form check 301s an old URL to the current one. An
+    # unresolvable slug 404s rather than silently dropping it, because a URL
     # promising two exclusions must not quietly apply one.
     #
-    # Genres only. A subject or setting slug 404s rather than filtering, so the
-    # URL space stays exactly what the picker can produce.
+    # Genres and audiences only. A subject or setting slug 404s rather than
+    # filtering, so the URL space stays exactly what the picker can produce.
     def genres(raw)
       slugs = Array(raw).flat_map { |value| value.to_s.split(",") }.map(&:strip).reject(&:blank?).uniq
       return [] if slugs.empty?
       raise ActiveRecord::RecordNotFound if slugs.size > MAX_EXCLUDED_GENRES
 
-      records = ::Books::Category.active.where(category_type: :genre, slug: slugs).sort_by(&:slug)
-      raise ActiveRecord::RecordNotFound if records.size != slugs.size
+      records = slugs.map do |slug|
+        category = ::Books::CategorySlugResolver.call(slug)
+        raise ActiveRecord::RecordNotFound unless category && EXCLUDABLE_TYPES.include?(category.category_type)
 
-      records
+        category
+      end
+      records.uniq.sort_by(&:slug)
     end
 
     def integer(raw, default)

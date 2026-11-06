@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { credentials, signIn } from '../../support/sign-in';
 
 // Guards the two halves of on-demand Firebase loading. Both are invisible to
 // the Rails suite: nothing server-side knows which script tags the browser
@@ -30,5 +31,20 @@ test.describe('Firebase loads on demand', () => {
 
     await firebaseResponse;
     await expect(page.locator('#login_modal')).toBeVisible();
+  });
+
+  test('a signed-in reader does not download the Firebase bundle on a normal page load', async ({ page }) => {
+    await signIn(page, credentials('USER'));
+
+    const firebaseRequests: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().includes('firebase-auth')) firebaseRequests.push(request.url());
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('#navbar_login_button')).toHaveAttribute('data-auth-state', 'signed-in');
+
+    expect(firebaseRequests).toHaveLength(0);
   });
 });

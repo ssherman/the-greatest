@@ -20,6 +20,20 @@ module Books
       assert_selector "button[onclick='books_filter_modal.showModal()']"
     end
 
+    test "unfiltered, the button reads Filter books and shows no count" do
+      render_bar
+
+      assert_button "Filter books"
+      assert_no_selector "[data-testid='filter-count']"
+    end
+
+    test "filtered, the count includes categories, countries and one for any year range" do
+      render_bar(categories: [categories(:books_novels_genre)], countries: [books_countries(:french)], year_start: "1900", year_end: "2000")
+
+      assert_button "Filters"
+      assert_selector "[data-testid='filter-count']", text: "3"
+    end
+
     test "renders no chips when nothing is filtered" do
       render_bar
 

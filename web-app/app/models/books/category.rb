@@ -14,20 +14,23 @@
 #  type              :string           not null
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
+#  merged_into_id    :bigint
 #  parent_id         :bigint
 #
 # Indexes
 #
-#  index_categories_on_category_type  (category_type)
-#  index_categories_on_deleted        (deleted)
-#  index_categories_on_name           (name)
-#  index_categories_on_parent_id      (parent_id)
-#  index_categories_on_slug           (slug)
-#  index_categories_on_type           (type)
-#  index_categories_on_type_and_slug  (type,slug)
+#  index_categories_on_category_type   (category_type)
+#  index_categories_on_deleted         (deleted)
+#  index_categories_on_merged_into_id  (merged_into_id)
+#  index_categories_on_name            (name)
+#  index_categories_on_parent_id       (parent_id)
+#  index_categories_on_slug            (slug)
+#  index_categories_on_type            (type)
+#  index_categories_on_type_and_slug   (type,slug)
 #
 # Foreign Keys
 #
+#  fk_rails_...  (merged_into_id => categories.id)
 #  fk_rails_...  (parent_id => categories.id)
 #
 module Books
@@ -70,6 +73,17 @@ module Books
     # searches filter on them, so nothing may merge, delete or rename them.
     def self.protected_ids
       ::Books::BookType::LABELS.keys.filter_map { |value| ::Books::BookType.category_id(value) }
+    end
+
+    # Every category type is badged on a search result, so a row always says what
+    # it is -- the Category axis spans genres, subjects and settings, and an
+    # unbadged row is indistinguishable from the badged ones around it. Only the
+    # wording is overridden: "Setting" reads better than "Location" for a place a
+    # book is set in. Every other type is its own titleized name.
+    TYPE_LABELS = {"location" => "Setting"}.freeze
+
+    def type_label
+      TYPE_LABELS.fetch(category_type.to_s) { category_type.to_s.titleize }
     end
 
     # Nearest first: Chicago -> [Illinois, United States, North America].

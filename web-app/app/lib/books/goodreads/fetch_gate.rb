@@ -21,6 +21,8 @@ module Books
         def granted? = refusal.nil?
       end
 
+      Usage = Data.define(:day, :count)
+
       def initialize(redis: nil, config: nil)
         @redis = redis || REDIS_POOL
         @config = config || Rails.application.config.x.goodreads
@@ -47,6 +49,22 @@ module Books
         read["blocked_until"].to_i > now
       end
 
+      # The UTC day of the newest reservation and how many fetches that day holds;
+      # [nil, 0] when nothing is stored. The day can be tomorrow: a long line
+      # reserves turns that start past midnight.
+      def usage
+        state = read
+        return Usage.new(day: nil, count: 0) if state["day"].blank?
+
+        Usage.new(day: Date.strptime(state["day"], "%Y%m%d"), count: state["day_count"].to_i)
+      end
+
+      # When the current block ends; nil when none was set or it has passed.
+      def blocked_until
+        epoch = read["blocked_until"].to_i
+        Time.at(epoch) if epoch > now
+      end
+
       # Seconds until fetch_interval has passed since the last fetch actually
       # began. A turn only promises a start time: jobs held up by a deploy or
       # a slow fetch come due together, and this keeps them apart.
@@ -59,7 +77,7 @@ module Books
       end
 
       def block!
-        Rails.logger.warn("#{self.class.name}: Goodreads blocked a fetch or served an unrecognizable page; " \
+        Rails.logger.warn("#{self.class.name}: Goodreads blocked a fetch; " \
           "no fetches for #{@config.block_cooldown}s")
         write("blocked_until" => now + @config.block_cooldown)
       end

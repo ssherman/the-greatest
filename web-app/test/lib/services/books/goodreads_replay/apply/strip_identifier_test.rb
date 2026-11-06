@@ -27,6 +27,12 @@ module Services
             assert_equal ["656"], goodreads_ids(@book)
           end
 
+          test "an identifier it adds is goodreads_import" do
+            StripIdentifier.call(verdict: verdict)
+
+            assert @book.identifiers.find_by!(identifier_type: :books_work_goodreads_id, value: "656").source_goodreads_import?
+          end
+
           test "drops the slug when the book already holds the bare id" do
             ::Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
 

@@ -40,6 +40,22 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
     assert_equal [["books_work_asin", "B01K0T9772"], ["books_work_isbn10", "0375755349"]], pairs
   end
 
+  test "a migrated identifier is marked legacy" do
+    book = ::Books::Book.create!(title: "Legacy Source Book")
+    run_migrator([{"id" => 30, "book_id" => book.id, "identifier_type" => 2, "identifier" => "9780140449136"}])
+
+    assert Identifier.find_by!(identifiable: book, identifier_type: :books_work_isbn13, value: "9780140449136").source_legacy?
+  end
+
+  test "re-migrating never downgrades a row a verified source already confirmed" do
+    book = ::Books::Book.create!(title: "Verified Source Book")
+    existing = Identifier.create!(identifiable: book, identifier_type: :books_work_isbn13, value: "9780140449136", source: :open_library)
+
+    run_migrator([{"id" => 31, "book_id" => book.id, "identifier_type" => 2, "identifier" => "9780140449136"}])
+
+    assert existing.reload.source_open_library?
+  end
+
   test "skips an unknown identifier_type" do
     book = ::Books::Book.create!(title: "Unknown Type Book")
     assert_no_difference -> { Identifier.count } do

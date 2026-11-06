@@ -4,6 +4,22 @@ module Books
   class FilterTitleTest < ActiveSupport::TestCase
     def genre(name) = Books::Category.new(name: name, category_type: :genre)
 
+    def audience(name) = Books::Category.new(name: name, category_type: :audience)
+
+    test "an audience alone reads as an audience of books" do
+      assert_equal "The Greatest Young Adult Books of All Time", Books::FilterTitle.call(categories: [audience("Young Adult")])
+    end
+
+    test "an audience comes before the genre" do
+      title = Books::FilterTitle.call(categories: [genre("Fantasy"), audience("Middle Grade")])
+
+      assert_equal "The Greatest Middle Grade Fantasy Books of All Time", title
+    end
+
+    test "a plural genre after an audience still drops the word Books" do
+      assert_equal "The Greatest Young Adult Novels of All Time", Books::FilterTitle.call(categories: [audience("Young Adult"), genre("Novels")])
+    end
+
     def subject(name) = Books::Category.new(name: name, category_type: :subject)
 
     def location(name) = Books::Category.new(name: name, category_type: :location)

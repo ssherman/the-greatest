@@ -37,7 +37,7 @@ namespace :worldcat do
     )
     abort result.errors.join("; ") unless result.success?
     c = result.data[:counts]
-    puts "#{c[:genre]} genre, #{c[:subject]} subject, #{c[:drop]} drop; #{result.data[:unplaced].size} terms with no genre -> docs/data-quality/worldcat-genre-mapping.md"
+    puts "#{c[:genre]} genre, #{c[:audience]} audience, #{c[:subject]} subject, #{c[:drop]} drop; #{result.data[:unplaced].size} terms with no genre -> docs/data-quality/worldcat-genre-mapping.md"
   end
 
   desc "Add every mapped WorldCat term as an alternative name on its genre category (idempotent)"
@@ -50,16 +50,17 @@ namespace :worldcat do
     puts line
   end
 
-  desc "Queue one WorldCat genre/subject backfill run over <count> books (id order) or all: worldcat:backfill[<count>|all]"
+  desc "Queue one WorldCat genre/subject backfill run over every book with a verified ISBN-13, or <count> of them (id order): worldcat:backfill[verified|<count>]"
   task :backfill, [:limit] => :environment do |_task, args|
-    usage = "usage: worldcat:backfill[<count>|all]"
+    usage = "usage: worldcat:backfill[verified|<count>]"
     limit = case args[:limit]
-    when "all" then nil
+    when "verified" then nil
+    when "all" then abort "worldcat:backfill[all] is retired: unverified ISBNs can point at another book. Use worldcat:backfill[verified]."
     when /\A[1-9]\d*\z/ then args[:limit].to_i
     else abort usage
     end
     run_id = SecureRandom.uuid
     Books::WorldCatBackfillJob.perform_async(limit, run_id)
-    puts "queued WorldCat backfill run #{run_id}: #{limit || "all"} books. One run at a time; a second exits at once. Progress: the worker log."
+    puts "queued WorldCat backfill run #{run_id}: #{limit ? "#{limit} books" : "every book with a verified ISBN-13"}. One run at a time; a second exits at once. Progress: the worker log."
   end
 end

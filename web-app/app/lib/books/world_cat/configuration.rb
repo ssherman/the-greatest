@@ -5,9 +5,9 @@ module Books
     class Configuration
       DEFAULT_URL = "http://127.0.0.1:8082"
       DEFAULT_USER_AGENT = "TheGreatest/1.0 (+https://thegreatestbooks.org)"
-      DEFAULT_TIMEOUT = 5
+      DEFAULT_TIMEOUT = 30
       DEFAULT_OPEN_TIMEOUT = 3
-      DEFAULT_BATCH_TIMEOUT = 20
+      DEFAULT_BATCH_TIMEOUT = 30
 
       attr_accessor :base_url, :user_agent, :timeout, :open_timeout, :batch_timeout, :logger, :access
 

@@ -15,26 +15,27 @@ test.describe('Books curated collections', () => {
 
   test('a collection page offers genre and year but not origin', async ({ page }) => {
     await page.goto('/africa');
-    await page.getByRole('button', { name: 'Filters' }).click();
+    // /Filter/ matches the trigger whether it reads "Filters" or "Filter books".
+    await page.getByRole('button', { name: /Filter/ }).click();
     await expect(page.locator('dialog#books_filter_modal')).toBeVisible();
 
-    await expect(page.locator("[data-level-target='category']")).toBeVisible();
+    await expect(page.locator("[data-level-target='genre']")).toBeVisible();
     await expect(page.locator("[data-level-target='year']")).toBeVisible();
     await expect(page.locator("[data-level-target='country']")).toHaveCount(0);
   });
 
   test('applying a genre stays inside the collection', async ({ page }) => {
     await page.goto('/western');
-    await page.getByRole('button', { name: 'Filters' }).click();
-    await page.locator("[data-level-target='category']").click();
+    await page.getByRole('button', { name: /Filter/ }).click();
+    await page.locator("[data-level-target='genre']").click();
 
     const firstGenre = page
-      .locator("turbo-frame#books_filter_pane_category label")
+      .locator("turbo-frame#books_filter_pane_genre label")
       .first();
     await firstGenre.waitFor();
     await firstGenre.click();
 
-    await page.getByRole('button', { name: 'Apply' }).click();
+    await page.locator('dialog#books_filter_modal').getByRole('button', { name: /^Show/ }).click();
 
     await expect(page).toHaveURL(/\/western\/the-greatest\/[^/]+\/books$/);
   });

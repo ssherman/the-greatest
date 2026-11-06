@@ -18,8 +18,10 @@ module Services
       # first full replay writes verdicts and applies nothing.
       class ApplyVerdicts
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
-        POSTGRES_ERRORS = [ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished].freeze
+        include HandlerRun
+
         HANDLERS = {
+          fix_identity: Apply::FixIdentity,
           merge_authors: Apply::MergeAuthors,
           merge_books: Apply::MergeBooks,
           relink: Apply::Relink,
@@ -50,30 +52,14 @@ module Services
               tally["#{kind} #{apply(verdict, handler)}"] += 1
             end
           end
-          queue_follow_ups
+          queue_follow_ups(@rankings | @reweigh, @follow_ups)
           Result.new(success?: true, data: {tally: tally.to_h, ranking_configuration_ids: (@rankings | @reweigh).to_a}, errors: [])
         end
 
         private
 
-        # The merges defer their per-merge requests, so a run of thousands of
-        # merges asks for each configuration once. Every refresh reweighs before
-        # it ranks, so a configuration a merge touched and one only a provisional
-        # flag touched get the same request. Sorted so the request is
-        # deterministic.
-        def queue_follow_ups
-          ::Services::RankingConfigurations::RequestRefresh.call_for_ids((@rankings | @reweigh).sort, delay: 5.minutes)
-          ::GenerateUserFavoritesListsJob.perform_async("Books::UserList") if @follow_ups.include?(:user_favorites)
-          request_author_rankings if @follow_ups.include?(:author_rankings)
-        end
-
-        def request_author_rankings
-          authors = ::Books::Authors::RankingConfiguration.default_primary
-          ::Services::RankingConfigurations::RequestRefresh.call(config: authors, delay: 5.minutes) if authors
-        end
-
         def apply(verdict, handler)
-          result = handler.call(verdict: verdict)
+          result = call_handler(verdict, handler)
           outcome = result.data[:outcome]
           @rankings.merge(Array(result.data[:ranking_configuration_ids]))
           @reweigh.merge(Array(result.data[:reweigh_configuration_ids]))

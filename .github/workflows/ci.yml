@@ -72,6 +72,13 @@ jobs:
           working-directory: web-app
           bundler-cache: true
 
+      # Without this the job runs on whatever Node the runner image ships,
+      # not the one the app (and its dependencies' engines) require.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: web-app/.node-version
+
       # Before the tests: test:prepare runs a plain `yarn install`, which would
       # rewrite a drifted yarn.lock instead of failing on it.
       - name: Install JavaScript dependencies (fails on yarn.lock drift)

@@ -1,0 +1,54 @@
+<%# One alternate-title decision. show_book adds the book's title (review page). %>
+<% stamp = ->(time) { time&.strftime("%Y-%m-%d %H:%M") } %>
+<% reviewer = row.decided_by_user %>
+<tr data-testid="alternate-title-row" data-alternate-title-id="<%= row.id %>" data-status="<%= row.status %>">
+  <% if local_assigns[:show_book] %>
+    <td class="[overflow-wrap:anywhere]"><%= link_to row.titleable.title, admin_books_book_path(row.titleable), class: "link" %></td>
+  <% end %>
+  <td class="[overflow-wrap:anywhere]"><%= row.title %></td>
+  <td><%= row.source.humanize %></td>
+  <td><span class="badge badge-sm <%= {"kept" => "badge-success", "removed" => "badge-error", "review" => "badge-warning"}[row.status] %>"><%= row.status.humanize %></span></td>
+  <td><%= row.verdict&.humanize || "–" %></td>
+  <td><%= row.category&.humanize || "–" %></td>
+  <td><%= row.confidence ? number_with_precision(row.confidence, precision: 2) : "–" %></td>
+  <td class="[overflow-wrap:anywhere] max-w-xs"><%= row.reason.presence || "–" %></td>
+  <td>
+    <% if row.ai_chat %>
+      <%= link_to "Chat", admin_books_ai_chat_path(row.ai_chat), class: "link", target: "_top" %>
+    <% else %>
+      –
+    <% end %>
+  </td>
+  <td class="whitespace-nowrap">
+    <% if row.decided_at %>
+      <%= row.decided_by&.humanize %><%= " (#{reviewer.display_name.presence || reviewer.name.presence || reviewer.email})" if reviewer %>,
+      <%= stamp.call(row.decided_at) %>
+    <% else %>
+      –
+    <% end %>
+  </td>
+  <td class="whitespace-nowrap">
+    <%# Copies a prompt for a deep-research agent: too costly to run per title through the API. %>
+    <span data-controller="clipboard-copy" class="inline">
+      <textarea hidden data-clipboard-copy-target="source"><%= Services::Books::AlternateTitles::ResearchPrompt.call(row) %></textarea>
+      <button type="button" class="btn btn-xs btn-primary" title="Copy a deep-research prompt for this title"
+              aria-label="Copy a deep-research prompt for &quot;<%= row.title %>&quot;"
+              data-testid="copy-research-prompt"
+              data-action="clipboard-copy#copy" data-clipboard-copy-target="button">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+        </svg>
+      </button>
+    </span>
+    <% if current_user_can_write? %>
+      <% if row.review? %>
+        <%= button_to "Keep", keep_admin_books_alternate_title_path(row), method: :post, class: "btn btn-xs btn-success", form: {data: {turbo_frame: "_top"}, class: "inline"} %>
+      <% end %>
+      <% if row.kept? || row.review? %>
+        <%= button_to "Remove", remove_admin_books_alternate_title_path(row), method: :post, class: "btn btn-xs btn-error", form: {data: {turbo_frame: "_top"}, class: "inline"} %>
+      <% elsif row.removed? %>
+        <%= button_to "Restore", restore_admin_books_alternate_title_path(row), method: :post, class: "btn btn-xs", form: {data: {turbo_frame: "_top"}, class: "inline"} %>
+      <% end %>
+    <% end %>
+  </td>
+</tr>

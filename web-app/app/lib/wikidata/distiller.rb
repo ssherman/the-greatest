@@ -97,6 +97,6 @@ module Wikidata
       end
     end
 
-    private_class_method :english, :name, :name_list, :best, :values, :item_ids, :times
+    private_class_method :name_list, :best
   end
 end

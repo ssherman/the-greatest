@@ -10,10 +10,8 @@ test.describe('Logout Flow', () => {
 
     // Sign-in reloads the page once Rails has a session. Navigating again here
     // collapses that race into a known fresh page (page.reload() is aborted by
-    // the page's own reload), on which the button is
-    // wired only when data-auth-state appears. Clicking on the "Logout" label
-    // alone used to open the login modal: the hint paints the label before
-    // Firebase rewires the inline onclick.
+    // the page's own reload). The widget renders from tg_uid alone, so the
+    // button is wired as soon as data-auth-state appears.
     await page.goto('/');
     const button = page.locator('#navbar_login_button');
     await expect(button).toHaveAttribute('data-auth-state', 'signed-in', { timeout: 15_000 });

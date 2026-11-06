@@ -23,6 +23,10 @@ module Api
         render_problem(::Api::Problem.new(:not_found, detail: "No #{noun} at that address"))
       end
 
+      rescue_from ::Api::UnknownFilter do |error|
+        render_problem(::Api::Problem.new(:not_found, detail: error.message))
+      end
+
       rescue_from ::Api::Page::InvalidParameter do |error|
         render_problem(::Api::Problem.new(:invalid_parameter, detail: error.message))
       end

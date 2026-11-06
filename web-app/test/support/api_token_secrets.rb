@@ -6,5 +6,7 @@ module ApiTokenSecrets
   MUSIC_ONLY = "tg_#{"u" * 40}".freeze
   EXPIRED = "tg_#{"e" * 40}".freeze
   NON_MEMBER = "tg_#{"n" * 40}".freeze
+  ADMIN = "tg_#{"a" * 40}".freeze
+  ADMIN_READ = "tg_#{"r" * 40}".freeze
   SERVICE = "tg_#{"s" * 40}".freeze
 end

@@ -11,6 +11,7 @@ module Services
         def setup
           @author = ::Books::Author.create!(name: "Reject Link Author")
           @user = users(:admin_user)
+          stub_workflow_dispatch
         end
 
         def decision(finder, key, outcome: :matched, created_at: Time.current)
@@ -35,8 +36,13 @@ module Services
 
         def hold(type, value) = @author.identifiers.create!(identifier_type: type, value: value)
 
+        # The re-run is planned as a superseding refresh run; the tests that only
+        # care that it happens stub the planner, and "plans a refresh run" below
+        # exercises the real one.
         def expect_rerun(times: 1)
-          ::Books::Authors::WikidataJob.expects(:perform_in).with(RejectExternalLink::RERUN_DELAY, @author.id, true).times(times)
+          ::Workflows::Books::AuthorEnrichment.expects(:start)
+            .with(@author, initiated_by: "reject_external_link", options: {refresh: true}, start_after: anything, supersede: true)
+            .times(times)
         end
 
         def reject(target) = RejectExternalLink.call(decision: target, user: @user)
@@ -316,29 +322,41 @@ module Services
           assert_not @author.identifiers.exists?
         end
 
-        test "when the re-run cannot be queued, nothing is rejected or reverted, and a retry goes through" do
+        test "a reject supersedes the active run and plans a refresh run after RERUN_DELAY, in its transaction" do
+          freeze_time
+          wikidata = decision(ResolveWikidata.name, "Q1")
+          active = ::Workflows::Books::AuthorEnrichment.start(@author, initiated_by: "test")
+
+          assert reject(wikidata).success?
+
+          fresh = ::WorkflowRun.running.find_by!(enrichable: @author)
+          assert_equal ["cancelled", true, "reject_external_link", RejectExternalLink::RERUN_DELAY.seconds.from_now.to_i],
+            [active.reload.status, fresh.options["refresh"], fresh.initiated_by, fresh.step(:wikidata).run_after.to_i]
+          assert_not_equal active.id, fresh.id
+        end
+
+        test "when the re-run cannot be planned, nothing is rejected or reverted, and a retry goes through" do
           wikidata = decision(ResolveWikidata.name, "Q1")
           hold(:books_author_wikidata_qid, "Q1")
           @author.update!(birth_year: 1901)
           ledger(EnrichFromWikidata::KIND, wikidata, "wikidata_qid" => filled("Q1"), "birth_year" => filled(1901))
-          ::Books::Authors::WikidataJob.stubs(:perform_in)
-            .raises(::RedisClient::CannotConnectError, "connection refused").then.returns("jid")
+          ::Workflows::Books::AuthorEnrichment.stubs(:start).raises(ActiveRecord::StatementInvalid, "plan failed")
 
-          result = reject(wikidata)
+          assert_raises(ActiveRecord::StatementInvalid) { reject(wikidata) }
 
-          assert_not result.success?
-          assert_equal 1, result.errors.size
           assert_nil wikidata.reload.verdict
           assert_equal 1901, @author.reload.birth_year
           assert @author.identifiers.exists?(identifier_type: "books_author_wikidata_qid", value: "Q1")
+          assert_equal 0, ::WorkflowRun.where(enrichable: @author).count
 
+          ::Workflows::Books::AuthorEnrichment.unstub(:start)
           assert reject(::MatchDecision.find(wikidata.id)).success?
           assert wikidata.reload.verdict_rejected?
           assert_nil @author.reload.birth_year
         end
 
         test "refuses an unmatched decision, a finder's decision, and one already rejected, changing and queuing nothing" do
-          ::Books::Authors::WikidataJob.expects(:perform_in).never
+          ::Workflows::Books::AuthorEnrichment.expects(:start).never
           unmatched = decision(ResolveWikidata.name, nil, outcome: :unmatched)
           finder = decision("DataImporters::Books::Author::Finder", "Q1")
           rejected = decision(ResolveWikidata.name, "Q1")

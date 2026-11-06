@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_06_142933) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,6 +59,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.jsonb "parameters"
     t.index ["parent_type", "parent_id"], name: "index_ai_chats_on_parent"
     t.index ["user_id"], name: "index_ai_chats_on_user_id"
+  end
+
+  create_table "alternate_titles", force: :cascade do |t|
+    t.bigint "titleable_id", null: false
+    t.string "title", null: false
+    t.string "normalized_title", null: false
+    t.integer "source", null: false
+    t.integer "status", default: 0, null: false
+    t.integer "verdict"
+    t.integer "category"
+    t.float "confidence"
+    t.text "reason"
+    t.bigint "ai_chat_id"
+    t.integer "decided_by"
+    t.bigint "decided_by_user_id"
+    t.datetime "decided_at"
+    t.datetime "judged_at"
+    t.datetime "undo_checked_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "titleable_type", null: false
+    t.index ["ai_chat_id"], name: "index_alternate_titles_on_ai_chat_id"
+    t.index ["decided_by_user_id"], name: "index_alternate_titles_on_decided_by_user_id"
+    t.index ["status"], name: "index_alternate_titles_on_status"
+    t.index ["titleable_type", "titleable_id", "normalized_title"], name: "index_alternate_titles_on_titleable_and_normalized_title", unique: true
+    t.index ["titleable_type", "titleable_id"], name: "index_alternate_titles_on_titleable_type_and_titleable_id"
   end
 
   create_table "api_tokens", force: :cascade do |t|
@@ -225,6 +251,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.index ["creditable_type", "creditable_id"], name: "index_books_credits_on_creditable"
   end
 
+  create_table "books_edition_candidates", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.string "edition_key", null: false
+    t.string "work_key"
+    t.string "title"
+    t.string "subtitle"
+    t.string "language_code"
+    t.integer "publish_year"
+    t.jsonb "identifiers", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["book_id", "edition_key"], name: "index_books_edition_candidates_on_book_id_and_edition_key", unique: true
+    t.index ["book_id"], name: "index_books_edition_candidates_on_book_id"
+  end
+
   create_table "books_editions", force: :cascade do |t|
     t.bigint "book_id", null: false
     t.string "title"
@@ -311,6 +352,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.bigint "legacy_book_id"
     t.index ["goodreads_edition_id"], name: "index_books_goodreads_import_rows_on_goodreads_edition_id"
     t.index ["import_id", "row_number"], name: "index_books_goodreads_import_rows_on_import_id_and_row_number", unique: true
+    t.index ["legacy_book_id"], name: "index_books_goodreads_import_rows_on_legacy_book_id"
     t.index ["replay_finding"], name: "index_books_goodreads_import_rows_on_replay_finding"
   end
 
@@ -359,29 +401,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.string "asin"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "description"
+    t.integer "page_count"
+    t.string "format"
+    t.bigint "best_book_id"
+    t.jsonb "genres", default: [], null: false
     t.index ["goodreads_book_id"], name: "index_books_goodreads_pages_on_goodreads_book_id", unique: true
   end
 
-  create_table "books_open_library_backfills", force: :cascade do |t|
-    t.bigint "book_id", null: false
+  create_table "books_goodreads_searches", force: :cascade do |t|
+    t.string "query", null: false
     t.integer "outcome", null: false
-    t.integer "lookup"
-    t.string "old_keys", default: [], null: false, array: true
-    t.string "new_key"
-    t.string "duplicate_keys", default: [], null: false, array: true
-    t.bigint "pair_book_id"
-    t.jsonb "author_changes", default: {}, null: false
-    t.string "dump_date"
-    t.integer "matcher_version"
-    t.string "run_id", null: false
-    t.integer "attempts", default: 1, null: false
-    t.text "error"
+    t.datetime "fetched_at", null: false
+    t.integer "http_status"
+    t.integer "parser_version"
+    t.jsonb "rows", default: [], null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.boolean "confirmed_on_abstain", default: false, null: false
-    t.index ["book_id"], name: "index_books_open_library_backfills_on_book_id", unique: true
-    t.index ["outcome"], name: "index_books_open_library_backfills_on_outcome"
-    t.index ["run_id"], name: "index_books_open_library_backfills_on_run_id"
+    t.index ["query"], name: "index_books_goodreads_searches_on_query", unique: true
   end
 
   create_table "books_reading_goals", force: :cascade do |t|
@@ -400,6 +437,38 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.check_constraint "target_count > 0", name: "books_reading_goals_target_count_positive"
   end
 
+  create_table "books_rebuild_book_surveys", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.integer "classification", null: false
+    t.integer "edition_count", default: 0, null: false
+    t.integer "row_count", default: 0, null: false
+    t.jsonb "groups", default: [], null: false
+    t.boolean "title_agrees"
+    t.boolean "authors_agree"
+    t.boolean "wrong_book", default: false, null: false
+    t.datetime "surveyed_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["book_id"], name: "index_books_rebuild_book_surveys_on_book_id", unique: true
+    t.index ["classification"], name: "index_books_rebuild_book_surveys_on_classification"
+    t.index ["wrong_book"], name: "index_books_rebuild_book_surveys_on_wrong_book"
+  end
+
+  create_table "books_rebuild_edition_evidences", force: :cascade do |t|
+    t.bigint "goodreads_book_id", null: false
+    t.string "signature", null: false
+    t.string "isbn13"
+    t.integer "world_cat", null: false
+    t.string "world_cat_title"
+    t.string "world_cat_creator"
+    t.integer "world_cat_year"
+    t.string "ol_work_keys", default: [], null: false, array: true
+    t.datetime "checked_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["goodreads_book_id", "signature"], name: "index_books_rebuild_edition_evidences_on_natural_key", unique: true
+  end
+
   create_table "books_repair_verdicts", force: :cascade do |t|
     t.integer "kind", null: false
     t.string "subject_key", null: false
@@ -415,6 +484,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.text "error"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "superseded_at"
+    t.index "((payload ->> 'book_id'::text))", name: "index_books_repair_verdicts_on_reimport_match_book", where: "(kind = 7)"
+    t.index "((payload ->> 'created_book_id'::text))", name: "index_books_repair_verdicts_on_reimport_match_created_book", where: "(kind = 7)"
+    t.index "((payload ->> 'from_book_id'::text))", name: "index_books_repair_verdicts_on_reimport_row_source", where: "(kind = 8)"
+    t.index "((payload ->> 'target_id'::text))", name: "index_books_repair_verdicts_on_merge_target", where: "(kind = 1)"
+    t.index "((payload ->> 'to_book_id'::text))", name: "index_books_repair_verdicts_on_reimport_row_destination", where: "(kind = 8)"
+    t.index "((payload ->> 'user_id'::text))", name: "index_books_repair_verdicts_on_reimport_row_user", where: "(kind = 8)"
     t.index ["kind", "subject_key"], name: "index_books_repair_verdicts_on_kind_and_subject_key", unique: true
     t.index ["status", "kind"], name: "index_books_repair_verdicts_on_status_and_kind"
   end
@@ -442,6 +518,66 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.index ["book_id"], name: "index_books_series_books_on_book_id"
     t.index ["series_id", "book_id"], name: "index_books_series_books_on_series_id_and_book_id", unique: true
     t.index ["series_id"], name: "index_books_series_books_on_series_id"
+  end
+
+  create_table "books_verification_findings", force: :cascade do |t|
+    t.bigint "verification_id", null: false
+    t.bigint "book_id", null: false
+    t.integer "kind", null: false
+    t.integer "identifier_type", null: false
+    t.string "value", null: false
+    t.bigint "identifier_id"
+    t.integer "source"
+    t.integer "previous_source"
+    t.bigint "other_book_id"
+    t.string "work_key"
+    t.jsonb "evidence", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "undone_at"
+    t.integer "undo_action"
+    t.index ["book_id"], name: "index_books_verification_findings_on_book_id"
+    t.index ["kind"], name: "index_books_verification_findings_on_kind"
+    t.index ["other_book_id"], name: "index_books_verification_findings_on_other_book_id"
+    t.index ["verification_id", "kind", "identifier_type", "value"], name: "index_books_verification_findings_unique", unique: true
+    t.index ["verification_id"], name: "index_books_verification_findings_on_verification_id"
+  end
+
+  create_table "books_verifications", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.integer "work_outcome", null: false
+    t.integer "lookup"
+    t.string "old_keys", default: [], null: false, array: true
+    t.string "new_key"
+    t.string "duplicate_keys", default: [], null: false, array: true
+    t.bigint "pair_book_id"
+    t.jsonb "author_changes", default: {}, null: false
+    t.string "dump_date"
+    t.integer "matcher_version"
+    t.string "run_id", null: false
+    t.integer "attempts", default: 1, null: false
+    t.text "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "confirmed_on_abstain", default: false, null: false
+    t.integer "cohort", default: 0, null: false
+    t.integer "stage", default: 0, null: false
+    t.text "stage_error"
+    t.integer "added_count", default: 0, null: false
+    t.integer "confirmed_count", default: 0, null: false
+    t.integer "candidate_count", default: 0, null: false
+    t.integer "wrong_count", default: 0, null: false
+    t.boolean "lump_suspect", default: false, null: false
+    t.string "worldcat_dump_date"
+    t.datetime "checked_at"
+    t.datetime "second_chance_at"
+    t.integer "prior_outcome"
+    t.string "prior_keys", default: [], null: false, array: true
+    t.index ["book_id"], name: "index_books_verifications_on_book_id", unique: true
+    t.index ["lump_suspect"], name: "index_books_verifications_on_lump_suspect"
+    t.index ["run_id"], name: "index_books_verifications_on_run_id"
+    t.index ["stage"], name: "index_books_verifications_on_stage"
+    t.index ["work_outcome"], name: "index_books_verifications_on_work_outcome"
   end
 
   create_table "categories", force: :cascade do |t|
@@ -487,6 +623,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.text "error"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "extra_target_ids", default: [], null: false, array: true
+    t.jsonb "split_assignments", default: {}, null: false
     t.index ["ai_chat_id"], name: "index_category_cleanup_decisions_on_ai_chat_id"
     t.index ["category_id"], name: "index_category_cleanup_decisions_on_category_id"
     t.index ["run", "category_id"], name: "index_category_cleanup_decisions_on_run_and_category_id"
@@ -655,12 +793,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.bigint "match_decision_id"
+    t.bigint "workflow_step_id"
     t.index ["ai_chat_id"], name: "index_enrichments_on_ai_chat_id"
     t.index ["enrichable_type", "enrichable_id"], name: "index_enrichments_on_enrichable"
     t.index ["kind"], name: "index_enrichments_on_kind"
     t.index ["match_decision_id"], name: "index_enrichments_on_match_decision_id"
     t.index ["mode", "created_at"], name: "index_enrichments_on_mode_and_created_at"
     t.index ["outcome"], name: "index_enrichments_on_outcome"
+    t.index ["workflow_step_id"], name: "index_enrichments_on_workflow_step_id"
   end
 
   create_table "external_links", force: :cascade do |t|
@@ -795,6 +935,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.string "value", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "source"
     t.index ["identifiable_type", "identifiable_id"], name: "index_identifiers_on_identifiable"
     t.index ["identifiable_type", "identifier_type", "value", "identifiable_id"], name: "index_identifiers_on_lookup_unique", unique: true
     t.index ["identifiable_type", "value"], name: "index_identifiers_on_type_and_value"
@@ -1325,6 +1466,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["item_type", "from_id"], name: "index_record_redirects_on_item_type_and_from_id", unique: true
+    t.index ["item_type", "to_id"], name: "index_record_redirects_on_item_type_and_to_id"
   end
 
   create_table "review_summaries", force: :cascade do |t|
@@ -1387,6 +1529,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.index ["created_at"], name: "index_search_index_requests_on_created_at"
     t.index ["parent_type", "parent_id"], name: "index_search_index_requests_on_parent"
     t.index ["parent_type", "parent_id"], name: "index_search_index_requests_on_parent_type_and_parent_id"
+  end
+
+  create_table "sessions", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "user_agent"
+    t.string "ip_address"
+    t.datetime "last_active_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_sessions_on_user_id"
   end
 
   create_table "stripe_events", force: :cascade do |t|
@@ -1473,9 +1625,70 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
     t.index ["stripe_customer_id"], name: "index_users_on_stripe_customer_id"
   end
 
+  create_table "workflow_dependencies", force: :cascade do |t|
+    t.bigint "step_id", null: false
+    t.bigint "prerequisite_step_id", null: false
+    t.integer "kind", default: 0, null: false
+    t.datetime "satisfied_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["prerequisite_step_id"], name: "index_workflow_dependencies_on_prerequisite_step_id"
+    t.index ["prerequisite_step_id"], name: "index_workflow_dependencies_open_on_prerequisite_step_id", where: "(satisfied_at IS NULL)"
+    t.index ["step_id", "prerequisite_step_id"], name: "index_workflow_dependencies_on_step_and_prerequisite", unique: true
+  end
+
+  create_table "workflow_runs", force: :cascade do |t|
+    t.string "workflow", null: false
+    t.integer "definition_version", null: false
+    t.string "enrichable_type", null: false
+    t.bigint "enrichable_id", null: false
+    t.integer "status", default: 0, null: false
+    t.jsonb "options", default: {}, null: false
+    t.string "initiated_by", null: false
+    t.bigint "parent_run_id"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.text "error_summary"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["enrichable_type", "enrichable_id"], name: "index_workflow_runs_on_enrichable"
+    t.index ["parent_run_id"], name: "index_workflow_runs_on_parent_run_id"
+    t.index ["status"], name: "index_workflow_runs_on_status"
+    t.index ["workflow", "enrichable_type", "enrichable_id"], name: "index_workflow_runs_one_active", unique: true, where: "(status = 0)"
+  end
+
+  create_table "workflow_steps", force: :cascade do |t|
+    t.bigint "workflow_run_id", null: false
+    t.string "key", null: false
+    t.integer "state", default: 0, null: false
+    t.string "outcome"
+    t.datetime "released_at"
+    t.datetime "run_after"
+    t.integer "attempts", default: 0, null: false
+    t.integer "max_attempts", default: 3, null: false
+    t.string "lease_token"
+    t.integer "lease_seconds", null: false
+    t.datetime "lease_expires_at"
+    t.datetime "dispatched_at"
+    t.integer "dispatch_count", default: 0, null: false
+    t.string "queue", null: false
+    t.jsonb "result", default: {}, null: false
+    t.text "error"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["state", "dispatched_at"], name: "index_workflow_steps_on_state_and_dispatched_at"
+    t.index ["state", "lease_expires_at"], name: "index_workflow_steps_on_state_and_lease_expires_at"
+    t.index ["state", "run_after"], name: "index_workflow_steps_on_state_and_run_after"
+    t.index ["workflow_run_id", "key"], name: "index_workflow_steps_on_workflow_run_id_and_key", unique: true
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_chats", "users"
+  add_foreign_key "alternate_titles", "ai_chats", on_delete: :nullify
+  add_foreign_key "alternate_titles", "users", column: "decided_by_user_id", on_delete: :nullify
   add_foreign_key "api_tokens", "users"
   add_foreign_key "books_author_countries", "books_authors", column: "author_id"
   add_foreign_key "books_author_countries", "books_countries", column: "country_id"
@@ -1490,6 +1703,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
   add_foreign_key "books_books", "books_editions", column: "default_edition_id", on_delete: :nullify
   add_foreign_key "books_books", "languages", column: "original_language_id"
   add_foreign_key "books_credits", "books_authors", column: "author_id"
+  add_foreign_key "books_edition_candidates", "books_books", column: "book_id", on_delete: :cascade
   add_foreign_key "books_editions", "books_books", column: "book_id"
   add_foreign_key "books_editions", "languages"
   add_foreign_key "books_goodreads_editions", "books_books", column: "book_id", on_delete: :nullify
@@ -1500,12 +1714,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
   add_foreign_key "books_goodreads_import_rows", "books_goodreads_imports", column: "import_id", on_delete: :cascade
   add_foreign_key "books_goodreads_imports", "users"
   add_foreign_key "books_goodreads_imports", "users", column: "reviewed_by_id"
-  add_foreign_key "books_open_library_backfills", "books_books", column: "book_id", on_delete: :cascade
-  add_foreign_key "books_open_library_backfills", "books_books", column: "pair_book_id", on_delete: :nullify
   add_foreign_key "books_reading_goals", "users"
+  add_foreign_key "books_rebuild_book_surveys", "books_books", column: "book_id", on_delete: :cascade
   add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
   add_foreign_key "books_series_books", "books_books", column: "book_id"
   add_foreign_key "books_series_books", "books_series", column: "series_id"
+  add_foreign_key "books_verification_findings", "books_books", column: "book_id", on_delete: :cascade
+  add_foreign_key "books_verification_findings", "books_books", column: "other_book_id", on_delete: :cascade
+  add_foreign_key "books_verification_findings", "books_verifications", column: "verification_id", on_delete: :cascade
+  add_foreign_key "books_verifications", "books_books", column: "book_id", on_delete: :cascade
+  add_foreign_key "books_verifications", "books_books", column: "pair_book_id", on_delete: :nullify
   add_foreign_key "categories", "categories", column: "merged_into_id"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_cleanup_decisions", "ai_chats"
@@ -1523,6 +1741,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
   add_foreign_key "duplicate_candidates", "users", column: "resolved_by_id", on_delete: :nullify
   add_foreign_key "enrichments", "ai_chats", on_delete: :nullify
   add_foreign_key "enrichments", "match_decisions", on_delete: :nullify
+  add_foreign_key "enrichments", "workflow_steps", on_delete: :nullify
   add_foreign_key "external_links", "users", column: "submitted_by_id"
   add_foreign_key "games_game_companies", "games_companies", column: "company_id"
   add_foreign_key "games_game_companies", "games_games", column: "game_id"
@@ -1569,6 +1788,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_145612) do
   add_foreign_key "recommendation_item_neighbors", "recommendation_models"
   add_foreign_key "reviews", "users"
   add_foreign_key "saved_searches", "users"
+  add_foreign_key "sessions", "users"
   add_foreign_key "user_list_items", "user_lists"
   add_foreign_key "user_lists", "users"
+  add_foreign_key "workflow_dependencies", "workflow_steps", column: "prerequisite_step_id", on_delete: :cascade
+  add_foreign_key "workflow_dependencies", "workflow_steps", column: "step_id", on_delete: :cascade
+  add_foreign_key "workflow_runs", "workflow_runs", column: "parent_run_id", on_delete: :nullify
+  add_foreign_key "workflow_steps", "workflow_runs"
 end

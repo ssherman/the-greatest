@@ -1,0 +1,312 @@
+require "test_helper"
+
+module Services
+  module Books
+    module GoodreadsReplay
+      module Apply
+        class FixIdentityTest < ActiveSupport::TestCase
+          AUTHOR_IMPORTER = ::DataImporters::Books::Author::Importer
+
+          setup do
+            @book = ::Books::Book.create!(id: GoodreadsRebuild::Cohort.post_import_range.first + 5_000, title: "Wrong Title")
+            @wrong_author = ::Books::Author.create!(name: "Wrong Author")
+            @book.book_authors.create!(author: @wrong_author, position: 1)
+            @book.identifiers.create!(identifier_type: :books_work_asin, value: "B00LEGACY1", source: :legacy)
+            @book.category_items.create!(category: categories(:books_fiction_genre))
+            @author = ::Books::Author.create!(name: "Right Author")
+            stub_author_import
+          end
+
+          def stub_author_import
+            AUTHOR_IMPORTER.stubs(:call).returns(
+              ::DataImporters::ImportResult.new(item: @author, provider_results: [], success: true, created: true)
+            )
+          end
+
+          def verdict
+            @verdict ||= ::Books::RepairVerdict.create!(kind: :fix_identity, subject_key: "rebuild:#{@book.id}", decided_by: :rule,
+              status: :approved, payload: {"book_id" => @book.id, "title" => "Right Title", "subtitle" => "A Subtitle", "full_title" => "Right Title: A Subtitle",
+                                           "author_names" => ["Right Author"], "year" => 1999, "isbn13" => ["9781234567897"],
+                                           "isbn10" => [], "goodreads_ids" => ["4242"], "ol_work_keys" => ["OL1W"]})
+          end
+
+          test "applies: export title, subtitle and year; old data gone; export author and identifiers with source goodreads_import" do
+            result = FixIdentity.call(verdict: verdict)
+
+            assert_equal :applied, result.data[:outcome]
+            book = ::Books::Book.find(@book.id)
+            assert_equal ["Right Title", "A Subtitle", 1999], [book.title, book.subtitle, book.first_published_year]
+            assert_equal [@author], book.authors.to_a
+            assert_equal 0, book.category_items.count
+            refute book.identifiers.exists?(value: "B00LEGACY1")
+            assert_equal "goodreads_import", book.identifiers.find_by!(identifier_type: :books_work_isbn13, value: "9781234567897").source
+            assert_equal "goodreads_import", book.identifiers.find_by!(identifier_type: :books_work_goodreads_id, value: "4242").source
+          end
+
+          test "trailing series and edition parentheticals recorded on an older verdict are cleaned before they are written" do
+            v = verdict
+            v.update!(payload: v.payload.merge("title" => "Right Title (Little Golden Book)", "subtitle" => "A Subtitle (Spanish Edition)"))
+
+            FixIdentity.call(verdict: v)
+
+            assert_equal ["Right Title", "A Subtitle"], ::Books::Book.find(@book.id).then { |b| [b.title, b.subtitle] }
+          end
+
+          test "keeps the book's id, slug, user list items and reviews" do
+            user = users(:regular_user)
+            item = UserListItem.create!(user_list: user_lists(:regular_user_books_favorites), listable: @book, position: 1)
+            review = Review.create!(user: user, reviewable: @book, rating: 4)
+            slug = @book.slug
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal [@book.id, slug], ::Books::Book.find(@book.id).then { |b| [b.id, b.slug] }
+            assert UserListItem.exists?(item.id)
+            assert Review.exists?(review.id)
+          end
+
+          test "writes ResetBook's archive and the created author ids onto the verdict" do
+            FixIdentity.call(verdict: verdict)
+
+            verdict.reload
+            assert_includes verdict.payload["removed"]["identifiers"], ["books_work_asin", "B00LEGACY1", "legacy"]
+            assert_equal [@author.id], verdict.payload["created_author_ids"]
+          end
+
+          test "never runs the Open Library provider or enrichment" do
+            ::DataImporters::Books::Book::Providers::OpenLibrary.any_instance.expects(:populate).never
+            ::Workflows::Books::BookEnrichment.expects(:start).never
+
+            FixIdentity.call(verdict: verdict)
+          end
+
+          test "an author link ties the existing author to the book; the importer is given only the unlinked names" do
+            existing = ::Books::Author.create!(name: "Daniel Dennett")
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Daniel C. Dennett", "Right Author"],
+              "author_links" => {"Daniel C. Dennett" => existing.id}))
+            ::DataImporters::Books::Book::Importer.expects(:call).with { |args| args[:author_names] == ["Right Author"] && args[:providers] == %i[authors query_identifiers] }
+              .returns(::DataImporters::ImportResult.new(item: @book, provider_results: [], success: true, created: false)).once
+
+            assert_no_difference "::Books::Author.count" do
+              FixIdentity.call(verdict: verdict)
+            end
+
+            assert_equal [existing], @book.reload.authors.to_a
+            assert_equal ["Daniel C. Dennett"], existing.reload.alternate_names
+          end
+
+          test "a linked author listed first in the export stays ahead of the imported one" do
+            existing = ::Books::Author.create!(name: "Linked Author")
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Linked Author", "Right Author"],
+              "author_links" => {"Linked Author" => existing.id}))
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal [existing, @author], @book.reload.authors.to_a
+          end
+
+          test "an author whose alternate names already hold the export spelling in normalised form is not updated" do
+            existing = ::Books::Author.create!(name: "Daniel Dennett", alternate_names: ["daniel c. dennett"])
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Daniel C. Dennett"],
+              "author_links" => {"Daniel C. Dennett" => existing.id}))
+            stamp = existing.reload.updated_at
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal stamp, existing.reload.updated_at
+          end
+
+          test "linked and imported authors take their places in the export's order" do
+            existing = ::Books::Author.create!(name: "Second Author")
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Right Author", "Second Author"],
+              "author_links" => {"Second Author" => existing.id}))
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal [@author, existing], @book.reload.authors.to_a
+            assert_equal [1, 2], @book.book_authors.order(:position).pluck(:position)
+          end
+
+          test "when every author is linked the importer skips the authors provider" do
+            existing = ::Books::Author.create!(name: "Right Author")
+            verdict.update_columns(payload: verdict.payload.merge("author_links" => {"Right Author" => existing.id}))
+            AUTHOR_IMPORTER.expects(:call).never
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal [existing], @book.reload.authors.to_a
+            assert_equal [], existing.alternate_names
+          end
+
+          test "a linked author that has vanished falls back to importing the name" do
+            verdict.update_columns(payload: verdict.payload.merge("author_links" => {"Right Author" => 0}))
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal [@author], @book.reload.authors.to_a
+          end
+
+          test "a never-applied apply stays idempotent for links" do
+            existing = ::Books::Author.create!(name: "Right Author")
+            verdict.update_columns(payload: verdict.payload.merge("author_links" => {"Right Author" => existing.id}))
+            FixIdentity.call(verdict: verdict)
+            verdict.update_columns(applied_at: nil)
+
+            FixIdentity.call(verdict: verdict.reload)
+
+            assert_equal [existing], @book.reload.authors.to_a
+          end
+
+          test "a second apply is a no-op and leaves data added since in place" do
+            verdict
+            ApplyVerdicts.call(auto_apply: true)
+            @book.descriptions.create!(source: :manual, content: "added later")
+
+            result = FixIdentity.call(verdict: verdict.reload)
+
+            assert_equal :noop, result.data[:outcome]
+            assert_equal 1, @book.descriptions.count
+            assert_equal({"fix_identity noop" => 1}, ApplyVerdicts.call(auto_apply: true).data[:tally])
+          end
+
+          test "a book that became trusted is left alone" do
+            ListItem.create!(list: lists(:books_list), listable: @book, position: 1)
+
+            result = FixIdentity.call(verdict: verdict)
+
+            assert_equal :noop, result.data[:outcome]
+            assert_equal "Wrong Title", @book.reload.title
+            assert_equal 1, @book.book_authors.count
+          end
+
+          test "a book that is gone is a no-op" do
+            verdict.update_columns(payload: verdict.payload.merge("book_id" => 0))
+
+            assert_equal :noop, FixIdentity.call(verdict: verdict).data[:outcome]
+          end
+
+          test "an author import failure records the error, keeps the archive, and a retry applies" do
+            verdict
+            AUTHOR_IMPORTER.stubs(:call).raises(StandardError, "boom")
+
+            tally = ApplyVerdicts.call(auto_apply: true).data[:tally]
+
+            verdict.reload
+            assert_equal({"fix_identity failed" => 1}, tally)
+            assert_match(/author import failed/, verdict.error)
+            assert_nil verdict.applied_at
+            assert_equal "Right Title", @book.reload.title
+            assert_includes verdict.payload["removed"]["identifiers"], ["books_work_asin", "B00LEGACY1", "legacy"]
+
+            stub_author_import
+            assert_equal({"fix_identity applied" => 1}, ApplyVerdicts.call(auto_apply: true).data[:tally])
+            verdict.reload
+            refute_nil verdict.applied_at
+            assert_nil verdict.error
+            assert_equal [@author], @book.reload.authors.to_a
+          end
+
+          test "a failure right after the reset rolls back the reset and the archive together" do
+            verdict
+            verdict.class.any_instance.stubs(:update_columns).raises(ActiveRecord::StatementInvalid, "boom")
+
+            assert_raises(ActiveRecord::StatementInvalid) { FixIdentity.call(verdict: verdict) }
+
+            assert @book.reload.identifiers.exists?(value: "B00LEGACY1")
+            assert_equal 1, @book.book_authors.count
+            refute verdict.reload.payload.key?("removed")
+          end
+
+          test "a retried apply keeps the first archive" do
+            verdict
+            AUTHOR_IMPORTER.stubs(:call).raises(StandardError, "boom")
+            ApplyVerdicts.call(auto_apply: true)
+            stub_author_import
+
+            ApplyVerdicts.call(auto_apply: true)
+
+            assert_includes verdict.reload.payload["removed"]["identifiers"], ["books_work_asin", "B00LEGACY1", "legacy"]
+          end
+
+          # The export names the book's own author, linked: what FixScope needs to call the fix a same-book one.
+          def survey_for_book(authors_agree: true)
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Wrong Author"], "author_links" => {"Wrong Author" => @wrong_author.id}))
+            ::Books::RebuildBookSurvey.create!(book: @book, classification: :coherent, groups: [], title_agrees: false,
+              authors_agree: authors_agree, wrong_book: false, surveyed_at: Time.current)
+          end
+
+          test "a same-author full fix whose author import fails is retried as a full fix, not mistaken for a book that is already right" do
+            survey_for_book
+            verdict.update_columns(payload: verdict.payload.merge("author_names" => ["Wrong Author", "Right Author"]))
+            # The first attempt sees a full fix; once it has renamed the book, a recomputed scope would say :none.
+            GoodreadsRebuild::FixScope.stubs(:call).returns(:full).then.returns(:none)
+            AUTHOR_IMPORTER.stubs(:call).raises(StandardError, "boom")
+            ApplyVerdicts.call(auto_apply: true)
+            assert_nil verdict.reload.applied_at
+            assert_equal "full", verdict.payload["fix_scope"]
+            assert_empty GoodreadsRebuild::RetireUnneededFixes.call.data[:counts]
+
+            stub_author_import
+            ApplyVerdicts.call(auto_apply: true)
+
+            assert_not_nil verdict.reload.applied_at
+            assert_equal ["Right Title", "A Subtitle"], ::Books::Book.find(@book.id).then { |b| [b.title, b.subtitle] }
+          end
+
+          test "a fix with no survey is a full reset and records its scope" do
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal "full", verdict.reload.payload["fix_scope"]
+          end
+
+          test "a title-only fix rewrites the title and subtitle and keeps everything else" do
+            survey_for_book
+            @book.update!(title: "Right Title", description: "Kept description")
+            @book.book_authors.destroy_all
+            @book.book_authors.create!(author: @wrong_author, position: 1)
+            ::Books::Book.where(id: @book.id).update_all(subtitle: nil)
+            ::DataImporters::Books::Book::Importer.expects(:call).never
+            GoodreadsRebuild::ResetBook.expects(:call).never
+            verdict
+
+            result = ApplyVerdicts.call(auto_apply: true)
+
+            assert result.success?
+            book = ::Books::Book.find(@book.id)
+            assert_equal ["Right Title", "A Subtitle", "Kept description"], [book.title, book.subtitle, book.description]
+            assert_equal [@wrong_author], book.authors.to_a
+            assert_equal 1, book.category_items.count
+            assert book.identifiers.exists?(value: "B00LEGACY1")
+            verdict.reload
+            assert_equal "title_only", verdict.payload["fix_scope"]
+            assert_not_nil verdict.applied_at
+            refute verdict.payload.key?("removed")
+          end
+
+          test "a title-only fix takes the export's subtitle when ours has none" do
+            survey_for_book
+            @book.update!(title: "Destination")
+            ::Books::Book.where(id: @book.id).update_all(subtitle: nil)
+            verdict.update_columns(payload: verdict.payload.merge("title" => "Destination", "subtitle" => "Void", "full_title" => "Destination: Void"))
+
+            FixIdentity.call(verdict: verdict)
+
+            assert_equal ["Destination", "Void"], ::Books::Book.find(@book.id).then { |b| [b.title, b.subtitle] }
+          end
+
+          test "a fix that would change nothing is a no-op and is never marked applied" do
+            survey_for_book
+            @book.update!(title: "Right Title", subtitle: "A Subtitle")
+            GoodreadsRebuild::ResetBook.expects(:call).never
+
+            result = FixIdentity.call(verdict: verdict.tap { |v| v.update_columns(payload: v.payload.merge("full_title" => "Right Title (Series)")) })
+
+            assert_equal :noop, result.data[:outcome]
+            assert_nil verdict.reload.applied_at
+            assert_equal ["Right Title", "A Subtitle"], ::Books::Book.find(@book.id).then { |b| [b.title, b.subtitle] }
+          end
+        end
+      end
+    end
+  end
+end

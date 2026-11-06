@@ -404,15 +404,25 @@ CategorySearchQuery.call("americ", scope: Books::Category, types: [:genre])
 
 It takes `scope:` rather than a domain symbol, so an admin controller passes its `model_class` and a public controller passes the class directly; the query never learns about domains. Results are `active` only, ordered `item_count DESC, name ASC` — on a table of ~52,000 books categories, alphabetical order surfaces whichever match happens to sort first rather than the one the user meant. A blank query returns `[]`.
 
-**`types:` is optional and defaults to unscoped, and that default is load-bearing.** Both callers need every `category_type`:
+**`types:` is optional and defaults to unscoped, and that default is load-bearing** for
+`Admin::CategoriesBaseController#search` and the saved-search picker: a book is legitimately
+tagged with a subject or a setting, not just a genre. Because their result sets span types, they
+label each result with `Category#name_with_type` (`"Americana (Genre)"`, and `"Unknown"` when the
+nullable `category_type` is `nil`); the admin JSON uses it since `{value:, text:}` has nowhere to
+put markup.
 
-- `Admin::CategoriesBaseController#search`, because a book is legitimately tagged with a subject or a setting, not just a genre.
-- `Books::FiltersController#render_pane_results`, because the books filter modal's Category axis is *defined* as genres, subjects and settings. Its placeholder says so and `e2e/tests/books/filters.spec.ts` pins it. Note that browse and search differ on purpose here: `FilterFacetsQuery.genres` scopes the browsable list to genres, because browsing 52,000 rows is only useful narrowed to the ~200 genres, while searching by name benefits from the whole space.
+### The books filter panel does not use it
 
-Because a result set spans three types, every result says which type it is. Two surfaces render that, differently on purpose:
-
-- `Category#name_with_type` returns `"Americana (Genre)"`, and `"Unknown"` when `category_type` is `nil` (the column is nullable). The admin JSON uses it, since `{value:, text:}` has nowhere to put markup.
-- `Books::FilterOptionRowsComponent` renders a separate tag next to the name, keeping the name itself clean. Its `BADGE_LABELS` overrides only one word — a location is tagged **Setting**, which reads better than the enum's own word for a place a book is set in.
+The public filter panel has one page per category type (Genre, Audience, Subject, Setting), so
+nothing it lists needs a type label. Its pages come from `Books::FilterFacetsQuery.categories(type:)`
+and `.countries`, counted over `Books::RankedBooksQuery` with the panel's applied filters.
+Genre and Origin ship their whole list and filter it in the browser. Subject and Setting ship the
+25 most popular and search the rest server-side through `Books::FilterCategorySearchQuery`
+(`app/lib/books/filter_category_search_query.rb`): one type per call, matching names and
+`alternative_names` with `CategorySearchQuery::NAME_OR_ALIAS_SQL`, kept only when the category
+holds a ranked book under the applied filters, held to the browse minimum of book links
+(`config.x.books.browse_min_category_books`), ordered by name-match quality (an alias-only hit loses
+to a real name match), then by filtered count. At most 10 rows.
 
 ## Views
 

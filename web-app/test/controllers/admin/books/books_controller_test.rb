@@ -135,11 +135,21 @@ module Admin
         assert_redirected_to admin_books_book_path(::Books::Book.order(:created_at).last)
       end
 
-      test "create splits comma-separated alternate titles into the array column" do
+      test "create writes admin rows for each title" do
         sign_in_as(@admin_user, stub_auth: true)
-        post admin_books_books_path, params: {books_book: {title: "Alt Title Book", book_kind: "standalone", alternate_titles_string: "First Alt,  Second Alt , "}}
+        post admin_books_books_path, params: {books_book: {title: "Alt Title Book", book_kind: "standalone", alternate_titles: ["", "First Alt", "Second Alt"]}}
         book = ::Books::Book.find_by(title: "Alt Title Book")
-        assert_equal ["First Alt", "Second Alt"], book.alternate_titles
+        assert_equal ["First Alt", "Second Alt"], book.reload.alternate_titles
+        rows = AlternateTitle.where(titleable: book)
+        assert_equal [["First Alt", "admin", "kept"], ["Second Alt", "admin", "kept"]], rows.order(:id).map { |r| [r.title, r.source, r.status] }
+      end
+
+      test "create with an invalid book writes no title rows" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_no_difference("AlternateTitle.count") do
+          post admin_books_books_path, params: {books_book: {title: "", book_kind: "standalone", alternate_titles: ["X"]}}
+        end
+        assert_response :unprocessable_entity
       end
 
       test "create rejects an invalid book" do
@@ -173,18 +183,48 @@ module Admin
         assert_equal "War and Peace (Revised)", @book.reload.title
       end
 
-      test "update leaves alternate_titles untouched when the field is absent" do
-        @book.update!(alternate_titles: ["Voyna i mir"])
+      test "update keeps a comma title whole" do
         sign_in_as(@admin_user, stub_auth: true)
-        patch admin_books_book_path(@book), params: {books_book: {title: @book.title}}
-        assert_equal ["Voyna i mir"], @book.reload.alternate_titles
+        patch admin_books_book_path(@book), params: {books_book: {title: @book.title, alternate_titles: ["", "Good Night, Mr. Tom"]}}
+        rows = AlternateTitle.where(titleable: @book, status: :kept)
+        assert_equal [["Good Night, Mr. Tom", "admin"]], rows.map { |r| [r.title, r.source] }
+        assert_nil AlternateTitle.find_by(titleable: @book, title: "Good Night")
+        assert_equal ["Good Night, Mr. Tom"], @book.reload.alternate_titles
       end
 
-      test "update clears alternate_titles when the field is submitted empty" do
-        @book.update!(alternate_titles: ["Voyna i mir"])
+      test "update marks a dropped title removed" do
+        Services::AlternateTitles::Writer.replace(record: @book, titles: ["A", "B"], source: :admin, user: @admin_user)
+        @book.save!
         sign_in_as(@admin_user, stub_auth: true)
-        patch admin_books_book_path(@book), params: {books_book: {title: @book.title, alternate_titles_string: ""}}
+        patch admin_books_book_path(@book), params: {books_book: {title: @book.title, alternate_titles: ["", "A"]}}
+        b = AlternateTitle.find_by!(titleable: @book, title: "B")
+        assert b.removed?
+        assert b.decided_by_admin?
+        assert_equal @admin_user.id, b.decided_by_user_id
+        assert_equal ["A"], @book.reload.alternate_titles
+      end
+
+      test "update clears every title when only the blank is submitted" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_book_path(@book), params: {books_book: {title: @book.title, alternate_titles: [""]}}
         assert_equal [], @book.reload.alternate_titles
+        assert AlternateTitle.where(titleable: @book).all?(&:removed?)
+      end
+
+      test "update without the key changes no titles" do
+        before = AlternateTitle.where(titleable: @book).order(:id).pluck(:id, :title, :status)
+        copy = @book.alternate_titles
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_book_path(@book), params: {books_book: {title: @book.title}}
+        assert_equal [before, copy], [AlternateTitle.where(titleable: @book).order(:id).pluck(:id, :title, :status), @book.reload.alternate_titles]
+      end
+
+      test "update that fails validation writes no rows" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_no_difference("AlternateTitle.count") do
+          patch admin_books_book_path(@book), params: {books_book: {title: "", alternate_titles: ["Brand New"]}}
+        end
+        assert_response :unprocessable_entity
       end
 
       test "update rejects invalid data" do

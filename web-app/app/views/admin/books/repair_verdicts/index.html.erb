@@ -47,7 +47,7 @@
                     <%= check_box_tag "ids[]", verdict.id, false, id: "verdict_#{verdict.id}", class: "checkbox checkbox-sm", aria: {label: "Select verdict #{verdict.id}"} %>
                   <% end %>
                 </td>
-                <td class="[overflow-wrap:anywhere]"><%= link_to verdict.summary, admin_books_repair_verdict_path(verdict), class: "link" %></td>
+                <td><%= render Admin::Books::RepairVerdictRowComponent.new(verdict: verdict, books: @books, authors: @authors, list_counts: @list_counts) %></td>
                 <td><span class="badge badge-ghost badge-sm"><%= verdict.kind.humanize %></span></td>
                 <td><%= verdict.decided_by.humanize %></td>
                 <td><%= verdict.confidence&.humanize %></td>

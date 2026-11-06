@@ -31,6 +31,22 @@ module Services
             .where("match_decisions.verdict IS DISTINCT FROM ?", ::MatchDecision.verdicts[:rejected])
         end
 
+        # Of these authors, the ids whose AI step (EnrichAuthor) already ran in
+        # this era: a row of that kind newer than the author row. A failed row
+        # means every retry was exhausted and the step never completed, so it
+        # does not count; a lost chain never reached it, so theirs does. The
+        # backfill reads it to avoid paying for the AI step twice, and so does
+        # a workflow run started with skip_ai_if_ran.
+        def self.ai_step_ran_ids(ids)
+          return Set.new if ids.empty?
+
+          ::Enrichment.for_kind(EnrichAuthor::KIND).where(enrichable_type: "Books::Author", enrichable_id: ids)
+            .where.not(outcome: :failed)
+            .joins("INNER JOIN books_authors ON books_authors.id = enrichments.enrichable_id")
+            .where("enrichments.created_at > books_authors.created_at")
+            .distinct.pluck(:enrichable_id).to_set
+        end
+
         private
 
         def processed? = LedgerRun.processed(self.class::KIND).where(enrichable_id: author.id).exists?

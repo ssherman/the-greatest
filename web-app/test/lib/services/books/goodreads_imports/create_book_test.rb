@@ -23,6 +23,7 @@ module Services
           book = edition.book
           author = book.authors.sole
           assert_equal :created, result.data[:outcome]
+          assert_equal [author.id], result.data[:created_author_ids]
           assert_equal ["The Quiet Year", 1977, true], [book.title, book.first_published_year, book.provisional?]
           assert_equal ["Anna Brenner", true], [author.name, author.provisional?]
           assert_equal [["books_work_goodreads_id", "90000001"], ["books_work_isbn13", "9780441013593"]],
@@ -35,6 +36,17 @@ module Services
             book.identifiers.map { |identifier| ["Identifier", identifier.id] }
           assert_equal expected.sort, @import.records.map { |record| [record.record_type, record.record_id] }.sort
           assert @import.records.all?(&:created?)
+          # A member import is enriched on admin approval (PromoteRecords), not here.
+          assert_equal 0, WorkflowRun.where(enrichable: [book, author]).count
+        end
+
+        test "provisional: false makes a book and author that are not provisional" do
+          edition = goodreads_edition(goodreads_book_id: 90_000_002)
+
+          CreateBook.call(edition: edition, import: @import, match: unmatched_match(subject: edition), provisional: false)
+
+          book = edition.reload.book
+          assert_equal [false, false], [book.provisional?, book.authors.sole.provisional?]
         end
 
         test "an existing author is linked, never made provisional, never recorded as created" do

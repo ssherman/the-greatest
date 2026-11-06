@@ -10,10 +10,9 @@ module DataImporters
 
         def setup
           ::Search::Books::Search::AuthorByName.stubs(:call).returns([])
-          # Sidekiq runs inline in tests; a real enqueue would run the whole
-          # Wikidata step. Tests that care about the enqueue set their own
-          # expectation, which takes precedence over this stub.
-          ::Books::Authors::WikidataJob.stubs(:perform_async)
+          # Sidekiq runs inline in tests; dispatching the planned run would run
+          # the whole Wikidata step.
+          stub_workflow_dispatch
           client = ::Books::OpenLibrary::Client.new(
             config: ::Books::OpenLibrary::Configuration.new(base_url: BASE_URL),
             breaker: ::Books::OpenLibrary::CircuitBreaker.new(
@@ -128,18 +127,16 @@ module DataImporters
           assert_equal ["Anya Brenner"], result.item.alternate_names
         end
 
-        test "a new author gets the Wikidata step queued; a matched author does not" do
-          # Replace setup's catch-all stub: a plain `stubs` alongside this
-          # `expects(:once)` would silently absorb a second, illegitimate
-          # call instead of failing the test.
-          ::Books::Authors::WikidataJob.unstub(:perform_async)
-          ::Books::Authors::WikidataJob.expects(:perform_async).once
-
-          created = Importer.call(name: "A Brand New Author Name")
-          matched = Importer.call(name: created.item.name)
+        test "a new author gets an author enrichment run planned; a matched author does not get another" do
+          created = nil
+          assert_difference -> { WorkflowRun.where(workflow: "books.author_enrichment").count }, 1 do
+            created = Importer.call(name: "A Brand New Author Name")
+            matched = Importer.call(name: created.item.name)
+            assert_not matched.created?
+          end
 
           assert created.created?
-          assert_not matched.created?
+          assert_equal "author_importer", WorkflowRun.find_by!(enrichable: created.item).initiated_by
         end
       end
     end

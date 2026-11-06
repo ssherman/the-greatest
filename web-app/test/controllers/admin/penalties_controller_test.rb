@@ -292,6 +292,6 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
       assert_select "a[href=?]", admin_artists_path, count: 0
       assert_select "a[href=?]", admin_games_games_path, count: 0
     end
-    assert_no_match %r{favicon}, response.body
+    assert_select "link[rel=icon][href=?]", "/icons/books/favicon.svg"
   end
 end

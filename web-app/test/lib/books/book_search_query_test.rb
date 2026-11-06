@@ -125,5 +125,19 @@ module Books
         end
       end
     end
+
+    test "hit_ids passes the size through and returns distinct integer ids in order" do
+      hits = [@book_b, @book_a, @book_b].map { |book| {id: book.id.to_s, score: 1.0, source: {}} }
+      ::Search::Books::Search::BookGeneral.expects(:call).with("war", size: 7).returns(hits)
+
+      assert_equal [@book_b.id, @book_a.id], ::Books::BookSearchQuery.hit_ids("war", size: 7)
+    end
+
+    test "hit_ids is empty for blank text without touching OpenSearch" do
+      ::Search::Books::Search::BookGeneral.expects(:call).never
+
+      assert_equal [], ::Books::BookSearchQuery.hit_ids("  ", size: 7)
+      assert_equal [], ::Books::BookSearchQuery.hit_ids(nil, size: 7)
+    end
   end
 end

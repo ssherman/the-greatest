@@ -418,10 +418,6 @@ Rails.application.routes.draw do
   post "membership/donate", to: "membership#donate", as: :membership_donate
   post "membership/portal", to: "membership#portal", as: :membership_portal
 
-  # Per-user membership state for edge-cached pages, following
-  # UserListStateController: never cached, JSON only.
-  get "membership_state", to: "membership_state#show", as: :membership_state
-
   # The members' area -- the first thing behind the paywall.
   get "members", to: "members#show", as: :members
 
@@ -648,18 +644,59 @@ Rails.application.routes.draw do
     # 404, not a 406). Domain comes from the host, like everything else.
     # Spec: docs/superpowers/specs/2026-09-12-public-api-framework-design.md
     namespace :api, defaults: {format: :json}, constraints: {format: :json} do
+      # The MCP endpoint (spec: docs/superpowers/specs/2026-11-02-mcp-server-design.md).
+      # It sits under /api/ for the edge's existing treatment of API paths; the edge
+      # rules live in the private the-greatest-cloudflare repo. GET and DELETE
+      # answer 405: no streams, no sessions.
+      post "mcp", to: "mcp#create", as: :mcp
+      match "mcp", to: "mcp#method_not_allowed", via: [:get, :delete]
+
+      # The admin tools are a separate endpoint so their descriptions never
+      # reach a member's client: /api/mcp lists only the public document (D3).
+      post "mcp/admin", to: "mcp_admin#create", as: :mcp_admin
+      match "mcp/admin", to: "mcp_admin#method_not_allowed", via: [:get, :delete]
+
       namespace :v1 do
         scope module: :books do
           resources :books, only: [:index, :show], param: :slug
           get "books/:slug/lists", to: "book_lists#index", as: :book_lists
           resources :authors, only: [:index, :show], param: :slug
+          get "categories", to: "categories#index"
+          get "categories/:slug", to: "categories#show", as: :category
+          get "categories/:slug/books", to: "category_books#index", as: :category_books
           resources :ranking_configurations, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/books", to: "books#index",
             as: :ranking_configuration_books, constraints: {ranking_configuration_id: /\d+/}
+          get "ranking_configurations/:ranking_configuration_id/categories/:slug/books", to: "category_books#index",
+            as: :ranking_configuration_category_books, constraints: {ranking_configuration_id: /\d+/}
           resources :lists, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/lists", to: "lists#index",
             as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
           get "lists/:list_id/items", to: "list_items#index", as: :list_items, constraints: {list_id: /\d+/}
+          get "search/books", to: "book_searches#index", as: :search_books
+        end
+
+        # Admin API: needs a books:admin:* scope. Its contract is
+        # config/api/v1/admin_openapi.yaml, served only from
+        # /api/v1/admin/openapi.json, never from the public document.
+        namespace :admin do
+          get "openapi", to: "openapi#show"
+          scope module: :books do
+            get "books", to: "books#index"
+            get "authors", to: "authors#index"
+            get "categories", to: "categories#index"
+            get "categories/:id", to: "categories#show", constraints: {id: /\d+/}
+            post "categories", to: "categories#create"
+            patch "categories/:id", to: "categories#update", constraints: {id: /\d+/}
+            post "categories/:id/merge", to: "categories#merge", constraints: {id: /\d+/}
+            delete "categories/:id", to: "categories#destroy", constraints: {id: /\d+/}
+            post "books/:id/merge", to: "book_merges#create", constraints: {id: /\d+/}
+            post "authors/:id/merge", to: "author_merges#create", constraints: {id: /\d+/}
+            post "books/:id/categories", to: "book_categories#create", constraints: {id: /\d+/}
+            delete "books/:id/categories/:category_id", to: "book_categories#destroy", constraints: {id: /\d+/, category_id: /\d+/}
+            post "authors/:id/categories", to: "author_categories#create", constraints: {id: /\d+/}
+            delete "authors/:id/categories/:category_id", to: "author_categories#destroy", constraints: {id: /\d+/, category_id: /\d+/}
+          end
         end
       end
     end
@@ -706,6 +743,9 @@ Rails.application.routes.draw do
         resources :book_relationships, only: [:create]
         resources :credits, only: [:create]
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
+        resources :workflow_runs, only: [:index]
+        resources :identifiers, only: [:index]
+        resources :alternate_titles, only: [:index]
         member do
           post :execute_action
         end
@@ -723,6 +763,8 @@ Rails.application.routes.draw do
         resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         resources :author_relationships, only: [:create]
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
+        resources :workflow_runs, only: [:index]
+        resources :books, only: [:index], controller: "author_books"
         member do
           post :execute_action
         end
@@ -749,6 +791,7 @@ Rails.application.routes.draw do
         member do
           post :merge
         end
+        resources :books, only: [:index], controller: "category_books"
       end
 
       resources :lists do
@@ -816,6 +859,16 @@ Rails.application.routes.draw do
         end
         collection do
           post :bulk_approve
+        end
+      end
+      resources :alternate_titles, only: [] do
+        collection do
+          get :review
+        end
+        member do
+          post :keep
+          post :remove
+          post :restore
         end
       end
       resources :repair_verdicts, only: [:index, :show] do
@@ -999,6 +1052,7 @@ Rails.application.routes.draw do
     get "filters", to: "books/filters#show", as: :books_filters
     get "filters/categories", to: "books/filters#categories", as: :books_filters_categories
     get "filters/countries", to: "books/filters#countries", as: :books_filters_countries
+    get "filters/count", to: "books/filters#count", as: :books_filters_count
 
     # The Global Canon. Settings live in the PATH, never a query string, so each
     # variant is its own Cloudflare edge-cache entry.
@@ -1038,40 +1092,45 @@ Rails.application.routes.draw do
         max_books_per_country: canon_country, excluded_genres: canon_genres
       }
 
-    # Legacy browse grammar, ported verbatim so no /genres or /countries URL needs
-    # a redirect: BrowseController already reads params[:filter] and params[:sort],
-    # and route segments populate params exactly as query parameters do. Only the
-    # bare forms are named -- Books::BrowsePath builds every parameterised path,
-    # mirroring Books::FilterPath.
+    # The category index lives at /categories[/settings|/subjects]. The old
+    # /genres/filtered-by/:filter grammar (and its query-string form) is a single
+    # route-level 301 to the final /categories URL -- one hop, never two, so a
+    # crawler following an old link does not pass through an intermediate
+    # redirect (spec 2026-10-17-books-categories-page-design, section 5).
+    # Books::BrowsePath builds every parameterised path, mirroring
+    # Books::FilterPath, so only the bare forms are named.
     #
-    # The sort and filter constraints are LOAD-BEARING, not cosmetic:
+    # The sort, filter and page constraints are LOAD-BEARING, not cosmetic:
     # BrowseQuery.normalized_* falls back to the default for any input, so an
-    # unconstrained segment would turn /genres/sorted-by/<anything> into an
+    # unconstrained segment would turn /categories/sorted-by/<anything> into an
     # unbounded space of indexable soft-duplicates. Anchors (\A, \z, ^, $) raise
     # ArgumentError in a segment constraint -- Rails anchors them itself.
     browse_sort = /(?:book_count|name)/
     browse_filter = /(?:genre|location|subject)/
 
-    get "genres", to: "books/browse#genres", as: :books_genres
-    get "genres/page/:page", to: "books/browse#genres", as: :books_genres_page,
-      constraints: {page: /\d+/}
-    get "genres/sorted-by/:sort", to: "books/browse#genres",
-      constraints: {sort: browse_sort}
-    get "genres/sorted-by/:sort/page/:page", to: "books/browse#genres",
-      constraints: {sort: browse_sort, page: /\d+/}
-    get "genres/filtered-by/:filter", to: "books/browse#genres",
-      constraints: {filter: browse_filter}
-    get "genres/filtered-by/:filter/page/:page", to: "books/browse#genres",
-      constraints: {filter: browse_filter, page: /\d+/}
-    get "genres/filtered-by/:filter/sorted-by/:sort", to: "books/browse#genres",
-      constraints: {filter: browse_filter, sort: browse_sort}
-    get "genres/filtered-by/:filter/sorted-by/:sort/page/:page", to: "books/browse#genres",
-      constraints: {filter: browse_filter, sort: browse_sort, page: /\d+/}
+    get "genres(/filtered-by/:filter)(/sorted-by/:sort)(/page/:page)",
+      constraints: {filter: browse_filter, sort: browse_sort, page: /\d+/},
+      to: redirect { |path_params, req|
+        Books::BrowsePath.from_legacy_genres(path_params: path_params, query_params: req.query_parameters)
+      }
 
-    # MUST stay last of the /genres routes: it matches any single segment, so every
-    # path above has to be declared first to win. /genres/page resolves the real
-    # location category named "Page"; /genres/page/2 stays pagination.
+    # MUST stay after the /genres redirect: it matches any single segment, so the
+    # redirect has to be declared first to win. /genres/page resolves the real
+    # location category named "Page"; /genres/page/2 is the redirect.
     get "genres/:id", to: "books/legacy_categories#show"
+
+    get "categories", to: "books/browse#categories", as: :books_categories
+    # Declared before the optional-segment routes below, which would not match
+    # it anyway (sort and page are constrained) but should never get the chance.
+    get "categories/search", to: "books/browse#search", as: :books_categories_search
+    get "categories(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",
+      constraints: {sort: browse_sort, page: /\d+/}
+    get "categories/settings(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",
+      defaults: {filter: "location"}, constraints: {sort: browse_sort, page: /\d+/}
+    get "categories/subjects(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",
+      defaults: {filter: "subject"}, constraints: {sort: browse_sort, page: /\d+/}
+    get "categories/audiences(/sorted-by/:sort)(/page/:page)", to: "books/browse#categories",
+      defaults: {filter: "audience"}, constraints: {sort: browse_sort, page: /\d+/}
 
     get "countries", to: "books/browse#countries", as: :books_countries
     get "countries/page/:page", to: "books/browse#countries", as: :books_countries_page,

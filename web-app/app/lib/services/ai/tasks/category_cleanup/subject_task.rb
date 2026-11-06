@@ -22,7 +22,7 @@ module Services
               - "keep": a good subject whose name already follows the rules.
               - "rename": a good subject whose name breaks the rules; give the new name in "name".
               - "merge": into a DIFFERENT known subject (never its own name) when the merge rule allows it; give its exact name in "merge_into".
-              - "delete": junk or not a subject: a truncated fragment, a placeholder ("Book titles", "Packages"), a genre ("Science Fiction"), a format ("Anthology") or an audience ("Young Adult").
+              - "delete": junk or not a subject: a truncated fragment, a placeholder ("Book titles", "Packages"), a genre ("Science Fiction"), a format ("Anthology") or an audience ("Young Adult"), which is its own category type.
               - "is_location": a place, which belongs with locations.
               #{merge_scope_rule}
               A vague but real theme ("Identity", "Family") is a keep.

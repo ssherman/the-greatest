@@ -16,7 +16,7 @@ module Correctable
   FieldDefinition = Struct.new(:name, :type, :target, :label, :hint, keyword_init: true)
 
   TYPES = %i[string text integer string_array].freeze
-  TARGETS = %i[column description].freeze
+  TARGETS = %i[column description alternate_titles].freeze
 
   included do
     has_many :corrections, as: :correctable, dependent: :destroy

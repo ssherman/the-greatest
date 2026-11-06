@@ -323,7 +323,7 @@ module Services
       test "result data carries every key, zero when unused" do
         result = Applier.call(run: "nothing-here")
 
-        assert_equal %w[rename merge retype set_parent delete keep created stale failed].sort, result.data.keys.sort
+        assert_equal %w[rename merge split retype set_parent delete keep created stale failed].sort, result.data.keys.sort
         assert_equal 0, result.data.values.sum
       end
 
@@ -491,6 +491,352 @@ module Services
         Applier.call(run: "r1")
 
         refute again.reload.stale?
+      end
+
+      def genre(name, books: [])
+        record = ::Books::Category.create!(name: name, category_type: :genre)
+        books.each { |book| CategoryItem.create!(category: record, item: book) }
+        record
+      end
+
+      test "a merging split gives each book only its assigned targets and merges the empty genre" do
+        lotr = @book
+        dune = books_books(:crime_and_punishment)
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        combined = genre("Science Fiction Fantasy", books: [lotr, dune])
+        split = decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id],
+          split_assignments: {lotr.id.to_s => [fantasy.id], dune.id.to_s => [sf.id, fantasy.id]})
+
+        result = Applier.call(run: "r1")
+
+        assert_equal "applied", split.reload.status
+        assert_equal 1, result.data["split"]
+        assert_equal sf, combined.reload.merged_into
+        assert combined.deleted?
+        refute CategoryItem.exists?(category: sf, item: lotr)
+        assert CategoryItem.exists?(category: fantasy, item: lotr)
+        assert CategoryItem.exists?(category: sf, item: dune)
+        assert CategoryItem.exists?(category: fantasy, item: dune)
+        assert_equal 0, CategoryItem.where(category: combined).count
+        assert_equal 1, sf.reload.item_count
+        assert_equal 2, fantasy.reload.item_count
+      end
+
+      test "a book missing from the assignments gets every target" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id])
+
+        Applier.call(run: "r1")
+
+        assert CategoryItem.exists?(category: sf, item: @book)
+        assert CategoryItem.exists?(category: fantasy, item: @book)
+      end
+
+      test "a renaming split keeps the genre for its assigned books and drops it for the rest" do
+        history_book = @book
+        politics_book = books_books(:crime_and_punishment)
+        politics = ::Books::Category.create!(name: "Politics", category_type: :subject)
+        combined = genre("History and Politics", books: [history_book, politics_book])
+        decide(combined, :split, stage: "genres", new_name: "History", extra_target_ids: [politics.id],
+          split_assignments: {history_book.id.to_s => [combined.id], politics_book.id.to_s => [politics.id]})
+
+        Applier.call(run: "r1")
+
+        combined.reload
+        assert_equal "History", combined.name
+        refute combined.deleted?
+        assert CategoryItem.exists?(category: combined, item: history_book)
+        refute CategoryItem.exists?(category: combined, item: politics_book)
+        assert CategoryItem.exists?(category: politics, item: politics_book)
+        refute CategoryItem.exists?(category: politics, item: history_book)
+      end
+
+      test "a book answered with a non-primary target only ends off the primary in both split modes" do
+        lotr = @book
+        dune = books_books(:crime_and_punishment)
+
+        # Merging mode: the primary is a different, existing category.
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        merging = genre("Science Fiction Fantasy", books: [lotr, dune])
+        decide(merging, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id],
+          split_assignments: {lotr.id.to_s => [fantasy.id], dune.id.to_s => [sf.id]})
+
+        # Renaming mode: the category itself is the primary.
+        other_fantasy = genre("High Fantasy")
+        renaming = genre("Science Fiction and Fantasy Mix", books: [lotr, dune])
+        decide(renaming, :split, stage: "genres", new_name: "Space Opera", extra_target_ids: [other_fantasy.id],
+          split_assignments: {lotr.id.to_s => [other_fantasy.id], dune.id.to_s => [renaming.id]})
+
+        Applier.call(run: "r1")
+
+        refute CategoryItem.exists?(category: sf, item: lotr)
+        assert CategoryItem.exists?(category: fantasy, item: lotr)
+        assert CategoryItem.exists?(category: sf, item: dune)
+        refute CategoryItem.exists?(category: fantasy, item: dune)
+
+        refute CategoryItem.exists?(category: renaming, item: lotr)
+        assert CategoryItem.exists?(category: other_fantasy, item: lotr)
+        assert CategoryItem.exists?(category: renaming, item: dune)
+        refute CategoryItem.exists?(category: other_fantasy, item: dune)
+        refute renaming.reload.deleted?
+      end
+
+      test "a split keeps the source of each link and does not duplicate existing links" do
+        sf = genre("Science Fiction", books: [@book])
+        fantasy = genre("Fantasy")
+        combined = ::Books::Category.create!(name: "Science Fiction Fantasy", category_type: :genre)
+        CategoryItem.create!(category: combined, item: @book, source: :admin)
+        decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id])
+
+        Applier.call(run: "r1")
+
+        assert_equal 1, CategoryItem.where(category: sf, item: @book).count
+        assert CategoryItem.exists?(category: fantasy, item: @book, source: :admin)
+      end
+
+      test "a keep with extra targets links the genre's books to them; a re-run adds nothing" do
+        romance = genre("Romance")
+        fantasy = genre("Fantasy")
+        romantasy = genre("Romantasy", books: [@book])
+        keep = decide(romantasy, :keep, stage: "genres", extra_target_ids: [romance.id, fantasy.id])
+
+        Applier.call(run: "r1")
+        Applier.call(run: "r1")
+
+        assert_equal "applied", keep.reload.status
+        assert_equal 1, CategoryItem.where(category: romance, item: @book).count
+        assert_equal 1, CategoryItem.where(category: fantasy, item: @book).count
+      end
+
+      test "a rename with extra targets renames and links" do
+        romance = genre("Romance")
+        rom_com = genre("romcom", books: [@book])
+        decide(rom_com, :rename, stage: "genres", new_name: "Romantic Comedy", extra_target_ids: [romance.id])
+
+        Applier.call(run: "r1")
+
+        assert_equal "Romantic Comedy", rom_com.reload.name
+        assert CategoryItem.exists?(category: romance, item: @book)
+      end
+
+      test "a split is terminal: a keep on the same category goes stale" do
+        sf = genre("Science Fiction")
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        split = decide(combined, :split, stage: "genres", target_category: sf)
+        keep = decide(combined, :keep, stage: "genres")
+
+        Applier.call(run: "r1")
+
+        assert_equal %w[applied stale], [split, keep].map { |d| d.reload.status }
+      end
+
+      def assert_failed_and_unchanged(decision, *categories, matching: nil)
+        before = categories.map { |c| [c.reload.deleted, c.merged_into_id, CategoryItem.where(category: c).pluck(:item_id).sort] }
+        Applier.call(run: "r1")
+        assert_equal "failed", decision.reload.status
+        assert_match matching, decision.error if matching
+        assert_equal before, categories.map { |c| [c.reload.deleted, c.merged_into_id, CategoryItem.where(category: c).pluck(:item_id).sort] }
+      end
+
+      test "a split fails when its merging primary was merged away since the plan" do
+        sf = genre("Science Fiction")
+        elsewhere = genre("Sci-Fi")
+        fantasy = genre("Fantasy")
+        sf.update_columns(deleted: true, merged_into_id: elsewhere.id)
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        split = decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id],
+          split_assignments: {@book.id.to_s => [sf.id]})
+
+        assert_failed_and_unchanged(split, combined, elsewhere, fantasy, matching: /deleted or merged/)
+      end
+
+      test "a split fails when an extra target is deleted" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        fantasy.update_columns(deleted: true)
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        split = decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id])
+
+        assert_failed_and_unchanged(split, combined, sf, fantasy, matching: /deleted or merged/)
+      end
+
+      test "a split fails when an assignment names an id outside its targets" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        stray = genre("Horror")
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        split = decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id],
+          split_assignments: {@book.id.to_s => [stray.id]})
+
+        assert_failed_and_unchanged(split, combined, sf, fantasy, stray, matching: /not a target/)
+      end
+
+      test "a split fails when an assignment is null rather than a list" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        split = decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id],
+          split_assignments: {@book.id.to_s => nil})
+
+        assert_failed_and_unchanged(split, combined, sf, fantasy, matching: /not a list/)
+      end
+
+      test "a keep with a deleted extra target fails and links nothing" do
+        gone = genre("Gone")
+        gone.update_columns(deleted: true)
+        romantasy = genre("Romantasy", books: [@book])
+        keep = decide(romantasy, :keep, stage: "genres", extra_target_ids: [gone.id])
+
+        assert_failed_and_unchanged(keep, romantasy, gone, matching: /deleted or merged/)
+      end
+
+      test "a split and a keep with extra targets on a protected category fail and change nothing" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        fiction = genre("Fiction", books: [@book])
+        nonfiction = genre("Nonfiction", books: [@book])
+        ::Books::Category.stubs(:protected_ids).returns([fiction.id, nonfiction.id])
+        split = decide(fiction, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id])
+        keep = decide(nonfiction, :keep, stage: "genres", extra_target_ids: [fantasy.id])
+
+        Applier.call(run: "r1")
+
+        assert_equal %w[failed failed], [split, keep].map { |d| d.reload.status }
+        assert_match "protected", split.error
+        assert_match "protected", keep.error
+        assert_equal [[], [], [@book.id], [@book.id]], [sf, fantasy, fiction, nonfiction].map { |c| CategoryItem.where(category: c).pluck(:item_id) }
+        refute fiction.reload.deleted?
+      end
+
+      test "a keep with extra targets leaves an existing link to the extra target alone" do
+        fantasy = genre("Fantasy")
+        romance = genre("Romance")
+        romantasy = genre("Romantasy")
+        CategoryItem.create!(category: romantasy, item: @book, source: :legacy)
+        CategoryItem.create!(category: fantasy, item: @book, source: :admin)
+        keep = decide(romantasy, :keep, stage: "genres", extra_target_ids: [fantasy.id, romance.id])
+
+        Applier.call(run: "r1")
+
+        assert_equal "applied", keep.reload.status
+        assert_equal 1, CategoryItem.where(category: fantasy, item: @book).count
+        assert CategoryItem.exists?(category: fantasy, item: @book, source: :admin)
+        assert CategoryItem.exists?(category: romance, item: @book, source: :legacy)
+      end
+
+      test "a resumed split leaves links that arrived from an earlier split untouched" do
+        other = genre("Other")
+        a_book = @book
+        b_book = books_books(:crime_and_punishment)
+        a = genre("History and Politics", books: [a_book])
+        b = genre("Politics and Society", books: [b_book])
+        a_split = decide(a, :split, stage: "genres", new_name: "A2", extra_target_ids: [b.id],
+          split_assignments: {a_book.id.to_s => [b.id]})
+        b_split = decide(b, :split, stage: "genres", new_name: "B2", extra_target_ids: [other.id])
+        other.update_columns(deleted: true) # B fails after A landed
+        Applier.call(run: "r1")
+        assert a_split.reload.applied?
+        assert b_split.reload.failed?
+        other.update_columns(deleted: false)
+        b_split.update_columns(status: CategoryCleanupDecision.statuses.fetch("proposed"))
+
+        Applier.call(run: "r1")
+
+        assert b_split.reload.applied?
+        assert CategoryItem.exists?(category: b, item: a_book)
+        refute CategoryItem.exists?(category: other, item: a_book)
+      end
+
+      test "a book linked to a split genre with no answer still gets every target" do
+        sf = genre("Science Fiction")
+        fantasy = genre("Fantasy")
+        combined = genre("Science Fiction Fantasy", books: [@book])
+        decide(combined, :split, stage: "genres", target_category: sf, extra_target_ids: [fantasy.id])
+
+        Applier.call(run: "r1")
+
+        assert CategoryItem.exists?(category: sf, item: @book)
+        assert CategoryItem.exists?(category: fantasy, item: @book)
+      end
+
+      test "a rename drops its own new name from the alternative names" do
+        genre = genre("Old Name")
+        genre.update!(alternative_names: ["New Name"])
+        decide(genre, :rename, new_name: "New Name")
+
+        Applier.call(run: "r1")
+
+        refute_includes genre.reload.alternative_names, "New Name"
+      end
+
+      test "a case-only rename never leaves the new name in alternative names" do
+        category = ::Books::Category.create!(name: "science fiction", category_type: :genre, alternative_names: ["Science Fiction", "SF"])
+        decide(category, :rename, new_name: "Science Fiction")
+
+        Applier.call(run: "r1")
+
+        assert_equal ["SF"], category.reload.alternative_names
+      end
+
+      test "a rename onto a slug a soft-deleted category holds reclaims the clean slug" do
+        dead = genre("Children's")
+        dead.update!(deleted: true)
+        assert_equal "children-s", dead.slug
+        renamed = genre("Children's books")
+        old_slug = renamed.slug
+        decide(renamed, :rename, new_name: "Children's")
+
+        Applier.call(run: "r1")
+
+        assert_equal "children-s", renamed.reload.slug
+        assert_equal "children-s-#{dead.id}", dead.reload.slug
+        assert_equal renamed, ::Books::CategorySlugResolver.call("children-s")
+        assert_equal renamed, ::Books::CategorySlugResolver.call(old_slug)
+      end
+
+      test "a rename onto the slug of a twin the same run merges in reclaims it, and the twin's URL follows" do
+        twin = genre("Science Fiction")
+        lower = genre("Science fiction")
+        assert_equal "science-fiction", twin.slug
+        assert_not_equal "science-fiction", lower.slug
+        decide(lower, :rename, new_name: "Science Fiction")
+        decide(twin, :merge, target_category: lower)
+
+        Applier.call(run: "r1")
+
+        assert_equal "science-fiction", lower.reload.slug
+        assert twin.reload.deleted?
+        assert_not_equal "science-fiction", twin.slug
+        assert_equal lower, ::Books::CategorySlugResolver.call("science-fiction")
+        assert_equal lower, ::Books::CategorySlugResolver.call(twin.slug)
+      end
+
+      test "a slug held by a live category stays with it" do
+        holder = genre("Children's")
+        renamed = genre("Children's books")
+        decide(renamed, :rename, new_name: "Children's")
+
+        Applier.call(run: "r1")
+
+        assert_equal "children-s", holder.reload.slug
+        assert_not_equal "children-s", renamed.reload.slug
+      end
+
+      test "reclaiming a slug is a no-op on a re-run" do
+        dead = genre("Children's")
+        dead.update!(deleted: true)
+        renamed = genre("Children's books")
+        decide(renamed, :rename, new_name: "Children's")
+        Applier.call(run: "r1")
+        before = [renamed.reload.slug, dead.reload.slug, FriendlyId::Slug.count]
+
+        Applier.call(run: "r1")
+
+        assert_equal before, [renamed.reload.slug, dead.reload.slug, FriendlyId::Slug.count]
       end
     end
   end

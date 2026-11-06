@@ -58,12 +58,12 @@ class Books::GlobalCanonController < ApplicationController
   # grammar is slug-based, and translating ids to slugs in JS would put URL
   # knowledge in two places.
   #
-  # types: [:genre] is deliberate and narrower than the books filter modal, which
-  # searches genres, subjects AND settings. Excluding "Paris" from a global canon
-  # is not a thing this page offers, and GlobalCanonParams 404s such a slug --
-  # the endpoint and the validator have to agree.
+  # types: [:genre, :audience] is deliberate and narrower than the books filter
+  # modal, which searches genres, subjects AND settings. Excluding "Paris" from a
+  # global canon is not a thing this page offers, and GlobalCanonParams 404s such
+  # a slug -- the endpoint and the validator have to agree.
   def genres
-    rows = CategorySearchQuery.call(params[:q], scope: ::Books::Category, types: [:genre])
+    rows = CategorySearchQuery.call(params[:q], scope: ::Books::Category, types: [:genre, :audience])
     render json: rows.map { |category| {value: category.slug, text: category.name} }
   end
 

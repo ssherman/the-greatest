@@ -16,8 +16,11 @@ class UserListItemsController < ApplicationController
     end
     return render_mutation_failure(result, candidate: candidate) unless result.success?
 
+    mark = mark_user_state_changed
     render json: {
       user_list_item: serialize_item(result.data[:item]),
+      state_mark: mark,
+      state_mark_was: incoming_state_mark,
       removed_user_list_items: result.data[:removed_items].map { |item| serialize_item(item) },
       message: mutation_message(result)
     }, status: :created
@@ -34,8 +37,11 @@ class UserListItemsController < ApplicationController
     end
     return render_mutation_failure(result) unless result.success?
 
+    mark = mark_user_state_changed
     render json: {
       ok: true,
+      state_mark: mark,
+      state_mark_was: incoming_state_mark,
       removed_user_list_item: serialize_item(result.data[:item]),
       message: mutation_message(result)
     }
@@ -53,6 +59,7 @@ class UserListItemsController < ApplicationController
       return
     end
 
+    mark_user_state_changed
     redirect_to my_list_path(item.user_list), notice: completion_message(result), status: :see_other
   end
 

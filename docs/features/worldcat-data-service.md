@@ -40,7 +40,7 @@ Same four boundaries, enforced structurally:
   first build `records` had 100,000-row groups of 14 MB (the text columns: `summary` 6 GB,
   `subjects` 4.6 GB, `title` 4.2 GB), each hit cost 80 ms at two threads, and one ISBN fans out to
   about ten records in ten different groups, so a 100-ISBN batch (975 records, 642 groups) could
-  not finish inside the 5 s deadline and a single popular ISBN took 5 s. No query shape fixes
+  not finish inside the original 5 s deadline and a single popular ISBN took 5 s. No query shape fixes
   that; the layout has to. `lookup` is the `isbns` table joined to the narrow fields, sorted by
   ISBN in 10,000-row groups of about 300 KB, so an ISBN's records share one small group. Measured
   at two threads on the development machine: 100 ISBNs in 1.2 s, 500 in 3.3 s, against a timeout
@@ -253,7 +253,7 @@ All responses are JSON. `worldcat.api.schemas.Record` is the one record shape:
 There is no health route. The container does not start without an open artifact, so the heartbeat
 and any manual check use `/version`.
 
-Limits: one DuckDB connection with a cursor per request, `memory_limit` 2 GB, 2 threads, a 5-second
+Limits: one DuckDB connection with a cursor per request, `memory_limit` 2 GB, 2 threads, a 25-second
 per-request deadline (`504`; a DuckDB error of any class after the deadline is reported as the
 deadline, because an interrupt that lands between a query and its fetch surfaces as
 `InvalidInputException`, not `InterruptException`). No concurrency cap: a single-item route
@@ -302,7 +302,7 @@ tables is missing, `manifest.json` is missing, its `gates_passed` is not `true`,
 fields (`title`, `summary` and the other text fields are `nil`, holdings absent), which is all
 `VocabularySnapshot`, `Backfill` and `ApplyCategories` read. It has its own `BaseClient`, `Configuration` and
 `Exceptions`, so callers rescue by source, but it reuses `Books::OpenLibrary::CircuitBreaker` (key
-`books:world_cat`, 5 failures, 60 s cooldown). Timeouts: 5 s, 3 s to open, 20 s for a batch.
+`books:world_cat`, 5 failures, 60 s cooldown). Timeouts: 30 s, 3 s to open, 30 s for a batch (just above the service's 25 s deadline, so the service answers 504 before the client gives up).
 `WORLDCAT_SERVICE_URL` defaults to `http://127.0.0.1:8082` in development.
 
 **Every caller must drop ISBNs that fail `Books::Isbn.normalize` before calling**, because `/lookup`
@@ -321,7 +321,7 @@ Run from `web-app/`. The first four write or use files under `web-app/config/wor
 | `bin/rails worldcat:apply_aliases` | `ApplyAliases` adds each genre-verdict term to its genre category's `alternative_names`, so the mapping shows in the admin and survives merges. Idempotent. Reports genres the map names that do not exist. |
 
 Two more tasks: `worldcat:export_isbns[<path>]` (the catalogue file for the build gate) and
-`worldcat:backfill[<count>|all]` (below).
+`worldcat:backfill[verified|<count>]` (below).
 
 `docs/data-quality/worldcat-genre-mapping.md`, `genre_terms.csv` and `genre_map.yml` do not exist
 until those tasks have run.
@@ -333,10 +333,14 @@ until those tasks have run.
 ```yaml
 version: 1
 genres: [<site genre names the pass was given>]
+audiences: [Children's, Middle Grade, Young Adult]    # added by the genre cleanup
 terms:
   "Detective and mystery fiction":
-    verdict: genre          # genre | subject | drop
+    verdict: genre          # genre | audience | subject | drop
     genre: Mystery          # for genre: a name from `genres`
+    # audience: Young Adult                    for audience: a name from `audiences`
+    # also: [Fantasy]                          optional, genre or audience verdicts: more names this term supports
+    # weak: true                               audience verdicts only: weak evidence (see below)
     # subject: <canonical English phrase>      for subject
     # reason: format | language_of_material | not_a_genre | too_specific    for drop
     language: en            # ISO 639-1 of the term
@@ -350,11 +354,28 @@ string. It rejects a batch with an unknown verdict, a genre not on the list, a s
 no phrase or a drop with no valid reason. The service returns raw WorldCat terms and knows nothing
 about our categories; the mapping lives only here.
 
+The `audience` verdict, `also:`, `weak: true` and the `audiences:` header come from the books genre
+cleanup (`docs/superpowers/specs/2026-10-17-books-genre-cleanup-design.md` §7), and
+`categories:genres:retarget_worldcat` writes them from the reviewed genre plan. `GenreMap#targets_for`
+returns every genre or audience a term supports, primary first, then the `also:` names.
+`ApplyCategories` counts a term as support for each of them, and `ApplyAliases` adds aliases to
+audiences as well as genres. A `weak` audience verdict (WorldCat's "Juvenile" terms, which cover about
+ages 0 to 15 and turn up on children's editions of classics) adds a link only when the book already
+has that audience or at least one matched record supports it through a non-weak term; `GenreMap`
+honours `weak` only on an audience primary. The run's data reports `weak_skipped`.
+
 ### The backfill and its support rule
 
-`bin/rails "worldcat:backfill[all]"` (or a count) queues `Books::WorldCatBackfillJob` on the `low`
-queue, with retries off. It runs `Services::Books::WorldCat::Backfill`: books with an ISBN-13, in id
-order, E2E leftovers excluded, 100 books per `lookup`, each book's records handed to
+The backfill reads verified ISBNs only, and `worldcat:backfill[all]` is retired (it aborts and names
+`[verified]`). An unverified ISBN can point at another book, and the links are additive, so a wrong
+ISBN would leave genres from someone else's book that a later run never removes. On 2026-11-03 the
+owner decided against `[all]` because it would have touched about 120,000 unranked books with
+unverified ISBNs. New links are recorded as `CategoryItem` source `worldcat`.
+
+`bin/rails "worldcat:backfill[verified]"` (or a count) queues `Books::WorldCatBackfillJob` on the `low`
+queue, with retries off. It runs `Services::Books::WorldCat::Backfill`: books with a **verified**
+ISBN-13 (`Identifier.verified`: source `open_library` or `worldcat`), in id order, E2E leftovers
+excluded, 100 books per `lookup`, each book's records handed to
 `Services::Books::WorldCat::ApplyCategories`. One run at a time: a Postgres advisory lock makes a
 second run exit at once. A failed lookup is retried with backoff (15 s up to 300 s, six retries);
 if those run out the run **stops** and the books it never reached stay untouched, so a tripped
@@ -410,9 +431,10 @@ what the development database holds now; the first was restored away. The snapsh
   reach (22,268 of 160,303 on the spike).
 - **No editions.** Records carry no work id, so clustering would be heuristic.
 - **No subject creation.** Subject text never creates a category; unresolved phrases are only counted.
-- **No identifiers yet.** OCLC numbers and the ISBN-13s we do not hold are not written to books. That
-  is increment 2 of the design, and needs its own spec (box-set ISBNs would feed the duplicate finder
-  false evidence).
+- **Identifiers come from the verification pass, not this service.** `docs/features/book-verification.md`
+  stage 3 looks up a book's held ISBNs one at a time (`GET /isbns`) and confirms one only when a record
+  agrees on title, creator and year; it never writes the other ISBNs a record lists, so box sets cannot
+  spread.
 - **No import-time seeding** of genres on newly imported books (increment 3).
 - **No refresh, no newer data, no non-Book formats, no ISBN-less records, and no use of holdings**
   as a ranking signal.

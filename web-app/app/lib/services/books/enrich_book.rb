@@ -12,12 +12,13 @@ module Services
 
       KIND = "books.book_facts"
 
-      def self.call(book:, force_research: false, author_names: nil)
-        new(book: book, force_research: force_research, author_names: author_names).call
+      def self.call(book:, force_research: false, author_names: nil, goodreads_page: nil)
+        new(book: book, force_research: force_research, author_names: author_names, goodreads_page: goodreads_page).call
       end
 
-      def initialize(book:, force_research:, author_names:)
+      def initialize(book:, force_research:, author_names:, goodreads_page: nil)
         @book = book
+        @goodreads_page = goodreads_page
         @force_research = force_research
         @author_names = Array(author_names).map(&:to_s).reject(&:blank?)
         @rows = []
@@ -29,7 +30,17 @@ module Services
           return result
         end
 
-        first_mode = (force_research || past_cutoff?) ? :research : :knowledge
+        # A matched Goodreads page replaces the knowledge run and its paid
+        # research fallback (spec section 6); only force_research still researches.
+        first_mode = if force_research
+          :research
+        elsif goodreads_page
+          :sourced
+        elsif past_cutoff?
+          :research
+        else
+          :knowledge
+        end
 
         if first_mode == :research && !force_research && budget_exhausted?
           rows << skip("budget_exhausted", mode: :research)
@@ -52,7 +63,7 @@ module Services
 
       private
 
-      attr_reader :book, :force_research, :rows
+      attr_reader :book, :force_research, :goodreads_page, :rows
 
       def author_names
         @author_names.presence || book.authors.map(&:name)
@@ -76,7 +87,7 @@ module Services
       end
 
       def run(mode)
-        task_result = Services::Ai::Tasks::Books::BookFactsTask.new(parent: book, mode: mode, author_names: author_names).call
+        task_result = Services::Ai::Tasks::Books::BookFactsTask.new(parent: book, mode: mode, author_names: author_names, source: goodreads_page).call
         return failed_row(mode, task_result) unless task_result.success?
 
         facts = task_result.data[:facts].deep_symbolize_keys
@@ -119,7 +130,7 @@ module Services
           )
         end
 
-        description = description_for(facts.dig(:description, :value))
+        description = description_for(facts.dig(:description, :value), mode)
         applied = ApplyBookFacts.call(book: book, facts: facts, citations: citations, description: description)
 
         book.enrichments.create!(
@@ -179,11 +190,11 @@ module Services
       # already_set regardless, so the review call (123k of 158k production
       # books carry a legacy AI description) is skipped and that reason is
       # reported directly.
-      def description_for(text)
+      def description_for(text, mode)
         return nil if text.blank?
         return {text: text, review: nil, reason: "already_set"} if book.descriptions.any? { |d| d.source == "ai_generated" }
 
-        review_description(text)
+        review_description(text, mode)
       end
 
       # {text:, review:, reason:}; a reason means "do not write". The
@@ -193,7 +204,7 @@ module Services
       # rewrite to fall back on is a rejection, not a pass-through of the
       # text the reviewer just objected to. DescriptionCheck only covers the
       # violations a regex can see, so it cannot stand in for the reviewer.
-      def review_description(text)
+      def review_description(text, mode)
         review = Services::Ai::Tasks::Books::DescriptionReviewTask.new(parent: book, description: text, author_names: author_names).call
         return {text: text, review: nil, reason: "review_failed"} unless review.success?
 
@@ -207,7 +218,11 @@ module Services
         end
 
         reviewed = data[:rewritten].presence || text
-        check = DescriptionCheck.call(reviewed)
+        check = if mode == :sourced
+          DescriptionCheck.call(reviewed, source_text: goodreads_page.description, exempt_phrases: [book.title, *author_names])
+        else
+          DescriptionCheck.call(reviewed)
+        end
 
         {
           text: check.data[:text],

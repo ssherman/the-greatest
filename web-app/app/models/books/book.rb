@@ -62,10 +62,21 @@ class Books::Book < ApplicationRecord
   # per-edition source arrives, and should go away when one does.
   enum :book_length, {very_short: 0, short: 1, medium: 2, moderate: 3, long: 4, very_long: 5}
 
-  # The category types that participate in similarity scoring. Books carry no
-  # `theme` categories today; counting only the scoring types keeps
-  # similarity_category_count honest if that changes.
+  # The scoring buckets of similarity and recommendations. Audience scores in
+  # the genre bucket; SCORED_CATEGORY_TYPES is the list of scored types.
+  # Books carry no `theme` categories today; counting only the scored types
+  # keeps similarity_category_count honest if that changes.
   SIMILARITY_CATEGORY_TYPES = %w[genre subject location].freeze
+
+  # Category type -> the bucket it scores in. Audience scores exactly as a
+  # genre (docs/superpowers/specs/2026-10-17-books-genre-cleanup-design.md §6):
+  # Children's, Middle Grade and Young Adult were genres until the genre
+  # cleanup, and similar books and recommendations were tuned with them in.
+  SCORING_TYPE_OF = {"genre" => "genre", "audience" => "genre", "subject" => "subject", "location" => "location"}.freeze
+  SCORED_CATEGORY_TYPES = SCORING_TYPE_OF.keys.freeze
+  GENRE_SCORED_TYPES = SCORING_TYPE_OF.select { |_type, bucket| bucket == "genre" }.keys.freeze
+
+  def self.scoring_type(category_type) = SCORING_TYPE_OF[category_type.to_s]
 
   # Fiction and Nonfiction are a book-level TYPE, not a genre. They still index into
   # genre_category_ids -- Search::Books::Search::BookSimilar needs the ids there to
@@ -94,7 +105,7 @@ class Books::Book < ApplicationRecord
   correctable_field :first_published_year, type: :integer
   correctable_field :page_range, type: :string, hint: "A number or a range, e.g. 300 or 250-350"
   correctable_field :word_count, type: :integer
-  correctable_field :alternate_titles, type: :string_array
+  correctable_field :alternate_titles, type: :string_array, target: :alternate_titles
   correctable_field :description, type: :text, target: :description
 
   belongs_to :original_language, class_name: "Language", optional: true
@@ -102,6 +113,10 @@ class Books::Book < ApplicationRecord
   has_many :book_authors, -> { order(:position) }, class_name: "Books::BookAuthor", dependent: :destroy
   has_many :authors, through: :book_authors, class_name: "Books::Author"
   has_many :editions, class_name: "Books::Edition", dependent: :destroy
+  has_one :verification, class_name: "Books::Verification", dependent: :delete
+  has_many :verification_findings, class_name: "Books::VerificationFinding", dependent: :delete_all
+  has_many :alternate_title_records, as: :titleable, class_name: "::AlternateTitle", dependent: :delete_all
+  has_many :edition_candidates, class_name: "Books::EditionCandidate", dependent: :delete_all
 
   has_many :credits, as: :creditable, class_name: "Books::Credit", dependent: :destroy
   has_many :identifiers, as: :identifiable, dependent: :destroy
@@ -147,6 +162,22 @@ class Books::Book < ApplicationRecord
   # a second import of the same book finds the provisional copy instead of making
   # another.
   scope :catalog, -> { where(provisional: false) }
+
+  # Ranked books first, best rank at the top, then the unranked by title. The rank
+  # is the default primary configuration's and is exposed as `primary_rank`. With
+  # no primary configuration the join matches nothing, so every book sorts as
+  # unranked rather than raising.
+  scope :ordered_by_primary_rank, -> {
+    rank_join = sanitize_sql_array([<<~SQL.squish, Books::RankingConfiguration.default_primary&.id])
+      LEFT JOIN ranked_items primary_ranks
+        ON primary_ranks.item_type = 'Books::Book'
+        AND primary_ranks.item_id = books_books.id
+        AND primary_ranks.ranking_configuration_id = ?
+    SQL
+    joins(rank_join)
+      .select("books_books.*, primary_ranks.rank AS primary_rank")
+      .order(Arel.sql("primary_ranks.rank ASC NULLS LAST, lower(books_books.title), books_books.id"))
+  }
 
   def release_year
     first_published_year
@@ -215,14 +246,14 @@ class Books::Book < ApplicationRecord
   def similarity_category_count
     categories.count do |c|
       c.deleted == false &&
-        SIMILARITY_CATEGORY_TYPES.include?(c.category_type) &&
+        self.class.scoring_type(c.category_type) &&
         !(c.category_type == "genre" && BOOK_TYPE_CATEGORY_NAMES.include?(c.name))
     end
   end
 
   def as_indexed_json
     active = categories.select { |c| c.deleted == false }
-    scored = active.select { |c| SIMILARITY_CATEGORY_TYPES.include?(c.category_type) }
+    scored = active.select { |c| self.class.scoring_type(c.category_type) }
 
     {
       title: title,
@@ -231,7 +262,7 @@ class Books::Book < ApplicationRecord
       author_names: authors.map(&:name),
       author_ids: authors.map(&:id),
       category_ids: active.map(&:id),
-      genre_category_ids: scored.select { |c| c.category_type == "genre" }.map(&:id),
+      genre_category_ids: scored.select { |c| self.class.scoring_type(c.category_type) == "genre" }.map(&:id),
       subject_category_ids: scored.select { |c| c.category_type == "subject" }.map(&:id),
       location_category_ids: scored.select { |c| c.category_type == "location" }.map(&:id),
       similarity_category_count: similarity_category_count,

@@ -4,6 +4,7 @@
 #
 #  id          :bigint           not null, primary key
 #  item_type   :string           not null
+#  source      :integer          default("legacy"), not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  category_id :bigint           not null
@@ -27,7 +28,7 @@ class CategoryItem < ApplicationRecord
   # specific location is linked to the same item; Categories::AncestorReconciler
   # owns them. prefix: true is required -- an unprefixed `inherited` scope would
   # override Ruby's Class#inherited hook.
-  enum :source, {legacy: 0, admin: 1, inherited: 2}, prefix: true
+  enum :source, {legacy: 0, admin: 1, inherited: 2, goodreads: 3, worldcat: 4}, prefix: true
 
   scope :direct, -> { where.not(source: :inherited) }
 

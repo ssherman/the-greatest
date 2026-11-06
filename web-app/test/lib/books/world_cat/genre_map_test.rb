@@ -26,6 +26,45 @@ module Books
         assert_equal 0, map.size
         assert_nil map.genre_for("Fiction")
       end
+
+      test "an also name in the audiences header is an audience target" do
+        map = Books::WorldCat::GenreMap.new({
+          "genres" => ["Fantasy"], "audiences" => ["Children's"],
+          "terms" => {"Juvenile fantasy" => {"verdict" => "genre", "genre" => "Fantasy", "also" => ["Children's"]}}
+        })
+
+        assert_equal [[:genre, "Fantasy", false], [:audience, "Children's", false]],
+          map.targets_for("Juvenile fantasy").map { |t| [t.kind, t.name, t.weak] }
+      end
+
+      test "targets_for never repeats a target" do
+        map = Books::WorldCat::GenreMap.new({
+          "genres" => ["Science Fiction", "Fantasy"], "audiences" => ["Children's"],
+          "terms" => {"x" => {"verdict" => "genre", "genre" => "Fantasy", "also" => ["Fantasy", "Science Fiction", "Science Fiction", "Children's"]}}
+        })
+
+        assert_equal [[:genre, "Fantasy"], [:genre, "Science Fiction"], [:audience, "Children's"]],
+          map.targets_for("x").map { |t| [t.kind, t.name] }
+      end
+
+      test "targets_for reads genre, audience, also and weak" do
+        map = Books::WorldCat::GenreMap.new({
+          "genres" => ["Science Fiction", "Fantasy"], "audiences" => ["Children's", "Young Adult"],
+          "terms" => {
+            "Fantasy och science fiction" => {"verdict" => "genre", "genre" => "Science Fiction", "also" => ["Fantasy"]},
+            "Juvenile fiction" => {"verdict" => "audience", "audience" => "Children's", "weak" => true},
+            "Young adult fiction" => {"verdict" => "audience", "audience" => "Young Adult"},
+            "Electronic books" => {"verdict" => "drop", "reason" => "format"}
+          }
+        })
+
+        assert_equal [[:genre, "Science Fiction", false], [:genre, "Fantasy", false]],
+          map.targets_for("Fantasy och science fiction").map { |t| [t.kind, t.name, t.weak] }
+        assert_equal [[:audience, "Children's", true]], map.targets_for("Juvenile fiction").map { |t| [t.kind, t.name, t.weak] }
+        assert_empty map.targets_for("Electronic books")
+        assert_equal({"Children's" => ["Juvenile fiction"], "Young Adult" => ["Young adult fiction"]}, map.terms_by_audience)
+        assert_equal ["Children's", "Young Adult"], map.audiences
+      end
     end
   end
 end

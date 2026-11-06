@@ -126,7 +126,7 @@ services:
       WC_API_MEMORY_LIMIT: "${WC_API_MEMORY_LIMIT:-2GB}"
       WC_API_TEMP_DIR: "${WC_API_TEMP_DIR:-/tmp}"
       WC_API_THREADS: "${WC_API_THREADS:-2}"
-      WC_API_DEADLINE_S: "${WC_API_DEADLINE_S:-5}"
+      WC_API_DEADLINE_S: "${WC_API_DEADLINE_S:-25}"
 
 volumes:
   recommender-work:

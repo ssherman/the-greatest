@@ -2,9 +2,10 @@ class AuthController < ApplicationController
   include Cacheable
 
   # Non-HttpOnly companion cookie carrying the signed-in user's id. JS reads it
-  # to gate localStorage hydration of /user_list_state state on cached pages —
-  # the HttpOnly session cookie isn't visible to JS and the cached HTML can't
-  # carry per-user markers. Plain (not signed) since user_id is non-sensitive
+  # as the page's only signed-in signal (sign-in widget, nav links, and the gate
+  # on localStorage hydration of /user_list_state state) — the HttpOnly session
+  # cookie isn't visible to JS and the cached HTML can't carry per-user
+  # markers. It is never trusted server-side. Plain (not signed) since user_id is non-sensitive
   # and forging it doesn't grant access (the HttpOnly session is the real auth).
   TG_UID_COOKIE = :tg_uid
 
@@ -73,16 +74,9 @@ class AuthController < ApplicationController
     user = result[:user]
 
     # Session fixation: a pre-authentication session id must not survive into
-    # the authenticated session. reset_session discards it, so the id an
-    # attacker could have planted is worthless.
-    reset_session
-    session[:user_id] = user.id
-    session[:provider] = user.external_provider
-    cookies[TG_UID_COOKIE] = {
-      value: user.id.to_s,
-      secure: Rails.env.production?,
-      same_site: :lax
-    }
+    # the authenticated session. start_session_for resets it first, so the id
+    # an attacker could have planted is worthless.
+    start_session_for(user)
 
     render json: {
       success: true,
@@ -99,10 +93,9 @@ class AuthController < ApplicationController
   end
 
   def sign_out
-    cookies.delete(TG_UID_COOKIE)
     # Same reasoning as sign_in: leaving the id intact lets a captured
     # pre-logout session id be reused against the next sign-in on this browser.
-    reset_session
+    end_current_session
 
     render json: {success: true}
   end

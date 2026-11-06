@@ -14,15 +14,21 @@ test.describe('Music membership page', () => {
 
   test('the members link is not shown to a non-member', async ({ page }) => {
     // The layout renders #navbar_members twice (mobile dropdown + desktop
-    // menu) and membership_state_controller.js reveals both via
+    // menu) and membership_state_controller.js toggles both via
     // querySelectorAll -- .first() avoids a strict-mode violation, not a
     // narrowing of what's checked.
-    const stateResponse = page.waitForResponse((res) => res.url().includes('/membership_state'));
+    //
+    // The link is hidden by default, so asserting on it straight after load would
+    // pass even if the controller never ran. Membership now rides in the cached
+    // user_list_state entry, so wait for that entry to exist (it is filled by a
+    // request on the first load, or already present) before asserting.
     await page.goto('/');
-    // Wait for the client-side membership check to actually complete rather
-    // than asserting on the pre-JS server-rendered state, which would pass
-    // even if the controller never ran at all.
-    await stateResponse;
+    await expect
+      .poll(() => page.evaluate(() => {
+        const key = Object.keys(localStorage).find((k) => k.startsWith('tg:user_list_state:'));
+        return key ? JSON.parse(localStorage.getItem(key)!).membership?.member : undefined;
+      }))
+      .toBe(false);
 
     await expect(page.locator('#navbar_members').first()).toHaveClass(/hidden/);
   });

@@ -36,6 +36,36 @@ module Services
             assert_includes prompt, "1869"
           end
 
+          test "sourced mode adds the Goodreads source block with genres and publisher copy" do
+            page = ::Books::GoodreadsPage.new(title: "War and Peace", authors: [{"name" => "Leo Tolstoy", "role" => "Author", "primary" => true}],
+              original_publication_year: 1868, page_count: 1225, genres: ["Classics", "Historical Fiction"], description: "A blurb about Russia.")
+            task = BookFactsTask.new(parent: @book, mode: :sourced, source: page)
+            prompt = task.send(:user_prompt)
+
+            assert_includes prompt, "Source material (Goodreads):"
+            assert_includes prompt, "Classics, Historical Fiction"
+            assert_includes prompt, "Publisher copy: use it for the premise only; write your own text and never copy its sentences: A blurb about Russia."
+            assert_includes task.send(:system_message), "Source material identifies the book"
+            assert_equal :standard, task.send(:task_role)
+            refute task.send(:force_tool?)
+          end
+
+          test "sourced mode with a blank page description omits the publisher copy line" do
+            page = ::Books::GoodreadsPage.new(title: "War and Peace", authors: [], genres: ["Classics"], description: " ")
+            prompt = BookFactsTask.new(parent: @book, mode: :sourced, source: page).send(:user_prompt)
+
+            assert_includes prompt, "Classics"
+            refute_includes prompt, "Publisher copy:"
+          end
+
+          test "knowledge mode has no source block" do
+            prompt = BookFactsTask.new(parent: @book).send(:user_prompt)
+
+            refute_includes prompt, "Publisher copy:"
+            refute_includes prompt, "Source material"
+            refute_includes BookFactsTask.new(parent: @book).send(:system_message), "Source material identifies"
+          end
+
           test "user prompt uses passed author names when the book has none" do
             book = ::Books::Book.create!(title: "An Unattributed Work")
             prompt = BookFactsTask.new(parent: book, author_names: ["Someone Obscure"]).send(:user_prompt)

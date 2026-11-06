@@ -47,7 +47,7 @@ class FooterComponent < ViewComponent::Base
     case domain
     when :books
       [["Authors", helpers.books_authors_path],
-        ["Genres", helpers.books_genres_path],
+        ["Categories", helpers.books_categories_path],
         ["Origins", helpers.books_countries_path],
         ["Lists", helpers.books_lists_path]]
     when :music

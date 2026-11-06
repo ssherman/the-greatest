@@ -31,6 +31,46 @@ module Services
           assert_equal 1, ::Books::RepairVerdict.count
         end
 
+        def supersede(verdict)
+          verdict.update!(status: :rejected, superseded_at: Time.current, reviewed_at: Time.current,
+            decided_by_user_id: users(:admin_user).id, applied_at: Time.current, error: "old")
+        end
+
+        test "a superseded verdict stays suppressed for the replay" do
+          verdict = record.data[:verdict]
+          supersede(verdict)
+
+          result = record(payload: {"source_id" => 9, "target_id" => 1}, auto: true)
+
+          assert_equal :suppressed, result.data[:outcome]
+          assert_predicate verdict.reload, :rejected?
+          assert_not_nil verdict.superseded_at
+        end
+
+        test "the rebuild replaces a superseded verdict" do
+          verdict = record.data[:verdict]
+          supersede(verdict)
+
+          result = record(payload: {"source_id" => 9, "target_id" => 1}, auto: false, replace_superseded: true)
+
+          assert_equal :replaced, result.data[:outcome]
+          verdict.reload
+          assert_predicate verdict, :proposed?
+          assert_equal({"source_id" => 9, "target_id" => 1}, verdict.payload)
+          assert_equal [nil, nil, nil, nil, nil],
+            [verdict.superseded_at, verdict.reviewed_at, verdict.decided_by_user_id, verdict.applied_at, verdict.error]
+        end
+
+        test "replace_superseded leaves an admin-rejected verdict suppressed" do
+          verdict = record.data[:verdict]
+          verdict.update!(status: :rejected, decided_by_user_id: users(:admin_user).id, reviewed_at: Time.current)
+
+          result = record(auto: true, replace_superseded: true)
+
+          assert_equal :suppressed, result.data[:outcome]
+          assert_predicate verdict.reload, :rejected?
+        end
+
         test "a rejected verdict suppresses its finding" do
           verdict = record.data[:verdict]
           verdict.update!(status: :rejected, decided_by_user_id: users(:admin_user).id, reviewed_at: Time.current)

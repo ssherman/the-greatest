@@ -71,7 +71,7 @@ module DataImporters
           holders = local_holders([ol_candidate.work_key, *ol_candidate.redirect_sources, *Array(work&.redirected_from)])
 
           if holders.empty?
-            [build(ol_candidate, external.merge(title: work&.title, creators: Array(work&.author_names), year: year_of(work)))]
+            [build(ol_candidate, external.merge(title: work&.title, subtitle: work&.subtitle, creators: Array(work&.author_names), year: year_of(work)))]
           else
             evidence = external.merge(external_title: work&.title, external_creators: Array(work&.author_names), external_year: year_of(work))
             duplicate_of = duplicate_of(ol_candidate.work_key)

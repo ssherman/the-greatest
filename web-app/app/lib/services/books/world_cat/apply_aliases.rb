@@ -3,7 +3,7 @@
 module Services
   module Books
     module WorldCat
-      # Adds every genre-verdict term as an alternative name on its genre category,
+      # Adds every genre- and audience-verdict term as an alternative name on its genre or audience category,
       # the same field Categories::Merger fills, so the mapping is visible in the
       # admin and survives future merges. Idempotent.
       class ApplyAliases
@@ -23,18 +23,20 @@ module Services
           updated = 0
           added = 0
           missing = []
-          @map.terms_by_genre.each do |genre_name, terms|
-            category = ::Books::Category.active.genre.by_name(genre_name).first
-            if category.nil?
-              missing << genre_name
-              next
-            end
-            aliases = terms.reject { |t| t == category.name || category.alternative_names.any? { |a| a.casecmp?(t) } }
-            next if aliases.empty?
+          [[@map.terms_by_genre, ::Books::Category.active.genre], [@map.terms_by_audience, ::Books::Category.active.audience]].each do |terms_by_name, scope|
+            terms_by_name.each do |name, terms|
+              category = scope.by_name(name).first
+              if category.nil?
+                missing << name
+                next
+              end
+              aliases = terms.reject { |t| t == category.name || category.alternative_names.any? { |a| a.casecmp?(t) } }
+              next if aliases.empty?
 
-            category.update!(alternative_names: category.alternative_names + aliases)
-            updated += 1
-            added += aliases.size
+              category.update!(alternative_names: category.alternative_names + aliases)
+              updated += 1
+              added += aliases.size
+            end
           end
           Result.new(success?: true, data: {categories_updated: updated, aliases_added: added, missing_genres: missing}, errors: [])
         end

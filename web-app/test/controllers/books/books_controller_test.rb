@@ -266,6 +266,17 @@ module Books
         @controller.view_assigns["categories_by_type"].map(&:first)
     end
 
+    test "an audience group sits between genres and subjects" do
+      CategoryItem.create!(category: categories(:books_france_location), item: @book)
+      CategoryItem.create!(category: categories(:books_politics_subject), item: @book)
+      CategoryItem.create!(category: Books::Category.create!(name: "Young Adult", category_type: :audience), item: @book)
+
+      get "/book/#{@book.slug}"
+
+      assert_equal %w[genre audience subject location],
+        @controller.view_assigns["categories_by_type"].map(&:first)
+    end
+
     test "renders the category groups in the order the controller assigned" do
       CategoryItem.create!(category: categories(:books_france_location), item: @book)
       CategoryItem.create!(category: categories(:books_politics_subject), item: @book)

@@ -75,6 +75,13 @@ module Services
         assert_equal ["9781400079988"], edition.identifiers.where(identifier_type: :books_edition_ean13).pluck(:value)
       end
 
+      test "edition identifiers it writes are amazon" do
+        edition = AmazonEditionUpserter.call(book: @book, product: product).edition
+
+        assert_not_empty edition.identifiers.reload
+        assert edition.identifiers.all?(&:source_amazon?)
+      end
+
       test "finds the existing edition again by ASIN instead of duplicating it" do
         first = AmazonEditionUpserter.call(book: @book, product: product).edition
 

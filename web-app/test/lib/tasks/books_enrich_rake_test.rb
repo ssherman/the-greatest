@@ -4,6 +4,8 @@ require "test_helper"
 require "rake"
 
 class BooksEnrichRakeTest < ActiveSupport::TestCase
+  include Workflows::DispatchHelper
+
   setup do
     # Load only this one rake file (see penalties_rake_test.rb for why not
     # Rails.application.load_tasks).
@@ -13,6 +15,18 @@ class BooksEnrichRakeTest < ActiveSupport::TestCase
     end
     @task = Rake::Task["books:enrich_missing"]
     @task.reenable
+  end
+
+  test "books:evidence prints the QID, sections and failed sources" do
+    book = books_books(:got)
+    enrichment = book.enrichments.create!(kind: "books.evidence", outcome: :applied, facts: {
+      "wikidata" => {"qid" => "Q42", "via" => "isbn"}, "wikipedia" => nil, "worldcat" => {}, "sources_failed" => ["wikipedia"]
+    })
+    ::Services::Books::Evidence::Gather.expects(:call).with(book: book).returns(stub(data: {enrichment: enrichment}))
+    task = Rake::Task["books:evidence"]
+    task.reenable
+
+    assert_output(/QID: Q42 \(via isbn\).*sections: wikidata, worldcat.*sources_failed: wikipedia/m) { task.invoke(book.id.to_s) }
   end
 
   test "a book whose only ledger row defers to its authors is still missing; an enriched one is not" do
@@ -25,6 +39,15 @@ class BooksEnrichRakeTest < ActiveSupport::TestCase
     ::Books::EnrichBookJob.stubs(:perform_async)
     ::Books::EnrichBookJob.expects(:perform_async).with(deferred.id).once
     ::Books::EnrichBookJob.expects(:perform_async).with(enriched.id).never
+
+    assert_output(/Enqueued/) { @task.invoke("100000") }
+  end
+
+  test "a book with only a books.evidence row still needs its book_facts run" do
+    evidence_only = ::Books::Book.create!(title: "Evidence Only")
+    evidence_only.enrichments.create!(kind: "books.evidence", outcome: :applied, facts: {})
+    ::Books::EnrichBookJob.stubs(:perform_async)
+    ::Books::EnrichBookJob.expects(:perform_async).with(evidence_only.id).once
 
     assert_output(/Enqueued/) { @task.invoke("100000") }
   end
@@ -46,6 +69,28 @@ class BooksEnrichRakeTest < ActiveSupport::TestCase
     ::Books::EnrichBookJob.stubs(:perform_async)
     ::Books::EnrichBookJob.expects(:perform_async).with(deferred_with_description.id).once
     ::Books::EnrichBookJob.expects(:perform_async).with(described.id).never
+
+    assert_output(/Enqueued/) { @task.invoke("100000") }
+  end
+
+  test "a book with a running book run is not enqueued, deferred or not; once the run ends it is missing again" do
+    # Adopted deferred books are in exactly this state: still no applied row,
+    # but a run is on it.
+    unledgered = ::Books::Book.create!(title: "Unledgered With Run")
+    deferred = ::Books::Book.create!(title: "Deferred With Run")
+    ::Services::Books::DeferredEnrichment.defer!(deferred)
+    stub_workflow_dispatch
+    runs = [unledgered, deferred].map { |book| Workflows::Books::BookEnrichment.start(book, initiated_by: "test") }
+    ::Books::EnrichBookJob.stubs(:perform_async)
+    ::Books::EnrichBookJob.expects(:perform_async).with(unledgered.id).never
+    ::Books::EnrichBookJob.expects(:perform_async).with(deferred.id).never
+
+    assert_output(/Enqueued/) { @task.invoke("100000") }
+
+    runs.each { |run| Workflows::Coordinator.cancel(run, outcome: "test") }
+    ::Books::EnrichBookJob.expects(:perform_async).with(unledgered.id).once
+    ::Books::EnrichBookJob.expects(:perform_async).with(deferred.id).once
+    @task.reenable
 
     assert_output(/Enqueued/) { @task.invoke("100000") }
   end

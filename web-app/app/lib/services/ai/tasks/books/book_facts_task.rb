@@ -11,8 +11,9 @@ module Services
             "books_work_openlibrary_id" => "Open Library work key"
           }.freeze
 
-          def initialize(parent:, mode: :knowledge, author_names: nil, provider: nil, model: nil)
+          def initialize(parent:, mode: :knowledge, author_names: nil, source: nil, provider: nil, model: nil)
             @author_names = Array(author_names).map(&:to_s).reject(&:blank?)
+            @source = source
             super(parent: parent, mode: mode, provider: provider, model: model)
           end
 
@@ -24,7 +25,7 @@ module Services
 
           def system_message
             <<~SYSTEM_MESSAGE
-              You are a bibliographic researcher for a book catalog. You report facts about one book and write one short description of it.#{research_instruction}
+              You are a bibliographic researcher for a book catalog. You report facts about one book and write one short description of it.#{research_instruction}#{sourced_instruction}
 
               Facts. For every fact give a value and a confidence of high, medium or low. Use null (or an empty list) when you do not know; never guess. Set "recognized" to false if you do not know this specific book, and give an overall "confidence" for how well you know it. first_published_year is the year the work was first published in any language; set first_published_year_estimated when the year is approximate. original_language is the language the work was written in, as its English name such as "English", "Russian", or "Ancient Greek". word_count is the approximate length of the full text. page_range is a typical page count for a standard edition, as "300" or "250-350". alternate_titles are other titles the same work has been published under, including translated titles. origin_countries are the nationalities of the work or its author, as English nationality adjectives such as "French" or "Japanese". book_type is one of fiction, nonfiction, poetry, religious. series_name and series_number are set only when the book is part of a series.
 
@@ -49,6 +50,12 @@ module Services
             " Use web search to verify every fact before reporting it; prefer publisher, library and encyclopedia sources. Report what the sources say, not what you remember."
           end
 
+          def sourced_instruction
+            return "" unless mode == :sourced
+
+            " Source material identifies the book: set recognized to true when it does, even if you did not know the book."
+          end
+
           def user_prompt
             lines = ["Book: \"#{parent.title}\""]
             lines << "Subtitle: #{parent.subtitle}" if parent.subtitle.present?
@@ -61,9 +68,28 @@ module Services
               lines << "Our current description, for context only; do not copy or extend it: #{existing}"
             end
 
+            lines.concat(source_lines) if mode == :sourced && @source
+
             lines << ""
             lines << "Report the facts and write the description as JSON matching the schema."
             lines.join("\n")
+          end
+
+          # The Goodreads page as source material. Its description is the
+          # publisher's copy, so it is labelled as premise-only: the result is
+          # checked for copied runs afterwards (DescriptionCheck), but the
+          # prompt should not invite it in the first place.
+          def source_lines
+            authors = Array(@source.authors).map { |a| a["name"] }.compact.join(", ")
+            lines = ["", "Source material (Goodreads):", "Title: #{@source.title}"]
+            lines << "Authors: #{authors}" if authors.present?
+            lines << "First published: #{@source.original_publication_year}" if @source.original_publication_year.present?
+            lines << "Pages: #{@source.page_count}" if @source.page_count.present?
+            lines << "Genres: #{Array(@source.genres).join(", ")}" if Array(@source.genres).any?
+            if @source.description.present?
+              lines << "Publisher copy: use it for the premise only; write your own text and never copy its sentences: #{@source.description}"
+            end
+            lines
           end
 
           # One line per stored author, from what we hold about them (spec

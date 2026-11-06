@@ -1,0 +1,10 @@
+<%# Shared by the browse grid and search results so the two stay in step.
+    Search results label each card with its type, because they span all three. %>
+<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+  <% records.each do |record| %>
+    <%= render Books::BrowseCardComponent.new(
+          record: record, count: record.ranked_count, path: Books::FilterPath.call(categories: [record]),
+          chain: chains.fetch(record.id, []), label: (record.type_label if show_type)
+        ) %>
+  <% end %>
+</div>

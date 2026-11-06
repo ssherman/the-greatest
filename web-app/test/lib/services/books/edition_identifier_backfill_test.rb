@@ -33,6 +33,13 @@ module Services
           @edition.identifiers.where(identifier_type: :books_edition_ean13).pluck(:value)
       end
 
+      test "rows it writes are marked legacy" do
+        EditionIdentifierBackfill.call
+
+        assert_not_empty @edition.identifiers
+        assert @edition.identifiers.all?(&:source_legacy?)
+      end
+
       test "is idempotent across repeated runs" do
         EditionIdentifierBackfill.call
         count_after_first = @edition.identifiers.count

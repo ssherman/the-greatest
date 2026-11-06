@@ -344,8 +344,8 @@ URL grammar is slug-based (`/excluding/childrens-books,poetry`), so if the picke
 ids, translating id -> slug would have to happen in JavaScript, putting the URL's vocabulary in two
 places instead of one.
 
-`types: [:genre]` is also deliberate and narrower than the books filter modal's own category
-picker, which searches genres, subjects, *and* settings (locations) together. Excluding "set in
+`types: [:genre]` is also deliberate. The books filter panel has its own Subject and Setting
+pages, each searching only its own type, and this endpoint offers neither: excluding "set in
 Paris" from a global canon isn't a thing this page offers, and `GlobalCanonParams` 404s a subject
 or location slug it's handed — the endpoint and the validator have to agree on what's excludable,
 or the picker could hand a visitor a chip that 404s the moment they click "Update list."

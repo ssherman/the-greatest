@@ -18,6 +18,11 @@
 class CategorySearchQuery
   DEFAULT_LIMIT = 10
 
+  # Old names and spellings live in alternative_names, so "Calcutta" finds Kolkata.
+  # Public so a caller that builds its own relation (Books::BrowseQuery.search)
+  # matches names exactly the way this class does. Binds :pattern.
+  NAME_OR_ALIAS_SQL = "categories.name ILIKE :pattern OR EXISTS (SELECT 1 FROM unnest(categories.alternative_names) AS alt WHERE alt ILIKE :pattern)"
+
   def self.call(query, scope:, types: [], limit: DEFAULT_LIMIT, min_items: 0, min_items_types: [], min_items_item_type: nil)
     new(query, scope: scope, types: types, limit: limit, min_items: min_items, min_items_types: min_items_types, min_items_item_type: min_items_item_type).call
   end
@@ -35,7 +40,7 @@ class CategorySearchQuery
   def call
     return [] if @query.blank?
 
-    relation = @scope.active.where(name_or_alias_sql, pattern: "%#{@scope.sanitize_sql_like(@query)}%")
+    relation = @scope.active.where(NAME_OR_ALIAS_SQL, pattern: "%#{@scope.sanitize_sql_like(@query)}%")
     relation = relation.where(category_type: @types) if @types.any?
     relation = apply_minimum(relation)
 
@@ -43,11 +48,6 @@ class CategorySearchQuery
   end
 
   private
-
-  # Old names and spellings live in alternative_names, so "Calcutta" finds Kolkata.
-  def name_or_alias_sql
-    "categories.name ILIKE :pattern OR EXISTS (SELECT 1 FROM unnest(categories.alternative_names) AS alt WHERE alt ILIKE :pattern)"
-  end
 
   def apply_minimum(relation)
     return relation if @min_items <= 0 || @min_items_types.empty?

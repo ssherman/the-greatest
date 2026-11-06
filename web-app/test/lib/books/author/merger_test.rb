@@ -93,6 +93,24 @@ module Books
         assert ::Books::Author.exists?(@source.id)
       end
 
+      test "a duplicate identifier keeps the more trusted source" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_author_viaf, value: "777", source: :viaf)
+        Identifier.create!(identifiable: @target, identifier_type: :books_author_viaf, value: "777", source: :legacy)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal ["viaf"], Identifier.where(identifiable: @target, identifier_type: :books_author_viaf, value: "777").pluck(:source)
+      end
+
+      test "a less trusted duplicate never downgrades the target's row" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_author_viaf, value: "777", source: :legacy)
+        Identifier.create!(identifiable: @target, identifier_type: :books_author_viaf, value: "777", source: :open_library)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal ["open_library"], Identifier.where(identifiable: @target, identifier_type: :books_author_viaf, value: "777").pluck(:source)
+      end
+
       test "moves identifiers the target does not already have" do
         identifier = Identifier.create!(
           identifiable: @source, identifier_type: :books_author_viaf, value: "111"

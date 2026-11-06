@@ -12,7 +12,7 @@ class Books::BooksController < ApplicationController
   # routinely led with Location. A type outside this list sorts to the end rather
   # than disappearing, and the secondary sort on the name itself keeps that tail
   # deterministic (Ruby's sort_by is not stable).
-  CATEGORY_TYPE_ORDER = %w[genre subject location].freeze
+  CATEGORY_TYPE_ORDER = %w[genre audience subject location].freeze
 
   def self.ranking_configuration_class
     Books::RankingConfiguration

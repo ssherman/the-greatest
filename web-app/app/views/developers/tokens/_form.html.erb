@@ -29,18 +29,22 @@
               autocomplete: "off",
               class: "input w-full",
               value: local_assigns[:name_value] %>
-        <p class="label">Where it will be used, so you know which one to revoke later.</p>
+        <p class="label whitespace-normal">Where it will be used, so you know which one to revoke later.</p>
       </fieldset>
 
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Scopes</legend>
         <% Api::Scopes.mintable_by(current_user).each do |scope| %>
-          <% checked = local_assigns[:scopes_value].nil? || scopes_value.include?(scope) %>
-          <label class="label cursor-pointer justify-start gap-3" for="<%= "api_token_scope_#{scope.tr(":", "_")}" %>">
+          <%# Admin scopes are never pre-ticked: they delete records, so choosing one must be deliberate. %>
+          <% checked = local_assigns[:scopes_value].nil? ? !Api::Scopes.admin?(scope) : scopes_value.include?(scope) %>
+          <%# daisyUI's .label is white-space: nowrap; a scope description is a
+              sentence or two and must wrap, or the longest one (books:admin:merge)
+              pushes the page sideways. items-start keeps the box on the first line. %>
+          <label class="label cursor-pointer justify-start items-start gap-3 whitespace-normal" for="<%= "api_token_scope_#{scope.tr(":", "_")}" %>">
             <%= check_box_tag "api_token[scopes][]", scope, checked,
                   id: "api_token_scope_#{scope.tr(":", "_")}",
-                  class: "checkbox" %>
-            <span><code><%= scope %></code>: <%= Api::Scopes.description(scope) %></span>
+                  class: "checkbox shrink-0" %>
+            <span class="min-w-0 [overflow-wrap:anywhere]"><code><%= scope %></code>: <%= Api::Scopes.description(scope) %></span>
           </label>
         <% end %>
       </fieldset>

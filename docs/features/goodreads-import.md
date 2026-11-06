@@ -47,6 +47,29 @@ never refuses a row.
 - A value that does not parse is dropped and recorded in the row's `notes`.
 - `Private Notes` is never stored.
 
+## Book page parser v2 and enrichment
+
+`Books::Goodreads::BookPage` is at version 2. Beyond the identity facts the import reads, it reads the
+description, genres, page count, format and the id of the work's main edition (`best_book_id`), and each
+series with its Goodreads series id. Ratings are still never read. The HTML is kept, so a version bump is
+re-read from the cache (`GoodreadsPages::Reparse`) with no fetch; a page at an older version is re-read
+before the enrichment step uses it.
+
+The `goodreads` step of `books.book_enrichment` (see [Enrichment workflows](./enrichment-workflows.md))
+reuses this machinery for new books:
+
+- **One gate turn for every fetch.** The import's `FetchPageJob` and the enrichment step both take a turn
+  through `Books::Goodreads::GateTurn`, so the 15 s spacing, the 1,500-per-UTC-day cap and the 6 h block
+  cooldown are one budget, with no sub-cap and no priority. Books a user's import creates usually cost the
+  enrichment step no fetch, because they arrive with a Goodreads id and a cached page.
+- **The search cache.** `books_goodreads_searches` stores each title search (rows and HTML, `found` or
+  `no_results`) keyed by the normalized query and is fresh for 30 days, so a retried or repeated search
+  fetches nothing. `Books::Goodreads::SearchPage` (version 2) reads the card layout Goodreads moved to
+  in November 2026 and falls back to the older table layout. Card ratings counts are abbreviated
+  ("12k ratings") and read as round numbers; they only order the candidates.
+- **A match is durable.** It is the `books_work_goodreads_id` identifier with source `goodreads`, which is
+  separate from the `goodreads_import` source of user-import data.
+
 ## Data model
 
 - `books_goodreads_imports`: one per upload. A partial unique index allows one import in progress
@@ -117,8 +140,10 @@ for it. Matched editions never touch Goodreads.
   `daily_fetch_cap` (1,500), each fetch counted against the day it starts on, so a line that runs
   past midnight fills the next day's cap. A job waits for its turn by rescheduling itself, and a turn that came
   due late (after a deploy or a slow fetch) still waits out `fetch_interval` since the last fetch
-  actually began. A page with no title or no contributors is unparseable, never found. A 403, a challenge or
-  an unrecognizable page blocks all fetching for `block_cooldown` (6 h). Goodreads' own 503 page
+  actually began. A page with no title or no contributors is unparseable, never found. A 401/403/429, any
+  other status it cannot read, or a page whose `<title>` is not Goodreads' (a challenge) blocks all
+  fetching for `block_cooldown` (6 h). A Goodreads page it cannot read does not; its editions settle
+  as if no page came back. Goodreads' own 503 page
   and timeouts are retried through the line up to `fetch_attempts` (3). Settings:
   `config/initializers/goodreads.rb`.
 - **Reading.** `Books::Goodreads::BookPage` reads `__NEXT_DATA__`, or the markup and `ld+json`
@@ -201,7 +226,8 @@ queues `Books::Goodreads::RunImportJob`.
 - **Approve** (`Approve`, `PromoteRecords`):
   - It deletes unticked records the import created, when nothing else uses them.
   - It promotes every provisional book the import created or its rows point at, with the book's provisional authors,
-    then queues enrichment. A book credited to a newly promoted author waits for that author's chain, as the importer
+    then queues enrichment, including Amazon enrichment (`Books::AmazonProductEnrichmentJob`) for every promoted
+    book, even one whose AI enrichment waits on its author. A book credited to a newly promoted author waits for that author's chain, as the importer
     does.
   - Promotion also purges the records' cached show pages (which carried `noindex` and the notice) and the public goal
     pages of the book's readers. It regenerates the users' favorites list when a promoted book is on anyone's
@@ -236,10 +262,14 @@ task can run again after each migration pass.
 
 ## Legacy replay
 
+**Paused since 2026-10-14; the Goodreads rebuild replaces it** (`docs/features/goodreads-rebuild.md`). Its
+proposed relinks and identifier strips are retired there; `apply`, the loader and `repair_ratings` are reused.
+
 Spec §12. The legacy app's 803 imports are replayed against the new resolver to measure it and to find the bad data
 legacy left behind. Every finding is a `Books::RepairVerdict` (`books_repair_verdicts`, no foreign keys, keyed by
 preserved ids): **never truncate that table**, the launch sequence relies on it. Nothing changes the catalog except
-`books:goodreads_replay:apply`, which refuses to run while `config.x.goodreads_replay.auto_apply` is false (the default).
+`books:goodreads_replay:apply`, which refuses to run while `config.x.goodreads_replay.auto_apply` is false. It has been
+on since 2026-10-14, after the first production replay's hand check; `apply` acts on approved verdicts only.
 
 A pass, after every books migration pass and in the launch sequence:
 
@@ -284,8 +314,8 @@ bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.m
   is added beside it, and the legacy book keeps the item and the review. Junk detection treats such a book as supported.
 - **Apply batches the follow-ups.** Merges run with `defer_rankings: true`, and one run queues each ranking
   recalculation, the favorites rebuild and the author rankings once, not once per merge.
-- **Before auto-apply:** hand-check 50 auto verdicts per kind with `books:goodreads_replay:sample[kind]`, then set
-  `auto_apply: true` in `config/initializers/goodreads_replay.rb`.
+- **Auto-apply** was switched on (`config/initializers/goodreads_replay.rb`) on 2026-10-14, after 50 auto verdicts per
+  kind were hand-checked with `books:goodreads_replay:sample[kind]`. Setting it back to false stops every later `apply`.
 
 ### Legacy truncation repair
 
@@ -332,7 +362,7 @@ imports.
   failed before writing any rows starts again, pending review.
 - `IDS=` only narrows what is started: a picked import still defers to a newer unfinished import of the same user.
 - Run it one import at a time (`[1]`), and let each finish before the next: running imports are skipped, not
-  counted. Four at once overloaded the Open Library service on 2026-10-06 (`docs/launch-todo.md`, section 5, item 6).
+  counted. Four at once overloaded the Open Library service on 2026-10-06 (`docs/launch-todo.md`, section 5, item 7).
   Each import also fetches Goodreads pages for the books it would create, on the fetch line member uploads use.
 - Measured on the 2026-10-05 development load (a dry run): 46 unfinished legacy imports. 10 have a later completed
   import, 12 have no file (missing from the legacy bucket, or not a CSV), and 1 has no Goodreads header. That leaves

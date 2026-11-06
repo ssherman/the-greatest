@@ -35,6 +35,29 @@ module Services
         assert Authenticator.call(request_with("bearer  #{ApiTokenSecrets::MEMBER} ")).success?
       end
 
+      test "a dispatched request returns the env principal without a token lookup or record_use" do
+        principal = Authenticator.call(request_with("Bearer #{ApiTokenSecrets::MEMBER}")).data
+        env = ::Api::DispatchedRequest.mark(Rack::MockRequest.env_for("/"), principal)
+        Tokens.expects(:authenticate).never
+        Tokens.expects(:record_use).never
+
+        result = Authenticator.call(ActionDispatch::Request.new(env))
+
+        assert result.success?
+        assert_same principal, result.data
+      end
+
+      test "a principal under any other env key is ignored" do
+        principal = Authenticator.call(request_with("Bearer #{ApiTokenSecrets::MEMBER}")).data
+        env = Rack::MockRequest.env_for("/")
+        env["HTTP_THE_GREATEST_API_PRINCIPAL"] = principal
+
+        result = Authenticator.call(ActionDispatch::Request.new(env))
+
+        refute result.success?
+        assert_equal [:unauthenticated], result.errors
+      end
+
       test "no Authorization header is :unauthenticated" do
         result = Authenticator.call(request_with(nil))
 
@@ -72,6 +95,43 @@ module Services
         users(:regular_user).memberships.update_all(status: :unpaid)
 
         assert_equal [:membership_required], Authenticator.call(request_with("Bearer #{ApiTokenSecrets::MEMBER}")).errors
+      end
+
+      def mint(user, scopes)
+        Services::Api::Tokens.generate(user: user, name: "mcp", scopes: scopes, expires_at: 30.days.from_now).data[:secret]
+      end
+
+      test "an admin without a membership authenticates as an admin principal" do
+        admin = users(:admin_user)
+        admin.memberships.destroy_all
+        result = Authenticator.call(request_with("Bearer #{mint(admin, ["books:admin:merge"])}"))
+
+        assert result.success?
+        assert_equal :admin, result.data.tier
+        assert_equal ["books:read", "books:admin:read", "books:admin:write", "books:admin:merge"].sort, result.data.scopes.sort
+      end
+
+      test "demotion takes effect on the next request" do
+        user = users(:regular_user)
+        role = DomainRole.create!(user: user, domain: :books, permission_level: :admin)
+        secret = mint(user, ["books:admin:merge"])
+        assert_includes Authenticator.call(request_with("Bearer #{secret}")).data.scopes, "books:admin:merge"
+
+        role.update!(permission_level: :viewer)
+        result = Authenticator.call(request_with("Bearer #{secret}"))
+
+        assert result.success?
+        assert_equal :admin, result.data.tier
+        assert_equal ["books:read", "books:admin:read"], result.data.scopes
+      end
+
+      test "an admin-scoped token whose owner lost every role and membership is :membership_required" do
+        admin = users(:admin_user)
+        secret = mint(admin, ["books:admin:merge"])
+        admin.update!(role: :user)
+        admin.memberships.destroy_all
+
+        assert_equal [:membership_required], Authenticator.call(request_with("Bearer #{secret}")).errors
       end
 
       test "a successful authentication records last use" do

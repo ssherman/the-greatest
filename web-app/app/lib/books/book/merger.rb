@@ -21,6 +21,11 @@ module Books
         description original_language_id default_edition_id
       ].freeze
 
+      # Text that belongs to one title in one language. A source under another title is usually a translation
+      # merged into the English book, and its subtitle or description ("Einheitsübersetzung", "Finde dein
+      # perfektes Match") would be wrong there, so these fill only from a source with the same title.
+      TITLE_BOUND = %i[subtitle sort_title description].freeze
+
       attr_reader :source_book, :target_book, :stats, :affected_ranking_configurations
 
       def self.call(source:, target:, defer_rankings: false)
@@ -208,7 +213,12 @@ module Books
             value: identifier.value
           )
 
+          # Two rows for one value: the survivor takes the more trusted source
+          # (identifier provenance spec, section 1).
           if existing
+            if ::Identifier.trust_rank(identifier.source) > ::Identifier.trust_rank(existing.source)
+              existing.update!(source: identifier.source)
+            end
             identifier.destroy!
           else
             identifier.update!(identifiable_id: target_book.id)
@@ -508,8 +518,10 @@ module Books
       def fill_blank_fields
         filled = []
 
+        same_title = same_title?
         BLANK_FILLABLE.each do |field|
           next if target_book.public_send(field).present?
+          next if TITLE_BOUND.include?(field) && !same_title
 
           value = source_book.public_send(field)
           next if value.blank?
@@ -519,6 +531,11 @@ module Books
         end
 
         @stats[:filled_fields] = filled
+      end
+
+      def same_title?
+        key = ::Services::Books::Verification::Check.title_key(target_book.title)
+        key.present? && key == ::Services::Books::Verification::Check.title_key(source_book.title)
       end
 
       def reconcile_first_published_year
@@ -536,17 +553,9 @@ module Books
       # feeds as_indexed_json, so the search index picks this up on the target's
       # post-commit reindex.
       def absorb_alternate_titles
-        existing = Array(target_book.alternate_titles)
-        incoming = ([source_book.title] + Array(source_book.alternate_titles))
-          .map { |value| value.to_s.strip }
-          .compact_blank
-
-        merged = (existing + incoming).uniq - [target_book.title]
-        @stats[:alternate_titles_added] = []
-        return if merged == existing
-
-        @stats[:alternate_titles_added] = merged - existing
-        target_book.alternate_titles = merged
+        @stats[:alternate_titles_added] = ::Services::AlternateTitles::Writer.move(
+          source: source_book, target: target_book
+        )
       end
 
       # Ordering constraint 1: runs first, before any association is touched. Once

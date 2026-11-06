@@ -31,9 +31,15 @@ class SavedSearchesController < ApplicationController
   # host without saved searches redirects to sign-in rather than 404ing --
   # nothing about the id is confirmed either way.
   before_action :require_domain_support!
-  before_action :require_signed_in!, only: [:index, :new, :create, :edit, :update, :destroy]
-  before_action :set_owned_search, only: [:edit, :update, :destroy]
+  # Before the intro render, which halts the chain: the intro and the form share
+  # a URL, so the intro must not be cached for a visitor who then signs in.
   before_action :prevent_caching
+  # A signed-out visitor to the list or the form gets an intro page with a
+  # Login button instead of a silent redirect to the front page: the filter
+  # panel links "Advanced search" here for everyone.
+  before_action :render_intro_unless_signed_in, only: [:index, :new]
+  before_action :require_signed_in!, only: [:create, :edit, :update, :destroy]
+  before_action :set_owned_search, only: [:edit, :update, :destroy]
 
   # GET /searches(/page/:page)
   def index
@@ -148,6 +154,10 @@ class SavedSearchesController < ApplicationController
   end
 
   private
+
+  def render_intro_unless_signed_in
+    render :intro if current_user.nil?
+  end
 
   # Scoped to the owner, so a stranger gets RecordNotFound -- a 404, not the
   # 403 Pundit would raise, which would confirm the id exists (spec §8).

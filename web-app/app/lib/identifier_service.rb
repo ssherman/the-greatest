@@ -8,12 +8,14 @@ class IdentifierService
   # @param identifiable [ActiveRecord::Base] The object to add identifier to
   # @param type [Symbol|String] The identifier type (enum value)
   # @param value [String] The identifier value
+  # @param source [Symbol|nil] Who attached it (Identifier.sources); books identifiers need one
   # @return [Result] Success/failure with identifier or errors
-  def self.add_identifier(identifiable, type, value)
+  def self.add_identifier(identifiable, type, value, source: nil)
     identifier = Identifier.new(
       identifiable: identifiable,
       identifier_type: type,
-      value: value.to_s.strip
+      value: value.to_s.strip,
+      source: source
     )
 
     if identifier.save

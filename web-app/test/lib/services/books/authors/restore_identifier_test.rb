@@ -36,6 +36,17 @@ module Services
           assert_equal ["5391"], held("books_author_viaf")
         end
 
+        test "a restored Wikidata id is wikidata and a restored VIAF id is viaf" do
+          decide("Q7243")
+          decide("5391", finder: ResolveViaf)
+
+          restore
+          restore(ResolveViaf)
+
+          assert @author.identifiers.find_by!(identifier_type: QID).source_wikidata?
+          assert @author.identifiers.find_by!(identifier_type: "books_author_viaf").source_viaf?
+        end
+
         test "a decision from this era, even one that matched nothing, stops an older match coming back" do
           decide("Q7243")
           decide(nil, outcome: :unmatched, at: @author.created_at + 1.minute)

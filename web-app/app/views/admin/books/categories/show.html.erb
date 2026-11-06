@@ -1,3 +1,12 @@
 <% content_for :title, @category.name %>
 <%= render Admin::Categories::ShowComponent.new(category: @category, domain_config: domain_config, stats: @stats) %>
+
+<div class="card bg-base-100 shadow-xl mt-6">
+  <div class="card-body">
+    <h2 class="card-title text-base">Books <span class="badge badge-ghost"><%= number_with_delimiter(@category.category_items.where(item_type: "Books::Book").count) %></span></h2>
+    <%= turbo_frame_tag "category_books_list", loading: :lazy, src: admin_books_category_books_path(@category) do %>
+      <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+    <% end %>
+  </div>
+</div>
 <%= render "admin/books/categories/merge_form", category: @category %>

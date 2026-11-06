@@ -43,7 +43,7 @@ def test_from_env_defaults_and_treats_empty_as_unset(monkeypatch):
     for name in ("WC_DATA_ROOT", "WC_API_MEMORY_LIMIT", "WC_API_DEADLINE_S"):
         monkeypatch.delenv(name, raising=False)
     s = Settings.from_env()
-    assert (s.data_root, s.memory_limit, s.threads, s.deadline_s) == (Path("/data"), "2GB", 2, 5.0)
+    assert (s.data_root, s.memory_limit, s.threads, s.deadline_s) == (Path("/data"), "2GB", 2, 25.0)
 
 
 def test_from_env_without_a_version_is_a_configuration_error(monkeypatch):
@@ -88,7 +88,7 @@ def test_a_good_version_opens_with_the_manifest_and_report(tmp_path, worldcat_ar
     try:
         assert state.manifest["gates_passed"] is True
         assert state.report["tables"]["records"]["rows"] > 0
-        assert state.deadline_s == 5.0
+        assert state.deadline_s == 25.0
         (one,) = state.connection.execute("SELECT 1").fetchone()
         assert one == 1
     finally:

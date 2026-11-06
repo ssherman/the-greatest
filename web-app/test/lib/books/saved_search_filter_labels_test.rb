@@ -24,9 +24,9 @@ class Books::SavedSearchFilterLabelsTest < ActiveSupport::TestCase
     fiction = categories(:books_fiction_genre)
     groups = labels({"included_category_ids" => [fiction.id], "genre_match_mode" => "any"})
 
-    g = group(groups, "Including genres")
+    g = group(groups, "Including categories")
     assert_equal [fiction.name], g.values
-    assert_equal "Books must have at least one of these genres", g.note
+    assert_equal "Books must have at least one of these categories", g.note
   end
 
   test "explains all-mode differently" do
@@ -37,9 +37,9 @@ class Books::SavedSearchFilterLabelsTest < ActiveSupport::TestCase
       "genre_match_mode" => "all"
     })
 
-    g = group(groups, "Including genres")
+    g = group(groups, "Including categories")
     assert_equal [fiction.name, classics.name].sort, g.values.sort
-    assert_equal "Books must have all of these genres", g.note
+    assert_equal "Books must have all of these categories", g.note
   end
 
   test "names excluded categories, languages and countries" do
@@ -51,7 +51,7 @@ class Books::SavedSearchFilterLabelsTest < ActiveSupport::TestCase
       "excluded_country_ids" => [books_countries(:japanese).id]
     })
 
-    assert_equal [categories(:books_classics_genre).name], group(groups, "Excluding genres").values
+    assert_equal [categories(:books_classics_genre).name], group(groups, "Excluding categories").values
     assert_equal [languages(:russian).name], group(groups, "Including languages").values
     assert_equal [languages(:latin).name], group(groups, "Excluding languages").values
     assert_equal [books_countries(:french).name], group(groups, "Including origins").values
@@ -62,7 +62,7 @@ class Books::SavedSearchFilterLabelsTest < ActiveSupport::TestCase
   # a search returning zero books needs a filter card that explains why.
   test "an id with no record renders as unknown rather than vanishing" do
     groups = labels({"included_category_ids" => [999_999]})
-    assert_equal ["Unknown (#999999)"], group(groups, "Including genres").values
+    assert_equal ["Unknown (#999999)"], group(groups, "Including categories").values
   end
 
   # Categories take a second query to find merged ids; languages and countries one each.
@@ -160,7 +160,7 @@ class Books::SavedSearchFilterLabelsTest < ActiveSupport::TestCase
     target = categories(:books_france_location)
     merged = ::Books::Category.create!(name: "France (country)", category_type: :location, deleted: true, merged_into: target)
 
-    g = group(labels({"included_category_ids" => [merged.id]}), "Including genres")
+    g = group(labels({"included_category_ids" => [merged.id]}), "Including categories")
 
     assert_equal [target.name], g.values
   end

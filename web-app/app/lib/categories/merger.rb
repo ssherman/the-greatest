@@ -12,16 +12,43 @@ module Categories
   class Merger
     attr_reader :category, :category_to_merge_with
 
+    # The message merge would refuse with, or nil when it would go ahead. Lets a
+    # batch caller check every source before merging any of them.
+    def self.refusal(source:, target:)
+      new(category: source, category_to_merge_with: target).refusal
+    end
+
     def initialize(category:, category_to_merge_with:)
       @category = category
       @category_to_merge_with = category_to_merge_with
     end
 
+    def refusal
+      return "A category can't be merged into itself." if source.id == target.id
+      return "Categories from different sites can't be merged." if source.type != target.type
+      return "Deleted categories can't be merged." if source.deleted? || target.deleted?
+      return "Merged categories can't be merge targets." if target.merged_into_id.present?
+      return "A category can't be merged into a place inside it." if descendant?(target)
+
+      return unless source.is_a?(::Books::Category)
+
+      protected_ids = ::Books::Category.protected_ids
+      if protected_ids.include?(source.id) || protected_ids.include?(target.id)
+        return "Fiction, Nonfiction, Poetry and Religion & Spirituality can't be merged."
+      end
+      if source.child_categories.where(deleted: false).exists? && !target.location?
+        "#{source.name} has places under it, so it can only merge into a location."
+      end
+    end
+
     def merge
-      refuse_invalid!
       moved = []
 
       ::Category.transaction do
+        # Lock in id order (no deadlock between opposite merges), then re-check
+        # against the fresh rows: a concurrent merge or delete may have run since load.
+        [source, target].sort_by(&:id).each(&:lock!)
+        refuse_invalid!
         moved = move_items
         ::Category.where(merged_into_id: source.id).update_all(merged_into_id: target.id)
         ::Category.where(parent_id: source.id).update_all(parent_id: target.id)
@@ -43,22 +70,8 @@ module Categories
     def target = @category_to_merge_with
 
     def refuse_invalid!
-      raise Refused, "A category can't be merged into itself." if source.id == target.id
-      raise Refused, "Categories from different sites can't be merged." if source.type != target.type
-      raise Refused, "Deleted categories can't be merged." if source.deleted? || target.deleted?
-
-      raise Refused, "Merged categories can't be merge targets." if target.merged_into_id.present?
-      raise Refused, "A category can't be merged into a place inside it." if descendant?(target)
-
-      return unless source.is_a?(::Books::Category)
-
-      protected_ids = ::Books::Category.protected_ids
-      if protected_ids.include?(source.id) || protected_ids.include?(target.id)
-        raise Refused, "Fiction, Nonfiction, Poetry and Religion & Spirituality can't be merged."
-      end
-      if source.child_categories.where(deleted: false).exists? && !target.location?
-        raise Refused, "#{source.name} has places under it, so it can only merge into a location."
-      end
+      message = refusal
+      raise Refused, message if message
     end
 
     # True when node sits below source. Generic (not Books::Category#ancestors)

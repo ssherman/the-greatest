@@ -8,7 +8,7 @@ module Viaf
   # would retry together every half minute and fill the low queue with
   # jobs that cannot run. Each waiting job takes the next free start time
   # instead, SLOT_SECONDS after the last one given out, and keeps that turn
-  # until its author is done (Books::Authors::ViafJob), so a backlog runs
+  # until its author is done (the author workflow's viaf step), so a backlog runs
   # in turn.
   #
   # Held in Redis so every worker shares one line. HINCRBY then HSET is

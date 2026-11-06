@@ -6,9 +6,11 @@ module Services
       # policy; this class owns the prompt, the schema and the mode.
       #
       # mode :knowledge asks the model what it knows (the standard role);
-      # mode :research forces a web search first (the research role).
+      # mode :research forces a web search first (the research role);
+      # mode :sourced hands the model source material in the prompt instead, so
+      # it uses the knowledge role and no tool.
       class EnrichmentTask < BaseTask
-        MODES = %i[knowledge research].freeze
+        MODES = %i[knowledge research sourced].freeze
         CONFIDENCES = %w[high medium low].freeze
 
         class IntegerFact < OpenAI::BaseModel

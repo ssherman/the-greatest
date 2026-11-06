@@ -214,5 +214,12 @@ module Categories
 
       refute CategoryItem.exists?(category: us, item: book)
     end
+
+    test "soft delete refuses a category deleted concurrently after it was loaded" do
+      stale = Music::Category.find(@uk_location.id)
+      Music::Category.find(@uk_location.id).update_columns(deleted: true)
+
+      assert_raises(Categories::Refused) { Categories::Deleter.new(category: stale).delete }
+    end
   end
 end

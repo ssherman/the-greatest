@@ -89,7 +89,7 @@ module Books
         pages = [book.except("primaryContributorEdge"), book.merge("title" => "", "titleComplete" => nil)].map do |variant|
           apollo = {"ROOT_QUERY" => {%(getBookByLegacyId({"legacyId":"7"})) => {"__ref" => "Book:1"}}, "Book:1" => variant,
                     "Contributor:1" => {"name" => "Lei Xu"}}
-          %(<script id="__NEXT_DATA__" type="application/json">#{{props: {pageProps: {apolloState: apollo}}}.to_json}</script>)
+          %(<title>Quiet by Lei Xu | Goodreads</title><script id="__NEXT_DATA__" type="application/json">#{{props: {pageProps: {apolloState: apollo}}}.to_json}</script>)
         end
 
         assert_equal [:unparseable, :unparseable], pages.map { |html| BookPage.parse(html: html, status: 200).outcome }
@@ -117,10 +117,49 @@ module Books
         assert_equal [:blocked] * 3, [401, 403, 429].map { |status| BookPage.parse(html: html, status: status).outcome }
       end
 
-      test "a page it cannot recognize is unparseable" do
-        pages = [page_html("synthetic_challenge.html"), "", %(<script id="__NEXT_DATA__">{not json</script>)]
+      test "a Goodreads page it cannot read is unparseable" do
+        html = %(<title>Quiet by Lei Xu | Goodreads</title><script id="__NEXT_DATA__">{not json</script>)
 
-        assert_equal [:unparseable] * 3, pages.map { |html| BookPage.parse(html: html, status: 200).outcome }
+        assert_equal :unparseable, BookPage.parse(html: html, status: 200).outcome
+      end
+
+      # Only an unreadable page Goodreads itself served may end one book without
+      # closing the gate; anything else stands in for a challenge.
+      test "a page that is not Goodreads', or any other status it cannot read, is blocked" do
+        challenge = page_html("synthetic_challenge.html")
+        statuses = [[challenge, 200], ["", 200], [challenge, 202], [challenge, 405]]
+
+        assert_equal [:blocked] * 4, statuses.map { |html, status| BookPage.parse(html: html, status: status).outcome }
+      end
+
+      # Measured once from the fixture's description with tags stripped: 493
+      # characters. A parser that kept markup, or lost text, falls outside 15%.
+      STRAY_DESCRIPTION_LENGTH = 493
+
+      test "a page names the description, genres, page count, format and main edition" do
+        facts = BookPage.parse(html: page_html("catch_22_stray_edition_147719920.html.gz"), status: 200).facts
+
+        assert_equal 147719920, facts.goodreads_book_id
+        assert_predicate facts.description, :present?
+        assert_not_includes facts.description, "<"
+        assert_in_delta STRAY_DESCRIPTION_LENGTH, facts.description.length, STRAY_DESCRIPTION_LENGTH * 0.15
+        assert_equal ["Classics", "Fiction", "Historical Fiction", "War", "Humor", "Literature", "Novels", "Satire", "Book Club", "Historical"], facts.genres
+        assert_nil facts.page_count
+        assert_equal ["Paperback", 168668], [facts.format, facts.best_book_id]
+      end
+
+      test "a page with a page count gives an integer, and a book gets genres" do
+        facts = BookPage.parse(html: page_html("war_and_peace_656.html.gz"), status: 200).facts
+
+        assert_predicate facts.genres, :any?
+        assert_kind_of Integer, facts.page_count
+        assert_equal 656, facts.best_book_id
+      end
+
+      test "the markup fallback has no description, genres, page count, format or main edition" do
+        facts = BookPage.parse(html: page_html("no_next_data_129650.html.gz"), status: 200).facts
+
+        assert_equal [nil, [], nil, nil, nil], [facts.description, facts.genres, facts.page_count, facts.format, facts.best_book_id]
       end
 
       test "a contributor with no role is unknown, every series is kept, and Goodreads' spacing is folded" do

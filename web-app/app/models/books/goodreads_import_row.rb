@@ -29,6 +29,7 @@
 #
 #  index_books_goodreads_import_rows_on_goodreads_edition_id      (goodreads_edition_id)
 #  index_books_goodreads_import_rows_on_import_id_and_row_number  (import_id,row_number) UNIQUE
+#  index_books_goodreads_import_rows_on_legacy_book_id            (legacy_book_id)
 #  index_books_goodreads_import_rows_on_replay_finding            (replay_finding)
 #
 # Foreign Keys

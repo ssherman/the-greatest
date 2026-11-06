@@ -5,7 +5,7 @@ module Books
     class ConfigurationTest < ActiveSupport::TestCase
       test "reads WORLDCAT_SERVICE_URL and applies the lookup timeouts" do
         config = Configuration.new(base_url: "http://wc.test:8082")
-        assert_equal ["http://wc.test:8082", 5, 3, 20], [config.base_url, config.timeout, config.open_timeout, config.batch_timeout]
+        assert_equal ["http://wc.test:8082", 30, 3, 30], [config.base_url, config.timeout, config.open_timeout, config.batch_timeout]
       end
 
       test "defaults to the local port when the variable is unset" do

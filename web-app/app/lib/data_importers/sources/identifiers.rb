@@ -9,10 +9,14 @@ module DataImporters
     # finder wants to see the collision. Never marks a candidate decisive;
     # whether an identifier hit can be trusted is the finder's corroboration
     # call.
+    #
+    # sources: only rows whose Identifier#source is in this list (strings, as
+    # Identifier.sources keys) count. nil, the default, means every row.
     class Identifiers
-      def initialize(model_class:, lookups:)
+      def initialize(model_class:, lookups:, sources: nil)
         @model_class = model_class
         @lookups = lookups
+        @sources = sources
       end
 
       def name
@@ -21,9 +25,11 @@ module DataImporters
 
       def call
         @lookups.flat_map do |identifier_type, value|
-          ::Identifier
+          scope = ::Identifier
             .includes(:identifiable)
             .where(identifiable_type: @model_class.name, identifier_type: identifier_type, value: value)
+          scope = scope.where(source: @sources) if @sources
+          scope
             .order(:identifiable_id)
             .map do |identifier|
               Candidate.new(

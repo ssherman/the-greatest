@@ -7,18 +7,23 @@ require "test_helper"
 #  id                        :bigint           not null, primary key
 #  asin                      :string
 #  authors                   :jsonb            not null
+#  description               :text
 #  fetched_at                :datetime         not null
+#  format                    :string
+#  genres                    :jsonb            not null
 #  http_status               :integer
 #  isbn10                    :string
 #  isbn13                    :string
 #  original_publication_year :integer
 #  outcome                   :integer          not null
+#  page_count                :integer
 #  parser_version            :integer
 #  series                    :jsonb            not null
 #  source                    :integer          default("fetched"), not null
 #  title                     :string
 #  created_at                :datetime         not null
 #  updated_at                :datetime         not null
+#  best_book_id              :bigint
 #  goodreads_book_id         :bigint           not null
 #
 # Indexes

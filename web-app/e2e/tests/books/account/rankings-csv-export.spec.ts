@@ -8,8 +8,8 @@ const BOM = String.fromCharCode(0xfeff);
 // comped, the modal never opens; the guard below skips rather than fails.
 test.describe('Books rankings CSV export (non-member)', () => {
   test.beforeEach(async ({ page }) => {
-    const state = await page.request.get('/membership_state', { headers: { Accept: 'application/json' } });
-    test.skip(state.ok() && (await state.json()).member === true, 'account is a member');
+    const state = await page.request.get('/user_list_state', { headers: { Accept: 'application/json' } });
+    test.skip(state.ok() && (await state.json()).membership?.member === true, 'account is a member');
   });
 
   test('explains the top-500 cap and downloads the preview', async ({ page }) => {

@@ -10,7 +10,8 @@
 Rails.application.configure do
   config.x.api.rate_limits = {
     member: {per_minute: 60, per_day: 5_000},
-    system: {per_minute: 600, per_day: 200_000}
+    system: {per_minute: 600, per_day: 200_000},
+    admin: {per_minute: 600, per_day: 200_000}
   }
 
   # 401 responses per visitor IP per minute. Bounds database load from junk;
