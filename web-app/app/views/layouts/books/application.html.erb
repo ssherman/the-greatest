@@ -168,6 +168,13 @@
       <div class="drawer-side z-40 lg:hidden">
         <label for="books-nav-drawer" aria-label="Close navigation menu" class="drawer-overlay"></label>
         <div id="books-nav-drawer-panel" class="bg-base-100 min-h-full w-80 p-4">
+          <%# px-4 lines the logo's drawn edge up with the menu links' text below it. %>
+          <header class="px-4 pt-1 pb-3 mb-1 border-b border-base-300">
+            <%= link_to "/", class: "flex items-center gap-2 font-['Playfair_Display',Georgia,serif] font-bold text-xl" do %>
+              <%= image_tag "/icons/books/logo.svg", width: 32, height: 32, alt: "", class: "size-8" %>
+              <span><%= domain_name %></span>
+            <% end %>
+          </header>
           <ul class="menu w-full">
             <%= render "books/shared/nav_links", variant: :vertical %>
           </ul>

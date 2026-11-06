@@ -25,6 +25,41 @@ module Books
       assert_select "#books-nav-drawer-panel #navbar_my_books a[href='/recommendations']", count: 1
     end
 
+    test "the drawer panel links home from its header" do
+      get "/"
+
+      assert_response :success
+      assert_select "#books-nav-drawer-panel header a[href=?]", "/", count: 1
+    end
+
+    # Exactly one link marked, and only in the drawer: the bar renders the same
+    # partial, so a mark leaking into it would announce two current pages.
+    test "the current page is marked once, in the drawer only" do
+      get "/authors"
+
+      assert_response :success
+      assert_select "#books-nav-drawer-panel a[aria-current='page']", count: 1
+      assert_select "#books-nav-drawer-panel a[aria-current='page'][href=?]", "/authors", count: 1
+      assert_select ".navbar-center a[aria-current]", count: 0
+    end
+
+    # A marked link inside a collapsed submenu would be invisible. The bar must
+    # stay collapsed: `open` there would drop its floating dropdown over the page.
+    test "the drawer's Lists submenu starts open on a page it contains" do
+      get "/lists"
+
+      assert_response :success
+      assert_select "#books-nav-drawer-panel details[open]", count: 1
+      assert_select ".navbar-center details[open]", count: 0
+    end
+
+    test "the drawer's Lists submenu starts closed elsewhere" do
+      get "/authors"
+
+      assert_response :success
+      assert_select "#books-nav-drawer-panel details[open]", count: 0
+    end
+
     test "the drawer panel is a sibling of the drawer content, not inside it" do
       get "/"
 
