@@ -142,6 +142,22 @@ module Services
           assert_includes report, "(2 recorded destroys)"
         end
 
+        test "a missing item is explained only by its own id: a recorded destroy of a different id gives no slack" do
+          list = ::Books::UserList.create!(user: @user, name: "Shelf", list_type: :custom)
+          lost = UserListItem.create!(user_list: list, listable: @book)
+          removed = UserListItem.create!(user_list: list, listable: @other)
+          Report.snapshot
+          lost.destroy!
+          row_verdict(@row, @book, applied_at: Time.current).update_columns(
+            payload: {"user_id" => @user.id, "action" => "copy", "leftovers_removed" => [{"id" => removed.id, "user_id" => @user.id}]}
+          )
+
+          report = Report.call
+
+          assert_includes report, "beyond the destroys recorded: 1"
+          assert_includes report, "explained drops (destroyed by a collision the verdicts recorded; not a loss): 0"
+        end
+
         test "a destroy applied before the snapshot gives no slack, a mixed book's deleted originals only count after it" do
           list = ::Books::UserList.create!(user: @user, name: "Shelf", list_type: :custom)
           item = UserListItem.create!(user_list: list, listable: @book)
