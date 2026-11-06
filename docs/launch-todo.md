@@ -107,8 +107,9 @@ second export on the same day reuses the day's file name and the trainer reports
    author ranking refresh. Idempotent: with nothing left it prints "Nothing to merge." The first run
    after the deploy that adds it merges the backlog (in dev, 35 authors into "Unknown").
 
-10. **`bin/rails "books:categorize:backfill[origin_only,all,weekly]" APPLY=1`**, after the sync, once
-   section 12 step 2 has run once. It plans only the books the sync added, and the books a deferred
+10. **Optional, manual: `bin/rails "books:categorize:backfill[origin_only,all,weekly]" APPLY=1`**. It applies
+   only after you have run section 12 step 2 once, and it needs `APPLY=1` like that step. Re-running it
+   after the sync picks up the books the sync added; it plans only the books the sync added and the books a deferred
    research or a failure left undone (deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it). Books with a running import are left to their import. While the
    section 12 backfill is still running, the weekly run reports almost every book as reused, and new books
    start after the backfill's last slot.
@@ -469,11 +470,14 @@ The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve o
 
 ## 12. Book origins (the backfill once, then weekly)
 
-Fills in each book's country of origin through the `books.book_categorize` workflow. The backfill runs
-once here; the weekly run is section 4, step 10.
+Fills in each book's country of origin through the `books.book_categorize` workflow. Only you start the
+backfill, by hand, with `APPLY=1`; nothing schedules it or starts it automatically. Run it after the
+Goodreads replay/rebuild (section 11) is done, since that removes crufty books and finds duplicates, and
+the books and authors it creates already go through the full import workflow, origin step included. The
+backfill runs once here; the weekly run is section 4, step 10, and is optional.
 
 1. The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10).
-2. In production (you run it with `!`), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
+2. In production (you run it by hand with `!`; this is the only way it starts), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
    to see the count, then again with `APPLY=1`. It paces itself at one book every 8 seconds, so the whole
    catalog (about 159,000 books) takes about 15 days; the dry run prints the hours. The ranked books go first. The research cap for the backfill is
    `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised; books whose

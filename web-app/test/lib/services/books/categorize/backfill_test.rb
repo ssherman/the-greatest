@@ -119,6 +119,18 @@ module Services
           assert_equal 2, WorkflowRun.where(workflow: "books.book_categorize").count
         end
 
+        test "a re-plan puts a new book one spacing after the last existing slot" do
+          ids = [@american.id, @unknown_only.id, @no_country.id]
+          Backfill.call(scope: "origin_only", limit: nil, label: "t", book_ids: ids)
+          last_slot = WorkflowRun.where(workflow: "books.book_categorize").map { it.step(:evidence).run_after }.max
+
+          again = Backfill.call(scope: "origin_only", limit: nil, label: "t", book_ids: ids + [@rank_one.id])
+          assert_equal [4, 3], [again.data[:planned], again.data[:reused]]
+          new_slot = WorkflowRun.where(workflow: "books.book_categorize", enrichable: @rank_one).sole.step(:evidence).run_after
+          assert_in_delta last_slot + Backfill::SPACING, new_slot, 1
+          assert_in_delta new_slot + Backfill::SPACING, again.data[:done_at], 1
+        end
+
         test "the limit caps what is planned" do
           result = Backfill.call(scope: "origin_only", limit: 1, label: "t", book_ids: [@american.id, @unknown_only.id])
           assert_equal 1, result.data[:planned]

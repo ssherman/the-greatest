@@ -91,6 +91,7 @@ module Services
           relation = relation.limit(@limit) if @limit
           planned = 0
           reused = 0
+          fresh = 0
           first_slot = first_slot_time
           relation.pluck(:id).each_slice(BATCH) do |ids|
             books = ::Books::Book.where(id: ids).index_by(&:id)
@@ -99,19 +100,23 @@ module Services
               # Merged or deleted since the pluck: not planned, not counted.
               next unless (book = books[id])
 
+              # A reused run keeps its old slot (the Planner ignores start_after for
+              # it), so only books that get a new run advance the slot counter.
+              reuse = running.include?(id)
               ActiveRecord::Base.transaction do
                 ::Workflows::Books::BookCategorize.start(
                   book, initiated_by: "backfill",
                   options: {"context" => "backfill", "label" => @label},
-                  start_after: first_slot + (planned * SPACING).seconds
+                  start_after: first_slot + (fresh * SPACING).seconds
                 )
               end
-              reused += 1 if running.include?(id)
+              reused += 1 if reuse
+              fresh += 1 unless reuse
               planned += 1
             end
           end
 
-          Result.new(success?: true, errors: [], data: {planned: planned, reused: reused, done_at: first_slot + (planned * SPACING).seconds})
+          Result.new(success?: true, errors: [], data: {planned: planned, reused: reused, done_at: first_slot + (fresh * SPACING).seconds})
         end
 
         private
