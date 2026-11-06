@@ -54,4 +54,33 @@ class BooksCategorizeRakeTest < ActiveSupport::TestCase
       assert_raises(SystemExit) { capture_io { @task.invoke(*args) } }
     end
   end
+
+  test "origin report prints the parts and disagreements" do
+    book = ::Books::Book.create!(title: "Rake Report Book", first_published_year: 1900, original_language: languages(:english))
+    row = book.enrichments.create!(kind: "books.origin", mode: :knowledge, outcome: :nothing_to_apply,
+      facts: {"label" => "rk", "path" => "judge", "origin" => {"reason" => "disagreement", "country" => "British", "held" => ["American"]}})
+    task = Rake::Task["books:origin:report"]
+    task.reenable
+    assert_output(/#{book.id} Rake Report Book: American -> British \(enrichment #{row.id}\)/) { task.invoke("rk") }
+  end
+
+  test "origin accept_disagreements is a dry run without APPLY and applies with it" do
+    american = ::Books::Country.find_or_create_by!(name: "American")
+    ::Books::Country.find_or_create_by!(name: "British")
+    book = ::Books::Book.create!(title: "Rake Accept Book", first_published_year: 1900, original_language: languages(:english))
+    book.countries << american
+    row = book.enrichments.create!(kind: "books.origin", mode: :knowledge, outcome: :nothing_to_apply,
+      facts: {"label" => "rk", "origin" => {"reason" => "disagreement", "country" => "British", "held" => ["American"]}})
+    task = Rake::Task["books:origin:accept_disagreements"]
+    task.reenable
+    capture_io { task.invoke("rk") }
+    assert_equal ["American"], book.reload.countries.map(&:name)
+    ENV["APPLY"] = "1"
+    ENV["IDS"] = row.id.to_s
+    task.reenable
+    assert_output(/accepted 1/) { task.invoke("rk") }
+    assert_equal ["British"], book.reload.countries.map(&:name)
+  ensure
+    ENV.delete("IDS")
+  end
 end

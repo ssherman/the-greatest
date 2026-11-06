@@ -31,4 +31,40 @@ namespace :books do
       end
     end
   end
+
+  namespace :origin do
+    desc "Summarise the books.origin rows of a run: bin/rails \"books:origin:report[origin-v1]\" (no label = every run)"
+    task :report, [:label] => :environment do |_task, args|
+      data = ::Services::Books::Origin::Report.call(label: args[:label].presence).data
+      puts "Books with an origin row: #{data[:books]}"
+      puts "By path: #{data[:by_path].map { |key, count| "#{key}=#{count}" }.join(", ")}"
+      puts "By reason: #{data[:by_reason].map { |key, count| "#{key}=#{count}" }.join(", ")}"
+      puts "Applied countries (top 15):"
+      data[:applied_countries].each { |name, count| puts "  #{name}: #{count}" }
+      puts "Disagreements (#{data[:disagreements].size}):"
+      data[:disagreements].each do |d|
+        puts "  ##{d[:book_id]} #{d[:title]}: #{d[:held].join(", ")} -> #{d[:proposed]} (enrichment #{d[:enrichment_id]})"
+      end
+      puts "Unmatched answers (top 20):"
+      data[:no_match].each { |raw, count| puts "  #{raw}: #{count}" }
+      puts "Research rows: #{data[:research_rows]} (about $#{format("%.2f", data[:research_cost_estimate])})"
+      puts "Deferred research: #{data[:deferred_research]}"
+    end
+
+    desc "List disagreements (a well-supported answer against the held country); APPLY=1 replaces the held country. " \
+      "IDS=1,2 narrows to those enrichment ids: bin/rails \"books:origin:accept_disagreements[origin-v1]\""
+    task :accept_disagreements, [:label] => :environment do |_task, args|
+      ids = ENV["IDS"].to_s.split(",").map(&:strip).reject(&:empty?).map { Integer(it) }.presence
+      apply = ENV["APPLY"] == "1"
+      data = ::Services::Books::Origin::AcceptDisagreements.call(label: args[:label].presence, enrichment_ids: ids, apply: apply).data
+      data[:candidates].each do |d|
+        puts "##{d[:book_id]} #{d[:title]}: #{d[:held].join(", ")} -> #{d[:proposed]} (enrichment #{d[:enrichment_id]})"
+      end
+      if apply
+        puts "accepted #{data[:accepted]}"
+      else
+        puts "#{data[:candidates].size} candidates. Re-run with APPLY=1 to accept them."
+      end
+    end
+  end
 end
