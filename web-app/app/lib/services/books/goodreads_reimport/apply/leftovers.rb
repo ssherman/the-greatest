@@ -62,12 +62,12 @@ module Services
           # Removes the stale items of one reader on a book their rows have settled, recording them on the verdict
           # first. The verdict being applied right now is marked applied here, inside the reader's lock, so a
           # sibling applying at the same moment sees it; a raise rolls the mark back with the rest. Returns how many
-          # items went. Idempotent: a second call finds nothing.
+          # items went. Idempotent: a second call finds nothing. A caller sweeping several books for one verdict
+          # wraps them in one transaction (Row.sweep_leftovers), so the mark commits only with the last sweep.
           def sweep(verdict, book, user)
-            return 0 if mixed?(book)
+            return 0 unless sweepable?(book, user)
 
             ids = book_ids(book)
-            return 0 unless rows_touching(user.id, book, ids).any? { |row| copy_from?(row, book, {}) }
 
             removed = 0
             user.with_lock do
@@ -80,6 +80,7 @@ module Services
 
               earlier = Array(verdict.payload["leftovers_removed"])
               verdict.update_columns(payload: verdict.payload.merge("leftovers_removed" => earlier + gone.map { |item| attributes(item) }))
+              purge_goal_pages(gone)
               gone.each(&:destroy!)
               ::UserList.where(id: gone.map(&:user_list_id).uniq).touch_all
               removed = gone.size
@@ -87,7 +88,26 @@ module Services
             removed
           end
 
+          # Could the sweep of this book touch this reader at all? Not a mixed book (Apply::Mixed's), and the reader
+          # has a copy from it. A cheap check made before any lock.
+          def sweepable?(book, user)
+            !mixed?(book) && rows_touching(user.id, book, book_ids(book)).any? { |row| copy_from?(row, book, {}) }
+          end
+
           def attributes(item) = Entries.item_attributes(item).merge("user_id" => item.user_list.user_id)
+
+          # Removing a dated Read entry changes what the reader's public reading-goal pages show, as a move does.
+          # The URLs are captured now, before the destroy, and purged once the outermost transaction commits (never
+          # on a rollback).
+          def purge_goal_pages(items)
+            urls = items.group_by { |item| item.user_list.user_id }.flat_map do |user_id, user_items|
+              user = ::User.find_by(id: user_id)
+              user ? Entries.goal_urls(user, user_items) : []
+            end.uniq
+            return if urls.empty?
+
+            ActiveRecord.after_all_transactions_commit { ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) }
+          end
 
           # The reader has an applied copy from the book, every current row of theirs touching it is approved and
           # applied, no CSV row of theirs that touches it is still without a verdict, and none of their rows names a

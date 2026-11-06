@@ -262,6 +262,36 @@ module Services
             assert_equal [item.id, @user.id, @mixed.id], deleted.values_at("id", "user_id", "listable_id")
           end
 
+          def public_goal
+            ::Books::ReadingGoal.create!(user: @user, name: "2020", target_count: 10, public: true,
+              starts_on: Date.new(2020, 1, 1), ends_on: Date.new(2020, 12, 31))
+          end
+
+          test "deleting a dated Read original purges the reader's reading-goal pages" do
+            public_goal
+            item = UserListItem.create!(user_list: list(:read), listable: @mixed, completed_on: Date.new(2020, 5, 5))
+            copy_verdict
+            urls = Entries.goal_urls(@user, [item])
+            assert urls.any?
+            ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with("books", urls).once
+
+            assert_equal :applied, Mixed.call(verdict: mixed_verdict).data[:outcome]
+          end
+
+          test "a kept book removing a dated Read original purges the reader's reading-goal pages" do
+            public_goal
+            kept = mixed_verdict
+            kept.update!(payload: kept.payload.merge("kept" => true))
+            original = UserListItem.create!(user_list: list(:read), listable: @mixed, completed_on: Date.new(2020, 5, 5))
+            row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @mixed, to: @to).update!(applied_at: Time.current)
+            urls = Entries.goal_urls(@user, [original])
+            ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with("books", urls).once
+
+            Mixed.call(verdict: kept)
+
+            assert_not UserListItem.exists?(original.id)
+          end
+
           test "another user's item is not a copy original" do
             other = User.create!(email: "other-#{SecureRandom.hex(4)}@example.com", role: :user, email_verified: false)
             UserListItem.create!(user_list: ::Books::UserList.find_by!(user: other, list_type: :read), listable: @mixed)

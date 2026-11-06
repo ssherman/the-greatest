@@ -34,6 +34,11 @@ module Services
 
           # After any settled outcome (applied, or a final no-op) of a row, the reader's originals on the books the
           # row touches are swept once all their rows there are settled (Leftovers.sweep decides).
+          #
+          # A sweep marks the verdict applied. With two books to sweep, both run in one transaction, so the mark
+          # commits only with the second: if that one raises or the process dies, the verdict stays unapplied and the
+          # retry sweeps both. The reader is locked first and then the books in id order, the order every sweep takes
+          # (a single sweep locks the reader, then its one book), so two rows of different readers cannot deadlock.
           def self.sweep_leftovers(verdict, result)
             settled = result.data[:outcome] == :applied || (result.data[:outcome] == :noop && result.data[:final])
             payload = verdict.payload
@@ -42,8 +47,15 @@ module Services
             user = ::User.find_by(id: payload["user_id"])
             return unless user
 
-            [payload["from_book_id"], payload["to_book_id"]].filter_map { |id| GoodreadsReplay::Apply::MergedBook.call(id) }.uniq
-              .each { |book| Leftovers.sweep(verdict, book, user) }
+            books = [payload["from_book_id"], payload["to_book_id"]].filter_map { |id| GoodreadsReplay::Apply::MergedBook.call(id) }
+              .uniq.select { |book| Leftovers.sweepable?(book, user) }.sort_by(&:id)
+            return if books.empty?
+
+            ::ApplicationRecord.transaction do
+              user.lock!
+              books.each(&:lock!)
+              books.each { |book| Leftovers.sweep(verdict, book, user) }
+            end
           end
 
           def self.perform(verdict)

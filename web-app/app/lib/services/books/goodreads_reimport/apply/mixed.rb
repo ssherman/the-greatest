@@ -51,6 +51,7 @@ module Services
 
               verdict.update_columns(payload: verdict.payload.merge("deleted" => items.map { |item| attributes(item) },
                 "deleted_images" => image_records(book), "redirect_written" => false))
+              Leftovers.purge_goal_pages(items)
               items.each(&:destroy!)
               keep_image_files(book)
               book.reload.destroy!
@@ -82,6 +83,7 @@ module Services
               if stale.any?
                 earlier = Array(verdict.payload["deleted"])
                 verdict.update_columns(payload: verdict.payload.merge("deleted" => earlier + stale.map { |item| attributes(item) }))
+                Leftovers.purge_goal_pages(stale)
                 stale.each(&:destroy!)
               end
               result = if ready.size == user_ids.size

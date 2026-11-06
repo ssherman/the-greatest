@@ -248,6 +248,59 @@ module Services
             assert UserListItem.exists?(hand_added.id)
           end
 
+          def public_goal
+            ::Books::ReadingGoal.create!(user: @user, name: "2020", target_count: 10, public: true,
+              starts_on: Date.new(2020, 1, 1), ends_on: Date.new(2020, 12, 31))
+          end
+
+          test "a swept dated Read entry purges the reader's reading-goal pages after commit" do
+            public_goal
+            read = UserListItem.create!(user_list: list(:read), listable: @from, completed_on: Date.new(2020, 5, 5))
+            copy = row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @from, to: @to)
+            urls = Entries.goal_urls(@user, [read])
+            assert urls.any?
+            ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with("books", urls).once
+
+            apply(copy)
+
+            assert_not UserListItem.exists?(read.id)
+          end
+
+          # A row whose from-book and destination both have leftovers: copy A -> B, while an applied copy B -> C makes
+          # B's sweep run too.
+          def row_sweeping_two_books
+            read = UserListItem.create!(user_list: list(:read), listable: @from)
+            reading = UserListItem.create!(user_list: list(:reading), listable: @to)
+            row_verdict(csv_row(exclusive_shelf: "read"), action: "copy", from: @to, to: @other).update!(applied_at: Time.current)
+            [read, reading, row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @from, to: @to)]
+          end
+
+          test "a row sweeping two books sweeps both" do
+            read, reading, copy = row_sweeping_two_books
+
+            apply(copy)
+
+            assert_not UserListItem.exists?(read.id)
+            assert_not UserListItem.exists?(reading.id)
+          end
+
+          test "when the second of a row's two sweeps raises, the verdict stays unapplied and the retry sweeps both" do
+            read, reading, copy = row_sweeping_two_books
+            Leftovers.stubs(:settled?).returns(true).then.raises(RuntimeError, "boom")
+
+            assert_raises(RuntimeError) { Row.call(verdict: copy) }
+
+            assert_nil copy.reload.applied_at
+            assert UserListItem.exists?(read.id)
+            assert UserListItem.exists?(reading.id)
+
+            Leftovers.unstub(:settled?)
+            apply(copy)
+
+            assert_not UserListItem.exists?(read.id)
+            assert_not UserListItem.exists?(reading.id)
+          end
+
           def count_queries
             count = 0
             counter = ->(*, payload) { count += 1 unless %w[SCHEMA TRANSACTION].include?(payload[:name]) || payload[:cached] }
