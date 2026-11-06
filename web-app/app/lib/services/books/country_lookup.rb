@@ -136,7 +136,17 @@ module Services
         return nil if PLACEHOLDERS.include?(target)
         return @rows[target] if @rows.key?(target)
 
-        @rows[target] = ::Books::Country.where("lower(name) = ?", target).order(:id).first
+        @rows[target] = by_name(target) || by_country_name(name)
+      end
+
+      def by_name(target) = ::Books::Country.where("lower(name) = ?", target).order(:id).first
+
+      # "France" -> the "French" row. A nationality row always wins first.
+      def by_country_name(name)
+        nationality = ISO3166::Country.find_country_by_any_name(name)&.nationality.to_s.split(",").first.to_s.strip.downcase
+        return nil if nationality.blank? || PLACEHOLDERS.include?(nationality)
+
+        by_name((ALIASES[nationality] || nationality).downcase)
       end
     end
   end
