@@ -261,16 +261,19 @@ module Api
     end
 
     test "list_similar_books passes limit through to the endpoint" do
-      hits = [books_books(:got), books_books(:clash), books_books(:crime_and_punishment)].map do |book|
-        {id: book.id.to_s, score: 1.0, source: {}}
+      # Five books by five different authors, so the author cap trims nothing and
+      # only `limit` (default 10 on the endpoint) can make the answer three long.
+      books = Array.new(5) do |i|
+        book = ::Books::Book.create!(title: "Similar #{i}")
+        ::Books::BookAuthor.create!(book: book, author: ::Books::Author.create!(name: "Similar Author #{i}"), role: :author)
+        book
       end
-      ::Search::Books::Search::BookSimilar.stubs(:call).returns(hits)
+      ::Search::Books::Search::BookSimilar.stubs(:call).returns(books.map { |book| {id: book.id.to_s, score: 1.0, source: {}} })
 
       call_tool("list_similar_books", {slug: @war_and_peace.slug, limit: 3})
 
       assert_equal false, json.dig("result", "isError")
-      assert_operator tool_text["data"].size, :<=, 3
-      assert_operator tool_text["data"].size, :>, 0
+      assert_equal 3, tool_text["data"].size
     end
 
     test "list_author_books pages with limit" do
