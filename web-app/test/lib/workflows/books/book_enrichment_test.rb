@@ -55,7 +55,7 @@ module Workflows
           Workflows::Registry.fetch("books.book_enrichment"), BookEnrichment.workflow, BookEnrichment.version, BookEnrichment.target_class
         ]
         assert_equal %i[goodreads evidence book_facts amazon categorize], BookEnrichment.steps.map(&:key)
-        assert_equal [:goodreads_fetch, :low, :low, :serial, :low], BookEnrichment.steps.map(&:queue)
+        assert_equal [:goodreads_fetch, :evidence, :low, :serial, :low], BookEnrichment.steps.map(&:queue)
         assert_equal [10.minutes, 10.minutes, 15.minutes, 10.minutes, 10.minutes], BookEnrichment.steps.map(&:lease)
         assert_equal [{}, {goodreads: :finish}, {goodreads: :finish}, {goodreads: :finish}, {book_facts: :finish, evidence: :finish}],
           BookEnrichment.steps.map(&:waits_on)

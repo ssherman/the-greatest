@@ -26,6 +26,31 @@ module Services
             data: {qid: work&.id, via: "stored", work: work, conflict_book_id: nil, rejected: [{"id" => "Q1", "reason" => "x"}]})
         end
 
+        test "its default Wikidata and Wikipedia clients use the evidence lane's longer inline wait" do
+          waits = []
+          builder = ->(**kwargs) { waits << kwargs[:http].settings.max_inline_wait }
+          ::Wikidata::Client.stubs(:new).with { |**kwargs| builder.call(**kwargs) || true }.returns(@wikidata)
+          ::Wikipedia::Client.stubs(:new).with { |**kwargs| builder.call(**kwargs) || true }.returns(@wikipedia)
+          @wikidata.stubs(:find_work).returns(nil)
+          ResolveWikidataWork.stubs(:call).returns(resolved(work: nil))
+          @worldcat.stubs(:records_by_oclc).returns({})
+
+          Gather.call(book: @book, worldcat: nil)
+
+          assert_equal [30.0, 30.0], waits
+          assert_equal 5.0, Rails.application.config.x.wikimedia.max_inline_wait
+        end
+
+        test "evidence_http_settings copies every setting Http reads and leaves the shared config alone" do
+          shared = Rails.application.config.x.wikimedia
+          settings = Gather.evidence_http_settings
+
+          assert_equal [shared.evidence_max_inline_wait, shared.requests_per_window, shared.window_seconds, shared.maxlag, shared.contact],
+            [settings.max_inline_wait, settings.requests_per_window, settings.window_seconds, settings.maxlag, settings.contact]
+          assert_not_same shared, settings
+          assert_equal 5.0, shared.max_inline_wait
+        end
+
         def gather
           Gather.call(book: @book, wikidata: @wikidata, wikipedia: @wikipedia, worldcat: @worldcat)
         end

@@ -38,6 +38,9 @@ module Books
       # Full records for several OCLC numbers, one request per slice. Unknown numbers and
       # redirect cycles are absent from the result.
       # @return [Hash{Integer => Record}] keyed by the number as requested
+      # Deliberately does not rescue NotFoundError: /records never 404s, so a 404 means the route is
+      # missing (a service older than this client). It propagates and Gather marks worldcat failed,
+      # unlike #record_by_oclc, where a 404 means "no such record".
       def records_by_oclc(numbers)
         numbers.each_slice(MAX_RECORDS_BATCH).each_with_object({}) do |slice, out|
           results = post("/records", {oclcs: slice}, timeout: config.batch_timeout)["results"] || {}

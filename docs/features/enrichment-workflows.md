@@ -73,7 +73,7 @@ A definition (`Workflows::Definition` subclass) declares `workflow` name, `versi
 
 | Argument | Meaning |
 |---|---|
-| `key`, `queue` | The step's name and the Sidekiq queue it dispatches onto |
+| `key`, `queue` | The step's name and the Sidekiq queue it dispatches onto. The book workflows' `evidence` step uses the `evidence` queue, a capsule with concurrency 1: its Wikimedia requests share one 1 request/second pace, and parallel steps lost their slot and restarted from scratch. Runs planned earlier keep the queue their step rows were planned with. |
 | `adapter` | Anything responding to `call(step:, run:, target:)`; returns a `Workflows::Outcome` or raises |
 | `waits_on` | `{prerequisite_key => :finish \| :release}` |
 | `max_attempts` | Default 3; the book workflow's `amazon` step uses 7 |

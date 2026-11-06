@@ -74,7 +74,7 @@ module Services
         end
 
         # One batch for the numbers not fetched yet. A number the service has no record for,
-        # and every number in a batch that timed out, is cached as nil.
+        # and every number in a batch that timed out (a 504 now covers the whole batch), is cached as nil.
         def load_full_records(oclcs)
           missing = oclcs.uniq - @full.keys
           return if missing.empty?

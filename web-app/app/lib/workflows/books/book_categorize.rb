@@ -14,7 +14,7 @@ module Workflows
       version 1
       target_class ::Books::Book
 
-      add_step key: :evidence, queue: :low, lease: 10.minutes,
+      add_step key: :evidence, queue: :evidence, lease: 10.minutes,
         adapter: Steps::Evidence.new(reuse_fresh: true)
 
       add_step key: :categorize, queue: :low, lease: 10.minutes, waits_on: {evidence: :finish},

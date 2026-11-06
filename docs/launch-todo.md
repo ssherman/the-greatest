@@ -320,7 +320,9 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    set) creates VM 130 `worldcat` and installs its env and units. Tunnels are already enabled on the
    host, so `provision --enable-tunnels` is not needed again; it dies unless all three tunnel tokens
    are set. The API will not start until step 7 puts an artifact on the VM.
-7. **Load the artifact.** Follow "Loading the WorldCat artifact (once)" in `docs/features/home-server.md`:
+7. **Load the artifact.** (Deploy order: the service image must be rebuilt and deployed before, or
+   together with, the Rails deploy that uses `POST /records`. Until then evidence rows list `worldcat`
+   in `sources_failed`; that is safe and a later run re-gathers them.) Follow "Loading the WorldCat artifact (once)" in `docs/features/home-server.md`:
    find the VM's address (`ssh pve-mini qm guest cmd 130 network-get-interfaces`; DHCP on the LAN),
    rsync the version directory as `debian@<vm-address>` with `--mkpath --rsync-path="sudo rsync"` (the
    only SSH user is `debian`, `/srv/wc-data` is root-owned and has no `versions/` yet),

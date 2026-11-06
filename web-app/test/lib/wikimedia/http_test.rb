@@ -167,5 +167,18 @@ module Wikimedia
       assert_equal 3, error.retry_after
       assert_not_requested stub
     end
+
+    test "waits out a busy slot that a larger max_inline_wait covers" do
+      settings = ActiveSupport::OrderedOptions.new.merge(@settings.to_h.merge(max_inline_wait: 30.0))
+      http = Http.new(settings: settings, limiter: @limiter, sleeper: ->(seconds) { @slept << seconds })
+      calls = 0
+      @limiter.stubs(:acquire!).with { (calls += 1) && true }.raises(busy(3.0)).then.returns(true)
+      stub = stub_request(:get, API).with(query: hash_including({})).to_return(json({}))
+
+      http.action_api(API, action: "query")
+
+      assert_equal [3.0], @slept
+      assert_requested stub
+    end
   end
 end

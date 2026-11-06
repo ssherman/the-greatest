@@ -15,8 +15,21 @@ module Services
         SCHEMA_VERSION = 2
         LIST_FIELDS = %w[countries languages genres main_subjects narrative_locations set_in_periods forms].freeze
 
-        def self.call(book:, wikidata: ::Wikidata::Client.new, wikipedia: ::Wikipedia::Client.new, worldcat: nil)
+        def self.call(book:, wikidata: nil, wikipedia: nil, worldcat: nil)
+          wikidata ||= ::Wikidata::Client.new(http: evidence_http)
+          wikipedia ||= ::Wikipedia::Client.new(http: evidence_http)
           new(book, wikidata, wikipedia, worldcat).call
+        end
+
+        # The shared Wikimedia settings with the longer inline wait of the evidence lane.
+        # A copy: the config object is shared with every other Wikimedia user.
+        def self.evidence_http_settings
+          shared = Rails.application.config.x.wikimedia
+          ActiveSupport::OrderedOptions.new.merge(shared.to_h.merge(max_inline_wait: shared.evidence_max_inline_wait))
+        end
+
+        def self.evidence_http
+          ::Wikimedia::Http.new(settings: evidence_http_settings)
         end
 
         def initialize(book, wikidata, wikipedia, worldcat)

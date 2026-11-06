@@ -16,6 +16,7 @@ module Workflows
         ]
         assert_equal %i[evidence categorize], BookCategorize.steps.map(&:key)
         assert_equal [{}, {evidence: :finish}], BookCategorize.steps.map(&:waits_on)
+        assert_equal [:evidence, :low], BookCategorize.steps.map(&:queue)
       end
 
       test "plans evidence then categorize, and a second start reuses the active run" do

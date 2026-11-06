@@ -124,7 +124,8 @@ rows lack both keys and readers treat a missing key as `[]`; nil when no work wa
 most 2,000 characters and plot of at most 6,000, reached only through the Wikidata item's enwiki
 sitelink, never a text search), `worldcat` (summary of at most 1,500 characters and the top 40 subjects,
 after a title, author and year identity check of the book's unverified ISBNs; ISBNs on verified identifiers skip the check), `wikidata_rejected`, `wikidata_conflict_book_id`
-and `sources_failed`. The outcome is `applied` when any section is present, otherwise `nothing_to_apply`.
+and `sources_failed`. The step runs on the single-file `evidence` queue (capsule concurrency 1) so gathers do not
+compete for the shared 1 request/second Wikimedia pace, and waits up to 30 s for a slot rather than 5 s. The outcome is `applied` when any section is present, otherwise `nothing_to_apply`.
 `bin/rails books:evidence[id]` gathers it inline for one book and prints the QID, how it was found, the
 sections present and `sources_failed` (dev inspection; it writes a row).
 

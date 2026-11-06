@@ -63,6 +63,12 @@ module Books
         assert_requested :post, "#{BASE_URL}/records", times: 2
       end
 
+      test "#records_by_oclc lets a 404 from POST /records raise, since a missing route is not an unknown record" do
+        stub_request(:post, "#{BASE_URL}/records").to_return(status: 404, body: {detail: "Not Found"}.to_json)
+
+        assert_raises(::Books::WorldCat::Exceptions::NotFoundError) { @client.records_by_oclc([1]) }
+      end
+
       test "#records_by_oclc with no numbers makes no request" do
         assert_equal({}, @client.records_by_oclc([]))
         assert_not_requested :post, "#{BASE_URL}/records"

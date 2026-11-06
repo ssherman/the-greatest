@@ -29,7 +29,7 @@ module Workflows
         adapter: Steps::Goodreads.new
 
       # Gathers Wikidata, Wikipedia and WorldCat evidence for the categorize step.
-      add_step key: :evidence, queue: :low, lease: 10.minutes, waits_on: {goodreads: :finish},
+      add_step key: :evidence, queue: :evidence, lease: 10.minutes, waits_on: {goodreads: :finish},
         adapter: Steps::Evidence.new
 
       add_step key: :book_facts, queue: :low, lease: 15.minutes, waits_on: {goodreads: :finish},

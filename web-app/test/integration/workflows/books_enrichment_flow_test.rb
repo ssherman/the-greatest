@@ -193,6 +193,8 @@ module Workflows
       chain = WorkflowStepJob.set(queue: "author_chain")
       serial = WorkflowStepJob.set(queue: "serial")
       fetch = WorkflowStepJob.set(queue: "goodreads_fetch")
+      evidence = WorkflowStepJob.set(queue: "evidence")
+      WorkflowStepJob.stubs(:set).with(queue: "evidence").returns(evidence)
       WorkflowStepJob.stubs(:set).with(queue: "author_chain").returns(chain)
       WorkflowStepJob.stubs(:set).with(queue: "serial").returns(serial)
       WorkflowStepJob.stubs(:set).with(queue: "goodreads_fetch").returns(fetch)

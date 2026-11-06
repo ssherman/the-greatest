@@ -297,6 +297,9 @@ tables is missing, `manifest.json` is missing, its `gates_passed` is not `true`,
   `docs/features/home-server.md`, "Loading the WorldCat artifact (once)". **The chmod is not
   optional**: the container runs as uid 10001, not the user that owns the rsynced files, and cannot
   otherwise read the artifact. Until `current-version` exists the deploy starts only `cloudflared`.
+- **Deploy order.** Rebuild and deploy the service image before, or together with, the Rails deploy that
+  uses `POST /records`. Until then evidence rows list `worldcat` in `sources_failed` (the 404 propagates
+  from `Books::WorldCat::Client#records_by_oclc`); that is safe, and a later run re-gathers them.
 - **Rails setting.** `WORLDCAT_SERVICE_URL` (documented in `deployment/ENV.md`) is the only new
   setting. The client also sends `CLOUDFLARE_ACCESS_CLIENT_ID` and `CLOUDFLARE_ACCESS_CLIENT_SECRET`,
   the same pair it sends to the Open Library and fetcher services.
