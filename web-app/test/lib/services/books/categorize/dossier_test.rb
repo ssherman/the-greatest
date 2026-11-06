@@ -86,6 +86,11 @@ module Services
           assert_equal %w[British French], Dossier.build(book: @book).author_countries
         end
 
+        test "author countries tolerate a record with no authors key" do
+          dossier = Dossier.new(book: @book, evidence_id: nil, record: {}, book_facts: nil, wikidata: nil, wikipedia: nil, worldcat: nil)
+          assert_equal [], dossier.author_countries
+        end
+
         test "real countries drop placeholders" do
           french = ::Books::Country.find_or_create_by!(name: "French")
           @book.countries << french

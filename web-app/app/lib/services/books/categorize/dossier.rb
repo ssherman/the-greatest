@@ -98,7 +98,7 @@ module Services
         # Person authors' countries and place authors' own nationality; editors
         # and placeholders add nothing.
         def author_countries
-          record["authors"].select { |a| a["role"] == "author" }.flat_map do |a|
+          Array(record&.dig("authors")).select { |a| a["role"] == "author" }.flat_map do |a|
             case a["kind"]
             when "person" then a["countries"]
             when "place" then [a["place_country"]]

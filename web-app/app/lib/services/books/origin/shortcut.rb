@@ -12,7 +12,7 @@ module Services
 
         def call(dossier)
           wikidata = dossier.wikidata
-          return nil if wikidata.blank?
+          return nil if wikidata.blank? || dossier.record.blank?
           return nil unless single_country?(wikidata)
 
           matches = Array(wikidata["country_matches"])
@@ -23,8 +23,6 @@ module Services
           return nil unless CountryLanguages.include?(name, language(dossier))
 
           CountryLookup.from_text([name]).countries.first
-        rescue NoMethodError, TypeError
-          nil
         end
 
         # A schema-1 evidence row has no country_ids; it keeps countries only.

@@ -69,6 +69,15 @@ module Services
             assert_includes prompt, "Author: Born Only (born 1927)\n"
           end
 
+          test "an editor is an editor whatever kind of author record it is" do
+            authors = [{"name" => "Various", "role" => "editor", "kind" => "placeholder", "countries" => [], "birth_year" => nil, "death_year" => nil, "place_country" => nil},
+              {"name" => "China", "role" => "editor", "kind" => "place", "countries" => [], "birth_year" => nil, "death_year" => nil, "place_country" => "Chinese"}]
+            prompt = task(dossier: build_dossier(authors: authors)).send(:user_prompt)
+            assert_includes prompt, "Editor: Various\n"
+            assert_includes prompt, "Editor: China\n"
+            refute_includes prompt, "Author:"
+          end
+
           test "sections the dossier lacks produce no lines" do
             prompt = task(dossier: build_dossier(wikidata: nil, wikipedia: nil, worldcat: nil)).send(:user_prompt)
             refute_includes prompt, "Wikidata:"

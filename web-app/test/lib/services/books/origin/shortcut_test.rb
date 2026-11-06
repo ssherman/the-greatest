@@ -58,9 +58,13 @@ module Services
           assert_equal "Chinese", result&.name
         end
 
-        test "malformed dossiers return nil" do
-          bad = Categorize::Dossier.new(book: nil, evidence_id: nil, record: {}, book_facts: nil, wikidata: {}, wikipedia: nil, worldcat: nil)
-          assert_nil Shortcut.call(bad)
+        test "a record without an authors key, or no record, returns nil without raising" do
+          no_authors = Categorize::Dossier.new(book: nil, evidence_id: 1, record: {"original_language" => "French"},
+            book_facts: nil, wikidata: wd, wikipedia: nil, worldcat: nil)
+          assert_nil Shortcut.call(no_authors)
+          no_record = Categorize::Dossier.new(book: nil, evidence_id: 1, record: nil,
+            book_facts: nil, wikidata: wd, wikipedia: nil, worldcat: nil)
+          assert_nil Shortcut.call(no_record)
         end
       end
     end

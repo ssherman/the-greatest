@@ -77,14 +77,14 @@ module Services
 
           def author_line(author)
             name = author["name"]
+            return "Editor: #{name}" if author["role"] == "editor"
+
             case author["kind"]
             when "placeholder"
               "Author: none known (catalogued as \"#{name}\", a placeholder, not a person)"
             when "place"
               "Author: catalogued under the place name \"#{name}\" (origin signal: #{author["place_country"]})"
             else
-              return "Editor: #{name}" if author["role"] == "editor"
-
               details = [life_years(author), Array(author["countries"]).sort.join(", ").presence].compact
               details.any? ? "Author: #{name} (#{details.join("; ")})" : "Author: #{name}"
             end
