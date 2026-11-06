@@ -43,6 +43,21 @@ module Services
             assert_not UserListItem.exists?(original.id)
           end
 
+          test "a kept book keeps the item of a keep row naming a book an admin merged into it (recorded only as a redirect)" do
+            kept = mixed_verdict
+            kept.update!(payload: kept.payload.merge("kept" => true))
+            gone_id = ::Books::Book.maximum(:id) + 1000
+            RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: @mixed.id)
+            original = UserListItem.create!(user_list: list(:read), listable: @mixed)
+            keep = row_verdict(csv_row(exclusive_shelf: "read"), action: "keep", from: @mixed, to: @mixed)
+            keep.update!(applied_at: Time.current, payload: keep.payload.merge("from_book_id" => gone_id, "to_book_id" => gone_id))
+            row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @mixed, to: @to).update!(applied_at: Time.current)
+
+            Mixed.call(verdict: kept)
+
+            assert UserListItem.exists?(original.id)
+          end
+
           test "a kept book sweeps nothing while a sibling row of the reader is rejected" do
             kept = mixed_verdict
             kept.update!(payload: kept.payload.merge("kept" => true))

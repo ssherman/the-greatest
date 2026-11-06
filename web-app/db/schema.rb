@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_06_141944) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_06_142933) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1466,6 +1466,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_141944) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["item_type", "from_id"], name: "index_record_redirects_on_item_type_and_from_id", unique: true
+    t.index ["item_type", "to_id"], name: "index_record_redirects_on_item_type_and_to_id"
   end
 
   create_table "review_summaries", force: :cascade do |t|

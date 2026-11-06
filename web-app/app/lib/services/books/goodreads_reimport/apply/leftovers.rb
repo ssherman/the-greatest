@@ -103,8 +103,9 @@ module Services
           def copy_from?(row, book, memo) = row.payload["action"] == "copy" && resolve(row.payload["from_book_id"], memo) == book.id
 
           # Book ids that may resolve to this book: itself and the books merged into it, followed through chains. This
-          # is the inverse of MergedBook (merge_books verdicts name the source and the target; a merged duplicate pair
-          # names both halves), over-inclusive on purpose: every use confirms through `resolve`.
+          # is the inverse of `resolve` (merge_books verdicts name the source and the target; a merged duplicate pair
+          # names both halves; a record_redirects row names from and to), over-inclusive on purpose: every use confirms
+          # through `resolve`.
           def book_ids(book)
             seen = Set[book.id]
             frontier = [book.id]
@@ -115,7 +116,8 @@ module Services
                 .pluck(Arel.sql("payload->>'source_id'")).map(&:to_i)
               pairs = ::DuplicateCandidate.merged.where(item_type: "Books::Book").where("item_a_id IN (:ids) OR item_b_id IN (:ids)", ids: frontier)
                 .pluck(:item_a_id, :item_b_id).flatten
-              frontier = (sources + pairs).uniq.reject { |id| seen.include?(id) }
+              redirected = ::RecordRedirect.where(item_type: "Books::Book", to_id: frontier).pluck(:from_id)
+              frontier = (sources + pairs + redirected).uniq.reject { |id| seen.include?(id) }
               seen.merge(frontier)
             end
             seen.to_a
@@ -161,10 +163,29 @@ module Services
             ids
           end
 
+          # The book an id names now, as MergedBook finds it, except that a gone id with no merge edge also follows its
+          # record_redirects row. An admin merge of two books that were never a duplicate pair leaves only that row,
+          # and without it a row naming the merged-away book would not count as heading to the book its items moved
+          # to, so they would be swept. MergedBook itself does not follow redirects: a deleted mixed book's redirect
+          # points at a guess (its most-read book), and moves and copies must not send readers there. Here a redirect
+          # can only make more rows count as touching the book, which keeps items or makes the sweep wait.
           def resolve(id, memo)
             return nil if id.nil?
 
-            memo.fetch(id) { memo[id] = GoodreadsReplay::Apply::MergedBook.call(id)&.id }
+            memo.fetch(id) { memo[id] = follow(id.to_i) }
+          end
+
+          def follow(id)
+            seen = Set.new
+            GoodreadsReplay::Apply::MergedBook::MAX_HOPS.times do
+              return nil if id.nil? || seen.include?(id)
+              return id if ::Books::Book.exists?(id)
+
+              seen << id
+              id = GoodreadsReplay::Apply::MergedBook.merge_target(id) ||
+                ::RecordRedirect.where(item_type: "Books::Book", from_id: id).where.not(to_id: nil).pick(:to_id)
+            end
+            nil
           end
 
           # Mixed books are Apply::Mixed's: it deletes them, or runs `stale` for them when kept.

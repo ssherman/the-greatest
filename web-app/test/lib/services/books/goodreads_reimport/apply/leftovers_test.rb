@@ -113,6 +113,82 @@ module Services
             assert_not UserListItem.exists?(reading.id)
           end
 
+          # A keep row naming `gone_id`, applied, with a Read item and a Reading item on the book; then a copy away.
+          def keep_row_naming(gone_id)
+            read = UserListItem.create!(user_list: list(:read), listable: @from)
+            reading = UserListItem.create!(user_list: list(:reading), listable: @from)
+            keep = row_verdict(csv_row(exclusive_shelf: "read"), action: "keep", from: @from, to: @from)
+            keep.update!(applied_at: Time.current, payload: keep.payload.merge("to_book_id" => gone_id, "from_book_id" => gone_id))
+            apply(row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @from, to: @to))
+            [read, reading]
+          end
+
+          def gone_ids(count) = Array.new(count) { |i| ::Books::Book.maximum(:id) + 1000 + i }
+
+          test "an admin merge recorded only as a redirect is followed: a keep row naming the merged-in book explains the item" do
+            gone_id, = gone_ids(1)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: @from.id)
+
+            read, reading = keep_row_naming(gone_id)
+
+            assert UserListItem.exists?(read.id)
+            assert_not UserListItem.exists?(reading.id)
+          end
+
+          test "a merge_books verdict then a redirect are followed as one chain" do
+            first, second = gone_ids(2)
+            ::Books::RepairVerdict.create!(kind: :merge_books, subject_key: "books:#{second}:#{first}", decided_by: :rule, status: :approved,
+              payload: {"source_id" => first, "target_id" => second})
+            RecordRedirect.create!(item_type: "Books::Book", from_id: second, to_id: @from.id)
+
+            read, reading = keep_row_naming(first)
+
+            assert UserListItem.exists?(read.id)
+            assert_not UserListItem.exists?(reading.id)
+          end
+
+          test "a redirect then a merge_books verdict are followed as one chain" do
+            first, second = gone_ids(2)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: first, to_id: second)
+            ::Books::RepairVerdict.create!(kind: :merge_books, subject_key: "books:#{@from.id}:#{second}", decided_by: :rule, status: :approved,
+              payload: {"source_id" => second, "target_id" => @from.id})
+
+            read, reading = keep_row_naming(first)
+
+            assert UserListItem.exists?(read.id)
+            assert_not UserListItem.exists?(reading.id)
+          end
+
+          test "book_ids follows redirects back to their sources and ignores a deleted book's redirect" do
+            merged, deleted = gone_ids(2)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: merged, to_id: @from.id)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: deleted, to_id: nil)
+            RecordRedirect.create!(item_type: "Books::Author", from_id: merged + 5, to_id: @from.id)
+
+            ids = Leftovers.book_ids(@from)
+
+            assert_includes ids, merged
+            assert_not_includes ids, deleted
+            assert_not_includes ids, merged + 5
+          end
+
+          test "a deleted book's redirect (no target) explains nothing: the keep row naming it does not keep the item" do
+            gone_id, = gone_ids(1)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: nil)
+
+            read, reading = keep_row_naming(gone_id)
+
+            assert_not UserListItem.exists?(read.id)
+            assert_not UserListItem.exists?(reading.id)
+          end
+
+          test "a redirect alone, like the one a mixed delete writes, does not change where MergedBook sends a row" do
+            gone_id, = gone_ids(1)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: @from.id)
+
+            assert_nil GoodreadsReplay::Apply::MergedBook.call(gone_id)
+          end
+
           def count_queries
             count = 0
             counter = ->(*, payload) { count += 1 unless %w[SCHEMA TRANSACTION].include?(payload[:name]) || payload[:cached] }
