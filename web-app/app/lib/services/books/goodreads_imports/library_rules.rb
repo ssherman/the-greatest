@@ -71,6 +71,20 @@ module Services
           shelves
         end
 
+        # The lists the user already has that write_row would put this row's book on (same shelf-to-list mapping),
+        # without creating any. Used to ask what a row says without writing it.
+        def existing_lists_for(user, row)
+          lists = ::Books::UserList.where(user: user).to_a
+          shelves_of(row).filter_map do |shelf|
+            if DEFAULT_SHELVES.key?(shelf)
+              lists.find { |list| list.default? && list.list_type.to_sym == DEFAULT_SHELVES[shelf] }
+            else
+              name = shelf.tr("-", " ").squish.downcase
+              lists.find { |list| list.custom? && list.name.downcase.squish == name }
+            end
+          end
+        end
+
         # Writes one row for one user onto one book, whatever the import's
         # status. Additive and idempotent like WriteLibrary: an existing item
         # only gets a blank completed_on filled, a read book drops its reading

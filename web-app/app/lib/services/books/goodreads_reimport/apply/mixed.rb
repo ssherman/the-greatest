@@ -51,6 +51,7 @@ module Services
 
               verdict.update_columns(payload: verdict.payload.merge("deleted" => items.map { |item| attributes(item) },
                 "deleted_images" => image_records(book), "redirect_written" => false))
+              Leftovers.purge_goal_pages(items)
               items.each(&:destroy!)
               keep_image_files(book)
               book.reload.destroy!
@@ -64,8 +65,8 @@ module Services
             Entries.applied
           end
 
-          # A kept book stays, but what the delete path would have removed still goes: the originals of users whose
-          # rows were copied away from it, except the items a row that heads to this book accounts for. Recorded in
+          # A kept book stays, but what the delete path would have removed still goes (Leftovers.stale): the originals of
+          # users whose rows were copied away from it, except the items a row that heads to this book accounts for. Recorded in
           # the payload first, like a delete. Waits while a copy or move from this book is still unapplied.
           def self.keep(verdict, book)
             result = nil
@@ -73,29 +74,25 @@ module Services
               book.lock!
               verdict.reload
               originals = copy_originals(book)
-              if pending_row?(book, originals)
-                result = Entries.noop("kept: a copy or move is not applied yet")
-                raise ActiveRecord::Rollback
-              end
+              ids = Leftovers.book_ids(book)
+              # Per reader: only one whose every row touching the book is settled (approved and applied) is cleaned.
+              user_ids = originals.map { |item| item.user_list.user_id }.uniq
+              ready = user_ids.select { |id| (user = ::User.find_by(id: id)) && Leftovers.settled?(book, user, ids) }
 
-              explained = explained_item_ids(book)
-              stale = originals.reject { |item| explained.include?(item.id) }
+              stale = Leftovers.stale(book, originals.select { |item| ready.include?(item.user_list.user_id) }, ids)
               if stale.any?
-                verdict.update_columns(payload: verdict.payload.merge("deleted" => stale.map { |item| attributes(item) }))
+                earlier = Array(verdict.payload["deleted"])
+                verdict.update_columns(payload: verdict.payload.merge("deleted" => earlier + stale.map { |item| attributes(item) }))
+                Leftovers.purge_goal_pages(stale)
                 stale.each(&:destroy!)
               end
-              result = Entries.noop("kept: readers matched this book", final: true)
+              result = if ready.size == user_ids.size
+                Entries.noop("kept: readers matched this book", final: true)
+              else
+                Entries.noop("kept: a copy or move is not applied yet")
+              end
             end
             result
-          end
-
-          # Items on the book that an applied row heading to it wrote or found: the in-place rows' own record, and
-          # whatever a move or add into the book put there.
-          def self.explained_item_ids(book)
-            ::Books::RepairVerdict.reimport_row.current.approved.where.not(applied_at: nil)
-              .where("payload->>'to_book_id' = ?", book.id.to_s).flat_map do |row|
-              Array(row.payload["explained_item_ids"]) + Array(row.payload.dig("moved", "list_item_ids_after"))
-            end.to_set
           end
 
           # The run died between the delete and the redirect: this verdict recorded redirect_written false, so the
@@ -136,15 +133,7 @@ module Services
           end
 
           # Items of users who have an applied copy verdict from this book; they are the only items that may go.
-          def self.copy_originals(book)
-            users = ::Books::RepairVerdict.reimport_row.where.not(applied_at: nil)
-              .where("payload->>'from_book_id' = ? AND payload->>'action' = 'copy'", book.id.to_s)
-              .pluck(Arel.sql("(payload->>'user_id')::bigint"))
-            return [] if users.empty?
-
-            ::UserListItem.joins(:user_list).includes(:user_list)
-              .where(listable_type: "Books::Book", listable_id: book.id, user_lists: {user_id: users}).order(:id).to_a
-          end
+          def self.copy_originals(book) = Leftovers.items_of(book, Leftovers.copy_users(book))
 
           # Why the book must stay, or nil when it holds nothing but the copy originals.
           def self.blocker(book, originals)
@@ -172,18 +161,11 @@ module Services
             end
           end
 
-          def self.pending_row?(book, originals)
-            return false if originals.empty?
+          def self.pending_row?(book, originals) = Leftovers.pending?(book, originals.map { |item| item.user_list.user_id }.uniq)
 
-            users = originals.map { |item| item.user_list.user_id }.uniq
-            ::Books::RepairVerdict.reimport_row.approved.current.unapplied
-              .where("payload->>'from_book_id' = ? AND payload->>'action' IN ('copy', 'move') AND COALESCE(payload->>'superseded_by', '') = ''", book.id.to_s)
-              .where("(payload->>'user_id')::bigint IN (?)", users).exists?
-          end
+          def self.attributes(item) = Leftovers.attributes(item)
 
-          def self.attributes(item) = Entries.item_attributes(item).merge("user_id" => item.user_list.user_id)
-
-          private_class_method :gone, :write_redirect, :redirect_target, :copy_originals, :blocker, :keep, :explained_item_ids, :image_records, :keep_image_files, :pending_guess?, :pending_row?, :attributes
+          private_class_method :gone, :write_redirect, :redirect_target, :copy_originals, :blocker, :keep, :image_records, :keep_image_files, :pending_guess?, :pending_row?, :attributes
         end
       end
     end
