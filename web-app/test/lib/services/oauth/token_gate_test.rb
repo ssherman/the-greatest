@@ -40,7 +40,9 @@ module Services
       test "a parameter Doorkeeper reads as a string is refused when it is an array or a hash" do
         %i[grant_type code_verifier redirect_uri scope client_id].each do |name|
           [["x"], {"a" => "b"}].each do |value|
-            result = gate(grant_type: "refresh_token", refresh_token: "x", name => value)
+            params = {grant_type: "refresh_token", refresh_token: "x"}
+            params[name] = value
+            result = gate(**params)
 
             assert_not result.success?, "#{name} as #{value.class} was let through"
             assert_equal [:invalid_request], result.errors

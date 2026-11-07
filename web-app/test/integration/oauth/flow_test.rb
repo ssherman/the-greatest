@@ -371,12 +371,12 @@ module Oauth
 
         post "/api/mcp", params: {jsonrpc: "2.0", id: 1, method: "tools/list", params: {}}.to_json,
           headers: {"Content-Type" => "application/json", "Accept" => "application/json, text/event-stream"}
-            .merge(bearer(tokens["access_token"])), env: connector
+              .merge(bearer(tokens["access_token"])), env: connector
         assert_response :success
 
         post "/api/mcp", params: {jsonrpc: "2.0", id: 1, method: "tools/list", params: {}}.to_json,
           headers: {"Content-Type" => "application/json", "Accept" => "application/json, text/event-stream"}
-            .merge(bearer("tg_#{"z" * 40}")), env: connector
+              .merge(bearer("tg_#{"z" * 40}")), env: connector
         assert_response :too_many_requests
         assert response.headers["Retry-After"].present?
       end
