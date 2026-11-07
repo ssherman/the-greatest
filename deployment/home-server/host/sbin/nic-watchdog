@@ -20,6 +20,7 @@ RETRY_RESET=1800        # a refused reboot retries a reset at most this often
 REBOOT_LIMIT=21600      # never reboot twice inside this window
 ANSWERING_RESET_CAP=2   # resets allowed per REBOOT_LIMIT while the gateway answers
 STALE_GAP=300           # a check this long after the previous one starts a new episode
+ANSWERING_MOVE_WAIT=300 # no reboot this long after moving a port the gateway was answering on
 
 ENV_FILE="${NIC_WATCHDOG_ENV:-/etc/the-greatest-home-server/nic-watchdog.env}"
 LOG_ONLY_FILE="${NIC_WATCHDOG_LOG_ONLY_FILE:-/etc/the-greatest-home-server/nic-watchdog-log-only}"
@@ -103,9 +104,11 @@ uptime_cs() {
 }
 
 # limited <limit-seconds> <outfile> <command...>: run a command in the background and wait for it
-# at most <limit> seconds, polling with kill -0. Returns the command's status, or 124 if it
-# overran, with the command's pid in LIMITED_PID. An overrun is NOT reaped and NOT killed: a command
-# stuck in the driver (holding RTNL) cannot be killed, and waiting for it would hang this script too.
+# at most <limit> seconds, polling with kill -0. Returns the command's status, 124 if it overran
+# (with the command's pid in LIMITED_PID), or 125 if the outfile cannot be written, so the command
+# never ran: a redirect that fails in the background looks exactly like a command exiting 1. An
+# overrun is NOT reaped: a command stuck in the driver (holding RTNL) cannot be killed, and waiting
+# for it would hang this script too.
 # The outfile is unlinked first, so a leftover from an earlier overrun that wakes up later writes to
 # a file nobody reads and cannot pass for this command's output. Never give it /dev/null.
 # Without a readable uptime clock the polls themselves bound the wait: each sleeps at least 0.1s.
@@ -113,7 +116,8 @@ limited() {
   local limit="$1" out="$2" pid start="" polls=0 UP_CS=0
   shift 2
   uptime_cs && start="$UP_CS"
-  rm -f "$out"
+  rm -f "$out" 2>/dev/null
+  { : >"$out"; } 2>/dev/null || return 125
   "$@" >"$out" 2>/dev/null </dev/null &
   pid=$!
   LIMITED_PID="$pid"
@@ -128,15 +132,31 @@ limited() {
   done
   wait "$pid"
 }
+# limited_read: limited, for a read-only command. An overrun is killed, so a read that stays stuck
+# does not leave one process per check. Never use this for ip link: reset_wedged depends on a stuck
+# link command staying alive.
+limited_read() {
+  local rc
+  limited "$@"; rc=$?
+  if [ "$rc" = 124 ]; then
+    kill -9 "$LIMITED_PID" 2>/dev/null
+    disown "$LIMITED_PID" 2>/dev/null
+  fi
+  return "$rc"
+}
 # shellcheck disable=SC2329  # run through limited, which shellcheck cannot follow
 read_carrier() { local c; read -r c <"$SYS/$NIC/carrier" || return 1; printf '%s\n' "$c"; }
-# shellcheck disable=SC2329  # run through limited, which shellcheck cannot follow
-read_gateway() {
-  local route dflt via gw _
-  route=$(ip -4 route show default 2>/dev/null | head -n 1)
-  read -r dflt via gw _ <<<"$route"
-  [ "${dflt:-}" = default ] && [ "${via:-}" = via ] && [[ ${gw:-} =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
-  printf '%s\n' "$gw"
+# read_route: set GW to the gateway of the default route through vmbr0. Returns 0, or limited's status,
+# or 1 if there is no such route: a ping through vmbr0 says nothing about a gateway on another device.
+read_route() {
+  local rc dflt via gw dev on _
+  GW=""
+  limited_read "$LINK_COMMAND_LIMIT" "$RUN/limited.out" ip -4 route show default; rc=$?
+  [ "$rc" = 0 ] || return "$rc"
+  read -r dflt via gw dev on _ <"$RUN/limited.out"
+  [ "${dflt:-}" = default ] && [ "${via:-}" = via ] && [ "${dev:-}" = dev ] && [ "${on:-}" = vmbr0 ] &&
+    [[ ${gw:-} =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  GW="$gw"
 }
 # wait_for_carrier: up to 15 seconds. Returns 0 back, 1 not back, 124 a read overran. WAITED holds
 # the seconds it took.
@@ -144,7 +164,7 @@ wait_for_carrier() {
   local rc c
   for ((WAITED = 0; WAITED < 15; WAITED++)); do
     c=""
-    limited "$LINK_COMMAND_LIMIT" "$RUN/limited.out" read_carrier; rc=$?
+    limited_read "$LINK_COMMAND_LIMIT" "$RUN/limited.out" read_carrier; rc=$?
     if [ "$rc" = 124 ]; then return 124; fi
     [ "$rc" = 0 ] && c=$(<"$RUN/limited.out")
     if [ "$c" = 1 ]; then return 0; fi
@@ -203,10 +223,13 @@ link_overrun() { # link_overrun <down|up>: the link command limited just gave up
   fi
 }
 
-do_reset() { # do_reset <why>
-  # Count first, so a kill mid-reset still advances the sequence.
-  resets=$((resets + 1))
-  put "$RUN/resets" "$resets"
+do_reset() { # do_reset <why> [nocount]
+  # Count first, so a kill mid-reset still advances the sequence. The count is the outage sequence
+  # toward a reboot, so a reset made while the gateway answers stays out of it.
+  if [ "${2:-}" != nocount ]; then
+    resets=$((resets + 1))
+    put "$RUN/resets" "$resets"
+  fi
   local outcome="" rc linkfail=0
   if [ "$LOG_ONLY" = 1 ]; then
     log "would reset $NIC ($1)"
@@ -238,67 +261,86 @@ do_reset() { # do_reset <why>
   report "reset $NIC ($1)${outcome:+: $outcome}"
 }
 
+# A port this watchdog moved while the gateway was answering can fail pings because of that move, so
+# the gate holds off for ANSWERING_MOVE_WAIT. Written just before the move, and kept across episodes.
+note_answering_move() { put "$RUN/answering_link_move" "$NOW"; }
+answering_move_is_recent() {
+  local move
+  [ -e "$RUN/answering_link_move" ] || return 1
+  if ! move=$(num "$RUN/answering_link_move") || [ "$move" -gt "$NOW" ]; then
+    move="$NOW"
+    note_answering_move
+  fi
+  [ $((NOW - move)) -lt "$ANSWERING_MOVE_WAIT" ]
+}
+# An unknown result says nothing about the gateway, so the time before it cannot count as lost.
+restart_gateway_clock() { rm -f "$RUN/gateway_lost_since"; }
+
 # gate_allows_reboot <reason>: the final say, run immediately before every reboot. Returns 0 only if
 # the reboot may go ahead, with GATE_DETAIL saying why. It decides on what it reads now:
 #   the gateway answers                    never reboot
 #   no reply (ping exit 1)                 may reboot
 #   anything else, or a read that overran  may reboot only with direct evidence the port is down
+#   a check that could not run at all      never reboot: the gateway must have been asked
+# and in every case not within ANSWERING_MOVE_WAIT of moving a port the gateway was answering on.
 # A carrier read that overruns is not evidence of anything.
 gate_allows_reboot() {
-  local reason="$1" rc gw="" unknown=""
-  # A ping right after this check moved a link the gateway was answering on only measures that.
-  if [ "$LINK_MOVED_WHILE_ANSWERING" = 1 ]; then
-    log "reboot refused ($reason): this check moved the link while the gateway was answering; the next check decides"
-    return 1
-  fi
-  limited "$LINK_COMMAND_LIMIT" "$RUN/limited.out" read_gateway; rc=$?
-  if [ "$rc" = 124 ]; then
-    unknown="reading the default route did not finish in ${LINK_COMMAND_LIMIT}s"
-    report "$unknown"
-  elif [ "$rc" = 0 ]; then
-    gw=$(<"$RUN/limited.out")
-  fi
-  if [ -z "$gw" ]; then
-    unknown="${unknown:-no default route}"
-  else
-    limited "$PING_LIMIT" "$RUN/limited.out" ping -c 3 -W 2 -I vmbr0 "$gw"; rc=$?
+  local reason="$1" rc unknown="" evidence=""
+  read_route; rc=$?
+  if [ "$rc" = 0 ]; then
+    limited "$PING_LIMIT" "$RUN/limited.out" ping -c 3 -W 2 -I vmbr0 "$GW"; rc=$?
     case "$rc" in
       0)
         log "reboot vetoed ($reason): the gateway answered a fresh check"
-        rm -f "$RUN/gateway_lost_since" "$STATE/gateway_reboot_marker"
+        restart_gateway_clock
+        rm -f "$STATE/gateway_reboot_marker"
         send_report
         return 1
         ;;
-      1)
-        GATE_DETAIL="gateway gave no reply"
-        return 0
-        ;;
+      1) GATE_DETAIL="gateway gave no reply" ;;
       124)
         unknown="ping did not finish in ${PING_LIMIT}s"
         report "$unknown"
         ;;
       *) unknown="ping exited $rc" ;;
     esac
+  elif [ "$rc" = 124 ]; then
+    unknown="reading the default route did not finish in ${LINK_COMMAND_LIMIT}s"
+    report "$unknown"
+  elif [ "$rc" != 125 ]; then
+    unknown="no default route on vmbr0"
   fi
-  local evidence=""
-  if wedge_alive; then
-    evidence="a link command is stuck"
-  elif [ -e "$SYS/$NIC/carrier" ]; then
-    limited "$LINK_COMMAND_LIMIT" "$RUN/limited.out" read_carrier; rc=$?
-    if [ "$rc" = 124 ]; then
-      log "carrier read for $NIC did not finish in ${LINK_COMMAND_LIMIT}s; that is not evidence"
-      report "carrier read on $NIC did not finish in ${LINK_COMMAND_LIMIT}s"
-    elif [ "$rc" != 0 ]; then
-      evidence="the interface is administratively down"
-    elif [ "$(<"$RUN/limited.out")" = 0 ]; then
-      evidence="carrier reads 0"
-    fi
-  fi
-  if [ -z "$evidence" ]; then
-    log "reboot refused ($reason): $unknown, and no direct evidence the port is down"
+  if [ "$rc" = 125 ]; then
+    log "reboot refused ($reason): could not run the gateway check"
+    restart_gateway_clock
     return 1
   fi
-  GATE_DETAIL="$unknown, and $evidence"
+  if [ -n "$unknown" ]; then
+    if wedge_alive; then
+      evidence="a link command is stuck"
+    elif [ -e "$SYS/$NIC/carrier" ]; then
+      limited_read "$LINK_COMMAND_LIMIT" "$RUN/limited.out" read_carrier; rc=$?
+      if [ "$rc" = 124 ]; then
+        log "carrier read for $NIC did not finish in ${LINK_COMMAND_LIMIT}s; that is not evidence"
+        report "carrier read on $NIC did not finish in ${LINK_COMMAND_LIMIT}s"
+      elif [ "$rc" = 1 ]; then
+        evidence="the interface is administratively down"
+      elif [ "$rc" = 0 ] && [ "$(<"$RUN/limited.out")" = 0 ]; then
+        evidence="carrier reads 0"
+      fi
+    fi
+    if [ -z "$evidence" ]; then
+      log "reboot refused ($reason): $unknown, and no direct evidence the port is down"
+      restart_gateway_clock
+      return 1
+    fi
+    GATE_DETAIL="$unknown, and $evidence"
+  fi
+  # Asked after the ping, so an answering gateway still vetoes and still gets the report out.
+  if answering_move_is_recent; then
+    log "reboot refused ($reason): a port the gateway was answering on was moved under ${ANSWERING_MOVE_WAIT}s ago"
+    return 1
+  fi
   return 0
 }
 
@@ -336,12 +378,13 @@ try_reboot() {
     log "would reboot ($reason): $GATE_DETAIL"
     return 1
   fi
-  # Each write must land before the next step; the reboot never runs after a failed one.
-  put "$STATE/last_reboot" "$NOW" || { log "cannot write last_reboot; not rebooting"; return 1; }
+  # Each write must land before the next step; the reboot never runs after a failed one. last_reboot
+  # goes last, so a write that fails does not use up the 6 hour limit on a reboot that never happened.
+  report "reboot ($reason): $GATE_DETAIL" || { log "cannot write the report; not rebooting"; return 1; }
   if [ "$kind" = gateway ]; then
     : >"$STATE/gateway_reboot_marker" 2>/dev/null || { log "cannot write the marker; not rebooting"; return 1; }
   fi
-  report "reboot ($reason): $GATE_DETAIL" || { log "cannot write the report; not rebooting"; return 1; }
+  put "$STATE/last_reboot" "$NOW" || { log "cannot write last_reboot; not rebooting"; return 1; }
   log "rebooting ($reason): $GATE_DETAIL"
   if ! systemctl reboot; then
     log "systemctl reboot failed"
@@ -392,7 +435,6 @@ fi
 
 # 1b. Log-only mode counts resets it never did and runs a clock nobody acted on. None of that may
 # count toward a real reboot, so the first real check after log-only starts the episode again.
-LINK_MOVED_WHILE_ANSWERING=0
 if [ "$LOG_ONLY" = 1 ]; then
   : >"$RUN/log_only_ran" 2>/dev/null
 elif [ -e "$RUN/log_only_ran" ]; then
@@ -415,17 +457,16 @@ if [ -e "$RUN/reset_wedged" ]; then
   else
     rm -f "$RUN/reset_wedged"
     log "the stuck link command has finished; reset_wedged cleared"
+    # Whichever command it was, the port has only just been moved and may still be coming back.
+    note_answering_move
     need_up=0
     if [ "$WEDGE_WHAT" != up ]; then
       need_up=1
     elif [ -e "$SYS/$NIC/carrier" ]; then
-      limited "$LINK_COMMAND_LIMIT" "$RUN/limited.out" read_carrier; rc=$?
-      if [ "$rc" != 0 ] && [ "$rc" != 124 ]; then need_up=1; fi
+      limited_read "$LINK_COMMAND_LIMIT" "$RUN/limited.out" read_carrier; rc=$?
+      if [ "$rc" = 1 ]; then need_up=1; fi
     fi
     if [ "$need_up" = 1 ]; then
-      # A stuck command can follow a gateway that was answering, and the port has only just come
-      # back. Nothing in this check may read that as a lost gateway.
-      LINK_MOVED_WHILE_ANSWERING=1
       limited "$LINK_COMMAND_LIMIT" "$RUN/limited.out" ip link set "$NIC" up; rc=$?
       if [ "$rc" = 124 ]; then
         link_overrun up
@@ -433,37 +474,43 @@ if [ -e "$RUN/reset_wedged" ]; then
       elif [ "$rc" != 0 ]; then
         log "ip link set $NIC up failed"
       fi
-      wait_for_carrier
     fi
+    wait_for_carrier
     # Hang messages from before the command finished are not a failed reset.
     put "$RUN/last_reset" "$((NOW + SECONDS))"
   fi
 fi
 
 # 2. Carrier.
-# No carrier file: the interface is gone, nothing to act on. A file that exists but cannot be
-# read is an interface that is administratively down (the kernel answers EINVAL): treat as down.
-# A read that overruns tells us nothing: carrier is unknown, and step 4 decides whether to go on.
+# No carrier file: the interface is gone, nothing to act on. A read that ran and failed is an
+# interface that is administratively down (the kernel answers EINVAL): treat as down. A read that
+# overran or could not run tells us nothing: carrier is unknown, and the gateway check still runs.
 carrier=""
 admin_down=0
 carrier_unknown=0
 if [ ! -e "$SYS/$NIC/carrier" ]; then
   log "no carrier file for $NIC; doing nothing"
+  restart_gateway_clock
   exit 0
 fi
-limited "$LINK_COMMAND_LIMIT" "$RUN/limited.out" read_carrier
+limited_read "$LINK_COMMAND_LIMIT" "$RUN/limited.out" read_carrier
 crc=$?
-if [ "$crc" = 124 ]; then
-  carrier_unknown=1
-  log "carrier read for $NIC did not finish in ${LINK_COMMAND_LIMIT}s; carrier is unknown"
-  report "carrier read on $NIC did not finish in ${LINK_COMMAND_LIMIT}s"
-elif [ "$crc" = 0 ]; then
-  carrier=$(<"$RUN/limited.out")
-else
-  carrier=""
-  admin_down=1
-  log "carrier unreadable for $NIC (administratively down)"
-fi
+case "$crc" in
+  0) carrier=$(<"$RUN/limited.out") ;;
+  1)
+    admin_down=1
+    log "carrier unreadable for $NIC (administratively down)"
+    ;;
+  124)
+    carrier_unknown=1
+    log "carrier read for $NIC did not finish in ${LINK_COMMAND_LIMIT}s; carrier is unknown"
+    report "carrier read on $NIC did not finish in ${LINK_COMMAND_LIMIT}s"
+    ;;
+  *)
+    carrier_unknown=1
+    log "carrier read for $NIC could not run (status $crc); carrier is unknown"
+    ;;
+esac
 
 # 3. Hang. Capture status first; --grep would exit 1 on "no match" and hide a real failure.
 since=$((NOW - 120))
@@ -475,6 +522,7 @@ journal=$(journalctl -k -b 0 --no-pager -o cat --since "@$since" 2>/dev/null)
 jrc=$?
 if [ "$jrc" != 0 ]; then
   log "journalctl failed ($jrc); doing nothing"
+  restart_gateway_clock
   exit 0
 fi
 streak=$(num "$RUN/hang_streak") || streak=0
@@ -496,13 +544,6 @@ fi
 resets=$(num "$RUN/resets") || resets=0
 episode=0
 { [ -e "$RUN/hang_seen" ] || [ "$resets" -gt 0 ]; } && episode=1
-
-# A slow carrier read on its own starts nothing. Only an open episode or a hang goes on, with carrier
-# unknown, and then only the gate can turn that into a reboot.
-if [ "$carrier_unknown" = 1 ] && [ "$episode" = 0 ] && [ "$hang" = 0 ]; then
-  log "no episode and no hang; stopping this check"
-  exit 0
-fi
 
 # 5. Carrier down, nothing wrong beyond a cable or a switch: not ours to fix.
 if [ "$carrier" != 1 ] && [ "$carrier_unknown" = 0 ] && [ "$episode" = 0 ] && [ "$hang" = 0 ]; then
@@ -527,17 +568,18 @@ fi
 # 6. Gateway.
 gateway=lost
 if [ "$carrier" = 1 ] || [ "$carrier_unknown" = 1 ]; then
-  limited "$LINK_COMMAND_LIMIT" "$RUN/limited.out" read_gateway; rc=$?
+  read_route; rc=$?
   if [ "$rc" = 124 ]; then
     log "reading the default route did not finish in ${LINK_COMMAND_LIMIT}s; doing nothing"
     report "reading the default route did not finish in ${LINK_COMMAND_LIMIT}s"
+    restart_gateway_clock
     exit 0
   elif [ "$rc" != 0 ]; then
-    log "no default route; doing nothing"
+    log "no default route on vmbr0; doing nothing"
+    restart_gateway_clock
     exit 0
   fi
-  gw=$(<"$RUN/limited.out")
-  limited "$PING_LIMIT" "$RUN/limited.out" ping -c 3 -W 2 -I vmbr0 "$gw"
+  limited "$PING_LIMIT" "$RUN/limited.out" ping -c 3 -W 2 -I vmbr0 "$GW"
   prc=$?
   case "$prc" in
     0) gateway=answers ;;
@@ -545,24 +587,28 @@ if [ "$carrier" = 1 ] || [ "$carrier_unknown" = 1 ]; then
     124)
       log "ping did not finish in ${PING_LIMIT}s, which is not a lost gateway; doing nothing"
       report "ping did not finish in ${PING_LIMIT}s"
+      restart_gateway_clock
       exit 0
       ;;
-    *) log "ping failed with status $prc, which is not a lost gateway; doing nothing"; exit 0 ;;
+    *)
+      log "ping failed with status $prc, which is not a lost gateway; doing nothing"
+      restart_gateway_clock
+      exit 0
+      ;;
   esac
 fi
 
 # 7. Gateway answers: the network is fine, whatever the kernel said.
 if [ "$gateway" = answers ]; then
-  rm -f "$RUN/gateway_lost_since" "$STATE/gateway_reboot_marker"
+  # The outage is over, so the next one starts its reset sequence from the beginning.
+  rm -f "$RUN/gateway_lost_since" "$RUN/resets" "$STATE/gateway_reboot_marker"
+  resets=0
   send_report
   if [ "$hang" = 0 ]; then
     clear_episode
     exit 0
   fi
   if [ "$streak" -ge 2 ]; then
-    # A reset here takes down a port the gateway is answering on. If its link command is slow, a ping
-    # in this same check would see the reset itself, so no reboot can start from this check.
-    LINK_MOVED_WHILE_ANSWERING=1
     recent=0
     if [ -r "$STATE/answering_resets" ]; then
       while IFS= read -r e; do
@@ -572,10 +618,11 @@ if [ "$gateway" = answers ]; then
     if [ "$recent" -ge "$ANSWERING_RESET_CAP" ]; then
       log "hang while the gateway answers; already reset $recent times inside the limit"
     elif [ "$LOG_ONLY" = 1 ]; then
-      do_reset "hang while the gateway answers"
-    elif [ "$STATE_OK" = 1 ] && printf '%s\n' "$NOW" >>"$STATE/answering_resets" 2>/dev/null; then
-      # Recorded before the reset: the cap must hold even if the reset never finishes.
-      do_reset "hang while the gateway answers"
+      do_reset "hang while the gateway answers" nocount
+    elif [ "$STATE_OK" = 1 ] && printf '%s\n' "$NOW" >>"$STATE/answering_resets" 2>/dev/null && note_answering_move; then
+      # Both recorded before the reset: the cap must hold even if the reset never finishes, and a
+      # ping that fails because of this reset must not be able to reboot the host.
+      do_reset "hang while the gateway answers" nocount
     else
       log "cannot record the reset; refusing it"
     fi

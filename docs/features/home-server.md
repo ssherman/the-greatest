@@ -210,9 +210,10 @@ one interface. Each check looks at three things:
 
 - **Hang:** `journalctl -k -b 0` since the later of the previous check and the last reset, for
   `<nic>: Detected Hardware Unit Hang`.
-- **Gateway:** `ping -c 3 -W 2 -I vmbr0` to the gateway in the default route, read on runs where carrier is up or unknown. Only
-  "no reply" (exit status 1) counts as lost. Any other ping status, no default route, or a failing
-  `journalctl` is "unknown": it logs and does nothing.
+- **Gateway:** `ping -c 3 -W 2 -I vmbr0` to the gateway in the default route, read on runs where carrier is up or unknown. The
+  route must be through `vmbr0`. Only "no reply" (exit status 1) counts as lost. Any other ping status,
+  no default route through `vmbr0`, or a failing `journalctl` is "unknown": it logs, does nothing else,
+  and restarts the gateway clock, so a later loss does not count the time before it.
 - **Carrier:** `/sys/class/net/<nic>/carrier`. A carrier file that exists but cannot be read means the
   interface is administratively down, and counts as carrier down.
 
@@ -221,16 +222,16 @@ one interface. Each check looks at three things:
 | Gateway answers, no hang message | Healthy. Clears the episode, sends any pending report |
 | Carrier down, no hang, no episode | Log only. A reset cannot fix a cable or a switch, and the gateway clock does not run |
 | Hang messages on 2 checks in a row, gateway lost | Reset. Hang messages after that reset: reset once more. Hang messages after the second reset: try a reboot |
-| Hang messages on 2 checks in a row, gateway answering | Reset, at most 2 in any 6 hours (kept on disk). After that, log only. Never reboots, because traffic is flowing. The gate enforces this, including when the reset's own link command is slow |
+| Hang messages on 2 checks in a row, gateway answering | Reset, at most 2 in any 6 hours (kept on disk). After that, log only. These resets stay out of the count the lost path uses, so a later outage starts at its first reset. Traffic is flowing, so the gate vetoes any reboot, and for 5 minutes after such a reset it refuses even if pings fail, because the reset itself can be why (including when its link command is slow) |
 | Gateway lost, carrier up, no hang | Reset at 5 minutes, again at 15, try a reboot at 30 |
 | Carrier down during an episode (a hang was seen or a reset was done) | Carries on toward a reboot as if carrier were up. If the interface is administratively down, it also retries `ip link set <nic> up` on each check |
-| A carrier read takes longer than 10 seconds | Carrier is unknown, which is not evidence of anything. No episode and no hang: logs it, reports it, stops the check, with no reboot and no flag. In an episode or with a hang logged: carries on with carrier unknown, and the gate decides |
+| A carrier read takes longer than 10 seconds | Carrier is unknown, which is not evidence of anything. Logs and reports it, kills the read, and writes no flag. The bounded route read and ping still run: an answering gateway does nothing, and a lost one starts the normal clock. Only the gate can turn that into a reboot |
 | An `ip link set` takes longer than 10 seconds | Writes `/run/nic-watchdog/reset_wedged` naming the command, reports it, and tries a reboot through the gate. While that command is still running, every check skips all link commands and only tries the reboot |
 
 A reset is `ip link set <nic> down`, 3 seconds, `ip link set <nic> up`, then up to 15 seconds waiting
-for carrier. It cycles the physical port only: the VMs keep running and `vmbr0` is untouched. The reset
-count is written before the link goes down, so a reset that is killed partway still advances the
-sequence. `last_reset` is written after the link is back, so hang messages from before the reset do
+for carrier. It cycles the physical port only: the VMs keep running and `vmbr0` is untouched. On the
+lost path, the reset count is written before the link goes down, so a reset that is killed partway still
+advances the sequence. A check where the gateway answers clears that count. `last_reset` is written after the link is back, so hang messages from before the reset do
 not count against it. A gap of more than 5 minutes between checks (a pause, a reboot, a clock jump)
 ends the episode. Each reset logs and reports its outcome: carrier back after how many seconds, not
 back after 15, `ip link` failed, or the carrier read did not finish.
@@ -243,40 +244,50 @@ fresh `ping -c 3 -W 2 -I vmbr0 <gateway>`:
 |---|---|
 | Exit 0, the gateway answers | **No reboot, on any path.** Logged |
 | Exit 1, no reply | The reboot may go ahead |
-| Any other status, the ping overruns, or no default route | The reboot may go ahead only with direct evidence the port is down: carrier reads 0, the interface is administratively down, or a link command is still stuck. Otherwise no reboot, logged |
+| Any other status, the ping overruns, or no default route through `vmbr0` | The reboot may go ahead only with direct evidence the port is down: carrier reads 0, the interface is administratively down (a carrier read that ran and failed), or a link command is still stuck. Otherwise no reboot, logged |
+| The check could not run at all (its output file cannot be written) | No reboot, even with evidence. The gateway must have been asked |
 
 A carrier read that overruns is not evidence. A refused gate writes neither `last_reboot` nor the
-marker. A reset on the answering path takes down a port the gateway was answering on, so a slow link
-command there would fail a ping in that same check because of the reset itself. A check that moved the
-link while the gateway was answering therefore cannot reboot, nor can one that has just brought a stuck
-command's port back up. The next check decides, a minute later, on a fresh ping.
+marker.
 
-**What the gate cannot tell apart.** A dead router with the link up looks the same as a silently failed
-card: no reply, carrier up, no hang messages. The gateway path can still reboot once in that case, at 30
-minutes, and the marker stops it repeating. This is the one case the gate can't separate.
+**The 5-minute refusal.** A port this watchdog moved while the gateway was answering can fail pings
+because of that move: the command may have overrun after taking effect, or the port may still be coming
+back. So `/run/nic-watchdog/answering_link_move` holds the time, written just before any reset made while
+the gateway answers and whenever a stuck command has just finished. The gate refuses while that time is
+under 5 minutes old, logs it, and then decides on a fresh ping. The gate pings first, so an answering
+gateway still vetoes and the report still goes out. Ending an episode does not clear the file. A reset
+made while the gateway was already lost does not write it, so a real outage keeps its timing.
+
+**What the gate cannot tell apart.** It cannot separate a dead router from a silently failed card: no
+reply, carrier up, no hang messages. The gateway path can still reboot once in that case, at 30 minutes,
+and the marker stops it repeating. A port recovering from the watchdog's own reset also fails pings, and
+that case is handled by the 5-minute refusal.
 
 **A stuck link command.** `ip link set`, the carrier read, the route read and the ping run in the
 background under a limit (10 seconds, 15 for the ping), timed on `/proc/uptime` so a clock step can
-neither fake nor hide an overrun. If an `ip link set` overruns, the watchdog stops waiting (it cannot
-kill a process stuck in the kernel), writes `/run/nic-watchdog/reset_wedged` with the command's pid, its
+neither fake nor hide an overrun. A carrier or route read that overruns gets `kill -9`, so a read that
+stays stuck does not leave one process per check. If an `ip link set` overruns, the watchdog stops
+waiting and never kills it (the flag depends on it staying alive), writes `/run/nic-watchdog/reset_wedged` with the command's pid, its
 start time and whether it was the down or the up, and tries a reboot through the gate. Only a stuck
 link command writes that file. At the start of each later check:
 
 - Same pid and same start time still running: no `ip link` call, a reboot attempt through the gate, and
   the check stops. It still sends any report and ping if the gate's ping answered.
-- Otherwise, including a pid that has been reused: the file is deleted and logged. If the stuck command
-  was the down, or the link is administratively down, `ip link set <nic> up` runs, followed by the usual
-  wait for carrier. The normal check then carries on.
+- Otherwise, including a pid that has been reused: the file is deleted and logged, and the 5-minute
+  refusal starts, whichever command it was. If the stuck command was the down, or the link is
+  administratively down, `ip link set <nic> up` runs. Then the usual wait for carrier, whether or not
+  that ran, and the normal check carries on.
 
 A boot clears the file. A stale gap and the end of an episode do not. The unit has `KillMode=process`,
 so a stuck leftover child does not hold it up. This mechanism is reasoned, not observed: no stuck link
 command has been seen. A host wedged badly enough might not finish `systemctl reboot` either, and then
 only Shane can recover it.
 
-Worst case to a reboot is about 4 minutes on the hang path and 30 on the gateway path.
+Worst case to a reboot is about 4 minutes on the hang path and 30 on the gateway path. If a reset was made while the gateway answered, or a stuck command has just finished, the gate adds a wait of up to 5 minutes after that move.
 
 **The 6-hour limit.** The watchdog reboots at most once every 6 hours. The time is written to
-`/var/lib/nic-watchdog/last_reboot` before `systemctl reboot` runs. A reboot that is refused falls back
+`/var/lib/nic-watchdog/last_reboot` before `systemctl reboot` runs, and after the report and the marker,
+so a write that fails does not use up the limit. A reboot that is refused falls back
 to a reset, at most once every 30 minutes. A `last_reboot` that is unreadable or in the future counts
 as "rebooted just now".
 
@@ -316,7 +327,7 @@ State files:
 
 | Where | Holds | Survives a reboot |
 |---|---|---|
-| `/run/nic-watchdog/` | The episode: last check time, hang streak, `hang_seen`, gateway-lost clock, reset count, last reset. Also `reset_wedged` (the stuck command's pid, start time, and down or up), which no episode rule clears, and `log_only_ran` | No |
+| `/run/nic-watchdog/` | The episode: last check time, hang streak, `hang_seen`, gateway-lost clock, reset count, last reset. Also `reset_wedged` (the stuck command's pid, start time, and down or up) and `answering_link_move`, which no episode rule clears, and `log_only_ran` | No |
 | `/var/lib/nic-watchdog/` | `last_reboot`, `gateway_reboot_marker`, `answering_resets`, `last_ping`, and `report` (the unsent report) | Yes |
 
 ### Telling Shane

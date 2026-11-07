@@ -75,6 +75,14 @@ slow_carrier() {
 }
 restore_carrier() { reap_stubs; rm -f "$NIC_WATCHDOG_SYS/eno1/carrier"; carrier 1; }
 ping_seq() { printf '%s\n' "$@" >"$SANDBOX/ping-seq"; }
+# since_journal + hl: a journal that honours --since, for lines stamped with a time.
+since_journal() {
+  stub journalctl 'since=""; prev=""
+for a in "$@"; do [ "$prev" = --since ] && since="${a#@}"; prev="$a"; done
+awk -v s="$since" '"'"'$1 >= s'"'"' "$SANDBOX/kernel-log"; exit "${JOURNAL_RC:-0}"'
+}
+hl() { echo "$1 eno1: Detected Hardware Unit Hang:" >>"$SANDBOX/kernel-log"; }
+no_reboot_state() { no_reboot && [ ! -e "$NIC_WATCHDOG_STATE/last_reboot" ] && [ ! -e "$NIC_WATCHDOG_STATE/gateway_reboot_marker" ]; }
 # seed_episode <resets>: an open episode as of the previous check, one minute before T.
 seed_episode() {
   echo "$1" >"$NIC_WATCHDOG_RUN/resets"; echo $((T - 120)) >"$NIC_WATCHDOG_RUN/last_reset"
@@ -443,11 +451,14 @@ reach_reboot() {
       seed_episode 2; ping_seq "$2"; run_at "$T" ;;
     carrier_down) carrier 0; seed_episode 2; minutes 0 29; ping_seq "$2"; run_at $((T + 1800)) ;;
     carrier_down_hang) carrier 0; seed_hang_ready; ping_seq "$2"; run_at "$T" ;;
+    answering_then_lost)
+      export PING_RC=0; hang_on; minutes 0 1
+      export PING_RC=1; echo 2 >"$NIC_WATCHDOG_RUN/resets"; ping_seq 1 "$2"; run_at $((T + 360)) ;;
     *) return 1 ;;
   esac
   [ ! -s "$SANDBOX/ping-seq" ]
 }
-REBOOT_ROUTES="hang gateway stuck_down stuck_up wedged_retry admin_down_up carrier_down carrier_down_hang"
+REBOOT_ROUTES="hang gateway stuck_down stuck_up wedged_retry admin_down_up carrier_down carrier_down_hang answering_then_lost"
 t_answering_gateway_vetoes_every_reboot() {
   local route rc=0
   for route in $REBOOT_ROUTES; do
@@ -476,15 +487,15 @@ t_one_reboot_call_in_the_script() {
     END {exit !(g && w && r && g < w && w < r)}' "$WD"
 }
 t_slow_carrier_read_no_reboot() {
-  setup; slow_carrier; export PING_RC=1
+  setup; slow_carrier; export PING_RC=0
   run_at "$T"; run_at $((T + 60))
   local rc=0
-  { no_reboot && no_reset && ! called '^ping ' && [ ! -e "$NIC_WATCHDOG_RUN/reset_wedged" ]; } || rc=1
-  grep -q 'carrier read on eno1 did not finish' "$NIC_WATCHDOG_STATE/report" || rc=1
+  { no_reboot_state && no_reset && [ ! -e "$NIC_WATCHDOG_RUN/reset_wedged" ] && [ ! -e "$NIC_WATCHDOG_RUN/gateway_lost_since" ]; } || rc=1
+  grep -q 'carrier read for eno1 did not finish' "$SANDBOX/log/out" || rc=1
   # the read recovers on a healthy host: still nothing, then or at six hours
-  restore_carrier; export PING_RC=0
+  restore_carrier
   run_at $((T + 120)); run_at $((T + 21900))
-  { no_reboot && no_reset && [ ! -e "$NIC_WATCHDOG_RUN/reset_wedged" ]; } || rc=1
+  { no_reboot_state && no_reset && [ ! -e "$NIC_WATCHDOG_RUN/reset_wedged" ]; } || rc=1
   return $rc
 }
 t_slow_carrier_read_in_episode_gate_decides() {
@@ -548,24 +559,23 @@ t_gate_no_route() {
   stub ip 'case "$*" in "-4 route show default")
   [ -e "$SANDBOX/route-seen" ] || { : >"$SANDBOX/route-seen"; echo "default via 198.51.100.1 dev vmbr0"; } ;; esac'
   run_at "$T"
-  no_reboot && [ ! -e "$NIC_WATCHDOG_STATE/last_reboot" ] && grep -q 'no default route, and no direct evidence' "$SANDBOX/log/out" || return 1
+  no_reboot && [ ! -e "$NIC_WATCHDOG_STATE/last_reboot" ] && grep -q 'no default route on vmbr0, and no direct evidence' "$SANDBOX/log/out" || return 1
   setup; export PING_RC=1 NO_ROUTE=1; carrier 0; seed_hang_ready; run_at "$T"
   called '^systemctl reboot$'
 }
-t_answering_reset_slow_link_never_reboots() {
+t_answering_reset_slow_link_refused_then_decides_on_a_fresh_ping() {
   local which rc=0
   for which in down up; do
-    setup; wedged_ip "$which"; export PING_RC=0; hang_on; minutes 0 0
-    # the reset has moved the link, so this check's second ping would say "no reply"
+    setup; wedged_ip "$which"; export PING_RC=0; hang_on; run_at "$T"
+    # the reset has moved the link, so this check's own gate ping gets no reply: E2 inside one check
     ping_seq 0 1; run_at $((T + 60))
-    no_reboot || rc=1
-    [ -e "$NIC_WATCHDOG_RUN/reset_wedged" ] || rc=1
-    [ "$(cat "$SANDBOX/ping-seq")" = 1 ] || rc=1
-    # while it stays stuck with the gateway answering, the gate vetoes each check
-    : >"$SANDBOX/ping-seq"; minutes 2 3
-    { no_reboot && [ ! -e "$NIC_WATCHDOG_STATE/last_reboot" ] && grep -q 'reboot vetoed' "$SANDBOX/log/out"; } || rc=1
+    { no_reboot_state && [ -e "$NIC_WATCHDOG_RUN/reset_wedged" ] && [ ! -s "$SANDBOX/ping-seq" ]; } || rc=1
+    grep -q 'moved under 300s ago' "$SANDBOX/log/out" || rc=1
+    # still stuck with the gateway answering: the gate vetoes each check
+    minutes 2 3
+    { no_reboot_state && grep -q 'reboot vetoed' "$SANDBOX/log/out"; } || rc=1
     stuck_gone; hang_off; run_at $((T + 240))
-    { no_reboot && [ ! -e "$NIC_WATCHDOG_RUN/reset_wedged" ]; } || rc=1
+    { no_reboot_state && [ ! -e "$NIC_WATCHDOG_RUN/reset_wedged" ]; } || rc=1
   done
   return $rc
 }
@@ -756,6 +766,222 @@ t_admin_down_up_overrun() {
   { called '^systemctl reboot$' && [ "$(count 'ip link set')" = 1 ]; } || rc=1
   reap_stubs; return $rc
 }
+
+# --- a port the watchdog itself moved (review sequences E1 to E8)
+# E1a: answering resets, then a fresh hang line and lost pings on the next check.
+t_e1a_lost_pings_after_answering_resets() {
+  setup; since_journal; export PING_RC=0
+  hl "$T"; run_at "$T"; hl $((T + 30)); run_at $((T + 60)); hl $((T + 90)); run_at $((T + 120))
+  [ "$(count 'ip link set eno1 down')" = 2 ] || return 1
+  hl $((T + 170)); ping_seq 1 1; run_at $((T + 180))
+  no_reboot_state && [ -e "$NIC_WATCHDOG_RUN/answering_link_move" ]
+}
+# E1b: the same, with carrier still 0 from the watchdog's own reset, so one lost round only.
+t_e1b_carrier_still_down_after_answering_resets() {
+  setup; since_journal; export PING_RC=0
+  hl "$T"; run_at "$T"; hl $((T + 30)); run_at $((T + 60)); hl $((T + 90)); run_at $((T + 120))
+  carrier 0; hl $((T + 170)); ping_seq 1; run_at $((T + 180))
+  no_reboot_state
+}
+# E2a, E2b: a link command overruns on the answering path, and the next check's gate gets no reply
+# because the port is down through the watchdog's own doing.
+t_e2_stuck_after_answering_reset_next_check_no_reply() {
+  local which rc=0
+  for which in up down; do
+    setup; hang_on; export PING_RC=0; wedged_ip "$which"
+    run_at "$T"; run_at $((T + 60))
+    hang_off; ping_seq 1; run_at $((T + 120))
+    { no_reboot_state && [ -e "$NIC_WATCHDOG_RUN/reset_wedged" ]; } || rc=1
+    grep -q 'moved under 300s ago' "$SANDBOX/log/out" || rc=1
+    reap_stubs
+  done
+  return $rc
+}
+# E3: an up that overran and then finished by itself, with carrier still 0.
+t_e3_stuck_up_finishes_by_itself() {
+  setup; since_journal; export PING_RC=0
+  hl "$T"; run_at "$T"; hl $((T + 30)); run_at $((T + 60))
+  wedged_ip up; hl $((T + 90)); run_at $((T + 120))
+  [ "$(sed -n 's/^what=//p' "$NIC_WATCHDOG_RUN/reset_wedged")" = up ] || return 1
+  stuck_gone; carrier 0; : >"$CALLS"
+  hl $((T + 180)); hl $((T + 181)); hl $((T + 182)); ping_seq 1; run_at $((T + 180))
+  no_reboot_state && [ ! -e "$NIC_WATCHDOG_RUN/reset_wedged" ]
+}
+# Item 2 on its own: the outage count is at 2 already, so only the marker and the wait stop this.
+t_stuck_up_finished_sets_the_refusal_and_waits() {
+  setup; wedged_ip up; export PING_RC=1; hang_on; run_at "$T"; ping_seq 1 0; run_at $((T + 60))
+  stuck_gone; carrier 0; : >"$CALLS"; echo 2 >"$NIC_WATCHDOG_RUN/resets"
+  run_at $((T + 120))
+  no_reboot_state && no_reset && [ "$(rv answering_link_move)" = $((T + 120)) ] &&
+    grep -q 'moved under 300s ago' "$SANDBOX/log/out" &&
+    [ "$(count 'sleep 1$')" = 15 ]
+}
+# E4: hang messages with traffic flowing, then a few seconds of loss.
+t_e4_answering_resets_stay_out_of_the_outage_count() {
+  setup; hang_on; export PING_RC=0; minutes 0 3
+  [ "$(count 'ip link set eno1 down')" = 2 ] && [ ! -e "$NIC_WATCHDOG_RUN/resets" ] || return 1
+  ping_seq 1 1; run_at $((T + 240))
+  # a real outage starts at reset 1
+  no_reboot_state && [ "$(rv resets)" = 1 ] && [ "$(count 'ip link set eno1 down')" = 3 ]
+}
+t_recovery_with_hang_still_logged_restarts_the_outage_count() {
+  setup; hang_on; export PING_RC=1; minutes 0 2
+  [ "$(rv resets)" = 2 ] || return 1
+  # traffic comes back with the hang messages still arriving, then one lost round
+  export PING_RC=0; run_at $((T + 180))
+  [ ! -e "$NIC_WATCHDOG_RUN/resets" ] || return 1
+  export PING_RC=1; run_at $((T + 240))
+  no_reboot_state && [ "$(rv resets)" = 1 ]
+}
+# E5: a dead host with a stuck carrier read and no hang.
+t_e5_dead_host_with_stuck_carrier_read_recovers() {
+  setup; slow_carrier; export PING_RC=1
+  run_at "$T"
+  [ "$(rv gateway_lost_since)" = "$T" ] && called '^ping ' || return 1
+  local m rc=0
+  for m in 5 10 15 20 25; do run_at $((T + 60 * m)); done
+  [ "$(count 'ip link set eno1 down')" = 2 ] || rc=1
+  no_reboot || rc=1
+  run_at $((T + 1800))
+  called '^systemctl reboot$' || rc=1
+  reap_stubs; return $rc
+}
+# E8: a redirect that fails looks like "no reply" and "administratively down".
+t_e8_failed_redirect_is_unknown() {
+  setup; export PING_RC=0; mkdir "$NIC_WATCHDOG_RUN/limited.out"; hang_on
+  minutes 0 6
+  no_reboot_state && no_reset && ! called '^ping ' && [ ! -e "$NIC_WATCHDOG_RUN/resets" ] || return 1
+  # not even a stuck command lets a reboot through with the gateway never asked
+  setup; wedged_ip down; export PING_RC=1; hang_on; run_at "$T"; ping_seq 1 0; run_at $((T + 60))
+  rm -f "$NIC_WATCHDOG_RUN/limited.out"; mkdir "$NIC_WATCHDOG_RUN/limited.out"; : >"$CALLS"
+  run_at $((T + 120))
+  local rc=0
+  { no_reboot_state && ! called '^ping ' && grep -q 'could not run the gateway check' "$SANDBOX/log/out"; } || rc=1
+  reap_stubs
+  # at the gate, an evidence read that could not run is not "administratively down"
+  setup; seed_hang_ready
+  stub ping '[ -e "$SANDBOX/ping-seen" ] || { : >"$SANDBOX/ping-seen"; exit 1; }
+command -p rm -f "$NIC_WATCHDOG_RUN/limited.out"; command -p mkdir "$NIC_WATCHDOG_RUN/limited.out"; exit 2'
+  run_at "$T"
+  { no_reboot_state && grep -q 'no direct evidence' "$SANDBOX/log/out"; } || rc=1
+  return $rc
+}
+
+# --- the five-minute refusal
+t_refusal_lasts_under_300s_then_allows() {
+  setup; hang_on; export PING_RC=0; minutes 0 1
+  [ "$(rv answering_link_move)" = $((T + 60)) ] || return 1
+  export PING_RC=1; echo 2 >"$NIC_WATCHDOG_RUN/resets"
+  run_at $((T + 120)); run_at $((T + 359))
+  no_reboot_state && [ "$(grep -c 'moved under 300s ago' "$SANDBOX/log/out")" = 2 ] || return 1
+  run_at $((T + 360))
+  called '^systemctl reboot$'
+}
+t_refusal_survives_the_end_of_the_episode() {
+  setup; hang_on; export PING_RC=0; minutes 0 1
+  hang_off; run_at $((T + 120))   # answers, no hang: clear_episode
+  [ -e "$NIC_WATCHDOG_RUN/answering_link_move" ] && [ ! -e "$NIC_WATCHDOG_RUN/hang_seen" ] || return 1
+  seed_hang_ready; echo $((T + 120)) >"$NIC_WATCHDOG_RUN/last_check"; ping_seq 1 1; run_at $((T + 180))
+  no_reboot_state && grep -q 'moved under 300s ago' "$SANDBOX/log/out"
+}
+t_refusal_unreadable_or_future_counts_as_just_now() {
+  local v
+  for v in garbage $((T + 9000)); do
+    setup; export PING_RC=1; seed_hang_ready; echo "$v" >"$NIC_WATCHDOG_RUN/answering_link_move"
+    run_at "$T"
+    no_reboot_state && [ "$(rv answering_link_move)" = "$T" ] || return 1
+  done
+}
+t_stuck_up_with_network_truly_down_reboots_after_the_refusal() {
+  setup; hang_on; export PING_RC=0; wedged_ip up; run_at "$T"; ping_seq 0 1; run_at $((T + 60))
+  export PING_RC=1; hang_off; run_at $((T + 120)); run_at $((T + 359))
+  local rc=0
+  no_reboot_state || rc=1
+  run_at $((T + 360))
+  { called '^systemctl reboot$' && grep -q 'reboot (stuck ip link set eno1 up): gateway gave no reply' "$NIC_WATCHDOG_STATE/report"; } || rc=1
+  reap_stubs; return $rc
+}
+t_move_while_lost_sets_no_marker_and_keeps_its_timing() {
+  # a real hang: about 4 minutes
+  setup; hang_on; export PING_RC=1; minutes 0 2; no_reboot || return 1
+  minutes 3 3; called '^systemctl reboot$' && [ ! -e "$NIC_WATCHDOG_RUN/answering_link_move" ] || return 1
+  # a silent failure: 30 minutes
+  setup; export PING_RC=1; minutes 0 29; no_reboot || return 1
+  minutes 30 30; called '^systemctl reboot$' && [ ! -e "$NIC_WATCHDOG_RUN/answering_link_move" ]
+}
+
+# --- the route's device
+t_route_on_another_device_is_unknown() {
+  setup; export PING_RC=1
+  stub ip 'case "$*" in "-4 route show default") echo "default via 198.51.100.1 dev wg0" ;; esac'
+  local m
+  for m in 0 5 10 15 20 25 30 35; do run_at $((T + 60 * m)); done
+  no_reboot_state && no_reset && ! called '^ping ' && [ ! -e "$NIC_WATCHDOG_RUN/gateway_lost_since" ] || return 1
+  # the gate reads it too: vmbr0 for the check's own ping, wg0 by the time the gate looks
+  setup; export PING_RC=1; seed_hang_ready
+  stub ip 'case "$*" in "-4 route show default")
+  if [ -e "$SANDBOX/route-seen" ]; then echo "default via 198.51.100.1 dev wg0"; else : >"$SANDBOX/route-seen"; echo "default via 198.51.100.1 dev vmbr0"; fi ;; esac'
+  run_at "$T"
+  no_reboot_state && [ "$(count '^ping ')" = 1 ] && grep -q 'no default route on vmbr0, and no direct evidence' "$SANDBOX/log/out"
+}
+
+# --- what a failed write costs
+t_report_write_failure_leaves_the_limit_untouched() {
+  setup; export PING_RC=1; hang_on; minutes 0 2
+  rm -f "$NIC_WATCHDOG_STATE/report"; mkdir "$NIC_WATCHDOG_STATE/report"
+  run_at $((T + 180))
+  no_reboot_state && grep -q 'cannot write the report; not rebooting' "$SANDBOX/log/out" || return 1
+  # the write works again, and the limit was not used up
+  rmdir "$NIC_WATCHDOG_STATE/report"; run_at $((T + 240))
+  called '^systemctl reboot$' && [ "$(sv last_reboot)" = $((T + 240)) ]
+}
+
+# --- the stale gateway clock
+t_unknown_result_restarts_the_gateway_clock() {
+  local how m
+  for how in ping_status journal route; do
+    setup; export PING_RC=1; run_at "$T"
+    [ "$(rv gateway_lost_since)" = "$T" ] || return 1
+    case "$how" in
+      ping_status) export PING_RC=2 ;;
+      journal) export JOURNAL_RC=1 ;;
+      route) export NO_ROUTE=1 ;;
+    esac
+    for m in 5 10 15 20 25 30 35 40; do run_at $((T + 60 * m)); done
+    [ ! -e "$NIC_WATCHDOG_RUN/gateway_lost_since" ] && no_reset && no_reboot || return 1
+    unset JOURNAL_RC NO_ROUTE; export PING_RC=1; run_at $((T + 2700))
+    [ "$(rv gateway_lost_since)" = $((T + 2700)) ] && no_reset && no_reboot || return 1
+  done
+}
+t_unknown_at_the_gate_restarts_the_gateway_clock() {
+  setup; export PING_RC=1; minutes 0 29
+  ping_seq 1 2; run_at $((T + 1800))
+  no_reboot_state && [ ! -e "$NIC_WATCHDOG_RUN/gateway_lost_since" ] || return 1
+  run_at $((T + 1860))
+  no_reboot_state && [ "$(rv gateway_lost_since)" = $((T + 1860)) ]
+}
+
+# --- leftovers from stuck reads
+t_stuck_reads_are_killed_and_link_commands_are_not() {
+  setup; slow_carrier; export PING_RC=0; run_at "$T"; run_at $((T + 60))
+  # a killed read leaves no subshell of the script behind
+  [ "$(pgrep -fc "$WD")" = 0 ] || return 1
+  grep -q Killed "$SANDBOX/log/out" && return 1
+  restore_carrier
+  # the route read: its pid is gone after the overrun
+  setup; real_sleep; export NIC_WATCHDOG_LINK_LIMIT=1 PING_RC=0
+  mkfifo "$SANDBOX/never"
+  stub ip 'case "$*" in "-4 route show default") echo $$ >>"$SANDBOX/log/route-pid"; read -r _ <>"$SANDBOX/never" ;; esac'
+  run_at "$T"
+  local pid; pid="$(cat "$SANDBOX/log/route-pid")"
+  [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null || return 1
+  # a stuck link command stays alive for the flag to mean anything
+  setup; wedged_ip down; export PING_RC=1; hang_on; run_at "$T"; ping_seq 1 0; run_at $((T + 60))
+  pid="$(sed -n 's/^pid=//p' "$NIC_WATCHDOG_RUN/reset_wedged")"
+  local rc=0
+  kill -0 "$pid" 2>/dev/null || rc=1
+  reap_stubs; return $rc
+}
 t_service_holds_killmode_process() {
   grep -qx 'KillMode=process' "$HS_DIR/host/systemd/nic-watchdog.service"
 }
@@ -817,7 +1043,7 @@ check "gate: an unknown ping with a stuck command proceeds" t_gate_unknown_ping_
 check "gate: a slow carrier read is not evidence" t_gate_slow_carrier_read_is_not_evidence
 check "gate: a ping overrun needs evidence" t_gate_ping_overrun
 check "gate: no default route needs evidence" t_gate_no_route
-check "a slow ip link on the answering path never reboots" t_answering_reset_slow_link_never_reboots
+check "a slow ip link on the answering path is refused, and a fresh ping decides" t_answering_reset_slow_link_refused_then_decides_on_a_fresh_ping
 check "a check stopped by a stuck command still sends the report and the ping" t_stuck_check_sends_report_and_ping
 check "the report states the actual reason, not hang" t_report_states_the_actual_reason
 check "a stuck command that finishes clears the flag, brings the link up, and nothing reboots" t_wedge_clears_when_process_gone
@@ -834,6 +1060,25 @@ check "an unreadable uptime still bounds the wait" t_uptime_unreadable_still_bou
 check "an up that overruns in a reset" t_up_overrun_in_reset
 check "a carrier read that overruns in the reset loop finishes the reset, no flag" t_carrier_overrun_in_reset_loop
 check "an up that overruns on an administratively down link" t_admin_down_up_overrun
+check "E1a: lost pings after answering resets do not reboot" t_e1a_lost_pings_after_answering_resets
+check "E1b: carrier down after answering resets does not reboot" t_e1b_carrier_still_down_after_answering_resets
+check "E2a, E2b: a stuck command after an answering reset, no reply next check, no reboot" t_e2_stuck_after_answering_reset_next_check_no_reply
+check "E3: a stuck up that finishes by itself does not reboot" t_e3_stuck_up_finishes_by_itself
+check "a finished stuck up sets the refusal and waits for carrier" t_stuck_up_finished_sets_the_refusal_and_waits
+check "E4: answering resets stay out of the outage count" t_e4_answering_resets_stay_out_of_the_outage_count
+check "recovery with hang messages still arriving restarts the outage count" t_recovery_with_hang_still_logged_restarts_the_outage_count
+check "E5: a dead host with a stuck carrier read still recovers" t_e5_dead_host_with_stuck_carrier_read_recovers
+check "E8: a failed redirect is unknown, and never reboots without asking the gateway" t_e8_failed_redirect_is_unknown
+check "the refusal lasts while under 300s and allows a reboot at 300s" t_refusal_lasts_under_300s_then_allows
+check "the refusal survives the end of the episode" t_refusal_survives_the_end_of_the_episode
+check "an unreadable or future move time counts as just now" t_refusal_unreadable_or_future_counts_as_just_now
+check "a stuck up with the network truly down reboots after the refusal" t_stuck_up_with_network_truly_down_reboots_after_the_refusal
+check "a move while the gateway was lost sets no marker; hang at 4 minutes, silent at 30" t_move_while_lost_sets_no_marker_and_keeps_its_timing
+check "a default route on another device is unknown" t_route_on_another_device_is_unknown
+check "a report write failure leaves the 6 hour limit untouched" t_report_write_failure_leaves_the_limit_untouched
+check "an unknown result restarts the gateway clock" t_unknown_result_restarts_the_gateway_clock
+check "an unknown at the gate restarts the gateway clock" t_unknown_at_the_gate_restarts_the_gateway_clock
+check "stuck reads are killed, stuck link commands are not" t_stuck_reads_are_killed_and_link_commands_are_not
 check "the service holds KillMode=process" t_service_holds_killmode_process
 reap_stubs
 finish
