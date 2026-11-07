@@ -113,15 +113,6 @@ Shane's go-ahead first, and the outputs are reported as they came.
       For R2's S3 API the access key id is the token's id and the secret is the SHA-256 of the token's value.
    d. **Delete the temporary token.** `setup-r2.sh` needs a new temporary token each time it runs again (the path
       switch in "Prove it"), and `setup-r2.sh --check` (read only) also needs one.
-   e. **Audit the account's other R2 tokens.** The account already holds others: the app's `STORAGE_*` and
-      `PRIVATE_IMPORTS_*` keys, the recommendations bucket's `RECOMMENDATIONS_R2_*` (the app and the home `ol`
-      VM), and any made by hand. In R2, Manage API tokens, and in My Profile / Account API tokens for any with R2
-      permissions, list every token and confirm that each one is scoped to **named buckets**, never "all
-      buckets", and that none but the temporary one (now deleted) has admin R2 rights (Admin Read & Write, or an
-      account token with R2 Edit). A token scoped to all buckets with Object Read & Write can delete the
-      backups and the dumps; an admin token can change or remove the locks. Re-scope or replace any that is not,
-      and record the date of the audit here. **Spec §8.2's claim that no remaining token can change the locks
-      holds only after this audit.**
 3. **(Shane, healthchecks.io)** Create `pg-backup` (1 day), `pg-health` (15 minutes) and `pg-restore-verified`
    (1 day), plus `HC_PGVERIFY_DEPLOY` for the VM's deploy timer. Set `pg-backup`'s grace **above the longest
    full backup**, not a flat 2 hours: read the longest full's start and stop in `pgbackrest info` and add

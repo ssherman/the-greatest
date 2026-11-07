@@ -242,13 +242,7 @@ Each is used through R2's S3 API: the access key id is the token's id and the se
 value. None of these four can change a bucket's settings, locks or lifecycle rules; the temporary account token that
 could is deleted after setup. Creating the tokens is a one-time dashboard step for Shane, in the runbook.
 
-**That covers these four tokens, not the account.** The account already holds other R2 tokens: the app's `STORAGE_*`
-and `PRIVATE_IMPORTS_*` keys, the recommendations bucket's `RECOMMENDATIONS_R2_*` (the app and the home `ol` VM), and
-any made by hand. A token scoped to all buckets can delete the backups and the dumps, and one with admin R2 rights can
-change or remove the locks. So the claims in this section (that no remaining token can change the locks, and that the
-dumps are out of reach of anything on the production server) **hold only once Shane has audited the account's
-tokens** at the one-time setup (runbook, "Build", step 2e): every one scoped to named buckets, and none but the
-temporary one with admin R2 rights **(my call)**.
+**That covers these four tokens.** The account holds other Cloudflare tokens that Shane manages himself; they are outside this design, and he decided (2026-11-07) not to audit them as part of it.
 
 `setup-r2.sh` also guards the live lock against itself: every run replaces the rules, so before any change it reads
 the current lock rules and refuses (exit 2) if one would be dropped, narrowed, shortened or disabled, unless
