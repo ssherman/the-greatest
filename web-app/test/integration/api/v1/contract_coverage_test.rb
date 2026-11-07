@@ -74,6 +74,22 @@ module Api
         ["GET", "/api/v1/ranking_configurations/{id}/lists", "403"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/lists", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
         ["GET", "/api/v1/ranking_configurations/{id}/lists", "404"] => -> { get "/api/v1/ranking_configurations/999999999/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/ranking_configurations/{id}/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/lists", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}", "200"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books/#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}", "401"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books/war-and-peace" },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}", "403"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books/war-and-peace", headers: bearer(ApiTokenSecrets::NON_MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}", "404"] => -> { get "/api/v1/ranking_configurations/999999999/books/war-and-peace", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books/war-and-peace", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}/lists", "200"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books/#{books_books(:war_and_peace).slug}/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}/lists", "400"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books/war-and-peace/lists?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}/lists", "401"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books/war-and-peace/lists" },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}/lists", "403"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books/war-and-peace/lists", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}/lists", "404"] => -> { get "/api/v1/ranking_configurations/999999999/books/war-and-peace/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/books/{slug}/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/books/war-and-peace/lists", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "200"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/lists/#{@list.id}", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "401"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/lists/#{@list.id}" },
+        ["GET", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "403"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/lists/#{@list.id}", headers: bearer(ApiTokenSecrets::NON_MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "404"] => -> { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/lists/999999999", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "429"] => -> { with_exhausted_limit { get "/api/v1/ranking_configurations/#{ranking_configurations(:books_global).id}/lists/#{@list.id}", headers: bearer(ApiTokenSecrets::MEMBER) } },
         ["GET", "/api/v1/lists", "200"] => -> { get "/api/v1/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/lists", "400"] => -> { get "/api/v1/lists?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/lists", "401"] => -> { get "/api/v1/lists" },
@@ -147,7 +163,17 @@ module Api
         ["GET", "/api/v1/search/authors", "503"] => lambda {
           ::Search::Books::Search::AuthorGeneral.stubs(:call).raises(Faraday::ConnectionFailed, "down")
           get "/api/v1/search/authors?q=tolstoy", headers: bearer(ApiTokenSecrets::MEMBER)
-        }
+        },
+        ["GET", "/api/v1/search/categories", "200"] => -> { get "/api/v1/search/categories?q=novel", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/search/categories", "400"] => -> { get "/api/v1/search/categories", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/search/categories", "401"] => -> { get "/api/v1/search/categories?q=novel" },
+        ["GET", "/api/v1/search/categories", "403"] => -> { get "/api/v1/search/categories?q=novel", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/search/categories", "429"] => -> { with_exhausted_limit { get "/api/v1/search/categories?q=novel", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/countries", "200"] => -> { get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/countries", "400"] => -> { get "/api/v1/countries?sort=popularity", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/countries", "401"] => -> { get "/api/v1/countries" },
+        ["GET", "/api/v1/countries", "403"] => -> { get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/countries", "429"] => -> { with_exhausted_limit { get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MEMBER) } }
       }.freeze
 
       setup do
