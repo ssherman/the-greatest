@@ -51,7 +51,9 @@ case "$mode" in
     converge_host_dns
     converge_host_packages
     converge_host_network
+    converge_host_nic
     converge_host_firewall
+    converge_host_watchdog
     require_host_ready_for_vms
     for role in fetcher ol worldcat; do ensure_vm "$role"; done
     assert_foreign_guests_running "$foreign_before"
