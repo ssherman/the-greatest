@@ -13,7 +13,7 @@ T=1000000
 setup() {
   [ -z "${SANDBOX:-}" ] || rm -rf "$SANDBOX"
   new_sandbox
-  unset PING_RC JOURNAL_RC CURL_RC NO_ROUTE
+  unset PING_RC JOURNAL_RC CURL_RC NO_ROUTE IP_LINK_RC
   export NIC_WATCHDOG_ENV="$SANDBOX/nic-watchdog.env"
   export NIC_WATCHDOG_LOG_ONLY_FILE="$SANDBOX/log-only"
   export NIC_WATCHDOG_STATE="$SANDBOX/persist"
@@ -25,7 +25,8 @@ setup() {
   hang_off
   stub journalctl 'cat "$SANDBOX/kernel-log"; exit "${JOURNAL_RC:-0}"'
   stub ping 'exit "${PING_RC:-0}"'
-  stub ip 'case "$*" in "-4 route show default") [ -n "${NO_ROUTE:-}" ] || echo "default via 198.51.100.1 dev vmbr0" ;; esac'
+  stub ip 'case "$*" in "link set "*) exit "${IP_LINK_RC:-0}" ;; esac
+case "$*" in "-4 route show default") [ -n "${NO_ROUTE:-}" ] || echo "default via 198.51.100.1 dev vmbr0" ;; esac'
   stub systemctl ''
   stub curl 'echo "https://hc.test/abc" >&2; exit "${CURL_RC:-0}"'
   stub sleep ''
@@ -40,6 +41,8 @@ minutes() { local m; for ((m = $1; m <= $2; m++)); do run_at $((T + 60 * m)); do
 count() { grep -cE "$1" "$CALLS" || true; }
 rv() { cat "$NIC_WATCHDOG_RUN/$1" 2>/dev/null; }
 sv() { cat "$NIC_WATCHDOG_STATE/$1" 2>/dev/null; }
+# last_reset is the reset's own time (check time plus seconds the script ran), so allow a little.
+last_reset_near() { local v; v="$(rv last_reset)"; [ -n "$v" ] && [ "$v" -ge "$1" ] && [ "$v" -le $(($1 + 90)) ]; }
 no_reboot() { ! called 'systemctl reboot'; }
 no_reset() { ! called 'ip link set'; }
 
@@ -100,7 +103,7 @@ t_gateway_recovery_clears() {
 t_reboot_inside_limit_refused() {
   setup; export PING_RC=1; hang_on; echo $((T - 3600)) >"$NIC_WATCHDOG_STATE/last_reboot"
   minutes 0 40
-  no_reboot && [ "$(count 'ip link set eno1 down')" = 3 ] && [ "$(rv last_reset)" = $((T + 1920)) ]
+  no_reboot && [ "$(count 'ip link set eno1 down')" = 3 ] && last_reset_near $((T + 1920))
 }
 t_reboot_after_limit_allowed() {
   setup; export PING_RC=1; hang_on; echo $((T - 25200)) >"$NIC_WATCHDOG_STATE/last_reboot"
@@ -240,6 +243,52 @@ t_url_never_logged() {
   [ "$(count '^curl ')" = 2 ] && grep -q failed "$SANDBOX/log/out" && ! grep -q 'hc\.test' "$SANDBOX/log/out"
 }
 
+# --- fix round 1
+t_missing_state_dir_cap_holds() {
+  setup; export PING_RC=0; hang_on; rm -rf "$NIC_WATCHDOG_STATE"
+  minutes 0 7
+  [ -d "$NIC_WATCHDOG_STATE" ] && [ "$(count 'ip link set eno1 down')" = 2 ] && no_reboot &&
+    [ "$(count 'curl .*hc\.test/abc$')" = 1 ]
+}
+t_unwritable_state_answering_no_reset() {
+  setup; export PING_RC=0; hang_on; rm -rf "$NIC_WATCHDOG_STATE"; : >"$NIC_WATCHDOG_STATE"
+  minutes 0 7
+  no_reset && no_reboot && ! called 'hc\.test/abc$'
+}
+t_journal_window_starts_at_reset() {
+  setup; export PING_RC=0; hang_on; minutes 0 1
+  local since lr
+  lr="$(rv last_reset)"; run_at $((T + 120))
+  since="$(grep -oE 'since @[0-9]+' "$CALLS" | tail -n 1 | tr -dc 0-9)"
+  [ -n "$lr" ] && [ "$since" = "$lr" ] && [ "$lr" -ge $((T + 60)) ]
+}
+t_reset_counted_before_link_down() {
+  setup; export PING_RC=1; hang_on
+  stub ip 'case "$*" in "link set eno1 down") echo "resets=$(cat "$NIC_WATCHDOG_RUN/resets")" >>"$SANDBOX/log/seen" ;; esac
+case "$*" in "-4 route show default") echo "default via 198.51.100.1 dev vmbr0" ;; esac'
+  minutes 0 1
+  [ "$(cat "$SANDBOX/log/seen")" = "resets=1" ]
+}
+t_admin_down_no_episode_no_action() {
+  setup; export PING_RC=1; rm -f "$NIC_WATCHDOG_SYS/eno1/carrier"; mkdir "$NIC_WATCHDOG_SYS/eno1/carrier"
+  minutes 0 39
+  no_reset && no_reboot && ! called '^ping '
+}
+t_admin_down_in_episode_reboots() {
+  setup; export PING_RC=2
+  rm -f "$NIC_WATCHDOG_SYS/eno1/carrier"; mkdir "$NIC_WATCHDOG_SYS/eno1/carrier"
+  echo 2 >"$NIC_WATCHDOG_RUN/resets"; echo $((T - 120)) >"$NIC_WATCHDOG_RUN/last_reset"
+  echo $((T - 60)) >"$NIC_WATCHDOG_RUN/last_check"
+  minutes 0 29; no_reboot && called 'ip link set eno1 up' || return 1
+  minutes 30 30; called '^systemctl reboot$'
+}
+t_failed_link_set_logged_sequence_advances() {
+  setup; export PING_RC=1 IP_LINK_RC=1; hang_on
+  minutes 0 2
+  [ "$(rv resets)" = 2 ] && grep -q 'ip link set eno1 down failed' "$SANDBOX/log/out" || return 1
+  minutes 3 3; called '^systemctl reboot$'
+}
+
 check "one hang alone does not reset" t_one_hang_no_reset
 check "two hang checks reset the card, down then up" t_two_hangs_reset
 check "hang sequence: reset, reset, then reboot" t_hang_sequence_reboots
@@ -273,4 +322,11 @@ check "a report survives a reboot" t_report_survives_reboot
 check "the success ping goes out hourly" t_hourly_ping
 check "a blank URL sends nothing" t_blank_url_sends_nothing
 check "the URL never reaches the log" t_url_never_logged
+check "a missing state directory is created and the reset cap holds" t_missing_state_dir_cap_holds
+check "an unwritable state path refuses resets while the gateway answers" t_unwritable_state_answering_no_reset
+check "the next journal window starts at the reset" t_journal_window_starts_at_reset
+check "the reset is counted before the link goes down" t_reset_counted_before_link_down
+check "admin-down with no episode takes no action" t_admin_down_no_episode_no_action
+check "admin-down in an episode retries up and reaches a reboot" t_admin_down_in_episode_reboots
+check "a failing ip link set is logged and the sequence advances" t_failed_link_set_logged_sequence_advances
 finish

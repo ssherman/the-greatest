@@ -64,9 +64,19 @@ num() {
 put() { printf '%s\n' "$2" >"$1" 2>/dev/null; }
 clear_episode() { rm -f "$RUN/hang_streak" "$RUN/hang_seen" "$RUN/gateway_lost_since" "$RUN/resets" "$RUN/last_reset"; }
 now_iso() { date -u -d "@$NOW" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "$NOW"; }
-report() { [ "$LOG_ONLY" = 1 ] && return 0; printf '%s %s\n' "$(now_iso)" "$1" >>"$STATE/report" 2>/dev/null; }
+report() {
+  [ "$LOG_ONLY" = 1 ] && return 0
+  printf '%s %s\n' "$(now_iso)" "$1" >>"$STATE/report" 2>/dev/null && return 0
+  log "cannot write the report"
+  return 1
+}
 
-mkdir -p "$RUN" 2>/dev/null
+mkdir -p "$RUN" "$STATE" 2>/dev/null
+# Without a writable state directory nothing that needs memory may act: no answering-path reset,
+# no success ping, no reboot. Everything else still runs.
+STATE_OK=0
+{ [ -d "$STATE" ] && [ -w "$STATE" ]; } && STATE_OK=1
+[ "$STATE_OK" = 1 ] || log "cannot write $STATE; actions that need it are disabled"
 if ! [ -d "$RUN" ] || ! [ -w "$RUN" ]; then
   log "cannot write $RUN; doing nothing"
   exit 1
@@ -89,10 +99,18 @@ if ! put "$RUN/last_check" "$NOW"; then
 fi
 
 # 2. Carrier.
+# No carrier file: the interface is gone, nothing to act on. A file that exists but cannot be
+# read is an interface that is administratively down (the kernel answers EINVAL): treat as down.
 carrier=""
-if ! { read -r carrier <"$SYS/$NIC/carrier"; } 2>/dev/null; then
-  log "cannot read carrier for $NIC; doing nothing"
+admin_down=0
+if [ ! -e "$SYS/$NIC/carrier" ]; then
+  log "no carrier file for $NIC; doing nothing"
   exit 0
+fi
+if ! { read -r carrier <"$SYS/$NIC/carrier"; } 2>/dev/null; then
+  carrier=""
+  admin_down=1
+  log "carrier unreadable for $NIC (administratively down)"
 fi
 
 # 3. Hang. Capture status first; --grep would exit 1 on "no match" and hide a real failure.
@@ -135,13 +153,16 @@ if [ "$carrier" != 1 ] && [ "$episode" = 0 ] && [ "$hang" = 0 ]; then
 fi
 
 do_reset() { # do_reset <why>
+  # Count first, so a kill mid-reset still advances the sequence.
+  resets=$((resets + 1))
+  put "$RUN/resets" "$resets"
   if [ "$LOG_ONLY" = 1 ]; then
     log "would reset $NIC ($1)"
   else
     log "resetting $NIC ($1)"
-    ip link set "$NIC" down
+    ip link set "$NIC" down || log "ip link set $NIC down failed"
     sleep 3
-    ip link set "$NIC" up
+    ip link set "$NIC" up || log "ip link set $NIC up failed"
     local i c=""
     for ((i = 0; i < 15; i++)); do
       { read -r c <"$SYS/$NIC/carrier"; } 2>/dev/null
@@ -149,9 +170,9 @@ do_reset() { # do_reset <why>
       sleep 1
     done
   fi
-  resets=$((resets + 1))
-  put "$RUN/resets" "$resets"
-  put "$RUN/last_reset" "$NOW"
+  # The reset's own time, after the link is back: hang messages from before it are not a failed
+  # reset. SECONDS keeps the test clock (NIC_WATCHDOG_NOW) working.
+  put "$RUN/last_reset" "$((NOW + SECONDS))"
   report "reset $NIC ($1)"
 }
 
@@ -202,6 +223,8 @@ send_report() { # only called on a check where the gateway answers
     else
       log "report send failed"
     fi
+  elif [ "$STATE_OK" = 0 ]; then
+    return 0   # could not record the ping, so it would repeat every minute
   elif ! lp=$(num "$STATE/last_ping") || [ "$lp" -gt "$NOW" ] || [ $((NOW - lp)) -ge 3600 ]; then
     if curl -fsS -m 10 -o /dev/null "$HC" 2>/dev/null; then
       put "$STATE/last_ping" "$NOW"
@@ -211,6 +234,12 @@ send_report() { # only called on a check where the gateway answers
     fi
   fi
 }
+
+# An interface left administratively down inside an episode: bring it back up, then carry on
+# toward a reboot exactly as for any carrier-down state.
+if [ "$admin_down" = 1 ] && [ "$episode" = 1 ] && [ "$LOG_ONLY" = 0 ]; then
+  ip link set "$NIC" up || log "ip link set $NIC up failed"
+fi
 
 # 6. Gateway.
 gateway=lost
@@ -246,11 +275,15 @@ if [ "$gateway" = answers ]; then
         [[ $e =~ ^[0-9]+$ ]] && [ "$e" -le "$NOW" ] && [ $((NOW - e)) -lt "$REBOOT_LIMIT" ] && recent=$((recent + 1))
       done <"$STATE/answering_resets"
     fi
-    if [ "$recent" -lt "$ANSWERING_RESET_CAP" ]; then
-      do_reset "hang while the gateway answers"
-      [ "$LOG_ONLY" = 1 ] || printf '%s\n' "$NOW" >>"$STATE/answering_resets" 2>/dev/null
-    else
+    if [ "$recent" -ge "$ANSWERING_RESET_CAP" ]; then
       log "hang while the gateway answers; already reset $recent times inside the limit"
+    elif [ "$LOG_ONLY" = 1 ]; then
+      do_reset "hang while the gateway answers"
+    elif [ "$STATE_OK" = 1 ] && printf '%s\n' "$NOW" >>"$STATE/answering_resets" 2>/dev/null; then
+      # Recorded before the reset: the cap must hold even if the reset never finishes.
+      do_reset "hang while the gateway answers"
+    else
+      log "cannot record the reset; refusing it"
     fi
   fi
   exit 0
