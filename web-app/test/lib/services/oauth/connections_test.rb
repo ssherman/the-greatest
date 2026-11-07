@@ -52,6 +52,20 @@ module Services
         assert grant.reload.revoked?
       end
 
+      # The row lock is what serialises two overlapping Approves of one
+      # connection (the controller issues its code inside the same transaction).
+      test "re-approving locks the existing connection row before changing it" do
+        OauthConnection.any_instance.expects(:lock!).once
+
+        approve
+      end
+
+      test "a first approval has no row to lock" do
+        OauthConnection.any_instance.expects(:lock!).never
+
+        approve(application: @other_app)
+      end
+
       test "approving a revoked connection clears revoked_at and updates the scopes" do
         connection = oauth_connections(:member_mcp)
         Connections.revoke!(connection)

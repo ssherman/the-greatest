@@ -42,21 +42,40 @@ module Oauth
     def create
       return if review!(strict: true)
 
-      application = pre_auth.client.application
-      result = ::Services::Oauth::Connections.approve(
-        user: current_user, application: application, resource_key: @resource.key, scopes: @scopes
-      )
-      return redirect_or_render(failure_response) unless result.success?
-
-      # Rebuilt from the request plus what the server decided: the connection it
-      # just made and the scopes it will grant. Nothing the client sent can
-      # replace either.
-      @server_params = {connection_id: result.data.id, scope: @scopes.join(" ")}
-      @pre_auth = nil
-      redirect_or_render(authorize_response)
+      redirect_or_render(approve_and_issue_code)
     end
 
     private
+
+    # The approval and the code it issues commit together or not at all.
+    #   - A re-approval revokes the earlier approval's tokens; if the code then
+    #     failed, the member would have lost those tokens for nothing.
+    #   - Connections.approve locks an existing connection row, and the lock is
+    #     held until this transaction commits. So when two Approves for one
+    #     connection overlap, the second waits until the first has issued its
+    #     code, then revokes it. Without this, both could end up holding a live
+    #     code, and a re-approval would no longer be a fresh start.
+    def approve_and_issue_code
+      response = nil
+      ::ActiveRecord::Base.transaction do
+        result = ::Services::Oauth::Connections.approve(
+          user: current_user, application: pre_auth.client.application, resource_key: @resource.key, scopes: @scopes
+        )
+        unless result.success?
+          response = failure_response
+          raise ::ActiveRecord::Rollback
+        end
+
+        # Rebuilt from the request plus what the server decided: the connection
+        # it just made and the scopes it will grant. Nothing the client sent can
+        # replace either.
+        @server_params = {connection_id: result.data.id, scope: @scopes.join(" ")}
+        @pre_auth = nil
+        response = authorize_response
+        raise ::ActiveRecord::Rollback if response.is_a?(::Doorkeeper::OAuth::ErrorResponse)
+      end
+      response
+    end
 
     # Renders or redirects and answers true when the request must not go on.
     # `strict` is the POST: a refusal there is an error status, not a page.

@@ -104,14 +104,14 @@ module Oauth
       assert_response :success
       assert_includes response.headers["Cache-Control"], "no-store"
       assert_select "[data-testid=oauth-redirect-host]", text: "claude.ai"
-      assert_select "button[onclick*=login_modal]"
+      assert_select "[data-testid=oauth-signed-out]"
     end
 
     test "a signed-out visitor who sent no scope still gets the sign-in prompt" do
       get "/oauth/authorize", params: authorize_params(scope: nil)
 
       assert_response :success
-      assert_select "button[onclick*=login_modal]"
+      assert_select "[data-testid=oauth-signed-out]"
     end
 
     test "a signed-out POST gets no code" do
@@ -211,7 +211,7 @@ module Oauth
       get "/oauth/authorize", params: authorize_params
       assert_response :success
       assert_select "[data-testid=oauth-approve]", count: 0
-      assert_select "a[href=?]", "/membership"
+      assert_select "[data-testid=oauth-ineligible]"
 
       delete "/oauth/authorize", params: authorize_params
       assert_redirected_to_client(CLAUDE_URI, error: "access_denied")
@@ -224,7 +224,7 @@ module Oauth
 
       assert_response :success
       assert_select "[data-testid=oauth-approve]", count: 0
-      assert_select "a[href=?]", "/membership"
+      assert_select "[data-testid=oauth-ineligible]"
     end
 
     test "a non-member who sent no scope is told about membership, not given an error redirect" do
@@ -233,7 +233,7 @@ module Oauth
       get "/oauth/authorize", params: authorize_params(scope: nil)
 
       assert_response :success
-      assert_select "a[href=?]", "/membership"
+      assert_select "[data-testid=oauth-ineligible]"
     end
 
     test "a non-member's forged POST gets no code and creates no connection" do
@@ -349,6 +349,25 @@ module Oauth
 
       assert_redirected_to_client(callback)
       assert_equal callback, OauthAccessGrant.order(:id).last.redirect_uri
+    end
+
+    test "a re-approval whose code cannot be issued leaves the earlier approval and its tokens alone" do
+      sign_in_as(@member, stub_auth: true)
+      connection = oauth_connections(:member_mcp)
+      access, = issue_oauth_token(connection)
+      approved_at = connection.approved_at
+      OauthAccessGrant.stubs(:create!).raises(ActiveRecord::RecordInvalid.new(OauthAccessGrant.new))
+
+      begin
+        post "/oauth/authorize", params: authorize_params(application: @claude_code, redirect_uri: "http://localhost:61000/callback")
+      rescue ActiveRecord::RecordInvalid
+        # Raised or rescued into an error page, depending on show_exceptions;
+        # either way no code went out and the transaction rolled back.
+      end
+
+      assert_nil(response&.location&.then { |location| Rack::Utils.parse_query(URI.parse(location).query)["code"] })
+      assert_not OauthAccessToken.by_token(access).revoked?
+      assert_equal approved_at, connection.reload.approved_at
     end
 
     test "the Approve response lets a form post end on the client's origin" do

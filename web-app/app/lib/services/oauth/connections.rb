@@ -19,6 +19,12 @@ module Services
       #
       # A double-clicked Approve makes two requests race to insert the same
       # row; the loser hits the unique index, and one retry finds the winner's.
+      #
+      # An existing row is locked (SELECT ... FOR UPDATE), so two approvals of
+      # one connection run one after the other. The lock only serialises them
+      # if the caller issues its code inside the same transaction:
+      # Oauth::AuthorizationsController#create does, so the later approval
+      # always sees, and revokes, the earlier approval's code.
       def self.approve(user:, application:, resource_key:, scopes:)
         attempts = 0
         begin
@@ -27,6 +33,7 @@ module Services
             record = ::OauthConnection.find_or_initialize_by(
               user_id: user.id, oauth_application_id: application.id, resource: resource_key
             )
+            record.lock! if record.persisted?
             now = Time.current
             revoke_children(record, now) if record.persisted?
             record.update!(scopes: scopes, approved_at: now, revoked_at: nil)
