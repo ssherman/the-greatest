@@ -41,6 +41,8 @@ mount_data_disk() {
 case "$ROLE" in
   ol) mount_data_disk ol-data "$OL_DATA" ;;
   worldcat) mount_data_disk wc-data "$WC_DATA" ;;
+  # The 200 GB data disk (rpool2) at /mnt/pgverify: the restored cluster, the dumps and the row-count baseline.
+  pgverify) mount_data_disk pgverify "$PGVERIFY_ROOT" ;;
   fetcher)
     # No IPv6 at all: every device in the house has a public IPv6 address (spec §4).
     # The sysctl alone held only until the first reboot: networkd brings eth0 up

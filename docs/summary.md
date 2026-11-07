@@ -64,7 +64,7 @@ Media-specific filters:
 
 ### Backend
 - **Framework**: Ruby on Rails 8
-- **Database**: PostgreSQL 17
+- **Database**: PostgreSQL 18 in development and CI; production moves from 17 by `docs/features/postgres-server.md`
 - **Caching**: Redis
 - **Background Jobs**: Sidekiq (for list aggregation, recommendations, data processing)
 - **AI Integration**: API clients for ChatGPT, Google AI, Claude, etc.

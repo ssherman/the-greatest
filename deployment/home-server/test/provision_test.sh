@@ -173,6 +173,18 @@ t_foreign_vmids_ignore_ours() {
   [ "$out" = 101 ]
 }
 
+# 140 is ours too (pgverify): never "foreign", so --verify does not treat it as a guest it must leave alone.
+t_foreign_vmids_ignore_pgverify() {
+  local out
+  out="$(
+    on_host() {
+      printf '%s\n' '      VMID NAME   STATUS     MEM(MB)' '       110 ol     running    24576' \
+        '       140 pgverify running   8192' '       101 other  running    2048'
+    }
+    running_foreign_vmids
+  )"
+  [ "$out" = 101 ]
+}
 # ol's address comes from an ssh to the host; that ssh must not eat the stdin
 # meant for the VM (it once left ol with an empty env file).
 t_vm_ssh_stdin_reaches_vm() {
@@ -195,6 +207,37 @@ t_push_env_refuses_a_mismatch() {
     push_vm_env ol
   ) 2>&1)" || rc=$?
   [ "$rc" = 1 ] && grep -q 'does not match' <<<"$out" && ! grep -q 'systemctl start' <<<"$out"
+}
+
+# The restore check's VM stays off until the migration turns it on: a plain provision after the merge
+# must not create VM 140 or start its timer.
+t_pgverify_is_off_unless_enabled() {
+  [ "$(unset PGVERIFY_ENABLED; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat " ] &&
+    [ "$(PGVERIFY_ENABLED=0; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat " ] &&
+    [ "$(PGVERIFY_ENABLED=1; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat pgverify " ]
+}
+# Every loop over the VMs goes through managed_roles, so none of them can reach a VM that was not asked for.
+t_no_role_loop_names_pgverify() {
+  ! grep -nE 'for role in .*pgverify' "$HS_DIR/provision" "$HS_DIR"/lib/*.sh &&
+    grep -q 'for role in $(managed_roles)' "$HS_DIR/provision"
+}
+# verify_vms and the egress checks, with everything that reaches a machine replaced by a line of output.
+verify_output() {
+  on_host() { echo "on_host $*"; }
+  vm_ssh() { echo "vm_ssh $*"; }
+  vm_ip() { echo 192.0.2.5; }
+  probe_rc() { echo 1; }
+  expect() { echo "expect $1"; }
+  expect_blocked() { echo "expect_blocked $1"; }
+  verify_vms 2>&1
+  verify_pgverify_egress 2>&1
+}
+t_verify_skips_pgverify_when_off() {
+  local out
+  out="$(unset PGVERIFY_ENABLED; verify_output)"
+  grep -q 'fetcher: running' <<<"$out" && ! grep -qE '(on_host|vm_ssh|expect|expect_blocked) .*pgverify' <<<"$out" || return 1
+  out="$(PGVERIFY_ENABLED=1; verify_output)"
+  grep -q 'pgverify: pg-restore-verify.timer' <<<"$out" && grep -q 'egress: pgverify reaches' <<<"$out"
 }
 
 # Every service's CPU cap must fit inside the ol VM (build and recommender).
@@ -224,7 +267,11 @@ check "an unreadable or non-IPv4 trace fails instead of returning nothing" t_hou
 check "the firewall step dies before writing anything when the public IPv4 can't be read" t_firewall_dies_without_house_ip
 check "--recovery re-checks the pre-existing guests after the reboot" t_recovery_rechecks_guests
 check "running_foreign_vmids ignores 110, 120 and 130 and stopped guests" t_foreign_vmids_ignore_ours
+check "running_foreign_vmids ignores 140 (pgverify) too" t_foreign_vmids_ignore_pgverify
 check "vm_ssh to ol passes its stdin to the VM, not to the host lookup" t_vm_ssh_stdin_reaches_vm
 check "an env file that lands different from what was sent stops before the deploy" t_push_env_refuses_a_mismatch
 check "the build's cpus cap fits in the ol VM's vCPUs" t_build_cpus_fit_vm
+check "pgverify is not a managed VM unless PGVERIFY_ENABLED=1" t_pgverify_is_off_unless_enabled
+check "provision and verify loop over managed_roles, never a literal pgverify" t_no_role_loop_names_pgverify
+check "--verify leaves VM 140 alone when it is off" t_verify_skips_pgverify_when_off
 finish

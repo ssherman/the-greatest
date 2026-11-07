@@ -22,6 +22,9 @@ if [ -z "${WC_DATA_VERSION:-}" ] && [ -f "$WC_DATA/current-version" ]; then
   export WC_DATA_VERSION
 fi
 
+# The pgverify VM's data disk, mounted into its Postgres containers (compose.pgverify.yml).
+export PGVERIFY_ROOT
+
 hs="$REPO_DIR/deployment/home-server"
 files=(-f "$REPO_DIR/data-sources/docker-compose.yml" -f "$hs/compose.tunnel.yml")
 if [ -f "$hs/compose.$ROLE.yml" ]; then files+=(-f "$hs/compose.$ROLE.yml"); fi

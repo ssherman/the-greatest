@@ -21,10 +21,15 @@ export HC_FETCHER_HEARTBEAT=https://hc.test/f-beat HC_FETCHER_DEPLOY=https://hc.
 export WORLDCAT_TUNNEL_TOKEN=wc-token HC_WORLDCAT_HEARTBEAT=https://hc.test/wc-beat HC_WORLDCAT_DEPLOY=https://hc.test/wc-deploy
 export HC_RECOMMENDER=https://hc.test/ol-train RECOMMENDATIONS_R2_ENDPOINT=https://acct.r2.test
 export RECOMMENDATIONS_R2_ACCESS_KEY=rec-access RECOMMENDATIONS_R2_SECRET_KEY=rec-secret RECOMMENDATIONS_R2_BUCKET=rec-bucket
+export HC_PGVERIFY=https://hc.test/pgv-verified HC_PGVERIFY_DEPLOY=https://hc.test/pgv-deploy
+export PGVERIFY_REPO_BUCKET=pgv-repo-bucket PGVERIFY_REPO_ENDPOINT=s3.pgv.test PGVERIFY_REPO_REGION=pgv-region-1
+export PGVERIFY_REPO_PATH=/pgv-path PGVERIFY_REPO_KEY=pgv-repo-key PGVERIFY_REPO_KEY_SECRET=pgv-repo-secret
+export PGVERIFY_CIPHER_PASS=pgv-cipher PGVERIFY_DUMP_BUCKET=pgv-dump-bucket PGVERIFY_DUMP_KEY=pgv-dump-key
+export PGVERIFY_DUMP_KEY_SECRET=pgv-dump-secret PGVERIFY_DUMP_REGION=pgv-dump-region
 echo "ssh-ed25519 AAAATEST test@example.com" >"$SANDBOX/key.pub"
 export SSH_PUBKEY_FILE="$SANDBOX/key.pub"
 
-for role in ol fetcher worldcat; do
+for role in ol fetcher worldcat pgverify; do
   render_vm_env "$role" "$SANDBOX/$role.env"
   render_user_data "$role" "$SANDBOX/$role.env" "$SANDBOX/$role.yaml"
 done
@@ -71,6 +76,74 @@ t_blank_secrets() {
     grep -qx 'TUNNEL_TOKEN=' "$SANDBOX/blank.env" && grep -qx 'RECOMMENDATIONS_R2_BUCKET=' "$SANDBOX/blank.env"
 }
 
+t_pgverify_env_keys() {
+  local keys
+  keys="$(env_from_yaml "$SANDBOX/pgverify.yaml" | cut -d= -f1 | tr '\n' ' ')"
+  [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH HC_PGVERIFY PGVERIFY_REPO_BUCKET PGVERIFY_REPO_ENDPOINT PGVERIFY_REPO_REGION PGVERIFY_REPO_PATH PGVERIFY_REPO_KEY PGVERIFY_REPO_KEY_SECRET PGVERIFY_CIPHER_PASS PGVERIFY_DUMP_BUCKET PGVERIFY_DUMP_REGION PGVERIFY_DUMP_KEY PGVERIFY_DUMP_KEY_SECRET PGVERIFY_UPLOAD_ENABLED " ]
+}
+t_pgverify_env() {
+  local env; env="$(env_from_yaml "$SANDBOX/pgverify.yaml")"
+  grep -qx 'ROLE=pgverify' <<<"$env" && grep -qx 'HC_PGVERIFY=https://hc.test/pgv-verified' <<<"$env" &&
+    grep -qx 'HC_DEPLOY=https://hc.test/pgv-deploy' <<<"$env" && grep -qx 'PGVERIFY_REPO_KEY_SECRET=pgv-repo-secret' <<<"$env" &&
+    grep -qx 'PGVERIFY_CIPHER_PASS=pgv-cipher' <<<"$env" && grep -qx 'PGVERIFY_DUMP_BUCKET=pgv-dump-bucket' <<<"$env" &&
+    grep -qx 'PGVERIFY_DUMP_REGION=pgv-dump-region' <<<"$env" &&
+    # No tunnel, no heartbeat: it runs no always-on service.
+    grep -qx 'TUNNELS_ENABLED=0' <<<"$env" && grep -qx 'TUNNEL_TOKEN=' <<<"$env" && grep -qx 'HC_HEARTBEAT=' <<<"$env"
+}
+t_pgverify_upload_off_by_default() {
+  env_from_yaml "$SANDBOX/pgverify.yaml" | grep -qx 'PGVERIFY_UPLOAD_ENABLED=0' &&
+    [ "$(PGVERIFY_UPLOAD_ENABLED=1; render_vm_env pgverify "$SANDBOX/up.env"; grep -x 'PGVERIFY_UPLOAD_ENABLED=1' "$SANDBOX/up.env")" = PGVERIFY_UPLOAD_ENABLED=1 ] &&
+    [ "$(unset PGVERIFY_UPLOAD_ENABLED; render_vm_env pgverify "$SANDBOX/up.env"; grep -x 'PGVERIFY_UPLOAD_ENABLED=0' "$SANDBOX/up.env")" = PGVERIFY_UPLOAD_ENABLED=0 ]
+}
+t_pgverify_values_reach_no_other_role() {
+  local r
+  for r in ol fetcher worldcat; do
+    ! env_from_yaml "$SANDBOX/$r.yaml" | grep -q 'PGVERIFY\|pgv-' || return 1
+  done
+}
+t_pgverify_holds_nothing_of_the_others() {
+  local env; env="$(env_from_yaml "$SANDBOX/pgverify.yaml")"
+  ! grep -q 'ol-token\|fetcher-token\|wc-token\|ol-beat\|f-beat\|wc-beat\|RECOMMEND\|rec-\|ol-train' <<<"$env"
+}
+t_pgverify_refuses_unsafe_values() {
+  # The env file is sourced by the VM's scripts: a value with a space, quote, $ or & would run as shell.
+  local v
+  for v in 'a b' "a'b" 'a$b' 'a&b' 'a;b' 'a`b'; do
+    (PGVERIFY_CIPHER_PASS="$v"; render_vm_env pgverify "$SANDBOX/bad.env") >/dev/null 2>&1 && return 1
+  done
+  (PGVERIFY_CIPHER_PASS='aZ09+/=._:@,-'; render_vm_env pgverify "$SANDBOX/ok.env") >/dev/null 2>&1
+}
+t_pgverify_refuses_a_blank_check_url() {
+  # Without it a failed restore check is silent, which is the failure the VM exists to prevent.
+  (HC_PGVERIFY=""; render_vm_env pgverify "$SANDBOX/nohc.env") >/dev/null 2>&1 && return 1
+  (unset HC_PGVERIFY; render_vm_env pgverify "$SANDBOX/nohc.env") >/dev/null 2>&1 && return 1
+  (HC_PGVERIFY=""; render_vm_env fetcher "$SANDBOX/other.env") >/dev/null 2>&1
+}
+t_pgverify_spec() {
+  vm_spec pgverify || return 1
+  [ "$VMID $NAME $CORES $MEM $OSDISK $DATADISK $STARTUP" = "140 pgverify 4 8192 32 400 order=4" ] &&
+    [ "$NET $IPCONFIG $NAMESERVER" = "virtio,bridge=vmbr1,firewall=1 ip=10.20.0.20/24,gw=10.20.0.1 1.1.1.1 1.0.0.1" ] &&
+    [ "$(vm_ip pgverify)" = 10.20.0.20 ]
+}
+t_pgverify_fw() {
+  local out="$SANDBOX/140.fw"
+  render_pgverify_fw "$out" 203.0.113.7 || return 1
+  ! grep -q '\${' "$out" || return 1
+  [ "$(sed -n '/^\[IPSET house_public\]/,/^$/p' "$out" | sed 1d)" = 203.0.113.7 ] &&
+    [ "$(sed -n '/^\[IPSET ipfilter-net0\]/,/^$/p' "$out" | sed 1d)" = 10.20.0.20 ] &&
+    grep -qx 'policy_in: DROP' "$out" && grep -qx 'policy_out: ACCEPT' "$out" && grep -qx 'ipfilter: 1' "$out" &&
+    grep -qx 'OUT DROP -dest +private -log nolog' "$out" && grep -qx 'OUT DROP -dest +guest/house_public -log nolog' "$out" &&
+    # Inbound: SSH from the host's vmbr1 address and nothing else.
+    [ "$(grep -c '^IN ' "$out")" = 1 ] && grep -qx 'IN ACCEPT -source 10.20.0.1 -p tcp -dport 22 -log nolog' "$out" &&
+    # No rule opens a port to the world or the LAN.
+    ! grep -q '^OUT ACCEPT\|+lan' "$out"
+}
+t_pgverify_fw_refuses_bad_ip() {
+  ! render_pgverify_fw "$SANDBOX/bad.fw" "" && ! render_pgverify_fw "$SANDBOX/bad.fw" 2001:db8::1
+}
+t_pgverify_in_firewall_pairs() {
+  grep -qF '"140.fw:/etc/pve/firewall/140.fw"' "$HS_DIR/lib/host.sh"
+}
 t_cluster_fw() {
   local out="$SANDBOX/cluster.fw" set
   LAN_IPV4_CIDR=192.0.2.0/24 LAN_IPV6_PREFIX=2001:db8:1::/64 render_cluster_fw "$out" || return 1
@@ -228,6 +301,17 @@ check "worldcat gets its role, token and check URLs, and no refresh check" t_wor
 check "worldcat holds nothing of ol's or the fetcher's" t_worldcat_isolation
 check "130.fw drops inbound except SSH from the LAN" t_worldcat_firewall
 check "converge_host_firewall installs 130.fw" t_worldcat_in_firewall_pairs
+check "pgverify gets its role, check URLs and settings, no tunnel and no heartbeat" t_pgverify_env
+check "pgverify's env has exactly its own keys" t_pgverify_env_keys
+check "the pgverify upload is off unless it is set to 1" t_pgverify_upload_off_by_default
+check "pgverify refuses a blank HC_PGVERIFY, and only pgverify does" t_pgverify_refuses_a_blank_check_url
+check "pgverify's values reach no other role" t_pgverify_values_reach_no_other_role
+check "pgverify holds nothing of the other roles'" t_pgverify_holds_nothing_of_the_others
+check "pgverify's env refuses a value that would run as shell" t_pgverify_refuses_unsafe_values
+check "vm_spec pgverify: VM 140, 4 vCPU / 8 GB / 400 GB data, vmbr1 at 10.20.0.20" t_pgverify_spec
+check "140.fw drops everything inbound but SSH from the host, and private destinations outbound" t_pgverify_fw
+check "140.fw refuses an empty or non-IPv4 house address" t_pgverify_fw_refuses_bad_ip
+check "converge_host_firewall installs 140.fw" t_pgverify_in_firewall_pairs
 check "storage names default to local-lvm / local and come from the secrets when set" t_storage_defaults
 check "pick_trace_ip returns only a dotted IPv4 ip= line" t_trace_ip
 check "a ZFS module/userland or kernel mismatch yields a reboot message naming both versions" t_reboot_reason
