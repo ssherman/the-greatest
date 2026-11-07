@@ -124,10 +124,16 @@ module Oauth
         {grant_types: "authorization_code"},
         {response_types: ["token"]},
         {client_name: "x" * 101},
-        {client_name: 5}
-      ].each do |extra|
+        {client_name: 5},
+        {client_name: "a\u0000b"},
+        {client_name: "a\u001Fb"},
+        {client_name: "gnp\u202Eexe"},
+        {client_name: "a\u200Bb"}
+      ].each_with_index do |extra, index|
+        # One address per case: there are more cases than the per-address budget.
+        env = {"REMOTE_ADDR" => "203.0.113.#{100 + index}"}
         assert_no_difference -> { OauthApplication.count } do
-          register({redirect_uris: [LOOPBACK_URI]}.merge(extra))
+          register({redirect_uris: [LOOPBACK_URI]}.merge(extra), env: env)
         end
         assert_registration_error "invalid_client_metadata"
       end

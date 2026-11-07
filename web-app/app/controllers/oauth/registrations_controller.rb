@@ -26,6 +26,7 @@ module Oauth
     MAX_REDIRECT_URI_LENGTH = 2_000
     MAX_CLIENT_NAME_LENGTH = 100
     DEFAULT_CLIENT_NAME = "MCP client"
+    UNSAFE_CLIENT_NAME_CHARACTERS = /[\p{Cc}\p{Cf}]/
     SUPPORTED_GRANT_TYPES = %w[authorization_code refresh_token].freeze
 
     # Raised for a request this server refuses; carries the RFC 7591 error code.
@@ -95,6 +96,13 @@ module Oauth
       name = metadata["client_name"]
       unless name.is_a?(String) && name.length <= MAX_CLIENT_NAME_LENGTH
         raise Rejected.new("invalid_client_metadata", "client_name must be a string of at most #{MAX_CLIENT_NAME_LENGTH} characters")
+      end
+
+      # The name is shown to the member on the approval screen. A NUL byte would
+      # also make Postgres raise, and a format character (right-to-left override,
+      # zero-width space) would let a client disguise who is asking.
+      unless name.valid_encoding? && !name.match?(UNSAFE_CLIENT_NAME_CHARACTERS)
+        raise Rejected.new("invalid_client_metadata", "client_name must not contain control or formatting characters")
       end
 
       name.presence || DEFAULT_CLIENT_NAME
