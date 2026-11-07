@@ -724,6 +724,9 @@ Rails.application.routes.draw do
     get ".well-known/oauth-protected-resource/api/mcp", to: "oauth/metadata#protected_resource",
       defaults: {resource_key: "mcp"}, format: false
 
+    # Dynamic Client Registration (RFC 7591, spec D6).
+    post "api/oauth/register", to: "oauth/registrations#create", defaults: {format: :json}, format: false
+
     get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
     get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal
     post "my/reading-goals", to: "books/my/reading_goals#create"
