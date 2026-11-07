@@ -1,0 +1,288 @@
+#!/usr/bin/env bash
+# deployment/home-server/host/sbin/nic-watchdog
+# Runs once a minute on the Proxmox host. Detects a hung network card (kernel "Detected Hardware
+# Unit Hang" for the uplink NIC, or the gateway unreachable), resets the card, and reboots the
+# host only if resetting did not help. A wrong reboot restarts every VM, so every reboot is
+# gated by a 6 hour limit, and the decision order below is deliberate.
+#
+# Deliberately no `set -e`: a failed read must be seen and handled, never stop the script
+# partway through a sequence. All logging is plain stdout; the service's SyslogIdentifier tags it.
+set -uo pipefail
+
+GATEWAY_RESET_1=300     # gateway lost this long: first reset
+GATEWAY_RESET_2=900     # ... second reset
+GATEWAY_REBOOT=1800     # ... then try a reboot
+RETRY_RESET=1800        # a refused reboot retries a reset at most this often
+REBOOT_LIMIT=21600      # never reboot twice inside this window
+ANSWERING_RESET_CAP=2   # resets allowed per REBOOT_LIMIT while the gateway answers
+STALE_GAP=300           # a check this long after the previous one starts a new episode
+
+ENV_FILE="${NIC_WATCHDOG_ENV:-/etc/the-greatest-home-server/nic-watchdog.env}"
+LOG_ONLY_FILE="${NIC_WATCHDOG_LOG_ONLY_FILE:-/etc/the-greatest-home-server/nic-watchdog-log-only}"
+STATE="${NIC_WATCHDOG_STATE:-/var/lib/nic-watchdog}"   # survives reboot
+RUN="${NIC_WATCHDOG_RUN:-/run/nic-watchdog}"           # clears on boot
+SYS="${NIC_WATCHDOG_SYS:-/sys/class/net}"
+NOW="${NIC_WATCHDOG_NOW:-$(date +%s)}"
+
+log() { echo "$*"; }
+
+# The env file is parsed for two keys, never sourced.
+NIC=""
+HC=""
+if [ -r "$ENV_FILE" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    case "$line" in
+      NIC=*) NIC="${line#NIC=}" ;;
+      HC_NIC_WATCHDOG=*) HC="${line#HC_NIC_WATCHDOG=}" ;;
+    esac
+  done <"$ENV_FILE"
+fi
+NIC="${NIC//[\"\']/}"
+HC="${HC//[\"\']/}"
+HC="${HC%/}"
+if ! [[ $NIC =~ ^[A-Za-z0-9._-]+$ ]]; then
+  log "NIC missing or invalid in the env file; doing nothing"
+  exit 1
+fi
+if ! [[ $NOW =~ ^[0-9]+$ ]]; then
+  log "NIC_WATCHDOG_NOW is not an epoch; doing nothing"
+  exit 1
+fi
+
+LOG_ONLY=0
+[ -e "$LOG_ONLY_FILE" ] && LOG_ONLY=1
+
+# num <file>: print the file's value only if it is a non-negative integer.
+num() {
+  local v=""
+  [ -r "$1" ] || return 1
+  IFS= read -r v <"$1" 2>/dev/null || [ -n "$v" ] || return 1
+  [[ $v =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "$v"
+}
+put() { printf '%s\n' "$2" >"$1" 2>/dev/null; }
+clear_episode() { rm -f "$RUN/hang_streak" "$RUN/hang_seen" "$RUN/gateway_lost_since" "$RUN/resets" "$RUN/last_reset"; }
+now_iso() { date -u -d "@$NOW" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "$NOW"; }
+report() { [ "$LOG_ONLY" = 1 ] && return 0; printf '%s %s\n' "$(now_iso)" "$1" >>"$STATE/report" 2>/dev/null; }
+
+mkdir -p "$RUN" 2>/dev/null
+if ! [ -d "$RUN" ] || ! [ -w "$RUN" ]; then
+  log "cannot write $RUN; doing nothing"
+  exit 1
+fi
+
+# 1. Stale state: a gap in checks (pause, reboot, clock jump) ends the episode.
+prev=""
+if [ -e "$RUN/last_check" ]; then
+  if prev=$(num "$RUN/last_check") && [ "$prev" -le "$NOW" ] && [ $((NOW - prev)) -le "$STALE_GAP" ]; then
+    :
+  else
+    log "previous check is stale or in the future; discarding episode state"
+    clear_episode
+    prev=""
+  fi
+fi
+if ! put "$RUN/last_check" "$NOW"; then
+  log "cannot record this check; doing nothing"
+  exit 1
+fi
+
+# 2. Carrier.
+carrier=""
+if ! { read -r carrier <"$SYS/$NIC/carrier"; } 2>/dev/null; then
+  log "cannot read carrier for $NIC; doing nothing"
+  exit 0
+fi
+
+# 3. Hang. Capture status first; --grep would exit 1 on "no match" and hide a real failure.
+since=$((NOW - 120))
+if [ -n "$prev" ]; then
+  since="$prev"
+  if lr=$(num "$RUN/last_reset") && [ "$lr" -gt "$since" ]; then since="$lr"; fi
+fi
+journal=$(journalctl -k -b 0 --no-pager -o cat --since "@$since" 2>/dev/null)
+jrc=$?
+if [ "$jrc" != 0 ]; then
+  log "journalctl failed ($jrc); doing nothing"
+  exit 0
+fi
+streak=$(num "$RUN/hang_streak") || streak=0
+hang=0
+case "$journal" in
+  *"$NIC: Detected Hardware Unit Hang"*) hang=1 ;;
+esac
+if [ "$hang" = 1 ]; then
+  streak=$((streak + 1))
+  put "$RUN/hang_streak" "$streak"
+  : >"$RUN/hang_seen" 2>/dev/null
+  log "hardware unit hang on $NIC (consecutive checks: $streak)"
+else
+  streak=0
+  put "$RUN/hang_streak" 0
+fi
+
+# 4. Episode.
+resets=$(num "$RUN/resets") || resets=0
+episode=0
+{ [ -e "$RUN/hang_seen" ] || [ "$resets" -gt 0 ]; } && episode=1
+
+# 5. Carrier down, nothing wrong beyond a cable or a switch: not ours to fix.
+if [ "$carrier" != 1 ] && [ "$episode" = 0 ] && [ "$hang" = 0 ]; then
+  log "carrier is down on $NIC with no hang and no episode; leaving it alone"
+  rm -f "$RUN/gateway_lost_since"
+  exit 0
+fi
+
+do_reset() { # do_reset <why>
+  if [ "$LOG_ONLY" = 1 ]; then
+    log "would reset $NIC ($1)"
+  else
+    log "resetting $NIC ($1)"
+    ip link set "$NIC" down
+    sleep 3
+    ip link set "$NIC" up
+    local i c=""
+    for ((i = 0; i < 15; i++)); do
+      { read -r c <"$SYS/$NIC/carrier"; } 2>/dev/null
+      [ "$c" = 1 ] && break
+      sleep 1
+    done
+  fi
+  resets=$((resets + 1))
+  put "$RUN/resets" "$resets"
+  put "$RUN/last_reset" "$NOW"
+  report "reset $NIC ($1)"
+}
+
+try_reboot() { # try_reboot <hang|gateway>
+  local kind="$1" last why=""
+  if last=$(num "$STATE/last_reboot") && [ "$last" -le "$NOW" ]; then
+    if [ $((NOW - last)) -lt "$REBOOT_LIMIT" ]; then why="last reboot was $((NOW - last))s ago"; fi
+  elif [ -e "$STATE/last_reboot" ]; then
+    why="last_reboot is unreadable or in the future"
+    [ "$LOG_ONLY" = 1 ] || put "$STATE/last_reboot" "$NOW"
+  fi
+  if [ -z "$why" ] && [ "$kind" = gateway ] && [ -e "$STATE/gateway_reboot_marker" ]; then
+    why="a gateway reboot already happened and the gateway has not answered since"
+  fi
+  if [ -z "$why" ] && [ "$LOG_ONLY" = 0 ]; then
+    mkdir -p "$STATE" 2>/dev/null
+    { [ -d "$STATE" ] && [ -w "$STATE" ]; } || why="cannot write $STATE"
+  fi
+  if [ -n "$why" ]; then
+    log "reboot refused ($kind): $why"
+    local lr
+    if ! lr=$(num "$RUN/last_reset") || [ $((NOW - lr)) -ge "$RETRY_RESET" ]; then
+      do_reset "retry after refused reboot"
+    fi
+    return 0
+  fi
+  if [ "$LOG_ONLY" = 1 ]; then
+    log "would reboot ($kind)"
+    return 0
+  fi
+  # Each write must land before the next step; the reboot never runs after a failed one.
+  put "$STATE/last_reboot" "$NOW" || { log "cannot write last_reboot; not rebooting"; return 0; }
+  if [ "$kind" = gateway ]; then
+    : >"$STATE/gateway_reboot_marker" 2>/dev/null || { log "cannot write the marker; not rebooting"; return 0; }
+  fi
+  report "reboot ($kind)" || { log "cannot write the report; not rebooting"; return 0; }
+  log "rebooting ($kind)"
+  systemctl reboot
+}
+
+send_report() { # only called on a check where the gateway answers
+  [ -n "$HC" ] || return 0
+  local lp
+  if [ -e "$STATE/report" ]; then
+    if curl -fsS -m 10 -o /dev/null --data-binary "@$STATE/report" "$HC/fail" 2>/dev/null; then
+      rm -f "$STATE/report"
+      log "report sent"
+    else
+      log "report send failed"
+    fi
+  elif ! lp=$(num "$STATE/last_ping") || [ "$lp" -gt "$NOW" ] || [ $((NOW - lp)) -ge 3600 ]; then
+    if curl -fsS -m 10 -o /dev/null "$HC" 2>/dev/null; then
+      put "$STATE/last_ping" "$NOW"
+      log "ping sent"
+    else
+      log "ping failed"
+    fi
+  fi
+}
+
+# 6. Gateway.
+gateway=lost
+if [ "$carrier" = 1 ]; then
+  route=$(ip -4 route show default 2>/dev/null | head -n 1)
+  gw=""
+  read -r dflt via gw _ <<<"$route"
+  if [ "${dflt:-}" != default ] || [ "${via:-}" != via ] || ! [[ ${gw:-} =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    log "no default route; doing nothing"
+    exit 0
+  fi
+  ping -c 3 -W 2 -I vmbr0 "$gw" >/dev/null 2>&1
+  prc=$?
+  case "$prc" in
+    0) gateway=answers ;;
+    1) gateway=lost ;;
+    *) log "ping failed with status $prc, which is not a lost gateway; doing nothing"; exit 0 ;;
+  esac
+fi
+
+# 7. Gateway answers: the network is fine, whatever the kernel said.
+if [ "$gateway" = answers ]; then
+  rm -f "$RUN/gateway_lost_since" "$STATE/gateway_reboot_marker"
+  send_report
+  if [ "$hang" = 0 ]; then
+    clear_episode
+    exit 0
+  fi
+  if [ "$streak" -ge 2 ]; then
+    recent=0
+    if [ -r "$STATE/answering_resets" ]; then
+      while IFS= read -r e; do
+        [[ $e =~ ^[0-9]+$ ]] && [ "$e" -le "$NOW" ] && [ $((NOW - e)) -lt "$REBOOT_LIMIT" ] && recent=$((recent + 1))
+      done <"$STATE/answering_resets"
+    fi
+    if [ "$recent" -lt "$ANSWERING_RESET_CAP" ]; then
+      do_reset "hang while the gateway answers"
+      [ "$LOG_ONLY" = 1 ] || printf '%s\n' "$NOW" >>"$STATE/answering_resets" 2>/dev/null
+    else
+      log "hang while the gateway answers; already reset $recent times inside the limit"
+    fi
+  fi
+  exit 0
+fi
+
+# 8. Gateway lost: start the clock.
+lost_since=$(num "$RUN/gateway_lost_since") || {
+  lost_since="$NOW"
+  put "$RUN/gateway_lost_since" "$NOW"
+  log "gateway lost"
+}
+
+# 9. A hang while the gateway is lost.
+if [ "$hang" = 1 ] && [ "$streak" -ge 2 ]; then
+  if [ "$resets" -lt 2 ]; then
+    do_reset "hang, gateway lost"
+  else
+    try_reboot hang
+  fi
+  exit 0
+fi
+
+# 10. Gateway-only.
+age=$((NOW - lost_since))
+[ "$age" -lt 0 ] && age=0
+if [ "$resets" -eq 0 ] && [ "$age" -ge "$GATEWAY_RESET_1" ]; then
+  do_reset "gateway lost ${age}s"
+elif [ "$resets" -eq 1 ] && [ "$age" -ge "$GATEWAY_RESET_2" ]; then
+  do_reset "gateway lost ${age}s"
+elif [ "$age" -ge "$GATEWAY_REBOOT" ]; then
+  try_reboot gateway
+else
+  log "gateway lost ${age}s; waiting"
+fi
+exit 0
