@@ -90,6 +90,7 @@ A systemd timer runs `nic-watchdog` every minute, first at 3 minutes after boot.
 | Hang messages with the gateway answering | At most 2 resets in any 6 hours, tracked on disk so a card that keeps hanging can't get around the cap. After that, log only. Never reboot: traffic is flowing, and the watchdog must not become the outage |
 | Gateway lost, carrier up, no hang messages | Reset at 5 minutes, again at 15 minutes, reboot at 30 minutes. This is the silent failure the forum reports describe, but it also looks like a dead router, which is why it waits much longer |
 | Anything unknown (no default route, a failed read) | Log only. Never act on it |
+| An `ip link set` or a carrier read takes over 10 seconds | The driver is treated as wedged (a reasoned mechanism, not observed). Each link command runs in the background with a 10 second limit; on an overrun the watchdog stops waiting without reaping and goes straight to a reboot, under the same 6-hour limit. A refused reboot, or an overrun carrier read, writes `/run/nic-watchdog/reset_wedged`, which only a boot clears. While it exists every check makes no `ip link` call and retries the reboot. `KillMode=process` keeps a stuck child from holding the unit up. A host wedged badly enough might not finish `systemctl reboot` either |
 
 Worst-case time to a reboot is about 4 minutes on the hang path and 30 on the gateway path.
 

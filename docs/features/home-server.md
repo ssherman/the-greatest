@@ -208,7 +208,7 @@ one interface. Each check looks at three things:
 
 - **Hang:** `journalctl -k -b 0` since the later of the previous check and the last reset, for
   `<nic>: Detected Hardware Unit Hang`.
-- **Gateway:** `ping -c 3 -W 2 -I vmbr0` to the gateway in the default route, read on every run. Only
+- **Gateway:** `ping -c 3 -W 2 -I vmbr0` to the gateway in the default route, read on runs where carrier is up. Only
   "no reply" (exit status 1) counts as lost. Any other ping status, no default route, or a failing
   `journalctl` is "unknown": it logs and does nothing.
 - **Carrier:** `/sys/class/net/<nic>/carrier`. A carrier file that exists but cannot be read means the
@@ -222,13 +222,24 @@ one interface. Each check looks at three things:
 | Hang messages on 2 checks in a row, gateway answering | Reset, at most 2 in any 6 hours (kept on disk). After that, log only. Never reboots, because traffic is flowing |
 | Gateway lost, carrier up, no hang | Reset at 5 minutes, again at 15, try a reboot at 30 |
 | Carrier down during an episode (a hang was seen or a reset was done) | Carries on toward a reboot as if carrier were up. If the interface is administratively down, it also retries `ip link set <nic> up` on each check |
+| An `ip link set` or a carrier read takes longer than 10 seconds | Treats the driver as wedged: goes straight to a reboot (6-hour limit applies). If the reboot is refused, or the carrier read hung, writes `/run/nic-watchdog/reset_wedged`; while that exists every check skips all link commands and only retries the reboot |
 
 A reset is `ip link set <nic> down`, 3 seconds, `ip link set <nic> up`, then up to 15 seconds waiting
 for carrier. It cycles the physical port only: the VMs keep running and `vmbr0` is untouched. The reset
 count is written before the link goes down, so a reset that is killed partway still advances the
 sequence. `last_reset` is written after the link is back, so hang messages from before the reset do
 not count against it. A gap of more than 5 minutes between checks (a pause, a reboot, a clock jump)
-ends the episode.
+ends the episode. Each reset logs and reports its outcome: carrier back after how many seconds, not
+back after 15, or `ip link` failed.
+
+**A reset that wedges in the driver.** `ip link set` and the carrier read run in the background with a
+10 second limit. If one overruns, the watchdog stops waiting (it cannot kill a process stuck in the
+kernel) and tries a reboot at once. A refused reboot, or an overrun carrier read, writes
+`/run/nic-watchdog/reset_wedged`, which the stale-gap rule does not clear; only a boot does. From then
+on each check makes no `ip link` call and retries the reboot, which the 6-hour limit still governs.
+The unit has `KillMode=process`, so a stuck leftover child does not hold it up. This mechanism is
+reasoned, not observed: no wedged reset has been seen. A host wedged badly enough might not finish
+`systemctl reboot` either, and then only Shane can recover it.
 
 Worst case to a reboot is about 4 minutes on the hang path and 30 on the gateway path.
 
@@ -270,7 +281,7 @@ State files:
 
 | Where | Holds | Survives a reboot |
 |---|---|---|
-| `/run/nic-watchdog/` | The episode: last check time, hang streak, gateway-lost clock, reset count, last reset | No |
+| `/run/nic-watchdog/` | The episode: last check time, hang streak, `hang_seen`, gateway-lost clock, reset count, last reset. Also `reset_wedged`, which no episode rule clears | No |
 | `/var/lib/nic-watchdog/` | `last_reboot`, `gateway_reboot_marker`, `answering_resets`, `last_ping`, and `report` (the unsent report) | Yes |
 
 ### Telling Shane
@@ -291,11 +302,15 @@ Shane runs every step; agents do not run `provision`.
    VMs tracking `main`. Plain `provision` upgrades host packages, so it may finish by asking for a
    reboot.
 2. Rehearse detection. On the host, write a fake hang line to `/dev/kmsg` (for example
-   `echo '<4>eno1: Detected Hardware Unit Hang' > /dev/kmsg`), once on each of two consecutive
-   checks, then read `journalctl -t nic-watchdog` and confirm `would reset`. First confirm the fake
-   line shows in `journalctl -k`. If it does not, this rehearsal cannot run, and only the unit tests
-   cover detection.
-3. Remove `/etc/the-greatest-home-server/nic-watchdog-log-only`.
+   `echo '<4>e1000e 0000:00:1f.6 eno1: Detected Hardware Unit Hang:' > /dev/kmsg`), once on each of
+   two consecutive checks, then read `journalctl -t nic-watchdog` and confirm `would reset`. First
+   confirm the fake line shows in `journalctl -k -o cat -n 1`: it must show
+   `eno1: Detected Hardware Unit Hang`. If it does not, this rehearsal cannot run, and only the unit
+   tests cover detection.
+3. Confirm the gateway answers ping from `vmbr0`. Read `journalctl -t nic-watchdog --since '1 day ago'`:
+   there must be no `gateway lost` lines from healthy minutes. A router that ignores ICMP would
+   otherwise cause real resets, and a reboot within the hour. Only then remove
+   `/etc/the-greatest-home-server/nic-watchdog-log-only`.
 4. Do one real reset. Run it detached, because it can drop the SSH session:
    `systemd-run --collect /bin/sh -c 'ip link set eno1 down; sleep 3; ip link set eno1 up'`. These
    are the commands the script runs. Then confirm the link is back, `vmbr0` is up, every VM is

@@ -116,7 +116,7 @@ converge_host_packages() {
   running="$(on_host "uname -r")"
   newest="$(on_host "ls /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||' | sort -V | tail -1")"
   if [ "$running" != "$newest" ]; then
-    log "NOTE: kernel $newest is installed but $running is running; the host never reboots itself"
+    log "NOTE: kernel $newest is installed but $running is running; provision never reboots the host"
   fi
 }
 
