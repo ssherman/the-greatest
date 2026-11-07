@@ -113,6 +113,11 @@ if [ "${#missing[@]}" -gt 0 ]; then
   hc start; started=1
   fail "missing settings: ${missing[*]}"
 fi
+# The aws CLI needs the scheme; without it the upload would fail only after two hours of restore.
+if [ "$upload" = 1 ] && [[ ! "$PGVERIFY_DUMP_ENDPOINT" =~ ^https:// ]]; then
+  hc start; started=1
+  fail "PGVERIFY_DUMP_ENDPOINT must start with https://"
+fi
 
 # --- The data disk, and the guards around emptying it ----------------------------------------
 # The data disk mounts with nofail so a missing disk cannot hang boot; without this check the

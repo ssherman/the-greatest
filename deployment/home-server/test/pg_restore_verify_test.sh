@@ -273,6 +273,13 @@ t_upload_needs_an_endpoint() {
     PGVERIFY_UPLOAD_ENABLED=1
   ! run && [[ "$(fail_message)" == *PGVERIFY_DUMP_ENDPOINT* ]] && ! called '^pgbackrest' && ! called '^aws'
 }
+t_upload_endpoint_needs_https() {
+  setup; write_env ROLE=pgverify HC_PGVERIFY=https://hc.test/pgv PGVERIFY_REPO_BUCKET=b PGVERIFY_REPO_ENDPOINT=e \
+    PGVERIFY_REPO_REGION=r PGVERIFY_REPO_PATH=/p PGVERIFY_REPO_KEY=k PGVERIFY_REPO_KEY_SECRET=s PGVERIFY_CIPHER_PASS=c \
+    PGVERIFY_DUMP_BUCKET=dump-bucket PGVERIFY_DUMP_KEY=dk PGVERIFY_DUMP_KEY_SECRET=ds PGVERIFY_DUMP_REGION=auto \
+    PGVERIFY_DUMP_ENDPOINT=dump.r2.test PGVERIFY_UPLOAD_ENABLED=1
+  ! run && [[ "$(fail_message)" == *https://* ]] && ! called '^pgbackrest' && ! called '^aws'
+}
 t_upload_failure_pings_fail() {
   setup; write_env ROLE=pgverify HC_PGVERIFY=https://hc.test/pgv PGVERIFY_REPO_BUCKET=b PGVERIFY_REPO_ENDPOINT=e \
     PGVERIFY_REPO_REGION=r PGVERIFY_REPO_PATH=/p PGVERIFY_REPO_KEY=k PGVERIFY_REPO_KEY_SECRET=s PGVERIFY_CIPHER_PASS=c \
@@ -679,6 +686,7 @@ check "a failed upload pings fail without naming the bucket" t_upload_failure_pi
 check "upload enabled without its settings fails before any restore" t_upload_needs_its_settings
 check "upload enabled without a region fails before any restore" t_upload_needs_a_region
 check "upload enabled without the dump bucket's endpoint fails before any restore" t_upload_needs_an_endpoint
+check "an upload endpoint without https:// fails before any restore" t_upload_endpoint_needs_https
 check "no secret reaches a command line" t_secrets_not_in_argv
 check "t_prune_keeps_14_daily_12_monthly" t_prune_keeps_14_daily_12_monthly
 check "the first successful run of a month copies the dumps to monthly" t_first_success_of_the_month_copies_monthly

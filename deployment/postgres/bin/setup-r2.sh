@@ -175,6 +175,7 @@ read_rules() {
 # dropped, narrowed, shortened or disabled. An old rule counts as kept when an enabled new rule covers its
 # prefix (the old prefix starts with the new one) for at least as long. Indefinite outlasts any age; a
 # Date lock is never treated as covered.
+# shellcheck disable=SC2016 # a jq program: its $old and $new are jq variables
 GUARD_JQ='
   def age: if .condition.type == "Age" then .condition.maxAgeSeconds
            elif .condition.type == "Indefinite" then infinite else null end;

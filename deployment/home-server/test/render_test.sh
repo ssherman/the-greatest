@@ -122,6 +122,14 @@ t_pgverify_upload_needs_the_dump_endpoint() {
   (PGVERIFY_UPLOAD_ENABLED=0; PGVERIFY_DUMP_ENDPOINT=""; render_vm_env pgverify "$SANDBOX/noep.env") >/dev/null 2>&1 &&
     (PGVERIFY_UPLOAD_ENABLED=1; render_vm_env pgverify "$SANDBOX/ep.env") >/dev/null 2>&1
 }
+t_pgverify_endpoint_schemes() {
+  # The aws CLI needs https://; pgBackRest takes a bare host and fails on a scheme.
+  (PGVERIFY_DUMP_ENDPOINT=pgv-dump.r2.test; render_vm_env pgverify "$SANDBOX/sch.env") >/dev/null 2>&1 && return 1
+  (PGVERIFY_DUMP_ENDPOINT=http://pgv-dump.r2.test; render_vm_env pgverify "$SANDBOX/sch.env") >/dev/null 2>&1 && return 1
+  (PGVERIFY_REPO_ENDPOINT=https://s3.pgv.test; render_vm_env pgverify "$SANDBOX/sch.env") >/dev/null 2>&1 && return 1
+  (PGVERIFY_UPLOAD_ENABLED=0; PGVERIFY_DUMP_ENDPOINT=""; render_vm_env pgverify "$SANDBOX/sch.env") >/dev/null 2>&1 &&
+    (render_vm_env pgverify "$SANDBOX/sch.env") >/dev/null 2>&1
+}
 t_pgverify_refuses_a_blank_check_url() {
   # Without it a failed restore check is silent, which is the failure the VM exists to prevent.
   (HC_PGVERIFY=""; render_vm_env pgverify "$SANDBOX/nohc.env") >/dev/null 2>&1 && return 1
@@ -315,6 +323,7 @@ check "pgverify's env has exactly its own keys" t_pgverify_env_keys
 check "the pgverify upload is off unless it is set to 1" t_pgverify_upload_off_by_default
 check "pgverify refuses a blank HC_PGVERIFY, and only pgverify does" t_pgverify_refuses_a_blank_check_url
 check "pgverify refuses an upload with no dump-bucket endpoint" t_pgverify_upload_needs_the_dump_endpoint
+check "pgverify: the dump endpoint must be https://, the repo endpoint must have no scheme" t_pgverify_endpoint_schemes
 check "pgverify's values reach no other role" t_pgverify_values_reach_no_other_role
 check "pgverify holds nothing of the other roles'" t_pgverify_holds_nothing_of_the_others
 check "pgverify's env refuses a value that would run as shell" t_pgverify_refuses_unsafe_values

@@ -79,6 +79,10 @@ JOBS="${RESTORE_JOBS:-4}"
 
 # Options for every aws call. Empty unless .env sets them, which keeps the old S3
 # behaviour unchanged.
+if [ -n "${BACKUP_ENDPOINT:-}" ] && [[ ! "$BACKUP_ENDPOINT" =~ ^https:// ]]; then
+  echo "BACKUP_ENDPOINT must start with https:// (e.g. https://<account id>.r2.cloudflarestorage.com)" >&2
+  exit 2
+fi
 AWS_OPTS=()
 if [ -n "${BACKUP_AWS_PROFILE:-}" ]; then AWS_OPTS+=(--profile "$BACKUP_AWS_PROFILE"); fi
 if [ -n "${BACKUP_ENDPOINT:-}" ]; then AWS_OPTS+=(--endpoint-url "$BACKUP_ENDPOINT"); fi

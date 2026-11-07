@@ -56,6 +56,13 @@ pgverify_env_check() {
   if [ "${PGVERIFY_UPLOAD_ENABLED:-0}" = 1 ] && [ -z "${PGVERIFY_DUMP_ENDPOINT:-}" ]; then
     die "PGVERIFY_UPLOAD_ENABLED=1 but PGVERIFY_DUMP_ENDPOINT is blank in secrets/home-server.env"
   fi
+  # Two endpoint forms: the aws CLI needs the scheme, pgBackRest must not have one.
+  if [ -n "${PGVERIFY_DUMP_ENDPOINT:-}" ] && [[ ! "$PGVERIFY_DUMP_ENDPOINT" =~ ^https:// ]]; then
+    die "PGVERIFY_DUMP_ENDPOINT in secrets/home-server.env must start with https://"
+  fi
+  case "${PGVERIFY_REPO_ENDPOINT:-}" in
+    *://*) die "PGVERIFY_REPO_ENDPOINT in secrets/home-server.env must be a host name with no scheme (no https://)" ;;
+  esac
   for name in HC_PGVERIFY HC_PGVERIFY_DEPLOY PGVERIFY_REPO_BUCKET PGVERIFY_REPO_ENDPOINT PGVERIFY_REPO_REGION \
     PGVERIFY_REPO_PATH PGVERIFY_REPO_KEY PGVERIFY_REPO_KEY_SECRET PGVERIFY_CIPHER_PASS PGVERIFY_DUMP_BUCKET \
     PGVERIFY_DUMP_REGION PGVERIFY_DUMP_ENDPOINT PGVERIFY_DUMP_KEY PGVERIFY_DUMP_KEY_SECRET PGVERIFY_UPLOAD_ENABLED; do
