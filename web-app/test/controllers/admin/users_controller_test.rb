@@ -226,6 +226,28 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_empty NewsPost.where(id: post.id)
   end
 
+  test "should destroy user with an oauth connection" do
+    user_to_delete = User.create!(email: "oauthowner@example.com", role: :user, email_verified: false)
+    connection = OauthConnection.create!(
+      user: user_to_delete, application: oauth_applications(:claude_code),
+      resource: "mcp", scopes: ["books:read"], approved_at: Time.current
+    )
+    issue_oauth_token(connection)
+    OauthAccessGrant.create!(
+      application: oauth_applications(:claude_code), resource_owner_id: user_to_delete.id,
+      connection_id: connection.id, token: "grant-secret", expires_in: 600,
+      redirect_uri: "http://localhost/callback"
+    )
+
+    assert_difference("User.count", -1) do
+      delete admin_user_url(user_to_delete)
+    end
+    assert_redirected_to admin_users_url
+    assert_not OauthConnection.exists?(connection.id)
+    assert_empty OauthAccessToken.where(connection_id: connection.id)
+    assert_empty OauthAccessGrant.where(connection_id: connection.id)
+  end
+
   test "should destroy user with a saved search" do
     user_to_delete = User.create!(
       email: "searchowner@example.com",
