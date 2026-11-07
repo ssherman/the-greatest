@@ -42,6 +42,8 @@ module Services
 
       def self.peek_ip(window, ip, now: Time.current) = new(now: now).peek_ip(window, ip)
 
+      def self.connector_range?(ip) = new.connector_range?(ip)
+
       # The IP windows, each with its per-IP limit's config key. Connector
       # ranges take their budget from config.connector_range_per_minute[window].
       IP_WINDOWS = {
@@ -98,6 +100,10 @@ module Services
           day: nil
         )
       end
+
+      # True when `ip` is inside a connector egress range, so its IP windows are
+      # a counter shared with every other caller of that connector.
+      def connector_range?(ip) = connector_range_for(ip).present?
 
       private
 

@@ -653,6 +653,31 @@ module Api
           end
         end
 
+        # A connector range's window is one counter shared by every claude.ai user,
+        # so exhausting it must not lock out the callers who hold a valid token.
+        test "with a connector range's window exhausted a valid token still gets through and junk is a 429" do
+          freeze_time do
+            connector = {"REMOTE_ADDR" => "160.79.104.9"}
+            limit = Rails.application.config.x.api.connector_range_per_minute.fetch(:unauthenticated)
+            (limit + 1).times { Services::Api::RateLimiter.hit_unauthenticated("160.79.104.9") }
+
+            get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER), env: connector
+            assert_response :success
+
+            get "/api/v1/books", headers: bearer("tg_#{"z" * 40}"), env: connector
+            assert_response :too_many_requests
+            assert_equal "rate_limited", json[:code]
+            assert response.headers["Retry-After"].present?
+            assert_equal "0", response.headers["X-RateLimit-Remaining"]
+          end
+        end
+
+        test "a junk token from a connector range under its limit is a 401, not a 429" do
+          get "/api/v1/books", headers: bearer("tg_#{"z" * 40}"), env: {"REMOTE_ADDR" => "160.79.104.9"}
+
+          assert_response :unauthorized
+        end
+
         # --- caching -------------------------------------------------------------
 
         test "responses are never cacheable by a shared cache" do

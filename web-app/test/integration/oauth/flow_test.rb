@@ -336,6 +336,26 @@ module Oauth
       end
     end
 
+    test "with a connector range's unauthenticated window exhausted an OAuth token still works on /api/mcp and junk is a 429" do
+      tokens = obtain_tokens
+      freeze_time do
+        limit = Rails.application.config.x.api.connector_range_per_minute.fetch(:unauthenticated)
+        (limit + 1).times { Services::Api::RateLimiter.hit_unauthenticated("160.79.104.9") }
+        connector = {"REMOTE_ADDR" => "160.79.104.9"}
+
+        post "/api/mcp", params: {jsonrpc: "2.0", id: 1, method: "tools/list", params: {}}.to_json,
+          headers: {"Content-Type" => "application/json", "Accept" => "application/json, text/event-stream"}
+            .merge(bearer(tokens["access_token"])), env: connector
+        assert_response :success
+
+        post "/api/mcp", params: {jsonrpc: "2.0", id: 1, method: "tools/list", params: {}}.to_json,
+          headers: {"Content-Type" => "application/json", "Accept" => "application/json, text/event-stream"}
+            .merge(bearer("tg_#{"z" * 40}")), env: connector
+        assert_response :too_many_requests
+        assert response.headers["Retry-After"].present?
+      end
+    end
+
     # --- sign-out ------------------------------------------------------------
 
     test "signing out of the site does not end the connection" do

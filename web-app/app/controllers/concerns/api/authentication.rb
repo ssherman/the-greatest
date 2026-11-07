@@ -4,7 +4,12 @@ module Api
   # Resolves the bearer token into current_principal, or halts with an RFC 6750
   # response. Unauthenticated failures count against a per-IP window so junk
   # cannot turn into database load; an address already over that window is
-  # refused before any lookup. Requires VisitorIp and Api::RateLimited's
+  # refused before any lookup. An address inside a connector egress range is the
+  # exception: its window is shared by every user of that connector, so refusing
+  # before the lookup would let one caller's junk lock all of them out, valid
+  # tokens included. There the (indexed) lookup runs first, a good token goes
+  # through, and only a failed one is counted and, once the range window is
+  # over, answered 429. Requires VisitorIp and Api::RateLimited's
   # apply_rate_limit_headers.
   module Authentication
     extend ActiveSupport::Concern
@@ -18,10 +23,13 @@ module Api
     attr_reader :current_principal
 
     def authenticate!
-      peek = Services::Api::RateLimiter.peek_unauthenticated(visitor_ip)
-      if peek.exceeded?
-        apply_rate_limit_headers(peek)
-        return render_rate_limited(peek)
+      shared_window = Services::Api::RateLimiter.connector_range?(visitor_ip)
+      unless shared_window
+        peek = Services::Api::RateLimiter.peek_unauthenticated(visitor_ip)
+        if peek.exceeded?
+          apply_rate_limit_headers(peek)
+          return render_rate_limited(peek)
+        end
       end
 
       result = Services::Api::Authenticator.call(request)
@@ -33,7 +41,9 @@ module Api
       # Every failed-auth outcome below -- membership_required included -- counts
       # against the visitor-IP window, so a rejected token can't be replayed for
       # free database load.
-      apply_rate_limit_headers(Services::Api::RateLimiter.hit_unauthenticated(visitor_ip))
+      verdict = Services::Api::RateLimiter.hit_unauthenticated(visitor_ip)
+      apply_rate_limit_headers(verdict)
+      return render_rate_limited(verdict) if shared_window && verdict.exceeded?
 
       case result.errors.first
       when :membership_required

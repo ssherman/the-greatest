@@ -151,6 +151,14 @@ module Services
         assert_equal [2_999, 2_998, 2_997], [first, second, third].map { |v| v.minute.remaining }
       end
 
+      test "connector_range? is true inside a range, false just outside, and false for junk" do
+        assert ip_limiter.connector_range?("160.79.104.9")
+        assert ip_limiter.connector_range?("::ffff:153.61.208.1")
+        refute ip_limiter.connector_range?("160.79.112.1")
+        refute ip_limiter.connector_range?("not an ip")
+        refute ip_limiter.connector_range?(nil)
+      end
+
       test "an address just outside the range has its own per-IP window" do
         2.times { ip_limiter.hit_ip(:unauthenticated, "160.79.104.9") }
 
