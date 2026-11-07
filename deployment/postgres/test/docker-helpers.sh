@@ -282,10 +282,12 @@ EOF
   chmod +x "$d"/*
 }
 
-# mk_minio NAME: an S3 server with TLS (pgBackRest needs https) and a versioned bucket, with two keys:
-#   pgserver  list/read/write/delete current objects, and DENIED s3:DeleteObjectVersion (spec §8.2's server key)
-#   pghome    read only (the home VM's restore key)
-# The bucket also gets the 14-day noncurrent-version lifecycle rule. Sets MINIO_* variables. MinIO has no
+# mk_minio NAME: an S3 server with TLS (pgBackRest needs https) and a plain (unversioned) bucket, standing in
+# for the R2 backups bucket, with two keys:
+#   pgserver  list/read/write/delete (spec §8.2's server token: Object Read & Write)
+#   pghome    read only (the home VM's restore token)
+# R2's bucket locks have no MinIO equivalent here; they were proven on real R2 (spec §8.4). Sets MINIO_*
+# variables. MinIO has no
 # image under minio/minio any more; the community build pgsty/minio is pinned by digest.
 MINIO_IMAGE="${MINIO_IMAGE:-pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372}"
 mc() { docker exec -i "$MINIO_CONTAINER" mc --insecure "$@"; }
@@ -311,13 +313,10 @@ mk_minio() {
   done
   mc alias set local https://localhost:9000 root "$root_pw" >/dev/null || return 1
   mc mb "local/$MINIO_BUCKET" >/dev/null || return 1
-  mc version enable "local/$MINIO_BUCKET" >/dev/null || return 1
-  mc ilm rule add --noncurrent-expire-days 14 "local/$MINIO_BUCKET" >/dev/null || return 1
   mc admin policy create local srvpol /dev/stdin >/dev/null <<EOF
 {"Version":"2012-10-17","Statement":[
  {"Effect":"Allow","Action":["s3:ListBucket","s3:GetBucketLocation"],"Resource":["arn:aws:s3:::$MINIO_BUCKET"]},
- {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject"],"Resource":["arn:aws:s3:::$MINIO_BUCKET/*"]},
- {"Effect":"Deny","Action":["s3:DeleteObjectVersion"],"Resource":["arn:aws:s3:::$MINIO_BUCKET/*"]}]}
+ {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject"],"Resource":["arn:aws:s3:::$MINIO_BUCKET/*"]}]}
 EOF
   mc admin policy create local homepol /dev/stdin >/dev/null <<EOF
 {"Version":"2012-10-17","Statement":[
