@@ -64,7 +64,7 @@ site and the new app, and music and games are live on it, so a failure is an out
 | Decision | Choice | Why |
 |---|---|---|
 | OS | Ubuntu 26.04 LTS | Same as OpenSearch |
-| Postgres | Official `postgres:18` image at the newest minor on the day, pinned by digest, with pgBackRest at an exact version from the PGDG apt repo in a small `FROM` image. **Decision made during implementation:** PGDG's archive repo is added too, because its current index drops older versions, and `ca-certificates`, which the archive and S3 both need **(my call)** | A floating tag has twice caused trouble on the old server: a surprise restart and a silent system library change that affects text sorting |
+| Postgres | Official `postgres:18` image at the newest minor on the day, pinned by digest, with pgBackRest at an exact version from the PGDG apt repo in a small `FROM` image. **Decision made during implementation:** PGDG's archive repo is added too, because its current index drops older versions, and `ca-certificates`, which the archive and the bucket's HTTPS endpoint both need **(my call)** | A floating tag has twice caused trouble on the old server: a surprise restart and a silent system library change that affects text sorting |
 | Size | Linode 8 GB (4 cores, 160 GB), region `us-central`, as a variable **(my call)** | Same as today; about 24 GB of data once the stats table is gone |
 | Storage | Instance disk only, no block storage volume | Portable. The current extra volume holds no live data |
 | Terraform | Own root module, own state | As OpenSearch |
@@ -72,7 +72,7 @@ site and the new app, and music and games are live on it, so a failure is an out
 | Encryption | Self-signed certificate on the server, clients use `sslmode=require` | Same accepted gap as OpenSearch: no renewals or hostnames, but no protection against impersonation on the provider's network |
 | Port | Keep 6543 **(my call)** | One less client difference. The firewall, not the port number, keeps people out |
 | Backup tool | pgBackRest 2.60 or newer **(my call)** | Incremental, encrypted, restore to any moment, built-in retention. Supports 18 since 2.55. Its maintainer announced the end of the project in April 2026, then announced in May that it would continue with new sponsors; if that changes, WAL-G is the fallback |
-| Backup storage | A new S3 bucket with versioning on **(my call)** | Lets the writing key be unable to erase history (§8.2). R2 has no egress fees but I found no equivalent to versioning and no confirmed pgBackRest use |
+| Backup storage | Cloudflare R2: a backups bucket for pgBackRest and a dumps bucket for the nightly dumps, with bucket locks **(Shane: R2, 2026-11-07; the two-bucket layout and the numbers are my call)** | No download charge for the nightly restore, one storage provider, and AWS retires after the move. Replaced the first choice, an S3 bucket with versioning. The cost is in §8.2: a compromised server can now destroy the pgBackRest backups, so the worst case is the nightly dump, about a day of writes. pgBackRest on R2 was proven on 2026-11-07 (§8.4) |
 | Restore test | A new VM on the home server **(Shane: the home server is dependable enough)** | Also produces the dev dump, so production carries no dump load |
 | Deploy | Manual `workflow_dispatch` | Merging to `main` must never restart the database |
 
@@ -152,7 +152,7 @@ deployment/terraform/postgres/       main.tf variables.tf cloud-init.yaml terraf
 deployment/postgres/
   Dockerfile  compose.yml  config/postgresql.conf  config/pgbackrest.conf.tmpl
   bin/deploy.sh  render-firewall.sh  render-hba.sh  generate-certs.sh  apply-roles.sh
-  bin/backup.sh  check-backup-health.sh
+  bin/backup.sh  check-backup-health.sh  setup-r2.sh (run once by Shane, §8.2)
   systemd/postgres-firewall.service  postgres-backup.{service,timer}  postgres-backup-health.{service,timer}
   test/run.sh  test/*_test.sh  test/local-e2e-test.sh
 deployment/home-server/guest/pg-restore-verify.sh  (plus unit, timer, VM entry)
@@ -177,15 +177,16 @@ the build and rebuild test in §2 use a separate pre-production repo path, delet
 path is only ever written by the real server.
 
 **Who runs what (Shane, standing preference):** agents run everything on live servers over SSH, including step 4's
-restart and the cutover, with Shane choosing the window. Shane runs `terraform apply`, `provision` and AWS console
-steps, because agents are blocked from those or lack the rights, and does the real sign-in and write check in step 15.
+restart and the cutover, with Shane choosing the window. Shane runs `terraform apply`, `provision` and the one-time R2
+setup (`setup-r2.sh` with a temporary account token, then the bucket-scoped tokens, §8.2), because agents are blocked
+from those or lack the rights, and does the real sign-in and write check in step 15.
 Agents have access to the private old-site repo.
 
 ## 8. Backups
 
 ### 8.1 What runs
 
-- **Continuous:** every completed WAL file goes to S3 through `archive_command`.
+- **Continuous:** every completed WAL file goes to the R2 backups bucket through `archive_command`.
 - **Weekly full, daily differential** at 09:00 UTC, the site's quietest time, with `process-max=1`, `start-fast=n` and
   `compress-type=zst` **(my call)**. A differential copies only changed files. The Sunday full is the heaviest job
   and is what the 1.5x test in §2 measures. If it fails that test, the fallback is throttling or running it from a
@@ -195,15 +196,69 @@ Agents have access to the private old-site repo.
 - **Encrypted** with `repo1-cipher-type=aes-256-cbc`. The passphrase is in SOPS, so a restore needs only the repo and
   the age key.
 - No backup writes to local disk, so the disk cannot fill from backups.
+- **The move to R2 changed none of this, and none of `backup.sh` or `pg-health`.** pgBackRest reaches R2 through
+  the same S3 settings, with R2's endpoint and region `auto`.
 
-### 8.2 Keys and the bucket
+### 8.2 Buckets, locks and tokens (R2)
 
-- The server's key can read, write and delete current objects in this bucket only, which pgBackRest expiry needs.
-- It cannot delete object versions, change bucket settings or touch IAM. A lifecycle rule removes non-current versions
-  after 14 days. So a server whose key is lost or misused can hide backups but not destroy them for 14 days.
-- The home VM's key is read-only on this bucket. A restore there therefore cannot write to the production repo.
-- Creating the bucket and keys is a one-time console step for Shane, recorded in the runbook. The root keys will be
-  gone, so no agent holds rights to do it.
+**Why R2 and not S3 (Shane, 2026-11-07).** The nightly restore (§9) downloads a backup and its WAL every night, and
+on S3 every one of those downloads is billed; R2 charges nothing for them. The site's other object storage is already
+on Cloudflare, so this keeps one provider, and AWS can be retired once the old server is gone (§13.2, step 18). The
+first draft chose S3 because it had versioning and R2 had no proven pgBackRest use. R2 has no versioning, but it has
+bucket locks, and pgBackRest on R2 is now proven (§8.4).
+
+**Two buckets** (my call):
+
+| Bucket | Written by | Lock | Lifecycle |
+|---|---|---|---|
+| Backups | The production server (pgBackRest) | Objects under `<repo path>/archive/main/18-` (the WAL archive) for 14 days | Abort incomplete multipart uploads after 7 days. No expiry rule: pgBackRest expires |
+| Dumps | The home VM (§9, the nightly `pg_dump` files) | Every object, 14 days | Delete objects after 30 days; abort incomplete multipart uploads after 7 days |
+
+An R2 lock refuses both delete and overwrite of a locked object (`ObjectLockedByBucketPolicy`), whoever asks. Two
+limits come from how pgBackRest uses the bucket, both measured on real R2:
+
+- **Only the WAL archive can be locked in the backups bucket.** pgBackRest rewrites the manifest inside each backup's
+  folder while it backs up, so a lock on backup folders makes every backup fail with 409 after minutes of retries.
+- **The lock must be shorter than retention.** `expire` fails with 409 on an object that is still locked, so the
+  14-day lock sits below the 30-day retention. `setup-r2.sh` refuses a lock that is not shorter than either the
+  retention or the dump expiry.
+
+`deployment/postgres/bin/setup-r2.sh` creates both buckets if absent, sets the locks and lifecycle rules, and reads
+every rule back. It is safe to repeat. Shane runs it once with a temporary account API token and then deletes that
+token. Bucket names and the repo path come from SOPS, never from the code.
+
+**Tokens, each scoped to one bucket** (my call):
+
+| Token | Permission | Bucket |
+|---|---|---|
+| Server | Object Read & Write | Backups |
+| Home VM restore | Object Read | Backups |
+| Home VM upload | Object Read & Write | Dumps |
+| Developer refresh | Object Read | Dumps |
+
+Each is used through R2's S3 API: the access key id is the token's id and the secret is the SHA-256 of the token's
+value. None can change a bucket's settings, locks or lifecycle rules. Only the temporary account token could, and it
+is deleted after setup. Creating the tokens is a one-time dashboard step for Shane, in the runbook.
+
+**What a compromised production server can and cannot destroy (the trade-off).** The server's token must be able to
+delete, because pgBackRest's `expire` deletes. So the server can delete or overwrite every full and differential
+backup, and any WAL older than 14 days. It cannot touch WAL from the last 14 days, but WAL without a base backup
+restores nothing. **The backups bucket is therefore not protected against its own server.** What is:
+
+- the dumps bucket, which the server holds no token for and whose objects are locked for 14 days. A dump is written
+  once and never rewritten, so a whole-bucket lock works there;
+- the home VM's own disk (14 daily and 12 monthly dumps), which no production token reaches.
+
+In that worst case the restore comes from the newest nightly dump, so **up to about a day of writes is lost**,
+against about 5 minutes when the repo is intact (`archive_timeout=300`). With S3 versioning, deleted backups would
+have stayed recoverable for 14 days and the worst case would have stayed at minutes. That is the cost of R2: no
+download charges and one provider, against a worse outcome in the one case where the server itself is compromised.
+The home VM's restore token is read-only, so a restore there still cannot write to the production repo.
+
+**The old AWS bucket until cutover.** The old server keeps writing its nightly dumps to its existing S3 bucket until
+cutover, and `bin/refresh-dev-db.sh` keeps reading them there. After cutover, the home VM uploads to the R2 dumps
+bucket and dev refresh reads that instead (`BACKUP_ENDPOINT`, `BACKUP_AWS_PROFILE`). AWS and its keys are retired
+after the old server is deleted.
 
 ### 8.3 Alerts
 
@@ -227,6 +282,21 @@ outage alerted correctly for over three days, unseen, because the email was file
 checks need a Gmail filter that keeps them out of Promotions and Updates, and a phone push channel if the healthchecks.io
 plan includes one.
 
+### 8.4 Proven on real R2 (2026-11-07)
+
+Run against a real R2 bucket with this repo's image and `pgbackrest.conf.tmpl`, before any server existed:
+
+- pgBackRest 2.60 works on R2 with endpoint `<account id>.r2.cloudflarestorage.com`, region `auto`, the default URI
+  style (no `repo1-s3-uri-style` line) and keys from an R2 token. `stanza-create`, `check`, a full, a differential, WAL
+  archiving and a restore with WAL replay all passed, and the restored rows matched.
+- A bucket lock refuses delete **and** overwrite of a locked object (`ObjectLockedByBucketPolicy`).
+- A lock on backup folders makes every backup fail with 409 after minutes of retries, because pgBackRest rewrites
+  each backup's manifest while it runs. Hence the WAL-archive-only lock in §8.2.
+- `expire` fails with 409 on objects still inside a lock. Hence lock (14 days) below retention (30 days).
+- A tiny restore took about 3.5 minutes, nearly all of it per-request latency rather than data, and a full backup waits
+  for a spread checkpoint (`start-fast=n`) before it copies anything. Neither says how long real data takes: the real
+  figures are measured on the server (runbook, "Prove it", and the first real night at step 7).
+
 ## 9. Nightly restore test and dev dump (home server)
 
 A new VM (next free VMID; 4 cores, 8 GB, 400 GB on `rpool2`: the restored data plus 26 sets of dumps at about 7.6 GB
@@ -235,7 +305,8 @@ each, **decision made during implementation**) with the same pinned Postgres ima
 anywhere. A timer starts after the backup window. Steps, stopping at the first failure except where noted:
 
 1. Restore the latest backup with `pgbackrest restore --delta`, and from an empty directory on Sundays **(my call)**.
-   Delta keeps S3 download costs down.
+   R2 charges nothing for the download, but every object is a request with its own latency, and delta fetches only
+   what changed, which keeps the nightly run short.
 2. Start Postgres and let it finish recovery.
 3. Check that it is real:
    - the latest replayed transaction is under 26 hours old;
@@ -252,11 +323,13 @@ anywhere. A timer starts after the backup window. Steps, stopping at the first f
      causes one alert and clears itself.
 4. Fail clearly if free disk is under one night's dumps (the newest set on disk). `pg_dump -Fc --no-subscriptions` each database, and confirm with `pg_restore --list` that each dump is readable and
    non-empty.
-5. **From cutover onwards**, upload the dumps to the existing dump bucket with the existing
-   `postgres_*_backup_*.sql.gz` names, using a key that can only write there. `bin/refresh-dev-db.sh` keeps working
-   unchanged, and that bucket's 3-day lifecycle rule still cleans it. Before cutover this step is off: the old server
-   still produces dev's dumps, and two sources under one name would let a half-copied dump reach a dev refresh, which
-   replaces the dev database.
+5. **From cutover onwards**, upload the dumps to the R2 dumps bucket (§8.2) with the existing
+   `postgres_*_backup_*.sql.gz` names, using the upload token, which reaches that bucket only. The `aws` container
+   gets the bucket's endpoint as `AWS_ENDPOINT_URL` (`PGVERIFY_DUMP_ENDPOINT`) and region `auto`. The bucket's lock
+   keeps each dump for 14 days against delete or overwrite, and its lifecycle rule deletes it after 30.
+   `bin/refresh-dev-db.sh` reads the same names, from that bucket once `.env` sets `BACKUP_ENDPOINT` and
+   `BACKUP_AWS_PROFILE`. Before cutover this step is off: dev still reads the old server's dumps from the old S3
+   bucket, and the upload is turned on in the same step that switches dev to R2.
 6. Keep 14 daily and 12 monthly dumps on the home server's disk, pruned by the script. Production holds no key that
    reaches them, so this is a copy production cannot modify. It holds real user data, so the VM has no
    inbound services.
@@ -347,9 +420,11 @@ cutover on either app, and sequences are set by hand at cutover.
 
 **Phase 1, new server**
 
-3. Build, verify, destroy, rebuild, verify (§2). Bucket and keys created. Using a small sentinel table and the
-   pre-production repo path (§7), prove a backup, a restore to a chosen moment, and the `pg-backup` and `pg-health`
-   alerts firing, then drop the sentinel table. The daily restore check and its alert start at step 7, once real data
+3. Build, verify, destroy, rebuild, verify (§2). Buckets, their locks and lifecycle rules, and the tokens created
+   (§8.2). Using a small sentinel table and the pre-production repo path (§7), prove a backup, a restore to a chosen
+   moment, that the lock refuses a delete of a fresh WAL object, and the `pg-backup` and `pg-health` alerts firing,
+   then drop the sentinel table. `setup-r2.sh` runs again with the real repo path when the path switches, because the
+   lock's prefix follows it. The daily restore check and its alert start at step 7, once real data
    and its VM exist; `pg-backup` and `pg-health` run from here on the real repo path.
 
 **Phase 2, copy** (sites unaffected except one brief restart)
@@ -401,7 +476,8 @@ server's backup has finished, and never during either.
     per database, each holding only that database's variables, reviewed in advance. A single PR merged after the first
     database would move the second app connection while its database still takes writes on the old server, and lose
     those writes.
-16. Drop the subscription. Once both databases are done, turn on §9's dump upload. **Decision made during
+16. Drop the subscription. Once both databases are done, turn on §9's dump upload to the R2 dumps bucket, and after
+    its first night switch dev refresh to that bucket (§8.2). **Decision made during
     implementation:** also drop the `replicator` role (`DROP OWNED BY` in each database with the session opted out of
     read-only, then `DROP ROLE`) and remove both temporary `hostssl` rules from step 4, including the app hosts' access.
 
@@ -414,7 +490,9 @@ Target: under 5 minutes per database, measured. If the rehearsal in §12 shows m
     fallback is needed. Keep the snapshots outside both databases, so they never reach dev. Stop when the test has
     passed on two Sundays.
 18. Keep the old server read-only for 14 days **(my call)**, confirm nothing on its data volume is still needed, then
-    Shane deletes it. Remove `postgres/`, the `db` service and the backup script from the old repo.
+    Shane deletes it. Remove `postgres/`, the `db` service and the backup script from the old repo. Then retire AWS:
+    the old dump bucket and every AWS key, including the one dev refresh used before cutover. This repo's code needs no AWS after that (`aws-sdk-s3` in the Gemfile
+    talks to R2); check the AWS account for anything else before closing it.
 
 ## 14. Rollback
 
@@ -441,7 +519,8 @@ Target: under 5 minutes per database, measured. If the rehearsal in §12 shows m
 
 - The exact newest 18.x image and pgBackRest version on the day, and that PGDG's package matches the image's Debian
   release.
-- pgBackRest's current docs for versioned S3 buckets and `--delta` from object storage.
+- ~~pgBackRest's current docs for versioned S3 buckets~~ Replaced by R2, proven on 2026-11-07 (§8.4). Still to measure
+  on real data: a restore's duration from R2, and `--delta` from object storage.
 - That `archive_command` failures surface in `pg-health` and cannot quietly fill `pg_wal`.
 - The right `max_logical_replication_workers` and `max_sync_workers_per_subscription` for a two-database copy on 4
   cores, and whether dropping non-key indexes during the copy is worth its complexity. Default to not doing it.
