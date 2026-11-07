@@ -114,8 +114,9 @@ What a run does, stopping at the first failure except the row-count alert:
    `postgres_tgb_backup_<UTC ts>.sql.gz` (the names `bin/refresh-dev-db.sh` reads) with a pinned `amazon/aws-cli`
    container, the key passed by environment, to the R2 dumps bucket (`PGVERIFY_DUMP_ENDPOINT`, passed as
    `AWS_ENDPOINT_URL`; region `auto`). That bucket locks every dump for 14 days and deletes it after 30
-   (`docs/features/postgres-server.md`). Leave it at `0` until the Postgres move's cutover, when dev switches
-   from the old server's S3 bucket to this one.
+   (`docs/features/postgres-server.md`). It goes on with the restore check itself, at step 7 of the Postgres move;
+   the bucket is separate from the old server's S3 bucket, which dev keeps reading until cutover. A failed upload
+   pings `fail`, so it fails the night.
 7. Stops Postgres (every run, failed or not, so the next `--delta` restore finds it stopped) and pings success.
    A run that ends any other way (a failed write, TERM) pings `fail` from an exit trap, so it is never silent.
    If this job holds its lock, `reboot-if-required` skips that night and tries again the next.

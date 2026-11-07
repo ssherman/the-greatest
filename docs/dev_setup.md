@@ -263,9 +263,10 @@ OpenSearch is not part of the backup — reindex afterwards with
 `bin/rails search:{music,games,books}:recreate_and_reindex_all`.
 
 **Where the dumps come from changes at the Postgres move.** Until the cutover, the old server
-writes them to an S3 bucket and the defaults above apply. After it, the home server's restore
-check uploads them to an R2 dumps bucket under the same names, and the S3 bucket stops getting
-new ones. Then set two more values in the root `.env`:
+writes them to an S3 bucket and the defaults above apply. The home server's restore check
+uploads the new server's dumps to an R2 dumps bucket under the same names (from the restore
+check's first night, before cutover); at cutover the S3 bucket stops getting new ones. Then
+point dev at R2 by changing `BACKUP_BUCKET` and setting two more values in the root `.env`:
 
 ```bash
 BACKUP_BUCKET=<the R2 dumps bucket>

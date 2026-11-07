@@ -219,6 +219,8 @@ limits come from how pgBackRest uses the bucket, both measured on real R2:
 
 - **Only the WAL archive can be locked in the backups bucket.** pgBackRest rewrites the manifest inside each backup's
   folder while it backs up, so a lock on backup folders makes every backup fail with 409 after minutes of retries.
+  The archive's prefix carries the Postgres major version (`18-`), so a major upgrade needs `setup-r2.sh` run again
+  with `PG_MAJOR` set to the new version.
 - **The lock must be shorter than retention.** `expire` fails with 409 on an object that is still locked, so the
   14-day lock sits below the 30-day retention. `setup-r2.sh` refuses a lock that is not shorter than either the
   retention or the dump expiry.
@@ -237,8 +239,20 @@ token. Bucket names and the repo path come from SOPS, never from the code.
 | Developer refresh | Object Read | Dumps |
 
 Each is used through R2's S3 API: the access key id is the token's id and the secret is the SHA-256 of the token's
-value. None can change a bucket's settings, locks or lifecycle rules. Only the temporary account token could, and it
-is deleted after setup. Creating the tokens is a one-time dashboard step for Shane, in the runbook.
+value. None of these four can change a bucket's settings, locks or lifecycle rules; the temporary account token that
+could is deleted after setup. Creating the tokens is a one-time dashboard step for Shane, in the runbook.
+
+**That covers these four tokens, not the account.** The account already holds other R2 tokens: the app's `STORAGE_*`
+and `PRIVATE_IMPORTS_*` keys, the recommendations bucket's `RECOMMENDATIONS_R2_*` (the app and the home `ol` VM), and
+any made by hand. A token scoped to all buckets can delete the backups and the dumps, and one with admin R2 rights can
+change or remove the locks. So the claims in this section (that no remaining token can change the locks, and that the
+dumps are out of reach of anything on the production server) **hold only once Shane has audited the account's
+tokens** at the one-time setup (runbook, "Build", step 2e): every one scoped to named buckets, and none but the
+temporary one with admin R2 rights **(my call)**.
+
+`setup-r2.sh` also guards the live lock against itself: every run replaces the rules, so before any change it reads
+the current lock rules and refuses (exit 2) if one would be dropped, narrowed, shortened or disabled, unless
+`R2_REPLACE_LOCK=1` is set for a deliberate change. `setup-r2.sh --check` only reads and compares **(my call)**.
 
 **What a compromised production server can and cannot destroy (the trade-off).** The server's token must be able to
 delete, because pgBackRest's `expire` deletes. So the server can delete or overwrite every full and differential
@@ -256,9 +270,11 @@ download charges and one provider, against a worse outcome in the one case where
 The home VM's restore token is read-only, so a restore there still cannot write to the production repo.
 
 **The old AWS bucket until cutover.** The old server keeps writing its nightly dumps to its existing S3 bucket until
-cutover, and `bin/refresh-dev-db.sh` keeps reading them there. After cutover, the home VM uploads to the R2 dumps
-bucket and dev refresh reads that instead (`BACKUP_ENDPOINT`, `BACKUP_AWS_PROFILE`). AWS and its keys are retired
-after the old server is deleted.
+cutover, and `bin/refresh-dev-db.sh` keeps reading them there. The home VM uploads to the R2 dumps bucket from the
+first night of the restore check (§13.2, step 7) **(Shane, 2026-11-07)**: it is a separate bucket, so the two sources
+never share a name, and starting early proves the upload before cutover. At cutover (step 16) dev refresh switches to
+the R2 bucket (`BACKUP_ENDPOINT`, `BACKUP_AWS_PROFILE`). AWS and its keys are retired after the old server is
+deleted.
 
 ### 8.3 Alerts
 
@@ -297,6 +313,13 @@ Run against a real R2 bucket with this repo's image and `pgbackrest.conf.tmpl`, 
   for a spread checkpoint (`start-fast=n`) before it copies anything. Neither says how long real data takes: the real
   figures are measured on the server (runbook, "Prove it", and the first real night at step 7).
 
+Then `setup-r2.sh` and the dump upload, against throwaway buckets deleted afterwards:
+
+- `setup-r2.sh` created both buckets, set both buckets' locks and lifecycle rules and read them back; the read-back
+  shapes it assumes are the real API's. A second run was a clean, verified no-op.
+- The pinned `amazon/aws-cli` image, with `AWS_ENDPOINT_URL` and region `auto`, uploaded a 120 MB multipart file to
+  the locked dumps bucket. A delete of it was refused with `ObjectLockedByBucketPolicy`, and `aws s3 ls` listed it.
+
 ## 9. Nightly restore test and dev dump (home server)
 
 A new VM (next free VMID; 4 cores, 8 GB, 400 GB on `rpool2`: the restored data plus 26 sets of dumps at about 7.6 GB
@@ -323,13 +346,14 @@ anywhere. A timer starts after the backup window. Steps, stopping at the first f
      causes one alert and clears itself.
 4. Fail clearly if free disk is under one night's dumps (the newest set on disk). `pg_dump -Fc --no-subscriptions` each database, and confirm with `pg_restore --list` that each dump is readable and
    non-empty.
-5. **From cutover onwards**, upload the dumps to the R2 dumps bucket (§8.2) with the existing
+5. **From the first night (step 7) onwards**, upload the dumps to the R2 dumps bucket (§8.2) with the existing
    `postgres_*_backup_*.sql.gz` names, using the upload token, which reaches that bucket only. The `aws` container
    gets the bucket's endpoint as `AWS_ENDPOINT_URL` (`PGVERIFY_DUMP_ENDPOINT`) and region `auto`. The bucket's lock
    keeps each dump for 14 days against delete or overwrite, and its lifecycle rule deletes it after 30.
    `bin/refresh-dev-db.sh` reads the same names, from that bucket once `.env` sets `BACKUP_ENDPOINT` and
-   `BACKUP_AWS_PROFILE`. Before cutover this step is off: dev still reads the old server's dumps from the old S3
-   bucket, and the upload is turned on in the same step that switches dev to R2.
+   `BACKUP_AWS_PROFILE`, which happens at cutover (step 16); until then dev reads the old server's dumps from the old
+   S3 bucket. The upload is part of the night: a failed upload pings `fail` and resets the 7-night count
+   **(Shane, 2026-11-07: upload from step 7, not from cutover)**.
 6. Keep 14 daily and 12 monthly dumps on the home server's disk, pruned by the script. Production holds no key that
    reaches them, so this is a copy production cannot modify. It holds real user data, so the VM has no
    inbound services.
@@ -423,8 +447,9 @@ cutover on either app, and sequences are set by hand at cutover.
 3. Build, verify, destroy, rebuild, verify (§2). Buckets, their locks and lifecycle rules, and the tokens created
    (§8.2). Using a small sentinel table and the pre-production repo path (§7), prove a backup, a restore to a chosen
    moment, that the lock refuses a delete of a fresh WAL object, and the `pg-backup` and `pg-health` alerts firing,
-   then drop the sentinel table. `setup-r2.sh` runs again with the real repo path when the path switches, because the
-   lock's prefix follows it. The daily restore check and its alert start at step 7, once real data
+   then drop the sentinel table. `setup-r2.sh` runs again with the real repo path and `R2_REPLACE_LOCK=1` when the path
+   switches, because the lock's prefix follows it. R2 locks are bucket rules, so that replacement unlocks the
+   pre-production prefix at once, and the pre-production archive is then deleted. The daily restore check and its alert start at step 7, once real data
    and its VM exist; `pg-backup` and `pg-health` run from here on the real repo path.
 
 **Phase 2, copy** (sites unaffected except one brief restart)
@@ -448,7 +473,9 @@ cutover on either app, and sequences are set by hand at cutover.
 7. Turn on the daily restore check (§9) with `PGVERIFY_ENABLED=1`. Before the nights start, a deliberately broken run
    must raise the `pg-restore-verified` alert and a real run must give its first ping. **Cutover needs 7 straight
    passing nights on real data.** New writes will depend on this chain alone from the moment of cutover, so it has to be
-   proven before then, not after.
+   proven before then, not after. The dump upload to the R2 dumps bucket (§9 step 5) goes on with it, so each of the 7
+   nights includes a successful upload; after the first, the developer token must list both dumps, and an optional
+   one-off dev refresh from R2 proves the whole path (dev must be on 18 by then).
 8. Compare both sides: row counts per table, `max(id)`, and checksums on a sample of important tables. A unique-index
    failure during copy would show a text index corrupted by the old server's silent library change. Fix the row on the
    source and record it. Run the old site's connection test (§11).
@@ -476,8 +503,8 @@ server's backup has finished, and never during either.
     per database, each holding only that database's variables, reviewed in advance. A single PR merged after the first
     database would move the second app connection while its database still takes writes on the old server, and lose
     those writes.
-16. Drop the subscription. Once both databases are done, turn on §9's dump upload to the R2 dumps bucket, and after
-    its first night switch dev refresh to that bucket (§8.2). **Decision made during
+16. Drop the subscription. Once both databases are done, switch dev's `.env` to the R2 dumps bucket, which has had
+    the dumps since step 7 (§8.2). **Decision made during
     implementation:** also drop the `replicator` role (`DROP OWNED BY` in each database with the session opted out of
     read-only, then `DROP ROLE`) and remove both temporary `hostssl` rules from step 4, including the app hosts' access.
 

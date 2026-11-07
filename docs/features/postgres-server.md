@@ -27,8 +27,8 @@ deploy. The IPv6 firewall rules still load, as a second layer.
 
 Backups are pgBackRest to a Cloudflare R2 bucket (the backups bucket): WAL continuously (`archive_timeout=300`), a
 full on Sundays and a differential other days at 09:00 UTC, 30 days of retention, encrypted. The WAL archive is
-locked for 14 days against delete and overwrite. After cutover the home VM's nightly dumps go to a second R2 bucket
-(the dumps bucket), locked whole for 14 days and expired after 30. Why R2, and what the locks do and do not protect:
+locked for 14 days against delete and overwrite. From step 7 of the move, when the restore check starts, the home
+VM's nightly dumps go to a second R2 bucket (the dumps bucket), locked whole for 14 days and expired after 30. Why R2, and what the locks do and do not protect:
 spec §8.2. **A backup counts only after it
 has been restored:** a VM on the home server restores the newest backup nightly, checks it and dumps both
 databases (`docs/features/home-server.md`, "The Postgres restore check").
@@ -111,8 +111,17 @@ Shane's go-ahead first, and the outputs are reported as they came.
       | Developer refresh | Object Read | Dumps | an `aws` CLI profile on each dev machine ("Dev refresh from R2") |
 
       For R2's S3 API the access key id is the token's id and the secret is the SHA-256 of the token's value.
-   d. **Delete the temporary token.** No token left can change a bucket's settings, locks or lifecycle rules.
-      `setup-r2.sh` needs a new temporary token each time it runs again (the path switch in "Prove it").
+   d. **Delete the temporary token.** `setup-r2.sh` needs a new temporary token each time it runs again (the path
+      switch in "Prove it"), and `setup-r2.sh --check` (read only) also needs one.
+   e. **Audit the account's other R2 tokens.** The account already holds others: the app's `STORAGE_*` and
+      `PRIVATE_IMPORTS_*` keys, the recommendations bucket's `RECOMMENDATIONS_R2_*` (the app and the home `ol`
+      VM), and any made by hand. In R2, Manage API tokens, and in My Profile / Account API tokens for any with R2
+      permissions, list every token and confirm that each one is scoped to **named buckets**, never "all
+      buckets", and that none but the temporary one (now deleted) has admin R2 rights (Admin Read & Write, or an
+      account token with R2 Edit). A token scoped to all buckets with Object Read & Write can delete the
+      backups and the dumps; an admin token can change or remove the locks. Re-scope or replace any that is not,
+      and record the date of the audit here. **Spec §8.2's claim that no remaining token can change the locks
+      holds only after this audit.**
 3. **(Shane, healthchecks.io)** Create `pg-backup` (1 day), `pg-health` (15 minutes) and `pg-restore-verified`
    (1 day), plus `HC_PGVERIFY_DEPLOY` for the VM's deploy timer. Set `pg-backup`'s grace **above the longest
    full backup**, not a flat 2 hours: read the longest full's start and stop in `pgbackrest info` and add
@@ -315,7 +324,7 @@ q -d the_greatest -c "create table sentinel (id int primary key, note text)" -c 
    key="$(aws s3 ls --recursive "s3://$b/$p/archive/main/18-" | sort | tail -n 1 | awk '{print $4}')"
    aws s3api delete-object --bucket "$b" --key "$key"   # must fail: ObjectLockedByBucketPolicy
    printf x | aws s3 cp - "s3://$b/$key"                # must fail too: a lock refuses overwrite
-   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_ENDPOINT_URL
+   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_ENDPOINT_URL AWS_DEFAULT_REGION
    ```
 
    If either succeeds, the lock is not in place: re-run `setup-r2.sh`, and run step 2 again, because the
@@ -329,11 +338,13 @@ q -d the_greatest -c "create table sentinel (id int primary key, note text)" -c 
    and verify again.
 6. **Drop the sentinel table:** `q -d the_greatest -c 'drop table sentinel'`. Left behind, `compare.sh` reports
    it at steps 8 and 13, because it exists only on the new server. Then set `PGBACKREST_REPO_PATH` to the real
-   one and **run `setup-r2.sh` again with it** (a new temporary token, deleted afterwards, as in Build step 2):
-   the lock's prefix follows the path, so without this the real WAL archive is unlocked. Then delete the
-   pre-production repo path. A WAL object there that R2 refuses (`ObjectLockedByBucketPolicy`) is still inside a
-   lock; delete the rest now and the archive after 14 days. From here `pg-backup` and `pg-health` run on the
-   real path.
+   one and **run `setup-r2.sh` again with it and `R2_REPLACE_LOCK=1`** (a new temporary token, deleted afterwards,
+   as in Build step 2). The lock's prefix follows the path, so without this the real WAL archive is unlocked;
+   the override is needed because the run moves the live lock, which the script otherwise refuses. This is the
+   only planned use of `R2_REPLACE_LOCK=1`. R2 locks are rules on the bucket, not marks on each object, so
+   replacing the rule unlocks the pre-production prefix at once. Then delete the whole pre-production repo path,
+   archive included, and confirm with `setup-r2.sh --check` that the lock is on the real prefix. From here
+   `pg-backup` and `pg-health` run on the real path.
 
 ## The move: 17 to 18 by logical replication
 
@@ -411,7 +422,8 @@ pass.
    (`the_greatest_books`). Before `POSTGRES_*` is touched, set **all five** `LEGACY_BOOKS_*` explicitly, in
    `secrets/.env.production` and on each host that runs `web` or `worker`, to today's values. Otherwise moving
    `the_greatest` repoints the legacy connection too.
-   **Dev and CI on 18** are merged. The dev database itself must be on 18 before step 16 (see "Dev database").
+   **Dev and CI on 18** are merged. The dev database itself must be on 18 before step 7's refresh proof (see
+   "Dev database").
    The new app's database variables are already environment-driven and unset means the driver default.
 
 ### Phase 1: the new server
@@ -485,9 +497,18 @@ pass.
    on this chain alone from the moment of cutover, so it is proven first. **This requirement is not negotiable.**
 
    (Shane) Set `PGVERIFY_ENABLED=1`, `HC_PGVERIFY` and the other `PGVERIFY_*` values in
-   `secrets/home-server.env`, with `PGVERIFY_UPLOAD_ENABLED` at `0`, and run `provision`, on `REPO_REF=main`. It
-   creates VM 140 with a 400 GB data disk, so check `DATA_STORAGE` has the room first. Until this flag is set
-   provision neither creates the VM nor starts its timer, and it refuses a blank `HC_PGVERIFY`.
+   `secrets/home-server.env`, and run `provision`, on `REPO_REF=main`. It creates VM 140 with a 400 GB data disk,
+   so check `DATA_STORAGE` has the room first. Until this flag is set provision neither creates the VM nor starts
+   its timer, and it refuses a blank `HC_PGVERIFY`.
+
+   **The dump upload goes on now, with the check.** The dumps go to their own R2 bucket, so they cannot collide
+   with the old server's dumps in the old S3 bucket, which dev keeps reading until cutover. In the same
+   `secrets/home-server.env`: `PGVERIFY_UPLOAD_ENABLED=1`, `PGVERIFY_DUMP_BUCKET`,
+   `PGVERIFY_DUMP_ENDPOINT=https://<account id>.r2.cloudflarestorage.com`, `PGVERIFY_DUMP_REGION=auto`, and the
+   upload token as `PGVERIFY_DUMP_KEY` and `_KEY_SECRET`. The VM passes the endpoint and region to its `aws`
+   container as `AWS_ENDPOINT_URL` and `AWS_DEFAULT_REGION`. Both the run and `provision` refuse an upload with no
+   endpoint or one without `https://`. **A failed upload pings `fail`, so it is a failed night and resets the
+   7-night count**, like any other failure.
 
    **Before the 7 nights start, prove the alert,** on the VM (`ssh pve-mini`, then to `10.20.0.20`):
 
@@ -503,6 +524,24 @@ pass.
    (`journalctl -u pg-restore-verify.service` shows when `restoring from an empty data directory` started and
    when Postgres came up), next to the "Prove it" figure, and in the spec's §8.4. A never-pinged check may not
    alert on silence (Alerts, below). The count starts with the next scheduled run.
+
+   **After the first night with the upload on, check it** from the dev machine with the developer refresh token
+   (the `r2-dumps` profile, "Dev refresh from R2"): both of that night's dumps must be listed.
+
+   ```bash
+   aws --profile r2-dumps --endpoint-url https://<account id>.r2.cloudflarestorage.com \
+     s3 ls s3://<dumps bucket>/ | sort | tail -n 2
+   ```
+
+   Optionally, prove the whole dev path once by setting the `BACKUP_*` values on the command line. The script
+   sources `.env` after the command line, so `.env` wins for anything it sets: comment out `BACKUP_BUCKET` (and
+   any other `BACKUP_*`) there for this one run, and put it back afterwards. It replaces the dev database, so it
+   needs Shane's go-ahead, and dev must already be on 18 (`pg_restore` 17 cannot read these dumps):
+
+   ```bash
+   BACKUP_BUCKET=<dumps bucket> BACKUP_ENDPOINT=https://<account id>.r2.cloudflarestorage.com \
+     BACKUP_AWS_PROFILE=r2-dumps bin/refresh-dev-db.sh
+   ```
 
    Count only nights where `pg-restore-verified` shows a success ping that Shane has seen. Any fail ping,
    including a row-count alert, resets the count to zero; the row-count baseline is the previous night, so
@@ -597,14 +636,8 @@ SOPS's values.
 
     Then remove both temporary-access rules from the old server (the `replicator` rule and the `postgres` rule
     from step 4, which also admits the app hosts) and reload it, unset `SOURCE_PGPASSWORD` and `REPLICATOR_PASSWORD`, run
-    `check-schema.sh all --target`, and confirm the dev database is on 18 (below). Then turn the dump upload on, to
-    the R2 dumps bucket: in `secrets/home-server.env` set `PGVERIFY_UPLOAD_ENABLED=1`, `PGVERIFY_DUMP_BUCKET`,
-    `PGVERIFY_DUMP_ENDPOINT=https://<account id>.r2.cloudflarestorage.com`, `PGVERIFY_DUMP_REGION=auto`, and the
-    upload token as `PGVERIFY_DUMP_KEY` and `_KEY_SECRET`. The VM passes the endpoint and region to its `aws`
-    container as `AWS_ENDPOINT_URL` and `AWS_DEFAULT_REGION`; both the run and `provision` refuse an upload with no
-    endpoint. **The upload path has not run against a real bucket.** Shane runs `provision`. After the next night,
-    `aws s3 ls` on the dumps bucket with the developer token must list both dumps; then switch dev to R2 ("Dev
-    refresh from R2", below) and confirm with a real `bin/refresh-dev-db.sh`.
+    `check-schema.sh all --target`. Then switch dev's `.env` to R2 ("Dev refresh from R2", below): the old server
+    stopped writing dumps at step 9, and the R2 dumps bucket has had them since step 7.
 
 **The window.** The local rehearsal (`deployment/postgres/test/local-e2e-test.sh`, 2026-11-06) measured about
 15 seconds per database for steps 10 to 13, on tiny data with Docker-run clients. **That does not predict the
@@ -752,8 +785,8 @@ Everything about it, including what each run does, the safety by construction an
 - It does not exist until `PGVERIFY_ENABLED=1` (step 7): a plain `provision` and `--verify` leave it alone.
 - Its key on the repo is read-only and every restore passes `--archive-mode=off`: nothing restored can write
   to production's repo.
-- Upload of dumps to the R2 dumps bucket is off until step 16. Until then dev reads the old server's dumps from
-  the old S3 bucket, and the upload goes on in the step that switches dev to R2.
+- The upload of dumps to the R2 dumps bucket goes on at step 7, with the restore check. A failed upload is a
+  failed night. Dev keeps reading the old server's dumps from the old S3 bucket until step 16 switches its `.env`.
 - Rebuild the VM with `provision --rebuild pgverify` (the data disk, and so the dumps, is kept).
 - Two items from the build to settle when the VM first runs: `provision --verify` and the compile of
   `140.fw` need a real host; and the VM's firewall keeps IPv6 link-local, which should be a deliberate choice.
@@ -886,13 +919,14 @@ switch stops the shared dev server, so ask first and tell anyone using it. The p
 - `yarn test:e2e` on 18, after confirming port 3000 is yours (AGENTS.md);
 - the `--legacy` restore on 18 (about 25 minutes or more).
 
-`pg_restore` 17 cannot read a dump from a newer `pg_dump`, so dev must reach 18 **before** step 16 turns the
-dump upload on.
+`pg_restore` 17 cannot read a dump from a newer `pg_dump`, so dev must reach 18 **before** step 7's refresh
+proof, and in any case before step 16 switches dev to the R2 dumps.
 
-## Dev refresh from R2 (after cutover)
+## Dev refresh from R2 (from step 16)
 
 Until cutover `bin/refresh-dev-db.sh` reads the old server's dumps from the old S3 bucket with the default AWS
-credentials, and nothing changes for it. After step 16 it reads the R2 dumps bucket. On each dev machine:
+credentials, and nothing changes for it. The R2 dumps bucket fills from step 7; step 16 points dev at it. On each
+dev machine:
 
 ```bash
 aws configure --profile r2-dumps    # key id = the developer refresh token's id, secret = SHA-256 of its value, region auto
@@ -906,7 +940,8 @@ BACKUP_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
 BACKUP_AWS_PROFILE=r2-dumps
 ```
 
-The script passes `--endpoint-url` and `--profile` to every `aws` call; unset, it behaves as it always did. The
+The script passes `--endpoint-url` and `--profile` to every `aws` call, and refuses a `BACKUP_ENDPOINT` without
+`https://`; unset, it behaves as it always did. The
 names are unchanged (`postgres_the_greatest_backup_*`, `postgres_tgb_backup_*`), so it picks the newest the same
 way. The token is read-only: a dev machine cannot change or delete a dump.
 
@@ -936,5 +971,13 @@ temporary server, and destroy it.
 - R2 locks: only `<repo path>/archive/main/18-` in the backups bucket, and always shorter than the 30-day
   retention. A lock on backup folders fails every backup with 409; a lock at or past retention fails `expire`.
   A change of `PGBACKREST_REPO_PATH` needs `setup-r2.sh` again, or the new archive is unlocked.
+- **A Postgres major-version upgrade moves the WAL archive** from `archive/main/18-…` to `archive/main/<new>-…`.
+  Run `setup-r2.sh` with `PG_MAJOR=<new>` once the new archive exists. The script refuses to drop the `18-` rule
+  until `R2_REPLACE_LOCK=1` is also set; doing so unlocks the old archive, which then matters only for a restore to
+  a moment before the upgrade. `setup-r2.sh --check` shows the rule in force.
+- `setup-r2.sh` refuses to drop, narrow, shorten or disable a live lock rule (exit 2, printing the old and new
+  prefix and age). Read the output before reaching for `R2_REPLACE_LOCK=1`: an unexpected refusal usually means a
+  wrong `PGBACKREST_REPO_PATH` or `R2_LOCK_DAYS` in the shell.
 - Two endpoint forms: pgBackRest takes `<account id>.r2.cloudflarestorage.com` with no scheme; the aws CLI
-  (`PGVERIFY_DUMP_ENDPOINT`, `BACKUP_ENDPOINT`) takes it with `https://`.
+  (`PGVERIFY_DUMP_ENDPOINT`, `BACKUP_ENDPOINT`) takes it with `https://`. `deploy.sh`, provision, the restore
+  check and `refresh-dev-db.sh` each refuse the wrong form.
