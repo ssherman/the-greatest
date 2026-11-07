@@ -57,6 +57,7 @@ doesn't.
 
 ## Decided by Shane
 
+- We should never restart a healthy server: a fresh gateway check runs immediately before every reboot, and an answering gateway always vetoes it.
 - The watchdog may reboot the host by itself, at most once every 6 hours. This restarts every VM,
   including `musicbrainz`, and interrupts any running Open Library build, which runs again later.
 - After a reboot triggered only by a lost gateway, no further gateway-only reboot happens until the
@@ -90,9 +91,50 @@ A systemd timer runs `nic-watchdog` every minute, first at 3 minutes after boot.
 | Hang messages with the gateway answering | At most 2 resets in any 6 hours, tracked on disk so a card that keeps hanging can't get around the cap. After that, log only. Never reboot: traffic is flowing, and the watchdog must not become the outage |
 | Gateway lost, carrier up, no hang messages | Reset at 5 minutes, again at 15 minutes, reboot at 30 minutes. This is the silent failure the forum reports describe, but it also looks like a dead router, which is why it waits much longer |
 | Anything unknown (no default route, a failed read) | Log only. Never act on it |
-| An `ip link set` or a carrier read takes over 10 seconds | The driver is treated as wedged (a reasoned mechanism, not observed). Each link command runs in the background with a 10 second limit; on an overrun the watchdog stops waiting without reaping and goes straight to a reboot, under the same 6-hour limit. A refused reboot, or an overrun carrier read, writes `/run/nic-watchdog/reset_wedged`, which only a boot clears. While it exists every check makes no `ip link` call and retries the reboot. `KillMode=process` keeps a stuck child from holding the unit up. A host wedged badly enough might not finish `systemctl reboot` either |
+| A carrier read takes over 10 seconds | Carrier is unknown, and that is not evidence of anything. With no episode and no hang: log it, put it in the report, stop the check. No reboot and no flag. In an episode or with a hang logged: carry on with carrier unknown, and the gate decides |
+| An `ip link set` takes over 10 seconds | The command may be stuck in the driver (a reasoned mechanism, not observed). Each link command runs in the background with a 10 second limit; on an overrun the watchdog stops waiting without reaping, writes `/run/nic-watchdog/reset_wedged` naming that command, puts it in the report, and tries a reboot through the gate. See "A stuck link command" below. `KillMode=process` keeps a stuck child from holding the unit up. A host wedged badly enough might not finish `systemctl reboot` either |
 
 Worst-case time to a reboot is about 4 minutes on the hang path and 30 on the gateway path.
+
+**The final gateway check.** Every reboot passes through one gate in `try_reboot`, after the limits and
+immediately before `last_reboot`, the marker and `systemctl reboot`. It is the only `systemctl reboot`
+in the script. The gate runs a fresh `ping -c 3 -W 2 -I vmbr0 <gateway>` under the bounded wait and
+decides:
+
+| Fresh result | Decision |
+|---|---|
+| Exit 0, the gateway answers | **No reboot, on any path.** Logged |
+| Exit 1, no reply | The reboot may go ahead |
+| Any other status, the ping overruns, or no default route | The reboot may go ahead only with direct evidence the port is down: carrier reads 0, the interface is administratively down, or a link command is still stuck. Otherwise no reboot, logged |
+
+A carrier read that overruns is not evidence. A refused gate writes neither `last_reboot` nor the
+marker. Log-only mode runs the gate too, so "would reboot" means the gate would have allowed it.
+
+The gate has one more refusal. A reset on the answering path takes down a port the gateway was
+answering on, and a slow link command there would make a ping in that same check fail because of the
+reset itself. So a check that moved the link while the gateway was answering cannot reboot, and neither
+can a check that has just brought a stuck command's port back up. The next check decides, a minute
+later, on a fresh ping.
+
+**What the gate cannot tell apart.** A dead router with the link up looks the same as a silently failed
+card: no reply, carrier up, no hang messages. The gateway-only path can still reboot once in that case,
+at 30 minutes, and the marker stops it repeating. This is the one case the gate can't separate.
+
+**A stuck link command.** Only a stuck `ip link set` writes `reset_wedged`. It holds the command's pid,
+that process's start time, and whether it was the down or the up. At the start of each check:
+
+- If that pid is alive with the same start time, so it is the same process and not a reused pid, the
+  check makes no `ip link` call, tries a reboot through the gate, and stops. A limit or the gate can
+  refuse, and the next check asks again.
+- Otherwise the file is deleted and logged. If the stuck command was the down, or the link is
+  administratively down, `ip link set <nic> up` runs under the bounded wait, followed by the usual wait
+  for carrier. The normal check then carries on.
+
+It lives in `/run`, so a boot clears it. Neither a stale gap nor the end of an episode does.
+
+If a check stops early for a stuck command and the gate's ping answered, it still sends any pending
+report or the hourly ping. Overruns go in the report, and a report names the actual reason for a reboot:
+it says `reboot (hang)` only if a hang was seen.
 
 **The reboot limit.** The time of the last reboot is stored on disk and written before calling
 `systemctl reboot`. Inside the 6 hours, the watchdog doesn't reboot: it logs that it wanted to and
@@ -111,9 +153,11 @@ hang path ignores the marker and uses only the 6-hour limit.
 seconds for carrier. It only cycles the physical port. VMs keep running and `vmbr0` is left alone.
 
 **Log-only mode.** If `/etc/the-greatest-home-server/nic-watchdog-log-only` exists, the watchdog tracks
-state and logs each action it would take, but does not reset or reboot. It exists for the rollout
-rehearsal below, and `provision --verify` fails while the file is present, so it can't be left on
-unnoticed.
+state and logs each action it would take, but does not reset or reboot. It writes no `reset_wedged`,
+`last_reboot`, marker, `answering_resets` or report. The resets it pretended to do and the clock it ran
+are discarded on the first real check after it, so nothing in it can lead to a later real reboot. It
+exists for the rollout rehearsal below, and `provision --verify` fails while the file is present, so it
+can't be left on unnoticed.
 
 **To pause it** for planned network work, run `systemctl stop nic-watchdog.timer`. A later `provision`
 starts it again.
@@ -184,6 +228,14 @@ Cases that must exist:
 - A blank `HC_NIC_WATCHDOG` sends nothing, and the URL never appears in the output.
 - Provision's offload step: leaves the live host's existing line alone, and adds the line once on a
   host without it.
+- An answering final ping vetoes every route to a reboot, and each of those routes does reboot when that
+  ping gets no reply.
+- The gate's other outcomes: an unknown ping, a ping overrun and no default route each refuse without
+  evidence and proceed with it.
+- A slow carrier read: nothing on a healthy host; the gate decides in an episode.
+- A stuck link command that finishes clears the flag and brings the link up, and nothing reboots
+  afterwards. A reused pid is not trusted. A failed reboot makes no second `ip link set down`.
+- A wall-clock jump during a healthy command is not an overrun.
 
 ## Rollout
 
