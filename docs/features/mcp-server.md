@@ -231,7 +231,7 @@ Hosted connectors reach the server from a few addresses shared by many members, 
 
 ### Edge for the discovery documents
 
-The discovery documents sit at the RFC-fixed `/.well-known/oauth-*` paths, outside `/api/`, so they do not inherit the edge's treatment of API paths, and a connector's backend cannot solve a challenge. A rule in the private Cloudflare repo gives them that treatment. It must be applied before the first claude.ai connection (`docs/launch-todo.md`, section 13). This repo records none of its details.
+The discovery documents sit at the RFC-fixed `/.well-known/oauth-*` paths, outside `/api/`, so they do not inherit the edge's treatment of API paths, and a connector's backend cannot solve a challenge. A rule in the private Cloudflare repo gives them that treatment. It must be applied after this code is deployed and before the first claude.ai connection (`docs/launch-todo.md`, section 13). This repo records none of its details.
 
 ### Increments
 

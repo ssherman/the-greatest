@@ -522,11 +522,12 @@ Each job can be stopped and run again safely. If a deploy interrupts a long job,
 
 Lets members connect claude.ai, Claude Desktop and mobile to `/api/mcp` by signing in, with no token to paste.
 How it works: `docs/features/mcp-server.md`, "Signing in with OAuth". Design:
-`docs/superpowers/specs/2026-11-02-mcp-oauth-design.md` (D15, D17). Nothing here runs on deploy.
+`docs/superpowers/specs/2026-11-02-mcp-oauth-design.md` (D15, D17). Nothing here runs on deploy, but step 1 depends on one.
 
-1. **Apply the edge change for the `/.well-known/oauth-*` paths, before the first claude.ai connection.**
-   It is a rule in the private Cloudflare repo, prepared as a PR there. Merge it, then apply it by hand with
-   that repo's own process. claude.ai's backend cannot solve a challenge, so until the rule is live its
+1. **Deploy, then apply the edge change for the `/.well-known/oauth-*` paths, then make the first claude.ai connection.**
+   Deploy this branch first. Apply the edge change only after the two `/.well-known/oauth-*` documents answer
+   200 from the origin. The edge change is a rule in the private Cloudflare repo, prepared as a PR there. Merge
+   it, then apply it by hand with that repo's own process. claude.ai's backend cannot solve a challenge, so until the rule is live its
    discovery request fails and the connector never reaches the sign-in page. No detail of the rule belongs
    in this repo. To check it, fetch `https://<books host>/.well-known/oauth-authorization-server` from
    outside, with no browser cookies, and expect JSON.
