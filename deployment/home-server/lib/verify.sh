@@ -66,6 +66,21 @@ verify_host() {
   expect "host: IPv4 forwarding on" on_host "[ \$(sysctl -n net.ipv4.ip_forward) = 1 ]"
   expect "host: IPv6 forwarding off" on_host "[ \$(sysctl -n net.ipv6.conf.all.forwarding) = 0 ]"
   expect "host: vmbr0 has IPv4" on_host "ip -4 -o addr show vmbr0 | grep -q inet"
+  verify_host_nic
+}
+
+# verify_host_nic: runs before verify_idempotent, so NIC may not be exported yet.
+verify_host_nic() {
+  local nic="${NIC:-}"
+  if [ -z "$nic" ]; then
+    nic="$(bridge_nic <<<"$(on_host "cat /etc/network/interfaces")")" || { bad "host: could not find the uplink NIC under vmbr0"; return 0; }
+  fi
+  expect "host: nic-watchdog.timer enabled" on_host "systemctl is-enabled --quiet nic-watchdog.timer"
+  expect "host: nic-watchdog.timer active" on_host "systemctl is-active --quiet nic-watchdog.timer"
+  expect "host: TSO off on $nic" on_host "ethtool -k $nic | grep -qx 'tcp-segmentation-offload: off'"
+  expect "host: GSO off on $nic" on_host "ethtool -k $nic | grep -qx 'generic-segmentation-offload: off'"
+  expect "host: $nic offload line in /etc/network/interfaces" on_host "grep -qxF '	$(offload_line "$nic")' /etc/network/interfaces"
+  expect "host: nic-watchdog is not in log-only mode" on_host "! test -e $HOST_STATE/nic-watchdog-log-only"
 }
 
 verify_vms() {
@@ -159,7 +174,8 @@ verify_egress() {
 
 verify_idempotent() {
   CHANGES=()
-  converge_host_dns; converge_host_packages; converge_host_network; converge_host_firewall
+  converge_host_dns; converge_host_packages; converge_host_network; converge_host_nic
+  converge_host_firewall; converge_host_watchdog
   local role; for role in fetcher ol worldcat; do ensure_vm "$role"; done
   if [ "${#CHANGES[@]}" = 0 ]; then ok "a second provision changes nothing"; else bad "a second provision changed: ${CHANGES[*]}"; fi
 }

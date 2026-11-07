@@ -1,0 +1,9 @@
+# Installed by deployment/home-server/provision.
+[Unit]
+Description=Check the host's network card and recover it if it hangs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nic-watchdog
+SyslogIdentifier=nic-watchdog
+TimeoutStartSec=120

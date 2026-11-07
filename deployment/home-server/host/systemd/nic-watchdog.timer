@@ -1,0 +1,11 @@
+# Installed by deployment/home-server/provision.
+[Unit]
+Description=Run the NIC watchdog every minute
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

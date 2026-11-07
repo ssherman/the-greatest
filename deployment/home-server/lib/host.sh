@@ -75,9 +75,9 @@ converge_host_packages() {
   put_host "$HS_DIR/host/apt/52unattended-upgrades-home-server" /etc/apt/apt.conf.d/52unattended-upgrades-home-server
 
   on_host "apt-get update -q >/dev/null" || die "apt-get update failed on the host"
-  if ! on_host "dpkg -s jq unattended-upgrades >/dev/null 2>&1"; then
-    on_host "DEBIAN_FRONTEND=noninteractive apt-get install -y -q jq unattended-upgrades >/dev/null"
-    note_change "installed jq unattended-upgrades"
+  if ! on_host "dpkg -s jq unattended-upgrades ethtool >/dev/null 2>&1"; then
+    on_host "DEBIAN_FRONTEND=noninteractive apt-get install -y -q jq unattended-upgrades ethtool >/dev/null"
+    note_change "installed jq unattended-upgrades ethtool"
   fi
   if [ "${VERIFY:-0}" = 1 ]; then
     log "skipping upgrade under --verify"
@@ -241,6 +241,78 @@ converge_host_network() {
 
   [ "$(on_host "sysctl -n net.ipv4.ip_forward")" = 1 ] || die "ip_forward is off; vmbr1's post-up did not run"
   [ "$(on_host "sysctl -n net.ipv6.conf.all.forwarding")" = 0 ] || die "IPv6 forwarding is on; the fetcher must have no IPv6 path"
+}
+
+# bridge_nic: stdin is /etc/network/interfaces; prints vmbr0's one bridge-ports
+# value. Fails on none or several: the watchdog must not guess which card to reset.
+bridge_nic() {
+  local ports
+  ports="$(awk '/^iface /{f = ($2 == "vmbr0")} f && $1 == "bridge-ports" {for (i = 2; i <= NF; i++) print $i}')"
+  [ -n "$ports" ] && [ "$(printf '%s\n' "$ports" | wc -l)" = 1 ] || return 1
+  printf '%s\n' "$ports"
+}
+
+# offload_line <nic>: the interfaces(5) line that keeps TSO and GSO off, which
+# the host's Intel card needs to avoid hanging under load.
+offload_line() { printf 'post-up /usr/sbin/ethtool -K %s tso off gso off\n' "$1"; }
+
+# nic_stanza_has_offload <nic>: stdin is /etc/network/interfaces.
+nic_stanza_has_offload() {
+  local want
+  want="$(offload_line "$1")"
+  awk -v nic="$1" -v want="$want" '
+    /^(iface|auto|allow-|source|mapping)/ {f = ($1 == "iface" && $2 == nic && $3 == "inet" && $4 == "manual"); next}
+    f {line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line); if (line == want) found = 1}
+    END {exit !found}'
+}
+
+# The mutate function for network_change; reads NIC.
+add_offload_line() {
+  local tab=$'\t' line
+  line="$(offload_line "$NIC")"
+  on_host "sed -i '/^iface $NIC inet manual\$/a\\${tab}$line' /etc/network/interfaces &&
+    grep -qxF '${tab}$line' /etc/network/interfaces"
+}
+
+# converge_host_nic: finds the uplink card (sets and exports NIC), keeps TSO/GSO
+# off for it in the interfaces file (survives a reboot) and on the running card.
+converge_host_nic() {
+  local file
+  file="$(on_host "cat /etc/network/interfaces")" || die "could not read /etc/network/interfaces on the host"
+  NIC="$(bridge_nic <<<"$file")" || die "could not find exactly one bridge-ports value under vmbr0 in /etc/network/interfaces"
+  export NIC
+  grep -qx "iface $NIC inet manual" <<<"$file" ||
+    die "/etc/network/interfaces has no 'iface $NIC inet manual' stanza; add the offload line by hand"
+  if ! nic_stanza_has_offload "$NIC" <<<"$file"; then
+    network_change "TSO/GSO off for $NIC in /etc/network/interfaces" add_offload_line
+  fi
+  # The runtime setting needs no ifreload, so no revert window.
+  local feat
+  feat="$(on_host "ethtool -k $NIC")" || die "could not read the offload settings of $NIC"
+  if grep -qE '^(tcp|generic)-segmentation-offload: on' <<<"$feat"; then
+    on_host "/usr/sbin/ethtool -K $NIC tso off gso off" || die "could not turn TSO/GSO off on $NIC"
+    note_change "TSO/GSO off on running $NIC"
+  fi
+}
+
+# converge_host_watchdog: needs NIC, which converge_host_nic sets.
+converge_host_watchdog() {
+  [ -n "${NIC:-}" ] || die "converge_host_watchdog needs NIC; run converge_host_nic first"
+  put_host "$HS_DIR/host/sbin/nic-watchdog" /usr/local/sbin/nic-watchdog 0755
+  local before=${#CHANGES[@]} tmp
+  put_host "$HS_DIR/host/systemd/nic-watchdog.service" /etc/systemd/system/nic-watchdog.service
+  put_host "$HS_DIR/host/systemd/nic-watchdog.timer" /etc/systemd/system/nic-watchdog.timer
+  if [ "${#CHANGES[@]}" -gt "$before" ]; then
+    on_host "systemctl daemon-reload" || die "systemctl daemon-reload failed on the host"
+  fi
+  # The env file may hold the ping URL: rendered only in a removed-on-exit temp dir.
+  new_tmpdir tmp
+  printf 'NIC=%s\nHC_NIC_WATCHDOG=%s\n' "$NIC" "${HC_NIC_WATCHDOG:-}" >"$tmp/nic-watchdog.env"
+  put_host "$tmp/nic-watchdog.env" "$HOST_STATE/nic-watchdog.env" 0600
+  if ! on_host "systemctl is-enabled --quiet nic-watchdog.timer && systemctl is-active --quiet nic-watchdog.timer"; then
+    on_host "systemctl enable --now nic-watchdog.timer >/dev/null 2>&1" || die "could not enable nic-watchdog.timer"
+    note_change "nic-watchdog.timer enabled"
+  fi
 }
 
 # render_cluster_fw <out>: the datacenter file with this house's LAN ranges.
