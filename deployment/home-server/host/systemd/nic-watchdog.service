@@ -6,7 +6,7 @@ Description=Check the host's network card and recover it if it hangs
 Type=oneshot
 ExecStart=/usr/local/sbin/nic-watchdog
 SyslogIdentifier=nic-watchdog
-TimeoutStartSec=120
+TimeoutStartSec=180
 # A link command stuck in the driver cannot be killed. Killing only the main process lets the unit
 # finish, so a stuck leftover child does not hold it up and delay the next check past the gap.
 KillMode=process

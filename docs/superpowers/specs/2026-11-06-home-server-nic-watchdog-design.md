@@ -76,7 +76,7 @@ A systemd timer runs `nic-watchdog` every minute, first at 3 minutes after boot.
 
 | Signal | How | Meaning |
 |---|---|---|
-| Hang | `journalctl -k -b 0` for `<nic>: Detected Hardware Unit Hang` since the later of the previous check and the last reset | The driver reports a stuck ring |
+| Hang | `journalctl -k -b 0` for `<nic>: Detected Hardware Unit Hang` since the later of the previous check and the last reset, under a 30 second limit. An overrun is a failed read | The driver reports a stuck ring |
 | Gateway | `ping -c 3 -W 2 -I vmbr0 <gateway>`, the gateway read on each run from the default route, which must be through `vmbr0` | Traffic actually flows. **Only exit status 1 (no reply) counts as lost.** Any other status is "unknown" |
 | Carrier | `/sys/class/net/<nic>/carrier` | The cable and switch are up |
 
@@ -96,7 +96,7 @@ A systemd timer runs `nic-watchdog` every minute, first at 3 minutes after boot.
 | A carrier read takes over 10 seconds | Carrier is unknown, and that is not evidence of anything. Log it, put it in the report, kill the read, and write no flag. The bounded route read and ping still run: an answering gateway does nothing, and a lost one starts the normal clock. Only the gate can turn that into a reboot |
 | An `ip link set` takes over 10 seconds | The command may be stuck in the driver (a reasoned mechanism, not observed). Each link command runs in the background with a 10 second limit; on an overrun the watchdog stops waiting without reaping, writes `/run/nic-watchdog/reset_wedged` naming that command and puts it in the report. Later checks try a reboot through the gate. See "A stuck link command" below. `KillMode=process` keeps a stuck child from holding the unit up. A host wedged badly enough might not finish `systemctl reboot` either |
 
-Worst-case time to a reboot, with the gateway lost throughout:
+Worst-case time to a reboot, with the gateway lost throughout. Each adds the gate's 20 seconds:
 
 | Path | Time |
 |---|---|
@@ -109,14 +109,14 @@ Worst-case time to a reboot, with the gateway lost throughout:
 
 **The final gateway check.** Every reboot passes through one gate in `try_reboot`, after the limits and
 immediately before `last_reboot`, the marker and `systemctl reboot`. It is the only `systemctl reboot`
-in the script. The gate runs a fresh `ping -c 3 -W 2 -I vmbr0 <gateway>` under the bounded wait and
-decides:
+in the script. The gate runs a fresh `ping -c 3 -W 2 -I vmbr0 <gateway>` under the bounded wait, and if
+that gets no reply, a second one 20 seconds later, because one lost round can be a blip. It decides:
 
 | Fresh result | Decision |
 |---|---|
-| Exit 0, the gateway answers | **No reboot, on any path.** Logged. It clears the reset count, the clock and the marker, like any check where the gateway answers, and sends any report |
-| Exit 1, no reply | The reboot may go ahead |
-| Any other status, the ping overruns, or no default route through `vmbr0` | The reboot may go ahead only with direct evidence the port is down: carrier reads 0, the interface is administratively down (a carrier read that ran and failed), or a link command is still stuck. Otherwise no reboot, logged |
+| Exit 0 on either round, the gateway answers | **No reboot, on any path.** Logged. It clears the reset count, the clock and the marker, like any check where the gateway answers, and sends any report |
+| Exit 1 on both rounds, no reply | The reboot may go ahead |
+| Any other status on either round, the ping overruns, or no default route through `vmbr0` | The reboot may go ahead only with direct evidence the port is down: carrier reads 0, the interface is administratively down (a carrier read that ran and failed), or a link command is still stuck. Otherwise no reboot, logged |
 | The check could not run at all (its output file cannot be written, or `ping` or `ip` exits 126 or 127) | No reboot, even with evidence. The gateway must have been asked |
 
 A carrier read that overruns is not evidence. A refused gate writes neither `last_reboot` nor the
@@ -137,7 +137,8 @@ rewritten. The gate pings first, so an answering gateway still vetoes and the re
 **What the gate cannot tell apart.** It cannot separate a dead router from a silently failed card: no
 reply, carrier up, no hang messages. The gateway path can still reboot once in that case, at 30 minutes,
 and the marker stops it repeating. A local firewall or router change that later makes the gateway stop
-answering ping looks exactly the same: resets, then one reboot at 30 minutes. A port recovering from the
+answering ping looks exactly the same: resets, then one reboot at 30 minutes. So does a router that stops
+answering ICMP but keeps forwarding traffic: it is the same signal, and the host is healthy when it happens. A port recovering from the
 watchdog's own command also fails pings, and that case is what the 5-minute refusal is for. It is a time
 limit: a port that took over 5 minutes to carry traffic again would look lost.
 
@@ -263,8 +264,11 @@ Cases that must exist:
 - A blank `HC_NIC_WATCHDOG` sends nothing, and the URL never appears in the output.
 - Provision's offload step: leaves the live host's existing line alone, and adds the line once on a
   host without it.
-- An answering final ping vetoes every route to a reboot, and each of those routes does reboot when that
-  ping gets no reply. A veto clears the reset count.
+- An answering gate ping, on either round, vetoes every route to a reboot, and each of those routes does
+  reboot when both rounds get no reply. A veto clears the reset count.
+- One lost round does not reboot: with a stuck command alive and the gateway answering since, or after
+  unknown checks left the reset count at 2.
+- A `journalctl` that overruns is killed and is a failed read.
 - The gate's other outcomes: an unknown ping, a ping overrun and no default route each refuse without
   evidence and proceed with it. Ping status 126 or 127 refuses whatever the evidence.
 - A slow carrier read: nothing on a healthy host; the gate decides in an episode; a dead host with a
@@ -295,15 +299,34 @@ Shane runs `provision`; agents are blocked from running it.
    detection.
 3. **Confirm the gateway answers ping from `vmbr0`.** Read `journalctl -t nic-watchdog --since '1 day ago'`:
    there must be no `gateway lost` lines from healthy minutes. A router that ignores ICMP would otherwise
-   cause real resets, and a reboot within the hour. Only then remove the log-only file.
-4. **Exercise one real reset**, with Shane's OK at the time, run detached because it can drop the SSH
+   cause real resets, and a reboot within the hour.
+4. **Confirm a silent loss is seen.** Step 3 only checks the healthy direction. This one is done while the
+   log-only file is still there, so nothing moves. Drop the gateway's echo replies at the host, which leaves
+   the link up and only touches ICMP from the gateway, so SSH stays up:
+   ```bash
+   GW=$(ip -4 route show default | awk '{print $3}')
+   iptables -I INPUT -i vmbr0 -p icmp --icmp-type echo-reply -s "$GW" -j DROP
+   ping -c 3 -W 2 -I vmbr0 "$GW"; echo "ping exit $?"     # must print: ping exit 1
+   ```
+   Wait for the next check, at most 2 minutes, then read `journalctl -t nic-watchdog --since '5 minutes ago'`:
+   it must show `gateway lost`. Undo it straight away, and confirm the gateway answers again:
+   ```bash
+   iptables -D INPUT -i vmbr0 -p icmp --icmp-type echo-reply -s "$GW" -j DROP
+   ping -c 3 -W 2 -I vmbr0 "$GW"; echo "ping exit $?"     # must print: ping exit 0
+   ```
+   Pulling the cable between the switch and the router works too, if the host's own link stays up, and
+   plugging it back in undoes it. Pulling the host's own cable does not test this: carrier drops, so the log
+   says `carrier is down` and no ping runs. If ping exits anything but 1, the watchdog treats the loss as
+   unknown and would never recover from it: stop and find out why before going on.
+5. Only then remove the log-only file.
+6. **Exercise one real reset**, with Shane's OK at the time, run detached because it can drop the SSH
    session. Confirm the link returns, `vmbr0` and all VMs are fine, TSO and GSO are still off, and the
    tunnels answer. **Time how long the port takes to carry traffic again** after the reset, because the
    300 second refusal depends on it, and confirm `ip link set <nic> up` on an up link is a no-op, because
    the recovery after a stuck command runs it unconditionally.
-5. Create the healthchecks.io check, add `HC_NIC_WATCHDOG` to `secrets/home-server.env`, and re-run
+7. Create the healthchecks.io check, add `HC_NIC_WATCHDOG` to `secrets/home-server.env`, and re-run
    `provision`.
-6. Check `ethtool -k <nic>` after the next host reboot. The `post-up` line has not yet been through
+8. Check `ethtool -k <nic>` after the next host reboot. The `post-up` line has not yet been through
    one, and `eno1` has no `auto` line. If the setting did not survive, `--verify` will fail.
 
 Do not ping healthchecks.io URLs as a test: a ping marks the check healthy.
@@ -339,6 +362,8 @@ These were not Shane's decisions, and any of them can be overruled.
 - One 300 second refusal after any link command, with no distinction by whether the gateway was answering.
   It costs the hang path about 4 minutes.
 - A stopped or failed reboot keeps `last_reboot`, and a failed gateway marker write stops the reboot.
+- 20 seconds between the gate's two rounds, and a 30 second limit on `journalctl`, longer than the other
+  reads because an overrun stops the check.
 - Sending reports and success pings whenever the gateway answers, even if hang messages continue.
 - The `HC_NIC_WATCHDOG` check and its settings.
 - Log-only mode, and the rehearsal steps that use it.

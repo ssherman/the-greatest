@@ -34,6 +34,10 @@ LINK_COMMAND_LIMIT=10       # seconds an ip link command, a carrier read or a ro
 [[ ${NIC_WATCHDOG_LINK_LIMIT:-} =~ ^[1-9][0-9]*$ ]] && LINK_COMMAND_LIMIT="$NIC_WATCHDOG_LINK_LIMIT"
 PING_LIMIT=15               # seconds a ping may take; -c 3 -W 2 needs about 4 at worst
 [[ ${NIC_WATCHDOG_PING_LIMIT:-} =~ ^[1-9][0-9]*$ ]] && PING_LIMIT="$NIC_WATCHDOG_PING_LIMIT"
+JOURNAL_LIMIT=30            # seconds journalctl may take; an overrun stops the check, so this is generous
+[[ ${NIC_WATCHDOG_JOURNAL_LIMIT:-} =~ ^[1-9][0-9]*$ ]] && JOURNAL_LIMIT="$NIC_WATCHDOG_JOURNAL_LIMIT"
+GATE_SECOND_ROUND_WAIT=20   # seconds between the gate's two ping rounds
+[[ ${NIC_WATCHDOG_GATE_WAIT:-} =~ ^[0-9]+$ ]] && GATE_SECOND_ROUND_WAIT="$NIC_WATCHDOG_GATE_WAIT"
 
 log() { echo "$*"; }
 
@@ -138,7 +142,7 @@ limited() {
   done
   wait "$pid"
 }
-# limited_read: limited, for a command that only reads (carrier, route, ping). An overrun gets kill -9,
+# limited_read: limited, for a command that only reads (carrier, route, ping, journal). An overrun gets kill -9,
 # so a read that stays stuck does not leave one process per check, unless it is in uninterruptible
 # sleep, which survives even that. Never use this for ip link: reset_wedged depends on a stuck link
 # command staying alive.
@@ -329,8 +333,8 @@ gateway_answered() {
 
 # gate_allows_reboot <reason>: the final say, run immediately before every reboot. Returns 0 only if
 # the reboot may go ahead, with GATE_DETAIL saying why. It decides on what it reads now:
-#   the gateway answers                    never reboot
-#   no reply (ping exit 1)                 may reboot
+#   the gateway answers either round       never reboot
+#   no reply on both rounds (ping exit 1)  may reboot
 #   anything else, or a read that overran  may reboot only with direct evidence the port is down
 #   a check that could not run at all      never reboot: the gateway must have been asked
 # and in every case not within MOVE_WAIT of a link command. A carrier read that overruns is not
@@ -340,13 +344,19 @@ gate_allows_reboot() {
   read_route; rc=$?
   if [ "$rc" = 0 ]; then
     ping_gateway; rc=$?
+    # One lost round can be a blip, and a reboot cannot be taken back, so a second round must agree. It
+    # is treated exactly like the first: an answer vetoes, and any other status is unknown.
+    if [ "$rc" = 1 ]; then
+      sleep "$GATE_SECOND_ROUND_WAIT"
+      ping_gateway; rc=$?
+    fi
     case "$rc" in
       0)
         log "reboot vetoed ($reason): the gateway answered a fresh check"
         gateway_answered
         return 1
         ;;
-      1) GATE_DETAIL="gateway gave no reply" ;;
+      1) GATE_DETAIL="gateway gave no reply on two rounds" ;;
       124)
         unknown="ping did not finish in ${PING_LIMIT}s"
         report "$unknown"
@@ -535,8 +545,10 @@ if [ -n "$prev" ]; then
   since="$prev"
   if lr=$(num "$RUN/last_reset") && [ "$lr" -gt "$since" ]; then since="$lr"; fi
 fi
-journal=$(journalctl -k -b 0 --no-pager -o cat --since "@$since" 2>/dev/null)
+limited_read "$JOURNAL_LIMIT" "$RUN/limited.out" journalctl -k -b 0 --no-pager -o cat --since "@$since"
 jrc=$?
+journal=""
+[ "$jrc" = 0 ] && journal=$(<"$RUN/limited.out")
 if [ "$jrc" != 0 ]; then
   log "journalctl failed ($jrc); doing nothing"
   restart_gateway_clock
