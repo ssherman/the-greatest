@@ -498,6 +498,16 @@ module Api
           assert_equal 401, json[:status]
         end
 
+        test "an OAuth token is a 401 invalid_token on REST, with the unchanged challenge" do
+          secret, = issue_oauth_token(oauth_connections(:member_mcp))
+
+          get "/api/v1/books", headers: bearer(secret)
+
+          assert_response :unauthorized
+          assert_equal %(Bearer error="invalid_token"), response.headers["WWW-Authenticate"]
+          assert_equal "invalid_token", json[:code]
+        end
+
         test "a token in a query parameter is not honoured -- still a 401" do
           get "/api/v1/books?access_token=#{ApiTokenSecrets::MEMBER}"
           # Response-only: access_token is deliberately an undocumented query

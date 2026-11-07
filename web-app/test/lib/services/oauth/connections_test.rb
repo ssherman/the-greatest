@@ -121,6 +121,26 @@ module Services
         assert_equal earlier, OauthAccessToken.by_token(access).revoked_at
       end
 
+      test "revoke! keeps the connection's earlier revocation time" do
+        connection = oauth_connections(:member_mcp)
+        earlier = 2.days.ago.change(usec: 0)
+        connection.update_columns(revoked_at: earlier)
+
+        Connections.revoke!(connection)
+
+        assert_equal earlier, connection.reload.revoked_at
+      end
+
+      test "revoke! still revokes a connection whose resource left the registry" do
+        connection = oauth_connections(:member_mcp)
+        connection.update_columns(resource: "retired")
+        stamp = Time.current.change(usec: 0)
+
+        Connections.revoke!(connection, at: stamp)
+
+        assert_equal [stamp, stamp], connection.reload.then { |c| [c.revoked_at, c.updated_at] }
+      end
+
       test "record_use writes last_used_at at most once per five minutes" do
         connection = oauth_connections(:member_mcp)
         freeze_time do

@@ -54,7 +54,7 @@ module Api
           private
 
           def log_merge(source:, target:, outcome:, errors: nil)
-            line = "event=api_admin_merge outcome=#{outcome} token_id=#{current_principal.token.id} " \
+            line = "event=api_admin_merge outcome=#{outcome} token_id=#{current_principal.token.id} token_kind=#{current_principal.token_kind} " \
               "user_id=#{current_principal.user.id} record_type=#{model_class.name} " \
               "source_id=#{source.id} target_id=#{target.id}"
             line += " errors=#{Array(errors).join("; ").inspect}" if errors

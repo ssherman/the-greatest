@@ -5,7 +5,8 @@ require "test_helper"
 class DoorkeeperConfigTest < ActiveSupport::TestCase
   test "Doorkeeper is pinned to the version whose internals this app prepends to" do
     assert_equal "5.9.9", Doorkeeper::VERSION::STRING,
-      "re-check URIChecker.matches?/loopback_uri? and AuthorizationsController#pre_auth_param_fields before bumping"
+      "re-check URIChecker.matches?/loopback_uri?, AuthorizationsController#pre_auth_param_fields and " \
+        "the @scopes memo cleared in config/initializers/doorkeeper.rb before bumping"
   end
 
   test "PKCE is forced and S256 is the only method" do

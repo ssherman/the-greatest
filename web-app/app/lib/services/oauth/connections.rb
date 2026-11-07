@@ -42,11 +42,14 @@ module Services
       end
 
       # Ends a connection: the connection itself and every token and grant
-      # still live under it. Already-revoked rows keep their original time.
+      # still live under it. Already-revoked rows, the connection included, keep
+      # their original time.
       def self.revoke!(connection, at: Time.current)
         ::ActiveRecord::Base.transaction do
           revoke_children(connection, at)
-          connection.update!(revoked_at: at)
+          # update_columns, not update!: a connection whose resource key left the
+          # registry fails validation and must still be revocable.
+          connection.update_columns(revoked_at: at, updated_at: at) if connection.revoked_at.nil?
         end
         connection
       end

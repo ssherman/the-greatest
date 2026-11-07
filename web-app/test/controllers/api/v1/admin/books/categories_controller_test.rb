@@ -241,7 +241,7 @@ module Api
 
           test "a create writes one log line" do
             Rails.logger.stubs(:info)
-            Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_category_create outcome=succeeded token_id=\d+ user_id=\d+ category_id=\d+/)).once
+            Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_category_create outcome=succeeded token_id=\d+ token_kind=personal user_id=\d+ category_id=\d+/)).once
             create_category(WRITE_BODY)
             assert_response :created
           end

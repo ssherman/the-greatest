@@ -39,7 +39,7 @@ class OauthConnection < ApplicationRecord
   has_many :access_grants, class_name: "OauthAccessGrant", foreign_key: :connection_id,
     inverse_of: :connection, dependent: :delete_all
 
-  validates :resource, inclusion: {in: %w[mcp]}
+  validates :resource, inclusion: {in: ->(_) { ::Oauth::Resources.keys }}
   validates :approved_at, presence: true
 
   scope :live, -> { where(revoked_at: nil) }
