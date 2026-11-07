@@ -37,6 +37,21 @@ module Services
         assert refresh_gate(["x"]).success?
       end
 
+      test "a parameter Doorkeeper reads as a string is refused when it is an array or a hash" do
+        %i[grant_type code_verifier redirect_uri scope client_id].each do |name|
+          [["x"], {"a" => "b"}].each do |value|
+            result = gate(grant_type: "refresh_token", refresh_token: "x", name => value)
+
+            assert_not result.success?, "#{name} as #{value.class} was let through"
+            assert_equal [:invalid_request], result.errors
+          end
+        end
+      end
+
+      test "absent or blank string parameters are not malformed" do
+        assert refresh_gate("x", scope: nil, code_verifier: "").success?
+      end
+
       test "a grant type the gate does not check passes" do
         assert gate(grant_type: "password").success?
         assert gate.success?

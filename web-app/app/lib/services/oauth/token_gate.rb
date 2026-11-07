@@ -10,10 +10,12 @@ module Services
     # clean up. Inside this module a bare `Oauth::` would resolve to
     # Services::Oauth, so everything outside it is root-anchored.
     #
-    # `errors` holds `:invalid_grant` or `:invalid_target`. A refresh token this
-    # cannot find passes through: Doorkeeper answers it with the same
-    # `invalid_grant`, so a probe cannot tell "unknown" from "revoked" by the
-    # reply.
+    # `errors` holds `:invalid_grant`, `:invalid_target` or `:invalid_request`.
+    # The last is a parameter that arrived as an array or a hash: Doorkeeper
+    # assumes strings and raises on those (a 500), so they are refused first.
+    # A refresh token this cannot find passes through: Doorkeeper answers it
+    # with the same `invalid_grant`, so a probe cannot tell "unknown" from
+    # "revoked" by the reply.
     class TokenGate
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -24,7 +26,15 @@ module Services
         @domain = domain
       end
 
+      # Parameters Doorkeeper reads as strings. `code`, `refresh_token` and
+      # `resource` are not here: a non-String code or refresh token matches no
+      # row and Doorkeeper answers `invalid_grant`, and `resource` has its own
+      # `invalid_target` refusal below.
+      STRING_PARAMS = %i[grant_type code_verifier redirect_uri scope client_id].freeze
+
       def call
+        return refuse(:invalid_request) if STRING_PARAMS.any? { |name| malformed?(@params[name]) }
+
         case @params[:grant_type]
         when "refresh_token" then check_refresh
         when "authorization_code" then check_code
@@ -33,6 +43,8 @@ module Services
       end
 
       private
+
+      def malformed?(value) = !value.nil? && !value.is_a?(String)
 
       def check_refresh
         secret = @params[:refresh_token]

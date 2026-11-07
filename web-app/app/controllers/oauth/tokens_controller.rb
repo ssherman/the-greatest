@@ -20,6 +20,7 @@ module Oauth
     include ::Api::ErrorRendering
 
     REFUSALS = {
+      invalid_request: "A parameter has the wrong shape",
       invalid_grant: "The grant is invalid, expired, revoked, or was issued to another client",
       invalid_target: "The resource does not match the one this authorization was granted for"
     }.freeze

@@ -313,6 +313,32 @@ module Oauth
       assert_response :success
     end
 
+    # --- malformed parameters --------------------------------------------------
+
+    test "an array code_verifier on a real exchange is a 400 invalid_request and creates no token" do
+      code = approve
+
+      assert_no_difference "OauthAccessToken.count" do
+        exchange(code, verifier: [VERIFIER])
+      end
+
+      assert_oauth_error :bad_request, "invalid_request"
+    end
+
+    test "an array or hash scope on a real refresh is a 400 invalid_request and creates no token" do
+      tokens = obtain_tokens
+
+      assert_no_difference "OauthAccessToken.count" do
+        refresh(tokens["refresh_token"], scope: ["books:read"])
+        assert_oauth_error :bad_request, "invalid_request"
+        refresh(tokens["refresh_token"], scope: {"a" => "b"})
+        assert_oauth_error :bad_request, "invalid_request"
+      end
+
+      refresh(tokens["refresh_token"])
+      assert_response :success
+    end
+
     # --- rate limit ----------------------------------------------------------
 
     test "the 31st token request in a minute from one address is a 429, and from a connector range it is not" do
