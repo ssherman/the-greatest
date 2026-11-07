@@ -134,6 +134,129 @@ module Services
         assert_equal [:membership_required], Authenticator.call(request_with("Bearer #{secret}")).errors
       end
 
+      def oauth_request(path, secret)
+        env = {"HTTP_AUTHORIZATION" => "Bearer #{secret}"}
+        ActionDispatch::Request.new(Rack::MockRequest.env_for(path, env))
+      end
+
+      def oauth_secret(connection = oauth_connections(:member_mcp), **options)
+        issue_oauth_token(connection, **options).first
+      end
+
+      test "an OAuth token on /api/mcp yields an oauth member principal" do
+        connection = oauth_connections(:member_mcp)
+        secret = oauth_secret(connection)
+
+        result = Authenticator.call(oauth_request("/api/mcp", secret))
+
+        assert result.success?
+        principal = result.data
+        assert_equal users(:regular_user), principal.user
+        assert_equal ["books:read"], principal.scopes
+        assert_equal :member, principal.tier
+        assert_equal "oauth", principal.token_kind
+        assert_kind_of OauthAccessToken, principal.token
+        assert_equal connection, principal.token.connection
+      end
+
+      test "a personal token's principal has token_kind personal" do
+        result = Authenticator.call(request_with("Bearer #{ApiTokenSecrets::MEMBER}"))
+
+        assert_equal "personal", result.data.token_kind
+      end
+
+      test "an OAuth token is :invalid_token on REST and on the admin endpoint" do
+        secret = oauth_secret
+
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/v1/books", secret)).errors
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/mcp/admin", secret)).errors
+      end
+
+      test "an expired OAuth token is :invalid_token" do
+        secret = oauth_secret(expires_in: 1.hour)
+
+        travel 2.hours do
+          assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/mcp", secret)).errors
+        end
+      end
+
+      test "a revoked OAuth token is :invalid_token" do
+        secret = oauth_secret
+        OauthAccessToken.by_token(secret).revoke
+
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/mcp", secret)).errors
+      end
+
+      test "an OAuth token whose connection is revoked is :invalid_token" do
+        connection = oauth_connections(:member_mcp)
+        secret = oauth_secret(connection)
+        connection.update_columns(revoked_at: Time.current)
+
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/mcp", secret)).errors
+      end
+
+      test "an OAuth token whose connection is for another resource is :invalid_token" do
+        connection = oauth_connections(:member_mcp)
+        secret = oauth_secret(connection)
+        connection.update_columns(resource: "something-else")
+
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/mcp", secret)).errors
+      end
+
+      test "an unknown bearer value on /api/mcp is :invalid_token" do
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/mcp", "not-a-real-token")).errors
+      end
+
+      test "a lapsed membership makes an OAuth token :invalid_token, never :membership_required" do
+        secret = oauth_secret
+        memberships(:regular_user_monthly).update!(status: :unpaid)
+
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/mcp", secret)).errors
+      end
+
+      test "a personal token whose owner lapsed is still :membership_required" do
+        memberships(:regular_user_monthly).update!(status: :unpaid)
+
+        assert_equal [:membership_required], Authenticator.call(request_with("Bearer #{ApiTokenSecrets::MEMBER}")).errors
+      end
+
+      test "first use of a refreshed OAuth token revokes the refresh token it replaced" do
+        connection = oauth_connections(:member_mcp)
+        _, old_refresh = issue_oauth_token(connection)
+        old = OauthAccessToken.by_refresh_token(old_refresh)
+        # What Doorkeeper's refresh request does: the new token carries the old one's stored refresh token.
+        refreshed = OauthAccessToken.create_for(
+          application: connection.application, resource_owner: connection.user,
+          scopes: Doorkeeper::OAuth::Scopes.from_array(connection.scopes), expires_in: 3600,
+          use_refresh_token: true, connection_id: connection.id, previous_refresh_token: old.refresh_token
+        )
+        assert_not_empty refreshed.previous_refresh_token
+        assert_not old.reload.revoked?
+
+        result = Authenticator.call(oauth_request("/api/mcp", refreshed.plaintext_token))
+
+        assert result.success?
+        assert_equal "", refreshed.reload.previous_refresh_token
+        assert old.reload.revoked?
+      end
+
+      test "a successful OAuth authentication records the connection's last use" do
+        connection = oauth_connections(:member_mcp)
+        secret = oauth_secret(connection)
+        assert_nil connection.last_used_at
+
+        Authenticator.call(oauth_request("/api/mcp", secret))
+
+        assert_not_nil connection.reload.last_used_at
+      end
+
+      test "an OAuth token still authenticates after the member's sessions are destroyed" do
+        secret = oauth_secret
+        users(:regular_user).sessions.destroy_all
+
+        assert Authenticator.call(oauth_request("/api/mcp", secret)).success?
+      end
+
       test "a successful authentication records last use" do
         token = api_tokens(:regular_user_token)
         assert_nil token.last_used_at

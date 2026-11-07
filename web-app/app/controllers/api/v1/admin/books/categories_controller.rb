@@ -258,7 +258,7 @@ module Api
           end
 
           def log_actor
-            "token_id=#{current_principal.token.id} user_id=#{current_principal.user.id}"
+            "token_id=#{current_principal.token.id} token_kind=#{current_principal.token_kind} user_id=#{current_principal.user.id}"
           end
 
           def render_forbidden

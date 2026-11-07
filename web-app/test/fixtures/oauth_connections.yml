@@ -1,0 +1,33 @@
+# regular_user has an active membership (memberships(:regular_user_monthly)).
+# == Schema Information
+#
+# Table name: oauth_connections
+#
+#  id                   :bigint           not null, primary key
+#  approved_at          :datetime         not null
+#  last_used_at         :datetime
+#  resource             :string           not null
+#  revoked_at           :datetime
+#  scopes               :string           default([]), not null, is an Array
+#  created_at           :datetime         not null
+#  updated_at           :datetime         not null
+#  oauth_application_id :bigint           not null
+#  user_id              :bigint           not null
+#
+# Indexes
+#
+#  index_oauth_connections_on_oauth_application_id  (oauth_application_id)
+#  index_oauth_connections_on_user_app_resource     (user_id,oauth_application_id,resource) UNIQUE
+#  index_oauth_connections_on_user_id               (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (oauth_application_id => oauth_applications.id)
+#  fk_rails_...  (user_id => users.id)
+#
+member_mcp:
+  user: regular_user
+  application: claude_code
+  resource: mcp
+  scopes: ["books:read"]
+  approved_at: <%= 1.day.ago.to_fs(:db) %>

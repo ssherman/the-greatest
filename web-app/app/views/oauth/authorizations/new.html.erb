@@ -1,0 +1,35 @@
+<% content_for :page_title, "Connect an app | #{domain_name}" %>
+
+<div class="mx-auto max-w-lg">
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-4">
+      <h1 class="card-title text-2xl">Connect an app to <%= domain_name %>?</h1>
+
+      <%= render "oauth/authorizations/destination" %>
+
+      <div>
+        <h2 class="font-semibold mb-2">It will be able to</h2>
+        <ul class="list bg-base-200 rounded-box">
+          <% @scopes.each do |scope| %>
+            <li class="list-row"><%= Api::Scopes.description(scope) %></li>
+          <% end %>
+        </ul>
+      </div>
+
+      <p class="text-sm text-base-content/70">
+        Approve only if you just started this from that app.
+      </p>
+
+      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <%= form_with url: oauth_authorize_path, method: :delete, data: {turbo: false}, class: "w-full sm:w-auto" do %>
+          <%= render "oauth/authorizations/request_fields" %>
+          <button type="submit" class="btn w-full sm:w-auto" data-testid="oauth-deny">Deny</button>
+        <% end %>
+        <%= form_with url: oauth_authorize_path, method: :post, data: {turbo: false}, class: "w-full sm:w-auto" do %>
+          <%= render "oauth/authorizations/request_fields" %>
+          <button type="submit" class="btn btn-primary w-full sm:w-auto" data-testid="oauth-approve">Approve</button>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</div>
