@@ -727,6 +727,11 @@ Rails.application.routes.draw do
     # Dynamic Client Registration (RFC 7591, spec D6).
     post "api/oauth/register", to: "oauth/registrations#create", defaults: {format: :json}, format: false
 
+    # The token endpoint and revocation (spec D11). Public clients: a bare
+    # client_id, PKCE for the proof.
+    post "api/oauth/token", to: "oauth/tokens#create", defaults: {format: :json}, format: false
+    post "api/oauth/revoke", to: "oauth/tokens#revoke", defaults: {format: :json}, format: false
+
     # The authorize page (spec D4). One URL: GET shows the screen, POST is
     # Approve, DELETE is Deny. HTML only, and on the books host because only
     # books has an MCP endpoint.
