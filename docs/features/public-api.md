@@ -62,6 +62,8 @@ Failures follow RFC 6750: 401 `WWW-Authenticate: Bearer` / `Bearer error="invali
 
 Members mint tokens at `/developers/tokens`: a name (≤60 chars), any of the three read scopes, and an expiry of never, 30, 90 or 365 days. Ten per account.
 
+A second kind of bearer token comes from the MCP server's OAuth sign-in (`docs/features/mcp-server.md`, "Signing in with OAuth"). It works only on `/api/mcp`: `Services::Api::Authenticator` ties it to that path, so on `/api/v1/*` it is a 401 `invalid_token`, with the same body and headers as any other bad token. The REST API keeps personal tokens as its only credential.
+
 ## Scopes
 
 `Api::Scopes` — `books:read`, `music:read`, `games:read` (plus the admin scopes under "Admin permissions"). Members may mint the three reads; service accounts get the read scopes only (never an admin scope, even if the account holds an admin role). `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy (`x:write` implies `x:read`) is already honoured for when write scopes exist.
@@ -98,7 +100,7 @@ Spec: `docs/superpowers/specs/2026-11-01-api-admin-permissions-design.md`. A tok
 
 ## Rate limits
 
-`config/initializers/api.rb`. Keyed on the account, two fixed windows (calendar minute, UTC day), counted by `Services::Api::RateLimiter` on `config.x.rate_limit_store`. Headers on every authenticated response: `X-RateLimit-Limit/Remaining/Reset` and `X-RateLimit-Daily-Limit/Remaining/Reset`; 429 adds `Retry-After`. Unauthenticated failures count per visitor IP (minute window only).
+`config/initializers/api.rb`. Keyed on the account, two fixed windows (calendar minute, UTC day), counted by `Services::Api::RateLimiter` on `config.x.rate_limit_store`. Headers on every authenticated response: `X-RateLimit-Limit/Remaining/Reset` and `X-RateLimit-Daily-Limit/Remaining/Reset`; 429 adds `Retry-After`. Unauthenticated failures count per visitor IP (minute window only). An address inside a configured connector egress range counts against a shared per-range budget instead (`config.x.api.connector_egress_ranges`; see `docs/features/mcp-server.md`).
 
 ## Service accounts
 
@@ -134,6 +136,5 @@ no rate-limit headers, so a cached copy cannot mislead.
 
 ## Not yet
 
-music/games resources; OAuth sign-in
-(`docs/superpowers/specs/2026-11-02-mcp-oauth-design.md`). The MCP server is shipped; see
+music/games resources. The MCP server is shipped, with OAuth sign-in on `/api/mcp`; see
 `docs/features/mcp-server.md`.
