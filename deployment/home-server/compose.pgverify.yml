@@ -1,0 +1,85 @@
+# The `pgverify` VM's services (docs/features/home-server.md; spec
+# docs/superpowers/specs/2026-11-06-postgres-server-design.md §9), merged over
+# data-sources/docker-compose.yml by guest/compose.sh. Nothing here runs all the time:
+# guest/pg-restore-verify.sh starts `postgres` for a night's check and stops it. Every service is
+# behind a profile, so nothing starts unless it is named.
+#
+# One image for the production server and this one, built from the same pinned Dockerfile, so a
+# restore is tested on the Postgres and pgBackRest build that wrote the backup. Paths are relative
+# to data-sources/ (the first compose file's directory).
+x-pgverify-image: &pgverify-image the-greatest/pgverify-postgres:local
+x-pgverify-env: &pgverify-env
+  # The pgBackRest config the script renders into $PGVERIFY_ROOT/config (it holds the read-only key).
+  PGBACKREST_CONFIG: /etc/pgverify/pgbackrest.conf
+services:
+  postgres:
+    build:
+      context: ../deployment/postgres
+    image: *pgverify-image
+    profiles: ["pgverify"]
+    # Not the image's docker-entrypoint.sh: it runs initdb on an empty data directory, which would
+    # turn a failed restore into a healthy-looking empty cluster.
+    entrypoint: [postgres]
+    # The postgres user of the image: pgBackRest refuses to run as root, and the data is owned by it.
+    user: "999:999"
+    # No restart policy. A VM reboot mid-run leaves Postgres stopped, and the next run restores over it.
+    restart: "no"
+    command:
+      - -c
+      - config_file=/etc/pgverify-static/postgresql.conf
+      - -c
+      - hba_file=/etc/pgverify-static/pg_hba.conf
+      # Forced here as well as in the config file: the command line beats the restored
+      # postgresql.auto.conf. A restored cluster must never archive to the production repo, and a
+      # restored subscription must never connect to anything. No TCP listener, no TLS to configure.
+      - -c
+      - archive_mode=off
+      - -c
+      - max_logical_replication_workers=0
+      - -c
+      - ssl=off
+      - -c
+      - listen_addresses=
+      # Recovery's WAL fetch goes through a wrapper: pgBackRest's "not found" ends recovery as usual, any
+      # other archive-get failure aborts it (exit above 125), so a read error cannot pass for end of WAL.
+      - -c
+      - restore_command=/etc/pgverify-static/archive-get.sh %f %p
+    # No published ports. The default network gives it outbound access, which recovery needs to fetch
+    # WAL from the repo (restore_command is pgbackrest archive-get).
+    shm_size: 1g
+    stop_grace_period: 120s
+    environment: *pgverify-env
+    volumes:
+      - ${PGVERIFY_ROOT:-/mnt/pgverify}/pgdata:/var/lib/postgresql/18/docker
+      - ${PGVERIFY_ROOT:-/mnt/pgverify}/run:/var/run/postgresql
+      - ${PGVERIFY_ROOT:-/mnt/pgverify}/config:/etc/pgverify:ro
+      - ../deployment/home-server/pgverify:/etc/pgverify-static:ro
+  # pgbackrest, psql, pg_amcheck, pg_dump, pg_restore: one-shot, over the server's socket.
+  tools:
+    image: *pgverify-image
+    profiles: ["pgverify"]
+    entrypoint: []
+    user: "999:999"
+    environment: *pgverify-env
+    volumes:
+      - ${PGVERIFY_ROOT:-/mnt/pgverify}/pgdata:/var/lib/postgresql/18/docker
+      - ${PGVERIFY_ROOT:-/mnt/pgverify}/run:/var/run/postgresql
+      - ${PGVERIFY_ROOT:-/mnt/pgverify}/config:/etc/pgverify:ro
+      - ${PGVERIFY_ROOT:-/mnt/pgverify}/dumps:/dumps
+  # The upload to the dump bucket. The Postgres image has no AWS CLI and a production image should not
+  # gain one for a job that runs on a different server, so a pinned one-shot container does it. Index
+  # digest of amazon/aws-cli:2.39.6, read from the registry on 2026-11-06. The key reaches it by
+  # environment, by name: the script sets the values for the one command, so no secret is on a command
+  # line or in this file.
+  aws:
+    image: amazon/aws-cli:2.39.6@sha256:eccdb3ec77e159d43ca6a750a70738c546883138be7f094498294a1477ec7e42
+    profiles: ["pgverify"]
+    entrypoint: [aws]
+    environment:
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      # The dump bucket's region (PGVERIFY_DUMP_REGION in the VM's env); the CLI needs one for a bucket
+      # outside its default.
+      - AWS_DEFAULT_REGION
+    volumes:
+      - ${PGVERIFY_ROOT:-/mnt/pgverify}/dumps:/dumps:ro

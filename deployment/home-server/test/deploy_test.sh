@@ -159,6 +159,34 @@ t_ol_build_running() {
   [ "$rc" = 0 ] && ! called '^compose '
 }
 
+t_pgverify_builds_postgres_only() {
+  setup; write_env ROLE=pgverify REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  export PGVERIFY_LOCK="$SANDBOX/run/pgverify.lock"
+  commit data-sources/app v2
+  # The nightly check starts Postgres itself: a deploy builds the image and starts nothing.
+  deploy && [ "$(grep -E '^compose build ' "$CALLS" | tr '\n' ' ')" = "compose build postgres " ] && ! called '^compose up' &&
+    ! called 'api|fetcher|worldcat' && [ "$(cat "$STATE_DIR/deployed-sha")" = "$(head_of_origin)" ]
+}
+t_pgverify_watches_the_postgres_image() {
+  setup; write_env ROLE=pgverify REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  export PGVERIFY_LOCK="$SANDBOX/run/pgverify.lock"
+  commit deployment/postgres/Dockerfile v2
+  deploy && called '^compose build postgres$'
+}
+t_postgres_image_change_leaves_the_others() {
+  setup; commit deployment/postgres/Dockerfile v2
+  deploy && ! called '^compose build'
+}
+t_pgverify_defers_under_a_running_check() {
+  setup; write_env ROLE=pgverify REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  export PGVERIFY_LOCK="$SANDBOX/run/pgverify.lock"
+  commit data-sources/app v2
+  flock "$PGVERIFY_LOCK" sleep 3 &
+  sleep 0.5
+  deploy; rc=$?
+  wait
+  [ "$rc" = 0 ] && ! called '^compose ' && called 'deferred: lock held'
+}
 check "a change outside the watched paths deploys nothing" t_unwatched
 check "a data-sources change builds and restarts the service" t_watched
 check "a deployment/home-server change deploys too" t_home_server_dir
@@ -182,6 +210,10 @@ check "tunnels off and no cloudflared running: nothing is removed" t_tunnels_off
 check "tunnels on: cloudflared is brought up, never removed" t_tunnels_on_keeps_it
 check "a no-op ol deploy does not care about the build lock" t_ol_noop_ignores_lock
 check "ol does not deploy under a running build" t_ol_build_running
+check "pgverify builds the Postgres image and starts nothing" t_pgverify_builds_postgres_only
+check "a change to the Postgres Dockerfile deploys on pgverify" t_pgverify_watches_the_postgres_image
+check "the same change deploys nothing on the other roles" t_postgres_image_change_leaves_the_others
+check "pgverify does not deploy under a running restore check" t_pgverify_defers_under_a_running_check
 # The ping URL's path is the check's credential; the journal must never see it.
 t_failed_ping_hides_url() {
   setup; stub curl 'exit 6'

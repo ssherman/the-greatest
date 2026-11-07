@@ -48,11 +48,12 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 | 110 `ol` | Open Library API, dump builds, recommendations trainer | 12 | 24 GB, no ballooning | 32 GB OS disk on `local-zfs`; 300 GB data disk on `rpool2`, ext4, mounted at `/srv/ol-data` | `vmbr0`, LAN |
 | 120 `fetcher` | Camoufox page fetcher | 4 | 4 GB, no ballooning | 40 GB OS disk on `local-zfs` | `vmbr1`, static `10.20.0.10`, gateway `10.20.0.1` |
 | 130 `worldcat` | WorldCat exact-lookup API | 2 | 4 GB, no ballooning | 32 GB OS disk on `local-zfs`; 40 GB data disk on `rpool2`, ext4, mounted at `/srv/wc-data` | `vmbr0`, LAN |
+| 140 `pgverify` | Nightly Postgres restore check and dev dump (below) | 4 | 8 GB, no ballooning | 32 GB OS disk on `local-zfs`; 400 GB data disk on `rpool2`, ext4, label `pgverify`, mounted at `/mnt/pgverify` | `vmbr1`, static `10.20.0.20`, gateway `10.20.0.1` |
 | 101 `musicbrainz` | MusicBrainz, built by hand | 8 | 16 GB | 1 TB on `rpool2` | LAN |
 
 All guests with `onboot` come back by themselves after a host reboot. VM 101 is not managed by
 `provision`, which never touches it. After a converge, and in `--verify`, provision asserts that every
-guest running beforehand other than 110, 120 and 130 (VM 101 included) is still running. Its
+guest running beforehand other than 110, 120, 130 and 140 (VM 101 included) is still running. Its
 Cloudflare tunnel runs inside the VM. VM 101's NIC has `firewall=1`, so once the host firewall is
 on its traffic passes through pve-firewall's bridge conntrack chains and the `vmbr1` CT-zone rule,
 even though no rule names it. Provision asserts only that it keeps running, not that its traffic is
@@ -73,6 +74,70 @@ the same way.
 The `worldcat` VM sits on the LAN bridge like `ol`. Its firewall (`130.fw`) accepts only SSH from
 the LAN; the API publishes on loopback and leaves through `cloudflared`.
 
+## The Postgres restore check (`pgverify`, VM 140)
+
+A backup counts only once it has been restored. Runbook, alerts and what to do about each:
+`docs/features/postgres-server.md`. The VM stays off until `PGVERIFY_ENABLED=1` in `secrets/home-server.env`, at step 7
+of the move: until then `provision` and `--verify` neither create nor touch it, and with it on provision refuses a
+blank `HC_PGVERIFY`. `pg-restore-verify.timer` runs `guest/pg-restore-verify.sh`
+at 12:00 UTC (after the 09:00 backup window; `Persistent=true`, so a VM that was down at noon runs it on
+return). Spec: `docs/superpowers/specs/2026-11-06-postgres-server-design.md` §8 and §9. The VM runs nothing
+else and has no heartbeat unit: `pg-restore-verified` is its alert, and a missed run alerts by silence.
+
+What a run does, stopping at the first failure except the row-count alert:
+
+1. Takes `/run/pgverify.lock` (a held lock logs and exits 0 without pinging; the next run reports), pings
+   `start`, checks its settings and that the data disk is mounted.
+2. Restores the latest backup with `pgbackrest restore --delta --archive-mode=off`, or from an empty data
+   directory on Sundays, on a first run and after an interrupted restore (a marker file written before the
+   restore and removed after it). Starts Postgres and waits for recovery to finish. It confirms it runs with
+   `archive_mode=off`, `max_logical_replication_workers=0` and no `listen_addresses`.
+3. Fails if the last replayed transaction is over 26 hours old or if there is none (`pg_last_xact_replay_timestamp()`
+   is null on an idle backup; production writes constantly, so a heartbeat write is not added), if either
+   database or any core table is missing or empty, or if `pg_amcheck` fails on the core tables and their indexes.
+   `amcheck` is dropped again before any dump.
+   It also reads the archive's newest WAL segment from `pgbackrest info` before restoring, and fails if replay
+   did not reach it (compared on log and segment, from the last byte replayed): recovery that gives up early
+   finishes on a new timeline and would otherwise pass every other check. The server's `restore_command` is
+   `pgverify/archive-get.sh`, which passes pgBackRest's "not found" (exit 1) through as normal end of WAL and
+   exits above 125 on any other `archive-get` failure, so a read error aborts recovery instead of ending it.
+4. Counts the core tables exactly. A table over 10,000 rows in either night's counts that moved over 5% makes the
+   run report failure at the end, naming the table, after the dumps; the names also ride on any other failure
+   message. The baseline (`/mnt/pgverify/state/row-counts`) is replaced at the end of every run that gets that
+   far, even after an alert, so one real change alerts once; a run that fails earlier leaves it.
+5. Fails if free disk is under one night's dumps (the newest set on disk; 8 GB before there is one), and reports free
+   disk in the journal and the success ping. Then `pg_dump -Fc --no-subscriptions` of `the_greatest` and `tgb` into `/mnt/pgverify/dumps/daily/`, each checked with
+   `pg_restore --list`. The first successful run of each month copies each database's dump to `monthly/`. 14 daily and 12 monthly are kept,
+   pruned by name (the UTC timestamp sorts as text). Dumps of a database dropped from the script's `DATABASES` list
+   are no longer pruned; delete them by hand.
+6. With `PGVERIFY_UPLOAD_ENABLED=1` only, uploads the dumps as `postgres_the_greatest_backup_<UTC ts>.sql.gz` and
+   `postgres_tgb_backup_<UTC ts>.sql.gz` (the names `bin/refresh-dev-db.sh` reads) with a pinned `amazon/aws-cli`
+   container, the key passed by environment. Leave it at `0` until the old server stops producing dev's dumps.
+7. Stops Postgres (every run, failed or not, so the next `--delta` restore finds it stopped) and pings success.
+   A run that ends any other way (a failed write, TERM) pings `fail` from an exit trap, so it is never silent.
+   If this job holds its lock, `reboot-if-required` skips that night and tries again the next.
+
+Safety by construction: the VM's pgBackRest key is read-only, and every restore passes `--archive-mode=off`, so
+nothing restored can write to the production repo. The command line forces the settings that matter over the
+restored `postgresql.auto.conf`. Postgres has no TCP listener and publishes no port; its config and `pg_hba.conf`
+(`local all postgres peer`) are `deployment/home-server/pgverify/`, because neither lives in the data directory
+and a backup does not carry them. The image is built from `deployment/postgres/Dockerfile`, so production and this
+VM run one pinned image. Emptying the data directory is guarded: the root must be a deep absolute path, a mount
+point, adopted only when pristine (or already carrying the sentinel the job writes), and the data directory
+must not be a symlink.
+
+`140.fw` (`host/firewall/140.fw.tmpl`, rendered like `120.fw`) is enforced on the host: inbound only SSH from
+`10.20.0.1`, outbound anything except private destinations and the house's own public IPv4. `vmbr1` NATs out
+through `vmbr0` with no destination filter, so HTTPS to S3, healthchecks.io, Docker Hub and the Debian mirrors
+works; the fetcher beside it cannot reach the VM.
+
+The VM's env (`secrets/home-server.env`, SOPS) takes: `PGVERIFY_ENABLED` (provision only; default off), `HC_PGVERIFY`, `HC_PGVERIFY_DEPLOY`, `PGVERIFY_REPO_BUCKET`,
+`PGVERIFY_REPO_ENDPOINT`, `PGVERIFY_REPO_REGION`, `PGVERIFY_REPO_PATH`, `PGVERIFY_REPO_KEY` and
+`PGVERIFY_REPO_KEY_SECRET` (the read-only key), `PGVERIFY_CIPHER_PASS`, `PGVERIFY_DUMP_BUCKET`, `PGVERIFY_DUMP_KEY`,
+`PGVERIFY_DUMP_KEY_SECRET`, `PGVERIFY_DUMP_REGION` (the dump bucket's region, passed to the `aws` container as
+`AWS_DEFAULT_REGION`; required when upload is on) and `PGVERIFY_UPLOAD_ENABLED` (default `0`). Values may use letters, digits and
+`. _ : / @ + = , -` only; provision refuses anything else, because the VM's scripts source the env file as shell.
+
 ## Running provision
 
 The script is `deployment/home-server/provision`, run from the dev machine. It decrypts
@@ -86,7 +151,7 @@ deployment/home-server/provision [mode]
 | Mode | What it does |
 |---|---|
 | (none) | Converges the host (DNS, packages, network, firewall, the ZFS ARC cap), creates any missing VM, installs each VM's env and units. A second run reports no changes. It does not create ZFS pools or Proxmox storage entries. |
-| `--rebuild ol\|fetcher\|worldcat` | Replaces that VM's OS disk with a fresh cloud image. The data disk is kept (`ol`'s and `worldcat`'s). |
+| `--rebuild ol\|fetcher\|worldcat\|pgverify` | Replaces that VM's OS disk with a fresh cloud image. The data disk is kept (`ol`'s, `worldcat`'s and `pgverify`'s). |
 | `--enable-tunnels` | Starts `cloudflared` on all three VMs. It dies unless all three tunnel tokens are set. Run it only after Cloudflare Access is in place. The flag is stored on the host, so a later `--rebuild` keeps it. |
 | `--disable-tunnels` | Removes the flag, pushes `TUNNELS_ENABLED=0` to all three VMs and forces a deploy, which stops and removes `cloudflared`. |
 | `--verify` | Not read-only: it re-runs convergence (DNS, packages without the upgrade, network, firewall, VM creation), so it can change things, and then fails its idempotence check if anything changed. Check classes: host, VMs, egress (with positive controls, from the VM and the container, including the house's public IPv4 on 80 and 443), idempotence, and pre-existing guests. |
@@ -104,10 +169,12 @@ The keys in `secrets/home-server.env` (SOPS-encrypted). Each VM receives only it
 | `WORLDCAT_TUNNEL_TOKEN` | `--enable-tunnels`; the worldcat VM | The Cloudflare tunnel token for `worldcat`. Optional until tunnels are on, then required: `--enable-tunnels` dies without all three |
 | `HC_OL_HEARTBEAT`, `HC_OL_DEPLOY`, `HC_OL_REFRESH`, `HC_FETCHER_HEARTBEAT`, `HC_FETCHER_DEPLOY` | optional | healthchecks.io ping URLs; blank means no ping |
 | `HC_WORLDCAT_HEARTBEAT`, `HC_WORLDCAT_DEPLOY` | optional; the worldcat VM | healthchecks.io ping URLs; blank means no ping |
+| `PGVERIFY_ENABLED` | optional; default off | `1` makes `pgverify` a managed VM. Off, provision and `--verify` leave VM 140 alone. Set at step 7 of the Postgres move. |
+| `HC_PGVERIFY`, `HC_PGVERIFY_DEPLOY`, `PGVERIFY_*` | the `pgverify` VM | See "The Postgres restore check". Only the `pgverify` VM receives them. `HC_PGVERIFY` may not be blank. |
 | `HC_RECOMMENDER` | optional | healthchecks.io ping URL for `recommender-train`, `ol` only |
 | `RECOMMENDATIONS_R2_ENDPOINT`, `RECOMMENDATIONS_R2_ACCESS_KEY`, `RECOMMENDATIONS_R2_SECRET_KEY`, `RECOMMENDATIONS_R2_BUCKET` | the trainer | The recommendations bucket (`docs/features/recommendations.md`, "Collaborative signal"): its S3 endpoint and a token scoped to it. All four or none; `ol` only. With none set, `recommender-train` logs a skip and does not ping. |
 | `VM_STORAGE` | optional | OS disks and cloud-init drive. Default `local-lvm`; `local-zfs` here |
-| `DATA_STORAGE` | optional | The `ol` and `worldcat` data disks. Default `VM_STORAGE`; `rpool2` here |
+| `DATA_STORAGE` | optional | The `ol`, `worldcat` and `pgverify` data disks. Default `VM_STORAGE`; `rpool2` here |
 | `IMAGE_STORAGE` | optional | Imported cloud images. Default `local` |
 | `PVE_LAN_DNS` | optional | The host's resolver. Default `PVE_LAN_GATEWAY4` |
 | `ARC_MAX_BYTES` | optional | ZFS ARC cap. Default 8 GiB |

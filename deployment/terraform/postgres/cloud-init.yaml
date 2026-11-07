@@ -1,0 +1,83 @@
+#cloud-config
+# The database server's first boot. Modelled on ../opensearch/cloud-init.yaml. It hardens the host,
+# closes port 6543 BEFORE Docker is installed, and clones the repo. It does not start Postgres: the
+# server has no secrets until the deploy-postgres workflow runs.
+users:
+  - name: deploy
+    groups: [sudo]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${primary_ssh_key}
+
+package_update: true
+package_upgrade: true
+ssh_pwauth: false
+disable_root: true
+packages:
+  - fail2ban
+  - ufw
+  - git
+  - ca-certificates
+  - curl
+  - age
+  - iptables
+  - python3
+  - gettext-base
+  - openssl
+  - unattended-upgrades
+
+write_files:
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root:root
+    permissions: '0644'
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+  - path: /usr/local/bin/gb-clone-or-pull.sh
+    owner: root:root
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      REPO_URL="https://github.com/ssherman/the-greatest.git"
+      APP_DIR="$HOME/apps/the-greatest"  # $HOME == /home/deploy when run as -u deploy -H
+
+      mkdir -p "$APP_DIR"
+      if [ -d "$APP_DIR/.git" ]; then
+        git -C "$APP_DIR" fetch --prune --tags
+        git -C "$APP_DIR" reset --hard origin/HEAD
+      else
+        git clone --depth=1 "$REPO_URL" "$APP_DIR"
+      fi
+
+runcmd:
+  # SSH only. Docker-published ports bypass ufw; 6543 is handled by the postgres firewall service.
+  - ufw default deny incoming && ufw allow OpenSSH && ufw --force enable
+  - systemctl enable --now fail2ban
+
+  # Clone as deploy (retry in case the network is not ready yet).
+  - install -d -o deploy -g deploy /home/deploy/apps
+  - bash -lc 'for i in 1 2 3; do sudo -u deploy -H /usr/local/bin/gb-clone-or-pull.sh && break || sleep 5; done'
+
+  # Close 6543 before Docker exists: with no allowlist yet, the unit drops every connection.
+  # Stop here if that fails: `cloud-init status --wait` then reports an error, and Docker is never installed.
+  - '/home/deploy/apps/the-greatest/deployment/postgres/bin/install-firewall.sh || { echo "postgres firewall install failed" >&2; exit 1; }'
+
+  # Docker from Docker's own repository. Compose builds the Postgres image on this server, hence buildx.
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"$${UBUNTU_CODENAME:-$$VERSION_CODENAME}\") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null'
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - usermod -aG docker deploy
+
+  # SOPS, same version as the web server.
+  - curl -LO https://github.com/getsops/sops/releases/download/v3.11.0/sops-v3.11.0.linux.amd64
+  - mv sops-v3.11.0.linux.amd64 /usr/local/bin/sops
+  - chmod +x /usr/local/bin/sops
+
+  - install -d -m 0750 -o root -g root /srv/postgres
+  - chown -R deploy:deploy /home/deploy/apps

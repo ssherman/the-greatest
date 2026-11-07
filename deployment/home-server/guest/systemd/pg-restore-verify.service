@@ -1,0 +1,11 @@
+[Unit]
+Description=Restore the latest Postgres backup, check it, dump it (docs/features/home-server.md)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/the-greatest/deployment/home-server/guest/pg-restore-verify.sh
+# A restore of the full backup plus WAL replay, checks and two dumps. Killing the unit does not stop the
+# containers it started; the next run stops Postgres first.
+TimeoutStartSec=10h
