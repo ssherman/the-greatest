@@ -52,10 +52,13 @@ module Oauth
 
     # What an approval may grant `user` (P-f): what was asked for, or all of the
     # resource's scopes when nothing was, limited to what the member may hold and
-    # to what the resource offers. An empty result means nothing can be granted.
+    # to what the resource offers. `offline_access` names no scope, so a request
+    # that asks for nothing else asked for nothing, and gets the same as no scope
+    # at all. An empty result means nothing can be granted.
     def self.grantable_scopes(user, resource, domain, requested: nil)
       offered = resource.scopes(domain)
-      asked = requested.nil? ? offered : Array(requested)
+      asked = Array(requested) - ["offline_access"]
+      asked = offered if asked.empty?
       offered & asked & ::Api::Scopes.mintable_by(user)
     end
 

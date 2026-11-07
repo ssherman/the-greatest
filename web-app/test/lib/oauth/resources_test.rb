@@ -62,6 +62,15 @@ module Oauth
         Resources.grantable_scopes(users(:regular_user), mcp, :books, requested: ["books:admin:merge"])
     end
 
+    test "a request for offline_access alone is treated as asking for nothing" do
+      mcp = Resources.fetch("mcp")
+
+      assert_equal ["books:read"],
+        Resources.grantable_scopes(users(:regular_user), mcp, :books, requested: ["offline_access"])
+      assert_equal [],
+        Resources.grantable_scopes(users(:user_with_expired_membership), mcp, :books, requested: ["offline_access"])
+    end
+
     test "a user with no membership and no role is granted nothing" do
       mcp = Resources.fetch("mcp")
       user = users(:regular_user)

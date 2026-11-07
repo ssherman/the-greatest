@@ -191,6 +191,18 @@ module Oauth
       assert_equal ["books:read"], grant.scopes.to_a
     end
 
+    test "a member who asks only for offline_access sees the approval screen and is granted books:read" do
+      sign_in_as(@member, stub_auth: true)
+
+      get "/oauth/authorize", params: authorize_params(scope: "offline_access")
+      assert_response :success
+      assert_select "[data-testid=oauth-approve]"
+
+      post "/oauth/authorize", params: authorize_params(scope: "offline_access")
+      assert_redirected_to_client(CLAUDE_URI)
+      assert_equal ["books:read"], OauthAccessGrant.order(:id).last.scopes.to_a
+    end
+
     # --- ineligible ---------------------------------------------------------
 
     test "a signed-in non-member gets the ineligible page and Return sends access_denied" do
@@ -203,6 +215,16 @@ module Oauth
 
       delete "/oauth/authorize", params: authorize_params
       assert_redirected_to_client(CLAUDE_URI, error: "access_denied")
+    end
+
+    test "a non-member who asked only for offline_access still gets the ineligible page" do
+      sign_in_as(@non_member, stub_auth: true)
+
+      get "/oauth/authorize", params: authorize_params(scope: "offline_access")
+
+      assert_response :success
+      assert_select "[data-testid=oauth-approve]", count: 0
+      assert_select "a[href=?]", "/membership"
     end
 
     test "a non-member who sent no scope is told about membership, not given an error redirect" do
