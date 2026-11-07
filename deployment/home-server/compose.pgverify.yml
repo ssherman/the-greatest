@@ -66,8 +66,9 @@ services:
       - ${PGVERIFY_ROOT:-/mnt/pgverify}/run:/var/run/postgresql
       - ${PGVERIFY_ROOT:-/mnt/pgverify}/config:/etc/pgverify:ro
       - ${PGVERIFY_ROOT:-/mnt/pgverify}/dumps:/dumps
-  # The upload to the dump bucket. The Postgres image has no AWS CLI and a production image should not
-  # gain one for a job that runs on a different server, so a pinned one-shot container does it. Index
+  # The upload to the dump bucket, an R2 bucket reached through its S3 API. The Postgres image has no AWS
+  # CLI and a production image should not gain one for a job that runs on a different server, so a pinned
+  # one-shot container does it. Index
   # digest of amazon/aws-cli:2.39.6, read from the registry on 2026-11-06. The key reaches it by
   # environment, by name: the script sets the values for the one command, so no secret is on a command
   # line or in this file.
@@ -78,8 +79,10 @@ services:
     environment:
       - AWS_ACCESS_KEY_ID
       - AWS_SECRET_ACCESS_KEY
-      # The dump bucket's region (PGVERIFY_DUMP_REGION in the VM's env); the CLI needs one for a bucket
-      # outside its default.
+      # The dump bucket's region (PGVERIFY_DUMP_REGION in the VM's env): `auto` for R2.
       - AWS_DEFAULT_REGION
+      # The dump bucket's endpoint (PGVERIFY_DUMP_ENDPOINT), https://<account id>.r2.cloudflarestorage.com.
+      # aws-cli v2 reads it for every service; without it the CLI would talk to AWS.
+      - AWS_ENDPOINT_URL
     volumes:
       - ${PGVERIFY_ROOT:-/mnt/pgverify}/dumps:/dumps:ro
