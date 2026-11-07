@@ -1,0 +1,15 @@
+# deployment/postgres/systemd/postgres-backup.service
+# One pgBackRest backup (full on Sunday, differential otherwise), run by postgres-backup.timer.
+# Installed by bin/install-backup.sh; runs the installed copy, never the checkout.
+# oneshot: systemd does not start a second copy while one is active, and pgBackRest's own lock
+# refuses an overlap from anywhere else; backup.sh reports that as a fail ping.
+[Unit]
+Description=Postgres pgBackRest backup (full on Sunday, differential otherwise)
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/postgres-server/backup.env
+ExecStart=/usr/local/lib/postgres-backup/backup.sh
+# A full backup of the whole cluster over S3 with process-max=1 takes hours.
+TimeoutStartSec=6h

@@ -12,6 +12,14 @@ module Services
     # The only place that knows what a token IS. A session cookie is never
     # consulted: the API is stateless by design.
     #
+    # Two kinds of bearer token: a personal access token (`tg_...`, Tokens), tried
+    # first because it is recognised by its shape without a database read, and
+    # then an OAuth access token a connector was issued through the sign-in flow
+    # (Services::Oauth::AccessTokens). An OAuth token only works on the path of the resource its
+    # connection was approved for (::Oauth::Resources.for_path), so it is
+    # :invalid_token on /api/v1/* and on /api/mcp/admin. An OAuth token whose
+    # holder lost their membership is :invalid_token, never :membership_required.
+    #
     # One exception: a request dispatched in-process by the MCP server already
     # carries a principal in the Rack env (::Api::DispatchedRequest). It is
     # returned as is, with no second token lookup and no record_use. The MCP
@@ -36,23 +44,42 @@ module Services
         header = @request.authorization
         return failure(:unauthenticated) if header.blank?
 
-        token = bearer_value(header).then { |secret| secret && Tokens.authenticate(secret) }
-        return failure(:invalid_token) if token.nil?
+        secret = bearer_value(header)
+        return failure(:invalid_token) if secret.nil?
 
+        personal = Tokens.authenticate(secret)
+        return authenticate_personal(personal) if personal
+
+        oauth = ::Services::Oauth::AccessTokens.find_live(secret, resource: ::Oauth::Resources.for_path(@request.path))
+        return failure(:invalid_token) if oauth.nil?
+
+        authenticate_oauth(oauth)
+      end
+
+      private
+
+      def authenticate_personal(token)
         user = token.user
         scopes = ::Api::Scopes.effective(token.scopes, user)
         return failure(:membership_required) if user.person? && scopes.empty? && !user.member?
 
         Tokens.record_use(token)
-        success(::Api::Principal.new(
-          user: user,
-          token: token,
-          scopes: scopes,
-          tier: tier_for(user, scopes)
-        ))
+        success(::Api::Principal.new(user: user, token: token, scopes: scopes, tier: tier_for(user, scopes)))
       end
 
-      private
+      # A connector's access token carries what the member approved, cut down to
+      # what the member may hold today, like a personal token. Unlike a personal
+      # token there is no 403 for a lapsed member: the person at the other end is
+      # an agent that cannot act on "membership_required", so it gets the 401 that
+      # sends it back through sign-in, where the member sees the real reason (D12).
+      def authenticate_oauth(token)
+        user = token.connection.user
+        scopes = ::Api::Scopes.effective(token.connection.scopes, user)
+        return failure(:invalid_token) if scopes.empty?
+
+        ::Services::Oauth::AccessTokens.record_use(token)
+        success(::Api::Principal.new(user: user, token: token, scopes: scopes, tier: tier_for(user, scopes)))
+      end
 
       def tier_for(user, scopes)
         return :system if user.service?

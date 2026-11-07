@@ -152,6 +152,31 @@ This will start:
 - Redis (if configured)
 - Any other services defined in `docker-compose.yml`
 
+### Switching an existing checkout from Postgres 17 to 18
+
+Development and CI run Postgres 18. The 18 container uses a new volume
+(`postgresql18-data`), so an existing 17 database does not carry over; you restore
+the production dump into the new one. Do this once, after merging, and tell anyone
+else using the shared dev database first, because it stops their server.
+
+```bash
+# from the project root (the scripts live in bin/ there, next to docker-compose.yml)
+export COMPOSE_PROJECT_NAME=the-greatest  # see below
+bin/snapshot-dev-db.sh --label pre-pg18   # safety copy of the 17 database
+docker compose stop db                    # stops the 17 container
+docker compose up -d db                   # starts 18 on the new empty volume
+bin/refresh-dev-db.sh --legacy            # restores both databases; ~25 minutes or more
+docker compose exec db psql -U postgres -Atc 'show server_version'   # starts with 18.
+```
+
+Compose derives its project name from the directory it runs in. The running `db`
+container belongs to the project named after the main checkout's directory, so from
+a worktree, `docker compose` and the snapshot and refresh scripts that call it
+would look in a different project and not find it. Setting `COMPOSE_PROJECT_NAME`
+as above, or running from the main checkout, avoids that. The old
+`postgresql-data` volume is left in place and unmounted; remove it with
+`docker volume rm tg_postgresql_data` only when you no longer want the 17 copy.
+
 ### 2. Start Rails Application
 Navigate to the web-app directory and start the Rails server:
 ```bash
@@ -345,21 +370,19 @@ dev.thegreatest.games {
 Example `docker-compose.yml` in the project root:
 
 ```yaml
-version: '3.8'
 services:
   db:
-    image: postgres:15
+    image: postgres:18
     environment:
-      POSTGRES_DB: the_greatest_development
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      - POSTGRES_PASSWORD=${DOCKER_POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:6543:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Postgres 18 images keep data in a versioned subdirectory, so the mount is the parent.
+      - postgresql18-data:/var/lib/postgresql
 
 volumes:
-  postgres_data:
+  postgresql18-data:
 ```
 
 ## Security Notes

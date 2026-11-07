@@ -7,6 +7,8 @@ module Api
     RATE_HEADERS = %w[X-RateLimit-Limit X-RateLimit-Remaining X-RateLimit-Reset
       X-RateLimit-Daily-Limit X-RateLimit-Daily-Remaining X-RateLimit-Daily-Reset].freeze
 
+    RESOURCE_METADATA = "https://dev-new.thegreatestbooks.org/.well-known/oauth-protected-resource/api/mcp".freeze
+
     setup do
       host! "dev-new.thegreatestbooks.org"
       @war_and_peace = books_books(:war_and_peace)
@@ -184,7 +186,55 @@ module Api
 
       assert_response :unauthorized
       assert_equal "unauthenticated", json["code"]
+      assert_equal %(Bearer resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+        response.headers["WWW-Authenticate"]
+    end
+
+    test "a bad token names the resource metadata in the invalid_token challenge" do
+      rpc("tools/list", token: "tg_#{"z" * 40}")
+
+      assert_response :unauthorized
+      assert_equal "invalid_token", json["code"]
+      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+        response.headers["WWW-Authenticate"]
+    end
+
+    test "a live OAuth token can list tools" do
+      secret, = issue_oauth_token(oauth_connections(:member_mcp))
+
+      rpc("tools/list", token: secret)
+
+      assert_response :success
+      names = json.dig("result", "tools").map { |tool| tool["name"] }
+      assert_includes names, "get_book"
+    end
+
+    test "a revoked OAuth token is a 401 with the resource metadata challenge" do
+      connection = oauth_connections(:member_mcp)
+      secret, = issue_oauth_token(connection)
+      Services::Oauth::Connections.revoke!(connection)
+
+      rpc("tools/list", token: secret)
+
+      assert_response :unauthorized
+      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+        response.headers["WWW-Authenticate"]
+    end
+
+    test "the admin endpoint's 401 keeps the bare Bearer challenge" do
+      rpc("tools/list", token: nil, path: "/api/mcp/admin")
+
+      assert_response :unauthorized
       assert_equal "Bearer", response.headers["WWW-Authenticate"]
+    end
+
+    test "an OAuth token is refused on the admin endpoint" do
+      secret, = issue_oauth_token(oauth_connections(:member_mcp))
+
+      rpc("tools/list", token: secret, path: "/api/mcp/admin")
+
+      assert_response :unauthorized
+      assert_equal %(Bearer error="invalid_token"), response.headers["WWW-Authenticate"]
     end
 
     test "a non-member is a 403 membership_required" do
@@ -258,6 +308,71 @@ module Api
       %w[search_authors list_author_books list_ranking_configuration_author_books list_similar_books].each do |name|
         assert_includes names, name
       end
+    end
+
+    test "tools/list includes the category, country and configuration tools" do
+      rpc("tools/list")
+
+      names = json.dig("result", "tools").map { |tool| tool["name"] }
+      %w[search_categories list_countries get_ranking_configuration_book
+        list_ranking_configuration_book_lists get_ranking_configuration_list].each do |name|
+        assert_includes names, name
+      end
+    end
+
+    test "get_ranking_configuration_list fills both path ids" do
+      primary = ranking_configurations(:books_global)
+      list = ::Books::List.create!(name: "Tool path list", status: :active)
+      RankedList.create!(list: list, ranking_configuration: primary, weight: 42)
+
+      call_tool("get_ranking_configuration_list", {id: primary.id, list_id: list.id})
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal list.id, tool_text.dig("data", "id")
+      assert_equal 42, tool_text.dig("data", "weight")
+
+      # Swapped, the list id lands in the configuration slot: no such configuration.
+      call_tool("get_ranking_configuration_list", {id: list.id, list_id: primary.id})
+
+      assert_equal true, json.dig("result", "isError")
+      assert_equal "not_found", tool_text["code"]
+    end
+
+    test "list_lists passes sort and q" do
+      primary = ranking_configurations(:books_global)
+      now = Time.utc(2025, 1, 1)
+      # Weight order (Canon, Beta, Modern) and newest order (Beta, Modern, Canon)
+      # disagree, so a dropped sort or a dropped q changes the answer.
+      lists = {"Alpha Canon" => 90, "Alpha Modern" => 10, "Beta Modern" => 50}.each_with_index.to_h do |(name, weight), i|
+        list = ::Books::List.create!(name: name, status: :active)
+        RankedList.create!(list: list, ranking_configuration: primary, weight: weight)
+        list.update_columns(activated_at: now + i.days)
+        [name, list]
+      end
+      ids = lists.values.map(&:id)
+      ours = -> { tool_text["data"].map { |row| row["id"] }.select { |id| ids.include?(id) } }
+
+      call_tool("list_lists", {sort: "newest", q: "ALPHA"})
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal [lists["Alpha Modern"].id, lists["Alpha Canon"].id], tool_text["data"].map { |row| row["id"] }
+
+      call_tool("list_lists", {q: "alpha"})
+
+      assert_equal [lists["Alpha Canon"].id, lists["Alpha Modern"].id], tool_text["data"].map { |row| row["id"] }, "weight order by default"
+
+      call_tool("list_lists", {sort: "newest"})
+
+      assert_equal lists.values_at("Beta Modern", "Alpha Modern", "Alpha Canon").map(&:id), ours.call
+
+      call_tool("list_lists", {})
+
+      assert_equal lists.values_at("Alpha Canon", "Beta Modern", "Alpha Modern").map(&:id), ours.call, "weight order by default"
+
+      call_tool("list_lists", {q: "  "})
+
+      assert_equal true, json.dig("result", "isError")
+      assert_equal "invalid_parameter", tool_text["code"]
     end
 
     test "list_similar_books passes limit through to the endpoint" do

@@ -671,14 +671,22 @@ Rails.application.routes.draw do
           resources :ranking_configurations, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/books", to: "books#index",
             as: :ranking_configuration_books, constraints: {ranking_configuration_id: /\d+/}
+          get "ranking_configurations/:ranking_configuration_id/books/:slug", to: "books#show",
+            as: :ranking_configuration_book, constraints: {ranking_configuration_id: /\d+/}
+          get "ranking_configurations/:ranking_configuration_id/books/:slug/lists", to: "book_lists#index",
+            as: :ranking_configuration_book_lists, constraints: {ranking_configuration_id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/categories/:slug/books", to: "category_books#index",
             as: :ranking_configuration_category_books, constraints: {ranking_configuration_id: /\d+/}
           resources :lists, only: [:index, :show], constraints: {id: /\d+/}
           get "ranking_configurations/:ranking_configuration_id/lists", to: "lists#index",
             as: :ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
+          get "ranking_configurations/:ranking_configuration_id/lists/:id", to: "lists#show",
+            as: :ranking_configuration_list, constraints: {ranking_configuration_id: /\d+/, id: /\d+/}
           get "lists/:list_id/items", to: "list_items#index", as: :list_items, constraints: {list_id: /\d+/}
           get "search/books", to: "book_searches#index", as: :search_books
           get "search/authors", to: "author_searches#index", as: :search_authors
+          get "search/categories", to: "category_searches#index", as: :search_categories
+          get "countries", to: "countries#index"
         end
 
         # Admin API: needs a books:admin:* scope. Its contract is
@@ -705,6 +713,31 @@ Rails.application.routes.draw do
         end
       end
     end
+
+    # OAuth discovery for the MCP endpoint (spec D3, D8). The protected-resource
+    # document is served at the root and at the RFC 9728 path-suffixed location
+    # for each registered resource; /api/mcp/admin has none and 404s.
+    get ".well-known/oauth-authorization-server", to: "oauth/metadata#authorization_server",
+      format: false
+    get ".well-known/oauth-protected-resource", to: "oauth/metadata#protected_resource",
+      defaults: {resource_key: "mcp"}, format: false
+    get ".well-known/oauth-protected-resource/api/mcp", to: "oauth/metadata#protected_resource",
+      defaults: {resource_key: "mcp"}, format: false
+
+    # Dynamic Client Registration (RFC 7591, spec D6).
+    post "api/oauth/register", to: "oauth/registrations#create", defaults: {format: :json}, format: false
+
+    # The token endpoint and revocation (spec D11). Public clients: a bare
+    # client_id, PKCE for the proof.
+    post "api/oauth/token", to: "oauth/tokens#create", defaults: {format: :json}, format: false
+    post "api/oauth/revoke", to: "oauth/tokens#revoke", defaults: {format: :json}, format: false
+
+    # The authorize page (spec D4). One URL: GET shows the screen, POST is
+    # Approve, DELETE is Deny. HTML only, and on the books host because only
+    # books has an MCP endpoint.
+    get "oauth/authorize", to: "oauth/authorizations#new", as: :oauth_authorize, format: false
+    post "oauth/authorize", to: "oauth/authorizations#create", format: false
+    delete "oauth/authorize", to: "oauth/authorizations#destroy", format: false
 
     get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
     get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal

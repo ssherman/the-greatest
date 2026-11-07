@@ -58,6 +58,40 @@ This document lists all environment variables required for production deployment
 - **Used By**: web, worker
 - **Security**: Never commit this value
 
+#### POSTGRES_SSLMODE
+- **Description**: libpq TLS mode for the primary database connection (`disable`, `prefer`, `require`, `verify-ca`, `verify-full`)
+- **Required**: No
+- **Default**: unset, which leaves the driver's default (`prefer`)
+- **Used By**: web, worker
+
+#### LEGACY_BOOKS_SSLMODE
+- **Description**: libpq TLS mode for the `legacy_books` connection. Does not fall back to `POSTGRES_SSLMODE`; set it separately.
+- **Required**: No
+- **Default**: unset, which leaves the driver's default (`prefer`)
+- **Used By**: web, worker
+
+#### Production values for the Postgres server
+
+In production `POSTGRES_HOST` is the Postgres server's address (`docs/features/postgres-server.md`), with
+`POSTGRES_PORT=6543`, `POSTGRES_SSLMODE=require`, `POSTGRES_USER=the_greatest` and `POSTGRES_DATABASE=the_greatest`.
+The `legacy_books` connection reads `LEGACY_BOOKS_HOST`, `LEGACY_BOOKS_PORT`, `LEGACY_BOOKS_DATABASE` (`tgb`),
+`LEGACY_BOOKS_USER` (`tgb_reader`), `LEGACY_BOOKS_PASSWORD` and `LEGACY_BOOKS_SSLMODE`. Host, port, user and
+password fall back to the `POSTGRES_*` values when unset, and `LEGACY_BOOKS_DATABASE` defaults to
+`the_greatest_books`. Before changing any `POSTGRES_*` value, set all five (`LEGACY_BOOKS_HOST`, `_PORT`, `_USER`,
+`_PASSWORD`, `_DATABASE`) explicitly to today's values, or the legacy connection moves with the primary one.
+
+The server itself is configured from `secrets/.env.postgres` (SOPS), not from this file. Its shape is
+`deployment/postgres/.env.postgres.example`:
+
+| Variable | Meaning |
+|---|---|
+| `POSTGRES_CLIENTS` | `role database address` entries separated by semicolons; also the firewall allowlist |
+| `POSTGRES_SUPERUSER_PASSWORD`, `POSTGRES_THE_GREATEST_PASSWORD`, `POSTGRES_TGB_APP_PASSWORD`, `POSTGRES_TGB_READER_PASSWORD` | One per role; `openssl rand -hex 32` |
+| `PGBACKREST_REPO_BUCKET`, `_ENDPOINT`, `_REGION`, `_PATH`, `_KEY`, `_KEY_SECRET` | The backup bucket and the server's key |
+| `PGBACKREST_CIPHER_PASS` | Encrypts the repo; losing it loses the backups |
+| `HC_PG_BACKUP`, `HC_PG_HEALTH` | healthchecks.io ping URLs |
+| `POSTGRES_BOOTSTRAP`, `POSTGRES_ALLOW_RESTART` | Not set normally; see the runbook |
+
 ### Redis Configuration
 
 #### REDIS_URL

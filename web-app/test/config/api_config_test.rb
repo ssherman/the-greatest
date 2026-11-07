@@ -26,4 +26,30 @@ class ApiConfigTest < ActiveSupport::TestCase
     assert_kind_of Integer, api.max_tokens_per_user
     assert_operator api.max_tokens_per_user, :>, 0
   end
+
+  test "the OAuth endpoints declare positive per-IP limits" do
+    api = Rails.application.config.x.api
+
+    assert_equal 10, api.oauth_register_per_minute
+    assert_equal 30, api.oauth_token_per_minute
+  end
+
+  test "every configured connector CIDR parses" do
+    ranges = Rails.application.config.x.api.connector_egress_ranges
+
+    assert_equal [:anthropic], ranges.keys
+    ranges.each_value do |cidrs|
+      assert_not_empty cidrs
+      cidrs.each { |cidr| assert_kind_of IPAddr, IPAddr.new(cidr) }
+    end
+  end
+
+  test "every rate-limited window has a positive connector-range budget above its per-IP limit" do
+    api = Rails.application.config.x.api
+    budgets = api.connector_range_per_minute
+    per_ip = {unauthenticated: api.unauthenticated_per_minute, oauth_register: api.oauth_register_per_minute, oauth_token: api.oauth_token_per_minute}
+
+    assert_equal per_ip.keys.sort, budgets.keys.sort
+    budgets.each { |window, limit| assert_operator limit, :>, per_ip.fetch(window) }
+  end
 end

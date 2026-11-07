@@ -10,10 +10,8 @@ module Api
       # a bare Books:: resolves to Api::V1::Books:: and raises NameError.
       class CategoriesController < BaseController
         def index
-          type = param_in(:type, ::Books::BrowseQuery::TYPES) || ::Books::BrowseQuery::TYPES.first
-          return if performed?
-          sort = param_in(:sort, ::Books::BrowseQuery::SORTS)
-          return if performed?
+          type = enum_param!(:type, ::Books::BrowseQuery::TYPES) || ::Books::BrowseQuery::TYPES.first
+          sort = enum_param!(:sort, ::Books::BrowseQuery::SORTS)
 
           configuration = ::Books::RankingConfiguration.default_primary
           relation = configuration && ::Books::BrowseQuery
@@ -41,19 +39,6 @@ module Api
           end
 
           render json: {data: CategoryResource.new(category, params: {book_count: count}).to_h}
-        end
-
-        private
-
-        # An absent param is nil; a value outside `allowed` renders the 400
-        # (callers check performed?).
-        def param_in(name, allowed)
-          value = params[name]
-          return nil if value.nil?
-          return value.to_s if allowed.include?(value.to_s)
-
-          render_problem(::Api::Problem.new(:invalid_parameter, detail: "#{name} must be one of #{allowed.join(", ")}"))
-          nil
         end
       end
     end

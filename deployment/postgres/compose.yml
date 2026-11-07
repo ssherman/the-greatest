@@ -1,0 +1,54 @@
+# deployment/postgres/compose.yml -- the database server.
+# Spec: docs/superpowers/specs/2026-11-06-postgres-server-design.md
+name: postgres-server
+services:
+  postgres:
+    build: .
+    restart: unless-stopped
+    # The postgres user of the image. Without it `compose exec` and `compose run` start as root, and
+    # pgBackRest refuses to run as root. Also what the certificate key ownership assumes.
+    user: "999:999"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set POSTGRES_SUPERUSER_PASSWORD in the environment}
+      # en_US.utf8 is the spelling the spec uses and the one `CREATE DATABASE ... LOCALE 'en_US.utf8'`
+      # must match against template1. Data checksums are the 18 default; the flag keeps it explicit.
+      # Init args matter on first start only.
+      POSTGRES_INITDB_ARGS: "--locale=en_US.utf8 --encoding=UTF8 --data-checksums"
+      # Every pgBackRest invocation in the container (archive_command, `compose exec`, `compose run`)
+      # reads the config the deploy rendered into the host config directory.
+      PGBACKREST_CONFIG: /etc/postgresql-host/pgbackrest.conf
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - hba_file=/etc/postgresql-host/pg_hba.conf
+    # Docker's default is 10 s, after which it kills Postgres mid-shutdown and the next start has to
+    # run crash recovery. A clean shutdown checkpoint can take longer than that at this size.
+    stop_grace_period: 120s
+    shm_size: 1g
+    ports:
+      # IPv4 only. A bare "6543:5432" also listens on [::]:6543 through docker-proxy, a path the
+      # DOCKER-USER allowlist never sees.
+      - "0.0.0.0:${POSTGRES_PORT:-6543}:5432"
+    volumes:
+      # The image keeps data in /var/lib/postgresql/18/docker and declares its volume at the parent.
+      - postgres-data:/var/lib/postgresql
+      # Directory mounts, not single files: a single-file bind mount keeps the old inode when a
+      # deploy replaces the file.
+      - ./config:/etc/postgresql:ro
+      - ${POSTGRES_HOST_CONFIG_DIR:-/srv/postgres/config}:/etc/postgresql-host:ro
+      - ${POSTGRES_CERTS_DIR:-/srv/postgres/certs}:/etc/postgresql-certs:ro
+    healthcheck:
+      # Over the socket, as the service user: a TCP probe to localhost matches no pg_hba rule and
+      # logs two FATAL lines every interval.
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options: { max-size: "100m", max-file: "20" }
+volumes:
+  postgres-data:

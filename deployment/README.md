@@ -9,12 +9,12 @@ The production deployment consists of:
 - **worker**: Sidekiq background job processor
 - **nginx**: Reverse proxy with SSL termination
 - **redis**: In-memory data store for Sidekiq and caching
-- **External Services**: PostgreSQL (hosted separately) and OpenSearch (its own server: docs/features/opensearch-server.md)
+- **External Services**: PostgreSQL (its own server: docs/features/postgres-server.md) and OpenSearch (its own server: docs/features/opensearch-server.md)
 
 ## Prerequisites
 
 - Linode instance provisioned via Terraform (see `deployment/terraform/`)
-- External PostgreSQL database
+- Postgres server, built from `deployment/terraform/postgres/` (runbook: `docs/features/postgres-server.md`)
 - OpenSearch server, built from `deployment/terraform/opensearch/` (runbook: `docs/features/opensearch-server.md`)
 - Cloudflare API token with DNS edit permissions
 - GitHub Container Registry access

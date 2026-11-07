@@ -1,0 +1,13 @@
+<% content_for :page_title, "Cannot connect this app | #{domain_name}" %>
+
+<div class="mx-auto max-w-lg">
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-4">
+      <h1 class="card-title text-2xl">This app cannot be connected</h1>
+      <p><%= error_response.body[:error_description] %></p>
+      <p class="text-sm text-base-content/70">
+        Nothing was approved. Go back to the app and start again.
+      </p>
+    </div>
+  </div>
+</div>
