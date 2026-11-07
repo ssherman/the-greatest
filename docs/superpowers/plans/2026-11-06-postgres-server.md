@@ -4,7 +4,7 @@
 
 **Goal:** Build a reproducible, locked-down PostgreSQL 18 server with proven backups, then move both sites' databases to it with minutes of read-only time.
 
-**Architecture:** One Linode built by Terraform and cloud-init and configured by a manual workflow, on the OpenSearch server's pattern. pgBackRest streams backups to a versioned S3 bucket. A home-server VM restores them nightly, checks them and produces the dev dumps. Logical replication copies live data from 17 to 18.
+**Architecture:** One Linode built by Terraform and cloud-init and configured by a manual workflow, on the OpenSearch server's pattern. pgBackRest streams backups to a Cloudflare R2 bucket whose WAL archive is locked for 14 days. A home-server VM restores them nightly, checks them and produces the dev dumps, which it uploads to a second, fully locked R2 bucket from the first night of the restore check; dev switches to that bucket at cutover. Logical replication copies live data from 17 to 18.
 
 **Tech Stack:** PostgreSQL 18 (official image plus PGDG pgBackRest), Docker Compose, Terraform, cloud-init, bash with stub-based tests and shellcheck, SOPS, healthchecks.io, Rails 8.
 
@@ -15,10 +15,10 @@
 - The repo is public. No server addresses, bucket names, ping URLs or details of the old server's security state in code, tests, docs, commits or PRs. Use placeholders and SOPS.
 - Never `commit` to `main`, and never push or open a PR without asking Shane. A merge to `main` deploys.
 - Part A tasks change code only. They touch no production system. Part B tasks are live and need Shane's go-ahead at the point each says so.
-- Shane runs `terraform apply`, `provision` and AWS console steps. Agents run everything else over SSH.
+- Shane runs `terraform apply`, `provision` and the one-time R2 setup (`setup-r2.sh` with a temporary account token, then the four bucket-scoped tokens). Agents run everything else over SSH.
 - Postgres `18.x` pinned by digest; pgBackRest 2.60 or newer; Ubuntu 26.04; `g6-standard-4`; `us-central`; port 6543 published as `0.0.0.0:6543:5432`, so IPv4 only.
 - Databases `the_greatest` and `tgb`, locale `en_US.utf8`. Roles exactly: `postgres`, `the_greatest`, `tgb_app`, `tgb_reader`. Nothing is copied from the old server's `postgres` or `template1` databases, and no old role or password is reused.
-- Data mount `/var/lib/postgresql`. `io_method` stays at its default. `archive_timeout=300`. Retention 30 days. Non-current S3 versions expire after 14 days.
+- Data mount `/var/lib/postgresql`. `io_method` stays at its default. `archive_timeout=300`. Retention 30 days. R2 lock 14 days, on the backups bucket's WAL archive prefix only and on the whole dumps bucket; the lock always stays below retention.
 - A deploy never restarts Postgres unless told to, and never restarts the firewall unit: reapply rules as `deployment/opensearch/bin/install-firewall.sh` does.
 - Every failure path pings `fail`, and no failure path pings success. Stubs follow `deployment/opensearch/test/helpers.sh`, including the depth guard. Never send a real ping from a test.
 - `deployment/home-server` may have another agent's NIC recovery work in flight. Check `git log origin/main -- deployment/home-server` before Task 9, and rebase rather than overwrite.
@@ -26,7 +26,7 @@
 
 ## Review Focus
 
-1. **WAL archiving breaks while Postgres looks healthy** (bad key, S3 down): `pg-health` must fail within 15 minutes, even though the database answers queries. Test: `t_ready_file_older_than_15_min_fails` in Task 7.
+1. **WAL archiving breaks while Postgres looks healthy** (bad token, R2 down): `pg-health` must fail within 15 minutes, even though the database answers queries. Test: `t_ready_file_older_than_15_min_fails` in Task 7.
 2. **The first restore-check run has no previous night's counts:** it must pass without a row-count alert rather than erroring or dividing by zero. Test: `t_first_run_has_no_baseline` in Task 9.
 3. **An IPv6 client address in SOPS:** it must render as a `/128` `hostssl` line and appear in the v6 firewall rules, not fail the deploy or be dropped silently. Test: `t_ipv6_client_renders_128` in Task 4.
 4. **Rotating a password by redeploying:** the new password takes effect with no restart and never appears in a process's arguments. Test: `t_password_goes_by_stdin_not_argv` in Task 6.
@@ -211,7 +211,7 @@ end
 
 **Interfaces:**
 - VM role `pgverify`: `VMID=140 NAME=pgverify CORES=4 MEM=8192 OSDISK=32 DATADISK=400`, created only with `PGVERIFY_ENABLED=1` and refusing a blank `HC_PGVERIFY`, on the isolated `vmbr1` with `ip=10.20.0.20/24,gw=10.20.0.1`, like `fetcher`. Confirm `lib/host.sh` allows outbound HTTPS from it and nothing inbound.
-- Env for this VM only: `HC_PGVERIFY`, `HC_PGVERIFY_DEPLOY`, `PGVERIFY_REPO_*` (read-only key), `PGVERIFY_CIPHER_PASS`, `PGVERIFY_DUMP_BUCKET`, `PGVERIFY_DUMP_KEY`, `PGVERIFY_DUMP_KEY_SECRET`, `PGVERIFY_UPLOAD_ENABLED` (default `0`).
+- Env for this VM only: `HC_PGVERIFY`, `HC_PGVERIFY_DEPLOY`, `PGVERIFY_REPO_*` (read-only key), `PGVERIFY_CIPHER_PASS`, `PGVERIFY_DUMP_BUCKET`, `PGVERIFY_DUMP_REGION` (`auto`), `PGVERIFY_DUMP_ENDPOINT` (the R2 endpoint, passed to the `aws` container as `AWS_ENDPOINT_URL`; required when upload is on), `PGVERIFY_DUMP_KEY`, `PGVERIFY_DUMP_KEY_SECRET`, `PGVERIFY_UPLOAD_ENABLED` (default `0`).
 - No heartbeat unit for this role: it runs no always-on service, and `pg-restore-verified` is its alert.
 - Timer `*-*-* 12:00:00 UTC`. Dumps in `/mnt/pgverify/dumps/{daily,monthly}`.
 - Core tables: `the_greatest`: `users`, `books_books`, `music_albums`, `music_songs`, `games_games`, `user_list_items`. `tgb`: `users`, `books`, `authors`, `user_list_books`.
@@ -261,7 +261,7 @@ end
   - `t_empty_table_sequence_keeps_is_called_false`.
   - `t_readonly_off_terminates_sessions`: sessions opened during the window stay read-only otherwise.
 - [ ] **Step 2:** Run. Expected: FAIL. Implement. Run. Expected: PASS.
-- [ ] **Step 3: Write `local-e2e-test.sh`,** by hand, needing Docker: `postgres:17` as source, the real image and compose as target, and MinIO with versioning on as the bucket. Asserts:
+- [ ] **Step 3: Write `local-e2e-test.sh`,** by hand, needing Docker: `postgres:17` as source, the real image and compose as target, and MinIO as the bucket (plain, unversioned: a stand-in for the R2 backups bucket). R2's lock behaviour is not modelled here; it is proven on real R2, spec §8.4. Asserts:
   - each role per spec §5.2;
   - no plain connection, no network superuser;
   - `show data_checksums` is `on`;
@@ -288,11 +288,11 @@ end
 
 Each of these touches production. Ask Shane before starting each one, and report exact outputs. Follow `docs/features/postgres-server.md`.
 
-### Task 12: Bucket, keys and alerts (Shane, with agent support)
+### Task 12: Buckets, tokens and alerts (Shane, with agent support)
 
-- [ ] **Step 1 (Shane, console):** Create the versioned bucket with a 14-day non-current expiry, and three IAM logins per spec §8.2 and §9: server, home VM read-only, home VM dump writer. Agents supply the exact policy JSON. The server's policy must not include `s3:DeleteObjectVersion`, `s3:PutBucket*`, `s3:PutLifecycleConfiguration` or anything in `iam:`.
+- [ ] **Step 1 (Shane, R2):** Create a temporary account API token that can edit R2. Run `deployment/postgres/bin/setup-r2.sh` with `CF_API_TOKEN`, `CF_ACCOUNT_ID`, `PGBACKREST_REPO_BUCKET`, `PGVERIFY_DUMP_BUCKET` and the **pre-production** `PGBACKREST_REPO_PATH` in the environment (runbook, "Build", step 2). Expected: last line `setup-r2: done`. Then create the four bucket-scoped tokens per spec §8.2 (server: Object Read & Write on backups; home VM restore: Object Read on backups; home VM upload: Object Read & Write on dumps; developer refresh: Object Read on dumps), and delete the temporary token. Then audit every other R2 token in the account (the app's `STORAGE_*`, `PRIVATE_IMPORTS_*`, `RECOMMENDATIONS_R2_*`, the `ol` VM's): each scoped to named buckets, none with admin R2 rights (runbook, "Build", step 2e). No AWS console step remains.
 - [ ] **Step 2 (Shane):** Create healthchecks.io checks `pg-backup` (1 day, 2 hours grace), `pg-health` (15 minutes, 15 minutes grace), `pg-restore-verified` (1 day, 2 hours grace). Add the Gmail filter so they stay out of Promotions and Updates, and a phone push channel if the plan includes one.
-- [ ] **Step 3:** Put all values in `secrets/.env.postgres` and `secrets/home-server.env`. Generate passwords with `openssl rand -hex 32`. Use a pre-production `PGBACKREST_REPO_PATH` for Task 14.
+- [ ] **Step 3:** Put all values in `secrets/.env.postgres` and `secrets/home-server.env`: endpoints `<account id>.r2.cloudflarestorage.com` for pgBackRest (no scheme) and `https://<account id>.r2.cloudflarestorage.com` for `PGVERIFY_DUMP_ENDPOINT`, region `auto`, key id = token id, secret = SHA-256 of the token value. Generate passwords with `openssl rand -hex 32`. Use a pre-production `PGBACKREST_REPO_PATH` for Task 14.
 
 ### Task 13: Old server prerequisites
 
@@ -303,31 +303,31 @@ Each of these touches production. Ask Shane before starting each one, and report
 
 - [ ] **Step 1 (Shane):** `terraform apply`. Add host and fingerprint secrets.
 - [ ] **Step 2:** Run `deploy-postgres`. Add the new server's address to no old allowlist yet. Run `verify-postgres-lockdown.sh --outside`, then `--inside` from both app servers with each login, plus the reboot probe from the OpenSearch runbook: no answer from outside while it boots.
-- [ ] **Step 3:** On the pre-production path: sentinel table, backup, restore to a chosen moment on the same server, confirm. Break a backup deliberately, and **Shane confirms he saw the `pg-backup` and `pg-health` alerts**. The restore check's alert is Task 15 Step 4.
-- [ ] **Step 4:** Destroy and rebuild with no SSH fixes, following the runbook's "Rebuild", and verify again. Drop the sentinel table. Delete the pre-production repo path and switch `PGBACKREST_REPO_PATH` to the real one. Start `pg-backup` and `pg-health`.
+- [ ] **Step 3:** On the pre-production path: sentinel table, backup, restore to a chosen moment on the same server, confirm, and record how long the restore took. Prove the lock: with the server's token, deleting the newest WAL object under `<path>/archive/main/18-` must fail with `ObjectLockedByBucketPolicy` (runbook, "Prove it"). Break a backup deliberately, and **Shane confirms he saw the `pg-backup` and `pg-health` alerts**. The restore check's alert is Task 15 Step 4.
+- [ ] **Step 4:** Destroy and rebuild with no SSH fixes, following the runbook's "Rebuild", and verify again. Drop the sentinel table. Switch `PGBACKREST_REPO_PATH` to the real one and **re-run `setup-r2.sh` with it and `R2_REPLACE_LOCK=1`** (Shane, temporary token again), so the lock covers the real WAL archive. R2 locks are bucket rules, so this unlocks the pre-production prefix at once: delete the whole pre-production repo path, archive included, and confirm with `setup-r2.sh --check`. `pg-backup` and `pg-health` run on the real path from here; backups and `pg-health` are unchanged by R2.
 
 ### Task 15: Copy and prove (spec Phase 2)
 
 - [ ] **Step 1:** Shane approves a restart time. Old server settings for the move: `wal_level=logical`, TLS with a self-signed certificate, `max_slot_wal_keep_size=20GB`, a `replicator` role with a `hostssl` rule on both databases from the new server's address, and a temporary `hostssl` rule for `postgres` from the new server's address and the app hosts that run `load-schema.sh`. Restart. Expected: both apps reconnect by themselves; check for errors in both logs. Then prove from inside the new server's container that `pg_isready` reaches the old server's port, and that `--outside` still passes.
 - [ ] **Step 2:** Freeze migrations on both apps, for at least 8 days, and tell Shane. `check-schema`, `load-schema` (from each database's app host), `create-replication` for each database. Watch `pg_stat_subscription` and the old server's disk.
 - [ ] **Step 3:** When lag is near zero: `ANALYZE` both, `compare` both, record the results. Any unique-index failure: fix the row on the source and record it.
-- [ ] **Step 4 (Shane):** Set `PGVERIFY_ENABLED=1` and `provision` to create VM 140, on `REPO_REF=main`. Before the nights start, break a restore check deliberately (**Shane confirms he saw the alert**) and see one real run's first success ping. **Cutover needs 7 straight passing nights.** Upload stays off.
+- [ ] **Step 4 (Shane):** Set `PGVERIFY_ENABLED=1` and `provision` to create VM 140, on `REPO_REF=main`. Before the nights start, break a restore check deliberately (**Shane confirms he saw the alert**) and see one real run's first success ping. Record that run's restore time from R2 on real data, from the journal. **The dump upload goes on now too:** `PGVERIFY_UPLOAD_ENABLED=1`, `PGVERIFY_DUMP_BUCKET`, `PGVERIFY_DUMP_ENDPOINT=https://<account id>.r2.cloudflarestorage.com`, `PGVERIFY_DUMP_REGION=auto` and the upload token in `secrets/home-server.env`, in the same `provision`. After the first night, `aws s3 ls` with the developer refresh token must list both dumps; optionally, one dev refresh from R2 with `BACKUP_*` on the command line, on Shane's say-so, with dev already on 18. A failed upload pings `fail` and resets the count. **Cutover needs 7 straight passing nights.**
 - [ ] **Step 5:** Old site connection test from its production server (spec §11), using a one-off container and a rolled-back write. New app's equivalent, with `rails runner` and `tgb_reader` reads, including `finish_legacy` and the Goodreads rake tasks' reads.
 
 ### Task 16: Cutover (spec Phase 3)
 
 Shane picks the day: not a Sunday, starting about 10:30 UTC. Have one SOPS PR per database reviewed and ready, each holding only that database's variables. Do one database at a time.
 
-- [ ] **Step 1:** Confirm no import is running and that neither backup is. Remove the old server's backup cron. Stop Sidekiq and the PgHero cron for the affected app.
+- [ ] **Step 1:** Confirm no import is running and that neither backup is. Remove the old server's backup cron (the old S3 bucket gets no new dumps from here; dev keeps the last one until Step 7). Stop Sidekiq and the PgHero cron for the affected app.
 - [ ] **Step 2:** `set-readonly DB on`. Start the timer.
 - [ ] **Step 3:** Wait for the subscription to reach the source's current LSN. `sync-sequences DB`. `compare DB`. Record the target's write count for the rollback. Any failure: `set-readonly DB off`, restart workers, stop.
 - [ ] **Step 4:** Switch the app: new app `.env` then `docker compose up -d web worker`; old site `.env` then restart `web worker cable`. For `tgb`, also `LEGACY_BOOKS_*`. Set `POSTGRES_SSLMODE=require` and friends.
 - [ ] **Step 5 (Shane):** Real sign-in and a real write on each site. Stop the timer and report the read-only time. Restart workers.
 - [ ] **Step 6:** Shane merges this database's SOPS PR, and only this one, or the next deploy points the app back. Drop the subscription. Repeat for the other database.
-- [ ] **Step 7:** Set `PGVERIFY_UPLOAD_ENABLED=1`, Shane runs `provision`, and confirm the next night's upload works with a real `bin/refresh-dev-db.sh` on Shane's say-so.
+- [ ] **Step 7:** Switch dev's `.env` to R2 (`BACKUP_BUCKET`, `BACKUP_ENDPOINT`, `BACKUP_AWS_PROFILE` in the root `.env`, with the developer refresh token in that profile); the dumps bucket has had the dumps since Task 15 Step 4. Confirm with a real `bin/refresh-dev-db.sh` on Shane's say-so.
 
 ### Task 17: Afterwards (spec Phase 4)
 
 - [ ] **Step 1:** Record hourly `pg_stat_statements` totals to a file outside both databases. After two Sundays, compare the full backup's hours to the same hours on other days. Pass is under 1.5x. Report; if it fails, apply spec §8.1's fallback.
-- [ ] **Step 2:** After 14 days, confirm with Shane that nothing on the old server's data volume is needed. Shane deletes it. Remove `postgres/`, the `db` service and backup scripts from the old repo. Remove `deployment/postgres/migration/`.
+- [ ] **Step 2:** After 14 days, confirm with Shane that nothing on the old server's data volume is needed. Shane deletes it. Remove `postgres/`, the `db` service and backup scripts from the old repo. Remove `deployment/postgres/migration/`. Then retire AWS: the old dump bucket and every AWS key (the old server's and dev refresh's).
 - [ ] **Step 3:** Run the restore-to-a-moment drill from the runbook once on a fresh temporary server, then destroy it.

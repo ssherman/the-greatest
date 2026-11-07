@@ -2,7 +2,7 @@
 # deployment/postgres/test/run.sh [--fast|--docker|--all]
 #   --fast    shellcheck plus every test that starts no container: apply-firewall, apply-roles, backup,
 #             check-backup-health, compose (`docker compose config` only, no daemon), config, deploy,
-#             generate-certs, install-backup, install-firewall, render-firewall, render-hba, verify-lockdown
+#             generate-certs, install-backup, install-firewall, render-firewall, render-hba, setup-r2, verify-lockdown
 #             (all with docker stubbed). This is what ci.yml's postgres job runs, and it gates web deploys.
 #   --docker  the tests that start Docker containers and pull images: firewall-netfilter_test.sh and
 #             migration_test.sh. This is what

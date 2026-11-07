@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
 # refresh-dev-db.sh — Replace the local development database(s) with the latest
-# production backups from S3.
+# production backups from the dump bucket (S3 today; the R2 dumps bucket after
+# the Postgres move, docs/features/postgres-server.md).
 #
 # What it does:
-#   1. Finds the newest NON-EMPTY backup in S3 for each database you asked for:
+#   1. Finds the newest NON-EMPTY backup in the bucket for each database you asked for:
 #        the_greatest_development  <- postgres_the_greatest_backup_*.sql.gz  (default)
 #        the_greatest_books_legacy <- postgres_tgb_backup_*.sql.gz           (--legacy)
 #   2. Downloads them.
@@ -29,6 +30,14 @@
 #   bin/refresh-dev-db.sh -y             # skip the confirmation prompt
 #   bin/refresh-dev-db.sh --no-migrate
 #   KEEP_DUMP=1 bin/refresh-dev-db.sh    # don't delete the downloaded files
+#
+# Settings, from the gitignored .env at the project root (see .env.example):
+#   BACKUP_BUCKET       the bucket (required)
+#   BACKUP_ENDPOINT     optional; passed as --endpoint-url to every aws call. Set it
+#                       for the R2 dumps bucket: https://<account id>.r2.cloudflarestorage.com
+#   BACKUP_AWS_PROFILE  optional; passed as --profile to every aws call (for R2, a
+#                       profile holding the read-only dumps token, region auto)
+#   Unset, both behave as before: the default AWS credentials and endpoint.
 #
 set -euo pipefail
 
@@ -68,6 +77,18 @@ DB_SERVICE="${DB_SERVICE:-db}"          # docker-compose service name
 DB_USER="${DB_USER:-postgres}"
 JOBS="${RESTORE_JOBS:-4}"
 
+# Options for every aws call. Empty unless .env sets them, which keeps the old S3
+# behaviour unchanged.
+if [ -n "${BACKUP_ENDPOINT:-}" ] && [[ ! "$BACKUP_ENDPOINT" =~ ^https:// ]]; then
+  echo "BACKUP_ENDPOINT must start with https:// (e.g. https://<account id>.r2.cloudflarestorage.com)" >&2
+  exit 2
+fi
+AWS_OPTS=()
+if [ -n "${BACKUP_AWS_PROFILE:-}" ]; then AWS_OPTS+=(--profile "$BACKUP_AWS_PROFILE"); fi
+if [ -n "${BACKUP_ENDPOINT:-}" ]; then AWS_OPTS+=(--endpoint-url "$BACKUP_ENDPOINT"); fi
+# The ${a[@]+...} form: an empty array under set -u is an error in macOS's bash 3.2.
+s3() { aws ${AWS_OPTS[@]+"${AWS_OPTS[@]}"} s3 "$@"; }
+
 say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!! \033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mxx \033[0m %s\n' "$*" >&2; exit 1; }
@@ -95,11 +116,11 @@ key_size_mb() {
   printf '%s\n' "$LISTING" | awk -v k="$1" '$4 == k { printf "%.0f", $3 / 1048576 }'
 }
 
-# Download S3 key $1 to $2, then refuse to go on unless it is a pg_dump archive.
+# Download bucket key $1 to $2, then refuse to go on unless it is a pg_dump archive.
 fetch_and_validate() {
   local key="$1" dest="$2" desc
   say "Downloading ${key}..."
-  aws s3 cp "s3://${BUCKET}/${key}" "$dest"
+  s3 cp "s3://${BUCKET}/${key}" "$dest"
   [ -s "$dest" ] || die "Downloaded file is empty — refusing to wipe any local DB."
   desc="$(file -b "$dest")"
   case "$desc" in
@@ -171,8 +192,8 @@ dbx pg_isready -U "$DB_USER" >/dev/null 2>&1 \
   || die "Postgres in '$DB_SERVICE' is not accepting connections"
 
 # --- pick the backups --------------------------------------------------------
-say "Listing s3://${BUCKET} ..."
-LISTING="$(aws s3 ls "s3://${BUCKET}/")"
+say "Listing s3://${BUCKET}${BACKUP_ENDPOINT:+ at ${BACKUP_ENDPOINT}} ..."
+LISTING="$(s3 ls "s3://${BUCKET}/")"
 
 MAIN_KEY=""
 LEGACY_KEY=""
@@ -180,13 +201,13 @@ TARGETS=""
 if [ "$DO_MAIN" -eq 1 ]; then
   MAIN_KEY="$(latest_key "$PREFIX")"
   [ -n "$MAIN_KEY" ] || die "No non-empty backup found matching '${PREFIX}*'. \
-Production backup job may still be broken — check S3."
+Production backup job may still be broken — check the bucket."
   say "Selected for '${DB_NAME}': ${MAIN_KEY} ($(key_size_mb "$MAIN_KEY") MB)"
   TARGETS="${DB_NAME}"
 fi
 if [ "$DO_LEGACY" -eq 1 ]; then
   LEGACY_KEY="$(latest_key "$LEGACY_PREFIX")"
-  [ -n "$LEGACY_KEY" ] || die "No non-empty backup found matching '${LEGACY_PREFIX}*' — check S3."
+  [ -n "$LEGACY_KEY" ] || die "No non-empty backup found matching '${LEGACY_PREFIX}*' — check the bucket."
   say "Selected for '${LEGACY_DB_NAME}': ${LEGACY_KEY} ($(key_size_mb "$LEGACY_KEY") MB)"
   TARGETS="${TARGETS:+${TARGETS}, }${LEGACY_DB_NAME}"
 fi

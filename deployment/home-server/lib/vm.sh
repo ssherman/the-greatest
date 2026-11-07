@@ -52,9 +52,20 @@ pgverify_env_check() {
   local name
   # A blank ping URL is a no-op in hc_ping, so a failed restore check would be silent.
   [ -n "${HC_PGVERIFY:-}" ] || die "HC_PGVERIFY is blank in secrets/home-server.env; the pgverify VM must not run without its alert"
+  # The dump bucket is on R2. With no endpoint the aws CLI would send the dumps to AWS instead.
+  if [ "${PGVERIFY_UPLOAD_ENABLED:-0}" = 1 ] && [ -z "${PGVERIFY_DUMP_ENDPOINT:-}" ]; then
+    die "PGVERIFY_UPLOAD_ENABLED=1 but PGVERIFY_DUMP_ENDPOINT is blank in secrets/home-server.env"
+  fi
+  # Two endpoint forms: the aws CLI needs the scheme, pgBackRest must not have one.
+  if [ -n "${PGVERIFY_DUMP_ENDPOINT:-}" ] && [[ ! "$PGVERIFY_DUMP_ENDPOINT" =~ ^https:// ]]; then
+    die "PGVERIFY_DUMP_ENDPOINT in secrets/home-server.env must start with https://"
+  fi
+  case "${PGVERIFY_REPO_ENDPOINT:-}" in
+    *://*) die "PGVERIFY_REPO_ENDPOINT in secrets/home-server.env must be a host name with no scheme (no https://)" ;;
+  esac
   for name in HC_PGVERIFY HC_PGVERIFY_DEPLOY PGVERIFY_REPO_BUCKET PGVERIFY_REPO_ENDPOINT PGVERIFY_REPO_REGION \
     PGVERIFY_REPO_PATH PGVERIFY_REPO_KEY PGVERIFY_REPO_KEY_SECRET PGVERIFY_CIPHER_PASS PGVERIFY_DUMP_BUCKET \
-    PGVERIFY_DUMP_REGION PGVERIFY_DUMP_KEY PGVERIFY_DUMP_KEY_SECRET PGVERIFY_UPLOAD_ENABLED; do
+    PGVERIFY_DUMP_REGION PGVERIFY_DUMP_ENDPOINT PGVERIFY_DUMP_KEY PGVERIFY_DUMP_KEY_SECRET PGVERIFY_UPLOAD_ENABLED; do
     [[ "${!name:-}" =~ ^[A-Za-z0-9._:/@+=,-]*$ ]] ||
       die "$name in secrets/home-server.env has a character that is not safe in the VM's env file (letters, digits and . _ : / @ + = , - only)"
   done
@@ -89,7 +100,8 @@ render_vm_env() {
         "PGVERIFY_REPO_REGION=${PGVERIFY_REPO_REGION:-}" "PGVERIFY_REPO_PATH=${PGVERIFY_REPO_PATH:-}" \
         "PGVERIFY_REPO_KEY=${PGVERIFY_REPO_KEY:-}" "PGVERIFY_REPO_KEY_SECRET=${PGVERIFY_REPO_KEY_SECRET:-}" \
         "PGVERIFY_CIPHER_PASS=${PGVERIFY_CIPHER_PASS:-}" "PGVERIFY_DUMP_BUCKET=${PGVERIFY_DUMP_BUCKET:-}" \
-        "PGVERIFY_DUMP_REGION=${PGVERIFY_DUMP_REGION:-}" "PGVERIFY_DUMP_KEY=${PGVERIFY_DUMP_KEY:-}" "PGVERIFY_DUMP_KEY_SECRET=${PGVERIFY_DUMP_KEY_SECRET:-}" \
+        "PGVERIFY_DUMP_REGION=${PGVERIFY_DUMP_REGION:-}" "PGVERIFY_DUMP_ENDPOINT=${PGVERIFY_DUMP_ENDPOINT:-}" \
+        "PGVERIFY_DUMP_KEY=${PGVERIFY_DUMP_KEY:-}" "PGVERIFY_DUMP_KEY_SECRET=${PGVERIFY_DUMP_KEY_SECRET:-}" \
         "PGVERIFY_UPLOAD_ENABLED=${PGVERIFY_UPLOAD_ENABLED:-0}" ;;
     *) die "unknown VM role '$role'" ;;
   esac >"$out"

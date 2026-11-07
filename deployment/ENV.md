@@ -87,7 +87,7 @@ The server itself is configured from `secrets/.env.postgres` (SOPS), not from th
 |---|---|
 | `POSTGRES_CLIENTS` | `role database address` entries separated by semicolons; also the firewall allowlist |
 | `POSTGRES_SUPERUSER_PASSWORD`, `POSTGRES_THE_GREATEST_PASSWORD`, `POSTGRES_TGB_APP_PASSWORD`, `POSTGRES_TGB_READER_PASSWORD` | One per role; `openssl rand -hex 32` |
-| `PGBACKREST_REPO_BUCKET`, `_ENDPOINT`, `_REGION`, `_PATH`, `_KEY`, `_KEY_SECRET` | The backup bucket and the server's key |
+| `PGBACKREST_REPO_BUCKET`, `_ENDPOINT`, `_REGION`, `_PATH`, `_KEY`, `_KEY_SECRET` | The R2 backups bucket and the server's R2 token (Object Read & Write on that bucket only). Endpoint `<account id>.r2.cloudflarestorage.com` with no scheme, region `auto`, key = the token's id, secret = the SHA-256 of its value. The bucket's lock and lifecycle rules come from `deployment/postgres/bin/setup-r2.sh` |
 | `PGBACKREST_CIPHER_PASS` | Encrypts the repo; losing it loses the backups |
 | `HC_PG_BACKUP`, `HC_PG_HEALTH` | healthchecks.io ping URLs |
 | `POSTGRES_BOOTSTRAP`, `POSTGRES_ALLOW_RESTART` | Not set normally; see the runbook |

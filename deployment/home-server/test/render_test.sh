@@ -26,6 +26,7 @@ export PGVERIFY_REPO_BUCKET=pgv-repo-bucket PGVERIFY_REPO_ENDPOINT=s3.pgv.test P
 export PGVERIFY_REPO_PATH=/pgv-path PGVERIFY_REPO_KEY=pgv-repo-key PGVERIFY_REPO_KEY_SECRET=pgv-repo-secret
 export PGVERIFY_CIPHER_PASS=pgv-cipher PGVERIFY_DUMP_BUCKET=pgv-dump-bucket PGVERIFY_DUMP_KEY=pgv-dump-key
 export PGVERIFY_DUMP_KEY_SECRET=pgv-dump-secret PGVERIFY_DUMP_REGION=pgv-dump-region
+export PGVERIFY_DUMP_ENDPOINT=https://pgv-dump.r2.test
 echo "ssh-ed25519 AAAATEST test@example.com" >"$SANDBOX/key.pub"
 export SSH_PUBKEY_FILE="$SANDBOX/key.pub"
 
@@ -79,7 +80,7 @@ t_blank_secrets() {
 t_pgverify_env_keys() {
   local keys
   keys="$(env_from_yaml "$SANDBOX/pgverify.yaml" | cut -d= -f1 | tr '\n' ' ')"
-  [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH HC_PGVERIFY PGVERIFY_REPO_BUCKET PGVERIFY_REPO_ENDPOINT PGVERIFY_REPO_REGION PGVERIFY_REPO_PATH PGVERIFY_REPO_KEY PGVERIFY_REPO_KEY_SECRET PGVERIFY_CIPHER_PASS PGVERIFY_DUMP_BUCKET PGVERIFY_DUMP_REGION PGVERIFY_DUMP_KEY PGVERIFY_DUMP_KEY_SECRET PGVERIFY_UPLOAD_ENABLED " ]
+  [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH HC_PGVERIFY PGVERIFY_REPO_BUCKET PGVERIFY_REPO_ENDPOINT PGVERIFY_REPO_REGION PGVERIFY_REPO_PATH PGVERIFY_REPO_KEY PGVERIFY_REPO_KEY_SECRET PGVERIFY_CIPHER_PASS PGVERIFY_DUMP_BUCKET PGVERIFY_DUMP_REGION PGVERIFY_DUMP_ENDPOINT PGVERIFY_DUMP_KEY PGVERIFY_DUMP_KEY_SECRET PGVERIFY_UPLOAD_ENABLED " ]
 }
 t_pgverify_env() {
   local env; env="$(env_from_yaml "$SANDBOX/pgverify.yaml")"
@@ -87,6 +88,7 @@ t_pgverify_env() {
     grep -qx 'HC_DEPLOY=https://hc.test/pgv-deploy' <<<"$env" && grep -qx 'PGVERIFY_REPO_KEY_SECRET=pgv-repo-secret' <<<"$env" &&
     grep -qx 'PGVERIFY_CIPHER_PASS=pgv-cipher' <<<"$env" && grep -qx 'PGVERIFY_DUMP_BUCKET=pgv-dump-bucket' <<<"$env" &&
     grep -qx 'PGVERIFY_DUMP_REGION=pgv-dump-region' <<<"$env" &&
+    grep -qx 'PGVERIFY_DUMP_ENDPOINT=https://pgv-dump.r2.test' <<<"$env" &&
     # No tunnel, no heartbeat: it runs no always-on service.
     grep -qx 'TUNNELS_ENABLED=0' <<<"$env" && grep -qx 'TUNNEL_TOKEN=' <<<"$env" && grep -qx 'HC_HEARTBEAT=' <<<"$env"
 }
@@ -112,6 +114,21 @@ t_pgverify_refuses_unsafe_values() {
     (PGVERIFY_CIPHER_PASS="$v"; render_vm_env pgverify "$SANDBOX/bad.env") >/dev/null 2>&1 && return 1
   done
   (PGVERIFY_CIPHER_PASS='aZ09+/=._:@,-'; render_vm_env pgverify "$SANDBOX/ok.env") >/dev/null 2>&1
+}
+t_pgverify_upload_needs_the_dump_endpoint() {
+  # The dump bucket is R2: an upload with no endpoint would go to AWS. Off, the endpoint may stay blank.
+  (PGVERIFY_UPLOAD_ENABLED=1; PGVERIFY_DUMP_ENDPOINT=""; render_vm_env pgverify "$SANDBOX/noep.env") >/dev/null 2>&1 && return 1
+  (PGVERIFY_UPLOAD_ENABLED=1; unset PGVERIFY_DUMP_ENDPOINT; render_vm_env pgverify "$SANDBOX/noep.env") >/dev/null 2>&1 && return 1
+  (PGVERIFY_UPLOAD_ENABLED=0; PGVERIFY_DUMP_ENDPOINT=""; render_vm_env pgverify "$SANDBOX/noep.env") >/dev/null 2>&1 &&
+    (PGVERIFY_UPLOAD_ENABLED=1; render_vm_env pgverify "$SANDBOX/ep.env") >/dev/null 2>&1
+}
+t_pgverify_endpoint_schemes() {
+  # The aws CLI needs https://; pgBackRest takes a bare host and fails on a scheme.
+  (PGVERIFY_DUMP_ENDPOINT=pgv-dump.r2.test; render_vm_env pgverify "$SANDBOX/sch.env") >/dev/null 2>&1 && return 1
+  (PGVERIFY_DUMP_ENDPOINT=http://pgv-dump.r2.test; render_vm_env pgverify "$SANDBOX/sch.env") >/dev/null 2>&1 && return 1
+  (PGVERIFY_REPO_ENDPOINT=https://s3.pgv.test; render_vm_env pgverify "$SANDBOX/sch.env") >/dev/null 2>&1 && return 1
+  (PGVERIFY_UPLOAD_ENABLED=0; PGVERIFY_DUMP_ENDPOINT=""; render_vm_env pgverify "$SANDBOX/sch.env") >/dev/null 2>&1 &&
+    (render_vm_env pgverify "$SANDBOX/sch.env") >/dev/null 2>&1
 }
 t_pgverify_refuses_a_blank_check_url() {
   # Without it a failed restore check is silent, which is the failure the VM exists to prevent.
@@ -305,6 +322,8 @@ check "pgverify gets its role, check URLs and settings, no tunnel and no heartbe
 check "pgverify's env has exactly its own keys" t_pgverify_env_keys
 check "the pgverify upload is off unless it is set to 1" t_pgverify_upload_off_by_default
 check "pgverify refuses a blank HC_PGVERIFY, and only pgverify does" t_pgverify_refuses_a_blank_check_url
+check "pgverify refuses an upload with no dump-bucket endpoint" t_pgverify_upload_needs_the_dump_endpoint
+check "pgverify: the dump endpoint must be https://, the repo endpoint must have no scheme" t_pgverify_endpoint_schemes
 check "pgverify's values reach no other role" t_pgverify_values_reach_no_other_role
 check "pgverify holds nothing of the other roles'" t_pgverify_holds_nothing_of_the_others
 check "pgverify's env refuses a value that would run as shell" t_pgverify_refuses_unsafe_values

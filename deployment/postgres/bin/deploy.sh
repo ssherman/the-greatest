@@ -57,6 +57,11 @@ required=(POSTGRES_CLIENTS POSTGRES_SUPERUSER_PASSWORD POSTGRES_THE_GREATEST_PAS
 for v in "${required[@]}"; do
   if [ -z "${!v:-}" ]; then die "$v is missing from $env_file" 2; fi
 done
+# pgBackRest takes a bare host (<account id>.r2.cloudflarestorage.com) and always uses HTTPS; a scheme
+# in the value makes every repo call fail.
+case "$PGBACKREST_REPO_ENDPOINT" in
+  *://*) die "PGBACKREST_REPO_ENDPOINT must be a host name with no scheme (no https://)" 2 ;;
+esac
 if [ -n "${POSTGRES_PORT+x}" ]; then
   die "POSTGRES_PORT is set; the firewall covers port 6543 only, so the database port cannot change here" 2
 fi

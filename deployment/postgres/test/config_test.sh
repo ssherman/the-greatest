@@ -29,6 +29,8 @@ want_br=(
 for l in "${want_br[@]}"; do
   if grep -qxF "$l" "$br"; then pass "pgbackrest.conf.tmpl: $l"; else fail "pgbackrest.conf.tmpl: $l" "line missing"; fi
 done
+# R2 takes the default (virtual-host) URI style; that is what was proven on real R2 on 2026-11-07.
+if ! grep -qE '^\s*repo1-s3-uri-style' "$br"; then pass "no uri-style line"; else fail "no uri-style line" "present"; fi
 for v in PGBACKREST_REPO_BUCKET PGBACKREST_REPO_ENDPOINT PGBACKREST_REPO_REGION PGBACKREST_REPO_PATH PGBACKREST_REPO_KEY PGBACKREST_REPO_KEY_SECRET PGBACKREST_CIPHER_PASS; do
   if grep -qF "\${$v}" "$br"; then pass "placeholder $v"; else fail "placeholder $v" "missing"; fi
 done

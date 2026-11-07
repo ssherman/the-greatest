@@ -4,8 +4,9 @@
 #
 # The first run of everything together, against nothing real:
 #   * the old server: postgres:17, TLS, wal_level=logical, shaped like production's two databases;
-#   * a versioned S3 bucket on MinIO (TLS, two keys; the server key may delete current objects but is
-#     denied s3:DeleteObjectVersion; the home key is read only);
+#   * an S3 bucket on MinIO standing in for the R2 backups bucket (TLS, two keys; the server key may read,
+#     write and delete; the home key is read only). R2's bucket locks are not modelled here: their behaviour
+#     with pgBackRest was proven on real R2 (spec §8.4);
 #   * the new server: the REAL Dockerfile and compose.yml, started by the REAL bin/deploy.sh. Only the things
 #     that need root on a real host are stood in for: install/chown/chmod through a root one-off container,
 #     and no-op iptables/systemctl. The test's own copy of the tree gets no published port (6543 belongs to
@@ -14,7 +15,7 @@
 # Covers: first deploy with stanza creation; pgbackrest info status 1, 2 and 0 on S3; a backup; a restore to a
 # chosen moment with the read-only key; deploy refusing an empty data directory with a stanza;
 # POSTGRES_BOOTSTRAP=restore onto a fresh volume; every role of spec §5.2; no plain connection and no network
-# superuser; data checksums; retention and versioning; then a full 17 -> 18 replication with writers running,
+# superuser; data checksums; retention (expire); then a full 17 -> 18 replication with writers running,
 # cutover through the migration scripts, sequences, and finally POSTGRES_BOOTSTRAP=new-cluster.
 # Prints the read-only window in seconds at the end. Everything it creates carries one label and is removed on
 # exit, also on failure. It publishes no port and never touches 6543 or 6544.
@@ -185,22 +186,17 @@ check "the restored cluster has data checksums on" test "$(scratch_v 'show data_
 docker rm -f -v "$PROJ-scratch" >/dev/null 2>&1
 sc down -v >/dev/null 2>&1
 
-say "the read-only key cannot write or delete in the bucket; the server key cannot delete a version"
+say "the read-only key cannot write or delete in the bucket"
 MCH() { docker exec -i "$MINIO_CONTAINER" mc --insecure "$@"; }
 MCH alias set home https://localhost:9000 "$MINIO_HOME_KEY" "$MINIO_HOME_SECRET" >/dev/null
 run bash -c "echo x | docker exec -i $MINIO_CONTAINER mc --insecure pipe home/$MINIO_BUCKET/e2e/probe-home"
 check "the read-only key cannot write" test "$RC" != 0
 run docker exec "$MINIO_CONTAINER" mc --insecure ls "home/$MINIO_BUCKET/e2e/"
 check "the read-only key can list" rc_is 0
-echo probe | docker exec -i "$MINIO_CONTAINER" mc --insecure pipe "srv/$MINIO_BUCKET/e2e/probe-srv" >/dev/null 2>&1
-echo probe2 | docker exec -i "$MINIO_CONTAINER" mc --insecure pipe "srv/$MINIO_BUCKET/e2e/probe-srv" >/dev/null 2>&1
-VID="$(docker exec "$MINIO_CONTAINER" mc --insecure ls --versions --json "srv/$MINIO_BUCKET/e2e/probe-srv" | grep -o '"versionId":"[^"]*"' | head -1 | cut -d'"' -f4)"
-run docker exec "$MINIO_CONTAINER" mc --insecure rm --version-id "$VID" "srv/$MINIO_BUCKET/e2e/probe-srv"
-if [ "$RC" != 0 ] && out_has '[Dd]enied'; then pass "t_server_key_cannot_delete_a_version (MinIO: AccessDenied on DeleteObjectVersion)"; else fail "delete version denied" "rc=$RC $OUT"; fi
-run docker exec "$MINIO_CONTAINER" mc --insecure rm "srv/$MINIO_BUCKET/e2e/probe-srv"
-if [ "$RC" = 0 ] && out_has '[Dd]elete marker'; then pass "...but may delete the current object, which only adds a delete marker"; else fail "current delete" "rc=$RC $OUT"; fi
-run docker exec "$MINIO_CONTAINER" mc --insecure ls --versions "srv/$MINIO_BUCKET/e2e/probe-srv"
-if [ "$(grep -c probe-srv <<<"$OUT")" -ge 3 ]; then pass "...and both earlier versions are still there"; else fail "versions kept" "$OUT"; fi
+probe_key="$(docker exec "$MINIO_CONTAINER" mc --insecure ls -r "srv/$MINIO_BUCKET/e2e/backup/main/" | awk 'NR == 1 { print $NF }')"
+check "there is a backup object to try deleting" test -n "$probe_key"
+run docker exec "$MINIO_CONTAINER" mc --insecure rm "home/$MINIO_BUCKET/e2e/backup/main/$probe_key"
+check "the read-only key cannot delete a backup object" test "$RC" != 0
 
 # --- 4. deploy refuses an empty data directory when the repo has a stanza --------------------------------------------------
 say "empty data directory with a stanza: refused; then POSTGRES_BOOTSTRAP=restore on a FRESH volume"
@@ -251,27 +247,21 @@ check "a wrong password is refused" test "$RC" != 0
 check "the superuser works over the socket inside the container" test "$(tv postgres 'select current_user')" = postgres
 check "the allowlist is the three client addresses" test "$(sort "$ETC/allowlist" | tr '\n' ' ')" = "$IP_TG $IP_APP $IP_RD "
 
-# --- 6. retention and versioning with the server key ------------------------------------------------------------------------
+# --- 6. retention with the server key --------------------------------------------------------------------------------------
 say "retention: a second full backup, then expire down to one full backup"
 checkpoints
 run tx pgbackrest --stanza=main backup --type=full
 stop_checkpoints
 check "a second full backup" rc_is 0
 old_label="$(tx pgbackrest --stanza=main info --output=json | python3 -I -c 'import json,sys; print([s for s in json.load(sys.stdin) if s["name"]=="main"][0]["backup"][0]["label"])')"
-before_markers="$(docker exec "$MINIO_CONTAINER" mc --insecure ls --versions --json -r "srv/$MINIO_BUCKET/e2e/backup/main/" | grep -c '"isDeleteMarker":true')"
+check "the oldest backup's objects are there before expire" test "$(docker exec "$MINIO_CONTAINER" mc --insecure ls -r "srv/$MINIO_BUCKET/e2e/backup/main/$old_label/" | wc -l)" -gt 0
 run tx pgbackrest --stanza=main expire --repo1-retention-full=1 --repo1-retention-full-type=count
-check "expire succeeds with the delete-version-denied key" rc_is 0
+check "expire succeeds with the server key" rc_is 0
 fulls="$(tx pgbackrest --stanza=main info --output=json | python3 -I -c 'import json,sys; print(len([b for b in [s for s in json.load(sys.stdin) if s["name"]=="main"][0]["backup"] if b["type"]=="full"]))')"
 check "only one full backup is left in the listing" test "$fulls" = 1
-after_markers="$(docker exec "$MINIO_CONTAINER" mc --insecure ls --versions --json -r "srv/$MINIO_BUCKET/e2e/backup/main/" | grep -c '"isDeleteMarker":true')"
-if [ "$after_markers" -gt "$before_markers" ]; then pass "expiry added delete markers ($before_markers -> $after_markers) instead of destroying anything"; else fail "delete markers" "$before_markers -> $after_markers"; fi
 current_n="$(docker exec "$MINIO_CONTAINER" mc --insecure ls -r "srv/$MINIO_BUCKET/e2e/backup/main/$old_label/" | wc -l)"
-versions_n="$(docker exec "$MINIO_CONTAINER" mc --insecure ls --versions -r "srv/$MINIO_BUCKET/e2e/backup/main/$old_label/" | grep -c 'PUT')"
-if [ "$current_n" = 0 ] && [ "$versions_n" -gt 0 ]; then
-  pass "t_expired_backup_survives_as_versions: $old_label is gone from the listing, but $versions_n of its object versions remain for the lifecycle rule to expire after 14 days"
-else fail "expired backup versions" "current=$current_n versions=$versions_n"; fi
-run docker exec "$MINIO_CONTAINER" mc --insecure ilm rule ls "local/$MINIO_BUCKET"
-if out_has '14'; then pass "the bucket has the 14-day noncurrent-version rule"; else fail "lifecycle rule" "$OUT"; fi
+if [ "$current_n" = 0 ]; then pass "t_expire_removes_the_expired_backup: $old_label's objects are gone from the bucket"
+else fail "expired backup objects" "$current_n left"; fi
 checkpoints
 OUT="$(env STATE_DIR="$STATE" REPO_DIR="$PG" HC_PG_BACKUP= BACKUP_DOW=3 "$PG/bin/backup.sh" 2>&1)"
 stop_checkpoints
