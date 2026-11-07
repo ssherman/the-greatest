@@ -1,5 +1,13 @@
 # pgbackrest.conf template. A deploy step renders the ${VAR} placeholders from SOPS-managed
-# environment into /srv/postgres/config/pgbackrest.conf. Spec §8.1.
+# environment into /srv/postgres/config/pgbackrest.conf. Spec §8.1 and §8.2.
+#
+# The repo is a Cloudflare R2 bucket through its S3 API: the endpoint is
+# <account id>.r2.cloudflarestorage.com (no scheme), the region is `auto`, and the key and secret
+# come from an R2 API token scoped to this bucket (key = token id, secret = SHA-256 of the token
+# value). R2 takes pgBackRest's default URI style, so there is no repo1-s3-uri-style line. Proven
+# on real R2 on 2026-11-07: stanza-create, check, full, diff, WAL archive and a restore with replay.
+# The bucket's lock and lifecycle rules come from deployment/postgres/bin/setup-r2.sh; its lock
+# (14 days, WAL archive only) must stay below repo1-retention-full, or expire fails.
 [global]
 repo1-type=s3
 repo1-s3-bucket=${PGBACKREST_REPO_BUCKET}
