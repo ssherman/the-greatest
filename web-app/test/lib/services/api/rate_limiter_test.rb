@@ -128,6 +128,143 @@ module Services
         assert_equal 2, verdict.minute.remaining
       end
 
+      # IP windows and connector-range budgets (MCP OAuth, spec D13).
+      def ip_config
+        config = ActiveSupport::OrderedOptions.new
+        config.rate_limits = @config.rate_limits
+        config.unauthenticated_per_minute = 60
+        config.oauth_register_per_minute = 10
+        config.oauth_token_per_minute = 30
+        config.connector_egress_ranges = {anthropic: %w[160.79.104.0/21 153.61.208.0/20]}
+        config.connector_range_per_minute = {unauthenticated: 3_000, oauth_register: 600, oauth_token: 3_000}
+        config
+      end
+
+      def ip_limiter(now: NOW) = RateLimiter.new(now: now, store: @store, config: ip_config)
+
+      test "addresses inside a connector range share one counter with the range limit" do
+        first = ip_limiter.hit_ip(:unauthenticated, "160.79.104.9")
+        second = ip_limiter.hit_ip(:unauthenticated, "160.79.111.200")
+        third = ip_limiter.hit_ip(:unauthenticated, "153.61.208.1")
+
+        assert_equal 3_000, first.minute.limit
+        assert_equal [2_999, 2_998, 2_997], [first, second, third].map { |v| v.minute.remaining }
+      end
+
+      test "an address just outside the range has its own per-IP window" do
+        2.times { ip_limiter.hit_ip(:unauthenticated, "160.79.104.9") }
+
+        outside = ip_limiter.hit_ip(:unauthenticated, "160.79.112.1")
+
+        assert_equal 60, outside.minute.limit
+        assert_equal 59, outside.minute.remaining
+      end
+
+      test "the range counter is keyed by range name and window" do
+        ip_limiter.hit_ip(:oauth_token, "160.79.104.9")
+
+        assert_equal 1, @store.read("api:rl:oauth_token:range:anthropic:m:#{Time.utc(2026, 9, 13, 10, 30, 0).to_i}", raw: true).to_i
+        assert_nil @store.read("api:rl:unauthenticated:range:anthropic:m:#{Time.utc(2026, 9, 13, 10, 30, 0).to_i}", raw: true)
+      end
+
+      test "a range exceeds only past its own limit" do
+        config = ip_config
+        config.connector_range_per_minute = {unauthenticated: 3, oauth_register: 600, oauth_token: 3_000}
+        limiter = RateLimiter.new(now: NOW, store: @store, config: config)
+
+        3.times { refute limiter.hit_ip(:unauthenticated, "160.79.104.9").exceeded? }
+        assert limiter.hit_ip(:unauthenticated, "160.79.104.10").exceeded?
+      end
+
+      test "register is exceeded on the eleventh hit from one address" do
+        10.times { refute ip_limiter.hit_ip(:oauth_register, "203.0.113.9").exceeded? }
+
+        assert ip_limiter.hit_ip(:oauth_register, "203.0.113.9").exceeded?
+        refute ip_limiter.hit_ip(:oauth_register, "203.0.113.10").exceeded?
+      end
+
+      test "the token window allows thirty per address" do
+        verdict = ip_limiter.hit_ip(:oauth_token, "203.0.113.9")
+
+        assert_equal 30, verdict.minute.limit
+        assert_nil verdict.day
+      end
+
+      test "windows do not share counters for one address" do
+        10.times { ip_limiter.hit_ip(:oauth_register, "203.0.113.9") }
+
+        assert_equal 29, ip_limiter.hit_ip(:oauth_token, "203.0.113.9").minute.remaining
+        assert_equal 59, ip_limiter.hit_ip(:unauthenticated, "203.0.113.9").minute.remaining
+      end
+
+      test "the unauthenticated window keeps its original per-IP key" do
+        ip_limiter.hit_ip(:unauthenticated, "203.0.113.9")
+        ip_limiter.hit_unauthenticated("203.0.113.9")
+
+        assert_equal 2, @store.read("api:rl:anon:203.0.113.9:m:#{Time.utc(2026, 9, 13, 10, 30, 0).to_i}", raw: true).to_i
+      end
+
+      test "peek_ip reports a range without counting" do
+        assert_equal 3_000, ip_limiter.peek_ip(:unauthenticated, "160.79.104.9").minute.remaining
+        assert_equal 3_000, ip_limiter.peek_ip(:unauthenticated, "160.79.104.9").minute.remaining
+
+        ip_limiter.hit_ip(:unauthenticated, "160.79.104.9")
+
+        assert_equal 2_999, ip_limiter.peek_ip(:unauthenticated, "160.79.104.200").minute.remaining
+      end
+
+      test "peek_ip sees an exceeded per-IP window" do
+        9.times { ip_limiter.hit_ip(:oauth_register, "203.0.113.9") }
+        refute ip_limiter.peek_ip(:oauth_register, "203.0.113.9").exceeded?
+
+        ip_limiter.hit_ip(:oauth_register, "203.0.113.9")
+
+        assert ip_limiter.peek_ip(:oauth_register, "203.0.113.9").exceeded?
+      end
+
+      test "a malformed address falls back to the per-IP key" do
+        verdict = ip_limiter.hit_ip(:oauth_register, "not-an-ip")
+
+        assert_equal 10, verdict.minute.limit
+        assert_equal 9, verdict.minute.remaining
+        assert_equal 10, ip_limiter.hit_ip(:oauth_register, "").minute.limit
+        assert_equal 10, ip_limiter.hit_ip(:oauth_register, nil).minute.limit
+      end
+
+      test "an IPv4-mapped IPv6 address inside a range counts toward the range" do
+        assert_equal 3_000, ip_limiter.hit_ip(:unauthenticated, "::ffff:160.79.104.9").minute.limit
+      end
+
+      test "an IPv6 address matches no IPv4 range" do
+        assert_equal 60, ip_limiter.hit_ip(:unauthenticated, "2001:db8::1").minute.limit
+      end
+
+      test "a config without connector ranges uses the per-IP window for every address" do
+        verdict = limiter.hit_ip(:unauthenticated, "160.79.104.9")
+
+        assert_equal 2, verdict.minute.limit
+      end
+
+      test "an unknown window is refused" do
+        assert_raises(KeyError) { ip_limiter.hit_ip(:bogus, "203.0.113.9") }
+      end
+
+      test "a store that fails its increment fails open on IP windows" do
+        @store.stubs(:increment).returns(nil)
+
+        verdict = ip_limiter.hit_ip(:oauth_register, "203.0.113.9")
+
+        refute verdict.exceeded?
+        assert_equal 10, verdict.minute.remaining
+      end
+
+      test "the IP window class methods use the app's store and config" do
+        verdict = RateLimiter.hit_ip(:oauth_register, "203.0.113.77")
+
+        assert_equal Rails.application.config.x.api.oauth_register_per_minute, verdict.minute.limit
+        assert_equal Rails.application.config.x.api.oauth_register_per_minute - 1, RateLimiter.peek_ip(:oauth_register, "203.0.113.77").minute.remaining
+      end
+
       test "the class methods use the app's store and config" do
         verdict = RateLimiter.hit(@member)
 

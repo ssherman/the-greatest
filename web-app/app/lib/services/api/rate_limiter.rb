@@ -38,6 +38,23 @@ module Services
 
       def self.peek_unauthenticated(ip, now: Time.current) = new(now: now).peek_unauthenticated(ip)
 
+      def self.hit_ip(window, ip, now: Time.current) = new(now: now).hit_ip(window, ip)
+
+      def self.peek_ip(window, ip, now: Time.current) = new(now: now).peek_ip(window, ip)
+
+      # The IP windows, each with its per-IP limit's config key. Connector
+      # ranges take their budget from config.connector_range_per_minute[window].
+      IP_WINDOWS = {
+        unauthenticated: :unauthenticated_per_minute,
+        oauth_register: :oauth_register_per_minute,
+        oauth_token: :oauth_token_per_minute
+      }.freeze
+
+      # Parsed CIDRs, keyed by the config hash they came from, so each set of
+      # ranges is parsed once per process rather than once per request.
+      PARSED_RANGES = Concurrent::Map.new
+      private_constant :PARSED_RANGES
+
       def initialize(now: Time.current, store: Rails.application.config.x.rate_limit_store, config: Rails.application.config.x.api)
         @now = now
         @store = store
@@ -56,15 +73,25 @@ module Services
         )
       end
 
-      def hit_unauthenticated(ip)
-        Verdict.new(minute: increment(minute_key("anon:#{ip}"), config.unauthenticated_per_minute, minute_end), day: nil)
-      end
+      def hit_unauthenticated(ip) = hit_ip(:unauthenticated, ip)
 
       # Reads the IP window without counting, so a request from an address that
       # is already over the limit can be refused before the database is consulted.
-      def peek_unauthenticated(ip)
-        limit = config.unauthenticated_per_minute
-        count = store.read(minute_key("anon:#{ip}"), raw: true).to_i
+      def peek_unauthenticated(ip) = peek_ip(:unauthenticated, ip)
+
+      # Counts one request from `ip` against `window` (:unauthenticated,
+      # :oauth_register or :oauth_token). An address inside a connector egress
+      # range shares that range's counter and budget, because a hosted connector
+      # presents thousands of users from a handful of addresses; any other
+      # address gets its own per-IP counter.
+      def hit_ip(window, ip)
+        subject, limit = ip_budget(window, ip)
+        Verdict.new(minute: increment(minute_key(subject), limit, minute_end), day: nil)
+      end
+
+      def peek_ip(window, ip)
+        subject, limit = ip_budget(window, ip)
+        count = store.read(minute_key(subject), raw: true).to_i
 
         Verdict.new(
           minute: Window.new(limit: limit, remaining: [limit - count, 0].max, reset_at: minute_end, exceeded: count >= limit),
@@ -75,6 +102,37 @@ module Services
       private
 
       attr_reader :now, :store, :config
+
+      # [counter subject, limit]. The :unauthenticated per-IP subject predates
+      # the other windows and keeps its original key.
+      def ip_budget(window, ip)
+        per_ip_limit = config.public_send(IP_WINDOWS.fetch(window))
+
+        if (range = connector_range_for(ip))
+          ["#{window}:range:#{range}", config.connector_range_per_minute.fetch(window)]
+        elsif window == :unauthenticated
+          ["anon:#{ip}", per_ip_limit]
+        else
+          ["#{window}:ip:#{ip}", per_ip_limit]
+        end
+      end
+
+      def connector_range_for(ip)
+        ranges = config.connector_egress_ranges
+        return if ranges.blank?
+
+        address = IPAddr.new(ip.to_s)
+        address = address.native if address.ipv4_mapped?
+        parsed_ranges(ranges).find { |_name, nets| nets.any? { |net| net.include?(address) } }&.first
+      rescue IPAddr::Error
+        nil
+      end
+
+      def parsed_ranges(ranges)
+        PARSED_RANGES.compute_if_absent(ranges) do
+          ranges.transform_values { |cidrs| cidrs.map { |cidr| IPAddr.new(cidr) }.freeze }.freeze
+        end
+      end
 
       def minute_start = Time.at(now.to_i - (now.to_i % 60)).utc
 
