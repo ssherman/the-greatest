@@ -16,7 +16,7 @@
 #      (main database only).
 #
 # The restore runs INSIDE the `db` docker-compose container so the pg_restore
-# version always matches the postgres:17 server and the dump format.
+# version always matches the postgres:18 server and the dump format.
 #
 # Sizes: the main dump is ~400 MB and restores in a minute or two. The legacy
 # dump is ~5 GB, restores to ~65 GB, and takes ~25 minutes — which is why it is

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # deployment/home-server/provision
 # Converges the Proxmox home server from this repo (docs/features/home-server.md).
-#   provision                       host, any missing VM, VM env and units
-#   provision --rebuild ol|fetcher|worldcat  replace that VM's OS disk (data disk kept)
+#   provision                       host, any missing VM, VM env and units (pgverify only with PGVERIFY_ENABLED=1)
+#   provision --rebuild ol|fetcher|worldcat|pgverify  replace that VM's OS disk (data disk kept)
 #   provision --enable-tunnels      start cloudflared on every VM, once Access is in place
 #   provision --disable-tunnels     stop and remove cloudflared on every VM
 #   provision --verify [--external-from user@host] [--recovery]
@@ -24,7 +24,7 @@ REPO_ROOT="$(cd "$HS_DIR/../.." && pwd)"
 mode=converge rebuild_role="" EXTERNAL_FROM="" RECOVERY=0 ref_arg="" UPGRADED=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --rebuild) mode=rebuild; rebuild_role="${2:?--rebuild needs ol, fetcher or worldcat}"; shift 2 ;;
+    --rebuild) mode=rebuild; rebuild_role="${2:?--rebuild needs ol, fetcher, worldcat or pgverify}"; shift 2 ;;
     --enable-tunnels) mode=enable-tunnels; shift ;;
     --disable-tunnels) mode=disable-tunnels; shift ;;
     --verify) mode=verify; shift ;;
@@ -53,7 +53,8 @@ case "$mode" in
     converge_host_network
     converge_host_firewall
     require_host_ready_for_vms
-    for role in fetcher ol worldcat; do ensure_vm "$role"; done
+    if ! pgverify_enabled; then log "pgverify is off (PGVERIFY_ENABLED is not 1): VM 140 is neither created nor changed"; fi
+    for role in $(managed_roles); do ensure_vm "$role"; done
     assert_foreign_guests_running "$foreign_before"
     ;;
   rebuild) require_host_ready_for_vms; rebuild_vm "$rebuild_role" ;;

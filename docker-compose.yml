@@ -1,10 +1,12 @@
 services:
   db:
-    image: postgres:17
+    image: postgres:18
     environment:
       - POSTGRES_PASSWORD=${DOCKER_POSTGRES_PASSWORD}
     volumes:
-      - postgresql-data:/var/lib/postgresql/data
+      # Postgres 18 images keep data in a versioned subdirectory, so the mount is
+      # /var/lib/postgresql, not /var/lib/postgresql/data.
+      - postgresql18-data:/var/lib/postgresql
     ports:
       - "127.0.0.1:6543:5432"
     command: >
@@ -45,8 +47,11 @@ services:
     command: redis-server --appendonly yes
 
 volumes:
+  postgresql18-data:
+    name: tg_postgresql18_data
+  # The Postgres 17 copy. No longer mounted; kept until Shane removes it.
   postgresql-data:
-    name: tg_postgresql_data 
+    name: tg_postgresql_data
   opensearch-data:
     name: tg_opensearch_data
   redis-data:

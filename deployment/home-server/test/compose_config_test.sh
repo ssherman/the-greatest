@@ -60,6 +60,54 @@ t_worldcat_alias() {
 }
 t_worldcat_off_by_default() { ! cfg worldcat | jq -e '.services | has("worldcat")' >/dev/null; }
 
+pgv() { # pgv: the merged model the pgverify VM runs; all three services are in the pgverify profile
+  PGVERIFY_ROOT=/mnt/pgverify COMPOSE_PROFILES=pgverify cfg pgverify pgverify
+}
+t_pgverify_postgres() {
+  pgv | jq -e '.services.postgres as $p |
+    ($p.user == "999:999") and ($p.entrypoint == ["postgres"]) and ($p | has("ports") | not) and
+    ($p.shm_size == 1073741824 or $p.shm_size == "1073741824" or $p.shm_size == "1g") and
+    ($p.restart == "no") and
+    ($p.command | index("archive_mode=off") != null) and
+    ($p.command | index("max_logical_replication_workers=0") != null) and
+    ($p.command | index("ssl=off") != null) and
+    ($p.command | index("listen_addresses=") != null) and
+    ($p.command | index("hba_file=/etc/pgverify-static/pg_hba.conf") != null) and
+    ($p.command | index("restore_command=/etc/pgverify-static/archive-get.sh %f %p") != null) and
+    ($p.build.context | endswith("/deployment/postgres")) and
+    ($p.environment.PGBACKREST_CONFIG == "/etc/pgverify/pgbackrest.conf")' >/dev/null
+}
+t_pgverify_same_image_everywhere() {
+  pgv | jq -e '.services.postgres.image == .services.tools.image and .services.tools.build == null' >/dev/null
+}
+t_pgverify_no_published_ports() {
+  pgv | jq -e '[.services.postgres, .services.tools, .services.aws] | all(has("ports") | not)' >/dev/null
+}
+t_pgverify_volumes() {
+  pgv | jq -e '(.services.postgres.volumes | map(.target)) as $t |
+    ($t | index("/var/lib/postgresql/18/docker") != null) and ($t | index("/var/run/postgresql") != null) and
+    (.services.postgres.volumes | map(select(.target == "/etc/pgverify-static")) | .[0].read_only == true) and
+    (.services.postgres.volumes | map(select(.target == "/etc/pgverify")) | .[0].read_only == true) and
+    (.services.tools.volumes | map(select(.target == "/dumps")) | .[0].source == "/mnt/pgverify/dumps") and
+    (.services.aws.volumes | map(select(.target == "/dumps")) | .[0].read_only == true)' >/dev/null
+}
+t_pgverify_aws_pinned() {
+  pgv | jq -e '.services.aws.image | test("^amazon/aws-cli:[0-9]+\\.[0-9]+\\.[0-9]+@sha256:[0-9a-f]{64}$")' >/dev/null
+}
+t_pgverify_aws_takes_keys_by_name() {
+  # The service names the variables and carries no value, so no key is in this file or on a command line.
+  grep -q 'AWS_ACCESS_KEY_ID$' "$HS_DIR/compose.pgverify.yml" && ! grep -qE 'AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)[:=]' "$HS_DIR/compose.pgverify.yml"
+}
+t_pgverify_off_by_default() {
+  ! cfg pgverify | jq -e '.services | has("postgres") or has("tools") or has("aws")' >/dev/null
+}
+t_pgverify_not_on_other_roles() {
+  ! cfg ol | jq -e '.services | has("postgres") or has("tools") or has("aws")' >/dev/null
+}
+t_pgverify_image_pinned_in_dockerfile() {
+  # One pinned image for both servers: the VM builds the very Dockerfile production does.
+  grep -qE '^FROM postgres:18\.[0-9]+-trixie@sha256:[0-9a-f]{64}$' "$REPO_ROOT/deployment/postgres/Dockerfile"
+}
 if ! command -v docker >/dev/null; then echo "SKIP  docker not installed"; exit 0; fi
 check "build is capped at 10 CPUs and 8GB" t_build
 check "api gets 6GB, 8 threads, one resolve at a time and a read-only /srv/ol-data" t_api
@@ -74,4 +122,13 @@ check "fetcher is on the default network with alias page-fetcher" t_fetcher_alia
 check "worldcat gets 2GB, 2 threads, 3g and a read-only data volume" t_worldcat_api
 check "worldcat is on the default network with alias worldcat" t_worldcat_alias
 check "worldcat is off until its profile or name selects it" t_worldcat_off_by_default
+check "pgverify postgres: no ports, user 999, 1g shm, forced archive/worker/ssl/listener flags, local hba, the shared Dockerfile" t_pgverify_postgres
+check "pgverify tools run the same image the server does" t_pgverify_same_image_everywhere
+check "no pgverify service publishes a port" t_pgverify_no_published_ports
+check "pgverify mounts the data, socket, config read-only and dumps (read-only for the uploader)" t_pgverify_volumes
+check "the uploader image is pinned by version and digest" t_pgverify_aws_pinned
+check "the uploader gets its key by variable name, never a value" t_pgverify_aws_takes_keys_by_name
+check "the pgverify services are off until named" t_pgverify_off_by_default
+check "no other role gets the pgverify services" t_pgverify_not_on_other_roles
+check "the Postgres Dockerfile the VM builds is pinned by digest" t_pgverify_image_pinned_in_dockerfile
 finish

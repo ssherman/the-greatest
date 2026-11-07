@@ -10,6 +10,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 load_env
 INSTALL_UNITS="${INSTALL_UNITS:-$here/install-units.sh}"
 WATCHED=(data-sources deployment/home-server)
+# pgverify builds its image from the Postgres server's Dockerfile, so a change there is its deploy too.
+if [ "$ROLE" = pgverify ]; then WATCHED+=(deployment/postgres); fi
 
 force=0
 if [ "${1:-}" = --force ] || [ -f "$STATE_DIR/force-deploy" ]; then force=1; fi
@@ -46,6 +48,15 @@ if [ "$ROLE" = ol ]; then
     exit 0
   fi
 fi
+if [ "$ROLE" = pgverify ]; then
+  # A nightly check uses the image for hours and runs one command per step: never retag it under one.
+  exec 9>"$PGVERIFY_LOCK"
+  if ! flock -n 9; then
+    log "the restore check holds $PGVERIFY_LOCK; deploying next time"
+    hc_ping "${HC_DEPLOY:-}" "" "deferred: lock held"
+    exit 0
+  fi
+fi
 git checkout --quiet --force --detach "$target" || fail "checkout ${target:0:12}"
 "$INSTALL_UNITS" || fail "install-units"
 
@@ -59,6 +70,9 @@ case "$ROLE" in
   ol) service=api; build=(recommender api) ;;
   fetcher) service=fetcher; build=(fetcher) ;;
   worldcat) service=worldcat; build=(worldcat) ;;
+  # Nothing runs all the time: pg-restore-verify.timer starts Postgres for a night's check. A deploy
+  # only builds the image the check will use.
+  pgverify) service=""; build=(postgres) ;;
   *) fail "unknown ROLE '$ROLE'" ;;
 esac
 # A failed build leaves the running container exactly as it was. One image per
@@ -67,7 +81,9 @@ for image in "${build[@]}"; do
   "$COMPOSE" build "$image" || fail "image build for $image at ${target:0:12}"
 done
 
-if [ "$ROLE" = ol ] && [ ! -f "$OL_DATA/current-version" ]; then
+if [ "$ROLE" = pgverify ]; then
+  log "pgverify starts nothing on deploy; pg-restore-verify.timer runs the check"
+elif [ "$ROLE" = ol ] && [ ! -f "$OL_DATA/current-version" ]; then
   log "no Open Library version yet; ol-refresh starts api after the first build"
   if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then "$COMPOSE" up -d cloudflared || fail "compose up cloudflared"; fi
 elif [ "$ROLE" = worldcat ] && [ ! -f "$WC_DATA/current-version" ]; then

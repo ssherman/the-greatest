@@ -1,0 +1,15 @@
+# deployment/postgres/systemd/postgres-backup-health.timer
+# Every 15 minutes. OnBootSec covers a reboot. When the timer is enabled on a server that is already
+# up, OnBootSec is long past and systemd runs the service straight away (tested on real systemd),
+# and OnUnitActiveSec then repeats it, so no OnActiveSec is needed. No Wants=docker.service on the
+# service either: a health check must never be what starts Docker; it fails closed without it.
+[Unit]
+Description=Postgres backup health checks every 15 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
