@@ -112,7 +112,10 @@ What a run does, stopping at the first failure except the row-count alert:
    are no longer pruned; delete them by hand.
 6. With `PGVERIFY_UPLOAD_ENABLED=1` only, uploads the dumps as `postgres_the_greatest_backup_<UTC ts>.sql.gz` and
    `postgres_tgb_backup_<UTC ts>.sql.gz` (the names `bin/refresh-dev-db.sh` reads) with a pinned `amazon/aws-cli`
-   container, the key passed by environment. Leave it at `0` until the old server stops producing dev's dumps.
+   container, the key passed by environment, to the R2 dumps bucket (`PGVERIFY_DUMP_ENDPOINT`, passed as
+   `AWS_ENDPOINT_URL`; region `auto`). That bucket locks every dump for 14 days and deletes it after 30
+   (`docs/features/postgres-server.md`). Leave it at `0` until the Postgres move's cutover, when dev switches
+   from the old server's S3 bucket to this one.
 7. Stops Postgres (every run, failed or not, so the next `--delta` restore finds it stopped) and pings success.
    A run that ends any other way (a failed write, TERM) pings `fail` from an exit trap, so it is never silent.
    If this job holds its lock, `reboot-if-required` skips that night and tries again the next.
@@ -128,14 +131,18 @@ must not be a symlink.
 
 `140.fw` (`host/firewall/140.fw.tmpl`, rendered like `120.fw`) is enforced on the host: inbound only SSH from
 `10.20.0.1`, outbound anything except private destinations and the house's own public IPv4. `vmbr1` NATs out
-through `vmbr0` with no destination filter, so HTTPS to S3, healthchecks.io, Docker Hub and the Debian mirrors
+through `vmbr0` with no destination filter, so HTTPS to R2, healthchecks.io, Docker Hub and the Debian mirrors
 works; the fetcher beside it cannot reach the VM.
 
 The VM's env (`secrets/home-server.env`, SOPS) takes: `PGVERIFY_ENABLED` (provision only; default off), `HC_PGVERIFY`, `HC_PGVERIFY_DEPLOY`, `PGVERIFY_REPO_BUCKET`,
 `PGVERIFY_REPO_ENDPOINT`, `PGVERIFY_REPO_REGION`, `PGVERIFY_REPO_PATH`, `PGVERIFY_REPO_KEY` and
-`PGVERIFY_REPO_KEY_SECRET` (the read-only key), `PGVERIFY_CIPHER_PASS`, `PGVERIFY_DUMP_BUCKET`, `PGVERIFY_DUMP_KEY`,
-`PGVERIFY_DUMP_KEY_SECRET`, `PGVERIFY_DUMP_REGION` (the dump bucket's region, passed to the `aws` container as
-`AWS_DEFAULT_REGION`; required when upload is on) and `PGVERIFY_UPLOAD_ENABLED` (default `0`). Values may use letters, digits and
+`PGVERIFY_REPO_KEY_SECRET` (the restore token, Object Read on the R2 backups bucket; the endpoint is
+`<account id>.r2.cloudflarestorage.com` with no scheme, the region `auto`), `PGVERIFY_CIPHER_PASS`,
+`PGVERIFY_DUMP_BUCKET`, `PGVERIFY_DUMP_KEY`, `PGVERIFY_DUMP_KEY_SECRET` (the upload token, Object Read & Write on
+the R2 dumps bucket), `PGVERIFY_DUMP_REGION` (`auto`, passed to the `aws` container as `AWS_DEFAULT_REGION`),
+`PGVERIFY_DUMP_ENDPOINT` (`https://<account id>.r2.cloudflarestorage.com`, passed as `AWS_ENDPOINT_URL`; the run
+and provision both refuse an upload without it) and `PGVERIFY_UPLOAD_ENABLED` (default `0`). The region is
+required when upload is on. Values may use letters, digits and
 `. _ : / @ + = , -` only; provision refuses anything else, because the VM's scripts source the env file as shell.
 
 ## Running provision

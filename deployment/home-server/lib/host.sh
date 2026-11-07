@@ -281,7 +281,7 @@ render_fetcher_fw() {
 # render_pgverify_fw <out> <house public IPv4>: VM 140's rules. It holds real user data, so nothing
 # may reach it but SSH from the host (the jump for provision), and it may send nothing to a private
 # destination or the house's own public address, like the fetcher. Everything else outbound is
-# allowed: S3, healthchecks.io, Docker Hub and the Debian mirrors are all public HTTPS.
+# allowed: R2, healthchecks.io, Docker Hub and the Debian mirrors are all public HTTPS.
 render_pgverify_fw() {
   [[ "$2" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
   # shellcheck disable=SC2016 # envsubst takes the variable list literally

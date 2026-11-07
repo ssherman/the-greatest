@@ -25,8 +25,11 @@ The port binds IPv4 only, so **an IPv6 client can never connect**, whatever `POS
 every app server an IPv4 entry. `render-hba.sh` warns on an IPv6 entry, naming the line, without failing the
 deploy. The IPv6 firewall rules still load, as a second layer.
 
-Backups are pgBackRest to a versioned S3 bucket: WAL continuously (`archive_timeout=300`), a full on Sundays
-and a differential other days at 09:00 UTC, 30 days of retention, encrypted. **A backup counts only after it
+Backups are pgBackRest to a Cloudflare R2 bucket (the backups bucket): WAL continuously (`archive_timeout=300`), a
+full on Sundays and a differential other days at 09:00 UTC, 30 days of retention, encrypted. The WAL archive is
+locked for 14 days against delete and overwrite. After cutover the home VM's nightly dumps go to a second R2 bucket
+(the dumps bucket), locked whole for 14 days and expired after 30. Why R2, and what the locks do and do not protect:
+spec §8.2. **A backup counts only after it
 has been restored:** a VM on the home server restores the newest backup nightly, checks it and dumps both
 databases (`docs/features/home-server.md`, "The Postgres restore check").
 
@@ -42,6 +45,7 @@ deployment/postgres/
   bin/deploy.sh                      # the deploy, run on the server
   bin/render-firewall.sh, render-hba.sh, install-firewall.sh, apply-firewall.sh, generate-certs.sh, apply-roles.sh
   bin/backup.sh, check-backup-health.sh, backup-common.sh, install-backup.sh
+  bin/setup-r2.sh                    # the two R2 buckets, their locks and lifecycle rules (Shane, once)
   systemd/                           # firewall unit, backup and health timers
   migration/                         # the one-time 17 -> 18 move (removed afterwards, see the last section)
   test/                              # run.sh (CI), run.sh --docker, local-e2e-test.sh (by hand)
@@ -49,13 +53,13 @@ deployment/home-server/guest/pg-restore-verify.sh   # the nightly restore check
 deployment/scripts/verify-postgres-lockdown.sh      # --outside and --inside checks
 .github/workflows/deploy-postgres.yml               # manual deploy
 .github/workflows/postgres-migration-tests.yml      # Docker-based migration tests, path-filtered
-secrets/.env.postgres                               # SOPS: clients, passwords, bucket, ping URLs
+secrets/.env.postgres                               # SOPS: clients, passwords, backups bucket and token, ping URLs
 ```
 
 ## Who runs what
 
 Agents run everything on live servers over SSH, including the old-server restart and the cutover, with Shane
-choosing the window. **Shane runs** `terraform apply`, `provision`, every AWS console step, the real sign-in
+choosing the window. **Shane runs** `terraform apply`, `provision`, the one-time R2 setup, the real sign-in
 and write check at cutover, and he is the one who must see each alert (see "Alerts"). Each live step needs
 Shane's go-ahead first, and the outputs are reported as they came.
 
@@ -69,12 +73,46 @@ Shane's go-ahead first, and the outputs are reported as they came.
    **Warning, at the merge:** once this merges, anyone running `docker compose up` or `bin/refresh-dev-db.sh`
    recreates `db` on 18 with an empty new volume until the refresh ends. The 17 data stays in its old volume.
    Do the dev switch soon after merging ("Dev database", below).
-2. **(Shane, AWS console)** Create the bucket with versioning on and a 14-day expiry of non-current versions,
-   and three IAM logins: the server (read, write, delete current objects in this bucket only), the home VM
-   (read-only on this bucket), the home VM's dump writer (write-only on the existing dump bucket). The
-   server's policy must not include `s3:DeleteObjectVersion`, `s3:PutBucket*`,
-   `s3:PutLifecycleConfiguration` or anything under `iam:`. So a server whose key is lost or misused can hide backups but not
-   destroy them for 14 days. Agents supply the policy JSON.
+2. **(Shane, R2, one time)** The buckets, their rules, then the tokens. Nothing here is done in the AWS console.
+
+   a. In the Cloudflare dashboard create a **temporary** account API token that can edit R2 (Account, Workers R2
+      Storage, Edit).
+   b. Run `setup-r2.sh` from the dev machine. It reads everything from the environment, never from arguments, and
+      prints neither the token nor the account id. Use the **pre-production** repo path now ("Prove it" switches
+      it):
+
+      ```bash
+      read -rs CF_API_TOKEN; export CF_API_TOKEN          # paste the temporary token
+      read -rs CF_ACCOUNT_ID; export CF_ACCOUNT_ID
+      export PGBACKREST_REPO_BUCKET=<backups bucket> PGVERIFY_DUMP_BUCKET=<dumps bucket>
+      export PGBACKREST_REPO_PATH=<pre-production repo path>
+      deployment/postgres/bin/setup-r2.sh
+      unset CF_API_TOKEN
+      ```
+
+      Pass: last line `setup-r2: done`. It creates either bucket if absent, then sets and reads back:
+
+      | Bucket | Lock | Lifecycle |
+      |---|---|---|
+      | Backups | `<repo path, no leading slash>/archive/main/18-`, 14 days | Abort incomplete multipart uploads after 7 days. No expiry: pgBackRest expires |
+      | Dumps | Every object, 14 days | Delete after 30 days; abort incomplete multipart uploads after 7 days |
+
+      It is safe to repeat, and each run replaces both buckets' rules. It refuses (exit 2, before any request) a lock
+      that is not shorter than the backup retention or the dump expiry: `expire` fails with 409 on a locked object.
+      **Never lock the backup folders:** pgBackRest rewrites each backup's manifest while it runs, and a lock there
+      makes every backup fail with 409.
+   c. Create four R2 API tokens (R2, Manage API tokens), each scoped to **one** bucket:
+
+      | Token | Permission | Bucket | Goes to |
+      |---|---|---|---|
+      | Server | Object Read & Write | Backups | `PGBACKREST_REPO_KEY`, `_KEY_SECRET` in `secrets/.env.postgres` |
+      | Home VM restore | Object Read | Backups | `PGVERIFY_REPO_KEY`, `_KEY_SECRET` in `secrets/home-server.env` |
+      | Home VM upload | Object Read & Write | Dumps | `PGVERIFY_DUMP_KEY`, `_KEY_SECRET` in `secrets/home-server.env` |
+      | Developer refresh | Object Read | Dumps | an `aws` CLI profile on each dev machine ("Dev refresh from R2") |
+
+      For R2's S3 API the access key id is the token's id and the secret is the SHA-256 of the token's value.
+   d. **Delete the temporary token.** No token left can change a bucket's settings, locks or lifecycle rules.
+      `setup-r2.sh` needs a new temporary token each time it runs again (the path switch in "Prove it").
 3. **(Shane, healthchecks.io)** Create `pg-backup` (1 day), `pg-health` (15 minutes) and `pg-restore-verified`
    (1 day), plus `HC_PGVERIFY_DEPLOY` for the VM's deploy timer. Set `pg-backup`'s grace **above the longest
    full backup**, not a flat 2 hours: read the longest full's start and stop in `pgbackrest info` and add
@@ -82,7 +120,9 @@ Shane's go-ahead first, and the outputs are reported as they came.
    (see "Alerts").
 4. Put the values in `secrets/.env.postgres` (shape: `deployment/postgres/.env.postgres.example`; passwords
    from `openssl rand -hex 32`; the cipher pass encrypts the repo, so losing it loses the backups) and in
-   `secrets/home-server.env`. Edit with `sops secrets/.env.postgres`, read with
+   `secrets/home-server.env`. R2 values: `PGBACKREST_REPO_ENDPOINT` and `PGVERIFY_REPO_ENDPOINT` are
+   `<account id>.r2.cloudflarestorage.com` with **no** scheme (pgBackRest's form); `PGVERIFY_DUMP_ENDPOINT` is
+   `https://<account id>.r2.cloudflarestorage.com` (the aws CLI's form); every region is `auto`. Edit with `sops secrets/.env.postgres`, read with
    `sops -d secrets/.env.postgres`, never pass `--input-type`. Use a **pre-production** `PGBACKREST_REPO_PATH`
    until "Prove it" is done. `POSTGRES_CLIENTS` is `role database address` entries separated by semicolons,
    allowed pairs `the_greatest the_greatest`, `tgb_app tgb`, `tgb_reader tgb`, single host addresses only.
@@ -223,8 +263,11 @@ Use the pre-production repo path and a small sentinel table. The local rehearsal
 status codes 0, 1 and 2, `stanza-upgrade` for a new cluster over an existing stanza, and a restore onto a
 fresh volume; this step repeats the parts that matter on the real server.
 
-This proves `pg-backup` and `pg-health`. `pg-restore-verified` is proved at step 7 of the move, because its VM
-does not exist until then.
+This proves `pg-backup`, `pg-health` and the backups bucket's lock. `pg-restore-verified` is proved at step 7 of
+the move, because its VM does not exist until then. pgBackRest itself on R2 was proven on 2026-11-07 before any
+server existed: `stanza-create`, `check`, a full, a differential, WAL archiving and a restore with replay all passed
+with this repo's image and template, with the default URI style and region `auto` (spec §8.4). Backups and
+`pg-health` work the same on R2 as on any S3 API; nothing in them changed.
 
 On the server:
 
@@ -256,15 +299,41 @@ q -d the_greatest -c "create table sentinel (id int primary key, note text)" -c 
    ```
 
    Then run the workflow once: it must end in `deploy: done`, with `pgbackrest check` green on the new timeline.
-3. **Break a backup on purpose:** a wrong key in `/srv/postgres/config/pgbackrest.conf` for one run. It must raise
+
+   **Time it.** Note how long the `restore` command took. On R2 a tiny restore took about 3.5 minutes in the
+   2026-11-07 test, nearly all per-request latency, so this figure says little about real data. The real-data
+   figure comes from the first real night at step 7 of the move: record both here.
+3. **Prove the lock refuses a delete of a fresh WAL object.** From the dev machine, with the **server's** token
+   (the one with delete rights), against the newest WAL object in the pre-production archive. Both commands must
+   fail with `ObjectLockedByBucketPolicy`:
+
+   ```bash
+   e() { sops -d secrets/.env.postgres | sed -n "s/^$1=//p"; }
+   export AWS_ACCESS_KEY_ID="$(e PGBACKREST_REPO_KEY)" AWS_SECRET_ACCESS_KEY="$(e PGBACKREST_REPO_KEY_SECRET)"
+   export AWS_DEFAULT_REGION=auto AWS_ENDPOINT_URL="https://$(e PGBACKREST_REPO_ENDPOINT)"
+   b="$(e PGBACKREST_REPO_BUCKET)"; p="$(e PGBACKREST_REPO_PATH)"; p="${p#/}"
+   key="$(aws s3 ls --recursive "s3://$b/$p/archive/main/18-" | sort | tail -n 1 | awk '{print $4}')"
+   aws s3api delete-object --bucket "$b" --key "$key"   # must fail: ObjectLockedByBucketPolicy
+   printf x | aws s3 cp - "s3://$b/$key"                # must fail too: a lock refuses overwrite
+   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_ENDPOINT_URL
+   ```
+
+   If either succeeds, the lock is not in place: re-run `setup-r2.sh`, and run step 2 again, because the
+   pre-production archive has now lost or damaged a WAL file. Step 1's backup succeeding with the lock set is the
+   proof that the lock does not cover the backup folders.
+4. **Break a backup on purpose:** a wrong key in `/srv/postgres/config/pgbackrest.conf` for one run. It must raise
    the `pg-backup` alert. While the key is still wrong, a write and `select pg_switch_wal()` make archiving fail,
    and `pg-health` must alert within 15 minutes. **A test passes only when Shane has seen the alert.** The
    workflow renders the file again, which puts the key back; the next runs must ping success.
-4. **Destroy and rebuild** with no SSH fix in between, following "Rebuild" with the pre-production repo path,
+5. **Destroy and rebuild** with no SSH fix in between, following "Rebuild" with the pre-production repo path,
    and verify again.
-5. **Drop the sentinel table:** `q -d the_greatest -c 'drop table sentinel'`. Left behind, `compare.sh` reports
-   it at steps 8 and 13, because it exists only on the new server. Then delete the pre-production repo path and
-   set `PGBACKREST_REPO_PATH` to the real one. From here `pg-backup` and `pg-health` run on the real path.
+6. **Drop the sentinel table:** `q -d the_greatest -c 'drop table sentinel'`. Left behind, `compare.sh` reports
+   it at steps 8 and 13, because it exists only on the new server. Then set `PGBACKREST_REPO_PATH` to the real
+   one and **run `setup-r2.sh` again with it** (a new temporary token, deleted afterwards, as in Build step 2):
+   the lock's prefix follows the path, so without this the real WAL archive is unlocked. Then delete the
+   pre-production repo path. A WAL object there that R2 refuses (`ObjectLockedByBucketPolicy`) is still inside a
+   lock; delete the rest now and the archive after 14 days. From here `pg-backup` and `pg-health` run on the
+   real path.
 
 ## The move: 17 to 18 by logical replication
 
@@ -430,8 +499,10 @@ pass.
 
    **A test passes only when Shane has seen the alert.** Then start one real run,
    `sudo systemctl start --no-block pg-restore-verify.service`, and wait for its first success ping, which
-   clears the alert. A never-pinged check may not alert on silence (Alerts, below). The count starts with the
-   next scheduled run.
+   clears the alert. **Record that run's restore time on real data from R2**
+   (`journalctl -u pg-restore-verify.service` shows when `restoring from an empty data directory` started and
+   when Postgres came up), next to the "Prove it" figure, and in the spec's §8.4. A never-pinged check may not
+   alert on silence (Alerts, below). The count starts with the next scheduled run.
 
    Count only nights where `pg-restore-verified` shows a success ping that Shane has seen. Any fail ping,
    including a row-count alert, resets the count to zero; the row-count baseline is the previous night, so
@@ -526,11 +597,14 @@ SOPS's values.
 
     Then remove both temporary-access rules from the old server (the `replicator` rule and the `postgres` rule
     from step 4, which also admits the app hosts) and reload it, unset `SOURCE_PGPASSWORD` and `REPLICATOR_PASSWORD`, run
-    `check-schema.sh all --target`, and confirm the dev database is on 18 (below). Then set
-    `PGVERIFY_UPLOAD_ENABLED=1` and `PGVERIFY_DUMP_REGION=<the dump bucket's region>` in
-    `secrets/home-server.env` (the VM passes the region to its `aws` container as `AWS_DEFAULT_REGION`; the
-    upload is refused without it, and the upload path has not run against a real bucket). Shane runs
-    `provision`, and the next night's upload is confirmed with a real `bin/refresh-dev-db.sh`.
+    `check-schema.sh all --target`, and confirm the dev database is on 18 (below). Then turn the dump upload on, to
+    the R2 dumps bucket: in `secrets/home-server.env` set `PGVERIFY_UPLOAD_ENABLED=1`, `PGVERIFY_DUMP_BUCKET`,
+    `PGVERIFY_DUMP_ENDPOINT=https://<account id>.r2.cloudflarestorage.com`, `PGVERIFY_DUMP_REGION=auto`, and the
+    upload token as `PGVERIFY_DUMP_KEY` and `_KEY_SECRET`. The VM passes the endpoint and region to its `aws`
+    container as `AWS_ENDPOINT_URL` and `AWS_DEFAULT_REGION`; both the run and `provision` refuse an upload with no
+    endpoint. **The upload path has not run against a real bucket.** Shane runs `provision`. After the next night,
+    `aws s3 ls` on the dumps bucket with the developer token must list both dumps; then switch dev to R2 ("Dev
+    refresh from R2", below) and confirm with a real `bin/refresh-dev-db.sh`.
 
 **The window.** The local rehearsal (`deployment/postgres/test/local-e2e-test.sh`, 2026-11-06) measured about
 15 seconds per database for steps 10 to 13, on tiny data with Docker-run clients. **That does not predict the
@@ -557,7 +631,10 @@ Shane.** Regenerate the rehearsal figure with `deployment/postgres/test/local-e2
 18. Keep the old server read-only for 14 days, confirm nothing on its data volume is needed, then Shane deletes
     it. Remove `postgres/`, the `db` service and the backup script from the old repo, remove `tgb` from
     `DATABASES` in `pg-restore-verify.sh` when the old site shuts down, and remove
-    `deployment/postgres/migration/` (see the last section).
+    `deployment/postgres/migration/` (see the last section). Then **retire AWS:** the old dump bucket stopped
+    receiving dumps at step 9 and nothing reads it after the dev switch, so delete it and every AWS key, including
+    the ones dev machines used for refreshes before cutover. This repo's code needs no AWS after that; check the
+    account for anything else before closing it.
 
 ## Rollback
 
@@ -615,7 +692,9 @@ the container); `exited 0 but info shows no new backup`; `marked as having error
 50`; the details are in `/srv/postgres/state/backup.log` (root only; the ping carries error classes only);
 then `pg pgbackrest --stanza=main info`. A `[028]`-style class after a rebuild is a stanza that no longer
 matches the cluster (the bootstrap section). Page checksum errors mean possible corruption: tell Shane, do
-not just re-run. **Silence:** the timer did not run (`systemctl list-timers postgres-backup.timer`; it is
+not just re-run. A 409 or `ObjectLockedByBucketPolicy` in `backup.log` means a lock covers more than the WAL
+archive (a backup rewrites its own manifest) or, from `expire`, that the lock is not shorter than retention:
+read the backups bucket's lock rule in the dashboard and re-run `setup-r2.sh`. **Silence:** the timer did not run (`systemctl list-timers postgres-backup.timer`; it is
 not persistent, so a server that boots late skips the day), or a full outlasted the grace. Start one by hand
 with `sudo systemctl start postgres-backup.service` (it can take hours; `TimeoutStartSec=6h`).
 
@@ -628,7 +707,7 @@ WAL file has waited over 15 minutes); `archive failures rose A to B`; `disk N% f
 answers queries, so this is the check that catches it.
 
 **First:** `pg pgbackrest --stanza=main check` and `pg psql -U postgres -c 'select * from pg_stat_archiver'`.
-A bad key, a bucket problem or an S3 outage show as archive failures; fix the cause, and the alert clears on
+A bad token, a bucket problem or an R2 outage show as archive failures; fix the cause, and the alert clears on
 the next passing run. **Disk is urgent when archiving is stuck:** unarchived WAL stays in `pg_wal` and will
 fill the disk. Failures logged before `stanza-create` on a first deploy are normal; the counter's first run
 stores a value and passes. Details: `/srv/postgres/state/health.log`.
@@ -673,8 +752,8 @@ Everything about it, including what each run does, the safety by construction an
 - It does not exist until `PGVERIFY_ENABLED=1` (step 7): a plain `provision` and `--verify` leave it alone.
 - Its key on the repo is read-only and every restore passes `--archive-mode=off`: nothing restored can write
   to production's repo.
-- Upload of dumps to the dev dump bucket is off until step 16, because two sources under one name could let a
-  half-copied dump reach a dev refresh, which replaces the dev database.
+- Upload of dumps to the R2 dumps bucket is off until step 16. Until then dev reads the old server's dumps from
+  the old S3 bucket, and the upload goes on in the step that switches dev to R2.
 - Rebuild the VM with `provision --rebuild pgverify` (the data disk, and so the dumps, is kept).
 - Two items from the build to settle when the VM first runs: `provision --verify` and the compile of
   `140.fw` need a real host; and the VM's firewall keeps IPv6 link-local, which should be a deliberate choice.
@@ -810,6 +889,27 @@ switch stops the shared dev server, so ask first and tell anyone using it. The p
 `pg_restore` 17 cannot read a dump from a newer `pg_dump`, so dev must reach 18 **before** step 16 turns the
 dump upload on.
 
+## Dev refresh from R2 (after cutover)
+
+Until cutover `bin/refresh-dev-db.sh` reads the old server's dumps from the old S3 bucket with the default AWS
+credentials, and nothing changes for it. After step 16 it reads the R2 dumps bucket. On each dev machine:
+
+```bash
+aws configure --profile r2-dumps    # key id = the developer refresh token's id, secret = SHA-256 of its value, region auto
+```
+
+and in the root `.env` (gitignored):
+
+```bash
+BACKUP_BUCKET=<the R2 dumps bucket>
+BACKUP_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
+BACKUP_AWS_PROFILE=r2-dumps
+```
+
+The script passes `--endpoint-url` and `--profile` to every `aws` call; unset, it behaves as it always did. The
+names are unchanged (`postgres_the_greatest_backup_*`, `postgres_tgb_backup_*`), so it picks the newest the same
+way. The token is read-only: a dev machine cannot change or delete a dump.
+
 ## Remove the migration scripts
 
 After the old server is deleted (step 18), remove `deployment/postgres/migration/`,
@@ -831,5 +931,10 @@ temporary server, and destroy it.
 - The certificate directory is owned by the container's uid (999), because Postgres must read the key. It is
   generated once; the cert is self-signed, so clients use `sslmode=require` and do not verify it.
 - `terraform output -raw ipv6` ends in `/128`; strip it before using it by hand.
-- This repo is public. Server addresses, bucket names and ping URLs stay in SOPS, and `deploy.sh` keeps
-  pgBackRest and Docker output out of the workflow log on purpose.
+- This repo is public. Server addresses, bucket names, the Cloudflare account id and ping URLs stay in SOPS,
+  and `deploy.sh` keeps pgBackRest and Docker output out of the workflow log on purpose.
+- R2 locks: only `<repo path>/archive/main/18-` in the backups bucket, and always shorter than the 30-day
+  retention. A lock on backup folders fails every backup with 409; a lock at or past retention fails `expire`.
+  A change of `PGBACKREST_REPO_PATH` needs `setup-r2.sh` again, or the new archive is unlocked.
+- Two endpoint forms: pgBackRest takes `<account id>.r2.cloudflarestorage.com` with no scheme; the aws CLI
+  (`PGVERIFY_DUMP_ENDPOINT`, `BACKUP_ENDPOINT`) takes it with `https://`.
