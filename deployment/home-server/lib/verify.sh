@@ -70,7 +70,7 @@ verify_host() {
 
 verify_vms() {
   local role
-  for role in ol fetcher worldcat; do
+  for role in $(managed_roles); do
     vm_spec "$role"
     expect "$role: running" on_host "qm status $VMID | grep -q running"
     expect "$role: starts on boot" on_host "qm config $VMID | grep -qx 'onboot: 1'"
@@ -78,6 +78,13 @@ verify_vms() {
     expect "$role: cloud-init instance-id is pinned" vm_ssh "$role" "sudo grep -qx the-greatest-$role /var/lib/cloud/data/instance-id"
   done
   expect "ol: recommender-train.timer is enabled" vm_ssh ol "systemctl is-enabled --quiet recommender-train.timer"
+  if pgverify_enabled; then
+    expect "pgverify: pg-restore-verify.timer is enabled" vm_ssh pgverify "systemctl is-enabled --quiet pg-restore-verify.timer"
+    expect "pgverify: has no heartbeat timer (it runs no always-on service)" vm_ssh pgverify "! systemctl is-enabled --quiet the-greatest-heartbeat.timer"
+    expect "pgverify: the data disk is mounted at /mnt/pgverify" vm_ssh pgverify "mountpoint -q /mnt/pgverify"
+  else
+    echo "SKIP  the restore check VM is off (PGVERIFY_ENABLED is not 1)"
+  fi
   expect "fetcher: /health answers" vm_ssh fetcher "curl -fsS 127.0.0.1:8081/health"
   if vm_ssh ol "test -f /srv/ol-data/current-version"; then
     expect "ol: /version answers" vm_ssh ol "curl -fsS 127.0.0.1:8080/version"
@@ -157,10 +164,31 @@ verify_egress() {
   expect "egress: fetcher container reaches the public internet (DNS included)" tcp_from_fetcher_container www.wikipedia.org 443
 }
 
+# pgverify holds real user data: it must reach the internet over HTTPS and nothing private, and nothing
+# but the host may reach it. Each "blocked" probe is paired with a positive control, as above.
+verify_pgverify_egress() {
+  pgverify_enabled || return 0
+  local lan_ip router ol_ip target host port rc
+  lan_ip="$(on_host "ip -4 -o addr show vmbr0 | awk '{print \$4}' | cut -d/ -f1 | head -1")"
+  router="$(on_host "ip -4 route show default dev vmbr0 | awk '{print \$3}' | head -1")"
+  ol_ip="$(vm_ip ol)"
+  expect "egress control: pgverify VM probe works" tcp_from_vm pgverify 1.1.1.1 443
+  expect "egress: pgverify reaches the public internet over HTTPS" vm_ssh pgverify "curl -fsS -m 10 -o /dev/null https://www.wikipedia.org"
+  for target in "10.20.0.1:8006" "10.20.0.1:22" "$lan_ip:8006" "$ol_ip:22" "$router:53"; do
+    host="${target%:*}" port="${target##*:}"
+    rc="$(probe_rc tcp_from_vm pgverify "$host" "$port")"
+    expect_blocked "egress: pgverify cannot reach $target" "$rc"
+  done
+  # Inbound: the fetcher is the only other thing on vmbr1, and it is the hostile one.
+  expect "egress control: the host reaches pgverify on 22" on_host "timeout 5 bash -c '</dev/tcp/10.20.0.20/22'"
+  rc="$(probe_rc tcp_from_vm fetcher 10.20.0.20 22)"
+  expect_blocked "inbound: the fetcher cannot reach pgverify on 22" "$rc"
+}
+
 verify_idempotent() {
   CHANGES=()
   converge_host_dns; converge_host_packages; converge_host_network; converge_host_firewall
-  local role; for role in fetcher ol worldcat; do ensure_vm "$role"; done
+  local role; for role in $(managed_roles); do ensure_vm "$role"; done
   if [ "${#CHANGES[@]}" = 0 ]; then ok "a second provision changes nothing"; else bad "a second provision changed: ${CHANGES[*]}"; fi
 }
 
@@ -262,6 +290,7 @@ verify_all() {
   verify_host
   verify_vms
   verify_egress
+  verify_pgverify_egress
   verify_idempotent
   verify_foreign_guests "$preexisting"
   if [ -n "$EXTERNAL_FROM" ]; then verify_external; fi

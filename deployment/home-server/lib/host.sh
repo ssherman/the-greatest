@@ -278,6 +278,16 @@ render_fetcher_fw() {
   HOUSE_PUBLIC_IPV4="$2" envsubst '${HOUSE_PUBLIC_IPV4}' <"$HS_DIR/host/firewall/120.fw.tmpl" >"$1"
 }
 
+# render_pgverify_fw <out> <house public IPv4>: VM 140's rules. It holds real user data, so nothing
+# may reach it but SSH from the host (the jump for provision), and it may send nothing to a private
+# destination or the house's own public address, like the fetcher. Everything else outbound is
+# allowed: S3, healthchecks.io, Docker Hub and the Debian mirrors are all public HTTPS.
+render_pgverify_fw() {
+  [[ "$2" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+  # shellcheck disable=SC2016 # envsubst takes the variable list literally
+  HOUSE_PUBLIC_IPV4="$2" envsubst '${HOUSE_PUBLIC_IPV4}' <"$HS_DIR/host/firewall/140.fw.tmpl" >"$1"
+}
+
 converge_host_firewall() {
   # The rendered files hold the host's /64 and the house's public IPv4; remove
   # them on any exit, die included.
@@ -289,11 +299,13 @@ converge_host_firewall() {
   house_ip="$(house_public_ipv4)" ||
     die "could not read the house's public IPv4 on the host (curl -4 https://1.1.1.1/cdn-cgi/trace); refusing to write 120.fw without it"
   render_fetcher_fw "$FW_RENDERED/120.fw" "$house_ip" || die "could not render 120.fw"
+  render_pgverify_fw "$FW_RENDERED/140.fw" "$house_ip" || die "could not render 140.fw"
   cp "$HS_DIR/host/firewall/host.fw" "$HS_DIR/host/firewall/110.fw" "$HS_DIR/host/firewall/130.fw" "$FW_RENDERED/"
 
   # cluster.fw is last: it is the file that turns the firewall on.
   local pairs=("host.fw:/etc/pve/local/host.fw" "110.fw:/etc/pve/firewall/110.fw"
-    "120.fw:/etc/pve/firewall/120.fw" "130.fw:/etc/pve/firewall/130.fw" "cluster.fw:/etc/pve/firewall/cluster.fw")
+    "120.fw:/etc/pve/firewall/120.fw" "130.fw:/etc/pve/firewall/130.fw" "140.fw:/etc/pve/firewall/140.fw"
+    "cluster.fw:/etc/pve/firewall/cluster.fw")
   local pair stale=()
   for pair in "${pairs[@]}"; do
     host_file_matches "$FW_RENDERED/${pair%%:*}" "${pair#*:}" || stale+=("$pair")

@@ -1,0 +1,35 @@
+name: Postgres migration tests
+
+# The one-time 17 -> 18 migration scripts, tested against real Postgres containers (pulls postgres:17 and
+# postgres:18 from Docker Hub). Separate from ci.yml on purpose: ci.yml gates the web image build, and a test that
+# needs Docker Hub and several minutes must not hold up, or block, a web deploy. Nothing calls this workflow and
+# nothing `needs` it. It runs only when the Postgres server files change.
+on:
+  pull_request:
+    paths:
+      - "deployment/postgres/**"
+      - "deployment/scripts/verify-postgres-lockdown.sh"
+      - ".github/workflows/postgres-migration-tests.yml"
+  push:
+    paths:
+      - "deployment/postgres/**"
+      - "deployment/scripts/verify-postgres-lockdown.sh"
+      - ".github/workflows/postgres-migration-tests.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postgres-migration-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Postgres migration tests (Docker)
+        run: deployment/postgres/test/run.sh --docker

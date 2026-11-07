@@ -35,7 +35,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -173,3 +173,20 @@ jobs:
       # The search server deploys these scripts from main, and the firewall ones run at boot.
       - name: OpenSearch shell tests and shellcheck
         run: deployment/opensearch/test/run.sh
+
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The workflow default is web-app/; these paths are from the repo root.
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # The database server deploys these scripts from main, and the firewall ones run at boot.
+      # --fast starts no containers. The Docker-backed migration tests run in postgres-migration-tests.yml, which
+      # is not part of this workflow and never gates a web deploy.
+      - name: Postgres shell tests and shellcheck
+        run: deployment/postgres/test/run.sh --fast

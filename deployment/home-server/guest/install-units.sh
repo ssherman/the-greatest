@@ -14,6 +14,8 @@ case "$ROLE" in
   ol) units+=(ol-refresh recommender-train) ;;
   fetcher) ;;
   worldcat) ;;
+  # No heartbeat: it runs no always-on service, and pg-restore-verified is its alert.
+  pgverify) units=(the-greatest-deploy reboot-if-required pg-restore-verify) ;;
   *) echo "install-units: unknown ROLE '$ROLE'" >&2; exit 1 ;;
 esac
 

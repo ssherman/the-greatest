@@ -11,11 +11,16 @@ STATE_DIR="${STATE_DIR:-/var/lib/the-greatest}"
 OL_DATA="${OL_DATA:-/srv/ol-data}"
 WC_DATA="${WC_DATA:-/srv/wc-data}"
 BUILD_LOCK="${BUILD_LOCK:-/run/ol-build.lock}"
+# pgverify only: where its data disk is mounted, and the lock the nightly restore check and a
+# deploy of its image take (a deploy must not retag the image under a running check).
+PGVERIFY_ROOT="${PGVERIFY_ROOT:-/mnt/pgverify}"
+PGVERIFY_LOCK="${PGVERIFY_LOCK:-/run/pgverify.lock}"
 COMPOSE="${COMPOSE:-$here/compose.sh}"
 
 # ROLE, REPO_REF, TUNNELS_ENABLED, TUNNEL_TOKEN, HC_HEARTBEAT, HC_DEPLOY, HC_REFRESH;
 # on ol also HC_RECOMMENDER and RECOMMENDATIONS_R2_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET
-# (compose.sh exports them, which is how the recommender service gets them).
+# (compose.sh exports them, which is how the recommender service gets them);
+# on pgverify HC_PGVERIFY and the PGVERIFY_* settings (guest/pg-restore-verify.sh).
 load_env() {
   set -a
   # shellcheck disable=SC1090
