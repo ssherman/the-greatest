@@ -727,6 +727,13 @@ Rails.application.routes.draw do
     # Dynamic Client Registration (RFC 7591, spec D6).
     post "api/oauth/register", to: "oauth/registrations#create", defaults: {format: :json}, format: false
 
+    # The authorize page (spec D4). One URL: GET shows the screen, POST is
+    # Approve, DELETE is Deny. HTML only, and on the books host because only
+    # books has an MCP endpoint.
+    get "oauth/authorize", to: "oauth/authorizations#new", as: :oauth_authorize, format: false
+    post "oauth/authorize", to: "oauth/authorizations#create", format: false
+    delete "oauth/authorize", to: "oauth/authorizations#destroy", format: false
+
     get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
     get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal
     post "my/reading-goals", to: "books/my/reading_goals#create"

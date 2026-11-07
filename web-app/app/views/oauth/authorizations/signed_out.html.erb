@@ -1,0 +1,21 @@
+<% content_for :page_title, "Sign in to connect an app | #{domain_name}" %>
+
+<div class="mx-auto max-w-lg">
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-4">
+      <h1 class="card-title text-2xl">Sign in to connect an app</h1>
+
+      <%= render "oauth/authorizations/destination" %>
+
+      <p>
+        An app is asking to read <%= domain_name %> on your behalf. Sign in to see
+        what it asks for, then approve or deny it.
+      </p>
+
+      <div class="card-actions">
+        <button type="button" class="btn btn-primary w-full sm:w-auto"
+          onclick="document.getElementById('login_modal').showModal()">Sign in</button>
+      </div>
+    </div>
+  </div>
+</div>

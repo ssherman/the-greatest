@@ -1,0 +1,24 @@
+<% content_for :page_title, "Membership needed | #{domain_name}" %>
+
+<div class="mx-auto max-w-lg">
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-4">
+      <h1 class="card-title text-2xl">Membership needed</h1>
+
+      <%= render "oauth/authorizations/destination" %>
+
+      <p>
+        Connecting an app is part of membership, and your account does not have an
+        active one. Membership covers every site.
+      </p>
+
+      <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <%= form_with url: oauth_authorize_path, method: :delete, data: {turbo: false}, class: "w-full sm:w-auto" do %>
+          <%= render "oauth/authorizations/request_fields" %>
+          <button type="submit" class="btn w-full sm:w-auto" data-testid="oauth-deny">Return to the app</button>
+        <% end %>
+        <%= link_to "See membership", "/membership", class: "btn btn-primary w-full sm:w-auto" %>
+      </div>
+    </div>
+  </div>
+</div>
