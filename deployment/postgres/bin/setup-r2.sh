@@ -182,7 +182,7 @@ GUARD_JQ='
   def show: "prefix \"\(.prefix // "")\", "
     + (if .condition.type == "Age" then "\(.condition.maxAgeSeconds / 86400) days" else .condition.type end)
     + (if .enabled then "" else " (disabled)" end);
-  [$old[] | select(.enabled) | . as $o | ($o | age) as $oa
+  [$old[] | select(.enabled != false) | . as $o | ($o | age) as $oa
     | select([$new[] | . as $n | select($n.enabled and (($o.prefix // "") | startswith($n.prefix // ""))
                and $oa != null and ($n | age) >= $oa)] | length == 0)
     | "  now:          " + ($o | show)] as $lost
