@@ -714,6 +714,16 @@ Rails.application.routes.draw do
       end
     end
 
+    # OAuth discovery for the MCP endpoint (spec D3, D8). The protected-resource
+    # document is served at the root and at the RFC 9728 path-suffixed location
+    # for each registered resource; /api/mcp/admin has none and 404s.
+    get ".well-known/oauth-authorization-server", to: "oauth/metadata#authorization_server",
+      format: false
+    get ".well-known/oauth-protected-resource", to: "oauth/metadata#protected_resource",
+      defaults: {resource_key: "mcp"}, format: false
+    get ".well-known/oauth-protected-resource/api/mcp", to: "oauth/metadata#protected_resource",
+      defaults: {resource_key: "mcp"}, format: false
+
     get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
     get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal
     post "my/reading-goals", to: "books/my/reading_goals#create"
