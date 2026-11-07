@@ -292,6 +292,21 @@ t_offload_runtime_reapplied() {
   nic_run "$LIVE_IFACES" "$ETHTOOL_TSO_ON" || return 1
   command -p grep -q '^ethtool-set .*ethtool -K eno1 tso off gso off' "$CALLS" && ! command -p grep -q '^network_change' "$CALLS"
 }
+# verify_offload <interfaces text>: the verify check's predicate over a stubbed read.
+verify_offload() {
+  local text=$1
+  ( on_host() { printf '%s' "$text"; }; host_nic_has_offload eno1 ) 2>/dev/null
+}
+t_verify_offload_accepts_spaces_in_stanza() {
+  verify_offload "${LIVE_IFACES//$'\t'post-up/    post-up}"
+}
+t_verify_offload_rejects_line_under_vmbr0() {
+  local text=${BARE_IFACES/$'\tgateway 192.0.2.1\n'/$'\tgateway 192.0.2.1\n\tpost-up /usr/sbin/ethtool -K eno1 tso off gso off\n'}
+  ! verify_offload "$text" && verify_offload "$LIVE_IFACES"
+}
+t_verify_offload_failed_read_fails() {
+  ! ( on_host() { return 255; }; host_nic_has_offload eno1 ) 2>/dev/null
+}
 t_watchdog_units_valid() {
   local t="$HS_DIR/host/systemd/nic-watchdog.timer" s="$HS_DIR/host/systemd/nic-watchdog.service"
   command -p grep -qx 'OnUnitActiveSec=1min' "$t" && command -p grep -qx 'OnBootSec=3min' "$t" &&
@@ -320,6 +335,9 @@ check "an existing offload line means no network change and no edit" t_existing_
 check "the offload line is added once, under the NIC's stanza, through network_change" t_offload_line_added_once
 check "a missing NIC stanza dies and leaves the file alone" t_offload_missing_stanza_dies
 check "TSO on at runtime is turned off without a network change" t_offload_runtime_reapplied
+check "verify accepts a space-indented offload line under the NIC's stanza" t_verify_offload_accepts_spaces_in_stanza
+check "verify rejects an offload line that sits under vmbr0" t_verify_offload_rejects_line_under_vmbr0
+check "verify fails when the interfaces file cannot be read" t_verify_offload_failed_read_fails
 check "the watchdog units carry the specified schedule and command" t_watchdog_units_valid
 check "the watchdog env file is sent mode 0600 with NIC and the ping URL" t_watchdog_env_mode
 finish

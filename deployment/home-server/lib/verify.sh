@@ -79,7 +79,7 @@ verify_host_nic() {
   expect "host: nic-watchdog.timer active" on_host "systemctl is-active --quiet nic-watchdog.timer"
   expect "host: TSO off on $nic" on_host "ethtool -k $nic | grep -qx 'tcp-segmentation-offload: off'"
   expect "host: GSO off on $nic" on_host "ethtool -k $nic | grep -qx 'generic-segmentation-offload: off'"
-  expect "host: $nic offload line in /etc/network/interfaces" on_host "grep -qxF '	$(offload_line "$nic")' /etc/network/interfaces"
+  expect "host: $nic offload line in /etc/network/interfaces" host_nic_has_offload "$nic"
   expect "host: nic-watchdog is not in log-only mode" on_host "! test -e $HOST_STATE/nic-watchdog-log-only"
 }
 

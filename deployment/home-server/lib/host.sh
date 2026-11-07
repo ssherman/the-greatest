@@ -266,6 +266,14 @@ nic_stanza_has_offload() {
     END {exit !found}'
 }
 
+# host_nic_has_offload <nic>: the same rule converge uses, read from the host.
+# The read is captured first, so a failed read fails instead of passing.
+host_nic_has_offload() {
+  local file
+  file="$(on_host "cat /etc/network/interfaces")" || return 1
+  nic_stanza_has_offload "$1" <<<"$file"
+}
+
 # The mutate function for network_change; reads NIC.
 add_offload_line() {
   local tab=$'\t' line
