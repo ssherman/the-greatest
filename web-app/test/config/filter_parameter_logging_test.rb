@@ -18,4 +18,8 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
 
     assert_equal "[FILTERED]", filtered.dig("auth", "jwt")
   end
+
+  test "the PKCE code verifier is filtered" do
+    assert_equal "[FILTERED]", filter.filter("code_verifier" => "v" * 64)["code_verifier"]
+  end
 end

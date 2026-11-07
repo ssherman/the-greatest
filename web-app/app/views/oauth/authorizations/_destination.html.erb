@@ -1,0 +1,9 @@
+<%# The redirect host is the primary trust signal: the client's name is
+    self-asserted and anyone can register as "Claude". %>
+<div class="rounded-box bg-base-200 p-4">
+  <p class="text-sm text-base-content/70">When you choose, you will be sent to</p>
+  <p class="font-mono text-xl font-bold break-all" data-testid="oauth-redirect-host"><%= @redirect_host %></p>
+</div>
+<p class="text-sm text-base-content/70">
+  The app calls itself &ldquo;<%= @client_name %>&rdquo;. Anyone can pick any name, so go by the address above.
+</p>

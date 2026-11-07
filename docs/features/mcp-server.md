@@ -4,7 +4,7 @@ Spec: `docs/superpowers/specs/2026-11-02-mcp-server-design.md` (decisions are nu
 
 ## What it is
 
-An MCP server inside the Rails app, built with the `mcp` gem (`Gemfile`: `~> 1.8`; the lockfile has 1.9.0). A member's AI assistant, such as Claude Code, connects with the same personal access token the REST API uses and works with the catalogue through tools.
+An MCP server inside the Rails app, built with the `mcp` gem (`Gemfile`: `~> 1.8`; the lockfile has 1.9.0). A member's AI assistant, such as Claude Code, connects with the same personal access token the REST API uses, or signs in through a browser (see "Signing in with OAuth"), and works with the catalogue through tools.
 
 | Endpoint | Who | Tools |
 |---|---|---|
@@ -149,6 +149,7 @@ An admin scope can only be held by someone the policy allows (`Api::Scopes::ALL`
 
 - **The 2026-07-28 lifecycle.** Claude Code speaks the stateless lifecycle of protocol version 2026-07-28: no `initialize`, a `server/discover` call for capabilities and instructions, the version in an `MCP-Protocol-Version` header and in each request's `_meta`, and `Mcp-Method` and `Mcp-Name` headers mirroring the method and the tool name. The gem routes this to its `handle_modern` path. The older `initialize` handshake still works too. `Accept` must include both `application/json` and `text/event-stream`: the modern path requires both, and sending both is harmless on the older one.
 - **The gem version.** `config/initializers/mcp.rb`, the controller's response copying, and the era routing above all rest on the gem's transport behaviour, which is young. Before `bundle update mcp`, re-read `handle_modern` and the header-routing code in `lib/mcp/server/transports/streamable_http_transport.rb`, then run the MCP tests and the acceptance run below.
+- **Claude apps, and any client that supports MCP authorization,** need only the URL: they find the sign-in through the 401 challenge and register themselves (see "Signing in with OAuth").
 - **Other clients** use Streamable HTTP with a bearer header: `POST`, `Authorization: Bearer <token>`, `Content-Type: application/json`.
 - **Limits.** The token's tier limits apply, and one MCP POST is one hit. An agent that pages through a large collection spends the member allowance like any other client.
 
@@ -177,9 +178,72 @@ event=api_mcp document=public|admin rpc_method=tools/call tool=list_books user_i
 - The token is never logged, only `user_id`. The body is read raw for this line and only here.
 - The inner controller writes its usual "Processing" and "Completed" lines, so a tool call also appears as the REST request it ran.
 
+## Signing in with OAuth
+
+Spec: `docs/superpowers/specs/2026-11-02-mcp-oauth-design.md` (decisions D1 to D17; code comments cite them). The Claude apps (claude.ai, Desktop, mobile) cannot send a custom header, so they cannot use a personal token. They sign the member in through a browser instead, and Claude Code and Codex can do the same. The authorization server is Doorkeeper 5.9 plus hand-written pieces where Doorkeeper has none: the metadata documents, Dynamic Client Registration and `resource` handling.
+
+Only `/api/mcp` accepts an OAuth token. `/api/mcp/admin` behaves as before: a personal token, a 401 with no `resource_metadata`, and an OAuth token is a 401 there. `/api/v1/*` is untouched. Every OAuth route is on the books host only, inside the same `DomainConstraint` as the MCP routes.
+
+### The flow
+
+1. **Discovery.** A client posts to `/api/mcp` with no token and gets a 401 whose `WWW-Authenticate` carries `resource_metadata` (the URL of the protected-resource document) and `scope`. It reads `GET /.well-known/oauth-protected-resource/api/mcp`, which names the resource and the one authorization server. The root `/.well-known/oauth-protected-resource` returns the same document, because some clients probe it. It then reads `GET /.well-known/oauth-authorization-server` for the endpoints. `Oauth::MetadataController` serves both with `public, max-age=3600`, and every URL in them comes from `Api::Host.base_url`, never `request.host`. The metadata does not advertise RFC 9207 `iss`, so Codex uses its per-server callback path, which registration records.
+2. **Registration.** The client has never seen this server, so it registers itself with `POST /api/oauth/register` (RFC 7591, `Oauth::RegistrationsController`). Every client is public: no secret is generated, and PKCE is the proof. A redirect URI is valid when it is `https` with a host, or `http` on `localhost`, `127.0.0.1` or `[::1]`, with no fragment and no credentials. The controller creates an `OauthApplication` and returns its `client_id`. `client_name` is shown to the member, so control and formatting characters are refused: a name must not disguise who is asking.
+3. **Authorize.** The client sends the member's browser to `GET /oauth/authorize` (`Oauth::AuthorizationsController`, a Doorkeeper subclass, so it gets the site layout and session sign-in). PKCE is required and only `S256` is accepted. The page works through these states in order. An unknown client or unregistered redirect URI is an error page, never a redirect. A signed-out visitor sees a prompt that opens the login modal, and the layout's widget reloads the same URL after sign-in. A request Doorkeeper refuses (bad scope, `plain` PKCE) redirects to the client with an error, as does an unknown `resource` (`invalid_target`). A member who may hold none of the requested scopes sees an explanation, a link to `/membership` and a Return form that denies. Otherwise the approval screen shows the client's name, the host the member will be sent to, the site and the scopes. Approve is a `POST` and Deny a `DELETE` on the same URL, both forms with `data-turbo="false"`, because Turbo Drive swallows the cross-origin redirect that ends the flow. The page is never cached.
+4. **Token.** The client posts the code and its verifier to `POST /api/oauth/token` and gets an access token (one hour) and a refresh token. The code lives ten minutes. `POST /api/oauth/revoke` revokes one token row.
+
+The scopes granted are the requested ones (all of the resource's scopes when `scope` is absent), limited to `Api::Scopes.mintable_by(user)` and to the resource's own scopes (`"#{domain}:read"`). `offline_access` is accepted and dropped, because refresh tokens are always issued. A `resource` sent on authorize must equal a registered resource's URL exactly. At the token endpoint, a `resource` that differs from the approval's is a 400 `invalid_target`.
+
+### The connection record
+
+`OauthConnection` is the app's own record of one approval: one row per (user, client, resource), holding the approved scopes, `approved_at`, `last_used_at` and `revoked_at`. Every grant and token belongs to exactly one connection, through a `connection_id` column that Doorkeeper copies from grant to token to refreshed token (`custom_access_token_attributes`). The server stamps it on Approve. A `connection_id`, `resource` or timestamp sent by the client on the authorize request or the Approve form is ignored: the controller drops the first and recomputes the rest.
+
+Approving again for the same (user, client, resource) reuses the row, resets `approved_at`, clears any revocation, and first revokes everything issued under the earlier approval, so a forgotten token does not outlive the consent that replaced it. `Services::Oauth::Connections` owns the lifecycle. `revoke!` ends a connection and every live token and grant under it. `last_used_at` is written at most every five minutes.
+
+The model classes are our own (`OauthApplication`, `OauthAccessGrant`, `OauthAccessToken`), each including the Doorkeeper mixin, so they can hold the association and be annotated. Token secrets are stored hashed.
+
+### Audience binding by path
+
+The connection stores its resource as a key (`mcp`), not a URL. `Oauth::Resources` maps keys to paths, and `Services::Api::Authenticator` maps the request path to a resource with `Resources.for_path`, an exact match. A token whose connection is for a different resource is refused. `/api/v1/*` and `/api/mcp/admin` map to no registered resource, so an OAuth token is a 401 `invalid_token` on both. A later endpoint is one more entry in `Resources::ALL`. Storing a key means the host can change without touching rows (launch todo, section 13).
+
+The authenticator tries a personal token first, because `tg_...` is recognised by its shape without a database read, and then an OAuth token (`Services::Oauth::AccessTokens.find_live`: not revoked, not expired, connection live, resource matching). Either way the result is the same `Api::Principal`, with effective scopes from `Api::Scopes.effective` over the connection's approved scopes, so a demoted member's connection shrinks on the next request. Calls dispatched in-process by the MCP server never reach this lookup: they carry the outer request's principal.
+
+### Refresh, rotation and reuse
+
+`Oauth::TokensController` runs `Services::Oauth::TokenGate` before Doorkeeper sees the request, so a refusal creates no row and leaves nothing to clean up. The gate refuses with `invalid_grant` or `invalid_target`. An unknown refresh token passes through and Doorkeeper answers `invalid_grant`, so a probe cannot tell unknown from revoked.
+
+- **Rotation.** A refresh issues a new token row and keeps the old refresh token valid, with no time limit, until the new access token is first used. That also covers a client that refreshes twice at once. Doorkeeper revokes the old one only inside its own token lookup, which this app does not use, so `AccessTokens.record_use` calls `revoke_previous_refresh_token!` on every authenticated request. Without that call rotation would never happen. A refresh without `scope` keeps the approved scopes.
+- **Reuse.** Presenting a refresh token that is already revoked means two parties hold it, so the gate revokes the whole connection and the member must approve again. The exception is a token created before the connection's current `approved_at`: a re-approval revoked it, so it is only stale. Replaying it gets `invalid_grant` and leaves the new approval alone.
+- **Revoke.** A token row carries both an access and a refresh secret. Revoking the row at `/api/oauth/revoke` and then refreshing with it trips the reuse rule. The cost is a disconnect that the member fixes by approving again.
+
+### Lapse
+
+When a member's membership ends, the connection row stays but its effective scopes become empty. A request with their access token is a 401 `invalid_token` carrying the `resource_metadata` challenge, not the personal-token path's 403 `membership_required`. An agent cannot act on a 403, but a 401 sends it back through sign-in, where the authorize page tells the member the reason and links to `/membership`. A refresh for a lapsed member is `invalid_grant` and also revokes the connection, so renewing later does not revive it: the member approves again. Every 401 from `/api/mcp` carries `resource_metadata` and `scope`. A 403 `insufficient_scope` is unchanged.
+
+### Rate-limit budgets
+
+`config/initializers/api.rb`, counted by `Services::Api::RateLimiter` per visitor IP per minute, before any parsing or lookup:
+
+- `config.x.api.unauthenticated_per_minute` for the existing pre-auth 401 window;
+- `config.x.api.oauth_register_per_minute` for registration, the tightest because the endpoint is open by design;
+- `config.x.api.oauth_token_per_minute` for the token endpoint.
+
+Hosted connectors reach the server from a few addresses shared by many members, and a per-IP window would throttle them together. `config.x.api.connector_egress_ranges` lists the vendor-published ranges (Anthropic's two, with their sources in a comment), and `config.x.api.connector_range_per_minute` gives each window a larger budget keyed on the range instead of the address. Each range is its own key, so all Anthropic traffic shares one budget per window. This is a budget, not a skip: a full skip would hand anyone on those ranges an unbounded channel for junk tokens. Another vendor is one entry in each map. ChatGPT is not a goal, and its ranges are not configured. Per-account limits still apply after authentication.
+
+### Edge for the discovery documents
+
+The discovery documents sit at the RFC-fixed `/.well-known/oauth-*` paths, outside `/api/`, so they do not inherit the edge's treatment of API paths, and a connector's backend cannot solve a challenge. A rule in the private Cloudflare repo gives them that treatment. It must be applied after this code is deployed and before the first claude.ai connection (`docs/launch-todo.md`, section 13). This repo records none of its details.
+
+### Increments
+
+This is increment 1, `/api/mcp` only. Increment 2 adds `/api/mcp/admin` as a second registered resource, admin approval, and a 30-day limit on refreshing an admin connection after `approved_at`; `TokenGate` gains that refusal. Increment 3 adds Connected apps on `/developers/tokens` (a member sees and revokes connections, even after a lapse), a job that prunes registered clients with no grant after 30 days, and per-client connection instructions on `/developers`. Until then there is no page for revoking a connection.
+
+### Testing
+
+`test/controllers/oauth/` (metadata, registration, authorization), `test/integration/oauth/flow_test.rb` (the flow over HTTP: PKCE, rotation, reuse, lapse, audience binding), `test/lib/oauth/`, `test/lib/services/oauth/`, and the model tests for the four OAuth models. The Playwright specs `e2e/tests/books/oauth-authorize.spec.ts`, `account/oauth-authorize.spec.ts` and `member/oauth-authorize.spec.ts` run a real loopback listener to prove the browser lands on the callback with `code` and `state`. Acceptance (not automated): Claude Code and Codex connect by sign-in against the dev server, and claude.ai against production once the launch steps are done.
+
 ## Edge
 
-The endpoints live under `/api/` so they get the edge's existing treatment of API paths. The edge rules live in the private `the-greatest-cloudflare` repo, which is the source of truth, and this public repo describes none of them.
+The endpoints live under `/api/` so they get the edge's existing treatment of API paths. The edge rules live in the private `the-greatest-cloudflare` repo, which is the source of truth, and this public repo describes none of them. The OAuth discovery paths are the one exception to "under `/api/`"; see "Edge for the discovery documents" above.
 
 ## Testing
 
@@ -191,6 +255,6 @@ The endpoints live under `/api/` so they get the edge's existing treatment of AP
 
 ## Not yet
 
-- **OAuth sign-in** for the Claude apps (claude.ai, Desktop, mobile), which cannot send a custom header: `docs/superpowers/specs/2026-11-02-mcp-oauth-design.md`. Today the credential is a personal access token.
+- **OAuth on the admin endpoint**, Connected apps and client pruning: increments 2 and 3 of `docs/superpowers/specs/2026-11-02-mcp-oauth-design.md` (see "Signing in with OAuth"). `/api/mcp/admin` takes a personal token only.
 - **Music and games tools.** They need API operations with `x-mcp` blocks first, and the MCP routes added to those hosts.
 - **REST follow-ups** that tool users meet: book and author merges parse `dry_run` leniently (`null`, `""` and `0` mean a real merge, where category merge and delete return a 400), and the four protected categories can still be renamed, re-parented or retyped through the category PATCH. Until fixed, only the admin prompt guards against both.

@@ -7,6 +7,8 @@ module Api
     RATE_HEADERS = %w[X-RateLimit-Limit X-RateLimit-Remaining X-RateLimit-Reset
       X-RateLimit-Daily-Limit X-RateLimit-Daily-Remaining X-RateLimit-Daily-Reset].freeze
 
+    RESOURCE_METADATA = "https://dev-new.thegreatestbooks.org/.well-known/oauth-protected-resource/api/mcp".freeze
+
     setup do
       host! "dev-new.thegreatestbooks.org"
       @war_and_peace = books_books(:war_and_peace)
@@ -184,7 +186,55 @@ module Api
 
       assert_response :unauthorized
       assert_equal "unauthenticated", json["code"]
+      assert_equal %(Bearer resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+        response.headers["WWW-Authenticate"]
+    end
+
+    test "a bad token names the resource metadata in the invalid_token challenge" do
+      rpc("tools/list", token: "tg_#{"z" * 40}")
+
+      assert_response :unauthorized
+      assert_equal "invalid_token", json["code"]
+      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+        response.headers["WWW-Authenticate"]
+    end
+
+    test "a live OAuth token can list tools" do
+      secret, = issue_oauth_token(oauth_connections(:member_mcp))
+
+      rpc("tools/list", token: secret)
+
+      assert_response :success
+      names = json.dig("result", "tools").map { |tool| tool["name"] }
+      assert_includes names, "get_book"
+    end
+
+    test "a revoked OAuth token is a 401 with the resource metadata challenge" do
+      connection = oauth_connections(:member_mcp)
+      secret, = issue_oauth_token(connection)
+      Services::Oauth::Connections.revoke!(connection)
+
+      rpc("tools/list", token: secret)
+
+      assert_response :unauthorized
+      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+        response.headers["WWW-Authenticate"]
+    end
+
+    test "the admin endpoint's 401 keeps the bare Bearer challenge" do
+      rpc("tools/list", token: nil, path: "/api/mcp/admin")
+
+      assert_response :unauthorized
       assert_equal "Bearer", response.headers["WWW-Authenticate"]
+    end
+
+    test "an OAuth token is refused on the admin endpoint" do
+      secret, = issue_oauth_token(oauth_connections(:member_mcp))
+
+      rpc("tools/list", token: secret, path: "/api/mcp/admin")
+
+      assert_response :unauthorized
+      assert_equal %(Bearer error="invalid_token"), response.headers["WWW-Authenticate"]
     end
 
     test "a non-member is a 403 membership_required" do

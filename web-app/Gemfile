@@ -126,3 +126,6 @@ gem "reverse_markdown", "~> 3.0"
 
 # Model Context Protocol server: the /api/mcp endpoint and its tool results.
 gem "mcp", "~> 1.8"
+
+# OAuth 2.1 authorization server for the MCP endpoint (sign-in by link, no pasted token).
+gem "doorkeeper", "~> 5.9"

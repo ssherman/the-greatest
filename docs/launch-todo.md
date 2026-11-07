@@ -517,3 +517,29 @@ Every step below only queues a Sidekiq job; wait for the jobs to finish before t
     `GOODREADS_REIMPORT_ENRICHMENT=true` and restart the worker. The new books then enrich.
 
 Each job can be stopped and run again safely. If a deploy interrupts a long job, run the same task again.
+
+## 13. MCP sign-in (OAuth)
+
+Lets members connect claude.ai, Claude Desktop and mobile to `/api/mcp` by signing in, with no token to paste.
+How it works: `docs/features/mcp-server.md`, "Signing in with OAuth". Design:
+`docs/superpowers/specs/2026-11-02-mcp-oauth-design.md` (D15, D17). Nothing here runs on deploy, but step 1 depends on one.
+
+1. **Deploy, then apply the edge change for the `/.well-known/oauth-*` paths, then make the first claude.ai connection.**
+   Deploy this branch first. Apply the edge change only after the two `/.well-known/oauth-*` documents answer
+   200 from the origin. The edge change is a rule in the private Cloudflare repo, prepared as a PR there. Merge
+   it, then apply it by hand with that repo's own process. claude.ai's backend cannot solve a challenge, so until the rule is live its
+   discovery request fails and the connector never reaches the sign-in page. No detail of the rule belongs
+   in this repo. To check it, fetch `https://<books host>/.well-known/oauth-authorization-server` from
+   outside, with no browser cookies, and expect JSON.
+2. **Confirm the production books hostname is admitted.** Both lists come from `BOOKS_DOMAIN` through
+   `config.domains`: `config.hosts` (`config/initializers/host_authorization.rb`) and the MCP transport's
+   `allowed_hosts` (`Api::McpController#transport`). Check that the production env's `BOOKS_DOMAIN` holds the
+   hostname members will type, and that its first entry is the one that should appear in the metadata:
+   `Api::Host.base_url` uses the first entry as the issuer and in every endpoint URL. A mismatch fails
+   with a Host-header refusal or a protected-resource `resource` that differs from the URL the client typed.
+3. **At the thegreatestbooks.org switch (section 7), members re-add the connector with the new URL.**
+   A connection records its resource as a key, not a URL, so existing connections keep working under the new
+   host. But claude.ai drops `Authorization` across redirects, so a connector still pointed at the old
+   hostname is redirected, arrives with no token, and cannot get in. Tell members who connected before the switch to
+   remove the connector and add `https://thegreatestbooks.org/api/mcp`. Books is not live yet, so few
+   connections will exist by then.

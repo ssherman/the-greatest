@@ -8,6 +8,7 @@ require_relative "support/turbo_frame_links"
 require_relative "support/stripe_webhook_helper"
 require_relative "support/firebase_token_helper"
 require_relative "support/api_token_secrets"
+require_relative "support/oauth_test_helper"
 require_relative "support/api_conformance"
 require_relative "support/mcp_rpc_helpers"
 require_relative "support/sql_capture"
@@ -56,6 +57,7 @@ module ActiveSupport
   class TestCase
     include SqlCapture
     include Workflows::DispatchHelper
+    include OauthTestHelper
 
     # Capped, not :number_of_processors. Several agents run suites at once in
     # separate worktrees, and every worker holds one Postgres connection, so an
@@ -122,6 +124,7 @@ end
 module ActionDispatch
   class IntegrationTest
     include StripeWebhookHelper
+    include OauthTestHelper
 
     def sign_in_as(user, stub_auth: false)
       # Stub authentication service to bypass JWT validation if requested

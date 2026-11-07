@@ -147,6 +147,8 @@ GEM
       irb (~> 1.10)
       reline (>= 0.3.8)
     domain_name (0.7.20261007)
+    doorkeeper (5.9.9)
+      railties (>= 5)
     dotenv (3.2.0)
     dotenv-rails (3.2.0)
       dotenv (= 3.2.0)
@@ -517,6 +519,7 @@ DEPENDENCIES
   cssbundling-rails
   csv
   debug
+  doorkeeper (~> 5.9)
   dotenv-rails
   down (~> 5.0)
   faraday
