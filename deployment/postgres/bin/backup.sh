@@ -66,7 +66,7 @@ for stanza in data:
             print(b["label"])
             if b.get("error") is True:
                 bad.write(b["label"] + "\n")
-' "$1.err" <"$work/info.out" | sort >"$1" || { INFO_ERR="info output was not understood"; return 1; }
+' "$1.err" <"$work/info.out" | LC_ALL=C sort >"$1" || { INFO_ERR="info output was not understood"; return 1; }
 }
 
 hc_ping "$url" start
@@ -89,7 +89,7 @@ fi
 
 # Exit 0 is not enough: the backup must be listed.
 labels_now "$work/after" || fail "backup exited 0 but could not be confirmed: $INFO_ERR"
-new="$(comm -13 "$work/before" "$work/after" | tail -n 1)"
+new="$(LC_ALL=C comm -13 "$work/before" "$work/after" | tail -n 1)"
 if [ -z "$new" ]; then fail "$type backup exited 0 but info shows no new backup"; fi
 
 if grep -qxF "$new" "$work/after.err"; then fail "$type backup $new exited 0 but pgBackRest marks it as having errors (page checksum errors)"; fi

@@ -350,7 +350,7 @@ anywhere. A timer starts after the backup window. Steps, stopping at the first f
    keeps each dump for 14 days against delete or overwrite, and its lifecycle rule deletes it after 30.
    `bin/refresh-dev-db.sh` reads the same names, from that bucket once `.env` sets `BACKUP_ENDPOINT` and
    `BACKUP_AWS_PROFILE`, which happens at cutover (step 16); until then dev reads the old server's dumps from the old
-   S3 bucket. The upload is part of the night: a failed upload pings `fail` and resets the 7-night count
+   S3 bucket. The upload is part of the night: a failed upload pings `fail` and resets the 3-night count
    **(Shane, 2026-11-07: upload from step 7, not from cutover)**.
 6. Keep 14 daily and 12 monthly dumps on the home server's disk, pruned by the script. Production holds no key that
    reaches them, so this is a copy production cannot modify. It holds real user data, so the VM has no
@@ -469,7 +469,7 @@ cutover on either app, and sequences are set by hand at cutover.
    databases, because logical copies carry no planner statistics and a cold planner would make the first hour after
    cutover slow.
 7. Turn on the daily restore check (§9) with `PGVERIFY_ENABLED=1`. Before the nights start, a deliberately broken run
-   must raise the `pg-restore-verified` alert and a real run must give its first ping. **Cutover needs 7 straight
+   must raise the `pg-restore-verified` alert and a real run must give its first ping. **Cutover needs 3 straight
    passing nights on real data.** New writes will depend on this chain alone from the moment of cutover, so it has to be
    proven before then, not after. The dump upload to the R2 dumps bucket (§9 step 5) goes on with it, so each of the 7
    nights includes a successful upload; after the first, the developer token must list both dumps, and an optional
