@@ -148,6 +148,7 @@ a second when research follows). Every row's `facts` carries `prompt_version` (t
 - `shortcut`: the Wikidata country agrees with the evidence, so no AI call is made (confidence `high`).
 - `judge`: the origin task answered, from knowledge or from research.
 - `has_origin`: the book already holds a real country and `force` is off; nothing is asked.
+  A book whose latest row owes research is not skipped as `has_origin`: it is researched when permitted, otherwise the debt is carried forward on the `has_origin` row (`deferred_research` true).
 - A book with no title writes a `skipped` row with reason `missing_inputs`.
 
 `Services::Books::Origin::Apply` decides whether an answer may be written, and its reason is the row's

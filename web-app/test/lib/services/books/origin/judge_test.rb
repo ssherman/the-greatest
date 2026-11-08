@@ -179,6 +179,34 @@ module Services
           assert_equal ["knowledge"], judge(context: "backfill").data[:enrichments].map(&:mode)
         end
 
+        def defer_past_cutoff_book
+          book = new_book("Brand New Owed", year: 2026)
+          stub_answer(nationality: "French", confidence: "high")
+          row = judge(book, context: "backfill").data[:enrichments].sole
+          assert_equal ["knowledge", "applied", true], [row.mode, row.outcome, row.facts["deferred_research"]]
+          assert_equal ["French"], book.reload.countries.map(&:name)
+          book
+        end
+
+        test "a book whose applied knowledge answer owed research is researched once the cap allows" do
+          book = defer_past_cutoff_book
+          Rails.application.config.x.ai.stubs(:categorize_backfill_research_daily_cap).returns(5)
+          BookOriginTask.any_instance.expects(:call).once.returns(ok(nationality: "French", confidence: "high"))
+          assert_difference -> { book.enrichments.where(kind: "books.origin").count }, 1 do
+            row = judge(book, context: "backfill").data[:enrichments].sole
+            assert_equal ["research", "already_set", false], [row.mode, row.reason, row.facts["deferred_research"]]
+          end
+        end
+
+        test "a book that owes research and still cannot be researched carries the debt on has_origin" do
+          book = defer_past_cutoff_book
+          BookOriginTask.any_instance.expects(:call).never
+          assert_difference -> { book.enrichments.where(kind: "books.origin").count }, 1 do
+            row = judge(book, context: "backfill").data[:enrichments].sole
+            assert_equal ["has_origin", true], [row.reason, row.facts["deferred_research"]]
+          end
+        end
+
         test "a past-cutoff book goes straight to research" do
           book = new_book("Brand New", year: 2026)
           stub_answer(nationality: "French", confidence: "high")

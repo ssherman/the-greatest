@@ -35,10 +35,12 @@ module Services
             return result
           end
 
+          # Read before any row is written: has_origin and judge both write one.
+          @owes_research = previously_deferred?
           @dossier = Categorize::Dossier.build(book: book)
           shortcut_country = Shortcut.call(dossier)
 
-          if dossier.real_countries.any? && !force
+          if dossier.real_countries.any? && !force && !(owes_research && research_permitted?)
             shortcut_country ? shortcut(shortcut_country) : has_origin
           elsif shortcut_country
             shortcut(shortcut_country)
@@ -51,11 +53,14 @@ module Services
 
         private
 
-        attr_reader :book, :context, :label, :research_allowed, :force, :force_research, :rows, :dossier
+        attr_reader :owes_research, :book, :context, :label, :research_allowed, :force, :force_research, :rows, :dossier
 
+        # A book that still owes research (its latest row says so, and research
+        # is not permitted now) keeps the debt on this row, so the backfill
+        # sees it again once the cap is raised.
         def has_origin
           rows << book.enrichments.create!(kind: KIND, mode: :knowledge, outcome: :nothing_to_apply,
-            reason: "has_origin", facts: base_facts("has_origin"))
+            reason: "has_origin", facts: base_facts("has_origin").merge("deferred_research" => owes_research))
         end
 
         def shortcut(country)
@@ -93,7 +98,7 @@ module Services
           return :research if force_research
           return :research if past_cutoff? && research_permitted?
           # Its knowledge call already ran and deferred this book's research.
-          return :research if previously_deferred? && research_permitted?
+          return :research if owes_research && research_permitted?
 
           :knowledge
         end
