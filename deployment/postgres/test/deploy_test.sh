@@ -318,5 +318,18 @@ write_env "POSTGRES_PORT=6544"
 scenario present "$STANZA_OK" 0 "abc123"; run_deploy
 if [ "$rc" = 2 ] && out | grep -q POSTGRES_PORT && ! called '.'; then pass "POSTGRES_PORT is refused: the firewall covers one port"; else fail "port override" "rc=$rc"; fi
 
+for ep in https://acct.r2.cloudflarestorage.com http://acct.r2.cloudflarestorage.com; do
+  write_env "PGBACKREST_REPO_ENDPOINT=$ep"
+  scenario present "$STANZA_OK" 0 "abc123"; run_deploy
+  if [ "$rc" = 2 ] && out | grep -q PGBACKREST_REPO_ENDPOINT && ! called '.'; then
+    pass "PGBACKREST_REPO_ENDPOINT with a scheme ($ep) is refused before anything is installed"
+  else fail "endpoint scheme $ep" "rc=$rc $(out | tail -2)"; fi
+done
+write_env "PGBACKREST_REPO_ENDPOINT=acct.r2.cloudflarestorage.com"
+scenario present "$STANZA_OK" 0 "abc123"; run_deploy
+if [ "$rc" = 0 ] && grep -qx 'repo1-s3-endpoint=acct.r2.cloudflarestorage.com' "$STATE_DIR/config/pgbackrest.conf"; then
+  pass "a bare R2 endpoint renders into pgbackrest.conf"
+else fail "bare endpoint" "rc=$rc $(out | tail -2)"; fi
+
 if ! "$BIN/deploy.sh" >/dev/null 2>&1; then pass "no ENV_FILE argument is refused"; else fail "no ENV_FILE argument is refused" "exit 0"; fi
 finish

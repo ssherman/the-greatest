@@ -26,7 +26,8 @@ setup() {
     PGVERIFY_REPO_BUCKET=repo-bucket PGVERIFY_REPO_ENDPOINT=s3.repo.test PGVERIFY_REPO_REGION=us-test-1 \
     PGVERIFY_REPO_PATH=/repo-path PGVERIFY_REPO_KEY=repo-key-id PGVERIFY_REPO_KEY_SECRET=repo-key-secret \
     PGVERIFY_CIPHER_PASS=cipher-pass-xyz PGVERIFY_DUMP_BUCKET=dump-bucket PGVERIFY_DUMP_KEY=dump-key-id \
-    PGVERIFY_DUMP_KEY_SECRET=dump-key-secret PGVERIFY_DUMP_REGION=dump-region-1 PGVERIFY_UPLOAD_ENABLED=0
+    PGVERIFY_DUMP_KEY_SECRET=dump-key-secret PGVERIFY_DUMP_REGION=dump-region-1 \
+    PGVERIFY_DUMP_ENDPOINT=https://dump.r2.test PGVERIFY_UPLOAD_ENABLED=0
   stub curl ''
   stub df 'printf "Filesystem 1024-blocks Used Available Capacity Mounted\n/dev/x 400000000 1000 %s 1%% /mnt\n" "${FREE_KB:-300000000}"'
   stub mountpoint '[ -z "${NOT_MOUNTED:-}" ]'
@@ -89,7 +90,7 @@ esac
 EOF
 )"
   stub pg_restore 'case "$*" in --list*) printf "; Archive created\n1; 2615 2200 SCHEMA - public owner\n"; exit "${LIST_EXIT:-0}" ;; esac'
-  stub aws 'echo "$AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY" >>"$SANDBOX/log/aws-env"; echo "${AWS_DEFAULT_REGION:-unset}" >>"$SANDBOX/log/aws-region"; exit "${AWS_EXIT:-0}"'
+  stub aws 'echo "$AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY" >>"$SANDBOX/log/aws-env"; echo "${AWS_DEFAULT_REGION:-unset}" >>"$SANDBOX/log/aws-region"; echo "${AWS_ENDPOINT_URL:-unset}" >>"$SANDBOX/log/aws-endpoint"; exit "${AWS_EXIT:-0}"'
 }
 
 # adopted: the data disk after the job has run once (the sentinel it writes on a pristine disk).
@@ -100,7 +101,7 @@ upload_on() {
     PGVERIFY_REPO_ENDPOINT=s3.repo.test PGVERIFY_REPO_REGION=us-test-1 PGVERIFY_REPO_PATH=/repo-path \
     PGVERIFY_REPO_KEY=repo-key-id PGVERIFY_REPO_KEY_SECRET=repo-key-secret PGVERIFY_CIPHER_PASS=cipher-pass-xyz \
     PGVERIFY_DUMP_BUCKET=dump-bucket PGVERIFY_DUMP_KEY=dump-key-id PGVERIFY_DUMP_KEY_SECRET=dump-key-secret \
-    PGVERIFY_DUMP_REGION=dump-region-1 PGVERIFY_UPLOAD_ENABLED=1
+    PGVERIFY_DUMP_REGION=dump-region-1 PGVERIFY_DUMP_ENDPOINT=https://dump.r2.test PGVERIFY_UPLOAD_ENABLED=1
 }
 set_count() { echo "$1 $2 $3" >>"$COUNTS"; }
 run() { "$GUEST/pg-restore-verify.sh" >"$SANDBOX/log/out" 2>&1; }
@@ -253,19 +254,37 @@ t_upload_on_uses_existing_names() {
     called '^aws s3 cp --only-show-errors /dumps/daily/postgres_tgb_backup_20261104T120000Z\.sql\.gz s3://dump-bucket/postgres_tgb_backup_20261104T120000Z\.sql\.gz$' &&
     [ "$(sequence)" = "start info stop restore up replay lsn amcheck amcheck dropext dropext dump list dump list upload upload stop ok " ] &&
     [ "$(sort -u "$SANDBOX/log/aws-env")" = "dump-key-id dump-key-secret" ] &&
-    [ "$(sort -u "$SANDBOX/log/aws-region")" = "dump-region-1" ]
+    [ "$(sort -u "$SANDBOX/log/aws-region")" = "dump-region-1" ] &&
+    [ "$(sort -u "$SANDBOX/log/aws-endpoint")" = "https://dump.r2.test" ]
 }
 t_upload_needs_a_region() {
   setup; upload_on
   write_env ROLE=pgverify HC_PGVERIFY=https://hc.test/pgv PGVERIFY_REPO_BUCKET=b PGVERIFY_REPO_ENDPOINT=e \
     PGVERIFY_REPO_REGION=r PGVERIFY_REPO_PATH=/p PGVERIFY_REPO_KEY=k PGVERIFY_REPO_KEY_SECRET=s PGVERIFY_CIPHER_PASS=c \
-    PGVERIFY_DUMP_BUCKET=dump-bucket PGVERIFY_DUMP_KEY=dk PGVERIFY_DUMP_KEY_SECRET=ds PGVERIFY_UPLOAD_ENABLED=1
+    PGVERIFY_DUMP_BUCKET=dump-bucket PGVERIFY_DUMP_KEY=dk PGVERIFY_DUMP_KEY_SECRET=ds \
+    PGVERIFY_DUMP_ENDPOINT=https://dump.r2.test PGVERIFY_UPLOAD_ENABLED=1
   ! run && [[ "$(fail_message)" == *PGVERIFY_DUMP_REGION* ]] && ! called '^pgbackrest' && ! called '^aws'
+}
+t_upload_needs_an_endpoint() {
+  # The dump bucket is R2: without its endpoint the CLI would send the dumps to AWS.
+  setup; write_env ROLE=pgverify HC_PGVERIFY=https://hc.test/pgv PGVERIFY_REPO_BUCKET=b PGVERIFY_REPO_ENDPOINT=e \
+    PGVERIFY_REPO_REGION=r PGVERIFY_REPO_PATH=/p PGVERIFY_REPO_KEY=k PGVERIFY_REPO_KEY_SECRET=s PGVERIFY_CIPHER_PASS=c \
+    PGVERIFY_DUMP_BUCKET=dump-bucket PGVERIFY_DUMP_KEY=dk PGVERIFY_DUMP_KEY_SECRET=ds PGVERIFY_DUMP_REGION=auto \
+    PGVERIFY_UPLOAD_ENABLED=1
+  ! run && [[ "$(fail_message)" == *PGVERIFY_DUMP_ENDPOINT* ]] && ! called '^pgbackrest' && ! called '^aws'
+}
+t_upload_endpoint_needs_https() {
+  setup; write_env ROLE=pgverify HC_PGVERIFY=https://hc.test/pgv PGVERIFY_REPO_BUCKET=b PGVERIFY_REPO_ENDPOINT=e \
+    PGVERIFY_REPO_REGION=r PGVERIFY_REPO_PATH=/p PGVERIFY_REPO_KEY=k PGVERIFY_REPO_KEY_SECRET=s PGVERIFY_CIPHER_PASS=c \
+    PGVERIFY_DUMP_BUCKET=dump-bucket PGVERIFY_DUMP_KEY=dk PGVERIFY_DUMP_KEY_SECRET=ds PGVERIFY_DUMP_REGION=auto \
+    PGVERIFY_DUMP_ENDPOINT=dump.r2.test PGVERIFY_UPLOAD_ENABLED=1
+  ! run && [[ "$(fail_message)" == *https://* ]] && ! called '^pgbackrest' && ! called '^aws'
 }
 t_upload_failure_pings_fail() {
   setup; write_env ROLE=pgverify HC_PGVERIFY=https://hc.test/pgv PGVERIFY_REPO_BUCKET=b PGVERIFY_REPO_ENDPOINT=e \
     PGVERIFY_REPO_REGION=r PGVERIFY_REPO_PATH=/p PGVERIFY_REPO_KEY=k PGVERIFY_REPO_KEY_SECRET=s PGVERIFY_CIPHER_PASS=c \
-    PGVERIFY_DUMP_BUCKET=dump-bucket PGVERIFY_DUMP_KEY=dk PGVERIFY_DUMP_KEY_SECRET=ds PGVERIFY_DUMP_REGION=r1 PGVERIFY_UPLOAD_ENABLED=1
+    PGVERIFY_DUMP_BUCKET=dump-bucket PGVERIFY_DUMP_KEY=dk PGVERIFY_DUMP_KEY_SECRET=ds PGVERIFY_DUMP_REGION=r1 \
+    PGVERIFY_DUMP_ENDPOINT=https://dump.r2.test PGVERIFY_UPLOAD_ENABLED=1
   export AWS_EXIT=1
   ! run && [[ "$(fail_message)" == *upload* ]] && [[ "$(fail_message)" != *dump-bucket* ]] && ! called 'hc\.test/pgv$'
 }
@@ -666,6 +685,8 @@ check "t_upload_on_uses_existing_names" t_upload_on_uses_existing_names
 check "a failed upload pings fail without naming the bucket" t_upload_failure_pings_fail
 check "upload enabled without its settings fails before any restore" t_upload_needs_its_settings
 check "upload enabled without a region fails before any restore" t_upload_needs_a_region
+check "upload enabled without the dump bucket's endpoint fails before any restore" t_upload_needs_an_endpoint
+check "an upload endpoint without https:// fails before any restore" t_upload_endpoint_needs_https
 check "no secret reaches a command line" t_secrets_not_in_argv
 check "t_prune_keeps_14_daily_12_monthly" t_prune_keeps_14_daily_12_monthly
 check "the first successful run of a month copies the dumps to monthly" t_first_success_of_the_month_copies_monthly

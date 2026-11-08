@@ -104,7 +104,7 @@ fi
 upload=0
 if [ "${PGVERIFY_UPLOAD_ENABLED:-0}" = 1 ]; then
   upload=1
-  required+=(PGVERIFY_DUMP_BUCKET PGVERIFY_DUMP_REGION PGVERIFY_DUMP_KEY PGVERIFY_DUMP_KEY_SECRET)
+  required+=(PGVERIFY_DUMP_BUCKET PGVERIFY_DUMP_REGION PGVERIFY_DUMP_ENDPOINT PGVERIFY_DUMP_KEY PGVERIFY_DUMP_KEY_SECRET)
 fi
 for name in "${required[@]}"; do
   if [ -z "${!name:-}" ]; then missing+=("$name"); fi
@@ -112,6 +112,11 @@ done
 if [ "${#missing[@]}" -gt 0 ]; then
   hc start; started=1
   fail "missing settings: ${missing[*]}"
+fi
+# The aws CLI needs the scheme; without it the upload would fail only after two hours of restore.
+if [ "$upload" = 1 ] && [[ ! "$PGVERIFY_DUMP_ENDPOINT" =~ ^https:// ]]; then
+  hc start; started=1
+  fail "PGVERIFY_DUMP_ENDPOINT must start with https://"
 fi
 
 # --- The data disk, and the guards around emptying it ----------------------------------------
@@ -352,10 +357,12 @@ prune() {
 prune "$DUMPS/daily" "$KEEP_DAILY"
 prune "$DUMPS/monthly" "$KEEP_MONTHLY"
 
+# The dump bucket is on R2: the endpoint (https://<account id>.r2.cloudflarestorage.com) and region `auto`
+# come from the env, and the key is an R2 token scoped to that bucket alone.
 if [ "$upload" = 1 ]; then
   for name in "${names[@]}"; do
     AWS_ACCESS_KEY_ID="$PGVERIFY_DUMP_KEY" AWS_SECRET_ACCESS_KEY="$PGVERIFY_DUMP_KEY_SECRET" AWS_DEFAULT_REGION="$PGVERIFY_DUMP_REGION" \
-      "$COMPOSE" run --rm --no-deps -T aws s3 cp --only-show-errors "/dumps/daily/$name" "s3://$PGVERIFY_DUMP_BUCKET/$name" ||
+      AWS_ENDPOINT_URL="$PGVERIFY_DUMP_ENDPOINT" "$COMPOSE" run --rm --no-deps -T aws s3 cp --only-show-errors "/dumps/daily/$name" "s3://$PGVERIFY_DUMP_BUCKET/$name" ||
       fail "upload failed"
   done
 else

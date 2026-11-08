@@ -7,8 +7,12 @@
 #  1. no finished WAL file has waited over 15 minutes to be archived. archive_timeout is 300 s, so a
 #     healthy server may hold one for a few minutes;
 #  2. pg_stat_archiver.failed_count has not risen since the last run. The first run stores a value
-#     and passes (failures logged before stanza-create on a first deploy are normal). A stats reset
-#     that lowers the count stores the lower value and does not alert;
+#     and passes (failures logged before stanza-create on a first deploy are normal). The state file
+#     holds "count|stats_reset". When stats_reset has changed (a restore or crash restarts the
+#     counter) the baseline is 0, so any failure since the reset alerts: comparing against the old
+#     count once let 3 real failures pass as "3 is lower than 9". A NULL stats_reset is stored as
+#     "never". A file holding only a count (the old format) passes once without a reset comparison
+#     and is rewritten with both values;
 #  3. the filesystem holding Docker's data is under 80% full.
 #
 # Test hook: DF_PATH overrides /var/lib/docker.
@@ -40,11 +44,11 @@ dexec() { timeout 120 docker compose -f "$REPO_DIR/compose.yml" exec -T postgres
 # Postgres, the failure counter and the archive settings, in one query. Anything but a number
 # first means it did not answer. Settings are read from the running server, not from the file: an
 # `ALTER SYSTEM`, a reload or a different config_file would show here and nowhere else.
-failed_count="" archive_mode="" archive_command=""
+failed_count="" stats_reset="" archive_mode="" archive_command=""
 if [ -z "${REPO_DIR:-}" ]; then
   reasons+=("REPO_DIR is not set")
-elif answer="$(dexec psql -U postgres -At -F '|' -c "SELECT failed_count, current_setting('archive_mode'), current_setting('archive_command') FROM pg_stat_archiver" 2>/dev/null)" \
-  && IFS='|' read -r failed_count archive_mode archive_command <<<"$answer" && [[ "$failed_count" =~ ^[0-9]+$ ]]; then
+elif answer="$(dexec psql -U postgres -At -F '|' -c "SELECT failed_count, coalesce(extract(epoch from stats_reset)::text, 'never'), current_setting('archive_mode'), current_setting('archive_command') FROM pg_stat_archiver" 2>/dev/null)" \
+  && IFS='|' read -r failed_count stats_reset archive_mode archive_command <<<"$answer" && [[ "$failed_count" =~ ^[0-9]+$ ]]; then
   :
 else
   failed_count=""
@@ -70,14 +74,21 @@ if [ -n "$failed_count" ]; then
   fi
 
   # 2. Compare, then store: always, so one burst of failures alerts once and a reset starts over.
-  stored=""
+  stored="" stored_reset=""
   if [ -f "$count_file" ]; then stored="$(cat "$count_file" 2>/dev/null || true)"; fi
-  if [[ "$stored" =~ ^[0-9]+$ ]] && [ "$failed_count" -gt "$stored" ]; then
+  if [[ "$stored" == *"|"* ]]; then stored_reset="${stored#*|}"; stored="${stored%%|*}"; fi
+  if ! [[ "$stored" =~ ^[0-9]+$ ]]; then
+    :  # first run, or an unreadable file: nothing to compare with
+  elif [ -n "$stored_reset" ] && [ "$stored_reset" != "$stats_reset" ]; then
+    # The counter restarted: its baseline is 0, whatever was stored.
+    if [ "$failed_count" -gt 0 ]; then reasons+=("archive failures rose 0 to $failed_count"); fi
+  elif [ "$failed_count" -gt "$stored" ]; then
+    # Same reset time, or an old-format file with no reset time to compare.
     reasons+=("archive failures rose $stored to $failed_count")
   fi
   umask 077
   mkdir -p "$LOG_DIR" 2>/dev/null || true
-  if ! { printf '%s\n' "$failed_count" >"$count_file.tmp" && mv -f "$count_file.tmp" "$count_file"; } 2>/dev/null; then
+  if ! { printf '%s|%s\n' "$failed_count" "$stats_reset" >"$count_file.tmp" && mv -f "$count_file.tmp" "$count_file"; } 2>/dev/null; then
     # A failure, not a log line: without a stored value every run is a "first run" and an
     # increase in failures could never be seen.
     reasons+=("could not store the archive failure count")

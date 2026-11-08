@@ -98,6 +98,10 @@ t_pgverify_aws_takes_keys_by_name() {
   # The service names the variables and carries no value, so no key is in this file or on a command line.
   grep -q 'AWS_ACCESS_KEY_ID$' "$HS_DIR/compose.pgverify.yml" && ! grep -qE 'AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)[:=]' "$HS_DIR/compose.pgverify.yml"
 }
+t_pgverify_aws_passes_the_endpoint() {
+  # The dump bucket is on R2: the endpoint must reach the CLI, or the upload goes to AWS.
+  grep -qE '^ *- AWS_ENDPOINT_URL$' "$HS_DIR/compose.pgverify.yml" && grep -qE '^ *- AWS_DEFAULT_REGION$' "$HS_DIR/compose.pgverify.yml"
+}
 t_pgverify_off_by_default() {
   ! cfg pgverify | jq -e '.services | has("postgres") or has("tools") or has("aws")' >/dev/null
 }
@@ -128,6 +132,7 @@ check "no pgverify service publishes a port" t_pgverify_no_published_ports
 check "pgverify mounts the data, socket, config read-only and dumps (read-only for the uploader)" t_pgverify_volumes
 check "the uploader image is pinned by version and digest" t_pgverify_aws_pinned
 check "the uploader gets its key by variable name, never a value" t_pgverify_aws_takes_keys_by_name
+check "the uploader gets the dump bucket's endpoint and region by name" t_pgverify_aws_passes_the_endpoint
 check "the pgverify services are off until named" t_pgverify_off_by_default
 check "no other role gets the pgverify services" t_pgverify_not_on_other_roles
 check "the Postgres Dockerfile the VM builds is pinned by digest" t_pgverify_image_pinned_in_dockerfile

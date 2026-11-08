@@ -2,7 +2,7 @@
 # §9). It holds a restored copy of production, so nothing may reach it but SSH from the host (the jump
 # provision uses), and it may reach the public internet and nothing private: not the LAN, not the host,
 # not the fetcher beside it on vmbr1, and not the house's own public IPv4, which the router hairpins to
-# its admin pages. Outbound HTTPS (S3, healthchecks.io, Docker Hub, the Debian mirrors) is the rest.
+# its admin pages. Outbound HTTPS (R2, healthchecks.io, Docker Hub, the Debian mirrors) is the rest.
 # Rendered by deployment/home-server/provision, which reads that address off the host at provision time;
 # it is never committed.
 [OPTIONS]

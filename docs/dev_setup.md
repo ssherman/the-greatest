@@ -96,7 +96,7 @@ Create a `.env` file in the project root:
 CLOUDFLARE_API_TOKEN=your_cloudflare_api_token_here   # Caddy's DNS challenge (run_caddy.sh)
 DOCKER_POSTGRES_PASSWORD=pick_one                     # docker-compose.yml → postgres
 DOCKER_OPENSEARCH_PASSWORD=pick_one                   # docker-compose.yml → opensearch
-BACKUP_BUCKET=the-s3-bucket-with-the-backups          # bin/refresh-dev-db.sh
+BACKUP_BUCKET=the-s3-bucket-with-the-backups          # bin/refresh-dev-db.sh (plus BACKUP_ENDPOINT, BACKUP_AWS_PROFILE after the Postgres move; see "Loading a Database")
 ```
 
 **Note**: You'll need to obtain a Cloudflare API token from your Cloudflare dashboard with DNS edit permissions.
@@ -261,6 +261,23 @@ DB only). The legacy DB is only needed to rehearse the books data migration
 (`data_migration:*`); on macOS check that Docker Desktop's disk image limit has room for it.
 OpenSearch is not part of the backup — reindex afterwards with
 `bin/rails search:{music,games,books}:recreate_and_reindex_all`.
+
+**Where the dumps come from changes at the Postgres move.** Until the cutover, the old server
+writes them to an S3 bucket and the defaults above apply. The home server's restore check
+uploads the new server's dumps to an R2 dumps bucket under the same names (from the restore
+check's first night, before cutover); at cutover the S3 bucket stops getting new ones. Then
+point dev at R2 by changing `BACKUP_BUCKET` and setting two more values in the root `.env`:
+
+```bash
+BACKUP_BUCKET=<the R2 dumps bucket>
+BACKUP_ENDPOINT=https://<account id>.r2.cloudflarestorage.com   # --endpoint-url on every aws call
+BACKUP_AWS_PROFILE=r2-dumps                                      # --profile on every aws call
+```
+
+and an `aws` CLI profile holding the read-only dumps token (`aws configure --profile r2-dumps`:
+key id = the token id, secret = the SHA-256 of the token value, region `auto`). Left unset, the
+script behaves exactly as before. Details: `docs/features/postgres-server.md`, "Dev refresh
+from R2".
 
 `web-app/.ruby-version` is what selects Ruby, so a version manager that activates on `cd`
 (mise) only does so *inside* `web-app/`. Anything launched from the project root that shells
