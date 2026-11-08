@@ -1,0 +1,13 @@
+# deployment/postgres/systemd/postgres-backup.timer
+# 09:00 UTC, the site's quietest time. Not persistent: a server that boots later must not start a
+# backup in peak hours to make up for a missed one; healthchecks.io alerts on the silence instead.
+[Unit]
+Description=Daily Postgres backup at 09:00 UTC
+
+[Timer]
+OnCalendar=*-*-* 09:00:00 UTC
+Persistent=false
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

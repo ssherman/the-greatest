@@ -163,6 +163,84 @@ module Api
           assert_equal "insufficient_scope", json[:code]
         end
 
+        # --- nested under a ranking configuration ----------------------------------
+
+        test "bare lists are unchanged" do
+          get "/api/v1/books/#{@book.slug}/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          # In the primary (80, 20), out of it (unweighted, year-only): the bare
+          # form still lists both, as it did before the nested form existed.
+          assert_equal [@weighted_high.id, @weighted_low.id, @unweighted.id, @year_only.id], json[:data].map { |row| row[:list][:id] }
+          assert_equal [80, 20, nil, nil], json[:data].map { |row| row[:list][:weight] }
+          assert_equal 4, json[:meta][:total_count]
+        end
+
+        test "nested lists only that configuration's lists, with its weights, NULL weight last" do
+          year = ranking_configurations(:books_year_2025)
+          RankedList.create!(list: @weighted_low, ranking_configuration: year, weight: 33)
+          null_weight = list_with(@book, "Fed, not yet weighted", position: 2, weight: nil)
+          RankedList.create!(list: null_weight, ranking_configuration: year, weight: nil)
+
+          get "/api/v1/ranking_configurations/#{year.id}/books/#{@book.slug}/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          # @year_only (60), @weighted_low (33), then the NULL weight last. The
+          # primary's @weighted_high and the unfed @unweighted are absent.
+          assert_equal [@year_only.id, @weighted_low.id, null_weight.id], json[:data].map { |row| row[:list][:id] }
+          assert_equal [60, 33, nil], json[:data].map { |row| row[:list][:weight] }
+          assert_equal [1, nil, 2], json[:data].map { |row| row[:position] }
+          assert_equal 3, json[:meta][:total_count]
+          refute_includes json[:data].map { |row| row[:list][:id] }, @weighted_high.id, "on the book but not fed by this configuration"
+          refute_includes json[:data].map { |row| row[:list][:id] }, @unweighted.id
+        end
+
+        test "nested links stay nested" do
+          year = ranking_configurations(:books_year_2025)
+          RankedList.create!(list: @weighted_low, ranking_configuration: year, weight: 33)
+
+          get "/api/v1/ranking_configurations/#{year.id}/books/#{@book.slug}/lists?per_page=1", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          base = "https://dev-new.thegreatestbooks.org/api/v1/ranking_configurations/#{year.id}/books/war-and-peace/lists"
+          assert_equal "#{base}?page=1&per_page=1", json[:links][:self]
+          assert_equal "#{base}?page=2&per_page=1", json[:links][:next]
+          assert_equal 2, json[:meta][:total_count]
+        end
+
+        test "nested lists on the primary are the bare form's weighted rows" do
+          get "/api/v1/ranking_configurations/#{@primary.id}/books/#{@book.slug}/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal [@weighted_high.id, @weighted_low.id], json[:data].map { |row| row[:list][:id] }
+          assert_equal [80, 20], json[:data].map { |row| row[:list][:weight] }
+        end
+
+        test "nested book lists: a bad page is a 400, a bad book a 404, and a bad configuration wins" do
+          get "/api/v1/ranking_configurations/#{@primary.id}/books/#{@book.slug}/lists?page=0", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 400)
+          assert_equal "invalid_parameter", json[:code]
+
+          get "/api/v1/ranking_configurations/#{@primary.id}/books/no-such-book/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+          assert_equal "No book at that address", json[:detail]
+
+          archived = ranking_configurations(:books_inherited)
+          archived.update!(archived: true)
+          [archived.id, ranking_configurations(:books_user).id, ranking_configurations(:books_authors_global).id, 999_999_999].each do |id|
+            get "/api/v1/ranking_configurations/#{id}/books/no-such-book/lists?page=0", headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_response_conform(status: 404)
+            assert_equal "No ranking configuration at that address", json[:detail], id
+          end
+        end
+
+        test "nested lists of a provisional book are a 404" do
+          @book.update!(provisional: true)
+
+          get "/api/v1/ranking_configurations/#{@primary.id}/books/#{@book.slug}/lists", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+        end
+
         private
 
         def list_with(book, name, position:, weight:, status: :active)

@@ -151,7 +151,7 @@ module Api
 
           test "a successful link and unlink each write one structured log line" do
             Rails.logger.stubs(:info)
-            Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_category_link action=link token_id=\d+ user_id=\d+ item_type=Books::Book item_id=#{@book.id} category_id=#{@politics.id}\z/)).once
+            Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_category_link action=link token_id=\d+ token_kind=personal user_id=\d+ item_type=Books::Book item_id=#{@book.id} category_id=#{@politics.id}\z/)).once
             tag({category_id: @politics.id})
 
             Rails.logger.expects(:info).with(regexp_matches(/event=api_admin_category_link action=unlink .*item_id=#{@book.id} category_id=#{@politics.id}\z/)).once

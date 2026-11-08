@@ -17,7 +17,7 @@ module Api
       # and the resource reads the primary author ranking itself.
       #
       # Show does not embed books (spec D13): an unbounded array is the wrong
-      # shape; /api/v1/authors/{slug}/books is the follow-up.
+      # shape; /api/v1/authors/{slug}/books is where they are.
       class AuthorResource
         include Alba::Resource
 

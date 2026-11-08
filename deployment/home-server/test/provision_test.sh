@@ -173,6 +173,18 @@ t_foreign_vmids_ignore_ours() {
   [ "$out" = 101 ]
 }
 
+# 140 is ours too (pgverify): never "foreign", so --verify does not treat it as a guest it must leave alone.
+t_foreign_vmids_ignore_pgverify() {
+  local out
+  out="$(
+    on_host() {
+      printf '%s\n' '      VMID NAME   STATUS     MEM(MB)' '       110 ol     running    24576' \
+        '       140 pgverify running   8192' '       101 other  running    2048'
+    }
+    running_foreign_vmids
+  )"
+  [ "$out" = 101 ]
+}
 # ol's address comes from an ssh to the host; that ssh must not eat the stdin
 # meant for the VM (it once left ol with an empty env file).
 t_vm_ssh_stdin_reaches_vm() {
@@ -195,6 +207,37 @@ t_push_env_refuses_a_mismatch() {
     push_vm_env ol
   ) 2>&1)" || rc=$?
   [ "$rc" = 1 ] && grep -q 'does not match' <<<"$out" && ! grep -q 'systemctl start' <<<"$out"
+}
+
+# The restore check's VM stays off until the migration turns it on: a plain provision after the merge
+# must not create VM 140 or start its timer.
+t_pgverify_is_off_unless_enabled() {
+  [ "$(unset PGVERIFY_ENABLED; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat " ] &&
+    [ "$(PGVERIFY_ENABLED=0; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat " ] &&
+    [ "$(PGVERIFY_ENABLED=1; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat pgverify " ]
+}
+# Every loop over the VMs goes through managed_roles, so none of them can reach a VM that was not asked for.
+t_no_role_loop_names_pgverify() {
+  ! grep -nE 'for role in .*pgverify' "$HS_DIR/provision" "$HS_DIR"/lib/*.sh &&
+    grep -q 'for role in $(managed_roles)' "$HS_DIR/provision"
+}
+# verify_vms and the egress checks, with everything that reaches a machine replaced by a line of output.
+verify_output() {
+  on_host() { echo "on_host $*"; }
+  vm_ssh() { echo "vm_ssh $*"; }
+  vm_ip() { echo 192.0.2.5; }
+  probe_rc() { echo 1; }
+  expect() { echo "expect $1"; }
+  expect_blocked() { echo "expect_blocked $1"; }
+  verify_vms 2>&1
+  verify_pgverify_egress 2>&1
+}
+t_verify_skips_pgverify_when_off() {
+  local out
+  out="$(unset PGVERIFY_ENABLED; verify_output)"
+  grep -q 'fetcher: running' <<<"$out" && ! grep -qE '(on_host|vm_ssh|expect|expect_blocked) .*pgverify' <<<"$out" || return 1
+  out="$(PGVERIFY_ENABLED=1; verify_output)"
+  grep -q 'pgverify: pg-restore-verify.timer' <<<"$out" && grep -q 'egress: pgverify reaches' <<<"$out"
 }
 
 # Every service's CPU cap must fit inside the ol VM (build and recommender).
@@ -224,7 +267,124 @@ check "an unreadable or non-IPv4 trace fails instead of returning nothing" t_hou
 check "the firewall step dies before writing anything when the public IPv4 can't be read" t_firewall_dies_without_house_ip
 check "--recovery re-checks the pre-existing guests after the reboot" t_recovery_rechecks_guests
 check "running_foreign_vmids ignores 110, 120 and 130 and stopped guests" t_foreign_vmids_ignore_ours
+check "running_foreign_vmids ignores 140 (pgverify) too" t_foreign_vmids_ignore_pgverify
 check "vm_ssh to ol passes its stdin to the VM, not to the host lookup" t_vm_ssh_stdin_reaches_vm
 check "an env file that lands different from what was sent stops before the deploy" t_push_env_refuses_a_mismatch
 check "the build's cpus cap fits in the ol VM's vCPUs" t_build_cpus_fit_vm
+check "pgverify is not a managed VM unless PGVERIFY_ENABLED=1" t_pgverify_is_off_unless_enabled
+check "provision and verify loop over managed_roles, never a literal pgverify" t_no_role_loop_names_pgverify
+check "--verify leaves VM 140 alone when it is off" t_verify_skips_pgverify_when_off
+
+# --- NIC watchdog provisioning -------------------------------------------------
+LIVE_IFACES=$'auto lo\niface lo inet loopback\n\niface eno1 inet manual\n\tpost-up /usr/sbin/ethtool -K eno1 tso off gso off\n\nauto vmbr0\niface vmbr0 inet static\n\taddress 192.0.2.10/24\n\tgateway 192.0.2.1\n\tbridge-ports eno1\n\tbridge-stp off\n\nauto vmbr1\niface vmbr1 inet static\n\taddress 10.20.0.1/24\n\tbridge-ports none\n'
+BARE_IFACES=${LIVE_IFACES/$'\tpost-up /usr/sbin/ethtool -K eno1 tso off gso off\n'/}
+
+t_bridge_nic_reads_port() {
+  [ "$(bridge_nic <<<"$LIVE_IFACES")" = eno1 ]
+}
+t_bridge_nic_refuses_several() {
+  ! bridge_nic <<<$'iface vmbr0 inet static\n\tbridge-ports eno1 eno2\n' >/dev/null &&
+    ! bridge_nic <<<$'iface vmbr0 inet static\n\taddress 192.0.2.10/24\n' >/dev/null &&
+    ! bridge_nic <<<$'iface vmbr0 inet static\n\tbridge-ports eno1\niface vmbr0 inet6 static\n\tbridge-ports eno2\n' >/dev/null
+}
+t_offload_line_exact() {
+  [ "$(offload_line eno1)" = "post-up /usr/sbin/ethtool -K eno1 tso off gso off" ]
+}
+
+# nic_run <interfaces text> <ethtool -k text>: converge_host_nic in a subshell over a
+# sandbox interfaces file. on_host runs file commands locally against the sandbox copy;
+# ethtool and network_change are recorded in $CALLS. Read the result from $IFACES.
+nic_run() {
+  new_sandbox
+  IFACES="$SANDBOX/interfaces"
+  printf '%s' "$1" >"$IFACES"
+  ETHTOOL_K="$2"
+  (
+    CHANGES=()
+    on_host() {
+      case "$*" in
+        "ethtool -k "*) printf '%s\n' "$ETHTOOL_K" ;;
+        "/usr/sbin/ethtool -K "*) echo "ethtool-set $*" >>"$CALLS" ;;
+        *) local cmd="$*"; bash -c "${cmd//\/etc\/network\/interfaces/$IFACES}" ;;
+      esac
+    }
+    network_change() { echo "network_change $1" >>"$CALLS"; "$2"; }
+    converge_host_nic
+  ) >"$SANDBOX/log/out" 2>&1
+}
+ETHTOOL_OFF=$'tcp-segmentation-offload: off\ngeneric-segmentation-offload: off'
+ETHTOOL_TSO_ON=$'tcp-segmentation-offload: on\ngeneric-segmentation-offload: off'
+
+t_existing_offload_line_left_alone() {
+  nic_run "$LIVE_IFACES" "$ETHTOOL_OFF" || return 1
+  [ "$(command -p cat "$IFACES")" = "${LIVE_IFACES%$'\n'}" ] && [ ! -s "$CALLS" ]
+}
+t_offload_line_added_once() {
+  nic_run "$BARE_IFACES" "$ETHTOOL_OFF" || return 1
+  [ "$(command -p grep -c 'ethtool -K eno1 tso off gso off' "$IFACES")" = 1 ] &&
+    command -p grep -A1 '^iface eno1 inet manual$' "$IFACES" | command -p grep -qxF $'\tpost-up /usr/sbin/ethtool -K eno1 tso off gso off' &&
+    [ "$(command -p grep -c '^network_change' "$CALLS")" = 1 ] || return 1
+  # a second run over the result adds nothing
+  local after
+  after="$(command -p cat "$IFACES")"
+  nic_run "$after" "$ETHTOOL_OFF" || return 1
+  [ "$(command -p grep -c 'ethtool -K eno1 tso off gso off' "$IFACES")" = 1 ] && [ ! -s "$CALLS" ]
+}
+t_offload_missing_stanza_dies() {
+  local text=${BARE_IFACES/iface eno1 inet manual/iface eno9 inet manual}
+  if nic_run "$text" "$ETHTOOL_OFF"; then return 1; fi
+  [ "$(command -p cat "$IFACES")" = "${text%$'\n'}" ] && command -p grep -q 'iface eno1 inet manual' "$SANDBOX/log/out" && [ ! -s "$CALLS" ]
+}
+t_offload_runtime_reapplied() {
+  nic_run "$LIVE_IFACES" "$ETHTOOL_TSO_ON" || return 1
+  command -p grep -q '^ethtool-set .*ethtool -K eno1 tso off gso off' "$CALLS" && ! command -p grep -q '^network_change' "$CALLS"
+}
+# verify_offload <interfaces text>: the verify check's predicate over a stubbed read.
+verify_offload() {
+  local text=$1
+  ( on_host() { printf '%s' "$text"; }; host_nic_has_offload eno1 ) 2>/dev/null
+}
+t_verify_offload_accepts_spaces_in_stanza() {
+  verify_offload "${LIVE_IFACES//$'\t'post-up/    post-up}"
+}
+t_verify_offload_rejects_line_under_vmbr0() {
+  local text=${BARE_IFACES/$'\tgateway 192.0.2.1\n'/$'\tgateway 192.0.2.1\n\tpost-up /usr/sbin/ethtool -K eno1 tso off gso off\n'}
+  ! verify_offload "$text" && verify_offload "$LIVE_IFACES"
+}
+t_verify_offload_failed_read_fails() {
+  ! ( on_host() { return 255; }; host_nic_has_offload eno1 ) 2>/dev/null
+}
+t_watchdog_units_valid() {
+  local t="$HS_DIR/host/systemd/nic-watchdog.timer" s="$HS_DIR/host/systemd/nic-watchdog.service"
+  command -p grep -qx 'OnUnitActiveSec=1min' "$t" && command -p grep -qx 'OnBootSec=3min' "$t" &&
+    command -p grep -qx 'WantedBy=timers.target' "$t" &&
+    command -p grep -qx 'ExecStart=/usr/local/sbin/nic-watchdog' "$s" && command -p grep -qx 'Type=oneshot' "$s"
+}
+t_watchdog_env_mode() {
+  new_sandbox
+  local out
+  out="$(
+    CHANGES=()
+    NIC=eno1 HC_NIC_WATCHDOG=https://hc.test/ping/abc
+    on_host() { return 0; }
+    put_host() { echo "put $2 ${3:-}"; case "$2" in */nic-watchdog.env) command -p cp "$1" "$SANDBOX/env.copy" ;; esac; }
+    converge_host_watchdog
+  )" || return 1
+  grep -qx "put $HOST_STATE/nic-watchdog.env 0600" <<<"$out" &&
+    grep -qx 'put /usr/local/sbin/nic-watchdog 0755' <<<"$out" &&
+    [ "$(command -p cat "$SANDBOX/env.copy")" = $'NIC=eno1\nHC_NIC_WATCHDOG=https://hc.test/ping/abc' ]
+}
+
+check "bridge_nic reads vmbr0's port, not vmbr1's none" t_bridge_nic_reads_port
+check "bridge_nic fails on several ports, none, or two vmbr0 stanzas" t_bridge_nic_refuses_several
+check "offload_line is the exact interfaces line" t_offload_line_exact
+check "an existing offload line means no network change and no edit" t_existing_offload_line_left_alone
+check "the offload line is added once, under the NIC's stanza, through network_change" t_offload_line_added_once
+check "a missing NIC stanza dies and leaves the file alone" t_offload_missing_stanza_dies
+check "TSO on at runtime is turned off without a network change" t_offload_runtime_reapplied
+check "verify accepts a space-indented offload line under the NIC's stanza" t_verify_offload_accepts_spaces_in_stanza
+check "verify rejects an offload line that sits under vmbr0" t_verify_offload_rejects_line_under_vmbr0
+check "verify fails when the interfaces file cannot be read" t_verify_offload_failed_read_fails
+check "the watchdog units carry the specified schedule and command" t_watchdog_units_valid
+check "the watchdog env file is sent mode 0600 with NIC and the ping URL" t_watchdog_env_mode
 finish

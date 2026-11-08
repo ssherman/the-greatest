@@ -1,0 +1,39 @@
+# frozen_string_literal: true
+
+# Doorkeeper's authorization code. Stored as a SHA-256 hash and good for ten
+# minutes. `connection_id` is copied onto the access token it is exchanged for.
+# == Schema Information
+#
+# Table name: oauth_access_grants
+#
+#  id                    :bigint           not null, primary key
+#  code_challenge        :string
+#  code_challenge_method :string
+#  expires_in            :integer          not null
+#  redirect_uri          :text             not null
+#  revoked_at            :datetime
+#  scopes                :string           default(""), not null
+#  token                 :string           not null
+#  created_at            :datetime         not null
+#  application_id        :bigint           not null
+#  connection_id         :bigint           not null
+#  resource_owner_id     :bigint           not null
+#
+# Indexes
+#
+#  index_oauth_access_grants_on_application_id     (application_id)
+#  index_oauth_access_grants_on_connection_id      (connection_id)
+#  index_oauth_access_grants_on_resource_owner_id  (resource_owner_id)
+#  index_oauth_access_grants_on_token              (token) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (application_id => oauth_applications.id)
+#  fk_rails_...  (connection_id => oauth_connections.id)
+#  fk_rails_...  (resource_owner_id => users.id)
+#
+class OauthAccessGrant < ApplicationRecord
+  include ::Doorkeeper::Orm::ActiveRecord::Mixins::AccessGrant
+
+  belongs_to :connection, class_name: "OauthConnection", inverse_of: :access_grants
+end

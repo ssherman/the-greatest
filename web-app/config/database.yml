@@ -82,6 +82,7 @@ production:
     database: <%= ENV.fetch("POSTGRES_DATABASE", "the_greatest_production") %>
     username: <%= ENV.fetch("POSTGRES_USER", "the_greatest") %>
     password: <%= ENV["POSTGRES_PASSWORD"] %>
+    sslmode: <%= ENV["POSTGRES_SSLMODE"] %>
   legacy_books:
     <<: *default
     host: <%= ENV.fetch("LEGACY_BOOKS_HOST", ENV.fetch("POSTGRES_HOST", "localhost")) %>
@@ -89,4 +90,5 @@ production:
     database: <%= ENV.fetch("LEGACY_BOOKS_DATABASE", "the_greatest_books") %>
     username: <%= ENV.fetch("LEGACY_BOOKS_USER", ENV.fetch("POSTGRES_USER", "the_greatest")) %>
     password: <%= ENV.fetch("LEGACY_BOOKS_PASSWORD", ENV["POSTGRES_PASSWORD"]) %>
+    sslmode: <%= ENV["LEGACY_BOOKS_SSLMODE"] %>
     replica: true

@@ -72,7 +72,7 @@ module Api
           end
 
           def log_change(action:, item:, category:)
-            Rails.logger.info("event=api_admin_category_link action=#{action} token_id=#{current_principal.token.id} " \
+            Rails.logger.info("event=api_admin_category_link action=#{action} token_id=#{current_principal.token.id} token_kind=#{current_principal.token_kind} " \
               "user_id=#{current_principal.user.id} item_type=#{item.class.name} item_id=#{item.id} category_id=#{category.id}")
           end
         end

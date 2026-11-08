@@ -7,12 +7,18 @@ module Services
     class SimilarBooks
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-      def self.call(book, **options)
-        new(book, **options).call
+      # `raise_on_failure: true` re-raises a failed search instead of answering
+      # an empty success, for a caller (the API) that must tell "no similar
+      # books" from "search is down". The site's book page leaves it off and
+      # keeps its silent empty card. It is the service's own option: it never
+      # reaches the similarity query or the merged config.
+      def self.call(book, raise_on_failure: false, **options)
+        new(book, raise_on_failure: raise_on_failure, **options).call
       end
 
-      def initialize(book, **options)
+      def initialize(book, raise_on_failure: false, **options)
         @book = book
+        @raise_on_failure = raise_on_failure
         @options = options
         @config = Rails.application.config.x.book_similarity.merge(options)
       end
@@ -37,6 +43,8 @@ module Services
         # in load_books/apply_author_cap, so log enough to tell the three apart:
         # class and a short backtrace, not just the message.
         Rails.logger.error "SimilarBooks failed for book #{@book.id}: #{e.class}: #{e.message} #{e.backtrace&.first(5)&.join(" | ")}"
+        raise if @raise_on_failure
+
         empty
       end
 
@@ -78,8 +86,13 @@ module Services
       #
       # The image chain matters -- the similar page renders 25 CardComponents and
       # each one reads primary_image. Without it that is a 25-query N+1.
+      #
+      # `catalog` because the index can lag a book being made provisional;
+      # BookSimilar excludes them in the query, but a stale hit must not
+      # surface a book awaiting review.
       def load_books(hits)
         ::Books::Book
+          .catalog
           .where(id: hits.map { |hit| hit[:id].to_i })
           .includes(book_authors: :author)
           .includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})

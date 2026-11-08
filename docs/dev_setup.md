@@ -96,7 +96,7 @@ Create a `.env` file in the project root:
 CLOUDFLARE_API_TOKEN=your_cloudflare_api_token_here   # Caddy's DNS challenge (run_caddy.sh)
 DOCKER_POSTGRES_PASSWORD=pick_one                     # docker-compose.yml → postgres
 DOCKER_OPENSEARCH_PASSWORD=pick_one                   # docker-compose.yml → opensearch
-BACKUP_BUCKET=the-s3-bucket-with-the-backups          # bin/refresh-dev-db.sh
+BACKUP_BUCKET=the-s3-bucket-with-the-backups          # bin/refresh-dev-db.sh (plus BACKUP_ENDPOINT, BACKUP_AWS_PROFILE after the Postgres move; see "Loading a Database")
 ```
 
 **Note**: You'll need to obtain a Cloudflare API token from your Cloudflare dashboard with DNS edit permissions.
@@ -151,6 +151,31 @@ This will start:
 - PostgreSQL database
 - Redis (if configured)
 - Any other services defined in `docker-compose.yml`
+
+### Switching an existing checkout from Postgres 17 to 18
+
+Development and CI run Postgres 18. The 18 container uses a new volume
+(`postgresql18-data`), so an existing 17 database does not carry over; you restore
+the production dump into the new one. Do this once, after merging, and tell anyone
+else using the shared dev database first, because it stops their server.
+
+```bash
+# from the project root (the scripts live in bin/ there, next to docker-compose.yml)
+export COMPOSE_PROJECT_NAME=the-greatest  # see below
+bin/snapshot-dev-db.sh --label pre-pg18   # safety copy of the 17 database
+docker compose stop db                    # stops the 17 container
+docker compose up -d db                   # starts 18 on the new empty volume
+bin/refresh-dev-db.sh --legacy            # restores both databases; ~25 minutes or more
+docker compose exec db psql -U postgres -Atc 'show server_version'   # starts with 18.
+```
+
+Compose derives its project name from the directory it runs in. The running `db`
+container belongs to the project named after the main checkout's directory, so from
+a worktree, `docker compose` and the snapshot and refresh scripts that call it
+would look in a different project and not find it. Setting `COMPOSE_PROJECT_NAME`
+as above, or running from the main checkout, avoids that. The old
+`postgresql-data` volume is left in place and unmounted; remove it with
+`docker volume rm tg_postgresql_data` only when you no longer want the 17 copy.
 
 ### 2. Start Rails Application
 Navigate to the web-app directory and start the Rails server:
@@ -236,6 +261,23 @@ DB only). The legacy DB is only needed to rehearse the books data migration
 (`data_migration:*`); on macOS check that Docker Desktop's disk image limit has room for it.
 OpenSearch is not part of the backup — reindex afterwards with
 `bin/rails search:{music,games,books}:recreate_and_reindex_all`.
+
+**Where the dumps come from changes at the Postgres move.** Until the cutover, the old server
+writes them to an S3 bucket and the defaults above apply. The home server's restore check
+uploads the new server's dumps to an R2 dumps bucket under the same names (from the restore
+check's first night, before cutover); at cutover the S3 bucket stops getting new ones. Then
+point dev at R2 by changing `BACKUP_BUCKET` and setting two more values in the root `.env`:
+
+```bash
+BACKUP_BUCKET=<the R2 dumps bucket>
+BACKUP_ENDPOINT=https://<account id>.r2.cloudflarestorage.com   # --endpoint-url on every aws call
+BACKUP_AWS_PROFILE=r2-dumps                                      # --profile on every aws call
+```
+
+and an `aws` CLI profile holding the read-only dumps token (`aws configure --profile r2-dumps`:
+key id = the token id, secret = the SHA-256 of the token value, region `auto`). Left unset, the
+script behaves exactly as before. Details: `docs/features/postgres-server.md`, "Dev refresh
+from R2".
 
 `web-app/.ruby-version` is what selects Ruby, so a version manager that activates on `cd`
 (mise) only does so *inside* `web-app/`. Anything launched from the project root that shells
@@ -345,21 +387,19 @@ dev.thegreatest.games {
 Example `docker-compose.yml` in the project root:
 
 ```yaml
-version: '3.8'
 services:
   db:
-    image: postgres:15
+    image: postgres:18
     environment:
-      POSTGRES_DB: the_greatest_development
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      - POSTGRES_PASSWORD=${DOCKER_POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:6543:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Postgres 18 images keep data in a versioned subdirectory, so the mount is the parent.
+      - postgresql18-data:/var/lib/postgresql
 
 volumes:
-  postgres_data:
+  postgresql18-data:
 ```
 
 ## Security Notes

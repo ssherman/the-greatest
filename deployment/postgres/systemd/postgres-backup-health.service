@@ -1,0 +1,11 @@
+# deployment/postgres/systemd/postgres-backup-health.service
+# WAL archive, archive failure count and disk checks; pings healthchecks.io. Run by the health timer.
+[Unit]
+Description=Postgres backup health checks
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/postgres-server/backup.env
+ExecStart=/usr/local/lib/postgres-backup/check-backup-health.sh
+TimeoutStartSec=10min

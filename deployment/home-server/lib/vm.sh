@@ -26,12 +26,54 @@ vm_spec() {
     worldcat)
       VMID=130 NAME=worldcat CORES=2 MEM=4096 OSDISK=32 DATADISK=40
       NET="virtio,bridge=vmbr0,firewall=1" IPCONFIG="ip=dhcp,ip6=auto" NAMESERVER="" STARTUP="order=3" ;;
-    *) die "unknown VM role '$1' (ol, fetcher or worldcat)" ;;
+    pgverify)
+      # The nightly Postgres restore check: real user data on an isolated, outbound-only network
+      # (spec §9). Addressed like the fetcher, behind its own host firewall file (140.fw). The data disk
+      # holds the restored cluster and 26 sets of dumps (14 daily, 12 monthly), at about 7.6 GB a set.
+      VMID=140 NAME=pgverify CORES=4 MEM=8192 OSDISK=32 DATADISK=400
+      NET="virtio,bridge=vmbr1,firewall=1" IPCONFIG="ip=10.20.0.20/24,gw=10.20.0.1"
+      NAMESERVER="1.1.1.1 1.0.0.1" STARTUP="order=4" ;;
+    *) die "unknown VM role '$1' (ol, fetcher, worldcat or pgverify)" ;;
   esac
 }
 
+# managed_roles: the VMs a plain provision and --verify act on. pgverify stays off until the Postgres
+# migration's step 7 sets PGVERIFY_ENABLED=1 in secrets/home-server.env: before there is real data in the
+# repo, its timer would only produce alerts (docs/features/postgres-server.md).
+pgverify_enabled() { [ "${PGVERIFY_ENABLED:-0}" = 1 ]; }
+managed_roles() {
+  printf '%s\n' fetcher ol worldcat
+  if pgverify_enabled; then echo pgverify; fi
+}
+
+# pgverify_env_check: the values only pgverify gets are sourced as shell by the VM's scripts, so a
+# value with a space, quote, $, & or ; would run. Passwords and URLs here never need those characters.
+pgverify_env_check() {
+  local name
+  # A blank ping URL is a no-op in hc_ping, so a failed restore check would be silent.
+  [ -n "${HC_PGVERIFY:-}" ] || die "HC_PGVERIFY is blank in secrets/home-server.env; the pgverify VM must not run without its alert"
+  # The dump bucket is on R2. With no endpoint the aws CLI would send the dumps to AWS instead.
+  if [ "${PGVERIFY_UPLOAD_ENABLED:-0}" = 1 ] && [ -z "${PGVERIFY_DUMP_ENDPOINT:-}" ]; then
+    die "PGVERIFY_UPLOAD_ENABLED=1 but PGVERIFY_DUMP_ENDPOINT is blank in secrets/home-server.env"
+  fi
+  # Two endpoint forms: the aws CLI needs the scheme, pgBackRest must not have one.
+  if [ -n "${PGVERIFY_DUMP_ENDPOINT:-}" ] && [[ ! "$PGVERIFY_DUMP_ENDPOINT" =~ ^https:// ]]; then
+    die "PGVERIFY_DUMP_ENDPOINT in secrets/home-server.env must start with https://"
+  fi
+  case "${PGVERIFY_REPO_ENDPOINT:-}" in
+    *://*) die "PGVERIFY_REPO_ENDPOINT in secrets/home-server.env must be a host name with no scheme (no https://)" ;;
+  esac
+  for name in HC_PGVERIFY HC_PGVERIFY_DEPLOY PGVERIFY_REPO_BUCKET PGVERIFY_REPO_ENDPOINT PGVERIFY_REPO_REGION \
+    PGVERIFY_REPO_PATH PGVERIFY_REPO_KEY PGVERIFY_REPO_KEY_SECRET PGVERIFY_CIPHER_PASS PGVERIFY_DUMP_BUCKET \
+    PGVERIFY_DUMP_REGION PGVERIFY_DUMP_ENDPOINT PGVERIFY_DUMP_KEY PGVERIFY_DUMP_KEY_SECRET PGVERIFY_UPLOAD_ENABLED; do
+    [[ "${!name:-}" =~ ^[A-Za-z0-9._:/@+=,-]*$ ]] ||
+      die "$name in secrets/home-server.env has a character that is not safe in the VM's env file (letters, digits and . _ : / @ + = , - only)"
+  done
+}
+
 # render_vm_env <role> <out>: the VM's /etc/the-greatest/home-server.env. Each
-# VM gets only its own token and check URLs; the trainer's R2 values go to ol alone.
+# VM gets only its own token and check URLs; the trainer's R2 values go to ol alone,
+# and pgverify's repo, cipher and dump-bucket values go to pgverify alone.
 render_vm_env() {
   local role=$1 out=$2
   case "$role" in
@@ -49,6 +91,18 @@ render_vm_env() {
     worldcat) printf '%s\n' "ROLE=worldcat" "REPO_REF=$REPO_REF" "TUNNELS_ENABLED=$TUNNELS_ENABLED" \
           "TUNNEL_TOKEN=${WORLDCAT_TUNNEL_TOKEN:-}" "HC_HEARTBEAT=${HC_WORLDCAT_HEARTBEAT:-}" \
           "HC_DEPLOY=${HC_WORLDCAT_DEPLOY:-}" "HC_REFRESH=" ;;
+    # No tunnel and no heartbeat: it runs no always-on service. pg-restore-verified is its alert.
+    pgverify)
+      pgverify_env_check
+      printf '%s\n' "ROLE=pgverify" "REPO_REF=$REPO_REF" "TUNNELS_ENABLED=0" "TUNNEL_TOKEN=" "HC_HEARTBEAT=" \
+        "HC_DEPLOY=${HC_PGVERIFY_DEPLOY:-}" "HC_REFRESH=" "HC_PGVERIFY=${HC_PGVERIFY:-}" \
+        "PGVERIFY_REPO_BUCKET=${PGVERIFY_REPO_BUCKET:-}" "PGVERIFY_REPO_ENDPOINT=${PGVERIFY_REPO_ENDPOINT:-}" \
+        "PGVERIFY_REPO_REGION=${PGVERIFY_REPO_REGION:-}" "PGVERIFY_REPO_PATH=${PGVERIFY_REPO_PATH:-}" \
+        "PGVERIFY_REPO_KEY=${PGVERIFY_REPO_KEY:-}" "PGVERIFY_REPO_KEY_SECRET=${PGVERIFY_REPO_KEY_SECRET:-}" \
+        "PGVERIFY_CIPHER_PASS=${PGVERIFY_CIPHER_PASS:-}" "PGVERIFY_DUMP_BUCKET=${PGVERIFY_DUMP_BUCKET:-}" \
+        "PGVERIFY_DUMP_REGION=${PGVERIFY_DUMP_REGION:-}" "PGVERIFY_DUMP_ENDPOINT=${PGVERIFY_DUMP_ENDPOINT:-}" \
+        "PGVERIFY_DUMP_KEY=${PGVERIFY_DUMP_KEY:-}" "PGVERIFY_DUMP_KEY_SECRET=${PGVERIFY_DUMP_KEY_SECRET:-}" \
+        "PGVERIFY_UPLOAD_ENABLED=${PGVERIFY_UPLOAD_ENABLED:-0}" ;;
     *) die "unknown VM role '$role'" ;;
   esac >"$out"
 }
@@ -68,10 +122,10 @@ render_user_data() {
 VM_SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no
   -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
-# vm_ip <role>: fetcher's is fixed; ol's comes from the guest agent.
+# vm_ip <role>: the vmbr1 VMs' are fixed; ol's and worldcat's come from the guest agent.
 vm_ip() {
   vm_spec "$1"
-  if [ "$1" = fetcher ]; then echo 10.20.0.10; return; fi
+  case "$1" in fetcher) echo 10.20.0.10; return ;; pgverify) echo 10.20.0.20; return ;; esac
   on_host "qm guest cmd $VMID network-get-interfaces 2>/dev/null" |
     jq -r '[.[] | select(.name | test("^(eth|en)")) |."ip-addresses"[]? | select(."ip-address-type" == "ipv4") | ."ip-address"] | first // empty'
 }

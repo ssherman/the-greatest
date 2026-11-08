@@ -121,6 +121,93 @@ module Services
           QueueEnrichment.call(in_flight: 5)
         end
 
+        def reimport_book(kind, payload)
+          book = ::Books::Book.create!(title: "Reimported #{@count += 1}")
+          ::Books::RepairVerdict.create!(kind: kind, subject_key: "reimport:#{kind}:#{book.id}", status: :approved, confidence: :high,
+            decided_by: :rule, applied_at: 1.hour.ago, payload: payload.call(book))
+          book
+        end
+
+        def created_book
+          reimport_book(:reimport_match, ->(b) { {"created_book_id" => b.id, "created_author_ids" => [@author.id], "facts" => {"author_names" => ["Facts Author"]}} })
+        end
+
+        def checked_book
+          reimport_book(:reimport_author, ->(b) { {"book_id" => b.id, "row_author_names" => ["Row Author"], "created_author_ids" => [@author.id]} })
+        end
+
+        def with_enrichment(value)
+          config = Rails.configuration.x.goodreads_reimport
+          was = config.enrichment
+          config.enrichment = value
+          yield
+        ensure
+          config.enrichment = was
+        end
+
+        test "re-import created books wait while enrichment is off" do
+          created_book
+          checked_book
+
+          result = QueueEnrichment.call(in_flight: 10)
+
+          assert_equal({started: 0, in_flight: 0, waiting: 0}, result.data)
+          assert_equal 0, runs.count
+        end
+
+        test "they start once it is on, after the rebuild's books" do
+          created = created_book
+          checked = checked_book
+          fixed = fixed_book
+          started = []
+          ::Workflows::Books::BookEnrichment.stubs(:start).with { |book, **kw| started << [book, kw] }.returns(WorkflowRun.new)
+
+          with_enrichment(true) { QueueEnrichment.call(in_flight: 10) }
+
+          assert_equal [fixed, created, checked], started.map(&:first)
+          assert_equal ["Facts Author"], started[1].last[:author_names]
+          assert_equal [@author.id], started[1].last[:new_author_ids]
+          assert_equal [@author.id], started[2].last[:new_author_ids]
+          assert_equal ["Row Author"], started[2].last[:author_names]
+        end
+
+        test "a re-import author check that created no authors, and unapplied, proposed or superseded re-import verdicts, are not started" do
+          reimport_book(:reimport_author, ->(b) { {"book_id" => b.id, "created_author_ids" => []} })
+          unapplied = created_book
+          ::Books::RepairVerdict.reimport_match.find_by("payload->>'created_book_id' = ?", unapplied.id.to_s).update_columns(applied_at: nil)
+          proposed = created_book
+          ::Books::RepairVerdict.reimport_match.find_by("payload->>'created_book_id' = ?", proposed.id.to_s)
+            .update_columns(status: ::Books::RepairVerdict.statuses.fetch("proposed"))
+          old = checked_book
+          ::Books::RepairVerdict.reimport_author.find_by("payload->>'book_id' = ?", old.id.to_s).update_columns(superseded_at: Time.current)
+          ::Workflows::Books::BookEnrichment.expects(:start).never
+
+          result = with_enrichment(true) { QueueEnrichment.call(in_flight: 10) }
+
+          assert_equal({started: 0, in_flight: 0, waiting: 0}, result.data)
+        end
+
+        test "a book named by a fix and a re-import verdict starts once with the created authors unioned" do
+          book = fixed_book(payload: {"created_author_ids" => [@author.id]})
+          other = ::Books::Author.create!(name: "Another")
+          ::Books::RepairVerdict.create!(kind: :reimport_author, subject_key: "reimport:author:#{book.id}", status: :approved, confidence: :high,
+            decided_by: :rule, applied_at: 1.hour.ago, payload: {"book_id" => book.id, "created_author_ids" => [other.id]})
+          ::Workflows::Books::BookEnrichment.expects(:start)
+            .with(book, initiated_by: "goodreads_rebuild", new_author_ids: [@author.id, other.id], author_names: ["Real Author"])
+            .once.returns(WorkflowRun.new)
+
+          with_enrichment(true) { QueueEnrichment.call(in_flight: 10) }
+        end
+
+        test "re-import books count against the same cap as the rebuild's" do
+          fixed_book
+          created_book
+
+          result = with_enrichment(true) { QueueEnrichment.call(in_flight: 1) }
+
+          assert_equal({started: 1, in_flight: 1, waiting: 1}, result.data)
+        end
+
         test "starts nothing while the fetch gate is blocked" do
           fixed_book
           ::Books::Goodreads::FetchGate.any_instance.stubs(:blocked?).returns(true)

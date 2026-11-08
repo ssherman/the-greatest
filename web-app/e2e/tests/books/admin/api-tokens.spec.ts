@@ -34,6 +34,21 @@ test.describe('Books API tokens, as an admin', () => {
     await expect(page.getByLabel(/^\s*books:admin:merge/)).toBeVisible();
   });
 
+  // daisyUI's .label is white-space: nowrap, and books:admin:merge has the
+  // longest description, so an unwrapped list pushed the page sideways.
+  for (const width of [1280, 375]) {
+    test(`the scope list fits the page at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/developers/tokens');
+      await expect(page.getByLabel(/^\s*books:admin:merge/)).toBeVisible();
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+    });
+  }
+
   test('an admin scope without an expiry is refused', async ({ page }) => {
     await page.goto('/developers/tokens');
 

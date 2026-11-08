@@ -1,0 +1,18 @@
+# One role per site, limited to that site's indexes. Neither can change cluster settings, roles or
+# the security index. Index names: web-app/app/lib/search/base/index.rb (<domain>_<model>_<env>)
+# and the old site's admin/app/lib/search/{books,authors}_index.rb.
+# tgb_legacy's extra permission: cluster_composite_ops allows scroll but not clearing one, and the old
+# site's advanced search clears each scroll when it finishes (admin/app/lib/search/books.rb, scroll_search).
+_meta:
+  type: "roles"
+  config_version: 2
+the_greatest_app:
+  cluster_permissions: ["cluster_composite_ops", "cluster_monitor"]
+  index_permissions:
+    - index_patterns: ["books_*_production", "music_*_production", "games_*_production"]
+      allowed_actions: ["indices_all"]
+tgb_legacy:
+  cluster_permissions: ["cluster_composite_ops", "cluster_monitor", "indices:data/read/scroll/clear"]
+  index_permissions:
+    - index_patterns: ["books", "authors"]
+      allowed_actions: ["indices_all"]

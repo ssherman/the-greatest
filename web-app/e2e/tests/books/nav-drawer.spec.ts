@@ -130,6 +130,65 @@ test.describe('Books mobile nav drawer', () => {
 
     await expect(lastLink).toBeInViewport();
   });
+
+  test('the panel header links home', async ({ page }) => {
+    await page.goto('/authors');
+    await page.locator('#books-nav-drawer-button').click();
+
+    await page.locator('#books-nav-drawer-panel header').getByRole('link', { name: 'The Greatest Books' }).click();
+
+    await expect(page).toHaveURL(/\/$/);
+  });
+
+  test('the current page carries the ribbon and no other link does', async ({ page }) => {
+    await page.goto('/authors');
+    await page.locator('#books-nav-drawer-button').click();
+
+    const current = page.locator('#books-nav-drawer-panel a[aria-current="page"]');
+    await expect(current).toHaveCount(1);
+    await expect(current).toHaveText('Authors');
+    await expect(current).toBeVisible();
+    // Lists only starts open when it holds the current page.
+    await expect(page.locator('#books-nav-drawer-panel details[open]')).toHaveCount(0);
+    // Measured because a ribbon that compiled away would fail silently.
+    const ribbonWidth = await current.evaluate((el) => getComputedStyle(el, '::before').width);
+    expect(parseFloat(ribbonWidth)).toBeGreaterThan(0);
+  });
+
+  test('a current page inside Lists opens the submenu so the ribbon shows', async ({ page }) => {
+    await page.goto('/lists');
+    await page.locator('#books-nav-drawer-button').click();
+
+    await expect(page.locator('#books-nav-drawer-panel a[aria-current="page"]')).toBeVisible();
+    // The desktop bar shares the partial; open there would float a dropdown over the page.
+    await expect(page.locator('.navbar-center details[open]')).toHaveCount(0);
+  });
+
+  // .drawer-side is overflow-x: hidden, so a marked label that outgrows the panel
+  // is clipped with no error. This is the longest one; bold pushed it 8px over.
+  test('the longest current-page label still fits the panel', async ({ page }) => {
+    await page.goto('/the-greatest-books/since/2000');
+    await page.locator('#books-nav-drawer-button').click();
+
+    const current = page.locator('#books-nav-drawer-panel a[aria-current="page"]');
+    await expect(current).toBeVisible();
+    const textRight = await current.evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().right;
+    });
+    const panel = (await page.locator('#books-nav-drawer-panel').boundingBox())!;
+    expect(textRight).toBeLessThanOrEqual(panel.x + panel.width);
+  });
+
+  // Signed out, My Books is hidden and its divider has to go with it, or two
+  // dividers stack with nothing between them.
+  test('signed out, one divider separates the two groups', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#books-nav-drawer-button').click();
+
+    await expect(page.locator('#books-nav-drawer-panel li:empty:visible')).toHaveCount(1);
+  });
 });
 
 test.describe('Books header stays visible', () => {

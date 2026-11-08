@@ -28,10 +28,10 @@ module Services
       # so a member editing lists meanwhile waits rather than interleaves.
       class WriteLibrary
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
-        DEFAULT_SHELVES = {"read" => :read, "to-read" => :want_to_read, "currently-reading" => :reading}.freeze
+        DEFAULT_SHELVES = LibraryRules::DEFAULT_SHELVES
         SKIPPED_DETAIL = "already on your lists"
         UNMATCHED_ERROR = "could not be matched to a book"
-        REVIEW_BREAK = %r{<br\s*/?>}i
+        REVIEW_BREAK = LibraryRules::REVIEW_BREAK
 
         # One list item this import wants: the list, the book, the rows behind
         # it (the lowest-numbered one records it), and the shelf it came from.
@@ -118,9 +118,7 @@ module Services
         end
 
         def default_lists
-          existing = ::Books::UserList.where(user: @user).to_a
-          ::Services::UserLists::EnsureDefaults.call(user: @user, domain: :books, existing: existing)
-            .select { |list| list.is_a?(::Books::UserList) && list.default? }.index_by { |list| list.list_type.to_sym }
+          LibraryRules.default_lists(@user)
         end
 
         def wants_for(book_id, rows, lists)
@@ -132,19 +130,13 @@ module Services
           shelves.delete("currently-reading") if shelves.key?("read")
 
           shelves.map do |shelf, shelf_rows|
-            list = DEFAULT_SHELVES.key?(shelf) ? lists.fetch(DEFAULT_SHELVES[shelf]) : custom_list(shelf)
+            list = LibraryRules.list_for(@user, shelf, lists, @custom_cache ||= {})
             Want.new(list: list, book_id: book_id, rows: shelf_rows.uniq.sort_by(&:row_number), shelf: shelf)
           end
         end
 
         def reading_replaced?(rows)
           rows.any? { |row| row.exclusive_shelf == "read" }
-        end
-
-        def custom_list(shelf)
-          name = shelf.tr("-", " ").squish
-          @custom_lists ||= ::Books::UserList.custom.where(user: @user).to_a.index_by { |list| list.name.downcase.squish }
-          @custom_lists[name.downcase] ||= ::Books::UserList.create!(user: @user, list_type: :custom, name: name)
         end
 
         def existing_items(wants)
@@ -155,9 +147,7 @@ module Services
         end
 
         def completed_on(want)
-          return nil unless want.list.completed_on_enabled?
-
-          want.rows.filter_map(&:date_read).max
+          LibraryRules.completed_on(want.list, want.rows)
         end
 
         def fill_completion(item, want)
@@ -212,23 +202,19 @@ module Services
           by_book.each do |book_id, rows|
             next if reviewed.include?(book_id)
 
-            winner = rows.select { |row| row.rating&.positive? || row.review_body.present? }
-              .min_by { |row| [row.rating&.positive? ? 0 : 1, -(row.date_read&.jd || 0), row.row_number] }
+            winner = LibraryRules.review_winner(rows)
             write_review(book_id, winner) if winner
           end
         end
 
         def write_review(book_id, row)
-          review = ::Review.new(user: @user, reviewable_type: "Books::Book", reviewable_id: book_id,
-            rating: (row.rating if row.rating&.positive?), body: row.review_body&.gsub(REVIEW_BREAK, "\n"))
+          review = LibraryRules.build_review(@user, book_id, row)
           unless review.valid?
             row.update!(error: "review not imported: #{review.errors.full_messages.to_sentence}")
             return
           end
 
-          now = Time.current
-          attributes = review.attributes.slice("user_id", "reviewable_type", "reviewable_id", "rating", "body", "title")
-            .merge("created_at" => (row.date_read || row.date_added)&.in_time_zone || @import.created_at, "updated_at" => now)
+          attributes = LibraryRules.review_attributes(review, row, @import.created_at)
           inserted = ::Review.insert_all([attributes], unique_by: :index_reviews_on_user_and_reviewable, returning: %w[id])
           return if inserted.rows.empty?
 

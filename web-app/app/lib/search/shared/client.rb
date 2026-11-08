@@ -37,7 +37,8 @@ module Search
 
             OpenSearch::Client.new(
               host: ENV.fetch("OPENSEARCH_URL"),
-              serializer_class: Search::Shared::Serializer
+              serializer_class: Search::Shared::Serializer,
+              transport_options: transport_options
             )
           end
         end
@@ -61,6 +62,15 @@ module Search
         end
 
         private
+
+        # The production search server presents a certificate it generated for itself
+        # (docs/features/opensearch-server.md), so there is no CA to check it against. The
+        # firewall and the per-app login keep others out; TLS here only stops eavesdropping.
+        def transport_options
+          return {} unless ENV["OPENSEARCH_SSL_VERIFY"] == "false"
+
+          {ssl: {verify: false}}
+        end
 
         # `bulk` doesn't serialize through this client at all: opensearch-ruby's
         # __bulkify builds the NDJSON body via the *module-level*

@@ -9,6 +9,10 @@ Rails.application.config.filter_parameters += [
   # credential replayable for up to an hour. "jwt" matches none of the
   # patterns above (security audit M3).
   :jwt,
+  # The PKCE verifier posted to the OAuth token endpoint. It is the proof of
+  # possession for an authorization code, and "code_verifier" matches none of
+  # the patterns above.
+  :code_verifier,
   # Stripe webhook payload fields. ParameterFilter matches at any depth, so
   # these cover the nested card and customer objects in an event body.
   :last4, :exp_month, :exp_year, :postal_code, :address, :customer_details, :billing_details,

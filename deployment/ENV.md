@@ -58,6 +58,40 @@ This document lists all environment variables required for production deployment
 - **Used By**: web, worker
 - **Security**: Never commit this value
 
+#### POSTGRES_SSLMODE
+- **Description**: libpq TLS mode for the primary database connection (`disable`, `prefer`, `require`, `verify-ca`, `verify-full`)
+- **Required**: No
+- **Default**: unset, which leaves the driver's default (`prefer`)
+- **Used By**: web, worker
+
+#### LEGACY_BOOKS_SSLMODE
+- **Description**: libpq TLS mode for the `legacy_books` connection. Does not fall back to `POSTGRES_SSLMODE`; set it separately.
+- **Required**: No
+- **Default**: unset, which leaves the driver's default (`prefer`)
+- **Used By**: web, worker
+
+#### Production values for the Postgres server
+
+In production `POSTGRES_HOST` is the Postgres server's address (`docs/features/postgres-server.md`), with
+`POSTGRES_PORT=6543`, `POSTGRES_SSLMODE=require`, `POSTGRES_USER=the_greatest` and `POSTGRES_DATABASE=the_greatest`.
+The `legacy_books` connection reads `LEGACY_BOOKS_HOST`, `LEGACY_BOOKS_PORT`, `LEGACY_BOOKS_DATABASE` (`tgb`),
+`LEGACY_BOOKS_USER` (`tgb_reader`), `LEGACY_BOOKS_PASSWORD` and `LEGACY_BOOKS_SSLMODE`. Host, port, user and
+password fall back to the `POSTGRES_*` values when unset, and `LEGACY_BOOKS_DATABASE` defaults to
+`the_greatest_books`. Before changing any `POSTGRES_*` value, set all five (`LEGACY_BOOKS_HOST`, `_PORT`, `_USER`,
+`_PASSWORD`, `_DATABASE`) explicitly to today's values, or the legacy connection moves with the primary one.
+
+The server itself is configured from `secrets/.env.postgres` (SOPS), not from this file. Its shape is
+`deployment/postgres/.env.postgres.example`:
+
+| Variable | Meaning |
+|---|---|
+| `POSTGRES_CLIENTS` | `role database address` entries separated by semicolons; also the firewall allowlist |
+| `POSTGRES_SUPERUSER_PASSWORD`, `POSTGRES_THE_GREATEST_PASSWORD`, `POSTGRES_TGB_APP_PASSWORD`, `POSTGRES_TGB_READER_PASSWORD` | One per role; `openssl rand -hex 32` |
+| `PGBACKREST_REPO_BUCKET`, `_ENDPOINT`, `_REGION`, `_PATH`, `_KEY`, `_KEY_SECRET` | The R2 backups bucket and the server's R2 token (Object Read & Write on that bucket only). Endpoint `<account id>.r2.cloudflarestorage.com` with no scheme, region `auto`, key = the token's id, secret = the SHA-256 of its value. The bucket's lock and lifecycle rules come from `deployment/postgres/bin/setup-r2.sh` |
+| `PGBACKREST_CIPHER_PASS` | Encrypts the repo; losing it loses the backups |
+| `HC_PG_BACKUP`, `HC_PG_HEALTH` | healthchecks.io ping URLs |
+| `POSTGRES_BOOTSTRAP`, `POSTGRES_ALLOW_RESTART` | Not set normally; see the runbook |
+
 ### Redis Configuration
 
 #### REDIS_URL
@@ -70,9 +104,18 @@ This document lists all environment variables required for production deployment
 ### OpenSearch Configuration
 
 #### OPENSEARCH_URL
-- **Description**: OpenSearch cluster URL
+- **Description**: The search server, with this app's login in the URL. Production:
+  `https://the_greatest_app:<OPENSEARCH_APP_PASSWORD>@<search server IPv4>:9200` (the password is in
+  `secrets/.env.opensearch`). Development: `http://localhost:9200`.
 - **Required**: Yes
-- **Example**: `https://opensearch.example.com:9200`
+- **Used By**: web, worker
+- **Runbook**: `docs/features/opensearch-server.md`
+
+#### OPENSEARCH_SSL_VERIFY
+- **Description**: Set to `false` in production: the search server presents a certificate it generated
+  itself, so there is no CA to verify it against. Any other value, or unset, verifies normally.
+- **Required**: Production only
+- **Example**: `false`
 - **Used By**: web, worker
 
 ### Home server data services
@@ -379,7 +422,8 @@ POSTGRES_PASSWORD=your_postgres_password_here
 REDIS_URL=redis://redis:6379/1
 
 # OpenSearch
-OPENSEARCH_URL=https://opensearch.example.com:9200
+OPENSEARCH_URL=https://the_greatest_app:your_app_password@203.0.113.50:9200
+OPENSEARCH_SSL_VERIFY=false
 
 # SSL Certificates
 CLOUDFLARE_API_TOKEN=your_cloudflare_token_here

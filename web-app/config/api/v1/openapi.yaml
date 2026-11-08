@@ -38,9 +38,9 @@ paths:
           Returns the primary ranking of The Greatest Books, best first, one page at a time; each book
           carries its `rank`, title, authors and first-published year. Use it for "top N" questions,
           narrowing with `country_id`, `year`, `category_id`, `collection` or the published range
-          (list_categories finds category slugs; a book's `countries`, from get_book, shows country
-          slugs), and prefer search_books when you have a title or author. `limit` is at most 100;
-          `meta.total_count` gives the size of the whole result.
+          (list_categories and search_categories find category slugs; list_countries finds country
+          slugs), and prefer search_books when you have a title or author.
+          `limit` is at most 100; `meta.total_count` gives the size of the whole result.
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
@@ -167,6 +167,63 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/books/{slug}/similar:
+    x-domain: books
+    get:
+      operationId: listSimilarBooks
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Books similar to a book
+      description: |
+        Books like this one, scored from the genres, subjects and locations they share, most similar first. At most two books per author appear. Only catalogued books are returned (not books still awaiting review), each with its primary-ranking `rank` (null when unranked). This is a top-N, not a paginated list: `limit` caps it and there are no `links`. `meta.more_available` is true when more similar books may exist beyond this response. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+      x-mcp:
+        description: >-
+          Returns the books most similar to one book, most similar first, at most two per author, each with
+          its primary-ranking `rank` (null when unranked). `meta.more_available` is true when more
+          similar books may exist beyond this response. Take the slug from search_books or find_book; `limit` is at most 25. Use get_book
+          for any one result's detail.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+        - name: limit
+          in: query
+          required: false
+          description: How many similar books to return, at most 25.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 25
+            default: 10
+      responses:
+        "200":
+          description: The book's similar books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarBookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /api/v1/authors:
     x-domain: books
     get:
@@ -216,12 +273,12 @@ paths:
       operationId: getAuthor
       security: [{bearerAuth: ["books:read"]}]
       summary: One author
-      description: The author alone. Their books are not embedded; a paginated sub-collection is a later addition.
+      description: The author alone. Their books are not embedded; they are a paginated sub-collection at `GET /api/v1/authors/{slug}/books`.
       x-mcp:
         description: >-
           Returns one author by slug: rank, birth and death years, kind (person, organization, pseudonym
-          or collective), alternate names and description. It does not list their books; use search_books
-          with the author's name to find them.
+          or collective), alternate names and description. It does not list their books; use
+          list_author_books with the same slug.
       parameters:
         - $ref: "#/components/parameters/slug"
       responses:
@@ -244,6 +301,100 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthorItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/authors/{slug}/books:
+    x-domain: books
+    get:
+      operationId: listAuthorBooks
+      security: [{bearerAuth: ["books:read"]}]
+      summary: An author's books
+      description: The books the author wrote (not ones they only edited), ranked books first in rank order on the site's primary ranking, then the unranked ones (`rank` null) by first publication year and then title. Books still awaiting review are left out. There are no filter parameters.
+      x-mcp:
+        description: >-
+          Returns an author's whole bibliography: their ranked books first, in rank order on the primary
+          ranking, then their unranked books with a null `rank`. Use it for "what did this author write"
+          once you have the author's slug from search_authors or from a book's `authors`; for a
+          non-primary ranking use list_ranking_configuration_author_books.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the author's books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}/authors/{slug}/books:
+    x-domain: books
+    get:
+      operationId: listRankingConfigurationAuthorBooks
+      security: [{bearerAuth: ["books:read"]}]
+      summary: An author's books on one configuration
+      description: The same rows and shape as `/api/v1/authors/{slug}/books`, ranked by the named configuration; `rank` is relative to it, and null for a book that configuration does not rank. Ranked books come first in rank order, then the unranked ones by first publication year and then title.
+      x-mcp:
+        description: >-
+          Returns an author's whole bibliography ranked by one named ranking configuration (an `id` from
+          list_ranking_configurations): books that configuration ranks first, in its order, then the
+          rest with a null `rank`. Prefer list_author_books unless you need a non-primary ranking.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the author's books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -388,19 +539,112 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}/books/{slug}:
+    x-domain: books
+    get:
+      operationId: getRankingConfigurationBook
+      security: [{bearerAuth: ["books:read"]}]
+      summary: One book on one configuration
+      description: The same record as `/api/v1/books/{slug}`, with `rank` relative to the named configuration; null when that configuration does not rank the book.
+      x-mcp:
+        description: >-
+          Returns one book by slug with its full record, its `rank` taken from one named ranking
+          configuration (an `id` from list_ranking_configurations); `rank` is null when that
+          configuration does not rank the book. Prefer get_book unless you need a non-primary ranking.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/slug"
+      responses:
+        "200":
+          description: The book.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}/books/{slug}/lists:
+    x-domain: books
+    get:
+      operationId: listRankingConfigurationBookLists
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Lists a book is on, on one configuration
+      description: Only the active lists the book appears on that the named configuration feeds, with that configuration's `weight` and the book's `position` on each. Heaviest first; a fed list with no weight yet comes last.
+      x-mcp:
+        description: >-
+          Returns the active lists one book appears on that one named ranking configuration (an `id`
+          from list_ranking_configurations) feeds, heaviest first, with the book's `position` on each
+          and that configuration's `weight`. Prefer list_book_lists unless you need a non-primary ranking.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the book's listings on the configuration.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookListingCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/ranking_configurations/{id}/lists:
     x-domain: books
     get:
       operationId: listRankingConfigurationLists
       security: [{bearerAuth: ["books:read"]}]
       summary: Lists behind one configuration
-      description: The same rows and shape as `/api/v1/lists`, on the named configuration; `weight` is relative to it.
+      description: The same rows, shape, `sort` and `q` as `/api/v1/lists`, on the named configuration; `weight` is relative to it.
       x-mcp:
         description: >-
-          Returns the lists that feed one named ranking configuration, heaviest first; `weight` is
-          relative to that configuration. For the primary ranking use list_lists.
+          Returns the lists that feed one named ranking configuration, heaviest first or newest first
+          (`sort`), optionally narrowed by `q` against name, source or web address; `weight` is relative
+          to that configuration. For the primary ranking use list_lists.
       parameters:
         - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/list_sort"
+        - $ref: "#/components/parameters/list_q"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
       responses:
@@ -433,19 +677,65 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/ranking_configurations/{id}/lists/{list_id}:
+    x-domain: books
+    get:
+      operationId: getRankingConfigurationList
+      security: [{bearerAuth: ["books:read"]}]
+      summary: One list on one configuration
+      description: The same record as `/api/v1/lists/{id}` for any active list, with `weight` relative to the named configuration; null when that configuration does not feed the list.
+      x-mcp:
+        description: >-
+          Returns one list by `list_id`, with its `weight` taken from one named ranking configuration
+          (`id`, from list_ranking_configurations); `weight` is null when that configuration does not feed
+          the list. Prefer get_list unless you need a non-primary ranking. Use list_list_items for its books.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/list_id"
+      responses:
+        "200":
+          description: The list.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/lists:
     x-domain: books
     get:
       operationId: listLists
       security: [{bearerAuth: ["books:read"]}]
       summary: Lists behind the primary ranking
-      description: The active lists that feed The Greatest Books' primary ranking, heaviest first. `weight` is the list's weight on that ranking; `item_count` is the number of books `items_api_url` serves.
+      description: The active lists that feed The Greatest Books' primary ranking, heaviest first unless `sort=newest`; `q` narrows them. `weight` is the list's weight on that ranking; `item_count` is the number of books `items_api_url` serves.
       x-mcp:
         description: >-
-          Returns the active lists that feed the primary ranking, heaviest first, each with its source,
-          year, voter count, `weight` and `item_count`. Use get_list for one list and list_list_items for
-          the books on it.
+          Returns the active lists that feed the primary ranking, each with its source,
+          year, voter count, `weight` and `item_count`. Heaviest first by default; `sort=newest` puts the
+          most recently activated first, and `q` narrows to lists whose name, source or web address
+          contains it. Use get_list for one list and list_list_items for the books on it.
       parameters:
+        - $ref: "#/components/parameters/list_sort"
+        - $ref: "#/components/parameters/list_q"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
       responses:
@@ -676,7 +966,7 @@ paths:
         description: >-
           Returns the ranked books that carry one category, best first: list_books limited to that
           category, with the same filters on top. Use it for "best books in this genre" once you have the
-          slug from list_categories.
+          slug from list_categories or search_categories.
       parameters:
         - $ref: "#/components/parameters/slug"
         - $ref: "#/components/parameters/page"
@@ -824,6 +1114,174 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/search/authors:
+    x-domain: books
+    get:
+      operationId: searchAuthors
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Search authors
+      description: |
+        Full-text search over author names and alternate names, best match first. `q` is required; a missing or blank `q` is a 400. Only catalogued authors are returned (not authors still awaiting review). A query yields at most 100 matches, so `total_count` never exceeds 100: refine the query rather than paging for more. `rank` is the author's position in the site's primary author ranking, or null when the author is unranked. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+      x-mcp:
+        description: >-
+          Finds authors by name or alternate name, best match first, with each author's primary-ranking
+          `rank` (null when unranked). A query returns at most 100 matches in all, so refine the query
+          rather than paging for more; once you have a slug, use get_author for one author, or
+          list_author_books for their books.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search text, at most 200 characters once surrounding whitespace is stripped.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of matching authors.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/search/categories:
+    x-domain: books
+    get:
+      operationId: searchCategories
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Search categories
+      description: |
+        Searches categories of every type by name or alternative name, with the same query as the site's category search. `q` is required, 2 to 100 characters once surrounding whitespace is stripped; a missing, blank, too short or too long `q` is a 400. Matches are ranked by how well the name matches (exact name, then a name starting with the query, then a word starting with it, then a name containing it, then a match through an alternative name only). Within each of those tiers, `type` (`genre`, `audience`, `location` or `subject`) puts that type's matches first; it never filters the other types out, and a better name match of another type still comes before a weaker match of the chosen type. Without `type`, genre comes first within each tier, as on the site. Only categories with ranked books in the site's primary ranking are returned, and `book_count` counts those ranked books. Subjects and locations with only a handful of ranked books are left out, as on the site, so a small subject may return nothing. A query yields at most 60 matches, so `total_count` never exceeds 60: refine the query rather than paging for more. Empty until a primary ranking has been calculated.
+      x-mcp:
+        description: >-
+          Finds category slugs by name or alternative name, best match first, with each category's type
+          and ranked `book_count`. Use it to turn a name like "Gothic" into the slug that `category_id`
+          accepts in list_books and list_category_books. Subjects and locations with only a handful of
+          ranked books are left out, so an empty result for a small subject is expected. A query returns
+          at most 60 matches in all, so refine the query rather than paging for more.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search text, 2 to 100 characters once surrounding whitespace is stripped.
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 100
+        - name: type
+          in: query
+          required: false
+          description: The category type whose matches come first within each tier of name match quality. It does not filter; matches of the other types are still returned.
+          schema:
+            type: string
+            enum: [genre, audience, location, subject]
+            default: genre
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of matching categories.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/countries:
+    x-domain: books
+    get:
+      operationId: listCountries
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Countries with ranked books
+      description: |
+        The countries that have ranked books in the site's primary ranking, with the slug that `country_id` accepts on the book endpoints. `book_count` counts the ranked books from the country on the primary ranking, and `url` is the site's ranked page for it. `sort` is `book_count` (most ranked books first, the default) or `name`. A country with no ranked books is left out, and so is "unknown". Empty until a primary ranking has been calculated. Any other `sort` is a 400.
+      x-mcp:
+        description: >-
+          Lists the countries that have ranked books, most books first, with their slugs and
+          `book_count`. Use it to discover the country slugs that `country_id` accepts in list_books
+          and the other book listings, instead of guessing a slug.
+      parameters:
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [book_count, name]
+            default: book_count
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of countries.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CountryCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -849,6 +1307,24 @@ components:
         minimum: 1
         maximum: 100
         default: 50
+    list_sort:
+      name: sort
+      in: query
+      required: false
+      description: "`weight` is heaviest on the ranking first; `newest` is newest by when the list became active."
+      schema:
+        type: string
+        enum: [weight, newest]
+        default: weight
+    list_q:
+      name: q
+      in: query
+      required: false
+      description: Keeps lists whose name, source or web address contains this text, case-insensitively. At most 200 characters once surrounding whitespace is stripped; blank is a 400.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
     category_id:
       name: category_id
       in: query
@@ -859,7 +1335,7 @@ components:
       name: country_id
       in: query
       required: false
-      description: Comma-separated country slugs, up to 10. A book from any of them matches. Cannot be combined with collection.
+      description: Comma-separated country slugs, up to 10, as listed by list_countries (`GET /api/v1/countries`). A book from any of them matches. Cannot be combined with collection.
       schema: {type: string, minLength: 1}
     year:
       name: year
@@ -896,6 +1372,14 @@ components:
       in: path
       required: true
       description: The resource's integer id.
+      schema:
+        type: integer
+        minimum: 1
+    list_id:
+      name: list_id
+      in: path
+      required: true
+      description: The list's integer id, where the path also carries a ranking configuration's `id`.
       schema:
         type: integer
         minimum: 1
@@ -1141,6 +1625,21 @@ components:
           $ref: "#/components/schemas/PaginationMeta"
         links:
           $ref: "#/components/schemas/PaginationLinks"
+    SimilarBookCollection:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Book"
+        meta:
+          type: object
+          required: [more_available]
+          properties:
+            more_available:
+              type: boolean
+              description: True when more similar books may exist beyond this response.
     AppliedFilters:
       type: object
       additionalProperties: false
@@ -1283,7 +1782,7 @@ components:
           description: Books on the list — the rows `items_api_url` serves.
         weight:
           type: [integer, "null"]
-          description: The list's weight on the ranking configuration it was read through — the primary for `/api/v1/lists`, `/api/v1/lists/{id}` and a book's listings; null when the list has no weight on it — it does not feed that configuration, or has not been weighted yet.
+          description: The list's weight on the ranking configuration it was read through — the primary for `/api/v1/lists`, `/api/v1/lists/{id}` and a book's listings, or the named configuration for `/api/v1/ranking_configurations/{id}/lists`, `/api/v1/ranking_configurations/{id}/lists/{list_id}` and `/api/v1/ranking_configurations/{id}/books/{slug}/lists`; null when the list has no weight on it — it does not feed that configuration, or has not been weighted yet.
         activated_at:
           type: [string, "null"]
           format: date-time
@@ -1389,6 +1888,29 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Category"
+    Country:
+      type: object
+      required: [slug, name, book_count, url]
+      properties:
+        slug: {type: string, description: The value `country_id` accepts on the book endpoints.}
+        name: {type: string}
+        book_count:
+          type: integer
+          minimum: 0
+          description: Books in the site's primary ranking from this country.
+        url: {type: string, format: uri, description: The site's ranked page for books from this country.}
+    CountryCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Country"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
     BookListingCollection:
       type: object
       required: [data, meta, links]

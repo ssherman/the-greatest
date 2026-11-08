@@ -386,6 +386,74 @@ module Api
           assert_nil json[:data][:rank]
         end
 
+        # --- show, nested under a ranking configuration ----------------------------
+
+        test "nested show carries that configuration's rank" do
+          year = ranking_configurations(:books_year_2025)
+          RankedItem.create!(item: @war_and_peace, ranking_configuration: year, rank: 7, score: 10)
+
+          get "/api/v1/ranking_configurations/#{year.id}/books/#{@war_and_peace.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal "war-and-peace", json[:data][:slug]
+          assert_equal 7, json[:data][:rank], "the year configuration's rank, not the primary's 1"
+          assert json[:data].key?(:description), "still the full shape"
+        end
+
+        test "nested show of a book unranked there has rank null" do
+          year = ranking_configurations(:books_year_2025)
+          RankedItem.create!(item: @mice, ranking_configuration: year, rank: 1, score: 10)
+
+          get "/api/v1/ranking_configurations/#{year.id}/books/#{@war_and_peace.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert json[:data].key?(:rank)
+          assert_nil json[:data][:rank], "ranked 1 on the primary but not here: no fallback to the primary"
+        end
+
+        test "the primary's id nested gives the same rank as the bare show" do
+          get "/api/v1/books/#{@crime.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+          bare = json[:data]
+
+          get "/api/v1/ranking_configurations/#{@rc.id}/books/#{@crime.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal 2, bare[:rank]
+          assert_equal bare, json[:data]
+        end
+
+        test "an archived, member-owned or unknown configuration is a 404, even for a known book" do
+          archived = ranking_configurations(:books_inherited)
+          archived.update!(archived: true)
+
+          [archived.id, ranking_configurations(:books_user).id, ranking_configurations(:books_user_shared).id,
+            ranking_configurations(:books_authors_global).id, 999_999_999].each do |id|
+            get "/api/v1/ranking_configurations/#{id}/books/#{@war_and_peace.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_conform(status: 404)
+
+            assert_response :not_found, id
+            assert_equal "No ranking configuration at that address", json[:detail], id
+          end
+        end
+
+        test "nested show of an unknown or provisional book is a 404" do
+          get "/api/v1/ranking_configurations/#{@rc.id}/books/no-such-book", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+          assert_equal "No book at that address", json[:detail]
+
+          @crime.update!(provisional: true)
+          get "/api/v1/ranking_configurations/#{@rc.id}/books/#{@crime.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+        end
+
+        test "a bad configuration beats an unknown book" do
+          get "/api/v1/ranking_configurations/999999999/books/no-such-book", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
+
+          assert_equal "No ranking configuration at that address", json[:detail]
+        end
+
         test "show of an unknown slug is a 404 problem" do
           get "/api/v1/books/no-such-book", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 404)
@@ -428,6 +496,16 @@ module Api
           assert_equal "application/problem+json; charset=utf-8", response.content_type
           assert_equal "unauthenticated", json[:code]
           assert_equal 401, json[:status]
+        end
+
+        test "an OAuth token is a 401 invalid_token on REST, with the unchanged challenge" do
+          secret, = issue_oauth_token(oauth_connections(:member_mcp))
+
+          get "/api/v1/books", headers: bearer(secret)
+
+          assert_response :unauthorized
+          assert_equal %(Bearer error="invalid_token"), response.headers["WWW-Authenticate"]
+          assert_equal "invalid_token", json[:code]
         end
 
         test "a token in a query parameter is not honoured -- still a 401" do
@@ -573,6 +651,31 @@ module Api
             get "/api/v1/books", headers: headers, env: {"REMOTE_ADDR" => "203.0.113.8"}
             assert_response :unauthorized
           end
+        end
+
+        # A connector range's window is one counter shared by every claude.ai user,
+        # so exhausting it must not lock out the callers who hold a valid token.
+        test "with a connector range's window exhausted a valid token still gets through and junk is a 429" do
+          freeze_time do
+            connector = {"REMOTE_ADDR" => "160.79.104.9"}
+            limit = Rails.application.config.x.api.connector_range_per_minute.fetch(:unauthenticated)
+            (limit + 1).times { Services::Api::RateLimiter.hit_unauthenticated("160.79.104.9") }
+
+            get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER), env: connector
+            assert_response :success
+
+            get "/api/v1/books", headers: bearer("tg_#{"z" * 40}"), env: connector
+            assert_response :too_many_requests
+            assert_equal "rate_limited", json[:code]
+            assert response.headers["Retry-After"].present?
+            assert_equal "0", response.headers["X-RateLimit-Remaining"]
+          end
+        end
+
+        test "a junk token from a connector range under its limit is a 401, not a 429" do
+          get "/api/v1/books", headers: bearer("tg_#{"z" * 40}"), env: {"REMOTE_ADDR" => "160.79.104.9"}
+
+          assert_response :unauthorized
         end
 
         # --- caching -------------------------------------------------------------

@@ -43,14 +43,18 @@ module DataImporters
         # trusts every row. alternate_title_sources: does the same for alternate
         # titles: given, only kept AlternateTitle rows from these sources count,
         # for the title rules and for what the AI is shown; nil keeps the
-        # books_books.alternate_titles array as it is.
-        def initialize(open_library_client: nil, open_library: :resolve, identifier_sources: nil, alternate_title_sources: nil)
+        # books_books.alternate_titles array as it is. exclude_ids: ids of books
+        # no source may return (the Goodreads re-import keeps mixed books out of
+        # every match); call's exclude: still drops one record.
+        def initialize(open_library_client: nil, open_library: :resolve, identifier_sources: nil, alternate_title_sources: nil,
+          exclude_ids: Set.new)
           raise ArgumentError, "unknown open_library mode: #{open_library.inspect}" unless OPEN_LIBRARY_MODES.include?(open_library)
 
           @open_library_client = open_library_client
           @open_library = open_library
           @identifier_sources = identifier_sources
           @alternate_title_sources = alternate_title_sources
+          @exclude_ids = exclude_ids.to_set
         end
 
         def describe_candidate(candidate)
@@ -82,6 +86,8 @@ module DataImporters
         protected
 
         def model_class = ::Books::Book
+
+        def excluded_ids = @exclude_ids
 
         def ranking_configuration_class = ::Books::RankingConfiguration
 

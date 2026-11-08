@@ -26,11 +26,13 @@ module Api
 
         get "/api/v1/openapi.json"
 
-        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/books/{slug}/lists", "/api/v1/authors", "/api/v1/authors/{slug}",
+        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/books/{slug}/lists", "/api/v1/books/{slug}/similar", "/api/v1/authors", "/api/v1/authors/{slug}",
+          "/api/v1/authors/{slug}/books", "/api/v1/ranking_configurations/{id}/authors/{slug}/books",
           "/api/v1/ranking_configurations", "/api/v1/ranking_configurations/{id}", "/api/v1/ranking_configurations/{id}/books",
-          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
+          "/api/v1/ranking_configurations/{id}/books/{slug}", "/api/v1/ranking_configurations/{id}/books/{slug}/lists",
+          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
           "/api/v1/categories", "/api/v1/categories/{slug}", "/api/v1/categories/{slug}/books",
-          "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books"], response.parsed_body["paths"].keys
+          "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books", "/api/v1/search/authors", "/api/v1/search/categories", "/api/v1/countries"], response.parsed_body["paths"].keys
       end
 
       test "on the music and games hosts the document advertises only what those hosts serve" do
@@ -97,11 +99,13 @@ module Api
 
       test "the document itself is valid enough to load" do
         assert_kind_of Hash, ::Api::OpenapiDocument.raw
-        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/books/{slug}/lists", "/api/v1/authors", "/api/v1/authors/{slug}",
+        assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}", "/api/v1/books/{slug}/lists", "/api/v1/books/{slug}/similar", "/api/v1/authors", "/api/v1/authors/{slug}",
+          "/api/v1/authors/{slug}/books", "/api/v1/ranking_configurations/{id}/authors/{slug}/books",
           "/api/v1/ranking_configurations", "/api/v1/ranking_configurations/{id}", "/api/v1/ranking_configurations/{id}/books",
-          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
+          "/api/v1/ranking_configurations/{id}/books/{slug}", "/api/v1/ranking_configurations/{id}/books/{slug}/lists",
+          "/api/v1/ranking_configurations/{id}/lists", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
           "/api/v1/categories", "/api/v1/categories/{slug}", "/api/v1/categories/{slug}/books",
-          "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books"], ::Api::OpenapiDocument.raw["paths"].keys
+          "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books", "/api/v1/search/authors", "/api/v1/search/categories", "/api/v1/countries"], ::Api::OpenapiDocument.raw["paths"].keys
       end
     end
   end

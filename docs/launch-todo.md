@@ -106,12 +106,11 @@ second export on the same day reuses the day's file name and the trainer reports
    queues `Books::MergeUnknownAuthorsJob`, which merges them through the author merger and asks for one
    author ranking refresh. Idempotent: with nothing left it prints "Nothing to merge." The first run
    after the deploy that adds it merges the backlog (in dev, 35 authors into "Unknown").
-
 10. **Optional, manual: `bin/rails "books:categorize:backfill[origin_only,all,weekly]" APPLY=1`**. It applies
-   only after you have run section 12 step 2 once, and it needs `APPLY=1` like that step. Re-running it
+   only after you have run section 14 step 2 once, and it needs `APPLY=1` like that step. Re-running it
    after the sync picks up the books the sync added; it plans only the books the sync added and the books a deferred
    research or a failure left undone (deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it). Books with a running import are left to their import. While the
-   section 12 backfill is still running, the weekly run reports almost every book as reused, and new books
+   section 14 backfill is still running, the weekly run reports almost every book as reused, and new books
    start after the backfill's last slot.
 
 ## 5. Cleanup, after the switch-over
@@ -245,6 +244,10 @@ the sync never undoes them.
      "Finishing legacy imports".
 5. **The Firebase bulk import, one last time** (`docs/features/v1-user-migration.md`, "Running it"),
    then never again (section 8).
+6. **Let the new worker server reach search.** When web and worker move to separate servers, add the
+   worker server's IPv4 to `OPENSEARCH_ALLOWED_IPS` (`sops secrets/.env.opensearch`), merge, and run
+   the "Deploy OpenSearch" workflow before the worker starts using search. See
+   `docs/features/opensearch-server.md`, "Add or remove an app server".
 
 ## 7. Pointing thegreatestbooks.org at this app
 
@@ -275,6 +278,10 @@ the sync never undoes them.
   switch. It is not specced yet.
 - **Remove the `LEGACY_R2_*` credentials from production secrets** after the last replay load and
   the last cover-image run.
+- **Remove the old site's server from the search allowlist.** When the old site's web/worker server
+  is shut down, remove its IP from `OPENSEARCH_ALLOWED_IPS` and run the "Deploy OpenSearch"
+  workflow. Removing an IP does not cut connections it already has open; the runbook's "Add or remove
+  an app server" says how.
 - **Remove the stale `FIREBASE_PROJECT_ID`** from production secrets. The project id is hardcoded
   now, so the variable does nothing and could mislead someone later.
 
@@ -470,15 +477,92 @@ The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve o
       blocked, raise `GOODREADS_DAILY_FETCH_CAP` in the production env (SOPS) and restart the worker.
       Above 5,760 a day, lower `GOODREADS_FETCH_INTERVAL` too.
 
-## 12. Book origins (the backfill once, then weekly)
+## 12. Goodreads re-import (one run, then repeats only if the sync is changed)
+
+Matches every legacy CSV row to the exact book it names and moves each reader's entries there. Design:
+`docs/superpowers/specs/2026-11-02-goodreads-reimport-design.md`; how it works, and where each output lands:
+`docs/features/goodreads-reimport.md`. It replaces stage two of section 11.
+
+**Do not run `data_migration:sync` until it has been checked against this run and changed so it cannot revert
+it** (spec section 3.9). As it stands it rewrites legacy users' lists and would undo moved rows.
+
+Do not start until the new enrichment steps (categories, origin) and the Goodreads search page fix are deployed.
+Every step below only queues a Sidekiq job; wait for the jobs to finish before the next step.
+
+1. **Gate on, enrichment off.** Set `GOODREADS_REIMPORT_ENABLED=true` in the production env (SOPS) and restart
+   the worker. Leave `GOODREADS_REIMPORT_ENRICHMENT` unset.
+2. **Refresh the survey.** `bin/rails "books:goodreads_rebuild:survey[all,redo]"`. The mixed books are read
+   from it.
+3. **Archive the mixed books.** `bin/rails books:goodreads_reimport:archive_mixed`. It records verdicts and
+   deletes nothing.
+4. **Match every edition.** `bin/rails "books:goodreads_reimport:match[200]"` first, then
+   `bin/rails "books:goodreads_reimport:match[all]"`. Run `[all]` again for any editions left.
+5. **Report and review.** `bin/rails books:goodreads_reimport:report`; find the file at
+   `storage/goodreads_reimport/report-<UTC time>.md` (the path is in the Sidekiq log). The worker writes it
+   into the shared storage volume, mounted in both web and worker, so read it from either container. The
+   snapshot's `counts.json` lands in the same folder. Then in Admin, Repair
+   verdicts, review the proposed `reimport_match` ones: approve the right ones, reject the wrong ones. Rejected
+   matches leave their rows waiting; the report lists them.
+6. **Apply the matches.** `bin/rails books:goodreads_reimport:apply`. This writes approved matches and creates
+   the new books.
+7. **Decide.** `bin/rails "books:goodreads_reimport:decide[200]"`, then `decide[all]`. Run `decide[all]` a
+   second time once the first has finished: the second pass decides the guesses for mixed books, which wait
+   until their rows are decided.
+8. **Snapshot.** `bin/rails books:goodreads_reimport:snapshot`, before the first apply that moves rows. It
+   refuses to replace an existing snapshot; `snapshot[redo]` does, but never use it after a row has moved.
+   A `counts.json` taken before the by-id check holds counts but no ids, and the report then prints "NOT CHECKED. The
+   snapshot predates id tracking". Run `bin/rails "books:goodreads_reimport:snapshot[redo]"` once, before any row
+   has been applied, to replace it.
+9. **Apply.** `bin/rails books:goodreads_reimport:apply`. Re-running is safe.
+10. **Check the authors, then apply.** `bin/rails "books:goodreads_reimport:check_authors[200]"`, then
+    `check_authors[all]`, then `bin/rails books:goodreads_reimport:apply` again.
+11. **Report.** `bin/rails books:goodreads_reimport:report` again. The acceptance lines at the bottom should
+    each print 0. Conflicts and verdicts closed because there was nothing left to do are listed in it; read them.
+12. **Sample.** `bin/rails books:goodreads_reimport:sample`. The result is in the Sidekiq log (search
+    "Goodreads re-import sample check"), not in a file. If a deploy interrupted it, enqueue it again. **Any
+    "no" stops the run** until its cause is fixed.
+13. **Enrichment on.** Only after the new enrichment steps have landed: set
+    `GOODREADS_REIMPORT_ENRICHMENT=true` and restart the worker. The new books then enrich.
+
+Each job can be stopped and run again safely. If a deploy interrupts a long job, run the same task again.
+
+## 13. MCP sign-in (OAuth)
+
+Lets members connect claude.ai, Claude Desktop and mobile to `/api/mcp` by signing in, with no token to paste.
+How it works: `docs/features/mcp-server.md`, "Signing in with OAuth". Design:
+`docs/superpowers/specs/2026-11-02-mcp-oauth-design.md` (D15, D17). Nothing here runs on deploy, but step 1 depends on one.
+
+1. **Deploy, then apply the edge change for the `/.well-known/oauth-*` paths, then make the first claude.ai connection.**
+   Deploy this branch first. Apply the edge change only after the two `/.well-known/oauth-*` documents answer
+   200 from the origin. The edge change is a rule in the private Cloudflare repo, prepared as a PR there. Merge
+   it, then apply it by hand with that repo's own process. claude.ai's backend cannot solve a challenge, so until the rule is live its
+   discovery request fails and the connector never reaches the sign-in page. No detail of the rule belongs
+   in this repo. To check it, fetch `https://<books host>/.well-known/oauth-authorization-server` from
+   outside, with no browser cookies, and expect JSON.
+2. **Confirm the production books hostname is admitted.** Both lists come from `BOOKS_DOMAIN` through
+   `config.domains`: `config.hosts` (`config/initializers/host_authorization.rb`) and the MCP transport's
+   `allowed_hosts` (`Api::McpController#transport`). Check that the production env's `BOOKS_DOMAIN` holds the
+   hostname members will type, and that its first entry is the one that should appear in the metadata:
+   `Api::Host.base_url` uses the first entry as the issuer and in every endpoint URL. A mismatch fails
+   with a Host-header refusal or a protected-resource `resource` that differs from the URL the client typed.
+3. **At the thegreatestbooks.org switch (section 7), members re-add the connector with the new URL.**
+   A connection records its resource as a key, not a URL, so existing connections keep working under the new
+   host. But claude.ai drops `Authorization` across redirects, so a connector still pointed at the old
+   hostname is redirected, arrives with no token, and cannot get in. Tell members who connected before the switch to
+   remove the connector and add `https://thegreatestbooks.org/api/mcp`. Books is not live yet, so few
+   connections will exist by then.
+
+## 14. Book origins (the backfill once, then weekly)
 
 Fills in each book's country of origin through the `books.book_categorize` workflow. Only you start the
 backfill, by hand, with `APPLY=1`; nothing schedules it or starts it automatically. Run it after the
-Goodreads replay/rebuild (section 11) is done, since that removes crufty books and finds duplicates, and
+Goodreads re-import (section 12) is done, since that removes crufty books and finds duplicates, and
 the books and authors it creates already go through the full import workflow, origin step included. The
 backfill runs once here; the weekly run is section 4, step 10, and is optional.
 
-1. The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10).
+1. The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10). It needs a local
+   Wikidata copy first: remote Wikidata refuses requests whenever its lag passes 5 seconds, which in November
+   2026 was most of the day, so it cannot carry a bulk run (Wikimedia asks bulk readers to use the dumps).
 2. In production (you run it by hand with `!`; this is the only way it starts), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
    to see the count, then again with `APPLY=1`. It paces itself at one book every 8 seconds, so the whole
    catalog (about 159,000 books) takes about 15 days; the dry run prints the hours. The ranked books go first. The research cap for the backfill is
