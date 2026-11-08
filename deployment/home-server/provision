@@ -51,7 +51,9 @@ case "$mode" in
     converge_host_dns
     converge_host_packages
     converge_host_network
+    converge_host_nic
     converge_host_firewall
+    converge_host_watchdog
     require_host_ready_for_vms
     if ! pgverify_enabled; then log "pgverify is off (PGVERIFY_ENABLED is not 1): VM 140 is neither created nor changed"; fi
     for role in $(managed_roles); do ensure_vm "$role"; done
