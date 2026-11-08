@@ -286,6 +286,10 @@ running server. With archiving switched off, or a command that succeeds without 
 and the failure counter stays flat, so the other checks would stay green: the exact failure this spec exists to
 prevent.
 
+**Decision made during implementation:** the stored failure count is kept with `pg_stat_archiver.stats_reset`. A restore
+restarts Postgres and the counter, and a lower count was once read as a reset, hiding 3 real failures (2026-11-08). When
+`stats_reset` has changed the baseline is 0, so any failure since the reset alerts.
+
 Each must be tested failing as well as passing (§2, step 3), because the failure this replaces was silence. A test
 passes only when Shane has actually seen the alert, not when healthchecks.io has sent it: in November 2026 a home server
 outage alerted correctly for over three days, unseen, because the email was filed as a newsletter. Before Phase 3 these
