@@ -14,12 +14,15 @@ from worldcat.api.schemas import (
     LookupRequest,
     LookupResponse,
     Record,
+    RecordsRequest,
+    RecordsResponse,
 )
 from worldcat.pipeline.distill import LOOKUP_COLUMNS
 from worldcat.pipeline.paths import WorldcatPaths
 
 router = APIRouter()
 MAX_BATCH = 500
+MAX_RECORDS_BATCH = 50
 RECORD_COLUMNS = (
     "oclc",
     "title",
@@ -53,12 +56,15 @@ def fetch_records(
         return {}
     placeholders = ", ".join("?" for _ in oclcs)
     columns = ", ".join(f"r.{c}" for c in RECORD_COLUMNS)
+    # Filter each side before the join. Joined bare, DuckDB pushes the oclc filter to one
+    # side only and scans most of the other (~3 s per record against the full artifact).
     rows = cur.execute(
+        f"WITH r AS (SELECT * FROM '{paths.table('records')}' WHERE oclc IN ({placeholders})), "
+        f"h AS (SELECT oclc, total_holding_count, total_editions "
+        f"FROM '{paths.table('holdings')}' WHERE oclc IN ({placeholders})) "
         f"SELECT {columns}, h.total_holding_count, h.total_editions AS holdings_editions "
-        f"FROM '{paths.table('records')}' r "
-        f"LEFT JOIN '{paths.table('holdings')}' h USING (oclc) "
-        f"WHERE r.oclc IN ({placeholders})",
-        oclcs,
+        f"FROM r LEFT JOIN h USING (oclc)",
+        [*oclcs, *oclcs],
     ).fetchall()
     out: dict[int, Record] = {}
     for row in rows:
@@ -172,6 +178,27 @@ def get_oclc(number: int, state: ArtifactState = Depends(get_state)):
         return record.model_copy(update={"redirected_from": redirected_from})
 
     return _with_deadline(state, run)
+
+
+@router.post("/records", response_model=RecordsResponse)
+def post_records(request: RecordsRequest, state: ArtifactState = Depends(get_state)):
+    """Full records for several OCLC numbers in one query. Each number resolves as in
+    `/oclc/{number}`; cycles and unknown numbers are absent from the results."""
+    if len(request.oclcs) > MAX_RECORDS_BATCH:
+        raise HTTPException(
+            status_code=422, detail=f"at most {MAX_RECORDS_BATCH} OCLC numbers per request"
+        )
+
+    def run(cur):
+        resolved = {n: resolve_oclc(cur, state.paths, n) for n in dict.fromkeys(request.oclcs)}
+        records = fetch_records(cur, state.paths, sorted({c for c, _ in resolved.values() if c}))
+        return {
+            str(number): records[current].model_copy(update={"redirected_from": redirected_from})
+            for number, (current, redirected_from) in resolved.items()
+            if current is not None and current in records
+        }
+
+    return RecordsResponse(results=_with_deadline(state, run))
 
 
 @router.post("/lookup", response_model=LookupResponse)

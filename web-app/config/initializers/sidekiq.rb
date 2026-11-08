@@ -25,6 +25,15 @@ Sidekiq.configure_server do |config|
     cap.queues = %w[goodreads_fetch]
   end
 
+  # Evidence gathering (Wikidata, Wikipedia, WorldCat), one step at a time. Every
+  # Wikimedia request shares a 1 request/second pace, so steps running in parallel
+  # lose their slot, give up and restart from scratch. A single file lane lets each
+  # one finish (Services::Books::Evidence::Gather waits longer for a slot here).
+  config.capsule("evidence") do |cap|
+    cap.concurrency = 1
+    cap.queues = %w[evidence]
+  end
+
   # Load cron jobs
   schedule_file = "config/schedule.yml"
 

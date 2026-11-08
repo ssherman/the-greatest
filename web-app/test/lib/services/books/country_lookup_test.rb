@@ -91,6 +91,33 @@ module Services
 
         assert_equal [british], CountryLookup.from_wikidata(["Q145", "Q174193"], client: client).countries
       end
+
+      test "from_text resolves a country name to its nationality row" do
+        french = books_countries(:french)
+        assert_equal [french], CountryLookup.from_text(["France"]).countries
+      end
+
+      test "England resolves to the English row, not British" do
+        country("British")
+        english = country("English")
+        assert_equal [english], CountryLookup.from_text(["England"]).countries
+        assert_equal [country("Scottish")], CountryLookup.from_text(["Scotland"]).countries
+      end
+
+      test "Niger never resolves to Nigerian" do
+        country("Nigerian")
+        assert_empty CountryLookup.from_text(["Niger"]).countries
+        assert_equal ["Niger"], CountryLookup.from_text(["Niger"]).unmatched
+        assert_empty CountryLookup.from_iso(["NE"]).countries
+        nigerien = country("Nigerien")
+        assert_equal [nigerien], CountryLookup.from_text(["Niger"]).countries
+        assert_equal [nigerien], CountryLookup.from_iso(["NE"]).countries
+      end
+
+      test "a nationality row still wins over the country-name fallback" do
+        english = country("English")
+        assert_equal [english], CountryLookup.from_text(["English"]).countries
+      end
     end
   end
 end

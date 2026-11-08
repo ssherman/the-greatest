@@ -15,6 +15,8 @@ module Services
 
       PAGE_RANGE = /\A\d+(-\d+)?\z/
       RECORDED_ONLY = %w[book_type series_name series_number].freeze
+      # Recorded with a reason of their own: the origin step decides these now.
+      SUPERSEDED = %w[origin_countries].freeze
 
       def self.call(book:, facts:, citations: [], description: nil)
         new(book: book, facts: facts, citations: citations, description: description).call
@@ -39,7 +41,6 @@ module Services
           apply_page_range
           apply_subtitle
           apply_alternate_titles
-          apply_origin_countries
           record_only_facts
           apply_description
 
@@ -155,27 +156,14 @@ module Services
         record(:alternate_titles, f, applied: true, reason: "filled", value: added)
       end
 
-      def apply_origin_countries
-        f = fact(:origin_countries)
-        names = Array(f[:value]).map { |n| n.to_s.strip }.reject(&:blank?).uniq(&:downcase)
-        return record(:origin_countries, f, applied: false, reason: "null", value: [], unmatched: []) if names.empty?
-        return record(:origin_countries, f, applied: false, reason: "already_set", unmatched: []) if book.book_countries.exists?
-
-        lookup = CountryLookup.from_text(names)
-        lookup.countries.each { |country| book.book_countries.build(country: country) }
-        matched = names - lookup.unmatched
-
-        if lookup.countries.any?
-          record(:origin_countries, f, applied: true, reason: "filled", value: matched, unmatched: lookup.unmatched)
-        else
-          record(:origin_countries, f, applied: false, reason: "no_match", unmatched: lookup.unmatched)
-        end
-      end
-
       def record_only_facts
         RECORDED_ONLY.each do |name|
           f = fact(name.to_sym)
           record(name, f, applied: false, reason: f[:value].nil? ? "null" : "not_applied_yet")
+        end
+        SUPERSEDED.each do |name|
+          f = fact(name.to_sym)
+          record(name, f, applied: false, reason: f[:value].blank? ? "null" : "superseded")
         end
       end
 

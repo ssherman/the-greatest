@@ -20,7 +20,7 @@ class BooksEnrichRakeTest < ActiveSupport::TestCase
   test "books:evidence prints the QID, sections and failed sources" do
     book = books_books(:got)
     enrichment = book.enrichments.create!(kind: "books.evidence", outcome: :applied, facts: {
-      "wikidata" => {"qid" => "Q42", "via" => "isbn"}, "wikipedia" => nil, "worldcat" => {}, "sources_failed" => ["wikipedia"]
+      "wikidata_qid" => "Q42", "wikidata" => {"qid" => "Q42", "via" => "isbn"}, "wikipedia" => nil, "worldcat" => {}, "sources_failed" => ["wikipedia"]
     })
     ::Services::Books::Evidence::Gather.expects(:call).with(book: book).returns(stub(data: {enrichment: enrichment}))
     task = Rake::Task["books:evidence"]

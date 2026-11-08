@@ -49,8 +49,9 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    pass-through of the text the reviewer objected to; an empty review reply (no spoilers
    verdict at all) is `review_failed`, the same as a call that errored outright.
 4. **Apply.** `Services::Books::ApplyBookFacts` fills blanks only: year, original language,
-   word count, page range, subtitle, alternate titles (union), and origin countries (only when
-   the book has none). Book type and series are recorded but not applied. Nothing overwrites a
+   word count, page range, subtitle and alternate titles (union). Origin countries are recorded
+   with reason `superseded` and never applied: the `categorize` step (`books.origin` kind, below) decides
+   the origin. Book type and series are recorded but not applied. Nothing overwrites a
    value that is set, which is what protects human corrections. If `recognized` was false
    nothing is applied at all. If the knowledge run was recognized but `low` confidence and the
    research run is about to follow, nothing is applied either (facts recorded as `deferred`,
@@ -80,13 +81,13 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 
 ## The ledger
 
-`Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`, `books.goodreads` or `books.evidence`), `mode`
+`Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`, `books.goodreads`, `books.evidence` or `books.origin`), `mode`
 (knowledge/research/sourced), `outcome` (applied, nothing_to_apply, unrecognized, skipped, failed),
 `recognized`, `confidence`, `facts` JSON, `citations`, `provider`, `model`, `ai_chat_id`,
-`error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (`origin_countries`
-also carries `unmatched`, and `description` carries `review`); reasons are `filled`,
+`error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (historical
+`origin_countries` entries also carry `unmatched`, which new rows do not, and `description` carries `review`); reasons are `filled`,
 `already_set`, `null`, `invalid`, `no_match`, `not_applied_yet`, `human_cleared`, `unrecognized`,
-`rejected`, `review_failed`, `deferred`. `deferred` means a low-confidence knowledge answer was
+`rejected`, `review_failed`, `deferred`, `superseded`. `deferred` means a low-confidence knowledge answer was
 recorded but left for the research run to verify. `human_cleared` means the field was deliberately blanked by an
 applied correction (the corrections flow accepts blanks on purpose) and the AI value is never
 used to refill it. Useful queries:
@@ -115,19 +116,64 @@ searches by first.
 
 The `evidence` step of the book workflow (`Services::Books::Evidence::Gather`) writes one row per run:
 the facts about the book that stage 2 (origin) and stage 3 (categories) will read, so they never call
-Wikidata, Wikipedia or WorldCat themselves. `facts` carries `"schema_version" => 1` and these keys:
+Wikidata, Wikipedia or WorldCat themselves. `facts` carries `"schema_version" => 2` and these keys:
 `wikidata` (the QID, how it was found, label, description and list fields such as countries, languages,
-genres, main subjects and narrative locations; nil when no work was confirmed), `wikipedia` (lead of at
+genres, main subjects and narrative locations, plus schema 2's `country_ids` (the work's P495 QIDs) and
+`country_matches` (the `Books::Country` names they map to through `CountryLookup.from_wikidata`); version-1
+rows lack both keys and readers treat a missing key as `[]`; nil when no work was confirmed), `wikipedia` (lead of at
 most 2,000 characters and plot of at most 6,000, reached only through the Wikidata item's enwiki
 sitelink, never a text search), `worldcat` (summary of at most 1,500 characters and the top 40 subjects,
 after a title, author and year identity check of the book's unverified ISBNs; ISBNs on verified identifiers skip the check), `wikidata_rejected`, `wikidata_conflict_book_id`
-and `sources_failed`. The outcome is `applied` when any section is present, otherwise `nothing_to_apply`.
+and `sources_failed`. The step runs on the single-file `evidence` queue (capsule concurrency 1) so gathers do not
+compete for the shared 1 request/second Wikimedia pace, and waits up to 30 s for a slot rather than 5 s. The outcome is `applied` when any section is present, otherwise `nothing_to_apply`.
 `bin/rails books:evidence[id]` gathers it inline for one book and prints the QID, how it was found, the
 sections present and `sources_failed` (dev inspection; it writes a row).
+
+Books whose authors are all placeholders ("Unknown", "Various") or place names ("China") accept a Wikidata
+work that has no P50 or whose P50 values are all `Q4233718` (anonymous); any other P50 is an
+`author_mismatch`. Books with a person author are matched as before.
 
 A row written before the WorldCat service is reachable in production records `worldcat` in
 `sources_failed` with no WorldCat section; stage 2 must re-gather those rows. `wikidata_qid` is the QID
 resolution ended with (or nil) and `source_errors` maps each failed source to its error class and message.
+
+
+### The `books.origin` kind
+
+The `categorize` step (`Services::Books::Origin::Judge`) writes one row per mode run (one for knowledge,
+a second when research follows). Every row's `facts` carries `prompt_version` (the origin task's
+`PROMPT_VERSION`), `context` (`import`, `backfill` or `admin`), `label`, `path`, `dossier`, `answer`,
+`origin` and `deferred_research`. `path` says how the row was reached:
+
+- `shortcut`: the Wikidata country agrees with the evidence, so no AI call is made (confidence `high`).
+- `judge`: the origin task answered, from knowledge or from research.
+- `has_origin`: the book already holds a real country and `force` is off; nothing is asked.
+  A book whose latest row owes research is not skipped as `has_origin`: it is researched when permitted, otherwise the debt is carried forward on the `has_origin` row (`deferred_research` true).
+- A book with no title writes a `skipped` row with reason `missing_inputs`.
+
+`Services::Books::Origin::Apply` decides whether an answer may be written, and its reason is the row's
+reason: `filled`, `already_set`, `null`, `placeholder_answer` ("Unknown", "Multiple", ... never written),
+`no_match` (the answer names no existing `Books::Country`; one is never created), `low_confidence`,
+`unsupported` (a medium answer with no supporting evidence), and `disagreement` (a high-confidence answer
+that differs from the held country, which is never overwritten). A knowledge answer that is `low`
+confidence, or unrecognized, while the book has no real country, is followed by a research run when the
+budget allows. A book published at or after `config.x.ai.knowledge_cutoff_year` starts with research. When
+research is wanted but there is no budget, the knowledge row gets `deferred_research => true`; a later run
+of a deferred book (current prompt version, research permitted) goes straight to research. When
+`book_facts` already researched in this run, nothing is deferred: the judge runs from knowledge with that
+research-backed `book_facts` row as evidence (its sources and description reach the prompt as "Web-verified
+facts"). A recognized research-mode `book_facts` row (`Dossier#research_backed?`) keeps a not-recognized
+judge answer from being marked `unrecognized`, and supports a `medium` answer that names the same country
+(`Dossier#external?` still means Wikidata, Wikipedia or WorldCat only). `EnrichBookJob` passes
+`book_facts_researched` to its categorize run after a research enrichment, so that run does not search again.
+
+Books adopted through `Workflows::Books::AdoptDeferred` (which plans only `book_facts`) get their origin
+from the origin backfill, not from their adopted run.
+
+Two research caps apply. Imports and admin runs spend `config.x.ai.research_daily_cap`, counted as
+`Enrichment.against_research_cap` as `EnrichBook` does (backfill origin research is excluded). The backfill spends its own
+`config.x.ai.categorize_backfill_research_daily_cap` (default 0), counted from research-mode `books.origin`
+rows created today whose `facts->>'context'` is `backfill`; backfill rows do not spend the shared cap.
 
 ## Tuning
 

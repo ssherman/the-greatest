@@ -7,6 +7,7 @@ module Services
         setup do
           @book = books_books(:war_and_peace)
           @wikidata = mock("wikidata")
+          @wikidata.stubs(:country_codes).returns({})
           @wikipedia = mock("wikipedia")
           @worldcat = mock("worldcat")
           @work = ::Wikidata::Work.from_payload(
@@ -25,6 +26,32 @@ module Services
             data: {qid: work&.id, via: "stored", work: work, conflict_book_id: nil, rejected: [{"id" => "Q1", "reason" => "x"}]})
         end
 
+        test "its default Wikidata and Wikipedia clients use the evidence lane's longer inline wait" do
+          waits = []
+          builder = ->(**kwargs) { waits << kwargs[:http].settings.max_inline_wait }
+          ::Wikidata::Client.stubs(:new).with { |**kwargs| builder.call(**kwargs) || true }.returns(@wikidata)
+          ::Wikipedia::Client.stubs(:new).with { |**kwargs| builder.call(**kwargs) || true }.returns(@wikipedia)
+          @wikidata.stubs(:find_work).returns(nil)
+          ResolveWikidataWork.stubs(:call).returns(resolved(work: nil))
+          @worldcat.stubs(:lookup).returns({})
+          @worldcat.stubs(:records_by_oclc).returns({})
+
+          Gather.call(book: @book, worldcat: @worldcat)
+
+          assert_equal [30.0, 30.0], waits
+          assert_equal 5.0, Rails.application.config.x.wikimedia.max_inline_wait
+        end
+
+        test "evidence_http_settings copies every setting Http reads and leaves the shared config alone" do
+          shared = Rails.application.config.x.wikimedia
+          settings = Gather.evidence_http_settings
+
+          assert_equal [shared.evidence_max_inline_wait, shared.requests_per_window, shared.window_seconds, shared.maxlag, shared.contact],
+            [settings.max_inline_wait, settings.requests_per_window, settings.window_seconds, settings.maxlag, settings.contact]
+          assert_not_same shared, settings
+          assert_equal 5.0, shared.max_inline_wait
+        end
+
         def gather
           Gather.call(book: @book, wikidata: @wikidata, wikipedia: @wikipedia, worldcat: @worldcat)
         end
@@ -32,6 +59,7 @@ module Services
         test "a full hit writes one row with all three sections and English labels" do
           ResolveWikidataWork.expects(:call).with(book: @book, client: @wikidata).returns(resolved)
           @wikidata.expects(:labels).once.returns({"Q159" => "Russian Empire", "Q7737" => "Russian", "Q8261" => "novel"})
+          @wikidata.stubs(:country_codes).returns("Q159" => {"code" => "RU", "label" => "Russia"})
           @wikipedia.expects(:article).with(language: "en", title: "War and Peace").returns(@article)
           WorldCatSection.expects(:call).with(book: @book, client: @worldcat).returns(@section)
 
@@ -44,13 +72,13 @@ module Services
           row = result.data[:enrichment]
           assert row.applied?
           facts = row.facts
-          assert_equal 1, facts["schema_version"]
+          assert_equal 2, facts["schema_version"]
           assert_equal ["Russian Empire"], facts["wikidata"]["countries"]
           assert_equal ["Russian"], facts["wikidata"]["languages"]
           assert_equal "Q161531", facts["wikidata"]["qid"]
           assert_equal "Q161531", facts["wikidata_qid"]
           assert_equal %w[qid via label description countries languages genres main_subjects narrative_locations
-            set_in_periods forms publication_years enwiki_title].sort, facts["wikidata"].keys.sort
+            set_in_periods forms publication_years enwiki_title country_ids country_matches].sort, facts["wikidata"].keys.sort
           assert_equal %w[title url lead plot infobox].sort, facts["wikipedia"].keys.sort
           assert_equal({}, facts["source_errors"])
           assert_equal "A plot", facts["wikipedia"]["plot"]
@@ -58,6 +86,46 @@ module Services
           assert_equal [{"id" => "Q1", "reason" => "x"}], facts["wikidata_rejected"]
           assert_nil facts["wikidata_conflict_book_id"]
           assert_equal [], facts["sources_failed"]
+        end
+
+        test "the wikidata section carries P495 ids and the countries they map to" do
+          work = ::Wikidata::Work.from_payload(
+            "id" => "Q161531", "label" => "Le Livre", "countries" => ["Q142"], "languages" => [], "genres" => [],
+            "main_subjects" => [], "narrative_locations" => [], "set_in_periods" => [], "forms" => [],
+            "publication_years" => [], "enwiki_title" => nil
+          )
+          ResolveWikidataWork.expects(:call).returns(resolved(work: work))
+          @wikidata.stubs(:labels).returns({"Q142" => "France"})
+          @wikidata.expects(:country_codes).with(["Q142"]).returns("Q142" => {"code" => "FR", "label" => "France"})
+          WorldCatSection.expects(:call).returns(nil)
+
+          facts = gather.data[:enrichment].facts
+
+          assert_equal 2, facts["schema_version"]
+          assert_equal ["Q142"], facts["wikidata"]["country_ids"]
+          assert_equal ["French"], facts["wikidata"]["country_matches"]
+        end
+
+        test "a Wikidata error while mapping countries fails the wikidata source" do
+          ResolveWikidataWork.expects(:call).returns(resolved)
+          @wikidata.stubs(:labels).returns({})
+          @wikidata.expects(:country_codes).raises(Wikimedia::Exceptions::NetworkError.new("down"))
+          WorldCatSection.expects(:call).returns(nil)
+
+          row = gather.data[:enrichment]
+
+          assert_equal ["wikidata"], row.facts["sources_failed"]
+          assert_nil row.facts["wikidata"]
+        end
+
+        test "a rate limit while mapping countries propagates and writes nothing" do
+          ResolveWikidataWork.expects(:call).returns(resolved)
+          @wikidata.stubs(:labels).returns({})
+          @wikidata.expects(:country_codes).raises(Wikimedia::Exceptions::RateLimited.new("slow", retry_after: 5))
+
+          assert_no_difference -> { Enrichment.count } do
+            assert_raises(Wikimedia::Exceptions::RateLimited) { gather }
+          end
         end
 
         test "a conflict records the other book's id" do

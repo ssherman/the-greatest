@@ -227,6 +227,16 @@ The single-ISBN route still pays one `records` row group per record found, so a 
 in the seconds; the backfill never calls it. If that route ever matters, read the OCLC numbers from
 `lookup` and fetch `records` one `oclc = ?` at a time (30 ms each), or move it to `lookup` too.
 
+### Full-record fetches filter both sides of the holdings join
+
+`fetch_records` (behind `GET /oclc/{number}`, `GET /isbns/{isbn}` and `POST /records`) used to
+`records LEFT JOIN holdings USING (oclc) WHERE r.oclc IN (...)`. DuckDB pushed that filter to one
+side only and scanned most of `holdings`, so one record took 2.7 to 3.2 s against the full
+artifact (records alone: 0.5 s; holdings alone: 0.01 s). It now filters `records` and `holdings`
+by the OCLC list in CTEs first and joins the results, which brings it to the records-only cost. The
+result shape is unchanged. `POST /records` exists so a caller that needs several full records pays
+that cost once, not once per number.
+
 ## HTTP contract
 
 All responses are JSON. `worldcat.api.schemas.Record` is the one record shape:
@@ -247,6 +257,7 @@ All responses are JSON. `worldcat.api.schemas.Record` is the one record shape:
 |---|---|
 | `GET /isbns/{isbn}` | ISBN-10 or -13, normalised to 13. Returns `{"isbn13": ..., "records": [...]}`. An unknown ISBN is `200` with an empty list (absence is an answer). An invalid ISBN or check digit is `422`. |
 | `GET /oclc/{number}` | Follows a redirect; the record carries `redirected_from`. A cycle is not followed. Unknown is `404`. |
+| `POST /records` | `{"oclcs": [...]}`, at most 50 (more is `422`). Returns `{"results": {"<number as sent>": record}}` with the full record (as `GET /oclc/{number}`). Each number resolves like `GET /oclc/{number}`: a redirect returns the current record with `redirected_from` set; a cycle or unknown number is simply absent (no `404`). One `fetch_records` query serves the whole batch. |
 | `POST /lookup` | `{"isbn13s": [...]}`, at most 500 (more is `422`). Returns `{"results": {"<isbn as sent>": [records...]}}` with every requested key present. Each record is the **category-bearing subset** (`worldcat.api.schemas.LookupRecord`: `oclc`, `year`, `cataloging_language`, `specific_format`, `genre`, `subjects`, `isbn13s`, `merged_oclc`, `other_format_oclc`, `total_editions`, `source_type`), never the text fields or holdings; `GET /oclc/{number}` has the full record. **One invalid ISBN makes the whole batch a `422`.** |
 | `GET /version` | `source`, `dump_date`, `pipeline_version`, `built_at`, `gates_passed`, `source_fingerprint`, per-table row counts, and the build's gate results. |
 
@@ -286,6 +297,9 @@ tables is missing, `manifest.json` is missing, its `gates_passed` is not `true`,
   `docs/features/home-server.md`, "Loading the WorldCat artifact (once)". **The chmod is not
   optional**: the container runs as uid 10001, not the user that owns the rsynced files, and cannot
   otherwise read the artifact. Until `current-version` exists the deploy starts only `cloudflared`.
+- **Deploy order.** Rebuild and deploy the service image before, or together with, the Rails deploy that
+  uses `POST /records`. Until then evidence rows list `worldcat` in `sources_failed` (the 404 propagates
+  from `Books::WorldCat::Client#records_by_oclc`); that is safe, and a later run re-gathers them.
 - **Rails setting.** `WORLDCAT_SERVICE_URL` (documented in `deployment/ENV.md`) is the only new
   setting. The client also sends `CLOUDFLARE_ACCESS_CLIENT_ID` and `CLOUDFLARE_ACCESS_CLIENT_SECRET`,
   the same pair it sends to the Open Library and fetcher services.
@@ -297,7 +311,8 @@ tables is missing, `manifest.json` is missing, its `gates_passed` is not `true`,
 ### Client
 
 `Books::WorldCat::Client` (`web-app/app/lib/books/world_cat/`): `record_by_isbn`, `record_by_oclc`
-(`nil` for a 404), `lookup(isbn13s)` (chunks at 500) and `version`. Results are
+(`nil` for a 404), `records_by_oclc(numbers)` (chunks at 50; `{requested number => Record}`, unknown
+numbers absent), `lookup(isbn13s)` (chunks at 500) and `version`. Results are
 `Books::WorldCat::Record` value objects; the ones `lookup` returns carry only the category-bearing
 fields (`title`, `summary` and the other text fields are `nil`, holdings absent), which is all
 `VocabularySnapshot`, `Backfill` and `ApplyCategories` read. It has its own `BaseClient`, `Configuration` and

@@ -130,4 +130,18 @@ class EnrichmentTest < ActiveSupport::TestCase
     assert enrichments(:war_and_peace_facts_applied).confidence_high?
     assert enrichments(:crime_and_punishment_unrecognized).confidence_low?
   end
+
+  test "against_research_cap leaves out backfill origin research rows only" do
+    book = books_authors(:tolstoy)
+    make = ->(kind, facts) { book.enrichments.create!(kind: kind, mode: :research, outcome: :applied, facts: facts) }
+    backfill = make.call("books.origin", {"context" => "backfill"})
+    import = make.call("books.origin", {"context" => "import"})
+    no_context = make.call("books.origin", {})
+    facts_row = make.call("books.book_facts", {})
+    scoped = Enrichment.against_research_cap
+    refute_includes scoped, backfill
+    assert_includes scoped, import
+    assert_includes scoped, no_context
+    assert_includes scoped, facts_row
+  end
 end

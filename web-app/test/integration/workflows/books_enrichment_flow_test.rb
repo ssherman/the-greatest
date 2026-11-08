@@ -74,6 +74,11 @@ module Workflows
         calls << [:amazon, kwargs[:book].title]
         true
       }.returns({success: true, data: {}, errors: []})
+      row = stub(id: 0, reason: "no_evidence", outcome: "nothing_to_apply")
+      ::Services::Books::Origin::Judge.stubs(:call).with { |**kwargs|
+        calls << [:categorize, kwargs[:book].title]
+        true
+      }.returns(::Services::Books::Origin::Judge::Result.new(success?: true, data: {enrichments: [row], applied: false}, errors: []))
     end
 
     def import(title, *author_names)
@@ -97,7 +102,9 @@ module Workflows
 
       assert_equal %w[completed completed], runs_of(book.authors).map(&:status)
       assert_equal %w[completed], runs_of(book).map(&:status)
-      assert_equal %w[succeeded succeeded succeeded succeeded], runs_of(book).first.steps.order(:id).map(&:state)
+      assert_equal %w[succeeded succeeded succeeded succeeded succeeded], runs_of(book).first.steps.order(:id).map(&:state)
+      assert_equal [["Two Hands"], 1], [called(:categorize), @calls.count { |kind, _| kind == :categorize }]
+      assert_operator @calls.index([:categorize, "Two Hands"]), :>, @calls.index([:book_facts, "Two Hands"])
     end
 
     # The order above also falls out of callback order (the author chains run
@@ -186,6 +193,8 @@ module Workflows
       chain = WorkflowStepJob.set(queue: "author_chain")
       serial = WorkflowStepJob.set(queue: "serial")
       fetch = WorkflowStepJob.set(queue: "goodreads_fetch")
+      evidence = WorkflowStepJob.set(queue: "evidence")
+      WorkflowStepJob.stubs(:set).with(queue: "evidence").returns(evidence)
       WorkflowStepJob.stubs(:set).with(queue: "author_chain").returns(chain)
       WorkflowStepJob.stubs(:set).with(queue: "serial").returns(serial)
       WorkflowStepJob.stubs(:set).with(queue: "goodreads_fetch").returns(fetch)

@@ -14,6 +14,10 @@ Rails.application.config.x.wikimedia = ActiveSupport::OrderedOptions.new.merge(
   requests_per_window: 1,
   window_seconds: 1.0,
   max_inline_wait: 5.0,
+  # The evidence lane runs one step at a time, so waiting for a slot there blocks
+  # nothing else and beats giving up and restarting the gather. Everyone else
+  # keeps max_inline_wait. See Services::Books::Evidence::Gather.
+  evidence_max_inline_wait: 30.0,
   maxlag: 5,
   contact: ENV.fetch("WIKIMEDIA_CONTACT", "https://thegreatestbooks.org")
 )

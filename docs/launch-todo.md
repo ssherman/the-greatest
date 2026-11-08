@@ -106,6 +106,12 @@ second export on the same day reuses the day's file name and the trainer reports
    queues `Books::MergeUnknownAuthorsJob`, which merges them through the author merger and asks for one
    author ranking refresh. Idempotent: with nothing left it prints "Nothing to merge." The first run
    after the deploy that adds it merges the backlog (in dev, 35 authors into "Unknown").
+10. **Optional, manual: `bin/rails "books:categorize:backfill[origin_only,all,weekly]" APPLY=1`**. It applies
+   only after you have run section 14 step 2 once, and it needs `APPLY=1` like that step. Re-running it
+   after the sync picks up the books the sync added; it plans only the books the sync added and the books a deferred
+   research or a failure left undone (deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it). Books with a running import are left to their import. While the
+   section 14 backfill is still running, the weekly run reports almost every book as reused, and new books
+   start after the backfill's last slot.
 
 ## 5. Cleanup, after the switch-over
 
@@ -224,7 +230,7 @@ the sync never undoes them.
 1. Take legacy offline.
 2. `FINAL=1 bin/rails data_migration:sync`. `FINAL=1` drops the 24-hour delay, so the last day's
    books come over too. Run `sync_report` with `FINAL=1` first.
-3. Section 4, steps 3-9.
+3. Section 4, steps 3-10.
 4. **Finish the failed and stuck legacy Goodreads imports.** Only now: they write into legacy users'
    lists, which every sync rewrites to match legacy, so a finishing import run earlier is undone by
    the next sync.
@@ -321,7 +327,9 @@ Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an a
    set) creates VM 130 `worldcat` and installs its env and units. Tunnels are already enabled on the
    host, so `provision --enable-tunnels` is not needed again; it dies unless all three tunnel tokens
    are set. The API will not start until step 7 puts an artifact on the VM.
-7. **Load the artifact.** Follow "Loading the WorldCat artifact (once)" in `docs/features/home-server.md`:
+7. **Load the artifact.** (Deploy order: the service image must be rebuilt and deployed before, or
+   together with, the Rails deploy that uses `POST /records`. Until then evidence rows list `worldcat`
+   in `sources_failed`; that is safe and a later run re-gathers them.) Follow "Loading the WorldCat artifact (once)" in `docs/features/home-server.md`:
    find the VM's address (`ssh pve-mini qm guest cmd 130 network-get-interfaces`; DHCP on the LAN),
    rsync the version directory as `debian@<vm-address>` with `--mkpath --rsync-path="sudo rsync"` (the
    only SSH user is `debian`, `/srv/wc-data` is root-owned and has no `versions/` yet),
@@ -543,3 +551,27 @@ How it works: `docs/features/mcp-server.md`, "Signing in with OAuth". Design:
    hostname is redirected, arrives with no token, and cannot get in. Tell members who connected before the switch to
    remove the connector and add `https://thegreatestbooks.org/api/mcp`. Books is not live yet, so few
    connections will exist by then.
+
+## 14. Book origins (the backfill once, then weekly)
+
+Fills in each book's country of origin through the `books.book_categorize` workflow. Only you start the
+backfill, by hand, with `APPLY=1`; nothing schedules it or starts it automatically. Run it after the
+Goodreads re-import (section 12) is done, since that removes crufty books and finds duplicates, and
+the books and authors it creates already go through the full import workflow, origin step included. The
+backfill runs once here; the weekly run is section 4, step 10, and is optional.
+
+1. The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10). It needs a local
+   Wikidata copy first: remote Wikidata refuses requests whenever its lag passes 5 seconds, which in November
+   2026 was most of the day, so it cannot carry a bulk run (Wikimedia asks bulk readers to use the dumps).
+2. In production (you run it by hand with `!`; this is the only way it starts), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
+   to see the count, then again with `APPLY=1`. It paces itself at one book every 8 seconds, so the whole
+   catalog (about 159,000 books) takes about 15 days; the dry run prints the hours. The ranked books go first. The research cap for the backfill is
+   `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised; books whose
+   judgment deferred research wait until you raise it, and the backfill leaves them alone meanwhile. Until
+   WorldCat is reachable from production, evidence rows list `worldcat` in `sources_failed`; the origin
+   judge works without it.
+3. `bin/rails "books:origin:report[origin-v1]"`.
+4. Accept or skip the disagreements: `bin/rails "books:origin:accept_disagreements[origin-v1]"`, with
+   `IDS=` and `APPLY=1`.
+5. **Rankings.** Refresh the books list weights and the book rankings, then the author rankings. Filling
+   origins changes `percentage_western` and so the western-canon penalty.

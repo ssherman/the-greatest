@@ -4,6 +4,9 @@ class Books::EnrichBookJobTest < ActiveSupport::TestCase
   def setup
     @book = books_books(:war_and_peace)
     @job = Books::EnrichBookJob.new
+    # Sidekiq runs inline in tests, so an unstubbed start would run the whole
+    # categorize workflow (Gather's HTTP, the judge).
+    Workflows::Books::BookCategorize.stubs(:start)
   end
 
   test "runs on the low queue with three retries" do
@@ -25,6 +28,30 @@ class Books::EnrichBookJobTest < ActiveSupport::TestCase
       .returns(Services::Books::EnrichBook::Result.new(success?: true, data: {enrichments: []}, errors: []))
 
     @job.perform(@book.id, true, ["Leo Tolstoy"])
+  end
+
+  test "a successful enrichment starts the categorize workflow" do
+    Services::Books::EnrichBook.stubs(:call).returns(Services::Books::EnrichBook::Result.new(success?: true, data: {enrichments: []}, errors: []))
+    Workflows::Books::BookCategorize.expects(:start)
+      .with(@book, initiated_by: "enrich_book_job", options: {"context" => "admin"})
+
+    @job.perform(@book.id, true)
+  end
+
+  test "a research enrichment tells the categorize run the web was already searched" do
+    research = Enrichment.new(mode: :research)
+    Services::Books::EnrichBook.stubs(:call).returns(Services::Books::EnrichBook::Result.new(success?: true, data: {enrichments: [research]}, errors: []))
+    Workflows::Books::BookCategorize.expects(:start)
+      .with(@book, initiated_by: "enrich_book_job", options: {"context" => "admin", "book_facts_researched" => true})
+
+    @job.perform(@book.id, true)
+  end
+
+  test "a failed enrichment does not start the categorize workflow" do
+    Services::Books::EnrichBook.stubs(:call).returns(Services::Books::EnrichBook::Result.new(success?: false, data: {enrichments: []}, errors: ["x"]))
+    Workflows::Books::BookCategorize.expects(:start).never
+
+    assert_raises(StandardError) { @job.perform(@book.id) }
   end
 
   test "re-raises on a failed result so Sidekiq retries" do

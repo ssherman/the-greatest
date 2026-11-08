@@ -7,7 +7,8 @@ module Workflows
   module Registry
     DEFINITIONS = {
       "books.author_enrichment" => "Workflows::Books::AuthorEnrichment",
-      "books.book_enrichment" => "Workflows::Books::BookEnrichment"
+      "books.book_enrichment" => "Workflows::Books::BookEnrichment",
+      "books.book_categorize" => "Workflows::Books::BookCategorize"
     }.freeze
 
     @registered = {}

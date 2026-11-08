@@ -167,5 +167,22 @@ module Wikimedia
       assert_equal 3, error.retry_after
       assert_not_requested stub
     end
+
+    test "a larger max_inline_wait waits out a busy slot that the default refuses" do
+      settings = ActiveSupport::OrderedOptions.new.merge(@settings.to_h.merge(max_inline_wait: 30.0))
+      patient = Http.new(settings: settings, limiter: @limiter, sleeper: ->(seconds) { @slept << seconds })
+      @limiter.stubs(:acquire!).raises(busy(10.0)).then.returns(true)
+      stub = stub_request(:get, API).with(query: hash_including({})).to_return(json({}))
+
+      patient.action_api(API, action: "query")
+
+      assert_equal [10.0], @slept
+      assert_requested stub
+
+      @slept.clear
+      @limiter.stubs(:acquire!).raises(busy(10.0))
+      assert_raises(Exceptions::RateLimited) { @http.action_api(API, action: "query") }
+      assert_empty @slept
+    end
   end
 end

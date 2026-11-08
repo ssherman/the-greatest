@@ -36,7 +36,7 @@ namespace :books do
     puts "Gathering evidence for #{book.title} (##{book.id})..."
     facts = ::Services::Books::Evidence::Gather.call(book: book).data[:enrichment].facts
     wikidata = facts["wikidata"]
-    puts "  QID: #{wikidata ? wikidata["qid"] : "none"}#{" (via #{wikidata["via"]})" if wikidata&.dig("via")}"
+    puts "  QID: #{facts["wikidata_qid"] || "none"}#{" (via #{wikidata["via"]})" if wikidata&.dig("via")}"
     puts "  sections: #{%w[wikidata wikipedia worldcat].select { facts[it] }.join(", ").presence || "none"}"
     puts "  sources_failed: #{facts["sources_failed"].join(", ").presence || "none"}"
   end

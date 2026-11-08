@@ -145,6 +145,38 @@ module Services
           assert_includes data[:rejected], {"id" => "Q20", "reason" => "author_mismatch"}
         end
 
+        test "a book by Unknown accepts a work whose only author is anonymous" do
+          unknown_book_with_stored_qid
+          @client.stubs(:entities).with(["Q_STORED"]).returns("Q_STORED" => entity("Q_STORED", "Mystery Tale", instance_of: NOVEL, authors: ["Q4233718"]))
+
+          assert_equal "Q_STORED", call.data[:qid]
+        end
+
+        test "a book by Unknown accepts a work with no author" do
+          unknown_book_with_stored_qid
+          @client.stubs(:entities).with(["Q_STORED"]).returns("Q_STORED" => entity("Q_STORED", "Mystery Tale", instance_of: NOVEL))
+
+          assert_equal "Q_STORED", call.data[:qid]
+        end
+
+        test "a book by Unknown rejects a work naming a real author" do
+          unknown_book_with_stored_qid
+          @client.stubs(:entities).with(["Q_STORED"]).returns("Q_STORED" => entity("Q_STORED", "Mystery Tale", instance_of: NOVEL, authors: ["Q42"]))
+
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_includes data[:rejected].map { it["reason"] }, "author_mismatch"
+        end
+
+        test "a book with a person author still rejects an anonymous work" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q_STORED", source: :wikidata)
+          @client.stubs(:entities).with(["Q_STORED"]).returns("Q_STORED" => entity("Q_STORED", "War and Peace", instance_of: NOVEL, authors: ["Q4233718"]))
+          @client.stubs(:labels).returns({"Q4233718" => "anonymous"})
+
+          assert_nil call.data[:qid]
+        end
+
         test "an author known only by name passes when the label agrees" do
           Identifier.where(identifiable: books_authors(:tolstoy), identifier_type: :books_author_wikidata_qid).destroy_all
           Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
@@ -496,6 +528,12 @@ module Services
         end
 
         def call = ResolveWikidataWork.call(book: @book, client: @client)
+
+        def unknown_book_with_stored_qid
+          @book = ::Books::Book.create!(title: "Mystery Tale")
+          @book.book_authors.create!(author: books_authors(:excluded_placeholder))
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q_STORED", source: :wikidata)
+        end
 
         def stored_values
           Identifier.where(identifiable: @book, identifier_type: :books_work_wikidata_qid).pluck(:value)

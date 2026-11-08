@@ -15,7 +15,7 @@ module Workflows
     end
 
     test "the books workflow names are known to the registry" do
-      assert_equal %w[books.author_enrichment books.book_enrichment], Workflows::Registry::DEFINITIONS.keys.sort
+      assert_equal %w[books.author_enrichment books.book_categorize books.book_enrichment], Workflows::Registry::DEFINITIONS.keys.sort
     end
 
     test "definition exposes its steps by key" do

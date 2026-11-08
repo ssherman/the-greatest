@@ -5,23 +5,25 @@ module Services
     module Evidence
       class WorldCatSectionTest < ActiveSupport::TestCase
         class FakeClient
-          attr_reader :looked_up, :fetched
+          attr_reader :looked_up, :fetched, :batches
 
           def initialize(lookup:, full: {})
             @lookup = lookup
             @full = full
             @looked_up = []
             @fetched = []
+            @batches = []
+          end
+
+          def records_by_oclc(oclcs)
+            @batches << oclcs
+            @fetched.concat(oclcs)
+            @full.slice(*oclcs)
           end
 
           def lookup(isbns)
             @looked_up.concat(isbns)
             isbns.to_h { |isbn| [isbn, @lookup.fetch(isbn, [])] }
-          end
-
-          def record_by_oclc(oclc)
-            @fetched << oclc
-            @full[oclc]
           end
         end
 
@@ -111,8 +113,8 @@ module Services
           ::Identifier.where(identifiable: @book, identifier_type: :books_work_isbn13).update_all(source: ::Identifier.sources[:open_library])
           ::Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: OTHER)
           timeout = Class.new(FakeClient) do
-            def record_by_oclc(oclc)
-              (oclc == 9) ? raise(::Books::WorldCat::Exceptions::ServerError.new("slow", 504)) : super
+            def records_by_oclc(oclcs)
+              oclcs.include?(9) ? raise(::Books::WorldCat::Exceptions::ServerError.new("slow", 504)) : super
             end
           end
           client = timeout.new(lookup: {MATCH => [slim(1)], OTHER => [slim(9, genre: "Poetry")]}, full: {1 => agreeing(1)})
@@ -144,6 +146,16 @@ module Services
           assert_equal [isbns[6], isbns[0], isbns[1], isbns[2], isbns[3]], result["isbns_accepted"]
           assert_equal [isbns[4], isbns[5]], result["isbns_unchecked"]
           assert_empty result["isbns_rejected"]
+        end
+
+        test "the identity checks are made in a single batch call" do
+          ::Identifier.where(identifiable: @book, identifier_type: :books_work_isbn13).delete_all
+          isbns = (0..2).map { |n| isbn13("97800000000#{n}") }
+          isbns.each { |isbn| ::Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: isbn) }
+          lookup = isbns.each_with_index.to_h { |isbn, n| [isbn, [slim(100 + n)]] }
+          client = FakeClient.new(lookup: lookup, full: (0..2).to_h { |n| [100 + n, agreeing(100 + n)] })
+          WorldCatSection.call(book: @book, client: client, map: @map)
+          assert_equal [100, 101, 102], client.batches.first
         end
 
         test "at most three extra full records are fetched for text" do
