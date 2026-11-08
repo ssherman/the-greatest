@@ -207,6 +207,16 @@ module Services
           end
         end
 
+        test "a shortcut on a book that owes research and cannot be researched carries the debt" do
+          book = agreeing_wikidata_book
+          book.countries << @french
+          book.enrichments.create!(kind: "books.origin", mode: :knowledge, outcome: :applied,
+            facts: {"prompt_version" => 1, "deferred_research" => true, "context" => "backfill"})
+          BookOriginTask.any_instance.expects(:call).never
+          row = judge(book, context: "backfill").data[:enrichments].sole
+          assert_equal ["shortcut", true], [row.facts["path"], row.facts["deferred_research"]]
+        end
+
         test "a past-cutoff book goes straight to research" do
           book = new_book("Brand New", year: 2026)
           stub_answer(nationality: "French", confidence: "high")

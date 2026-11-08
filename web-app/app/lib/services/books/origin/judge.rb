@@ -41,7 +41,7 @@ module Services
           shortcut_country = Shortcut.call(dossier)
 
           if dossier.real_countries.any? && !force && !(owes_research && research_permitted?)
-            shortcut_country ? shortcut(shortcut_country) : has_origin
+            shortcut_country ? shortcut(shortcut_country, owes_research) : has_origin
           elsif shortcut_country
             shortcut(shortcut_country)
           else
@@ -63,14 +63,15 @@ module Services
             reason: "has_origin", facts: base_facts("has_origin").merge("deferred_research" => owes_research))
         end
 
-        def shortcut(country)
+        # carry_debt: the early-exit branch of a book that still owes research.
+        def shortcut(country, carry_debt = false)
           applied = apply(country.name, "high")
           answer = {"nationality" => country.name, "confidence" => "high", "reason" => "wikidata_agrees",
                     "recognized" => nil, "original_language" => nil}
           rows << book.enrichments.create!(
             kind: KIND, mode: :knowledge, outcome: applied.data[:applied] ? :applied : :nothing_to_apply,
             reason: applied.data[:reason], confidence: "high",
-            facts: base_facts("shortcut").merge("answer" => answer, "origin" => applied.data.deep_stringify_keys)
+            facts: base_facts("shortcut").merge("deferred_research" => carry_debt, "answer" => answer, "origin" => applied.data.deep_stringify_keys)
           )
         end
 
