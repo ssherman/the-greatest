@@ -47,7 +47,7 @@ dexec() { timeout 120 docker compose -f "$REPO_DIR/compose.yml" exec -T postgres
 failed_count="" stats_reset="" archive_mode="" archive_command=""
 if [ -z "${REPO_DIR:-}" ]; then
   reasons+=("REPO_DIR is not set")
-elif answer="$(dexec psql -U postgres -At -F '|' -c "SELECT failed_count, coalesce(stats_reset::text, 'never'), current_setting('archive_mode'), current_setting('archive_command') FROM pg_stat_archiver" 2>/dev/null)" \
+elif answer="$(dexec psql -U postgres -At -F '|' -c "SELECT failed_count, coalesce(extract(epoch from stats_reset)::text, 'never'), current_setting('archive_mode'), current_setting('archive_command') FROM pg_stat_archiver" 2>/dev/null)" \
   && IFS='|' read -r failed_count stats_reset archive_mode archive_command <<<"$answer" && [[ "$failed_count" =~ ^[0-9]+$ ]]; then
   :
 else

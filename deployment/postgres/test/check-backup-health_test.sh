@@ -31,7 +31,7 @@ scenario() {   # a healthy server unless a test changes it
   local st="$SANDBOX/state"
   rm -f "${st:?}"/* "$COUNT_FILE" "$SANDBOX/log/pings" "$SANDBOX/log/out"
   rmdir "$COUNT_FILE.tmp" 2>/dev/null
-  echo 0 >"$st/failed_count"; echo '2026-11-01 00:00:00+00' >"$st/stats_reset"; : >"$st/ready"; echo 0 >"$st/find_rc"
+  echo 0 >"$st/failed_count"; echo '1793491200.123456' >"$st/stats_reset"; : >"$st/ready"; echo 0 >"$st/find_rc"
   echo on >"$st/archive_mode"; echo 'pgbackrest --stanza=main archive-push %p' >"$st/archive_command"
   printf 'Use%%\n 42%%\n' >"$st/df"
   : >"$CALLS"; : >"$SANDBOX/log/pings"
@@ -65,7 +65,7 @@ if failed_with; then pass "a failing queue check fails, never passes"; else fail
 # --- archive failure count --------------------------------------------------------------------------------------------
 scenario; echo 7 >"$SANDBOX/state/failed_count"
 run_check
-if passed && [ "$(stored_count)" = 7 ] && [ "$(stored_reset)" = "2026-11-01 00:00:00+00" ] && [ "$(stat -c %a "$COUNT_FILE")" = 600 ]; then
+if passed && [ "$(stored_count)" = 7 ] && [ "$(stored_reset)" = "1793491200.123456" ] && [ "$(stat -c %a "$COUNT_FILE")" = 600 ]; then
   pass "t_first_run_no_stored_count_passes: passes and stores the count (0600)"; else fail "t_first_run_no_stored_count_passes" "rc=$rc $(pings) $(cat "$COUNT_FILE" 2>&1)"; fi
 echo 9 >"$SANDBOX/state/failed_count"; : >"$SANDBOX/log/pings"
 run_check
@@ -89,36 +89,36 @@ if [ "$(stored_count)" = 9 ]; then pass "the count is stored even when another c
 # --- stats reset: the stored count means nothing across a reset or a restart ------------------------------------------
 # 2026-11-08: stored 9, a restore restarted Postgres, the counter began at 0 and reached 3; "3 < 9" was read as a
 # reset and passed, so three real failures went unreported.
-scenario; echo '9|2026-11-01 00:00:00+00' >"$COUNT_FILE"; echo 3 >"$SANDBOX/state/failed_count"; echo '2026-11-08 05:00:00+00' >"$SANDBOX/state/stats_reset"
+scenario; echo '9|1793491200.123456' >"$COUNT_FILE"; echo 3 >"$SANDBOX/state/failed_count"; echo '1793922000.654321' >"$SANDBOX/state/stats_reset"
 run_check
-if failed_with 'rose' && [ "$(stored_count)" = 3 ] && [ "$(stored_reset)" = "2026-11-08 05:00:00+00" ]; then
+if failed_with 'rose' && [ "$(stored_count)" = 3 ] && [ "$(stored_reset)" = "1793922000.654321" ]; then
   pass "t_reset_with_failures_after_it_fails: baseline is 0 after a reset (and both values are stored)"; else fail "t_reset_with_failures_after_it_fails" "rc=$rc $(pings) $(cat "$COUNT_FILE")"; fi
 : >"$SANDBOX/log/pings"; run_check
 if passed; then pass "...and the next run with the same reset and count passes"; else fail "reset then steady" "rc=$rc $(pings)"; fi
-scenario; echo '9|2026-11-01 00:00:00+00' >"$COUNT_FILE"; echo 0 >"$SANDBOX/state/failed_count"; echo '2026-11-08 05:00:00+00' >"$SANDBOX/state/stats_reset"
+scenario; echo '9|1793491200.123456' >"$COUNT_FILE"; echo 0 >"$SANDBOX/state/failed_count"; echo '1793922000.654321' >"$SANDBOX/state/stats_reset"
 run_check
-if passed && [ "$(stored_count)" = 0 ] && [ "$(stored_reset)" = "2026-11-08 05:00:00+00" ]; then
+if passed && [ "$(stored_count)" = 0 ] && [ "$(stored_reset)" = "1793922000.654321" ]; then
   pass "t_reset_without_failures_passes"; else fail "t_reset_without_failures_passes" "rc=$rc $(pings) $(cat "$COUNT_FILE")"; fi
-scenario; echo '5|2026-11-01 00:00:00+00' >"$COUNT_FILE"; echo 6 >"$SANDBOX/state/failed_count"
+scenario; echo '5|1793491200.123456' >"$COUNT_FILE"; echo 6 >"$SANDBOX/state/failed_count"
 run_check
 if failed_with 'rose 5 to 6'; then pass "t_unchanged_reset_rise_fails: same reset compares to the stored count"; else fail "unchanged reset rise" "rc=$rc $(pings)"; fi
-scenario; echo '5|2026-11-01 00:00:00+00' >"$COUNT_FILE"; echo 5 >"$SANDBOX/state/failed_count"
+scenario; echo '5|1793491200.123456' >"$COUNT_FILE"; echo 5 >"$SANDBOX/state/failed_count"
 run_check
 if passed; then pass "t_unchanged_reset_flat_passes"; else fail "unchanged reset flat" "rc=$rc $(pings)"; fi
 scenario; echo 4 >"$COUNT_FILE"; echo 2 >"$SANDBOX/state/failed_count"
 run_check
-if passed && [ "$(stored_count)" = 2 ] && [ "$(stored_reset)" = "2026-11-01 00:00:00+00" ]; then
+if passed && [ "$(stored_count)" = 2 ] && [ "$(stored_reset)" = "1793491200.123456" ]; then
   pass "t_old_format_state_migrates: a count-only file passes once and gains the reset time"; else fail "t_old_format_state_migrates" "rc=$rc $(pings) $(cat "$COUNT_FILE")"; fi
 scenario; echo 4 >"$COUNT_FILE"; echo 6 >"$SANDBOX/state/failed_count"
 run_check
-if failed_with 'rose 4 to 6' && [ "$(stored_reset)" = "2026-11-01 00:00:00+00" ]; then pass "...an old-format file still catches a plain rise"; else fail "old format rise" "rc=$rc $(pings) $(cat "$COUNT_FILE")"; fi
+if failed_with 'rose 4 to 6' && [ "$(stored_reset)" = "1793491200.123456" ]; then pass "...an old-format file still catches a plain rise"; else fail "old format rise" "rc=$rc $(pings) $(cat "$COUNT_FILE")"; fi
 scenario; echo never >"$SANDBOX/state/stats_reset"; echo 2 >"$SANDBOX/state/failed_count"
 run_check
 if passed && [ "$(stored_reset)" = never ]; then pass "t_null_stats_reset: a never-reset server stores a marker and passes"; else fail "t_null_stats_reset" "rc=$rc $(pings) $(cat "$COUNT_FILE")"; fi
 echo 3 >"$SANDBOX/state/failed_count"; : >"$SANDBOX/log/pings"
 run_check
 if failed_with 'rose 2 to 3'; then pass "...and a NULL reset compares counts like any unchanged reset"; else fail "null then rise" "rc=$rc $(pings)"; fi
-scenario; echo '9|never' >"$COUNT_FILE"; echo 1 >"$SANDBOX/state/failed_count"; echo '2026-11-08 05:00:00+00' >"$SANDBOX/state/stats_reset"
+scenario; echo '9|never' >"$COUNT_FILE"; echo 1 >"$SANDBOX/state/failed_count"; echo '1793922000.654321' >"$SANDBOX/state/stats_reset"
 run_check
 if failed_with 'rose 0 to 1'; then pass "NULL becoming a timestamp is a reset"; else fail "null to timestamp" "rc=$rc $(pings)"; fi
 
