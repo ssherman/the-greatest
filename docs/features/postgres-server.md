@@ -734,7 +734,8 @@ answers queries, so this is the check that catches it.
 A bad token, a bucket problem or an R2 outage show as archive failures; fix the cause, and the alert clears on
 the next passing run. **Disk is urgent when archiving is stuck:** unarchived WAL stays in `pg_wal` and will
 fill the disk. Failures logged before `stanza-create` on a first deploy are normal; the counter's first run
-stores a value and passes. Details: `/srv/postgres/state/health.log`.
+stores a value and passes. The stored value is the count plus `pg_stat_archiver.stats_reset`; after a restore
+or restart (a new `stats_reset`) the counter starts at 0, so any failure since then alerts. Details: `/srv/postgres/state/health.log`.
 
 ### `pg-restore-verified`
 
