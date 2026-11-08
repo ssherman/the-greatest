@@ -22,6 +22,14 @@ packages:
   - age               # age encryption tool for SOPS
 
 write_files:
+  # cloud-init's own 50-cloud-init.conf says "PermitRootLogin yes" (Linode installs the operator's key for root).
+  # sshd takes the first value it reads and includes sshd_config.d in lexical order, so 10- wins.
+  - path: /etc/ssh/sshd_config.d/10-no-root-login.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      PermitRootLogin no
+
   - path: /usr/local/bin/gb-clone-or-pull.sh
     owner: root:root
     permissions: '0755'
@@ -53,6 +61,7 @@ runcmd:
   # firewall + fail2ban
   - ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw --force enable
   - systemctl enable --now fail2ban
+  - systemctl reload ssh
 
   # install Docker from official Docker repository
   - install -m 0755 -d /etc/apt/keyrings
