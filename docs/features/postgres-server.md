@@ -343,7 +343,7 @@ The old server stays up and unchanged except as noted. **Do not merge anything t
 the database during this, and run no migrations on either app from step 5 until cutover is done.** Logical
 replication copies no schema changes and no sequences. Ask Shane before each step; report exact outputs.
 
-**The migration freeze lasts at least 8 days:** the copy at steps 5 and 6, seven straight passing nights at
+**The migration freeze lasts at least 4 days:** the copy at steps 5 and 6 (about an hour for 24 GB), three straight passing nights at
 step 7, then the cutover. Any failed night restarts the count, and the freeze runs on with it. Nobody has to
 run a migration for this to go wrong: **a merged migration runs itself** through `db:prepare` when the app
 deploys, so any migration merged during the freeze changes the source's schema and breaks replication. Tell
@@ -484,7 +484,7 @@ pass.
    clears once the archiver catches up. Watch the disk, which is the real limit: if it passes 80% (the check
    alerts on that too), `ALTER SUBSCRIPTION migration_sub_DB DISABLE` in that database on the new server until archiving
    catches up, then `ENABLE`. A rising `failed_count` is a real failure: treat it as the `pg-health` section says.
-7. **The nightly restore check starts and must pass 7 nights in a row before cutover.** New writes will depend
+7. **The nightly restore check starts and must pass 3 nights in a row before cutover (Shane cut it from 7 on 2026-11-08).** New writes will depend
    on this chain alone from the moment of cutover, so it is proven first. **This requirement is not negotiable.**
 
    (Shane) Set `PGVERIFY_ENABLED=1`, `HC_PGVERIFY` and the other `PGVERIFY_*` values in
@@ -499,9 +499,9 @@ pass.
    upload token as `PGVERIFY_DUMP_KEY` and `_KEY_SECRET`. The VM passes the endpoint and region to its `aws`
    container as `AWS_ENDPOINT_URL` and `AWS_DEFAULT_REGION`. Both the run and `provision` refuse an upload with no
    endpoint or one without `https://`. **A failed upload pings `fail`, so it is a failed night and resets the
-   7-night count**, like any other failure.
+   3-night count**, like any other failure.
 
-   **Before the 7 nights start, prove the alert,** on the VM (`ssh pve-mini`, then to `10.20.0.20`):
+   **Before the 3 nights start, prove the alert,** on the VM (`ssh pve-mini`, then to `10.20.0.20`):
 
    ```bash
    sudo sed -i.bak 's|^PGVERIFY_REPO_PATH=.*|PGVERIFY_REPO_PATH=/does-not-exist|' /etc/the-greatest/home-server.env
@@ -566,7 +566,7 @@ pass.
 
 ### Phase 3: cutover
 
-**The 7 straight passing nights (step 7) must be complete before step 9.** Shane picks a day that is not a
+**The 3 straight passing nights (step 7) must be complete before step 9.** Shane picks a day that is not a
 Sunday, starting about 10:30 UTC: after the old dump ends and the new server's 09:00 backup has finished,
 never during either. Do one database at a time. Have the timer ready.
 
@@ -763,7 +763,7 @@ night's count) moved more than 5% since the previous night. **Bulk changes in bo
 (imports, merges, the Goodreads replay, the weekly legacy sync), so first ask whether someone did one. If so,
 no action: the baseline is replaced every night, so one change alerts once and clears itself. If nobody
 did, treat it as possible data loss: compare the table's count on production now with the last daily dumps
-in `/mnt/pgverify/dumps/daily/`, and tell Shane. The alert resets the 7-night count before cutover.
+in `/mnt/pgverify/dumps/daily/`, and tell Shane. The alert resets the 3-night count before cutover.
 
 **Silence:** the VM is down or its timer did not run (`Persistent=true`, so a VM that was down at 12:00 UTC
 runs on return). A held lock logs and exits without pinging; the next run reports.

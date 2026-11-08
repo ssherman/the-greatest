@@ -87,7 +87,9 @@ fi
 
 # 2. The new server must already have every table (load-schema.sh), or the copy fails per table.
 mapfile -t have < <(tq "$db" -At -c "$TABLES_SQL" </dev/null)
-missing="$(comm -23 <(printf '%s\n' "${tables[@]}" | sort) <(printf '%s\n' "${have[@]}" | sort) | tr '\n' ' ')"
+# Byte order for both sort and comm: under en_US.UTF-8 on the new server's Ubuntu they disagree about names
+# with underscores, so comm called sort's own output unsorted and the check failed on matching lists.
+missing="$(LC_ALL=C comm -23 <(printf '%s\n' "${tables[@]}" | LC_ALL=C sort) <(printf '%s\n' "${have[@]}" | LC_ALL=C sort) | tr '\n' ' ')"
 if [ -n "${missing// /}" ]; then
   echo "create-replication: the new server's $db lacks: $missing(run load-schema.sh first)" >&2
   exit 1
@@ -100,6 +102,9 @@ schemas="$(printf '%s\n' "${tables[@]}" | sed 's/\..*//' | sort -u | tr '\n' ','
   quiet_session_sql
   printf "SELECT 'CREATE ROLE replicator' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'replicator') \\\\gexec\n"
   printf "ALTER ROLE replicator WITH LOGIN REPLICATION NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD %s;\n" "$(lit "$REPLICATOR_PASSWORD")"
+  # The old the_greatest database has CONNECT revoked from PUBLIC (only its owner may connect), so the
+  # subscription was refused with "permission denied for database". DROP OWNED BY at step 16 revokes this too.
+  printf 'GRANT CONNECT ON DATABASE %s TO replicator;\n' "$db"
   printf 'GRANT USAGE ON SCHEMA %s TO replicator;\n' "$schemas"
   printf 'GRANT SELECT ON %s TO replicator;\n' "$tablelist"
   printf 'CREATE PUBLICATION %s FOR TABLE %s;\n' "$pub" "$tablelist"
