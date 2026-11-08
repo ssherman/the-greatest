@@ -28,6 +28,14 @@ packages:
   - unattended-upgrades
 
 write_files:
+  # cloud-init's own 50-cloud-init.conf says "PermitRootLogin yes" (Linode installs the operator's key for root).
+  # sshd takes the first value it reads and includes sshd_config.d in lexical order, so 10- wins.
+  - path: /etc/ssh/sshd_config.d/10-no-root-login.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      PermitRootLogin no
+
   - path: /etc/apt/apt.conf.d/20auto-upgrades
     owner: root:root
     permissions: '0644'
@@ -56,6 +64,7 @@ runcmd:
   # SSH only. Docker-published ports bypass ufw; 6543 is handled by the postgres firewall service.
   - ufw default deny incoming && ufw allow OpenSSH && ufw --force enable
   - systemctl enable --now fail2ban
+  - systemctl reload ssh
 
   # Clone as deploy (retry in case the network is not ready yet).
   - install -d -o deploy -g deploy /home/deploy/apps
