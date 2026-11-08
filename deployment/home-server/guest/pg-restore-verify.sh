@@ -359,11 +359,23 @@ prune "$DUMPS/monthly" "$KEEP_MONTHLY"
 
 # The dump bucket is on R2: the endpoint (https://<account id>.r2.cloudflarestorage.com) and region `auto`
 # come from the env, and the key is an R2 token scoped to that bucket alone.
+# Up to 3 attempts per dump: on 2026-11-08 one of two multipart uploads to R2 failed at the final step
+# (InvalidPart, "one or more of the specified parts could not be found") while the other went through, and
+# one bad part is not worth a failed night. A failed attempt leaves no object (the multipart upload never
+# completed), so the retry is not an overwrite of a locked object.
+upload_one() {
+  AWS_ACCESS_KEY_ID="$PGVERIFY_DUMP_KEY" AWS_SECRET_ACCESS_KEY="$PGVERIFY_DUMP_KEY_SECRET" AWS_DEFAULT_REGION="$PGVERIFY_DUMP_REGION" \
+    AWS_ENDPOINT_URL="$PGVERIFY_DUMP_ENDPOINT" "$COMPOSE" run --rm --no-deps -T aws s3 cp --only-show-errors "/dumps/daily/$1" "s3://$PGVERIFY_DUMP_BUCKET/$1"
+}
 if [ "$upload" = 1 ]; then
   for name in "${names[@]}"; do
-    AWS_ACCESS_KEY_ID="$PGVERIFY_DUMP_KEY" AWS_SECRET_ACCESS_KEY="$PGVERIFY_DUMP_KEY_SECRET" AWS_DEFAULT_REGION="$PGVERIFY_DUMP_REGION" \
-      AWS_ENDPOINT_URL="$PGVERIFY_DUMP_ENDPOINT" "$COMPOSE" run --rm --no-deps -T aws s3 cp --only-show-errors "/dumps/daily/$name" "s3://$PGVERIFY_DUMP_BUCKET/$name" ||
-      fail "upload failed"
+    attempt=1
+    until upload_one "$name"; do
+      if [ "$attempt" -ge 3 ]; then fail "upload failed after 3 attempts"; fi
+      log "upload attempt $attempt failed; retrying"
+      attempt=$((attempt + 1))
+      sleep $((POLL_S * 3))
+    done
   done
 else
   log "upload is off (PGVERIFY_UPLOAD_ENABLED is not 1)"

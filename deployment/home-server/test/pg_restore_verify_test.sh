@@ -17,7 +17,7 @@ setup() {
   export PGVERIFY_ROOT="$SANDBOX/pgv" PGVERIFY_LOCK="$SANDBOX/run/pgverify.lock"
   export PGVERIFY_UID PGVERIFY_NOW="$WEEKDAY" PGVERIFY_POLL_S=0 COUNTS="$SANDBOX/counts"
   PGVERIFY_UID="$(id -u)"
-  unset FREE_KB COMPOSE_STOP_EXIT INFO_EXIT ARCHIVE_MAX REPLAY_SEG RESTORE_EXIT REPLAY_AGE AMCHECK_EXIT DUMP_MODE LIST_EXIT AWS_EXIT SETTINGS MISSING_TABLE PG_EXITED \
+  unset FREE_KB COMPOSE_STOP_EXIT INFO_EXIT ARCHIVE_MAX REPLAY_SEG RESTORE_EXIT REPLAY_AGE AMCHECK_EXIT DUMP_MODE LIST_EXIT AWS_EXIT AWS_FAIL_TIMES SETTINGS MISSING_TABLE PG_EXITED \
     NOT_MOUNTED ISREADY_EXIT PGVERIFY_RECOVERY_TIMEOUT_S PGVERIFY_UPLOAD_ENABLED
   : >"$COUNTS"
   # The data disk as first-boot leaves it: mounted and empty.
@@ -90,7 +90,7 @@ esac
 EOF
 )"
   stub pg_restore 'case "$*" in --list*) printf "; Archive created\n1; 2615 2200 SCHEMA - public owner\n"; exit "${LIST_EXIT:-0}" ;; esac'
-  stub aws 'echo "$AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY" >>"$SANDBOX/log/aws-env"; echo "${AWS_DEFAULT_REGION:-unset}" >>"$SANDBOX/log/aws-region"; echo "${AWS_ENDPOINT_URL:-unset}" >>"$SANDBOX/log/aws-endpoint"; exit "${AWS_EXIT:-0}"'
+  stub aws 'echo "$AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY" >>"$SANDBOX/log/aws-env"; echo "${AWS_DEFAULT_REGION:-unset}" >>"$SANDBOX/log/aws-region"; echo "${AWS_ENDPOINT_URL:-unset}" >>"$SANDBOX/log/aws-endpoint"; n=$(( $(cat "$SANDBOX/log/aws-calls" 2>/dev/null || echo 0) + 1 )); echo "$n" >"$SANDBOX/log/aws-calls"; [ "$n" -gt "${AWS_FAIL_TIMES:-0}" ] || exit 1; exit "${AWS_EXIT:-0}"'
 }
 
 # adopted: the data disk after the job has run once (the sentinel it writes on a pristine disk).
@@ -286,7 +286,14 @@ t_upload_failure_pings_fail() {
     PGVERIFY_DUMP_BUCKET=dump-bucket PGVERIFY_DUMP_KEY=dk PGVERIFY_DUMP_KEY_SECRET=ds PGVERIFY_DUMP_REGION=r1 \
     PGVERIFY_DUMP_ENDPOINT=https://dump.r2.test PGVERIFY_UPLOAD_ENABLED=1
   export AWS_EXIT=1
-  ! run && [[ "$(fail_message)" == *upload* ]] && [[ "$(fail_message)" != *dump-bucket* ]] && ! called 'hc\.test/pgv$'
+  ! run && [[ "$(fail_message)" == *upload* ]] && [[ "$(fail_message)" != *dump-bucket* ]] && ! called 'hc\.test/pgv$' &&
+    [ "$(cat "$SANDBOX/log/aws-calls")" = 3 ]
+}
+t_upload_retries_a_failed_attempt() {
+  # R2 failed one multipart upload of two on 2026-11-08 (InvalidPart); a retry must save the night.
+  setup; upload_on; export AWS_FAIL_TIMES=2
+  run && called 'hc\.test/pgv$' && [ "$(cat "$SANDBOX/log/aws-calls")" = 4 ] &&
+    [ "$(grep -c '^aws s3 cp .*postgres_the_greatest_backup' "$CALLS")" = 3 ]
 }
 t_upload_needs_its_settings() {
   setup; write_env ROLE=pgverify HC_PGVERIFY=https://hc.test/pgv PGVERIFY_REPO_BUCKET=b PGVERIFY_REPO_ENDPOINT=e \
@@ -723,6 +730,7 @@ check "the wrapper is forced as restore_command on the server" t_restore_command
 check "a row-count alert rides on a later failure, and the baseline waits for a finished run" t_row_alert_rides_on_a_later_failure_and_the_baseline_waits
 check "the baseline is written after the dumps" t_baseline_is_written_after_the_dumps
 check "a failed baseline write pings fail" t_a_failed_baseline_write_pings_fail
+check "a failed upload attempt is retried and the night passes" t_upload_retries_a_failed_attempt
 check "a failed install pings fail" t_a_failed_install_pings_fail
 check "an unguarded failure pings fail once, from the exit trap" t_an_unguarded_failure_pings_fail_once
 check "a reported failure is not reported again" t_a_reported_failure_is_not_reported_twice
