@@ -101,9 +101,9 @@ typer. Rails 8, Faraday, Minitest, Mocha, WebMock. Bash home-server tooling with
 - [ ] **Step 1: Write the fixture dump.** About 40 real entities, trimmed by hand, in dump format: a `[` line, one entity
   per line ending in `,`, and a `]` line. Fetch them once with `curl 'https://www.wikidata.org/wiki/Special:EntityData/<Q>.json'`
   while writing the fixture, never in tests. It must include:
-  - Q217243 (Things Fall Apart, P495 Q1033) and Q18003 (Chinua Achebe, P214 VIAF, P27 Q1033), Q1033 (Nigeria, P297 "NG")
-  - an edition of Things Fall Apart (P31 Q3331189, P629 Q217243, a P212 ISBN-13 with hyphens)
-  - a scholarly article with P50 Q18003 (P31 Q13442814)
+  - Q622400 (Things Fall Apart, P495 Q145) and Q155845 (Chinua Achebe, P214 VIAF 24596756, P27 Q1033), Q1033 (Nigeria, P297 "NG"), Q145 (United Kingdom, P297 "GB"); real QIDs and real statement values, verified 2026-11-08
+  - an edition of Things Fall Apart (P31 Q3331189, P629 Q622400, a P212 ISBN-13 with hyphens)
+  - a scholarly article with P50 Q155845 (P31 Q13442814)
   - Homer (Q6691, P31 Q21070568)
   - a manga volume (P31 Q8274), plus an item typed by a subclass chain of two hops below Q7725634, with both subclass items present
   - a painting (not kept, but its label must exist), and a person with a Cyrillic label only (Лев Толстой, Q7243)
@@ -172,8 +172,8 @@ The algorithm, which the tests do not fix:
   - `test_distill.py`, running `distill` over the fixture into `tmp_path`:
     - `items` holds Things Fall Apart, its edition, the manga volume, the two-hop item, Homer, Achebe, Tolstoy and Nigeria (as a link target), and not the scholarly article or the painting.
     - `labels` holds the painting.
-    - `external_ids` holds (`P212`, `9780385474542`) → the edition's QID, and (`P214`, Achebe's VIAF) → Q18003.
-    - `links` holds (`P50`, `Q18003`) → Q217243, and not the scholarly article.
+    - `external_ids` holds (`P212`, `9780385474542`) → the edition's QID, and (`P214`, Achebe's VIAF) → Q155845.
+    - `links` holds (`P50`, `Q155845`) → Q622400, and not the scholarly article.
     - `names` holds `normalize_name("Лев Толстой")` → Q7243.
     - Nigeria's `items` row keeps P297 `"NG"`.
     - Every table is sorted by its key.
@@ -212,8 +212,8 @@ The algorithm, which the tests do not fix:
 The gates:
 - **Row counts.** Each table is non-empty. With a previous version, each table is within ±15% of its count there.
 - **Canaries** (on the real dump only; skipped when the build is `--fixture`, which the tests pass):
-  - Q217243 has P495 Q1033.
-  - Q18003 is found by `normalize_name("Chinua Achebe")` in `names`, by its VIAF in `external_ids`, and links to Q217243 through P50.
+  - Q622400 has P495 Q145.
+  - Q155845 is found by `normalize_name("Chinua Achebe")` in `names`, by its VIAF in `external_ids`, and links to Q622400 through P50.
   - Q1033 has P297 `NG`.
   - Some redirect exists.
 - **No excluded types.** No `items` row is typed under `excluded_roots`.

@@ -154,7 +154,7 @@ deleted after a successful build.
 ### Gates (a failed gate leaves the previous version serving)
 
 - Row counts within a band of the previous version (no collapse to a fraction).
-- A fixed fixture set resolves: e.g. Things Fall Apart (Q217243) has `P495` Nigeria; Chinua Achebe (Q18003) is found by
+- A fixed fixture set resolves: e.g. Things Fall Apart (Q622400) has `P495` United Kingdom (Q145, where it was first published); Chinua Achebe (Q155845) is found by
   name, by VIAF, and lists Things Fall Apart among his works; a known Open Library work id and a known Goodreads id
   resolve to their QIDs; a known ISBN-13 resolves; a known merged QID redirects.
 - No scholarly article in `items`.
