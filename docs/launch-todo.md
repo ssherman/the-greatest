@@ -554,6 +554,10 @@ How it works: `docs/features/mcp-server.md`, "Signing in with OAuth". Design:
 4. **Acceptance for the admin endpoint.** As an admin, add `https://<books host>/api/mcp/admin` as a second
    claude.ai connector (it is a separate resource from `/api/mcp`), sign in, approve, and ask for a dry-run
    merge of two duplicate books. Admin approvals need renewing every 30 days.
+5. **Acceptance from the docs alone.** Following only `/developers`, connect claude.ai, Claude Code and Codex to
+   `https://<books host>/api/mcp` by signing in, and ask each one question. Then Revoke each on
+   `/developers/tokens` and confirm each asks to sign in again. Record the result in the PR or on the
+   acceptance line of `docs/features/mcp-server.md`.
 
 ## 14. Book origins (the backfill once, then weekly)
 

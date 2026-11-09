@@ -32,6 +32,14 @@ Rails.application.configure do
   # Spec: docs/superpowers/specs/2026-11-02-mcp-oauth-design.md D5.
   config.x.api.oauth_admin_approval_lifetime = 30.days
 
+  # A dynamically registered client that nobody approved within this long is
+  # deleted by Oauth::PruneJob (spec D6: "no grant after 30 days").
+  config.x.api.oauth_unused_client_lifetime = 30.days
+
+  # How long a used or expired authorization code row is kept. Doorkeeper codes
+  # live 10 minutes, so a day is far more than any check needs.
+  config.x.api.oauth_grant_retention = 1.day
+
   # Egress ranges of hosted MCP connectors. Thousands of users reach us from
   # these few addresses, so a per-IP limit would throttle one user's neighbours.
   # An address inside a range shares one counter named for the range, with the

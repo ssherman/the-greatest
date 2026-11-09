@@ -19,6 +19,12 @@ module Developers
 
     before_action :prevent_caching
     before_action :require_api_access!
+    # The page is also open to a lapsed member with a live OAuth connection (so
+    # they can see and revoke it); minting and revoking personal tokens keeps
+    # today's rule.
+    before_action :require_mint_access!, only: [:create, :destroy]
+
+    helper_method :can_mint?
 
     # Days a token may live, as the form offers them; blank is "never". Any
     # other value is a tampered request and is refused rather than silently
@@ -27,6 +33,7 @@ module Developers
 
     def index
       @tokens = tokens
+      @connections = connections
     end
 
     def create
@@ -64,10 +71,20 @@ module Developers
     # Anyone who can mint at least one scope may use the page (an admin needs
     # no membership); everyone else keeps today's membership redirect.
     def require_api_access!
-      return if current_user && ::Api::Scopes.mintable_by(current_user).any?
+      return if current_user && (can_mint? || current_user.oauth_connections.live.exists?)
 
       require_membership!(:api)
     end
+
+    def require_mint_access!
+      return if current_user && can_mint?
+
+      require_membership!(:api)
+    end
+
+    def can_mint? = ::Api::Scopes.mintable_by(current_user).any?
+
+    def connections = current_user.oauth_connections.listed
 
     def tokens = current_user.api_tokens.order(:created_at, :id)
 
