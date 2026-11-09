@@ -72,4 +72,29 @@ class OauthConnectionTest < ActiveSupport::TestCase
     assert_empty OauthAccessToken.where(connection_id: @connection.id)
     assert_empty OauthAccessGrant.where(connection_id: @connection.id)
   end
+
+  test "redirect_hosts lists each host once, in order, skipping unparsable URIs" do
+    app = OauthApplication.create!(name: "Multi", confidential: false, scopes: "",
+      redirect_uri: "https://claude.ai/api/mcp/auth_callback\nhttps://claude.com/cb\nhttps://claude.ai/other")
+    connection = OauthConnection.new(application: app)
+
+    assert_equal ["claude.ai", "claude.com"], connection.redirect_hosts
+  end
+
+  test "redirect_hosts shows a loopback host without its port" do
+    assert_equal ["localhost"], oauth_connections(:member_mcp).redirect_hosts
+  end
+
+  test "listed keeps live connections, newest approval first" do
+    user = users(:regular_user)
+    older = OauthConnection.create!(user: user, application: oauth_applications(:claude_ai), resource: "mcp",
+      scopes: ["books:read"], approved_at: 5.days.ago)
+    revoked = OauthConnection.create!(user: user, application: oauth_applications(:claude_ai), resource: "mcp_admin",
+      scopes: ["books:read"], approved_at: 1.hour.ago, revoked_at: 1.minute.ago)
+
+    listed = user.oauth_connections.listed.to_a
+
+    assert_equal [oauth_connections(:member_mcp), older], listed
+    assert_not_includes listed, revoked
+  end
 end
