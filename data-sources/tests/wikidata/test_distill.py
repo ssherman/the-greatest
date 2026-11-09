@@ -3,9 +3,11 @@ import json
 import duckdb
 import pytest
 
+from wikidata.pipeline import distill as distill_module
 from wikidata.pipeline.distill import distill
 from wikidata.pipeline.normalize import normalize_name
 from wikidata.pipeline.paths import TABLES, WikidataPaths
+from wikidata.pipeline.scan import iter_entities
 
 from .conftest import FIXTURES
 
@@ -16,7 +18,7 @@ TWO_HOP_NOVEL = "Q900005"
 PAINTING = "Q12418"
 
 
-def run(paths, config):
+def run(paths, config, threads=2):
     return distill(
         FIXTURES / "mini-all.json",
         FIXTURES / "mini-redirect.sql",
@@ -24,7 +26,7 @@ def run(paths, config):
         paths,
         config,
         memory_limit="1GB",
-        threads=2,
+        threads=threads,
     )
 
 
@@ -72,7 +74,7 @@ def test_items_leave_out_the_article_and_the_painting(built):
 def test_labels_hold_every_entity_including_the_painting(built):
     _, counts = built
     assert PAINTING in qids(built, "labels")
-    assert counts["labels"] == 40
+    assert counts["labels"] == len(list(iter_entities(FIXTURES / "mini-all.json")))
 
 
 def test_external_ids_hold_the_normalized_isbn_and_viaf(built):
@@ -130,6 +132,21 @@ def test_items_row_groups_stay_small(built):
         f"SELECT row_group_num_rows FROM parquet_metadata('{paths.staged('items')}')"
     ).fetchall()
     assert all(n <= 10_000 for (n,) in groups)
+
+
+def test_parallel_workers_produce_identical_tables(tmp_path, config, monkeypatch):
+    # Seven-line batches spread the 40 fixture entities over several shards and workers.
+    monkeypatch.setattr(distill_module, "BATCH_LINES", 7)
+    contents = {}
+    for threads in (1, 3):
+        paths = WikidataPaths(root=tmp_path / f"t{threads}", dump_date="2026-11-01")
+        run(paths, config, threads=threads)
+        contents[threads] = {
+            table: duckdb.sql(f"SELECT * FROM '{paths.staged(table)}' ORDER BY ALL").fetchall()
+            for table in TABLES
+        }
+    assert contents[1] == contents[3]
+    assert contents[3]["labels"]
 
 
 def test_rerunning_replaces_stale_shards(built, config):

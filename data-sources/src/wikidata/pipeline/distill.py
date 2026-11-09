@@ -8,8 +8,10 @@ Everything lands in `paths.staging_dir`. Promoting it to `version_dir` is the ca
 after the gates.
 """
 
+import multiprocessing
 import shutil
-from collections.abc import Iterable
+import threading
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import duckdb
@@ -20,12 +22,15 @@ from wikidata.pipeline.config import KeptConfig
 from wikidata.pipeline.normalize import normalize_external_id, normalize_name
 from wikidata.pipeline.paths import TABLES, WikidataPaths
 from wikidata.pipeline.redirects import parse_redirects
-from wikidata.pipeline.scan import SlimEntity, iter_entities, slim
+from wikidata.pipeline.scan import SlimEntity, slim
+from wikidata.pipeline.scan import _open as open_dump
 
-# Entities per shard. A batch of slim rows is a few hundred MB at most; the 100M-entity dump
-# becomes thousands of shards, which DuckDB reads as one glob.
-BATCH_SIZE = 20_000
-ROW_GROUP = 10_000
+# A batch of raw lines is cut at whichever limit comes first. 32 MB keeps a worker's parsed
+# batch to a few hundred MB and the full dump to tens of thousands of shards (one glob).
+BATCH_LINES = 20_000
+BATCH_BYTES = 32 * 1024 * 1024
+# DuckDB rounds row groups to 2,048-row vectors, so 8,192 stays at or under the spec's 10,000.
+ROW_GROUP = 8_192
 
 _SHARD_COLUMNS = (
     "{qid: 'VARCHAR', label_en: 'VARCHAR', label_mul: 'VARCHAR', description_en: 'VARCHAR',"
@@ -113,37 +118,89 @@ def _shard_row(slimmed: SlimEntity, config: KeptConfig) -> dict:
     }
 
 
-def _flush(con: duckdb.DuckDBPyConnection, batch: list[bytes], paths: WikidataPaths, n: int):
-    source = paths.shards_dir / f"batch_{n:07d}.ndjson"
-    source.write_bytes(b"\n".join(batch) + b"\n")
-    target = paths.shards_dir / f"shard_{n:07d}.parquet"
-    con.execute(
+_worker_config: KeptConfig | None = None
+_worker_con: duckdb.DuckDBPyConnection | None = None
+
+
+def _init_worker(config: KeptConfig) -> None:
+    """Pool initializer: module-level and picklable, so it works under spawn and forkserver."""
+    global _worker_config, _worker_con
+    _worker_config = config
+    _worker_con = duckdb.connect(database=":memory:")
+    _worker_con.execute("SET threads=1")
+    _worker_con.execute("SET memory_limit='512MB'")
+
+
+def _process_batch(task: tuple[int, list[bytes], str]) -> int:
+    """Parse one batch of raw dump lines and write its shard; returns the rows written."""
+    number, lines, shards_dir = task
+    rows = []
+    for line in lines:
+        entity = orjson.loads(line)
+        if str(entity.get("id", "")).startswith("Q"):
+            rows.append(orjson.dumps(_shard_row(slim(entity, _worker_config), _worker_config)))
+    if not rows:
+        return 0
+    source = Path(shards_dir) / f"batch_{number:07d}.ndjson"
+    source.write_bytes(b"\n".join(rows) + b"\n")
+    target = Path(shards_dir) / f"shard_{number:07d}.parquet"
+    _worker_con.execute(
         f"COPY (SELECT * FROM read_json('{source}', format='newline_delimited',"
         f" columns={_SHARD_COLUMNS})) TO '{target}' (FORMAT parquet, COMPRESSION zstd)"
     )
     source.unlink()
+    return len(rows)
 
 
-def _pass_one(
-    con: duckdb.DuckDBPyConnection,
-    dump: Path,
-    paths: WikidataPaths,
-    config: KeptConfig,
-    threads: int,
-) -> int:
+def _raw_batches(dump: Path, threads: int) -> Iterator[list[bytes]]:
+    """Slice the dump into batches of raw entity lines, without parsing them."""
     batch: list[bytes] = []
-    shards = 0
-    for entity in iter_entities(dump, threads=threads):
-        if not str(entity.get("id", "")).startswith("Q"):
-            continue
-        batch.append(orjson.dumps(_shard_row(slim(entity, config), config)))
-        if len(batch) >= BATCH_SIZE:
-            _flush(con, batch, paths, shards)
-            batch, shards = [], shards + 1
+    size = 0
+    with open_dump(dump, min(threads, 4)) as handle:
+        for raw in handle:
+            line = raw.strip()
+            if line in (b"", b"[", b"]"):
+                continue
+            batch.append(line[:-1] if line.endswith(b",") else line)
+            size += len(line)
+            if len(batch) >= BATCH_LINES or size >= BATCH_BYTES:
+                yield batch
+                batch, size = [], 0
     if batch:
-        _flush(con, batch, paths, shards)
-        shards += 1
-    return shards
+        yield batch
+
+
+def _pass_one(dump: Path, paths: WikidataPaths, config: KeptConfig, threads: int) -> int:
+    """The parent decompresses and slices lines; `threads - 1` workers (min 1) parse and write
+    shards. In-flight batches are bounded, so memory stays at a few batches per worker."""
+    workers = max(1, threads - 1)
+    in_flight = threading.BoundedSemaphore(2 * workers)
+    errors: list[BaseException] = []
+
+    def done(_rows: int) -> None:
+        in_flight.release()
+
+    def failed(error: BaseException) -> None:
+        errors.append(error)
+        in_flight.release()
+
+    context = multiprocessing.get_context("spawn")
+    with context.Pool(workers, _init_worker, (config,)) as pool:
+        for number, lines in enumerate(_raw_batches(dump, threads)):
+            in_flight.acquire()
+            if errors:
+                break
+            pool.apply_async(
+                _process_batch,
+                ((number, lines, str(paths.shards_dir)),),
+                callback=done,
+                error_callback=failed,
+            )
+        pool.close()
+        pool.join()
+    if errors:
+        raise errors[0]
+    return len(list(paths.shards_dir.glob("shard_*.parquet")))
 
 
 def _copy(con: duckdb.DuckDBPyConnection, select: str, target: Path, row_group: int = ROW_GROUP):
@@ -226,7 +283,7 @@ def distill(
         con.execute(f"SET temp_directory='{paths.tmp_dir}'")
         con.execute(f"SET threads={int(threads)}")
 
-        _pass_one(con, dump, paths, config, threads)
+        _pass_one(dump, paths, config, threads)
         raw_redirects = paths.shards_dir / "redirects.ndjson"
         _write_redirects_raw(redirect_sql, page_sql, raw_redirects)
 
@@ -249,7 +306,7 @@ def distill(
                 con,
                 "SELECT qid, label_en, label_mul, description_en FROM shards ORDER BY qid",
                 paths.staged("labels"),
-                100_000,
+                ROW_GROUP,
             ),
             "external_ids": _copy(
                 con,
@@ -291,7 +348,7 @@ def distill(
                 ORDER BY from_qid, to_qid
                 """,
                 paths.staged("redirects"),
-                100_000,
+                ROW_GROUP,
             ),
         }
         assert set(counts) == set(TABLES)
