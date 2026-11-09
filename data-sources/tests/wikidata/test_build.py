@@ -69,6 +69,28 @@ def test_a_gate_failure_keeps_report_and_failed_manifest_but_no_tables(tmp_path,
     assert result.exit_code == 1
 
 
+def test_keep_failed_tables_leaves_staged_tables_but_the_version_stays_unservable(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        build_module, "run_gates", lambda *a, **k: [GateResult("row_counts", "fail", "forced")]
+    )
+    with pytest.raises(BuildFailed):
+        run_build(tmp_path, keep_failed_tables=True)
+    paths = WikidataPaths(root=tmp_path, dump_date="2026-11-05")
+    assert all(paths.staged(t).exists() for t in TABLES)
+    assert json.loads(paths.manifest_path.read_text())["gates_passed"] is False
+    assert read_status(tmp_path).passing == []
+    assert read_status(tmp_path).failed == ["2026-11-05"]
+
+
+def test_the_keep_failed_tables_flag_is_on_the_command_line(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(build_module, "build", lambda **kwargs: seen.update(kwargs))
+    result = runner.invoke(app, ["--root", str(tmp_path), "--keep-failed-tables"])
+    assert result.exit_code == 0 and seen["keep_failed_tables"] is True
+
+
 def test_without_dump_it_discovers_downloads_and_deletes_the_dump(tmp_path):
     base = "https://dumps.wikimedia.org/wikidatawiki/"
     payload = (FIXTURES / "mini-all.json.gz").read_bytes()

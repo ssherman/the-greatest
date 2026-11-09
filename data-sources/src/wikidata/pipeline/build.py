@@ -58,6 +58,7 @@ def build(
     redirects_dump_date: str | None = None,
     keep_dump: bool = False,
     fixture: bool = False,
+    keep_failed_tables: bool = False,
     client: httpx.Client | None = None,
     config: KeptConfig | None = None,
 ) -> dict:
@@ -112,7 +113,10 @@ def build(
             tables=table_stats(paths, staged=True),
         )
         write_manifest(paths, manifest_dict(dump_date, results, counts, redirects_dump_date))
-        shutil.rmtree(paths.staging_dir, ignore_errors=True)
+        if keep_failed_tables:
+            typer.echo(f"keeping the staged tables of the failed build in {paths.staging_dir}")
+        else:
+            shutil.rmtree(paths.staging_dir, ignore_errors=True)
         raise BuildFailed(f"quality gates failed for {dump_date}")
 
     for name in TABLES:
@@ -142,6 +146,11 @@ def main(
     redirects_dump_date: str | None = typer.Option(None, "--redirects-dump-date"),
     keep_dump: bool = typer.Option(False, "--keep-dump"),
     fixture: bool = typer.Option(False, "--fixture", help="skip the real-dump canaries"),
+    keep_failed_tables: bool = typer.Option(
+        False,
+        "--keep-failed-tables",
+        help="diagnosis only: leave the staged tables when a gate fails (never servable)",
+    ),
 ) -> None:
     try:
         build(
@@ -155,6 +164,7 @@ def main(
             threads=threads,
             keep_dump=keep_dump,
             fixture=fixture,
+            keep_failed_tables=keep_failed_tables,
         )
     except BuildFailed as exc:
         typer.echo(str(exc), err=True)

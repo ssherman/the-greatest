@@ -68,6 +68,44 @@ def test_an_excluded_type_in_items_fails(staged, config, tmp_path):
     assert results["no_excluded_types"].status == "fail"
 
 
+def test_a_failing_excluded_types_gate_names_sample_items_and_types(staged, config, tmp_path):
+    paths, _ = staged
+    copy = copy_staged(
+        paths,
+        tmp_path,
+        items=f"SELECT * REPLACE (['Q13442814'] AS types) FROM '{paths.staged('items')}'"
+        " WHERE qid = 'Q622400'",
+    )
+    observed = by_name(run_gates(copy, config, None, fixture=True))["no_excluded_types"].observed
+    assert observed["violations"] == 1
+    assert observed["samples"] == [{"qid": "Q622400", "types": ["Q13442814", "Q8261"]}]
+
+
+def test_a_person_also_typed_as_an_excluded_type_is_kept_not_a_violation(staged, config, tmp_path):
+    # distill keeps every person-typed item regardless of excluded roots, so the gate must too.
+    paths, _ = staged
+    copy = copy_staged(
+        paths,
+        tmp_path,
+        items=f"SELECT * REPLACE (['Q5', 'Q13442814'] AS types) FROM '{paths.staged('items')}'"
+        " WHERE qid = 'Q622400'",
+    )
+    results = by_name(run_gates(copy, config, None, fixture=True))
+    assert results["no_excluded_types"].status == "pass"
+
+
+def test_a_form_typed_excluded_non_person_still_fails(staged, config, tmp_path):
+    paths, _ = staged
+    copy = copy_staged(
+        paths,
+        tmp_path,
+        items="SELECT * REPLACE (['Q571'] AS types, ['Q13442814'] AS forms) "
+        f"FROM '{paths.staged('items')}' WHERE qid = 'Q622400'",
+    )
+    results = by_name(run_gates(copy, config, None, fixture=True))
+    assert results["no_excluded_types"].status == "fail"
+
+
 def test_a_missing_canary_fails(staged, config, tmp_path):
     paths, _ = staged
     copy = copy_staged(

@@ -1,7 +1,8 @@
 """Wikidata redirects from the MediaWiki SQL dumps (`redirect` and `page`).
 
-Both files are MySQL extended INSERTs: ``INSERT INTO `t` VALUES (..),(..);`` one statement per
-line. They are parsed line by line with a field-level tuple tokenizer (quoted strings with
+Both files are MySQL extended INSERTs, in either form: ``INSERT INTO `t` VALUES (..),(..);`` on one
+line, or (the real dumps) ``VALUES`` alone on its line then one tuple per line, `,`-terminated, the
+last `;`. Parsed line by line with a field-level tuple tokenizer (quoted strings with
 backslash escapes), never read whole.
 """
 
@@ -50,13 +51,25 @@ def _open(path: Path) -> IO[str]:
 
 def iter_rows(path: Path, table: str) -> Iterator[list[str | None]]:
     """Every row of every ``INSERT INTO `table` `` statement, as a list of decoded fields."""
-    prefix = f"INSERT INTO `{table}` VALUES "
+    prefix = f"INSERT INTO `{table}` VALUES"
+    inserting = False
+    pending = ""  # the unfinished tail of a tuple that continues on the next line
     with _open(path) as handle:
         for line in handle:
-            if not line.startswith(prefix):
+            if line.startswith(prefix):
+                inserting = True
+                line = line[len(prefix) :]
+                pending = ""
+            elif not inserting:
                 continue
-            for match in _TUPLE.finditer(line, len(prefix)):
+            text = pending + line
+            end = 0
+            for match in _TUPLE.finditer(text):
+                end = match.end()
                 yield _split(match.group(1))
+            pending = text[end:] if "(" in text[end:] else ""
+            if line.rstrip().endswith(";") and not pending:
+                inserting = False
 
 
 def _qid_number(title: str | None) -> int | None:

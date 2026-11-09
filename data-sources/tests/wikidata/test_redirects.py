@@ -33,6 +33,29 @@ def test_tokenizer_handles_escaped_quotes_and_backslashes():
     assert rows[0][-1] is None
 
 
+def test_a_multi_line_dump_yields_the_expected_pairs():
+    # The real Wikimedia format: VALUES alone on its line, one tuple per line.
+    assert set(parse_redirects(REDIRECT, PAGE)) == {
+        ("Q900101", "Q622400"),
+        ("Q900102", "Q622400"),
+        ("Q900106", "Q12418"),
+    }
+
+
+def test_rows_come_from_every_insert_statement_in_both_forms():
+    assert [r[0] for r in iter_rows(REDIRECT, "redirect")] == [
+        "1001", "1002", "1003", "1004", "1009", "1006", "1007",
+    ]  # fmt: skip
+
+
+def test_a_tuple_spanning_lines_is_read_whole(tmp_path):
+    path = tmp_path / "redirect.sql"
+    path.write_text(
+        "INSERT INTO `redirect` VALUES\n(1,0,'Q2','',''),(2,0,'Q\n3','',''),\n(3,0,'Q\n4','','');\n"
+    )
+    assert [r[0] for r in iter_rows(path, "redirect")] == ["1", "2", "3"]
+
+
 def test_a_chain_past_the_hop_limit_is_dropped(tmp_path, monkeypatch):
     monkeypatch.setattr(redirects, "MAX_HOPS", 2)
     page = tmp_path / "page.sql"

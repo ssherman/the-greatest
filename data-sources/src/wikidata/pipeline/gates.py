@@ -87,23 +87,38 @@ def _canaries(con, paths) -> GateResult:
     )
 
 
+SAMPLE_LIMIT = 20
+
+
 def _no_excluded_types(con, paths, config: KeptConfig) -> GateResult:
+    """Applies distill's rule (`_kept_set`): a person-typed item is kept whatever else it is typed
+    as (Wikidata has persons also typed as scholarly articles), so only a non-person item typed
+    under an excluded root is a violation."""
     items = paths.staged("items")
+    people = "[" + ", ".join(f"'{t}'" for t in sorted(config.person_types)) + "]"
     con.execute(
         "CREATE OR REPLACE TEMP TABLE _edges AS "
         f"SELECT qid AS child, unnest(subclass_of) AS parent FROM '{items}'"
     )
     closure_table(con, "_excluded", config.excluded_roots, "_edges")
-    (bad,) = _one(
-        con,
-        "SELECT count(*) FROM (SELECT qid, unnest(list_concat(types, forms)) AS cls "
-        f"FROM '{items}') WHERE cls IN (SELECT cls FROM _excluded)",
+    con.execute(
+        "CREATE OR REPLACE TEMP TABLE _violations AS "
+        f"SELECT qid, list_concat(types, forms) AS all_types FROM '{items}' "
+        f"WHERE NOT list_has_any(types, {people}) "
+        "AND list_has_any(list_concat(types, forms), (SELECT list(cls) FROM _excluded))"
     )
+    (bad,) = _one(con, "SELECT count(*) FROM _violations")
+    samples = [
+        {"qid": qid, "types": list(types)}
+        for qid, types in con.execute(
+            f"SELECT qid, all_types FROM _violations ORDER BY qid LIMIT {SAMPLE_LIMIT}"
+        ).fetchall()
+    ]
     return GateResult(
         "no_excluded_types",
         "fail" if bad else "pass",
         f"{bad} items typed under an excluded root" if bad else "no excluded types in items",
-        {"violations": bad},
+        {"violations": bad, "samples": samples},
     )
 
 
