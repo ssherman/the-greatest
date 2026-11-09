@@ -71,6 +71,25 @@ test.describe('Books API developer pages, signed out', () => {
     await expect(page.locator('#mcp-tool-search_books')).toBeVisible();
   });
 
+  test('the documentation page gives sign-in instructions with the exact address', async ({ page }) => {
+    await page.goto('/developers');
+
+    const url = 'https://dev-new.thegreatestbooks.org/api/mcp';
+    await expect(page.getByRole('heading', { level: 3, name: /signing in/i })).toBeVisible();
+    await expect(page.locator('#mcp-exact-url code').first()).toHaveText(url);
+    await expect(page.locator('#mcp-claude-apps')).toContainText('Add custom connector');
+    await expect(page.locator('#mcp-claude-code-oauth')).toHaveText(
+      `claude mcp add --transport http --scope user the-greatest-books ${url}`
+    );
+    await expect(page.locator('#mcp-codex')).toContainText(`codex mcp add the-greatest-books --url ${url}`);
+    await expect(page.locator('#mcp-codex')).toContainText('codex mcp login the-greatest-books');
+    await expect(page.locator('#mcp-revoke').getByRole('link')).toHaveAttribute('href', '/developers/tokens');
+    for (const id of ['#mcp-claude-code-oauth', '#mcp-codex', '#mcp-exact-url']) {
+      const text = (await page.locator(id).textContent()) ?? '';
+      expect(text).not.toMatch(/\/api\/mcp\/(\s|$)/);
+    }
+  });
+
   // The copy a member reads before connecting. Pinned here, not in the
   // controller test: AGENTS.md keeps controller tests to behaviour.
   test('the MCP section says how tools differ from the endpoints and how to set the token', async ({ page }) => {

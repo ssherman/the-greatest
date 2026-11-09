@@ -124,6 +124,88 @@ module Developers
       assert_select "[data-testid=token-cap-reached]", 1
     end
 
+    # --- connected apps and the widened gate ------------------------------------
+
+    def connect(user, revoked_at: nil)
+      OauthConnection.create!(user: user, application: oauth_applications(:claude_ai), resource: "mcp",
+        scopes: ["books:read"], approved_at: 2.days.ago, revoked_at: revoked_at)
+    end
+
+    test "a lapsed member with a live connection sees the page" do
+      user = users(:user_with_expired_membership)
+      connection = connect(user)
+      sign_in_as(user, stub_auth: true)
+
+      get developers_tokens_path
+
+      assert_response :success
+      assert_select "#developers_connections ##{ActionView::RecordIdentifier.dom_id(connection)}", 1
+      assert_select "#developers_token_form", 0
+      assert_select "#developers_tokens", 0
+    end
+
+    test "a lapsed member whose only connection is revoked is still redirected" do
+      user = users(:user_with_expired_membership)
+      connect(user, revoked_at: 1.day.ago)
+      sign_in_as(user, stub_auth: true)
+
+      get developers_tokens_path
+
+      assert_redirected_to membership_path
+    end
+
+    test "a lapsed member with a live connection still cannot create a token" do
+      user = users(:user_with_expired_membership)
+      connect(user)
+
+      assert_no_difference -> { ApiToken.count } do
+        create_token({name: "laptop", scopes: ["books:read"], expires_in: ""}, user: user)
+      end
+      assert_redirected_to membership_path
+    end
+
+    test "a member sees only their own live connections" do
+      sign_in_as(users(:regular_user), stub_auth: true)
+      revoked = connect(users(:regular_user), revoked_at: 1.day.ago)
+
+      get developers_tokens_path
+
+      assert_select "#developers_connections tbody tr", 1
+      assert_select "##{ActionView::RecordIdentifier.dom_id(oauth_connections(:member_mcp))}", 1
+      assert_select "##{ActionView::RecordIdentifier.dom_id(revoked)}", 0
+      assert_select "##{ActionView::RecordIdentifier.dom_id(oauth_connections(:admin_mcp))}", 0
+    end
+
+    test "an admin sees their admin connection" do
+      sign_in_as(users(:admin_user), stub_auth: true)
+
+      get developers_tokens_path
+
+      assert_response :success
+      assert_select "#developers_connections ##{ActionView::RecordIdentifier.dom_id(oauth_connections(:admin_mcp))}", 1
+    end
+
+    test "a member with no live connections sees the section with no rows" do
+      oauth_connections(:member_mcp).update_columns(revoked_at: 1.day.ago)
+      sign_in_as(users(:regular_user), stub_auth: true)
+
+      get developers_tokens_path
+
+      assert_response :success
+      assert_select "#developers_connections", 1
+      assert_select "#developers_connections table", 0
+    end
+
+    test "a connection whose resource left the registry still renders" do
+      oauth_connections(:member_mcp).update_column(:resource, "retired")
+      sign_in_as(users(:regular_user), stub_auth: true)
+
+      get developers_tokens_path
+
+      assert_response :success
+      assert_select "##{ActionView::RecordIdentifier.dom_id(oauth_connections(:member_mcp))}", 1
+    end
+
     # --- create -----------------------------------------------------------------
 
     def create_token(params, user: users(:editor_user))

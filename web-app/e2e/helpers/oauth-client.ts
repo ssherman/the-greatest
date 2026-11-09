@@ -12,16 +12,19 @@ export type OauthClient = {
   callbackPattern: string;
   state: string;
   authorizeUrl: string;
+  verifier: string;
+  clientName: string;
 };
 
 export async function registerClient(
   request: APIRequestContext,
   port: number,
-  options: { resource?: string; scope?: string } = {}
+  options: { resource?: string; scope?: string; clientName?: string } = {}
 ): Promise<OauthClient> {
   const redirectUri = `http://127.0.0.1:${port}/callback`;
+  const clientName = options.clientName ?? 'E2E client';
   const response = await request.post('/api/oauth/register', {
-    data: { redirect_uris: [redirectUri], client_name: 'E2E client' },
+    data: { redirect_uris: [redirectUri], client_name: clientName },
   });
   if (response.status() !== 201) throw new Error(`registration failed: ${response.status()}`);
   const { client_id: clientId } = await response.json();
@@ -47,6 +50,8 @@ export async function registerClient(
     callbackPattern: `http://127.0.0.1:${port}/callback**`,
     state,
     authorizeUrl: `/oauth/authorize?${query.toString()}`,
+    verifier,
+    clientName,
   };
 }
 

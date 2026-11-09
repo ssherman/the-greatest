@@ -239,6 +239,54 @@ module Services
         assert_equal 10, ip_limiter.hit_ip(:oauth_register, nil).minute.limit
       end
 
+      def v6_limiter(per_minute = 2)
+        config = ip_config
+        config.oauth_register_per_minute = per_minute
+        config.unauthenticated_per_minute = per_minute
+        RateLimiter.new(now: NOW, store: @store, config: config)
+      end
+
+      test "two IPv6 addresses in one /64 share an oauth_register budget" do
+        limiter = v6_limiter
+        limiter.hit_ip(:oauth_register, "2001:db8:1:2::1")
+        limiter.hit_ip(:oauth_register, "2001:db8:1:2::1")
+
+        assert limiter.hit_ip(:oauth_register, "2001:db8:1:2:ffff::9").exceeded?
+      end
+
+      test "IPv6 addresses in different /64s have separate budgets" do
+        limiter = v6_limiter
+        2.times { limiter.hit_ip(:oauth_register, "2001:db8:1:2::1") }
+
+        refute limiter.hit_ip(:oauth_register, "2001:db8:1:3::1").exceeded?
+      end
+
+      test "an IPv4-mapped IPv6 address counts as its IPv4 address" do
+        limiter = v6_limiter
+        limiter.hit_ip(:oauth_register, "::ffff:203.0.113.5")
+        limiter.hit_ip(:oauth_register, "203.0.113.5")
+
+        assert limiter.hit_ip(:oauth_register, "::ffff:203.0.113.5").exceeded?
+      end
+
+      test "the unauthenticated window also groups IPv6 by /64" do
+        limiter = v6_limiter
+        limiter.hit_unauthenticated("2001:db8:1:2::1")
+        limiter.hit_unauthenticated("2001:db8:1:2::2")
+
+        assert limiter.peek_unauthenticated("2001:db8:1:2:aaaa::3").exceeded?
+        refute limiter.peek_unauthenticated("2001:db8:1:9::3").exceeded?
+      end
+
+      test "an unparsable address is still counted under its own string" do
+        limiter = v6_limiter
+        limiter.hit_ip(:oauth_register, "not-an-ip")
+        limiter.hit_ip(:oauth_register, "not-an-ip")
+
+        assert limiter.hit_ip(:oauth_register, "not-an-ip").exceeded?
+        refute limiter.hit_ip(:oauth_register, "other-junk").exceeded?
+      end
+
       test "an IPv4-mapped IPv6 address inside a range counts toward the range" do
         assert_equal 3_000, ip_limiter.hit_ip(:unauthenticated, "::ffff:160.79.104.9").minute.limit
       end
