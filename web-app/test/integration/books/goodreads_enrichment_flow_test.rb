@@ -33,6 +33,9 @@ module Books
       # The evidence step has its own tests; its Wikidata, Wikipedia and WorldCat calls are external.
       enrichment = stub(outcome: "nothing_to_apply", id: 0, facts: {"wikidata_qid" => nil})
       ::Services::Books::Evidence::Gather.stubs(:call).returns(stub(data: {enrichment: enrichment}))
+      row = stub(id: 0, reason: "no_evidence", outcome: "nothing_to_apply")
+      ::Services::Books::Origin::Judge.stubs(:call)
+        .returns(::Services::Books::Origin::Judge::Result.new(success?: true, data: {enrichments: [row], applied: false}, errors: []))
     end
 
     def ok(klass, data = {}) = klass::Result.new(success?: true, data: data, errors: [])

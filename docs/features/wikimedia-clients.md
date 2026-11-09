@@ -56,7 +56,12 @@ stripping refs, links and templates.
   an email address by default -- the Wikimedia policy accepts a URL, and this codebase never
   sends an email address to a third party without being asked to.
 - All of this is tuned in `config/initializers/wikimedia.rb`: `requests_per_window`,
-  `window_seconds`, `max_inline_wait`, `maxlag`, `contact`.
+  `window_seconds`, `max_inline_wait`, `evidence_max_inline_wait`, `maxlag`, `contact`.
+- The evidence lane (the `evidence` Sidekiq capsule, one step at a time) waits up to
+  `evidence_max_inline_wait` (30 s) for a slot instead of `max_inline_wait` (5 s), so a gather finishes
+  instead of giving up and restarting. `Services::Books::Evidence::Gather` builds its default clients
+  on a `Wikimedia::Http` with a copy of the settings; every other user keeps 5 s. A maxlag refusal
+  still raises `RateLimited` at once.
 
 ## Verified limits (2026-09-27)
 

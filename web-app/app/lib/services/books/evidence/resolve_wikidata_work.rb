@@ -34,6 +34,7 @@ module Services
           "P243" => "books_work_oclc_id"
         }.freeze
         MAX_STATEMENT_PAIRS = 50
+        ANONYMOUS_QID = "Q4233718"
 
         def self.call(book:, client: ::Wikidata::Client.new)
           new(book: book, client: client).call
@@ -152,6 +153,7 @@ module Services
         end
 
         def authors_ok?(work)
+          return work.authors.all? { |qid| qid == ANONYMOUS_QID } if only_placeholder_or_place_authors?
           return true if work.authors.empty?
           return false if @book.authors.empty?
           return true if work.authors.intersect?(author_qids)
@@ -167,6 +169,14 @@ module Services
         end
 
         UnkeyedAuthors = Data.define(:authors)
+
+        # Books by "Unknown" or a place ("China") have no person for Wikidata to name,
+        # so the work may carry no author or Wikidata's "anonymous"; any other author
+        # is someone else's work.
+        def only_placeholder_or_place_authors?
+          authors = @book.authors.to_a
+          authors.any? && authors.all? { |author| ::Services::Books::Authors::AuthorKind.kind(author) != :person }
+        end
 
         def unkeyed_authors
           keyed = ::Identifier.where(identifiable_type: "Books::Author", identifiable_id: @book.authors.map(&:id),

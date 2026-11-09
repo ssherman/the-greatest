@@ -27,6 +27,18 @@ module Services
         "east timorese" => "Timorese", "vatican citizen" => "Vatican"
       }.freeze
 
+      # Country names the countries gem resolves to the wrong nationality or
+      # not at all (countries 8.1.0): England maps to British, Scotland and
+      # Wales to nothing. This file keeps the home nations apart on purpose.
+      COUNTRY_NAMES = {
+        "england" => "English", "scotland" => "Scottish", "wales" => "Welsh",
+        "northern ireland" => "Northern Irish"
+      }.freeze
+
+      # ISO codes whose gem demonym is wrong: NE (Niger) comes back "Nigerian",
+      # which is Nigeria's row. A name matched here that has no row stays unmatched.
+      ISO_NATIONALITIES = {"NE" => "Nigerien"}.freeze
+
       # Rows that are not nationalities.
       PLACEHOLDERS = %w[unknown multiple mulitple mixed].freeze
 
@@ -127,6 +139,7 @@ module Services
       # "Antiguan, Barbudan" and "Bosnian, Herzegovinian": the first part names the country.
       def iso_nationality(code)
         return nil if code.blank?
+        return ISO_NATIONALITIES[code.to_s.upcase] if ISO_NATIONALITIES.key?(code.to_s.upcase)
 
         ISO3166::Country[code]&.nationality.to_s.split(",").first.to_s.strip.presence
       end
@@ -136,7 +149,22 @@ module Services
         return nil if PLACEHOLDERS.include?(target)
         return @rows[target] if @rows.key?(target)
 
-        @rows[target] = ::Books::Country.where("lower(name) = ?", target).order(:id).first
+        @rows[target] = by_name(target) || by_country_name(name)
+      end
+
+      def by_name(target) = ::Books::Country.where("lower(name) = ?", target).order(:id).first
+
+      # "France" -> the "French" row. A nationality row always wins first.
+      def by_country_name(name)
+        return by_name(COUNTRY_NAMES[name.downcase].downcase) if COUNTRY_NAMES.key?(name.downcase)
+
+        country = ISO3166::Country.find_country_by_any_name(name)
+        return nil unless country
+
+        nationality = (ISO_NATIONALITIES[country.alpha2] || country.nationality).to_s.split(",").first.to_s.strip.downcase
+        return nil if nationality.blank? || PLACEHOLDERS.include?(nationality)
+
+        by_name((ALIASES[nationality] || nationality).downcase)
       end
     end
   end

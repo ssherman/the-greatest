@@ -7,6 +7,8 @@
 # has only the other two steps and still runs. Version 3 added evidence (a
 # books.evidence ledger row for the later origin and category stages), which
 # waits on goodreads too; a run planned under version 2 has no evidence step
+# and still runs. Version 4 added categorize (the origin judge), which waits on
+# book_facts and evidence; a run planned under version 3 has no categorize step
 # and still runs.
 #
 # book_facts also waits for the AI step of every author the import created, but
@@ -19,16 +21,15 @@ module Workflows
   module Books
     class BookEnrichment < Workflows::Definition
       workflow "books.book_enrichment"
-      version 3
+      version 4
       target_class ::Books::Book
 
       # On the goodreads_fetch capsule, one job at a time: FetchGate pacing relies on it.
       add_step key: :goodreads, queue: :goodreads_fetch, lease: 10.minutes,
         adapter: Steps::Goodreads.new
 
-      # Gathers Wikidata, Wikipedia and WorldCat evidence. Nothing waits on it yet;
-      # the categorize step of the next stage will.
-      add_step key: :evidence, queue: :low, lease: 10.minutes, waits_on: {goodreads: :finish},
+      # Gathers Wikidata, Wikipedia and WorldCat evidence for the categorize step.
+      add_step key: :evidence, queue: :evidence, lease: 10.minutes, waits_on: {goodreads: :finish},
         adapter: Steps::Evidence.new
 
       add_step key: :book_facts, queue: :low, lease: 15.minutes, waits_on: {goodreads: :finish},
@@ -40,6 +41,10 @@ module Workflows
       # a failed book again.
       add_step key: :amazon, queue: :serial, lease: 10.minutes, max_attempts: 7, waits_on: {goodreads: :finish},
         adapter: Steps::Amazon.new
+
+      # Decides the origin country from the evidence and book_facts' answer.
+      add_step key: :categorize, queue: :low, lease: 10.minutes, waits_on: {book_facts: :finish, evidence: :finish},
+        adapter: Steps::Categorize.new
 
       # Plans a book run and dispatches what is ready once the caller's
       # transaction commits. Returns the run: the new one, or the active one when

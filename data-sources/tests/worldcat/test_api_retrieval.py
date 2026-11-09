@@ -1,8 +1,11 @@
+import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
 from worldcat.api.deps import Settings, open_artifact
 from worldcat.api.main import create_app
+from worldcat.api.retrieval import fetch_records
+from worldcat.pipeline.paths import WorldcatPaths
 
 
 @pytest.fixture(scope="module")
@@ -117,3 +120,41 @@ def test_lookup_rejects_more_than_500_or_an_invalid_isbn(client):
     response = client.post("/lookup", json={"isbn13s": ["9780735211292", "garbage"]})
     assert response.status_code == 422
     assert "garbage" in response.json()["detail"]
+
+
+def test_fetch_records_returns_records_with_and_without_holdings_and_skips_unknown(
+    worldcat_artifact,
+):
+    paths = WorldcatPaths(root=worldcat_artifact.root, dump_date=worldcat_artifact.dump_date)
+    con = duckdb.connect()
+    found = fetch_records(con, paths, [1055766559, 9000000030, 424242424242])
+    assert set(found) == {1055766559, 9000000030}
+    assert found[1055766559].holdings is not None
+    assert found[9000000030].holdings is None
+    assert fetch_records(con, paths, []) == {}
+
+
+def test_records_batch_keys_results_by_the_requested_number(client):
+    body = client.post("/records", json={"oclcs": [1055766559, 1000415078]}).json()
+    assert set(body["results"]) == {"1055766559", "1000415078"}
+    assert body["results"]["1055766559"]["title"].startswith("Atomic")
+    assert body["results"]["1055766559"]["redirected_from"] is None
+    assert body["results"]["1055766559"]["holdings"]["total_holding_count"] == 4000
+
+
+def test_records_batch_follows_a_redirect_and_reports_the_source(client):
+    body = client.post("/records", json={"oclcs": [9000000010, 1055766559]}).json()
+    redirected = body["results"]["9000000010"]
+    assert redirected["oclc"] == 1055766559 and redirected["redirected_from"] == 9000000010
+    assert body["results"]["1055766559"]["redirected_from"] is None
+
+
+def test_records_batch_omits_cycle_and_unknown_numbers(client):
+    response = client.post("/records", json={"oclcs": [9000000020, 424242424242, 1055766559]})
+    assert response.status_code == 200
+    assert set(response.json()["results"]) == {"1055766559"}
+
+
+def test_records_batch_rejects_more_than_50(client):
+    assert client.post("/records", json={"oclcs": list(range(1, 52))}).status_code == 422
+    assert client.post("/records", json={"oclcs": list(range(1, 51))}).status_code == 200

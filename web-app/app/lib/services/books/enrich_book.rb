@@ -83,7 +83,7 @@ module Services
       end
 
       def budget_exhausted?
-        Enrichment.research.today.count >= Rails.application.config.x.ai.research_daily_cap
+        Enrichment.against_research_cap.count >= Rails.application.config.x.ai.research_daily_cap
       end
 
       def run(mode)
