@@ -82,7 +82,7 @@ The `wikidata` VM (150) is the same shape, with `150.fw` and `/srv/wd-data`. Its
 service in `docs/features/wikidata-data-service.md`; `wikidata-refresh.timer` (04:00 daily and 15 minutes
 after boot) runs `guest/wikidata-refresh.sh`, a copy of `ol-refresh.sh`'s promote-or-roll-back logic. The
 build downloads the dump itself (about 157 GB, roughly 4.5 hours), so the script holds the build lock for the
-whole run and a second timer firing during it defers. It puts an 8 GB swap file on the data disk
+whole run; a second timer firing during it defers, and so does a deploy (it takes the same lock, as on `ol`). It puts an 8 GB swap file on the data disk
 (`/srv/wd-data/swapfile`, not in fstab) once a build is certain. Memory: API `mem_limit` 1 GB, build 10 GB,
 `compose.wikidata.yml`. It writes `current-version`, runs `compose up -d wikidata` and polls `/version` on
 8083; if the API does not serve the new date in time it writes the previous date back, and with no previous

@@ -69,7 +69,7 @@ t_wikidata_api() {
 t_wikidata_build_limits() {
   cfg wikidata wikidata | jq -e '.services["wikidata-build"] as $b |
     ($b.mem_limit == 10737418240 or $b.mem_limit == "10737418240" or $b.mem_limit == "10g") and
-    $b.environment.WD_BUILD_MEMORY_LIMIT == "8GB" and $b.environment.WD_BUILD_THREADS == "6"' >/dev/null
+    ($b.command | index("8GB") != null) and ($b.command | index("6") != null)' >/dev/null
 }
 t_wikidata_alias() {
   cfg wikidata wikidata | jq -e '.services.wikidata.networks.default.aliases == ["wikidata"]' >/dev/null

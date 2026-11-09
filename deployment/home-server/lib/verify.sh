@@ -93,6 +93,7 @@ verify_vms() {
     expect "$role: cloud-init instance-id is pinned" vm_ssh "$role" "sudo grep -qx the-greatest-$role /var/lib/cloud/data/instance-id"
   done
   expect "ol: recommender-train.timer is enabled" vm_ssh ol "systemctl is-enabled --quiet recommender-train.timer"
+  expect "wikidata: wikidata-refresh.timer is enabled" vm_ssh wikidata "systemctl is-enabled --quiet wikidata-refresh.timer"
   if pgverify_enabled; then
     expect "pgverify: pg-restore-verify.timer is enabled" vm_ssh pgverify "systemctl is-enabled --quiet pg-restore-verify.timer"
     expect "pgverify: has no heartbeat timer (it runs no always-on service)" vm_ssh pgverify "! systemctl is-enabled --quiet the-greatest-heartbeat.timer"

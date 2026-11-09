@@ -228,7 +228,18 @@ check "tunnels switched off on ol with no data version: cloudflared is still rem
 check "tunnels off and no cloudflared running: nothing is removed" t_tunnels_off_nothing_running
 check "tunnels on: cloudflared is brought up, never removed" t_tunnels_on_keeps_it
 check "a no-op ol deploy does not care about the build lock" t_ol_noop_ignores_lock
+t_wikidata_build_running() {
+  setup; write_env ROLE=wikidata REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  echo 2026-11-01 >"$WD_DATA/current-version"
+  commit data-sources/app v2
+  flock "$BUILD_LOCK" sleep 3 &
+  sleep 0.5
+  deploy; rc=$?
+  wait
+  [ "$rc" = 0 ] && ! called '^compose '
+}
 check "ol does not deploy under a running build" t_ol_build_running
+check "wikidata does not deploy under a running build" t_wikidata_build_running
 check "pgverify builds the Postgres image and starts nothing" t_pgverify_builds_postgres_only
 check "a change to the Postgres Dockerfile deploys on pgverify" t_pgverify_watches_the_postgres_image
 check "the same change deploys nothing on the other roles" t_postgres_image_change_leaves_the_others

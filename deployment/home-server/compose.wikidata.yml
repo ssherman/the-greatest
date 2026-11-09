@@ -12,8 +12,5 @@ services:
       WD_API_THREADS: "2"
   wikidata-build:
     mem_limit: 10g
-    environment:
-      # The build command (data-sources/docker-compose.yml) reads these same
-      # names from the compose process's environment, with these as defaults.
-      WD_BUILD_MEMORY_LIMIT: 8GB
-      WD_BUILD_THREADS: "6"
+    # The build command's defaults (8GB, 6 threads, data-sources/docker-compose.yml)
+    # are the production values; mem_limit caps the container.

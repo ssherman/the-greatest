@@ -37,10 +37,11 @@ if ! needs_deploy; then
 fi
 
 log "deploying ${target:0:12} (was ${deployed:0:12})"
-if [ "$ROLE" = ol ]; then
+if [ "$ROLE" = ol ] || [ "$ROLE" = wikidata ]; then
   # Only a deploy with something to do takes the lock, so a no-op check every
   # 15 minutes never blocks the refresh. Never rebuild under a running data
-  # build, and never let one start mid-deploy.
+  # build, and never let one start mid-deploy. On wikidata a deploy mid-refresh
+  # would race promotion and rollback.
   exec 9>"$BUILD_LOCK"
   if ! flock -n 9; then
     log "a build or training run holds $BUILD_LOCK; deploying next time"
