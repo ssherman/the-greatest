@@ -16,7 +16,9 @@ against a Wikimedia host directly.
 (`docs/features/wikidata-data-service.md`), a copy built from a Wikidata dump. Pacing, `maxlag`
 and the cache below apply to Wikipedia only. Wikidata answers carry the dump's date
 (`Client#dump_date`), and a QID that exists in Wikidata but outside the copy is reported by
-`Client#not_kept` instead of being treated as gone. When the service is down the client raises
+`Client#not_kept` instead of being treated as gone. `WIKIDATA_SERVICE_URL` must be set in production
+(`Wikidata::Configuration` raises `ConfigurationError` rather than defaulting to loopback); development and
+test default to `http://127.0.0.1:8083`. When the service is down the client raises
 `Wikidata::Exceptions::Unavailable`, a `RateLimited`, so jobs and workflow steps wait and retry
 exactly as they do for a Wikipedia rate limit. The operations the author steps need:
 

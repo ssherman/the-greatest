@@ -400,11 +400,18 @@ module Services
           assert_empty stored_values
         end
 
-        test "a stored wikidata-source QID whose entity is missing is removed" do
+        test "a stored QID the service reports missing is kept, recorded, and ends resolution" do
           Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q50", source: :wikidata)
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          @client.expects(:by_statements).never
+          @client.expects(:work_items).never
 
-          assert_nil call.data[:qid]
-          assert_empty stored_values
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_nil data[:work]
+          assert_equal ["Q50"], stored_values
+          assert_includes data[:rejected], {"id" => "Q50", "reason" => "missing"}
         end
 
         test "a stored QID the service reports not kept is left in place and yields no evidence" do

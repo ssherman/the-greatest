@@ -58,6 +58,18 @@ module Wikidata
       assert_equal 300, error.retry_after
     end
 
+    test "production refuses to start without WIKIDATA_SERVICE_URL instead of guessing loopback" do
+      Rails.stubs(:env).returns(ActiveSupport::StringInquirer.new("production"))
+      saved = ENV.delete("WIKIDATA_SERVICE_URL")
+      begin
+        error = assert_raises(Exceptions::ConfigurationError) { Configuration.new(logger: nil) }
+        assert_match(/WIKIDATA_SERVICE_URL/, error.message)
+        assert_equal "http://wd.test", Configuration.new(base_url: "http://wd.test", logger: nil).base_url
+      ensure
+        ENV["WIKIDATA_SERVICE_URL"] = saved if saved
+      end
+    end
+
     test "configuration rejects a half-set Access token and a bad URL" do
       partial = CloudflareAccess::Credentials.new(client_id: "cid", client_secret: nil)
 

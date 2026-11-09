@@ -81,8 +81,13 @@ module Services
           entity = @client.entities([stored])[stored]
           work = entity && accept(entity, check_title: true)
           return [work.id, work, "stored"] if work
-          if entity.nil? && @client.not_kept.include?(stored)
-            @rejected << {"id" => stored, "reason" => "not_kept"}
+          if entity.nil?
+            # Neither answer proves the QID is wrong. not_kept: Wikidata has it but we do not
+            # distil it. missing: absent from a weekly snapshot, whose redirect dump can be weeks
+            # older than the JSON dump, and a QID stored since may be newer than the dump. A miss
+            # is weaker than a live 404, so the stored row stays and resolution ends here.
+            reason = @client.not_kept.include?(stored) ? "not_kept" : "missing"
+            @rejected << {"id" => stored, "reason" => reason}
             return NOT_KEPT
           end
 

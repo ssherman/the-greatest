@@ -13,7 +13,7 @@ module Wikidata
     attr_accessor :base_url, :user_agent, :timeout, :open_timeout, :logger, :access
 
     def initialize(base_url: nil, timeout: nil, open_timeout: nil, user_agent: nil, logger: nil, access: nil)
-      @base_url = base_url.nil? ? ENV.fetch("WIKIDATA_SERVICE_URL", DEFAULT_URL) : base_url
+      @base_url = base_url.nil? ? url_from_env : base_url
       @timeout = timeout || DEFAULT_TIMEOUT
       @open_timeout = open_timeout || DEFAULT_OPEN_TIMEOUT
       @user_agent = user_agent || DEFAULT_USER_AGENT
@@ -23,6 +23,16 @@ module Wikidata
     end
 
     private
+
+    # Production never guesses loopback: an unset variable there is a deploy mistake that
+    # would otherwise show up as every lookup being Unavailable.
+    def url_from_env
+      configured = ENV["WIKIDATA_SERVICE_URL"]
+      return configured unless configured.nil?
+      raise Exceptions::ConfigurationError, "WIKIDATA_SERVICE_URL must be set in production" if Rails.env.production?
+
+      DEFAULT_URL
+    end
 
     def validate_configuration!
       if access.partial?
