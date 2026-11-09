@@ -249,6 +249,51 @@ ents.append(
     )
 )
 
+# fix-round-1 begin
+# Synthetic: an essayist whose P800 (notable work) lists a kept book, the scholarly article
+# (unkept, so it must not come back from /linked-from) and a deprecated painting.
+ents.append(
+    synth(
+        "Q900020",
+        "Essayist Example",
+        "essayist",
+        {
+            "P31": [stmt("P31", "Q5")],
+            "P800": [
+                stmt("P800", "Q622400"),
+                stmt("P800", "Q900002"),
+                stmt("P800", "Q12418", rank="deprecated"),
+            ],
+        },
+    )
+)
+# Synthetic: an author with a preferred P800 and a normal one; only the preferred is "best rank".
+ents.append(
+    synth(
+        "Q900021",
+        "Ranked Example",
+        "writer",
+        {
+            "P31": [stmt("P31", "Q5")],
+            "P800": [stmt("P800", "Q900005"), stmt("P800", "Q622400", rank="preferred")],
+        },
+    )
+)
+# Synthetic: an edition carrying only an ISBN-10 (P957); the build stores it as ISBN-13.
+ents.append(
+    synth(
+        "Q900022",
+        "ISBN-10-only edition",
+        "1990 paperback edition",
+        {
+            "P31": [stmt("P31", "Q3331189")],
+            "P629": [stmt("P629", "Q622400")],
+            "P957": [stmt("P957", "0-306-40615-2", dtype="external-id")],
+        },
+    )
+)
+# fix-round-1 end
+
 # Filler: neutral, untyped items so the fixture has the shape of a real dump slice. No person
 # types and no real names, so nothing indexes them as anything. (Q12418, the painting, is real
 # and linked from no kept item.)

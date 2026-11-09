@@ -10,7 +10,7 @@ GZIPPED = FIXTURES / "mini-all.json.gz"
 def test_iter_entities_reads_gzip_and_plain():
     plain = [e["id"] for e in iter_entities(PLAIN)]
     gzipped = [e["id"] for e in iter_entities(GZIPPED)]
-    assert len(plain) == 40
+    assert len(plain) == 43
     assert plain == gzipped
 
 

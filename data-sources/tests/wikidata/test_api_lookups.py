@@ -1,6 +1,7 @@
 DUMP = "2026-11-05"
 BOOK, ACHEBE, TOLSTOY, HOMER = "Q622400", "Q155845", "Q7243", "Q6691"
 PAINTING, EDITION = "Q12418", "Q900001"
+ESSAYIST, RANKED, UNKEPT_REDIRECT = "Q900020", "Q900021", "Q900106"
 REDIRECT_FROM = "Q900101"  # mini-redirect.sql: Q900101 -> Q622400
 
 
@@ -91,10 +92,52 @@ def test_linked_from_excludes_editions_and_scholarly(wikidata_client):
 
 
 def test_linked_from_truncation_flag(wikidata_client):
+    def run(limit):
+        return post(
+            wikidata_client,
+            "/linked-from",
+            {"targets": [ACHEBE, RANKED], "properties": ["P50", "P800"], "limit": limit},
+        ).json()
+
+    assert (len(run(1)["rows"]), run(1)["truncated"]) == (1, True)
+    assert (len(run(2)["rows"]), run(2)["truncated"]) == (2, False)
+
+
+def test_linked_from_p800_drops_unkept_sources_and_deprecated_statements(wikidata_client):
+    body = post(wikidata_client, "/linked-from", {"targets": [ESSAYIST], "properties": ["P800"]})
+    # Q900002 (scholarly article) is not in items; Q12418 is deprecated and unkept.
+    assert [(r[0], r[1]) for r in body.json()["rows"]] == [(ESSAYIST, BOOK)]
+
+
+def test_linked_from_p800_uses_best_rank_only(wikidata_client):
+    body = post(wikidata_client, "/linked-from", {"targets": [RANKED], "properties": ["P800"]})
+    assert [r[1] for r in body.json()["rows"]] == [BOOK]  # the normal Q900005 is outranked
+
+
+def test_linked_from_p800_still_applies_exclude_types(wikidata_client):
     body = post(
-        wikidata_client, "/linked-from", {"targets": [ACHEBE], "properties": ["P50"], "limit": 1}
-    ).json()
-    assert len(body["rows"]) == 1
+        wikidata_client,
+        "/linked-from",
+        {"targets": [ESSAYIST], "properties": ["P800"], "exclude_types": ["Q7725634"]},
+    )
+    assert body.json()["rows"] == []
+
+
+def test_malformed_ids_are_422_not_missing(wikidata_client):
+    assert post(wikidata_client, "/items", {"ids": ["Q0"]}).status_code == 422
+    assert post(wikidata_client, "/labels", {"ids": ["x'; --"]}).status_code == 422
+    assert post(wikidata_client, "/linked-from", {"targets": ["Q01"]}).status_code == 422
+
+
+def test_a_redirect_to_an_unkept_entity_is_not_kept_never_missing(wikidata_client):
+    body = post(wikidata_client, "/items", {"ids": [UNKEPT_REDIRECT]}).json()
+    assert (body["not_kept"], body["missing"], body["items"]) == ([UNKEPT_REDIRECT], [], {})
+
+
+def test_isbn10_only_item_is_found_via_either_property(wikidata_client):
+    for pair in (["P957", "0306406152"], ["P212", "9780306406157"]):
+        body = post(wikidata_client, "/by-external-id", {"pairs": [pair]}).json()
+        assert body["ids"] == ["Q900022"], pair
 
 
 def test_names_matches_across_script_and_accents(wikidata_client):

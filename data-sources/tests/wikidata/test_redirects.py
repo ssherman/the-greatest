@@ -23,7 +23,7 @@ def test_a_cycle_is_dropped():
 def test_other_namespaces_and_interwiki_rows_are_ignored():
     pairs = set(parse_redirects(REDIRECT, PAGE))
     assert "Q900105" not in {source for source, _ in pairs}
-    assert len(pairs) == 2
+    assert len(pairs) == 3
 
 
 def test_tokenizer_handles_escaped_quotes_and_backslashes():

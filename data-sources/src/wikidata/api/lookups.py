@@ -151,76 +151,92 @@ def by_external_id(body: ExternalIdRequest, state: ArtifactState = Depends(get_s
     return {"ids": _unique(found)[: body.limit]}
 
 
+def _best_rank(statements: list[dict]) -> list[dict]:
+    """Like `wdt:`: the preferred statements if any exist, else the normal ones."""
+    for rank in ("preferred", "normal"):
+        chosen = [s for s in statements if s.get("rank", "normal") == rank]
+        if chosen:
+            return chosen
+    return []
+
+
 def _p800_works(cur, state: ArtifactState, targets: list[str]) -> list[tuple[str, str]]:
     """P800 is the author's own statement, so it lives in the target's claims, not in `links`."""
     rows = cur.execute(
         f"SELECT qid, claims FROM {_table(state, 'items')} WHERE qid IN ({_marks(targets)})",
         targets,
     ).fetchall()
+    found = {r[0]: r[1] for r in rows}
     pairs = []
-    for qid, claims in rows:
-        for statement in json.loads(claims).get("P800", []):
-            if statement.get("rank") == "deprecated":
-                continue
+    for target in targets:
+        if target not in found:
+            continue
+        for statement in _best_rank(json.loads(found[target]).get("P800", [])):
             value = statement.get("mainsnak", {}).get("datavalue", {}).get("value")
             if isinstance(value, dict) and str(value.get("id", "")).startswith("Q"):
-                pairs.append((qid, value["id"]))
+                pairs.append((target, value["id"]))
     return pairs
+
+
+def _exclusion(exclude_types: list[str]) -> str:
+    if not exclude_types:
+        return ""
+    return f" AND NOT list_has_any(list_concat(i.types, i.forms), [{_marks(exclude_types)}])"
 
 
 @router.post("/linked-from")
 def linked_from(body: LinkedFromRequest, state: ArtifactState = Depends(get_state)) -> dict:
+    """Sources must be kept items (present in `items`), which drops the scholarly articles
+    and other unkept entities on both paths. Reads at most limit + 1 rows, enough to know
+    whether the answer was truncated."""
     targets = _unique(body.targets)
     properties = _unique(body.properties)
     if not targets or not properties:
         return {"rows": [], "truncated": False}
-    pairs: list[tuple[str, str]] = []
+    wanted = body.limit + 1
+    rows: list[list[str]] = []
+    seen: set[tuple[str, str]] = set()
+    exclusion = _exclusion(body.exclude_types)
+    items, labels, links = (_table(state, n) for n in ("items", "labels", "links"))
+
+    def add(batch) -> None:
+        for target, source, label in batch:
+            if (target, source) not in seen and len(rows) < wanted:
+                seen.add((target, source))
+                rows.append([target, source, label])
+
     with cursor(state) as cur:
         reverse = [p for p in properties if p != "P800"]
-        if reverse:
-            pairs.extend(
+        for target in targets if reverse else []:
+            if len(rows) >= wanted:
+                break
+            add(
                 cur.execute(
-                    f"SELECT target, source FROM {_table(state, 'links')}"
-                    f" WHERE property IN ({_marks(reverse)}) AND target IN ({_marks(targets)})"
-                    " ORDER BY target, source",
-                    [*reverse, *targets],
+                    "SELECT l.target, l.source, coalesce(lb.label_en, lb.label_mul)"
+                    f" FROM {links} l JOIN {items} i ON i.qid = l.source"
+                    f" JOIN {labels} lb ON lb.qid = l.source"
+                    f" WHERE l.property IN ({_marks(reverse)}) AND l.target = ?"
+                    " AND coalesce(lb.label_en, lb.label_mul) IS NOT NULL"
+                    f"{exclusion} ORDER BY l.source LIMIT ?",
+                    [*reverse, target, *body.exclude_types, wanted - len(rows)],
                 ).fetchall()
             )
-        if "P800" in properties:
-            pairs.extend(_p800_works(cur, state, targets))
-        pairs = _unique_pairs(pairs)
-        sources = _unique([s for _, s in pairs])
-        if not sources:
-            return {"rows": [], "truncated": False}
-        excluded = set()
-        if body.exclude_types:
-            excluded = {
-                r[0]
-                for r in cur.execute(
-                    f"SELECT qid FROM {_table(state, 'items')}"
-                    f" WHERE qid IN ({_marks(sources)})"
-                    f" AND list_has_any(list_concat(types, forms), [{_marks(body.exclude_types)}])",
-                    [*sources, *body.exclude_types],
-                ).fetchall()
-            }
-        names = {
-            qid: en or mul
-            for qid, en, mul in cur.execute(
-                f"SELECT qid, label_en, label_mul FROM {_table(state, 'labels')}"
-                f" WHERE qid IN ({_marks(sources)})",
-                sources,
-            ).fetchall()
-        }
-    rows = [
-        [target, source, names[source]]
-        for target, source in pairs
-        if source not in excluded and names.get(source)
-    ]
+        if "P800" in properties and len(rows) < wanted:
+            pairs = _p800_works(cur, state, targets)
+            works = _unique([w for _, w in pairs])[:5000]
+            if works:
+                meta = {
+                    qid: label
+                    for qid, label in cur.execute(
+                        f"SELECT i.qid, coalesce(lb.label_en, lb.label_mul)"
+                        f" FROM {items} i JOIN {labels} lb ON lb.qid = i.qid"
+                        f" WHERE i.qid IN ({_marks(works)})"
+                        f" AND coalesce(lb.label_en, lb.label_mul) IS NOT NULL{exclusion}",
+                        [*works, *body.exclude_types],
+                    ).fetchall()
+                }
+                add((t, w, meta[w]) for t, w in pairs if w in meta)
     return {"rows": rows[: body.limit], "truncated": len(rows) > body.limit}
-
-
-def _unique_pairs(pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    return list(dict.fromkeys(pairs))
 
 
 @router.get("/names")

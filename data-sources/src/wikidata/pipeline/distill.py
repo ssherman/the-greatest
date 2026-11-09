@@ -237,7 +237,8 @@ def _kept_set(con: duckdb.DuckDBPyConnection, config: KeptConfig) -> None:
     """TEMP TABLE kept(qid).
 
     Kept: typed (P31 or P7937) under the work roots or as the edition type, and not typed under
-    an excluded root; or a person type; or the target of a statement property of one of those.
+    an excluded root; or a person type; or the target of a statement property of one of those
+    (a target typed under an excluded root, such as a scholarly article, is never kept).
     """
     con.execute(
         "CREATE OR REPLACE TEMP TABLE edges AS "
@@ -267,6 +268,7 @@ def _kept_set(con: duckdb.DuckDBPyConnection, config: KeptConfig) -> None:
         SELECT DISTINCT t.qid FROM (
           SELECT unnest(s.targets) AS qid FROM shards s JOIN core USING (qid)
         ) t JOIN shards USING (qid)
+        WHERE t.qid NOT IN (SELECT qid FROM typed WHERE cls IN (SELECT cls FROM excluded_classes))
         """
     )
 
@@ -355,13 +357,15 @@ def distill(
                 """,
                 paths.staged("names"),
             ),
+            # Every redirect whose target exists in the dump, kept or not: the API answers
+            # `not_kept` for an unkept target, and `missing` would make a caller drop the id.
             "redirects": _copy(
                 con,
                 f"""
                 SELECT from_qid, to_qid
                 FROM read_json('{raw_redirects}', format='newline_delimited',
                                columns={{from_qid: 'VARCHAR', to_qid: 'VARCHAR'}})
-                WHERE to_qid IN (SELECT qid FROM kept)
+                WHERE to_qid IN (SELECT qid FROM shards)
                 ORDER BY from_qid, to_qid
                 """,
                 paths.staged("redirects"),

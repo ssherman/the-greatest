@@ -102,9 +102,15 @@ def test_nigeria_keeps_its_country_code(built):
     assert json.loads(claims)["P297"][0]["mainsnak"]["datavalue"]["value"] == "NG"
 
 
-def test_redirects_resolve_to_kept_items(built):
+def test_redirects_keep_every_target_that_exists_in_the_dump(built):
     pairs = rows(built, "SELECT from_qid, to_qid FROM {t}", "redirects")
-    assert pairs == [("Q900101", "Q622400"), ("Q900102", "Q622400")]
+    # Q900106 redirects to the painting: not kept, but present in labels.
+    assert pairs == [("Q900101", "Q622400"), ("Q900102", "Q622400"), ("Q900106", "Q12418")]
+
+
+def test_an_isbn10_only_statement_is_stored_as_isbn13(built):
+    pairs = rows(built, "SELECT property, value, qid FROM {t}", "external_ids")
+    assert ("P957", "9780306406157", "Q900022") in pairs
 
 
 @pytest.mark.parametrize(
@@ -137,7 +143,7 @@ def test_items_row_groups_stay_small(built):
 
 
 def test_parallel_workers_produce_identical_tables(tmp_path, config, monkeypatch):
-    # Seven-line batches spread the 40 fixture entities over several shards and workers.
+    # Seven-line batches spread the 43 fixture entities over several shards and workers.
     monkeypatch.setattr(distill_module, "BATCH_LINES", 7)
     contents = {}
     for threads in (1, 3):
