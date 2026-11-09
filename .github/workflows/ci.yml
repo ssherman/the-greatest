@@ -169,7 +169,11 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --name-only "$BASE_SHA"...HEAD | grep -qE '^(deployment/home-server/|\.github/workflows/ci\.yml$)'; then
+          # Every real file the suite reads: the tooling itself, the base Compose file
+          # compose_config_test.sh merges with the VM overlays, the Postgres Dockerfile
+          # whose digest pin it checks, and this workflow. (deploy_test.sh's
+          # data-sources/ paths are commits in a throwaway sandbox repo, not inputs.)
+          if git diff --name-only "$BASE_SHA"...HEAD | grep -qE '^(deployment/home-server/|data-sources/docker-compose\.yml$|deployment/postgres/Dockerfile$|\.github/workflows/ci\.yml$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "No home-server changes; skipping its tests."
