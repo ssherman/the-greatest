@@ -129,6 +129,13 @@ def test_linked_from_pages_through_links_when_a_batch_is_filtered_away(
     assert [(r[0], r[1]) for r in body["rows"]] == [(ACHEBE, BOOK)]
 
 
+def test_linked_from_p50_uses_best_rank_only(wikidata_client):
+    outranked = post(wikidata_client, "/linked-from", {"targets": [ACHEBE], "properties": ["P50"]})
+    assert "Q900023" not in [r[1] for r in outranked.json()["rows"]]
+    best = post(wikidata_client, "/linked-from", {"targets": ["Q900006"], "properties": ["P50"]})
+    assert "Q900023" in [r[1] for r in best.json()["rows"]]
+
+
 def test_linked_from_p800_flags_truncation_at_the_works_cap(wikidata_client, monkeypatch):
     from wikidata.api import lookups
 

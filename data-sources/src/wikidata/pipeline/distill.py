@@ -24,6 +24,7 @@ from wikidata.pipeline.classes import closure_table
 from wikidata.pipeline.config import KeptConfig
 from wikidata.pipeline.normalize import normalize_external_id, normalize_name
 from wikidata.pipeline.paths import TABLES, WikidataPaths
+from wikidata.pipeline.ranks import best_rank
 from wikidata.pipeline.redirects import parse_redirects
 from wikidata.pipeline.scan import SlimEntity, open_dump, slim
 
@@ -83,7 +84,8 @@ def _external_ids(slimmed: SlimEntity, config: KeptConfig) -> list[dict]:
 def _links(slimmed: SlimEntity, config: KeptConfig) -> list[dict]:
     found: dict[tuple[str, str], None] = {}
     for prop in config.reverse_links:
-        for statement in _live(slimmed.claims.get(prop, [])):
+        # Best rank, as `wdt:P50` and the API's P800 handling: an outranked author is not linked.
+        for statement in best_rank(slimmed.claims.get(prop, [])):
             value = _value(statement)
             if isinstance(value, dict) and str(value.get("id", "")).startswith("Q"):
                 found[(prop, value["id"])] = None

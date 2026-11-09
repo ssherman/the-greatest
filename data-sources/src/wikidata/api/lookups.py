@@ -17,6 +17,7 @@ from wikidata.api.schemas import (
     LinkedFromRequest,
 )
 from wikidata.pipeline.normalize import normalize_external_id, normalize_name
+from wikidata.pipeline.ranks import best_rank
 
 router = APIRouter()
 
@@ -151,15 +152,6 @@ def by_external_id(body: ExternalIdRequest, state: ArtifactState = Depends(get_s
     return {"ids": _unique(found)[: body.limit]}
 
 
-def _best_rank(statements: list[dict]) -> list[dict]:
-    """Like `wdt:`: the preferred statements if any exist, else the normal ones."""
-    for rank in ("preferred", "normal"):
-        chosen = [s for s in statements if s.get("rank", "normal") == rank]
-        if chosen:
-            return chosen
-    return []
-
-
 def _p800_works(cur, state: ArtifactState, targets: list[str]) -> list[tuple[str, str]]:
     """P800 is the author's own statement, so it lives in the target's claims, not in `links`."""
     rows = cur.execute(
@@ -171,7 +163,7 @@ def _p800_works(cur, state: ArtifactState, targets: list[str]) -> list[tuple[str
     for target in targets:
         if target not in found:
             continue
-        for statement in _best_rank(json.loads(found[target]).get("P800", [])):
+        for statement in best_rank(json.loads(found[target]).get("P800", [])):
             value = statement.get("mainsnak", {}).get("datavalue", {}).get("value")
             if isinstance(value, dict) and str(value.get("id", "")).startswith("Q"):
                 pairs.append((target, value["id"]))
