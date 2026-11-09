@@ -113,6 +113,22 @@ t_worldcat_with_version_tunnels() {
   echo 2025-09-04 >"$WC_DATA/current-version"; commit data-sources/app v2
   deploy && called '^compose up -d --remove-orphans worldcat cloudflared$' && ! called 'api|fetcher'
 }
+t_wikidata_without_version() {
+  setup; write_env ROLE=wikidata REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  commit data-sources/app v2
+  deploy && called '^compose build wikidata$' && ! called '^compose up -d --remove-orphans wikidata'
+}
+t_wikidata_with_version() {
+  setup; write_env ROLE=wikidata REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  echo 2026-11-01 >"$WD_DATA/current-version"
+  commit data-sources/app v2
+  deploy && called '^compose build wikidata$' && called '^compose up -d --remove-orphans wikidata$'
+}
+t_wikidata_without_version_tunnels() {
+  setup; write_env ROLE=wikidata REPO_REF=main TUNNELS_ENABLED=1 HC_DEPLOY=https://hc.test/deploy
+  commit data-sources/app v2
+  deploy && called '^compose up -d cloudflared$' && ! called '^compose up -d --remove-orphans'
+}
 t_tunnels_off_removes_running() {
   setup; export TUNNEL_RUNNING=1; commit data-sources/app v2
   deploy && called '^compose up -d --remove-orphans fetcher$' &&
@@ -200,6 +216,9 @@ check "a trainer image that fails to build stops ol before the api image is touc
 check "worldcat with no data version builds but does not start the service" t_worldcat_without_version
 check "worldcat with a data version builds and starts only the service" t_worldcat_with_version
 check "worldcat with no data version still starts the tunnel" t_worldcat_without_version_tunnels
+check "wikidata with no data version builds but does not start the service" t_wikidata_without_version
+check "wikidata with a data version builds and starts only the service" t_wikidata_with_version
+check "wikidata with no data version still starts the tunnel" t_wikidata_without_version_tunnels
 check "worldcat with a version and tunnels brings up worldcat and cloudflared only" t_worldcat_with_version_tunnels
 check "ol with no data version still starts the tunnel" t_ol_without_version_tunnels
 check "ol with a version and tunnels brings up api and cloudflared only" t_ol_with_version_tunnels

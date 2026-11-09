@@ -1,0 +1,9 @@
+[Unit]
+Description=Check for a new Wikidata dump daily, and at boot
+
+[Timer]
+OnCalendar=*-*-* 04:00
+OnBootSec=15min
+
+[Install]
+WantedBy=timers.target

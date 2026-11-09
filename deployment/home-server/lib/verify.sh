@@ -111,6 +111,11 @@ verify_vms() {
   else
     echo "SKIP  worldcat: no WorldCat version yet (copy the artifact and write current-version: docs/features/worldcat-data-service.md)"
   fi
+  if vm_ssh wikidata "test -f /srv/wd-data/current-version"; then
+    expect "wikidata: /version answers" vm_ssh wikidata "curl -fsS 127.0.0.1:8083/version"
+  else
+    echo "SKIP  wikidata: no Wikidata version yet (first build running or failed: journalctl -u wikidata-refresh)"
+  fi
 }
 
 # A probe that fails for everyone proves nothing: each target is first reached
@@ -283,6 +288,9 @@ verify_recovery() {
   fi
   if vm_ssh worldcat "test -f /srv/wc-data/current-version"; then
     crash_service worldcat the-greatest-worldcat-1 "curl -fsS 127.0.0.1:8082/version"
+  fi
+  if vm_ssh wikidata "test -f /srv/wd-data/current-version"; then
+    crash_service wikidata the-greatest-wikidata-1 "curl -fsS 127.0.0.1:8083/version"
   fi
   log "rebooting the host"
   on_host "systemctl reboot" || true

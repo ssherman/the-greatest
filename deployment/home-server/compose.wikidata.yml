@@ -1,0 +1,19 @@
+# The `wikidata` VM's production settings (docs/features/wikidata-data-service.md),
+# merged over data-sources/docker-compose.yml by guest/compose.sh. Sized for an
+# 8-vCPU, 12 GB VM: the API keeps 1 GB (512 MB for DuckDB), a running build
+# gets 10 GB (8 GB for DuckDB, the rest is the parser's shard buffers), and
+# guest/wikidata-refresh.sh puts an 8 GB swap file on the data disk as a
+# backstop while a build runs.
+services:
+  wikidata:
+    mem_limit: 1g
+    environment:
+      WD_API_MEMORY_LIMIT: 512MB
+      WD_API_THREADS: "2"
+  wikidata-build:
+    mem_limit: 10g
+    environment:
+      # The build command (data-sources/docker-compose.yml) reads these same
+      # names from the compose process's environment, with these as defaults.
+      WD_BUILD_MEMORY_LIMIT: 8GB
+      WD_BUILD_THREADS: "6"

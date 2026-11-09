@@ -1,6 +1,6 @@
 # The Cloudflare Tunnel connector for whichever service this VM runs
 # (docs/features/home-server.md). The routing (hostname -> http://openlibrary:8080,
-# http://page-fetcher:8081 or http://worldcat:8082) lives in the tunnel's
+# http://page-fetcher:8081, http://worldcat:8082 or http://wikidata:8083) lives in the tunnel's
 # dashboard configuration, so this file is the same on every VM. The aliases
 # below give the services those stable names while they keep their compose
 # names (api, fetcher). Profile "tunnel" is on only after
@@ -18,6 +18,10 @@ services:
     networks:
       default:
         aliases: [worldcat]
+  wikidata:
+    networks:
+      default:
+        aliases: [wikidata]
   cloudflared:
     image: cloudflare/cloudflared:2026.9.3
     profiles: ["tunnel"]

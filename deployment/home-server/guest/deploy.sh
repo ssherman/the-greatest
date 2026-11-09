@@ -70,6 +70,7 @@ case "$ROLE" in
   ol) service=api; build=(recommender api) ;;
   fetcher) service=fetcher; build=(fetcher) ;;
   worldcat) service=worldcat; build=(worldcat) ;;
+  wikidata) service=wikidata; build=(wikidata) ;;
   # Nothing runs all the time: pg-restore-verify.timer starts Postgres for a night's check. A deploy
   # only builds the image the check will use.
   pgverify) service=""; build=(postgres) ;;
@@ -88,6 +89,9 @@ elif [ "$ROLE" = ol ] && [ ! -f "$OL_DATA/current-version" ]; then
   if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then "$COMPOSE" up -d cloudflared || fail "compose up cloudflared"; fi
 elif [ "$ROLE" = worldcat ] && [ ! -f "$WC_DATA/current-version" ]; then
   log "no WorldCat version yet; copy the artifact and write $WC_DATA/current-version, then touch force-deploy"
+  if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then "$COMPOSE" up -d cloudflared || fail "compose up cloudflared"; fi
+elif [ "$ROLE" = wikidata ] && [ ! -f "$WD_DATA/current-version" ]; then
+  log "no Wikidata version yet; wikidata-refresh starts the API after the first build"
   if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then "$COMPOSE" up -d cloudflared || fail "compose up cloudflared"; fi
 else
   # Both services are defined on both VMs: name only this VM's.

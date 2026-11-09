@@ -19,6 +19,7 @@ export REPO_REF=main TUNNELS_ENABLED=0 OL_TUNNEL_TOKEN=ol-token FETCHER_TUNNEL_T
 export HC_OL_HEARTBEAT=https://hc.test/ol-beat HC_OL_DEPLOY=https://hc.test/ol-deploy HC_OL_REFRESH=https://hc.test/ol-refresh
 export HC_FETCHER_HEARTBEAT=https://hc.test/f-beat HC_FETCHER_DEPLOY=https://hc.test/f-deploy
 export WORLDCAT_TUNNEL_TOKEN=wc-token HC_WORLDCAT_HEARTBEAT=https://hc.test/wc-beat HC_WORLDCAT_DEPLOY=https://hc.test/wc-deploy
+export WIKIDATA_TUNNEL_TOKEN=wd-token HC_WIKIDATA_HEARTBEAT=https://hc.test/wd-beat HC_WIKIDATA_DEPLOY=https://hc.test/wd-deploy HC_WIKIDATA_REFRESH=https://hc.test/wd-refresh
 export HC_RECOMMENDER=https://hc.test/ol-train RECOMMENDATIONS_R2_ENDPOINT=https://acct.r2.test
 export RECOMMENDATIONS_R2_ACCESS_KEY=rec-access RECOMMENDATIONS_R2_SECRET_KEY=rec-secret RECOMMENDATIONS_R2_BUCKET=rec-bucket
 export HC_PGVERIFY=https://hc.test/pgv-verified HC_PGVERIFY_DEPLOY=https://hc.test/pgv-deploy
@@ -30,7 +31,7 @@ export PGVERIFY_DUMP_ENDPOINT=https://pgv-dump.r2.test
 echo "ssh-ed25519 AAAATEST test@example.com" >"$SANDBOX/key.pub"
 export SSH_PUBKEY_FILE="$SANDBOX/key.pub"
 
-for role in ol fetcher worldcat pgverify; do
+for role in ol fetcher worldcat wikidata pgverify; do
   render_vm_env "$role" "$SANDBOX/$role.env"
   render_user_data "$role" "$SANDBOX/$role.env" "$SANDBOX/$role.yaml"
 done
@@ -38,7 +39,7 @@ env_from_yaml() { # decode the env file a rendered user-data carries
   ruby -ryaml -rbase64 -e 'y = YAML.load_file(ARGV[0]); f = y["write_files"].find { |w| w["path"] == "/etc/the-greatest/home-server.env" }; print Base64.decode64(f["content"])' "$1"
 }
 
-t_yaml() { for r in ol fetcher worldcat; do ruby -ryaml -e 'YAML.load_file(ARGV[0])' "$SANDBOX/$r.yaml" || return 1; done; }
+t_yaml() { for r in ol fetcher worldcat wikidata; do ruby -ryaml -e 'YAML.load_file(ARGV[0])' "$SANDBOX/$r.yaml" || return 1; done; }
 t_first_line() { [ "$(head -1 "$SANDBOX/ol.yaml")" = "#cloud-config" ]; }
 # ${distro_codename} is apt's own variable, meant to survive rendering.
 t_no_leftovers() { ! cat "$SANDBOX/ol.yaml" "$SANDBOX/fetcher.yaml" | grep -v 'distro_codename' | grep -q '\${'; }
@@ -65,6 +66,8 @@ t_env_keys() {
   keys="$(env_from_yaml "$SANDBOX/fetcher.yaml" | cut -d= -f1 | tr '\n' ' ')"
   [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH " ] || return 1
   keys="$(env_from_yaml "$SANDBOX/worldcat.yaml" | cut -d= -f1 | tr '\n' ' ')"
+  [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH " ] || return 1
+  keys="$(env_from_yaml "$SANDBOX/wikidata.yaml" | cut -d= -f1 | tr '\n' ' ')"
   [ "$keys" = "ROLE REPO_REF TUNNELS_ENABLED TUNNEL_TOKEN HC_HEARTBEAT HC_DEPLOY HC_REFRESH " ]
 }
 t_codename_literal() {
@@ -99,13 +102,13 @@ t_pgverify_upload_off_by_default() {
 }
 t_pgverify_values_reach_no_other_role() {
   local r
-  for r in ol fetcher worldcat; do
+  for r in ol fetcher worldcat wikidata; do
     ! env_from_yaml "$SANDBOX/$r.yaml" | grep -q 'PGVERIFY\|pgv-' || return 1
   done
 }
 t_pgverify_holds_nothing_of_the_others() {
   local env; env="$(env_from_yaml "$SANDBOX/pgverify.yaml")"
-  ! grep -q 'ol-token\|fetcher-token\|wc-token\|ol-beat\|f-beat\|wc-beat\|RECOMMEND\|rec-\|ol-train' <<<"$env"
+  ! grep -q 'ol-token\|fetcher-token\|wc-token\|wd-token\|ol-beat\|f-beat\|wc-beat\|wd-beat\|RECOMMEND\|rec-\|ol-train' <<<"$env"
 }
 t_pgverify_refuses_unsafe_values() {
   # The env file is sourced by the VM's scripts: a value with a space, quote, $ or & would run as shell.
@@ -214,7 +217,35 @@ t_reboot_reason() {
 t_vm_spec_sizes() {
   vm_spec ol && [ "$CORES $MEM $DATADISK" = "12 24576 300" ] || return 1
   vm_spec fetcher && [ "$CORES $MEM" = "4 4096" ] || return 1
-  vm_spec worldcat && [ "$VMID $CORES $MEM $OSDISK $DATADISK $STARTUP" = "130 2 4096 32 40 order=3" ]
+  vm_spec worldcat && [ "$VMID $CORES $MEM $OSDISK $DATADISK $STARTUP" = "130 2 4096 32 40 order=3" ] || return 1
+  vm_spec wikidata && [ "$VMID $NAME $CORES $MEM $OSDISK $DATADISK $STARTUP" = "150 wikidata 8 12288 32 400 order=5" ]
+}
+t_wikidata_env() {
+  local env; env="$(env_from_yaml "$SANDBOX/wikidata.yaml")"
+  grep -qx 'ROLE=wikidata' <<<"$env" && grep -qx 'TUNNEL_TOKEN=wd-token' <<<"$env" &&
+    grep -qx 'HC_HEARTBEAT=https://hc.test/wd-beat' <<<"$env" && grep -qx 'HC_DEPLOY=https://hc.test/wd-deploy' <<<"$env" &&
+    grep -qx 'HC_REFRESH=https://hc.test/wd-refresh' <<<"$env"
+}
+t_wikidata_isolation() {
+  local env; env="$(env_from_yaml "$SANDBOX/wikidata.yaml")"
+  ! grep -q 'ol-token\|fetcher-token\|wc-token\|ol-beat\|f-beat\|wc-beat\|ol-refresh\|RECOMMEND\|rec-\|PGVERIFY' <<<"$env"
+}
+t_wikidata_firewall() {
+  local fw="$HS_DIR/host/firewall/150.fw"
+  [ -f "$fw" ] && grep -qx 'policy_in: DROP' "$fw" && grep -qx 'IN ACCEPT -source +lan -p tcp -dport 22 -log nolog'  "$fw"
+}
+t_wikidata_in_firewall_pairs() {
+  grep -qF '"150.fw:/etc/pve/firewall/150.fw"' "$HS_DIR/lib/host.sh"
+}
+t_enable_tunnels_needs_four_tokens() {
+  local out
+  out="$( (
+    on_host() { :; }
+    write_snippet() { :; }
+    push_vm_env() { :; }
+    WIKIDATA_TUNNEL_TOKEN="" enable_tunnels 2>&1
+  ) || true)"
+  grep -q 'all four tunnel tokens' <<<"$out"
 }
 t_worldcat_env() {
   local env; env="$(env_from_yaml "$SANDBOX/worldcat.yaml")"
@@ -316,6 +347,11 @@ check "120.fw is committed only as a template" t_fetcher_fw_not_committed_render
 check "vm_spec sizes: ol 12 vCPU / 24 GB, fetcher unchanged, worldcat 2 vCPU / 4 GB / 40 GB data" t_vm_spec_sizes
 check "worldcat gets its role, token and check URLs, and no refresh check" t_worldcat_env
 check "worldcat holds nothing of ol's or the fetcher's" t_worldcat_isolation
+check "wikidata gets its role, token, check URLs and refresh check" t_wikidata_env
+check "wikidata holds nothing of the other VMs'" t_wikidata_isolation
+check "150.fw drops inbound except SSH from the LAN" t_wikidata_firewall
+check "converge_host_firewall installs 150.fw" t_wikidata_in_firewall_pairs
+check "--enable-tunnels refuses without the wikidata token" t_enable_tunnels_needs_four_tokens
 check "130.fw drops inbound except SSH from the LAN" t_worldcat_firewall
 check "converge_host_firewall installs 130.fw" t_worldcat_in_firewall_pairs
 check "pgverify gets its role, check URLs and settings, no tunnel and no heartbeat" t_pgverify_env

@@ -26,6 +26,12 @@ vm_spec() {
     worldcat)
       VMID=130 NAME=worldcat CORES=2 MEM=4096 OSDISK=32 DATADISK=40
       NET="virtio,bridge=vmbr0,firewall=1" IPCONFIG="ip=dhcp,ip6=auto" NAMESERVER="" STARTUP="order=3" ;;
+    wikidata)
+      # The Wikidata exact-lookup API and its weekly build (docs/features/wikidata-data-service.md).
+      # 12 GB: the build holds 8 GB of DuckDB plus swap, the API 1 GB. The 400 GB data disk holds the ~157 GB
+      # dump download and two built versions. MusicBrainz VM 101 is stopped until a second server arrives.
+      VMID=150 NAME=wikidata CORES=8 MEM=12288 OSDISK=32 DATADISK=400
+      NET="virtio,bridge=vmbr0,firewall=1" IPCONFIG="ip=dhcp,ip6=auto" NAMESERVER="" STARTUP="order=5" ;;
     pgverify)
       # The nightly Postgres restore check: real user data on an isolated, outbound-only network
       # (spec §9). Addressed like the fetcher, behind its own host firewall file (140.fw). The data disk
@@ -33,7 +39,7 @@ vm_spec() {
       VMID=140 NAME=pgverify CORES=4 MEM=8192 OSDISK=32 DATADISK=400
       NET="virtio,bridge=vmbr1,firewall=1" IPCONFIG="ip=10.20.0.20/24,gw=10.20.0.1"
       NAMESERVER="1.1.1.1 1.0.0.1" STARTUP="order=4" ;;
-    *) die "unknown VM role '$1' (ol, fetcher, worldcat or pgverify)" ;;
+    *) die "unknown VM role '$1' (ol, fetcher, worldcat, wikidata or pgverify)" ;;
   esac
 }
 
@@ -42,7 +48,7 @@ vm_spec() {
 # repo, its timer would only produce alerts (docs/features/postgres-server.md).
 pgverify_enabled() { [ "${PGVERIFY_ENABLED:-0}" = 1 ]; }
 managed_roles() {
-  printf '%s\n' fetcher ol worldcat
+  printf '%s\n' fetcher ol worldcat wikidata
   if pgverify_enabled; then echo pgverify; fi
 }
 
@@ -91,6 +97,9 @@ render_vm_env() {
     worldcat) printf '%s\n' "ROLE=worldcat" "REPO_REF=$REPO_REF" "TUNNELS_ENABLED=$TUNNELS_ENABLED" \
           "TUNNEL_TOKEN=${WORLDCAT_TUNNEL_TOKEN:-}" "HC_HEARTBEAT=${HC_WORLDCAT_HEARTBEAT:-}" \
           "HC_DEPLOY=${HC_WORLDCAT_DEPLOY:-}" "HC_REFRESH=" ;;
+    wikidata) printf '%s\n' "ROLE=wikidata" "REPO_REF=$REPO_REF" "TUNNELS_ENABLED=$TUNNELS_ENABLED" \
+          "TUNNEL_TOKEN=${WIKIDATA_TUNNEL_TOKEN:-}" "HC_HEARTBEAT=${HC_WIKIDATA_HEARTBEAT:-}" \
+          "HC_DEPLOY=${HC_WIKIDATA_DEPLOY:-}" "HC_REFRESH=${HC_WIKIDATA_REFRESH:-}" ;;
     # No tunnel and no heartbeat: it runs no always-on service. pg-restore-verified is its alert.
     pgverify)
       pgverify_env_check
@@ -122,7 +131,7 @@ render_user_data() {
 VM_SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no
   -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
-# vm_ip <role>: the vmbr1 VMs' are fixed; ol's and worldcat's come from the guest agent.
+# vm_ip <role>: the vmbr1 VMs' are fixed; ol's, worldcat's and wikidata's come from the guest agent.
 vm_ip() {
   vm_spec "$1"
   case "$1" in fetcher) echo 10.20.0.10; return ;; pgverify) echo 10.20.0.20; return ;; esac
@@ -298,13 +307,14 @@ rebuild_vm() { # replace only the OS disk; the data disk is never touched (spec 
 }
 
 enable_tunnels() {
-  if [ -z "${OL_TUNNEL_TOKEN:-}" ] || [ -z "${FETCHER_TUNNEL_TOKEN:-}" ] || [ -z "${WORLDCAT_TUNNEL_TOKEN:-}" ]; then
-    die "all three tunnel tokens must be set in secrets/home-server.env first (sops secrets/home-server.env)"
+  if [ -z "${OL_TUNNEL_TOKEN:-}" ] || [ -z "${FETCHER_TUNNEL_TOKEN:-}" ] || [ -z "${WORLDCAT_TUNNEL_TOKEN:-}" ] ||
+    [ -z "${WIKIDATA_TUNNEL_TOKEN:-}" ]; then
+    die "all four tunnel tokens must be set in secrets/home-server.env first (sops secrets/home-server.env)"
   fi
   on_host "touch $HOST_STATE/tunnels-enabled"
   TUNNELS_ENABLED=1
   local role
-  for role in fetcher ol worldcat; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
+  for role in fetcher ol worldcat wikidata; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
 }
 
 # disable_tunnels: clear the flag and push TUNNELS_ENABLED=0; the forced deploy
@@ -313,5 +323,5 @@ disable_tunnels() {
   on_host "rm -f $HOST_STATE/tunnels-enabled"
   TUNNELS_ENABLED=0
   local role
-  for role in fetcher ol worldcat; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
+  for role in fetcher ol worldcat wikidata; do vm_spec "$role"; write_snippet "$role"; push_vm_env "$role"; done
 }

@@ -63,7 +63,16 @@ t_wikidata_api() {
   cfg wikidata wikidata | jq -e '.services.wikidata as $w |
     $w.environment.WD_API_MEMORY_LIMIT == "512MB" and $w.environment.WD_API_THREADS == "2" and
     $w.volumes[0].read_only == true and $w.volumes[0].source == "/home/shane/wd-data" and
-    $w.ports[0].target == 8083' >/dev/null
+    $w.ports[0].target == 8083 and
+    ($w.mem_limit == 1073741824 or $w.mem_limit == "1073741824" or $w.mem_limit == "1g")' >/dev/null
+}
+t_wikidata_build_limits() {
+  cfg wikidata wikidata | jq -e '.services["wikidata-build"] as $b |
+    ($b.mem_limit == 10737418240 or $b.mem_limit == "10737418240" or $b.mem_limit == "10g") and
+    $b.environment.WD_BUILD_MEMORY_LIMIT == "8GB" and $b.environment.WD_BUILD_THREADS == "6"' >/dev/null
+}
+t_wikidata_alias() {
+  cfg wikidata wikidata | jq -e '.services.wikidata.networks.default.aliases == ["wikidata"]' >/dev/null
 }
 t_wikidata_build() {
   cfg wikidata wikidata | jq -e '.services["wikidata-build"] as $b |
@@ -139,8 +148,10 @@ check "fetcher is on the default network with alias page-fetcher" t_fetcher_alia
 check "worldcat gets 2GB, 2 threads, 3g and a read-only data volume" t_worldcat_api
 check "worldcat is on the default network with alias worldcat" t_worldcat_alias
 check "worldcat is off until its profile or name selects it" t_worldcat_off_by_default
-check "wikidata api: 512MB, 2 threads, port 8083, read-only data volume" t_wikidata_api
+check "wikidata api: 512MB, 2 threads, 1g, port 8083, read-only data volume" t_wikidata_api
 check "wikidata-build runs the pipeline with a writable data volume" t_wikidata_build
+check "wikidata-build gets 10g and its 8GB / 6 thread settings" t_wikidata_build_limits
+check "wikidata is on the default network with alias wikidata" t_wikidata_alias
 check "the wikidata services are off until their profile or name selects them" t_wikidata_off_by_default
 check "pgverify postgres: no ports, user 999, 1g shm, forced archive/worker/ssl/listener flags, local hba, the shared Dockerfile" t_pgverify_postgres
 check "pgverify tools run the same image the server does" t_pgverify_same_image_everywhere

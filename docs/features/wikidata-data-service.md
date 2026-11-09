@@ -6,8 +6,8 @@ JSON dump and served over a small API. The service lives in `data-sources/` at t
 
 Design: `docs/superpowers/specs/2026-11-08-wikidata-data-service-design.md`
 
-**Status.** The pipeline, the API, the image and the compose services are written. The VM is not
-provisioned, the refresh timer (Task 9) is not built, no real dump has been built, and the Rails client
+**Status.** The pipeline, the API, the image and the compose services are written. The VM 150
+tooling and the weekly refresh timer are written but nothing has been provisioned on the real server, no real dump has been built, and the Rails client
 has not switched over. "Measured build" below is empty until Task 10 fills it.
 
 ## What it is
@@ -144,14 +144,33 @@ Facts the build depends on:
 `python -m wikidata.pipeline.versions next-action|status|prune --root /data` is what the refresh timer asks:
 whether the newest dump is already built or failed, which versions pass, and which to prune.
 
-## Refresh on VM 150 (planned, Task 9)
+## Refresh on VM 150
 
-Not built yet. The design: VM 150 `wikidata` (8 vCPU, 12 GB, 400 GB data disk at `/srv/wd-data`), provisioned
-by the home-server tooling. A systemd timer checks daily with `versions next-action`; a new dump date
-triggers download, build and gates, then promotion by repointing `WD_DATA_VERSION` and restarting the API.
-Two versions are kept (`versions prune`). A failed gate leaves the previous version serving. Healthchecks
-pings for heartbeat, deploy and refresh. Production reaches it through a Cloudflare tunnel with Access
-service credentials. See `docs/features/home-server.md` for the tooling.
+VM 150 `wikidata` (8 vCPU, 12 GB, 400 GB data disk at `/srv/wd-data`) is provisioned by the home-server
+tooling (`deployment/home-server`, `docs/features/home-server.md`). It is the same shape as the WorldCat VM:
+`compose.wikidata.yml` sets the API to 1 GB (`WD_API_MEMORY_LIMIT=512MB`, 2 threads) and the build to
+10 GB (`WD_BUILD_MEMORY_LIMIT=8GB`, 6 threads); `150.fw` allows only SSH from the LAN; the API listens on
+loopback port 8083 and leaves through `cloudflared` (alias `wikidata`, `WIKIDATA_TUNNEL_TOKEN`).
+
+`wikidata-refresh.timer` fires daily at 04:00 and 15 minutes after boot and runs
+`guest/wikidata-refresh.sh`, which follows `ol-refresh.sh`:
+
+1. Take the build lock (shared with deploy and the reboot check). If it is held, ping success with the message `deferred: lock held`
+   and exit 0: the build runs for hours and a second timer firing must not start another.
+2. Refuse if `/srv/wd-data` is not mounted.
+3. `versions next-action` (run in `wikidata-build`): `skip ...` pings and exits; `build <date>` continues.
+4. Create and enable an 8 GB swap file on the data disk (not in fstab).
+5. `docker compose run --rm --no-deps -T wikidata-build`: the pipeline discovers, downloads (about 157 GB,
+   roughly 4.5 hours) and builds. A non-zero exit with gates failed keeps the old version serving and the
+   `fail` ping names the failed gates from `build_report.json`; a crash leaves an incomplete version that
+   runs again next time.
+6. On a passing build, write `current-version`, `compose up -d wikidata` with `WD_DATA_VERSION=<date>`, and
+   poll `/version` until it reports that date. If it does not, write the old date back and ping `fail`; with
+   no old version, remove `current-version` and stop the API.
+7. `versions prune --keep 2`, then ping `success` with the date.
+
+Healthchecks: `HC_WIKIDATA_HEARTBEAT` (the API answers), `HC_WIKIDATA_DEPLOY`, `HC_WIKIDATA_REFRESH`. Until
+the first build passes there is no `current-version`, so the API is not started and the heartbeat is silent.
 
 ## Measured build
 
