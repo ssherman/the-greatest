@@ -3,11 +3,11 @@
 # Stand-ins for Wikidata::Client and Wikipedia::Client with canned answers.
 # Each records its calls so a test can assert what was (not) asked.
 class FakeWikidataClient
-  attr_reader :calls
+  attr_reader :calls, :not_kept, :dump_date
 
   # entities: requested id => entity Hash (see WikidataEntityBuilder)
   # searches: name => [ids]; statements: [ids]; works: id => [titles]
-  def initialize(entities: {}, searches: {}, statements: [], works: {}, labels: {}, country_codes: {}, works_error: nil, labels_error: nil)
+  def initialize(entities: {}, searches: {}, statements: [], works: {}, labels: {}, country_codes: {}, works_error: nil, labels_error: nil, not_kept: [], dump_date: "2026-11-05")
     @entities = entities
     @searches = searches
     @statements = statements
@@ -16,6 +16,8 @@ class FakeWikidataClient
     @country_codes = country_codes
     @works_error = works_error
     @labels_error = labels_error
+    @not_kept = Set.new(not_kept)
+    @dump_date = dump_date
     @calls = []
   end
 

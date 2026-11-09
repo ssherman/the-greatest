@@ -17,7 +17,7 @@ module Services
 
         def self.call(book:, wikidata: nil, wikipedia: nil, worldcat: nil)
           http = evidence_http
-          wikidata ||= ::Wikidata::Client.new(http: http)
+          wikidata ||= ::Wikidata::Client.new
           wikipedia ||= ::Wikipedia::Client.new(http: http)
           new(book, wikidata, wikipedia, worldcat).call
         end

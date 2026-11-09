@@ -1,0 +1,24 @@
+{
+  "labels": {
+    "Q30": {
+      "en": "United States",
+      "mul": null,
+      "description": "country in North America"
+    },
+    "Q34266": {
+      "en": "Russian Empire",
+      "mul": null,
+      "description": "empire"
+    },
+    "Q36180": {
+      "en": "writer",
+      "mul": null,
+      "description": "person who uses written words"
+    },
+    "Q1": {
+      "en": null,
+      "mul": "Victor Hugo",
+      "description": null
+    }
+  }
+}

@@ -26,10 +26,10 @@ module Services
             data: {qid: work&.id, via: "stored", work: work, conflict_book_id: nil, rejected: [{"id" => "Q1", "reason" => "x"}]})
         end
 
-        test "its default Wikidata and Wikipedia clients use the evidence lane's longer inline wait" do
+        test "its default Wikipedia client uses the evidence lane's longer inline wait, and Wikidata takes no http" do
           waits = []
           builder = ->(**kwargs) { waits << kwargs[:http].settings.max_inline_wait }
-          ::Wikidata::Client.stubs(:new).with { |**kwargs| builder.call(**kwargs) || true }.returns(@wikidata)
+          ::Wikidata::Client.stubs(:new).with { |**kwargs| kwargs.empty? }.returns(@wikidata)
           ::Wikipedia::Client.stubs(:new).with { |**kwargs| builder.call(**kwargs) || true }.returns(@wikipedia)
           @wikidata.stubs(:find_work).returns(nil)
           ResolveWikidataWork.stubs(:call).returns(resolved(work: nil))
@@ -38,7 +38,7 @@ module Services
 
           Gather.call(book: @book, worldcat: @worldcat)
 
-          assert_equal [30.0, 30.0], waits
+          assert_equal [30.0], waits
           assert_equal 5.0, Rails.application.config.x.wikimedia.max_inline_wait
         end
 
