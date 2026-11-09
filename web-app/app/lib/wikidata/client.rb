@@ -12,6 +12,8 @@ module Wikidata
     MAX_TARGETS = 100
     SEARCH_LIMIT = 10
     STATEMENT_LIMIT = 10
+    MAX_STATEMENT_VALUE = 200 # the service's per-value limit (ExternalIdRequest)
+    MAX_STATEMENT_PAIRS = 500 # and its pair limit
     WORKS_ROW_LIMIT = 5000
     WORK_PROPERTIES = %w[P50 P800].freeze
     # Editions repeat their work's titles. Scholarly articles are not in the service's kept set at all.
@@ -58,14 +60,15 @@ module Wikidata
 
     # The items carrying any of the property=value pairs.
     def by_statements(pairs, limit: STATEMENT_LIMIT)
-      safe = Array(pairs).select { |property, value| property.to_s.match?(PROPERTY_ID) && value.to_s.present? }
+      safe = Array(pairs).select { |property, value| property.to_s.match?(PROPERTY_ID) && value.to_s.present? && value.to_s.length <= MAX_STATEMENT_VALUE }
+        .first(MAX_STATEMENT_PAIRS)
       return [] if safe.empty?
 
       data = @service.post("/by-external-id", {pairs: safe.map { |property, value| [property.to_s, value.to_s] }, limit: limit})
       Array(data["ids"]).grep(ITEM_ID)
     end
 
-    # Every English title of the works each item wrote (P50, read backwards)
+    # Every title (English, else the all-languages "mul" label) of the works each item wrote (P50, read backwards)
     # or is known for (P800). Scholarly articles and editions are left out: a
     # scientist can author thousands of articles, and editions repeat titles.
     def works(item_ids)
@@ -75,7 +78,7 @@ module Wikidata
       end
     end
 
-    # The works of each item as id and English label pairs, keyed by author id.
+    # The works of each item as id and label pairs, keyed by author id.
     def work_items(item_ids)
       each_work_row(item_ids).each_with_object({}) do |(author, work, label), found|
         next if work.nil?

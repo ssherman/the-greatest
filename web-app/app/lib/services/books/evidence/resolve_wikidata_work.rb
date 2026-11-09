@@ -22,8 +22,15 @@ module Services
       # another book is stored on neither, and an unmerged duplicate
       # candidate naming it keeps both books from taking it again.
       #
-      # ISBN statements are not used: Wikidata stores P212 hyphenated and
-      # haswbstatement needs the exact string.
+      # The book's verified ISBN-13s go out as P212 statements too. Wikidata holds
+      # P212 hyphenated and the local Wikidata service stores ISBN-13 and ISBN-10 in
+      # one normalised form, so the bare digits match; an edition found this way is
+      # followed to its work by its P629. Unverified ISBNs are never used.
+      #
+      # A stored QID the service does not hold is removed only when Wikidata itself
+      # does not have it. One reported by the client's not_kept exists but lies outside
+      # the service's copy (it is not a book, author or work-like item), so the stored
+      # row is left alone and this run simply finds no evidence from it.
       class ResolveWikidataWork
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         WorkLike = ::Services::Books::Verification::WorldCatCheck::WorkLike
@@ -67,6 +74,7 @@ module Services
           entity = @client.entities([stored])[stored]
           work = entity && accept(entity, check_title: true)
           return [work.id, work, "stored"] if work
+          return if entity.nil? && @client.not_kept.include?(stored)
 
           own_rows.first.destroy! if own_rows.first&.source_wikidata?
           nil
@@ -78,7 +86,9 @@ module Services
         def from_statements
           pairs = STATEMENT_IDS.flat_map do |property, type|
             own_identifiers.where(identifier_type: type).order(:id).pluck(:value).compact_blank.map { |value| [property, value] }
-          end.first(MAX_STATEMENT_PAIRS)
+          end
+          pairs += own_identifiers.verified.where(identifier_type: :books_work_isbn13).order(:id).pluck(:value).compact_blank.map { |value| ["P212", value] }
+          pairs = pairs.first(MAX_STATEMENT_PAIRS)
           return if pairs.empty?
 
           ids = @client.by_statements(pairs, limit: MAX_STATEMENT_PAIRS)

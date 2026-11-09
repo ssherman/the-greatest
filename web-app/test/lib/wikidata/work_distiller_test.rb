@@ -6,6 +6,12 @@ module Wikidata
   class WorkDistillerTest < ActiveSupport::TestCase
     def entity(id) = JSON.parse(file_fixture("wikidata/wbgetentities_#{id}.json").read)["entities"][id]
 
+    test "carries the service's dump date" do
+      payload = WorkDistiller.call({"id" => "Q1", "dump_date" => "2026-11-05", "claims" => {}})
+
+      assert_equal "2026-11-05", payload["dump_date"]
+    end
+
     test "distills a novel into the fields the evidence reads" do
       payload = WorkDistiller.call(entity("Q161531"))
 

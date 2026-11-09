@@ -12,7 +12,13 @@ Spec: `docs/superpowers/specs/2026-09-27-books-author-importer-design.md` §4.
 a 429 or a `maxlag` error into `Wikimedia::Exceptions::RateLimited`. Nothing calls Faraday
 against a Wikimedia host directly.
 
-`Wikidata::Client` is the set of operations the author steps need:
+`Wikidata::Client` no longer calls Wikidata. It reads the local Wikidata service
+(`docs/features/wikidata-data-service.md`), a copy built from a Wikidata dump. Pacing, `maxlag`
+and the cache below apply to Wikipedia only. Wikidata answers carry the dump's date
+(`Client#dump_date`), and a QID that exists in Wikidata but outside the copy is reported by
+`Client#not_kept` instead of being treated as gone. When the service is down the client raises
+`Wikidata::Exceptions::Unavailable`, a `RateLimited`, so jobs and workflow steps wait and retry
+exactly as they do for a Wikipedia rate limit. The operations the author steps need:
 
 - `entities(ids)` -- `wbgetentities`, up to 50 ids per call.
 - `search(name)` -- `wbsearchentities`, English, items, top 10.
@@ -42,6 +48,9 @@ sub-headings dropped, capped at 6,000), then `action=parse` on section 0 for the
 stripping refs, links and templates.
 
 ## Pacing and etiquette
+
+This section describes Wikipedia (and the old Wikidata path's shared limiter). Wikidata calls no
+longer pass through it.
 
 - One request a second across every Wikimedia host, through a shared `DistributedRateLimiter` on
   Redis key `wikimedia:api` in `:immediate` mode.
@@ -102,6 +111,8 @@ matched to the author (see `docs/features/books-author-enrichment.md`). There is
 that turns a name into a Wikipedia page directly.
 
 ## Caching
+
+This applies to Wikipedia only. The Wikidata service is local and is not cached by the client.
 
 `country_codes` and `labels` are cached for 30 days, keyed per item (`wikidata:country:<id>`,
 `wikidata:label:<id>`), in `config.x.external_api_cache` rather than `Rails.cache`. These repeat

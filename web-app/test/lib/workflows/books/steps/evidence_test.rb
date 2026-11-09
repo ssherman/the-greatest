@@ -67,6 +67,19 @@ module Workflows
           call
         end
 
+        test "an unavailable Wikidata service waits and writes no row" do
+          ::Services::Books::Evidence::Gather.stubs(:call).raises(::Wikidata::Exceptions::Unavailable.new("down", retry_after: 60))
+          adapter = Evidence.new
+          adapter.stubs(:rand).returns(7)
+
+          result = nil
+          assert_no_difference -> { Enrichment.where(kind: "books.evidence").count } do
+            result = call(adapter)
+          end
+
+          assert_equal [:wait, Time.current + 67], [result.kind, result.run_after]
+        end
+
         test "a rate limit waits past retry_after plus jitter and writes no row" do
           ::Services::Books::Evidence::Gather.stubs(:call).raises(::Wikimedia::Exceptions::RateLimited.new("busy", retry_after: 60))
           adapter = Evidence.new

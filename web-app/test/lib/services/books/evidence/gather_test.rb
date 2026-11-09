@@ -8,6 +8,7 @@ module Services
           @book = books_books(:war_and_peace)
           @wikidata = mock("wikidata")
           @wikidata.stubs(:country_codes).returns({})
+          @wikidata.stubs(:dump_date).returns("2026-11-05")
           @wikipedia = mock("wikipedia")
           @worldcat = mock("worldcat")
           @work = ::Wikidata::Work.from_payload(
@@ -72,7 +73,7 @@ module Services
           row = result.data[:enrichment]
           assert row.applied?
           facts = row.facts
-          assert_equal 2, facts["schema_version"]
+          assert_equal 3, facts["schema_version"]
           assert_equal ["Russian Empire"], facts["wikidata"]["countries"]
           assert_equal ["Russian"], facts["wikidata"]["languages"]
           assert_equal "Q161531", facts["wikidata"]["qid"]
@@ -101,7 +102,7 @@ module Services
 
           facts = gather.data[:enrichment].facts
 
-          assert_equal 2, facts["schema_version"]
+          assert_equal 3, facts["schema_version"]
           assert_equal ["Q142"], facts["wikidata"]["country_ids"]
           assert_equal ["French"], facts["wikidata"]["country_matches"]
         end
@@ -116,6 +117,23 @@ module Services
 
           assert_equal ["wikidata"], row.facts["sources_failed"]
           assert_nil row.facts["wikidata"]
+        end
+
+        test "the row records the Wikidata dump date" do
+          ResolveWikidataWork.expects(:call).returns(resolved)
+          @wikidata.stubs(:labels).returns({})
+          @wikipedia.stubs(:article).returns(@article)
+          WorldCatSection.expects(:call).returns(nil)
+
+          assert_equal "2026-11-05", gather.data[:enrichment].facts["wikidata_dump_date"]
+        end
+
+        test "an unavailable Wikidata service propagates and writes nothing" do
+          ResolveWikidataWork.expects(:call).raises(Wikidata::Exceptions::Unavailable.new("down", retry_after: 60))
+
+          assert_no_difference -> { Enrichment.count } do
+            assert_raises(Wikidata::Exceptions::Unavailable) { gather }
+          end
         end
 
         test "a rate limit while mapping countries propagates and writes nothing" do

@@ -116,7 +116,7 @@ searches by first.
 
 The `evidence` step of the book workflow (`Services::Books::Evidence::Gather`) writes one row per run:
 the facts about the book that stage 2 (origin) and stage 3 (categories) will read, so they never call
-Wikidata, Wikipedia or WorldCat themselves. `facts` carries `"schema_version" => 2` and these keys:
+Wikidata, Wikipedia or WorldCat themselves. `facts` carries `"schema_version" => 3` (3 adds `wikidata_dump_date`, the date of the Wikidata dump the local service answered from, nil when Wikidata was not reached; the Wikidata resolver also matches the book's verified ISBN-13s as P212 statements, following an edition to its work, and keeps a stored QID the service reports as not kept) and these keys:
 `wikidata` (the QID, how it was found, label, description and list fields such as countries, languages,
 genres, main subjects and narrative locations, plus schema 2's `country_ids` (the work's P495 QIDs) and
 `country_matches` (the `Books::Country` names they map to through `CountryLookup.from_wikidata`); version-1

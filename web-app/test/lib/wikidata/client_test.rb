@@ -106,6 +106,20 @@ module Wikidata
       assert_not_requested :post, "#{BASE}/by-external-id"
     end
 
+    test "by_statements drops values over the service's 200 characters and caps the pairs at 500" do
+      stub = stub_request(:post, "#{BASE}/by-external-id")
+        .with { |r|
+        body = request_body(r)
+        body["pairs"].size == 500 && body["pairs"].none? { |_, value| value.length > 200 }
+      }
+        .to_return(json_response(fixture("by_external_id_tolstoy.json")))
+      pairs = [["P648", "x" * 201]] + (1..600).map { |i| ["P648", "OL#{i}A"] }
+
+      @client.by_statements(pairs)
+
+      assert_requested stub
+    end
+
     test "works makes one /linked-from request and groups each author's titles once" do
       stub = stub_request(:post, "#{BASE}/linked-from")
         .with { |r| request_body(r) == {"targets" => ["Q7243"], "properties" => %w[P50 P800], "exclude_types" => ["Q3331189"], "limit" => 5000} }
