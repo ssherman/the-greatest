@@ -602,7 +602,8 @@ already has tunnels enabled, so a VM created before the token exists starts `clo
    9.5 GiB of 10 GiB; numbers in the feature doc's "Measured build").
 3. **Merge PR 1** (#473, the Wikidata service and the home-server tooling). **DONE 2026-11-09.** Nothing in
    production calls the service yet.
-4. **Cloudflare, before anything touches the home server. Shane runs with `!`.** Nothing is done in the
+4. **Cloudflare, before anything touches the home server. Shane runs with `!`. DONE 2026-11-09** (both
+   applies in sync; the SOPS files committed with this section). Nothing is done in the
    dashboard. In `the-greatest-cloudflare`, merge the branch `wikidata-tunnel`: it adds the `wikidata-api`
    Access app (the existing `prod-rails` service token, nothing new), the `home-wikidata` tunnel with ingress
    `http://wikidata:8083`, `WIKIDATA_SERVICE_URL` to the production values, and
