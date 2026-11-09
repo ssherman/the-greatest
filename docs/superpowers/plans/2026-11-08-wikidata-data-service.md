@@ -38,8 +38,9 @@ typer. Rails 8, Faraday, Minitest, Mocha, WebMock. Bash home-server tooling with
 - The dump lives at `https://dumps.wikimedia.org/wikidatawiki/entities/<dir>/wikidata-<date>-all.json.gz`. **The directory
   name and the file's date differ**: dir `20261102` holds `wikidata-20261105-all.json.gz`. Each dir has
   `wikidata-<date>-md5sums.txt`. `latest-all.json.gz` is 156,864,194,974 bytes.
-- The download measured **~5.2 MB/s** on one connection, so ~8.5 h for one dump. The mirrors checked (umu, your.org, accum)
-  are stale or empty, so the download uses dumps.wikimedia.org, one connection, resumable.
+- The download measured **~5.2 MB/s** on one connection. Two parallel range connections measured ~4.8 MB/s each, so
+  ~4.5 h for one dump. Wikimedia allows 2 connections per IP, so the downloader uses exactly 2. The mirrors checked
+  (umu, your.org, accum) are stale or empty, so the download uses dumps.wikimedia.org.
 - **The JSON dump has no redirects for merged items.** Redirects come from the SQL dumps:
   `https://dumps.wikimedia.org/wikidatawiki/latest/wikidatawiki-latest-redirect.sql.gz` (37 MB) and
   `wikidatawiki-latest-page.sql.gz` (3.6 GB; maps `rd_from` page ids to `Q` titles). These are produced about twice a month.
@@ -193,7 +194,9 @@ The algorithm, which the tests do not fix:
   - `dump_date` (`YYYY-MM-DD`, from the file name, not the directory)
   - `url` and `md5`
   It walks the entity directories newest first and returns the first one holding `wikidata-<date>-all.json.gz`, with the md5 from its `md5sums.txt`.
-- Produces: `download(dump: Dump, dest_dir: Path, *, client) -> Path`. It resumes with a `Range` request, checks the md5, and on a mismatch deletes the file and raises.
+- Produces: `download(dump: Dump, dest_dir: Path, *, client, connections: int = 2) -> Path`. It splits the file into
+  `connections` byte ranges fetched in parallel into part files (never more than 2), resumes each part with a `Range`
+  request, concatenates them, checks the md5, and on a mismatch deletes the file and raises.
 - Produces: `download_redirect_sources(dest_dir, *, client) -> tuple[Path, Path]` (the `latest` redirect and page SQL).
 - Produces: `run_gates(paths, config, previous_counts: dict | None) -> list[GateResult]` and `gates_passed(results) -> bool`, copying `worldcat.pipeline.gates`.
 - Produces: `versions.py` with typer commands, the same as `openlibrary.pipeline.versions`:
@@ -217,7 +220,7 @@ The gates:
 - **Row-group sizes.** No row group in `items` is over 64 MB.
 
 - [ ] **Step 1: Write the failing tests.**
-  - `test_download.py` uses an `httpx.MockTransport`. The directory listing has the dir/file date mismatch (dir `20261102`, file `wikidata-20261105-all.json.gz`), so `discover_latest` must return `dump_date == "2026-11-05"`. A short file plus a `Range` response resumes. A bad md5 raises and leaves no file.
+  - `test_download.py` uses an `httpx.MockTransport`. The directory listing has the dir/file date mismatch (dir `20261102`, file `wikidata-20261105-all.json.gz`), so `discover_latest` must return `dump_date == "2026-11-05"`. A short part file plus a `Range` response resumes. Two parts are requested with non-overlapping ranges and joined in order. `connections=3` raises. A bad md5 raises and leaves no file.
   - `test_gates.py`: the fixture build passes with `--fixture`. A table at 50% of `previous_counts` fails `row_counts`. An injected scholarly-article row fails `no_excluded_types`.
   - `test_versions.py`: a version dir without `manifest.json` counts as neither passing nor failed. `next-action` skips a date already passed or failed. `prune` keeps the current and newest.
   - `test_build.py`: the end-to-end fixture build writes `manifest.json` with `gates_passed: true` and the six tables. A forced gate failure exits 1, leaves no `version_dir`, and records the date as failed.
