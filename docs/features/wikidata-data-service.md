@@ -7,8 +7,8 @@ JSON dump and served over a small API. The service lives in `data-sources/` at t
 Design: `docs/superpowers/specs/2026-11-08-wikidata-data-service-design.md`
 
 **Status.** The pipeline, the API, the image and the compose services are written. The VM 150
-tooling and the weekly refresh timer are written but nothing has been provisioned on the real server, no real dump has been built, and the Rails client
-has not switched over. "Measured build" below is empty until Task 10 fills it.
+tooling and the weekly refresh timer are written but nothing has been provisioned on the real server, and the Rails client has not switched over. The real dump of 2026-11-05 has been built and passed every gate on the dev machine
+("Measured build" below).
 
 ## What it is
 
@@ -93,7 +93,9 @@ JSON, read-only, port 8083. All routes are generic.
 table keeps redirects whose target is unkept.
 
 `/names` is stricter than live `wbsearchentities`: it matches the whole normalized name (accents folded,
-casefolded, punctuation to spaces), not a prefix or a fuzzy match.
+casefolded, punctuation to spaces), not a prefix or a fuzzy match. One concession: when the whole name finds
+nothing, it retries once with single-letter tokens (middle initials) removed ("Douglas C. Merrill" becomes
+"douglas merrill"), but only if at least two tokens remain. Ranking and `limit` are unchanged.
 
 Settings (env, forwarded by compose): `WD_DATA_ROOT` (`/data`), `WD_DATA_VERSION` (required; the API opens an
 explicit `versions/<dump-date>` and never guesses), `WD_API_MEMORY_LIMIT` (512MB), `WD_API_TEMP_DIR`,
@@ -102,7 +104,7 @@ explicit `versions/<dump-date>` and never guesses), `WD_API_MEMORY_LIMIT` (512MB
 **`redirects_dump_date`** is the date of the redirect SQL dump (the `Last-Modified` of the file the build
 downloaded; `null` for a build from local files without `--redirects-dump-date`). That dump lives in
 `latest/` and can be weeks older than the JSON dump, so a QID merged after it is `not_kept`/`missing` here
-while Wikidata already redirects it. This is why Rails treats `missing` as "unknown", not "gone".
+while Wikidata already redirects it. This is why the Rails client (a separate PR) treats `missing` as "unknown", not "gone".
 
 **Two things the API does not read from the artifact.** `external_id_kinds` (which properties
 `/by-external-id` accepts, and their normalization kind) comes from the *image's* `kept.yml`, not from the
@@ -224,5 +226,33 @@ docker stop <container-id>
 
 ## Measured build
 
-Empty until Task 10: download time, build time, peak memory at 8 GB, table sizes and counts, largest row
-group, API latency at 1 GB.
+Real dump 2026-11-05, measured 2026-11-09 on the dev machine under the VM's limits (docker `--memory 10g`,
+`--cpus 8`, DuckDB 8 GB, 6 threads).
+
+- **Download.** 157 GB JSON, 3.6 GB `page.sql` and 37 MB `redirect.sql`, over two connections: about 5.4 h
+  in total (about 4.8 MB/s per connection).
+- **Build.** 4,854 s (81 min) wall. Pass 1 took about 58 min (about 41 MB/s of compressed dump), the
+  redirect/page SQL parse about 12 min (single core, about 420 MB), and pass 2 the rest. No OOM. Peak
+  container memory was 9.48 GiB of 10 GiB, which is tight: watch it. Peak data-root disk was 28 GB,
+  excluding the dump. The artifact is 5.20 GB.
+- **Rows.** `items` 34,465,293 (1.84 GB); `labels` 122,183,373 (2.90 GB); `external_ids` 9,930,676;
+  `links` 2,293,064; `names` 31,577,467; `redirects` 4,992,151.
+- **API latency** at memory 1 GB, DuckDB 512 MB, 2 threads (RSS 474 MiB):
+
+  | Call | Latency |
+  |---|---|
+  | `/items`, 1 QID | p50 73 ms (p95 79) |
+  | `/items`, 50 QIDs | p50 147 ms |
+  | `/labels`, 50 QIDs | p50 186 ms |
+  | `/names` | p50 142 ms (p95 148) |
+  | `/linked-from`, one author | p50 228 ms (p95 414) |
+  | `/linked-from`, ten authors | p50 1.15 s (p95 1.53 s) |
+  | `/by-external-id` | 13-18 ms |
+
+  Real authors through `/linked-from`: Tolstoy 0.9 s for 134 works, Asimov 0.78 s for 376, Shakespeare
+  1.0 s for 312.
+- **Name search.** 500 authors with a known QID: top-1 90%, top-10 97%, measured before the middle-initial
+  retry. Most misses were middle initials, which the retry now covers.
+- **What the first real build found.** It failed its gates and exposed two bugs, both fixed: the SQL dumps
+  put each tuple on its own line, and the excluded-types gate counted people that Wikidata also types as
+  scholarly articles (distill keeps all people).

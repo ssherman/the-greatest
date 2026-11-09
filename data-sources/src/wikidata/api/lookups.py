@@ -279,6 +279,15 @@ def linked_from(body: LinkedFromRequest, state: ArtifactState = Depends(get_stat
     return {"rows": rows[: body.limit], "truncated": capped or len(rows) > body.limit}
 
 
+def _name_qids(cur, state: ArtifactState, normalized: str) -> list[str]:
+    return [
+        r[0]
+        for r in cur.execute(
+            f"SELECT qid FROM {_table(state, 'names')} WHERE name = ?", [normalized]
+        ).fetchall()
+    ]
+
+
 @router.get("/names")
 def names(
     q: str = Query(min_length=1, max_length=200),
@@ -289,12 +298,14 @@ def names(
     if not normalized:
         return {"hits": []}
     with cursor(state) as cur:
-        qids = [
-            r[0]
-            for r in cur.execute(
-                f"SELECT qid FROM {_table(state, 'names')} WHERE name = ?", [normalized]
-            ).fetchall()
-        ]
+        qids = _name_qids(cur, state, normalized)
+        if not qids:
+            # Callers often carry a middle initial the Wikidata label lacks ("Douglas C.
+            # Merrill"); retry once without single-letter tokens.
+            tokens = normalized.split()
+            reduced = [t for t in tokens if len(t) > 1]
+            if len(reduced) >= 2 and len(reduced) < len(tokens):
+                qids = _name_qids(cur, state, " ".join(reduced))
         if not qids:
             return {"hits": []}
         rows = cur.execute(

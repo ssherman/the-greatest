@@ -187,3 +187,14 @@ def test_names_matches_pseudonym_typed_item(wikidata_client):
 
 def test_names_no_match_is_empty(wikidata_client):
     assert wikidata_client.get("/names", params={"q": "zzzzqqq"}).json() == {"hits": []}
+
+
+def test_names_retries_without_a_middle_initial(wikidata_client):
+    plain = wikidata_client.get("/names", params={"q": "Chinua Achebe"}).json()["hits"]
+    assert ACHEBE in [h["id"] for h in plain]
+    body = wikidata_client.get("/names", params={"q": "Chinua O. Achebe"}).json()
+    assert [h["id"] for h in body["hits"]] == [h["id"] for h in plain]
+
+
+def test_names_initial_retry_needs_two_remaining_tokens(wikidata_client):
+    assert wikidata_client.get("/names", params={"q": "Homer X."}).json()["hits"] == []
