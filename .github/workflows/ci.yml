@@ -144,8 +144,16 @@ jobs:
         run: uv run pytest
 
   home-server:
+    # The VMs deploy their own scripts from main, so a broken deploy.sh on main
+    # would stop the next fix from arriving: test them before merge. Only on pull
+    # requests (the push-to-main build re-runs CI before an image, and these tests
+    # say nothing about the image), and only when the PR touches the home-server
+    # tooling or this file. nic_watchdog_test.sh waits on real timers and takes
+    # about 6 minutes, hence 15 (5 cancelled every main build after #458 and so
+    # blocked every deploy).
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     # The workflow default is web-app/; these paths are from the repo root.
     defaults:
       run:
@@ -153,10 +161,27 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # The VMs deploy their own scripts from main, so a broken deploy.sh on
-      # main would stop the next fix from arriving. Test them before merge.
+      - name: Did this PR change the home-server tooling?
+        id: changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Every real file the suite reads: the tooling itself, the base Compose file
+          # compose_config_test.sh merges with the VM overlays, the Postgres Dockerfile
+          # whose digest pin it checks, and this workflow. (deploy_test.sh's
+          # data-sources/ paths are commits in a throwaway sandbox repo, not inputs.)
+          if git diff --name-only "$BASE_SHA"...HEAD | grep -qE '^(deployment/home-server/|data-sources/docker-compose\.yml$|deployment/postgres/Dockerfile$|\.github/workflows/ci\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No home-server changes; skipping its tests."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Shell tests and shellcheck
+        if: steps.changed.outputs.run == 'true'
         run: deployment/home-server/test/run.sh
 
   opensearch:
