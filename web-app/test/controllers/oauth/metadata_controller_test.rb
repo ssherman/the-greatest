@@ -75,10 +75,29 @@ module Oauth
       assert_cacheable_for_an_hour
     end
 
-    test "the admin endpoint has no protected resource document" do
+    test "protected resource metadata for the admin resource" do
       get "/.well-known/oauth-protected-resource/api/mcp/admin"
 
-      assert_response :not_found
+      assert_response :success
+      assert_equal(
+        {
+          "resource" => @base + "/api/mcp/admin",
+          "authorization_servers" => [@base],
+          "scopes_supported" => ["books:admin:read", "books:admin:write", "books:admin:merge"],
+          "bearer_methods_supported" => ["header"]
+        },
+        response.parsed_body
+      )
+      assert_cacheable_for_an_hour
+    end
+
+    test "every registered resource has its metadata route" do
+      ::Oauth::Resources::ALL.each_value do |resource|
+        get resource.metadata_path
+
+        assert_response :success, resource.key
+        assert_equal resource.url(@base), response.parsed_body["resource"], resource.key
+      end
     end
 
     test "the music and games hosts serve no discovery documents" do
