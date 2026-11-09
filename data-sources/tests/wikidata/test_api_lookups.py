@@ -13,6 +13,7 @@ def test_version_reports_the_artifact(wikidata_client):
     body = wikidata_client.get("/version").json()
     assert (body["source"], body["gates_passed"], body["dump_date"]) == ("wikidata", True, DUMP)
     assert set(body["tables"]) >= {"items", "labels"}
+    assert body["redirects_dump_date"] == "2026-11-01"
 
 
 def test_items_returns_a_wbgetentities_shaped_entity(wikidata_client):
@@ -101,6 +102,39 @@ def test_linked_from_truncation_flag(wikidata_client):
 
     assert (len(run(1)["rows"]), run(1)["truncated"]) == (1, True)
     assert (len(run(2)["rows"]), run(2)["truncated"]) == (2, False)
+
+
+def test_linked_from_multi_target_reverse_rows_then_p800_rows(wikidata_client):
+    body = post(
+        wikidata_client,
+        "/linked-from",
+        {"targets": [ESSAYIST, ACHEBE], "properties": ["P50", "P800"]},
+    ).json()
+    assert [(r[0], r[1]) for r in body["rows"]] == [(ACHEBE, BOOK), (ESSAYIST, BOOK)]
+    assert body["truncated"] is False
+
+
+def test_linked_from_pages_through_links_when_a_batch_is_filtered_away(
+    wikidata_client, monkeypatch
+):
+    from wikidata.api import lookups
+
+    # One link per batch: a batch whose only source is excluded must not end the search.
+    monkeypatch.setattr(lookups, "LINK_BATCH", 1)
+    body = post(
+        wikidata_client,
+        "/linked-from",
+        {"targets": [ACHEBE], "properties": ["P50"], "exclude_types": ["Q3331189"]},
+    ).json()
+    assert [(r[0], r[1]) for r in body["rows"]] == [(ACHEBE, BOOK)]
+
+
+def test_linked_from_p800_flags_truncation_at_the_works_cap(wikidata_client, monkeypatch):
+    from wikidata.api import lookups
+
+    monkeypatch.setattr(lookups, "P800_WORK_CAP", 0)
+    body = post(wikidata_client, "/linked-from", {"targets": [ESSAYIST], "properties": ["P800"]})
+    assert body.json() == {"rows": [], "truncated": True}
 
 
 def test_linked_from_p800_drops_unkept_sources_and_deprecated_statements(wikidata_client):

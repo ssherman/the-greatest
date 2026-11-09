@@ -11,7 +11,7 @@ setup() {
   new_sandbox
   write_env ROLE=wikidata REPO_REF=main TUNNELS_ENABLED=0 HC_REFRESH=https://hc.test/refresh
   export PROMOTE_TIMEOUT_S=1 POLL_S=0 API_URL=http://api.test
-  unset NEXT_ACTION NEXT_ACTION_FAIL BUILD_EXIT BROKEN_VERSION NOT_MOUNTED SWAP_ACTIVE MKSWAP_EXIT SWAP_SIZE
+  unset NEXT_ACTION NEXT_ACTION_FAIL BUILD_EXIT BROKEN_VERSION NOT_MOUNTED SWAP_ACTIVE MKSWAP_EXIT SWAP_SIZE PRUNE_BEFORE_EXIT
   stub swapon 'case "${1:-}" in --show*) [ -n "${SWAP_ACTIVE:-}" ] && echo "$WD_DATA/swapfile" ;; esac; true'
   stub fallocate 'command -p touch "${!#}"'
   stub mkswap 'exit "${MKSWAP_EXIT:-0}"'
@@ -26,6 +26,7 @@ esac'
   stub compose 'case "$*" in
   *"versions next-action"*) [ -z "${NEXT_ACTION_FAIL:-}" ] || exit 1; echo "$NEXT_ACTION" ;;
   *"versions status"*) command -p cat "$SANDBOX/status.json" ;;
+  *"versions prune --before"*) exit "${PRUNE_BEFORE_EXIT:-0}" ;;
   *"versions prune"*) ;;
   "run --rm --no-deps -T wikidata-build") exit "${BUILD_EXIT:-0}" ;;
   "up -d wikidata") if [ "$WD_DATA_VERSION" = "${BROKEN_VERSION:-}" ]; then command -p rm -f "$SANDBOX/serving"; else echo "$WD_DATA_VERSION" >"$SANDBOX/serving"; fi ;;
@@ -70,7 +71,7 @@ t_reverts() {
   setup; serving 2026-08-31; export NEXT_ACTION="build 2026-09-30" BROKEN_VERSION=2026-09-30
   status_json '{"passing":["2026-08-31","2026-09-30"],"failed":[],"incomplete":[]}'
   ! refresh && [ "$(cat "$WD_DATA/current-version")" = 2026-08-31 ] &&
-    [ "$(command -p cat "$SANDBOX/serving")" = 2026-08-31 ] && called 'refresh/fail' && ! called 'versions prune'
+    [ "$(command -p cat "$SANDBOX/serving")" = 2026-08-31 ] && called 'refresh/fail' && ! called 'versions prune --keep'
 }
 t_first_promotion_fails() {
   setup; export NEXT_ACTION="build 2026-09-30" BROKEN_VERSION=2026-09-30
@@ -128,6 +129,23 @@ t_swap_fails() {
     ! called '^compose run --rm --no-deps -T wikidata-build$'
 }
 
+t_prunes_earlier_weeks_before_the_build() {
+  setup; serving 2026-08-31; export NEXT_ACTION="build 2026-09-30"
+  status_json '{"passing":["2026-08-31","2026-09-30"],"failed":[],"incomplete":[]}'
+  refresh && called 'versions prune --before 2026-09-30 --current 2026-08-31 --root /data$' || return 1
+  local pruned built
+  pruned="$(grep -nE 'versions prune --before' "$CALLS" | head -1 | cut -d: -f1)"
+  built="$(grep -nE '^compose run --rm --no-deps -T wikidata-build$' "$CALLS" | head -1 | cut -d: -f1)"
+  [ -n "$pruned" ] && [ -n "$built" ] && [ "$pruned" -lt "$built" ]
+}
+t_prune_before_failing_does_not_stop_the_build() {
+  setup; serving 2026-08-31; export NEXT_ACTION="build 2026-09-30" PRUNE_BEFORE_EXIT=1
+  status_json '{"passing":["2026-08-31","2026-09-30"],"failed":[],"incomplete":[]}'
+  refresh && called '^compose run --rm --no-deps -T wikidata-build$'
+}
+
+check "earlier weeks' dumps are pruned before the build starts" t_prunes_earlier_weeks_before_the_build
+check "a prune that fails does not stop the build" t_prune_before_failing_does_not_stop_the_build
 check "a held build lock means no second build" t_lock_held
 check "an unmounted data disk refuses to build" t_unmounted
 check "Wikidata unreachable is a failure" t_unreachable

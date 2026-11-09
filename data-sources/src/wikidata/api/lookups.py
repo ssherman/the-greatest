@@ -184,6 +184,64 @@ def _exclusion(exclude_types: list[str]) -> str:
     return f" AND NOT list_has_any(list_concat(i.types, i.forms), [{_marks(exclude_types)}])"
 
 
+LINK_BATCH = 1000
+P800_WORK_CAP = 5000
+
+
+def _kept_labels(cur, state: ArtifactState, qids: list[str], exclude_types: list[str]) -> dict:
+    """qid -> label for the qids that are kept items, labelled, and not of an excluded type.
+    Both reads are literal IN lists on the sort key, so they prune to a few row groups."""
+    kept = {
+        r[0]
+        for r in cur.execute(
+            f"SELECT i.qid FROM {_table(state, 'items')} i WHERE i.qid IN ({_marks(qids)})"
+            f"{_exclusion(exclude_types)}",
+            [*qids, *exclude_types],
+        ).fetchall()
+    }
+    if not kept:
+        return {}
+    wanted = [q for q in qids if q in kept]
+    return {
+        qid: label
+        for qid, label in cur.execute(
+            f"SELECT lb.qid, coalesce(lb.label_en, lb.label_mul)"
+            f" FROM {_table(state, 'labels')} lb WHERE lb.qid IN ({_marks(wanted)})"
+            " AND coalesce(lb.label_en, lb.label_mul) IS NOT NULL",
+            wanted,
+        ).fetchall()
+    }
+
+
+def _reverse_rows(
+    cur, state: ArtifactState, target: str, properties: list[str], exclude_types: list[str], limit
+) -> list[tuple[str, str, str]]:
+    """(target, source, label) for sources linking to `target`, ordered by source. Reads
+    `links` (filtered on target, a prefix of its sort key) in batches, then checks each
+    batch's sources against items and labels by qid. The big tables are never joined on a
+    column DuckDB cannot prune."""
+    found: list[tuple[str, str, str]] = []
+    after = ""
+    while len(found) < limit:
+        sources = [
+            r[0]
+            for r in cur.execute(
+                f"SELECT DISTINCT source FROM {_table(state, 'links')}"
+                f" WHERE property IN ({_marks(properties)}) AND target = ? AND source > ?"
+                " ORDER BY source LIMIT ?",
+                [*properties, target, after, LINK_BATCH],
+            ).fetchall()
+        ]
+        if not sources:
+            break
+        meta = _kept_labels(cur, state, sources, exclude_types)
+        found.extend((target, s, meta[s]) for s in sources if s in meta)
+        after = sources[-1]
+        if len(sources) < LINK_BATCH:
+            break
+    return found[:limit]
+
+
 @router.post("/linked-from")
 def linked_from(body: LinkedFromRequest, state: ArtifactState = Depends(get_state)) -> dict:
     """Sources must be kept items (present in `items`), which drops the scholarly articles
@@ -196,8 +254,7 @@ def linked_from(body: LinkedFromRequest, state: ArtifactState = Depends(get_stat
     wanted = body.limit + 1
     rows: list[list[str]] = []
     seen: set[tuple[str, str]] = set()
-    exclusion = _exclusion(body.exclude_types)
-    items, labels, links = (_table(state, n) for n in ("items", "labels", "links"))
+    capped = False
 
     def add(batch) -> None:
         for target, source, label in batch:
@@ -210,33 +267,16 @@ def linked_from(body: LinkedFromRequest, state: ArtifactState = Depends(get_stat
         for target in targets if reverse else []:
             if len(rows) >= wanted:
                 break
-            add(
-                cur.execute(
-                    "SELECT l.target, l.source, coalesce(lb.label_en, lb.label_mul)"
-                    f" FROM {links} l JOIN {items} i ON i.qid = l.source"
-                    f" JOIN {labels} lb ON lb.qid = l.source"
-                    f" WHERE l.property IN ({_marks(reverse)}) AND l.target = ?"
-                    " AND coalesce(lb.label_en, lb.label_mul) IS NOT NULL"
-                    f"{exclusion} ORDER BY l.source LIMIT ?",
-                    [*reverse, target, *body.exclude_types, wanted - len(rows)],
-                ).fetchall()
-            )
+            add(_reverse_rows(cur, state, target, reverse, body.exclude_types, wanted - len(rows)))
         if "P800" in properties and len(rows) < wanted:
             pairs = _p800_works(cur, state, targets)
-            works = _unique([w for _, w in pairs])[:5000]
+            all_works = _unique([w for _, w in pairs])
+            capped = len(all_works) > P800_WORK_CAP
+            works = all_works[:P800_WORK_CAP]
             if works:
-                meta = {
-                    qid: label
-                    for qid, label in cur.execute(
-                        f"SELECT i.qid, coalesce(lb.label_en, lb.label_mul)"
-                        f" FROM {items} i JOIN {labels} lb ON lb.qid = i.qid"
-                        f" WHERE i.qid IN ({_marks(works)})"
-                        f" AND coalesce(lb.label_en, lb.label_mul) IS NOT NULL{exclusion}",
-                        [*works, *body.exclude_types],
-                    ).fetchall()
-                }
+                meta = _kept_labels(cur, state, works, body.exclude_types)
                 add((t, w, meta[w]) for t, w in pairs if w in meta)
-    return {"rows": rows[: body.limit], "truncated": len(rows) > body.limit}
+    return {"rows": rows[: body.limit], "truncated": capped or len(rows) > body.limit}
 
 
 @router.get("/names")

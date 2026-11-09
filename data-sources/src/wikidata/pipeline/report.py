@@ -53,9 +53,16 @@ def write_build_report(
     return report
 
 
-def manifest_dict(dump_date: str, results: list[GateResult], counts: dict[str, int]) -> dict:
+def manifest_dict(
+    dump_date: str,
+    results: list[GateResult],
+    counts: dict[str, int],
+    redirects_dump_date: str | None = None,
+) -> dict:
     return {
         "dump_date": dump_date,
+        # The redirect SQL dump is a separate, usually older, weekly snapshot (None if unknown).
+        "redirects_dump_date": redirects_dump_date,
         "built_at": now(),
         "pipeline_version": PIPELINE_VERSION,
         "tables": counts,

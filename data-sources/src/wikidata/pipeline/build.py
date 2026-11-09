@@ -55,6 +55,7 @@ def build(
     dump_date: str | None = None,
     redirect_sql: Path | None = None,
     page_sql: Path | None = None,
+    redirects_dump_date: str | None = None,
     keep_dump: bool = False,
     fixture: bool = False,
     client: httpx.Client | None = None,
@@ -74,7 +75,9 @@ def build(
             typer.echo(f"downloading {found.url}")
             started = time.time()
             downloaded = dump = dl.download(found, dumps_dir, client=client)
-            redirect_sql, page_sql = dl.download_redirect_sources(dumps_dir, client=client)
+            redirect_sql, page_sql, redirects_dump_date = dl.download_redirect_sources(
+                dumps_dir, client=client
+            )
             timings["download"] = round(time.time() - started, 1)
         finally:
             if owned:
@@ -108,7 +111,7 @@ def build(
             timings=timings,
             tables=table_stats(paths, staged=True),
         )
-        write_manifest(paths, manifest_dict(dump_date, results, counts))
+        write_manifest(paths, manifest_dict(dump_date, results, counts, redirects_dump_date))
         shutil.rmtree(paths.staging_dir, ignore_errors=True)
         raise BuildFailed(f"quality gates failed for {dump_date}")
 
@@ -118,7 +121,7 @@ def build(
     write_build_report(
         paths, dump_date=dump_date, results=results, timings=timings, tables=table_stats(paths)
     )
-    manifest = manifest_dict(dump_date, results, counts)
+    manifest = manifest_dict(dump_date, results, counts, redirects_dump_date)
     write_manifest(paths, manifest)
 
     if downloaded is not None and not keep_dump:
@@ -136,6 +139,7 @@ def main(
     page_sql: Path | None = typer.Option(None, "--page-sql", exists=True),  # noqa: B008
     memory_limit: str = typer.Option("8GB", "--memory-limit"),
     threads: int = typer.Option(6, "--threads"),
+    redirects_dump_date: str | None = typer.Option(None, "--redirects-dump-date"),
     keep_dump: bool = typer.Option(False, "--keep-dump"),
     fixture: bool = typer.Option(False, "--fixture", help="skip the real-dump canaries"),
 ) -> None:
@@ -146,6 +150,7 @@ def main(
             dump_date=dump_date,
             redirect_sql=redirect_sql,
             page_sql=page_sql,
+            redirects_dump_date=redirects_dump_date,
             memory_limit=memory_limit,
             threads=threads,
             keep_dump=keep_dump,

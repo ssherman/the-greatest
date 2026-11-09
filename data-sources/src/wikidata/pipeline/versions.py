@@ -86,6 +86,26 @@ def prune(root: Path, *, keep: int, current: str | None) -> list[Path]:
     return removed
 
 
+def prune_before(root: Path, before: str, *, current: str | None = None) -> list[Path]:
+    """Free the disk for building `before`: delete the downloaded dumps (and SQL files) of
+    every earlier date, and the failed or incomplete version directories of earlier dates.
+    `prune` only runs after a successful promotion, so a failed week's 157 GB dump would
+    otherwise stay and fill the disk. Passing versions and `current` are never touched."""
+    status = read_status(root)
+    removed: list[Path] = []
+    for date in status.failed + status.incomplete:
+        if date < before and date != current:
+            shutil.rmtree(root / "versions" / date)
+            removed.append(root / "versions" / date)
+    dumps_dir = root / "dumps"
+    if dumps_dir.is_dir():
+        for directory in sorted(d for d in dumps_dir.iterdir() if d.is_dir()):
+            if directory.name < before:
+                shutil.rmtree(directory)
+                removed.append(directory)
+    return sorted(removed, key=lambda p: (p.parent.name, p.name))
+
+
 @app.command("next-action")
 def next_action_command(root: Path = typer.Option(..., "--root")) -> None:  # noqa: B008
     with make_client() as client:
@@ -108,8 +128,16 @@ def prune_command(
     root: Path = typer.Option(..., "--root"),  # noqa: B008
     keep: int = typer.Option(2, "--keep", min=1),
     current: str | None = typer.Option(None, "--current"),
+    before: str | None = typer.Option(
+        None, "--before", help="only free the disk for building this date (see prune_before)"
+    ),
 ) -> None:
-    for path in prune(root, keep=keep, current=current):
+    removed = (
+        prune_before(root, before, current=current)
+        if before
+        else prune(root, keep=keep, current=current)
+    )
+    for path in removed:
         typer.echo(str(path))
 
 

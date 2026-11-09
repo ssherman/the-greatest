@@ -2,7 +2,14 @@ import json
 
 from typer.testing import CliRunner
 
-from wikidata.pipeline.versions import VersionStatus, app, decide, prune, read_status
+from wikidata.pipeline.versions import (
+    VersionStatus,
+    app,
+    decide,
+    prune,
+    prune_before,
+    read_status,
+)
 
 runner = CliRunner()
 
@@ -61,6 +68,44 @@ def test_prune_drops_a_superseded_dump_directory(tmp_path):
     (tmp_path / "dumps" / "2026-11-12").mkdir(parents=True)
     prune(tmp_path, keep=2, current=None)
     assert [d.name for d in (tmp_path / "dumps").iterdir()] == ["2026-11-12"]
+
+
+def test_prune_before_clears_the_dumps_and_dead_versions_of_earlier_weeks(tmp_path):
+    make(tmp_path, "2026-10-22", True)
+    make(tmp_path, "2026-10-29", False)  # a failed build whose 157 GB dump was never pruned
+    make(tmp_path, "2026-11-05")  # an OOM-killed build: no manifest
+    make(tmp_path, "2026-11-12", False)
+    for date in ("2026-10-29", "2026-11-05", "2026-11-12"):
+        (tmp_path / "dumps" / date).mkdir(parents=True)
+        (tmp_path / "dumps" / date / "wikidatawiki-latest-redirect.sql.gz").write_bytes(b"x")
+    removed = prune_before(tmp_path, "2026-11-12")
+    assert sorted(p.parent.name + "/" + p.name for p in removed) == [
+        "dumps/2026-10-29",
+        "dumps/2026-11-05",
+        "versions/2026-10-29",
+        "versions/2026-11-05",
+    ]
+    assert sorted(d.name for d in (tmp_path / "versions").iterdir()) == ["2026-10-22", "2026-11-12"]
+    assert [d.name for d in (tmp_path / "dumps").iterdir()] == ["2026-11-12"]
+
+
+def test_prune_before_never_touches_a_passing_or_the_served_version(tmp_path):
+    make(tmp_path, "2026-10-22", True)
+    make(tmp_path, "2026-10-29", True)
+    make(tmp_path, "2026-11-05", False)
+    removed = prune_before(tmp_path, "2026-11-12", current="2026-11-05")
+    assert [p.name for p in removed] == []
+    assert len(list((tmp_path / "versions").iterdir())) == 3
+
+
+def test_prune_before_command_runs_only_that_step(tmp_path):
+    make(tmp_path, "2026-10-22", True)
+    make(tmp_path, "2026-11-05")
+    result = runner.invoke(
+        app, ["prune", "--root", str(tmp_path), "--keep", "1", "--before", "2026-11-12"]
+    )
+    assert result.exit_code == 0
+    assert sorted(d.name for d in (tmp_path / "versions").iterdir()) == ["2026-10-22"]
 
 
 def test_prune_drops_superseded_failed_and_incomplete_directories(tmp_path):

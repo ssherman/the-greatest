@@ -31,6 +31,9 @@ from wikidata.pipeline.scan import SlimEntity, open_dump, slim
 # batch to a few hundred MB and the full dump to tens of thousands of shards (one glob).
 BATCH_LINES = 20_000
 BATCH_BYTES = 32 * 1024 * 1024
+# DuckDB defaults to 16 MB; one oversized entity must not fail a multi-hour build. The reader
+# allocates twice this per thread, so 256 MB would not fit the worker's 512 MB memory_limit.
+_MAX_OBJECT_BYTES = 128 * 1024 * 1024
 # DuckDB rounds row groups to 2,048-row vectors, so 8,192 stays at or under the spec's 10,000.
 ROW_GROUP = 8_192
 
@@ -155,6 +158,7 @@ def _process_batch(task: tuple[int, list[bytes], str]) -> int:
     target = Path(shards_dir) / f"shard_{number:07d}.parquet"
     _worker_con.execute(
         f"COPY (SELECT * FROM read_json('{source}', format='newline_delimited',"
+        f" maximum_object_size={_MAX_OBJECT_BYTES},"
         f" columns={_SHARD_COLUMNS})) TO '{target}' (FORMAT parquet, COMPRESSION zstd)"
     )
     source.unlink()
@@ -290,9 +294,9 @@ def distill(
     threads: int,
 ) -> dict[str, int]:
     """Build every table into `paths.staging_dir`; returns table -> row count."""
+    # An OOM-killed build leaves DuckDB spill files and shards in tmp; nothing else lives there.
+    shutil.rmtree(paths.tmp_dir, ignore_errors=True)
     paths.ensure()
-    if paths.shards_dir.exists():
-        shutil.rmtree(paths.shards_dir)
     paths.shards_dir.mkdir(parents=True)
 
     con = duckdb.connect(database=":memory:")

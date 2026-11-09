@@ -51,6 +51,13 @@ if ! swapon --show=NAME --noheadings | grep -qxF "$swapfile"; then
   swapon "$swapfile" || fail "could not enable swap on $swapfile"
 fi
 
+# A failed or killed week leaves its ~157 GB dump behind, and the success-only prune below
+# never runs for it. Free every earlier week's dump and dead version before downloading
+# this one; the served version and passing versions are never touched.
+current="$(cat "$WD_DATA/current-version" 2>/dev/null || true)"
+versions prune --before "$date" ${current:+--current "$current"} ||
+  log "could not free the disk of earlier dumps; building anyway"
+
 log "building $date"
 built=0
 "$COMPOSE" run --rm --no-deps -T wikidata-build && built=1

@@ -34,6 +34,7 @@ def wikidata_artifact(tmp_path_factory):
         dump_date=WIKIDATA_DUMP_DATE,
         redirect_sql=FIXTURES / "mini-redirect.sql",
         page_sql=FIXTURES / "mini-page.sql",
+        redirects_dump_date="2026-11-01",
         memory_limit="1GB",
         threads=2,
         fixture=True,

@@ -6,6 +6,7 @@ discovery walks newest first until one holds the entity dump. Wikimedia allows t
 per IP, so `download` never opens more than two.
 """
 
+import email.utils
 import hashlib
 import re
 import shutil
@@ -159,19 +160,34 @@ def download(
     return target
 
 
-def _fetch_whole(client: httpx.Client, url: str, target: Path) -> Path:
+def _fetch_whole(client: httpx.Client, url: str, target: Path) -> tuple[Path, str | None]:
+    """Returns the file and the server's Last-Modified as an ISO date (None if absent)."""
     partial = target.with_name(target.name + ".part")
     with client.stream("GET", url) as response:
         response.raise_for_status()
+        modified = _http_date(response.headers.get("last-modified"))
         with partial.open("wb") as out:
             for chunk in response.iter_bytes(CHUNK):
                 out.write(chunk)
     shutil.move(partial, target)
-    return target
+    return target, modified
 
 
-def download_redirect_sources(dest_dir: Path, *, client: httpx.Client) -> tuple[Path, Path]:
+def _http_date(value: str | None) -> str | None:
+    try:
+        return email.utils.parsedate_to_datetime(value).date().isoformat() if value else None
+    except (TypeError, ValueError):
+        return None
+
+
+def download_redirect_sources(
+    dest_dir: Path, *, client: httpx.Client
+) -> tuple[Path, Path, str | None]:
+    """The redirect and page SQL dumps, plus the redirect dump's date (its Last-Modified).
+    These live in `latest/`, so their date can trail the JSON dump's by weeks."""
     dest_dir.mkdir(parents=True, exist_ok=True)
-    redirect = _fetch_whole(client, REDIRECT_URL, dest_dir / "wikidatawiki-latest-redirect.sql.gz")
-    page = _fetch_whole(client, PAGE_URL, dest_dir / "wikidatawiki-latest-page.sql.gz")
-    return redirect, page
+    redirect, redirects_date = _fetch_whole(
+        client, REDIRECT_URL, dest_dir / "wikidatawiki-latest-redirect.sql.gz"
+    )
+    page, _ = _fetch_whole(client, PAGE_URL, dest_dir / "wikidatawiki-latest-page.sql.gz")
+    return redirect, page, redirects_date

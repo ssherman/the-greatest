@@ -84,7 +84,9 @@ def test_without_dump_it_discovers_downloads_and_deletes_the_dump(tmp_path):
             return httpx.Response(200, text=f"{md5}  wikidata-20261105-all.json.gz\n")
         if url.endswith("redirect.sql.gz"):
             return httpx.Response(
-                200, content=gzip.compress((FIXTURES / "mini-redirect.sql").read_bytes())
+                200,
+                content=gzip.compress((FIXTURES / "mini-redirect.sql").read_bytes()),
+                headers={"last-modified": "Sun, 01 Nov 2026 03:00:00 GMT"},
             )
         if url.endswith("page.sql.gz"):
             return httpx.Response(
@@ -98,6 +100,7 @@ def test_without_dump_it_discovers_downloads_and_deletes_the_dump(tmp_path):
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         manifest = build(root=tmp_path, memory_limit="1GB", threads=2, fixture=True, client=client)
     assert manifest["dump_date"] == "2026-11-05"
+    assert manifest["redirects_dump_date"] == "2026-11-01"
     assert not (tmp_path / "dumps" / "2026-11-05" / "wikidata-20261105-all.json.gz").exists()
 
 

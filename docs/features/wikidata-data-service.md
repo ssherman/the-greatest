@@ -80,10 +80,10 @@ JSON, read-only, port 8083. All routes are generic.
 
 | Route | Answers |
 |---|---|
-| `GET /version` | dump date, built-at, `gates_passed`, table counts, gate results |
+| `GET /version` | dump date, `redirects_dump_date`, built-at, `gates_passed`, table counts, gate results |
 | `POST /items` (at most 50 QIDs) | `items` keyed by the QID asked for (following redirects), plus `not_kept` and `missing` lists |
 | `POST /labels` (at most 500) | `en`, `mul` and `description` per QID |
-| `POST /by-external-id` (pairs, at most 500; `limit` per property, default 10, max 100) | QIDs carrying any `property=value` pair; 422 for a property not indexed |
+| `POST /by-external-id` (pairs, at most 500; `limit` caps the merged answer overall, not per property; default 10, max 100) | QIDs carrying any `property=value` pair; 422 for a property not indexed |
 | `POST /linked-from` (targets, properties, optional `exclude_types`; `limit` default 5000, max 20000) | flat `rows: [[target, source, label], ...]` of the kept items linking to each target through `P50` and `P800`, plus `truncated`, which says whether `limit` cut the answer |
 | `GET /names?q=` | person-typed items whose normalized label or alias equals the query, ranked by sitelink count; `limit` defaults to 10, max 100 |
 
@@ -97,7 +97,21 @@ casefolded, punctuation to spaces), not a prefix or a fuzzy match.
 
 Settings (env, forwarded by compose): `WD_DATA_ROOT` (`/data`), `WD_DATA_VERSION` (required; the API opens an
 explicit `versions/<dump-date>` and never guesses), `WD_API_MEMORY_LIMIT` (512MB), `WD_API_TEMP_DIR`,
-`WD_API_THREADS` (2). The API refuses to boot against a version with no manifest, `gates_passed` other than
+`WD_API_THREADS` (2).
+
+**`redirects_dump_date`** is the date of the redirect SQL dump (the `Last-Modified` of the file the build
+downloaded; `null` for a build from local files without `--redirects-dump-date`). That dump lives in
+`latest/` and can be weeks older than the JSON dump, so a QID merged after it is `not_kept`/`missing` here
+while Wikidata already redirects it. This is why Rails treats `missing` as "unknown", not "gone".
+
+**Two things the API does not read from the artifact.** `external_id_kinds` (which properties
+`/by-external-id` accepts, and their normalization kind) comes from the *image's* `kept.yml`, not from the
+manifest. A `kept.yml` change therefore changes lookups only after the next weekly build has re-derived the
+`external_ids` table, and an image deployed earlier than that build can accept a property whose table has no
+rows. Second, a `PIPELINE_VERSION` bump makes the API refuse every older artifact (`VersionMismatch`) until
+it is rebuilt; see "Deploying a PIPELINE_VERSION bump" below.
+
+The API refuses to boot against a version with no manifest, `gates_passed` other than
 true, a missing table, a symlinked version directory or a different `pipeline_version`.
 
 ## Building on dev
@@ -171,6 +185,42 @@ loopback port 8083 and leaves through `cloudflared` (alias `wikidata`, `WIKIDATA
 
 Healthchecks: `HC_WIKIDATA_HEARTBEAT` (the API answers), `HC_WIKIDATA_DEPLOY`, `HC_WIKIDATA_REFRESH`. Until
 the first build passes there is no `current-version`, so the API is not started and the heartbeat is silent.
+
+### Deploying a PIPELINE_VERSION bump
+
+After a bump the API will not open the served artifact, and `versions next-action` still answers
+`skip built <date>` because that manifest says `gates_passed: true`. To force a rebuild of the served date
+on the VM, make it look unfinished and start the refresh by hand:
+
+```bash
+rm /srv/wd-data/versions/<served-date>/manifest.json
+sudo systemctl start wikidata-refresh.service      # same script as the timer; takes the build lock
+```
+
+The build deletes and recreates `versions/<served-date>/`, so the API is down (Rails sees `Unavailable` and
+reschedules) from the deploy until the new build passes, roughly half a day including the ~157 GB
+download, which is not kept after a success. Schedule it for a quiet period. A build run by hand uses
+`docker compose run --rm --no-deps -T wikidata-build` under the same lock the script takes.
+
+### Weekly disk hygiene
+
+The refresh script runs `versions prune --before <date>` right after `next-action` returns `build <date>`.
+It deletes the downloaded dumps (and SQL files) of every earlier date and the failed or unfinished version
+directories of earlier dates, so a failed week's 157 GB dump cannot accumulate on the 400 GB disk. It never
+touches a passing version or the served one. The ordinary `prune --keep 2` still runs after a promotion.
+Each build also clears `<root>/tmp` first, so DuckDB spill files from an OOM-killed build do not stay.
+
+### A timed-out refresh can leave the build running
+
+`wikidata-refresh.service` has `TimeoutStartSec=24h`. When systemd kills the script, it kills the
+`docker compose run` client but not the build container, which dockerd owns. The script's build lock is then
+released while a build is still running. Check with `docker ps` on the VM (look for the `wikidata-build`
+container) and stop it before the next run:
+
+```bash
+docker ps --filter name=wikidata-build
+docker stop <container-id>
+```
 
 ## Measured build
 

@@ -102,12 +102,17 @@ def test_a_bad_md5_raises_and_leaves_no_file(tmp_path):
 
 def test_redirect_sources_come_from_the_latest_directory(tmp_path):
     def handler(request):
-        return httpx.Response(200, content=request.url.path.encode())
+        return httpx.Response(
+            200,
+            content=request.url.path.encode(),
+            headers={"last-modified": "Sun, 01 Nov 2026 03:00:00 GMT"},
+        )
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        redirect, page = dl.download_redirect_sources(tmp_path, client=client)
+        redirect, page, redirects_date = dl.download_redirect_sources(tmp_path, client=client)
     assert redirect.name == "wikidatawiki-latest-redirect.sql.gz"
     assert page.name == "wikidatawiki-latest-page.sql.gz"
+    assert redirects_date == "2026-11-01"
     assert b"redirect" in redirect.read_bytes() and b"page" in page.read_bytes()
 
 

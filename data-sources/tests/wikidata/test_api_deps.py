@@ -65,6 +65,15 @@ def test_a_gate_failed_version_refuses_to_boot(tmp_path, wikidata_artifact):
         open_artifact(_settings(paths, tmp_path))
 
 
+def test_the_connection_caches_parquet_metadata(tmp_path, wikidata_artifact):
+    state = open_artifact(_settings(wikidata_artifact, tmp_path))
+    (cached,) = state.connection.execute(
+        "SELECT current_setting('parquet_metadata_cache')"
+    ).fetchone()
+    assert cached is True
+    state.connection.close()
+
+
 def test_a_passing_version_opens(tmp_path, wikidata_artifact):
     state = open_artifact(_settings(wikidata_artifact, tmp_path))
     assert state.manifest["gates_passed"] is True

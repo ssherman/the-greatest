@@ -200,3 +200,29 @@ def test_rerunning_replaces_stale_shards(built, config):
     paths.shards_dir.mkdir(parents=True)
     (paths.shards_dir / "shard_9999999.parquet").write_bytes(b"stale")
     assert run(paths, config) == counts
+
+
+def test_rerunning_clears_spill_files_an_earlier_killed_build_left(built, config):
+    paths, counts = built
+    leftover = paths.tmp_dir / "duckdb_temp_storage_leftover.tmp"
+    leftover.write_bytes(b"spill")
+    assert run(paths, config) == counts
+    assert not leftover.exists()
+
+
+def test_a_single_oversized_entity_does_not_fail_the_shard_write(tmp_path, config):
+    import orjson
+
+    entity = {
+        "id": "Q900999",
+        "type": "item",
+        "labels": {"en": {"language": "en", "value": "x" * (20 * 1024 * 1024)}},
+        "descriptions": {},
+        "aliases": {},
+        "claims": {},
+        "sitelinks": {},
+    }
+    distill_module._init_worker(config)
+    written = distill_module._process_batch((0, [orjson.dumps(entity)], str(tmp_path)))
+    assert written == 1
+    assert (tmp_path / "shard_0000000.parquet").exists()

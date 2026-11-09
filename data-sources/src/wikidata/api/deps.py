@@ -126,6 +126,8 @@ def open_artifact(settings: Settings) -> ArtifactState:
     connection = duckdb.connect(database=":memory:")
     connection.execute(f"SET memory_limit='{settings.memory_limit}'")
     connection.execute(f"SET threads={settings.threads}")
+    # Every lookup reads Parquet footers (thousands of row groups); read them once.
+    connection.execute("SET parquet_metadata_cache=true")
     connection.execute(f"SET temp_directory='{settings.temp_dir}'")
     return ArtifactState(
         paths=paths,
