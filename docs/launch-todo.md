@@ -567,7 +567,7 @@ Goodreads re-import (section 12) is done, since that removes crufty books and fi
 the books and authors it creates already go through the full import workflow, origin step included. The
 backfill runs once here; the weekly run is section 4, step 10, and is optional.
 
-1. Run the author Wikidata enrichment first (section 15, step 7): the work match depends on author QIDs.
+1. Run the author Wikidata enrichment first (section 15, step 11): the work match depends on author QIDs.
    The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10). It needs a local
    Wikidata copy first (section 15): remote Wikidata refuses requests whenever its lag passes 5 seconds, which in November
    2026 was most of the day, so it cannot carry a bulk run (Wikimedia asks bulk readers to use the dumps).
@@ -592,24 +592,61 @@ server through a Cloudflare tunnel behind Cloudflare Access. Details:
 The work ships as two PRs: the Wikidata service and home-server tooling first, the Rails switch second.
 
 Steps marked "Shane runs with `!`" change the home server, Cloudflare or production, so an agent does not run them.
+The order matters: the Cloudflare step writes the tunnel token that `provision` hands the new VM. The host
+already has tunnels enabled, so a VM created before the token exists starts `cloudflared` with an empty one.
 
-1. **Free the old MusicBrainz VM. Shane runs with `!`.** On pve-mini: `qm set 101 --onboot 0`, so VM 101 stops
-   competing with VM 150 for memory after a reboot. Then check production's `MUSICBRAINZ_URL`: if it points
-   at VM 101, point it at `https://musicbrainz.org` before VM 101 is ever stopped.
-2. **Prove the build on the dev machine.** The dev build passes every gate.
-3. **Merge PR 1** (the Wikidata service and the home-server tooling). Nothing in production calls the
-   service yet.
-4. **Provision VM 150. Shane runs with `!`.** `provision` with the new role, then the first build and its
-   gates. Then the tunnel and Access: `bin/cfzerotrust apply --secrets-root <this checkout>` in
-   `the-greatest-cloudflare`, as in section 9 step 2. The Access app must accept the existing `prod-rails`
-   service token: production already holds it as the shared `CLOUDFLARE_ACCESS_CLIENT_ID` and
-   `CLOUDFLARE_ACCESS_CLIENT_SECRET` (WorldCat uses them), and the Wikidata client reads the same two, so
-   change no credential. The only new production setting is `WIKIDATA_SERVICE_URL`, which the same apply
-   writes into `secrets/.env.production`, as it does for `WORLDCAT_SERVICE_URL`.
-5. **Confirm production reaches the service.** From a production host, `curl` `/version` through the tunnel
-   with the Access headers. It answers with the dump date.
-6. **Only then merge PR 2** (the Rails switch), which deploys the client.
-7. **Enrich the authors from the local Wikidata, ranked authors first. Shane runs with `!`.**
+1. **Free the old MusicBrainz VM. Shane runs with `!`. DONE 2026-11-09.** On pve-mini: `qm set 101 --onboot 0`,
+   so VM 101 stops competing with VM 150 for memory after a reboot. Then check production's `MUSICBRAINZ_URL`:
+   if it points at VM 101, point it at `https://musicbrainz.org` before VM 101 is ever stopped.
+2. **Prove the build on the dev machine. DONE 2026-11-09.** The dev build passes every gate (81 min, peak
+   9.5 GiB of 10 GiB; numbers in the feature doc's "Measured build").
+3. **Merge PR 1** (#473, the Wikidata service and the home-server tooling). **DONE 2026-11-09.** Nothing in
+   production calls the service yet.
+4. **Cloudflare, before anything touches the home server. Shane runs with `!`.** Nothing is done in the
+   dashboard. In `the-greatest-cloudflare`, merge the branch `wikidata-tunnel`: it adds the `wikidata-api`
+   Access app (the existing `prod-rails` service token, nothing new), the `home-wikidata` tunnel with ingress
+   `http://wikidata:8083`, `WIKIDATA_SERVICE_URL` to the production values, and
+   `wikidata-api.thegreatestbooks.org` to the `skip_edge_for_home_server` bot-skip rule. Then, from an
+   up-to-date checkout of that repo (`CLOUDFLARE_ZT_API_TOKEN` and `CLOUDFLARE_API_TOKEN` in its `.env`,
+   `SOPS_AGE_KEY_FILE` set):
+   - `bin/cfzerotrust diff --secrets-root /home/shane/dev/the-greatest` lists one app, one tunnel, one
+     CNAME and two secret writes to create, and nothing to change for the other three services.
+   - `bin/cfzerotrust apply --secrets-root /home/shane/dev/the-greatest` creates them, writes
+     `WIKIDATA_TUNNEL_TOKEN` into `secrets/home-server.env` and `WIKIDATA_SERVICE_URL` into
+     `secrets/.env.production`. There is no token to copy.
+   - `bin/cfrules diff thegreatestbooks.org` shows only the skip rule's host list gaining the new hostname
+     (if it reports dashboard drift, `pull` and merge first, per that repo's AGENTS.md), then
+     `bin/cfrules apply thegreatestbooks.org`.
+   - Commit the two changed SOPS files in this repo on a branch and merge it. Production picks up
+     `WIKIDATA_SERVICE_URL` the way section 9 step 9 did; nothing reads it until PR 2 merges.
+5. **healthchecks.io (optional).** Create `wikidata-heartbeat` (period 5 min, grace 15 min),
+   `wikidata-deploy` (15 min, 1 h) and `wikidata-refresh` (1 day, 12 h), then add their ping URLs as
+   `HC_WIKIDATA_HEARTBEAT`, `HC_WIKIDATA_DEPLOY` and `HC_WIKIDATA_REFRESH` with
+   `sops secrets/home-server.env`. Blank means no ping, so this can wait, but do it before step 7 or
+   re-run `provision` afterwards.
+6. **Confirm VMID 150 is unused, immediately before step 7.** `ssh pve-mini qm list` must not list 150.
+   `provision` adopts a VM it finds at that id instead of creating one.
+7. **Create the VM. Shane runs with `!`.** From this repo's main checkout, up to date with `main` and with
+   step 4's secrets: `SOPS_AGE_KEY_FILE=~/.config/sops/age/production.txt deployment/home-server/provision`.
+   It creates VM 150 `wikidata` (8 vCPU, 12 GB, a 400 GB data disk on `rpool2`), installs its env and
+   timers, and leaves the other VMs alone. `cloudflared` starts at once; the API does not, because there is
+   no built version yet. Check: `ssh pve-mini qm list` shows 150 running, and
+   `deployment/home-server/provision --verify` passes, with the wikidata `/version` check reported as SKIP.
+8. **The first build runs by itself.** `wikidata-refresh.timer` fires 15 minutes after the VM boots: about
+   4.5 h to download the dump, then about 1.5 h to build, gate and promote. Nothing to do but wait.
+   To watch it, find the VM's address (`ssh pve-mini qm guest cmd 150 network-get-interfaces`), then
+   `ssh debian@<vm-address> journalctl -fu wikidata-refresh`. It is done when
+   `ssh debian@<vm-address> curl -s 127.0.0.1:8083/version` prints `"gates_passed":true` with a dump
+   date, and `wikidata-heartbeat` goes green. A failed gate leaves nothing served and pings
+   `wikidata-refresh` with the gate names; the dump is kept, so a retry does not download it again.
+9. **Confirm production reaches the service. Shane runs with `!`.** From a production host:
+   `curl -s -H "CF-Access-Client-Id: $CLOUDFLARE_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CLOUDFLARE_ACCESS_CLIENT_SECRET" https://wikidata-api.thegreatestbooks.org/version`
+   answers with the same dump date. A 403 means the Access app or token; a challenge page means the
+   bot-skip rule from step 4 is not applied.
+10. **Only then merge PR 2** (#474, the Rails switch): mark it ready for review, let CI and Codex finish,
+    merge. It deploys the client. Merging it before step 9 passes leaves production imports with no
+    Wikidata at all.
+11. **Enrich the authors from the local Wikidata, ranked authors first. Shane runs with `!`.**
    `bin/rails "books:authors:enrich[13654]"` (13,654 is the ranked authors; it queues the Wikidata step, then
    VIAF on a miss, then AI with research off, one author every 8 seconds). Check it with
    `bin/rails "books:authors:enrich_report[<ISO time it printed>]"`. Do this BEFORE the section 14 origin
@@ -617,8 +654,8 @@ Steps marked "Shane runs with `!`" change the home server, Cloudflare or product
    76,006 authors have a Wikidata QID. On a 40-book sample the local copy matched 5 of 10 top-ranked books,
    1 of 10 mid-ranked and 1 of 20 unranked, all through identifiers. When the author was found by name,
    the author-works route matched 8 of the 14 ranked books that were still unmatched.
-8. **Re-run the stage 2 rehearsal** (section 14, step 1).
-9. **After launch, optionally turn on the re-check.** Set `config.x.wikidata.recheck_after_refresh = true`
+12. **Re-run the stage 2 rehearsal** (section 14, step 1).
+13. **After launch, optionally turn on the re-check.** Set `config.x.wikidata.recheck_after_refresh = true`
    (`config/initializers/wikidata.rb`; it is off everywhere until you do) and deploy. The 06:00 UTC cron
    (`wikidata_recheck_after_refresh`) then reads `/version` daily and, when the dump date is new, re-checks
    books and authors created in the last 90 days (`config.x.wikidata.recheck_window`) that found no QID,
