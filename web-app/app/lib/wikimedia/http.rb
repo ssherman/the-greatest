@@ -37,7 +37,7 @@ module Wikimedia
 
     # GET against an Action API endpoint (www.wikidata.org or a Wikipedia).
     def action_api(url, params)
-      response = perform(:get, url, params.merge(format: "json", formatversion: 2, maxlag: settings.maxlag))
+      response = perform(url, params.merge(format: "json", formatversion: 2, maxlag: settings.maxlag))
       data = parse(response)
       error = data.is_a?(Hash) ? data["error"] : nil
       raise Exceptions::ApiError.new("Wikimedia API error #{error["code"]}: #{error["info"]}", error["code"].to_s) if error
@@ -45,22 +45,11 @@ module Wikimedia
       Response.new(data: data, body: response.body)
     end
 
-    # POST to the Wikidata Query Service, so a long VALUES list fits.
-    def sparql(url, query)
-      response = perform(:post, url, {query: query}, accept: "application/sparql-results+json")
-      Response.new(data: parse(response), body: response.body)
-    end
-
     private
 
-    def perform(verb, url, params, accept: "application/json")
+    def perform(url, params)
       acquire_slot!
-      headers = {"User-Agent" => user_agent, "Accept" => accept}
-      response = if verb == :get
-        connection.get(url, params, headers)
-      else
-        connection.post(url, URI.encode_www_form(params), headers.merge("Content-Type" => "application/x-www-form-urlencoded"))
-      end
+      response = connection.get(url, params, {"User-Agent" => user_agent, "Accept" => "application/json"})
       check_status!(response)
       response
     rescue Faraday::TimeoutError => e

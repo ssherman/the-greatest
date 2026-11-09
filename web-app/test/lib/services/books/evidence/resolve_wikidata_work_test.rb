@@ -17,6 +17,7 @@ module Services
           @client.stubs(:work_items).returns({})
           @client.stubs(:labels).returns({})
           @client.stubs(:entities).returns({})
+          @client.stubs(:not_kept).returns(Set.new)
           Identifier.create!(identifiable: books_authors(:tolstoy), identifier_type: :books_author_wikidata_qid, value: "Q7243")
         end
 
@@ -399,11 +400,53 @@ module Services
           assert_empty stored_values
         end
 
-        test "a stored wikidata-source QID whose entity is missing is removed" do
+        test "a stored QID the service reports missing is kept, recorded, and ends resolution" do
           Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q50", source: :wikidata)
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          @client.expects(:by_statements).never
+          @client.expects(:work_items).never
 
-          assert_nil call.data[:qid]
-          assert_empty stored_values
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_nil data[:work]
+          assert_equal ["Q50"], stored_values
+          assert_includes data[:rejected], {"id" => "Q50", "reason" => "missing"}
+        end
+
+        test "a stored QID the service reports not kept is left in place and yields no evidence" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q50", source: :wikidata)
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
+          @client.stubs(:not_kept).returns(Set["Q50"])
+          @client.expects(:by_statements).never
+          @client.expects(:work_items).never
+
+          data = call.data
+
+          assert_nil data[:qid]
+          assert_nil data[:work]
+          assert_equal ["Q50"], stored_values
+          assert_includes data[:rejected], {"id" => "Q50", "reason" => "not_kept"}
+        end
+
+        test "a verified ISBN-13 keeps its slot when the other pairs fill the cap" do
+          (1..60).each { |i| Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "g#{i}") }
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: "9780385474542", source: :worldcat)
+          @client.expects(:by_statements).with { |pairs, **| pairs.size == 50 && pairs.last == ["P212", "9780385474542"] }.returns([])
+
+          call
+        end
+
+        test "a verified ISBN-13 is sent as a P212 statement and an edition hit resolves to its work" do
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: "9780385474542", source: :worldcat)
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: "9781400079988", source: :legacy)
+          @client.expects(:by_statements).with([["P212", "9780385474542"]], limit: 50).returns(["Q900"])
+          @client.stubs(:entities).with(["Q900"]).returns("Q900" => entity("Q900", "War and Peace", instance_of: EDITION, edition_of: ["Q161531"]))
+          @client.stubs(:entities).with(["Q161531"]).returns("Q161531" => entity("Q161531", "War and Peace", instance_of: NOVEL, authors: ["Q7243"]))
+
+          data = call.data
+
+          assert_equal ["Q161531", "statements"], [data[:qid], data[:via]]
         end
 
         test "a stored legacy-source QID that is now a film is left in place" do

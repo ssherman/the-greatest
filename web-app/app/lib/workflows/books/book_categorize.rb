@@ -5,8 +5,9 @@
 # that did not come through an import. The evidence step reuses a current,
 # complete evidence row instead of gathering again.
 #
-# Run options read by the steps: "context", "label", "force_judge" and
-# "force_research".
+# Run options read by the steps: "context", "label", "force_judge",
+# "force_research" and "regather" (true: the evidence step gathers even when a
+# current row exists; set by the Wikidata re-check).
 module Workflows
   module Books
     class BookCategorize < Workflows::Definition

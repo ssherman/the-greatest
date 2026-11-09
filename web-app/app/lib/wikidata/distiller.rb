@@ -9,9 +9,10 @@ module Wikidata
   # Names read English first, then "mul", the label Wikidata keeps for all
   # languages: many people's items now carry their name only there (Victor
   # Hugo's has no English label at all). SCHEMA_VERSION 2 added that
-  # fallback, so an item stored under 1 is fetched and distilled again.
+  # fallback, so an item stored under 1 is fetched and distilled again. 3 reads the service's
+  # sitelink_count (its sitelinks hold only enwiki) and records the dump date.
   module Distiller
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
     NAME_LANGUAGES = %w[en mul].freeze
 
     IDENTIFIER_PROPERTIES = {
@@ -44,8 +45,15 @@ module Wikidata
         "pseudonyms" => values(claims, "P742").grep(String),
         "identifiers" => IDENTIFIER_PROPERTIES.transform_values { |property| values(claims, property).grep(String) },
         "enwiki_title" => entity["sitelinks"].is_a?(Hash) ? entity["sitelinks"].dig("enwiki", "title") : nil,
-        "sitelink_count" => entity["sitelinks"].is_a?(Hash) ? entity["sitelinks"].size : 0
+        "sitelink_count" => sitelink_count(entity),
+        "dump_date" => entity["dump_date"]
       }
+    end
+
+    def sitelink_count(entity)
+      return entity["sitelink_count"] if entity["sitelink_count"].is_a?(Integer)
+
+      entity["sitelinks"].is_a?(Hash) ? entity["sitelinks"].size : 0
     end
 
     def english(terms)
@@ -97,6 +105,6 @@ module Wikidata
       end
     end
 
-    private_class_method :name_list, :best
+    private_class_method :name_list, :best, :sitelink_count
   end
 end

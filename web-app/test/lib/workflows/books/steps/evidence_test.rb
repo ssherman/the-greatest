@@ -60,11 +60,32 @@ module Workflows
           assert_equal "applied", call(Evidence.new(reuse_fresh: true)).outcome
         end
 
+        test "reuse_fresh gathers anyway when the run's regather option is true" do
+          row = evidence_row("schema_version" => ::Services::Books::Evidence::Gather::SCHEMA_VERSION, "sources_failed" => [], "wikidata_qid" => nil)
+          ::Services::Books::Evidence::Gather.expects(:call).with(book: @book).returns(stub(data: {enrichment: row}))
+          run = BookEnrichment.start(@book, initiated_by: "test", options: {"regather" => true})
+
+          Evidence.new(reuse_fresh: true).call(step: run.step(:evidence), run: run, target: @book)
+        end
+
         test "the default adapter gathers even when a fresh row exists" do
           row = evidence_row("schema_version" => ::Services::Books::Evidence::Gather::SCHEMA_VERSION, "sources_failed" => [])
           ::Services::Books::Evidence::Gather.expects(:call).returns(stub(data: {enrichment: row}))
 
           call
+        end
+
+        test "an unavailable Wikidata service waits and writes no row" do
+          ::Services::Books::Evidence::Gather.stubs(:call).raises(::Wikidata::Exceptions::Unavailable.new("down", retry_after: 60))
+          adapter = Evidence.new
+          adapter.stubs(:rand).returns(7)
+
+          result = nil
+          assert_no_difference -> { Enrichment.where(kind: "books.evidence").count } do
+            result = call(adapter)
+          end
+
+          assert_equal [:wait, Time.current + 67], [result.kind, result.run_after]
         end
 
         test "a rate limit waits past retry_after plus jitter and writes no row" do

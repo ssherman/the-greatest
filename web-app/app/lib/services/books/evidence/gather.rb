@@ -7,17 +7,19 @@ module Services
       # books.evidence ledger row. Every section is computed before the row is written,
       # so a Wikimedia rate limit (which propagates) leaves nothing behind. Any other
       # Wikimedia error, or a WorldCat error, marks that one source failed and the run
-      # continues. Wikipedia is reached only through the Wikidata item's enwiki sitelink.
+      # continues. Facts carry the date of the Wikidata dump the service answered
+      # from (nil when Wikidata was not reached). Wikipedia is reached only through
+      # the Wikidata item's enwiki sitelink.
       class Gather
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
         KIND = "books.evidence"
-        SCHEMA_VERSION = 2
+        SCHEMA_VERSION = 3
         LIST_FIELDS = %w[countries languages genres main_subjects narrative_locations set_in_periods forms].freeze
 
         def self.call(book:, wikidata: nil, wikipedia: nil, worldcat: nil)
           http = evidence_http
-          wikidata ||= ::Wikidata::Client.new(http: http)
+          wikidata ||= ::Wikidata::Client.new
           wikipedia ||= ::Wikipedia::Client.new(http: http)
           new(book, wikidata, wikipedia, worldcat).call
         end
@@ -56,6 +58,7 @@ module Services
             facts: {
               "schema_version" => SCHEMA_VERSION,
               "wikidata_qid" => resolution&.dig(:qid),
+              "wikidata_dump_date" => dump_date,
               "wikidata" => wikidata_section,
               "wikipedia" => wikipedia_section,
               "worldcat" => worldcat_section,
@@ -69,6 +72,14 @@ module Services
         end
 
         private
+
+        # A service that answered but was never asked for an item still names its dump.
+        # An error other than a wait (which propagates) leaves it nil.
+        def dump_date
+          @wikidata.dump_date
+        rescue ::Wikimedia::Exceptions::Error
+          nil
+        end
 
         def resolve
           ResolveWikidataWork.call(book: @book, client: @wikidata).data

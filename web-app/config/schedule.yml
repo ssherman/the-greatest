@@ -51,6 +51,11 @@ goodreads_rebuild_enrichment:
   cron: "*/10 * * * *"
   description: "Start enrichment for the Goodreads rebuild fixed books, most-listed first, a few hundred at a time"
 
+wikidata_recheck_after_refresh:
+  class: Wikidata::RecheckAfterRefreshJob
+  cron: "0 6 * * *"
+  description: "After the local Wikidata copy is refreshed, re-check recent books and authors with no match (off unless config.x.wikidata.recheck_after_refresh)"
+
 oauth_prune:
   class: Oauth::PruneJob
   cron: "45 3 * * *"

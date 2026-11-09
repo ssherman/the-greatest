@@ -1,0 +1,97 @@
+{
+  "items": {
+    "Q30": {
+      "id": "Q30",
+      "labels": {
+        "en": {
+          "language": "en",
+          "value": "United States"
+        }
+      },
+      "claims": {
+        "P297": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P297",
+              "datavalue": {
+                "value": "US",
+                "type": "string"
+              }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ]
+      },
+      "dump_date": "2026-11-05"
+    },
+    "Q34266": {
+      "id": "Q34266",
+      "labels": {
+        "en": {
+          "language": "en",
+          "value": "Russian Empire"
+        }
+      },
+      "claims": {},
+      "dump_date": "2026-11-05"
+    },
+    "Q159": {
+      "id": "Q159",
+      "labels": {
+        "mul": {
+          "language": "mul",
+          "value": "Russia"
+        }
+      },
+      "claims": {
+        "P297": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P297",
+              "datavalue": {
+                "value": "XX",
+                "type": "string"
+              }
+            },
+            "type": "statement",
+            "rank": "deprecated"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P297",
+              "datavalue": {
+                "value": "RU",
+                "type": "string"
+              }
+            },
+            "type": "statement",
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P297",
+              "datavalue": {
+                "value": "SU",
+                "type": "string"
+              }
+            },
+            "type": "statement",
+            "rank": "preferred"
+          }
+        ]
+      },
+      "dump_date": "2026-11-05"
+    }
+  },
+  "not_kept": [
+    "Q999"
+  ],
+  "missing": [
+    "Q998"
+  ]
+}

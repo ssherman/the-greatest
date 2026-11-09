@@ -5,7 +5,6 @@ require "test_helper"
 module Wikimedia
   class HttpTest < ActiveSupport::TestCase
     API = "https://www.wikidata.org/w/api.php"
-    SPARQL = "https://query.wikidata.org/sparql"
     AGENT = "TheGreatest/1.0 (https://example.org/contact)"
 
     def setup
@@ -134,17 +133,6 @@ module Wikimedia
       stub_request(:get, API).with(query: hash_including({})).to_raise(Faraday::TimeoutError)
 
       assert_raises(Exceptions::TimeoutError) { @http.action_api(API, action: "query") }
-    end
-
-    test "SPARQL posts the query with the results Accept header and the User-Agent" do
-      stub = stub_request(:post, SPARQL)
-        .with(body: {query: "ASK {}"}, headers: {"Accept" => "application/sparql-results+json", "User-Agent" => AGENT})
-        .to_return(json({boolean: true}))
-
-      response = @http.sparql(SPARQL, "ASK {}")
-
-      assert_requested stub
-      assert_equal true, response.data["boolean"]
     end
 
     test "waits inline for a busy slot, then sends" do

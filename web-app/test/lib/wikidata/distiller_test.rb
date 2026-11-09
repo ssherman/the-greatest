@@ -37,6 +37,13 @@ module Wikidata
       assert_equal 3, payload["sitelink_count"]
     end
 
+    test "prefers the service's sitelink_count key and carries its dump date" do
+      payload = Distiller.call({"id" => "Q9", "sitelink_count" => 87, "dump_date" => "2026-11-05",
+        "sitelinks" => {"enwiki" => {"title" => "X"}}})
+
+      assert_equal [87, "2026-11-05"], [payload["sitelink_count"], payload["dump_date"]]
+    end
+
     test "uses only best-rank statements: preferred when any, never deprecated" do
       entity = wikidata_entity("Q1", label: "X", claims: {
         "P569" => [wikidata_time_statement(1900, rank: "preferred"), wikidata_time_statement(1901)],

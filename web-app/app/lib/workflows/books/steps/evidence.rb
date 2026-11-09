@@ -16,13 +16,14 @@ module Workflows
         RESCHEDULE_JITTER = 0..30
 
         # reuse_fresh: skip Gather when the latest evidence row is current (this
-        # schema version) and complete (no source failed).
+        # schema version) and complete (no source failed), unless the run's
+        # "regather" option is true (a re-check after a Wikidata refresh).
         def initialize(reuse_fresh: false)
           @reuse_fresh = reuse_fresh
         end
 
         def call(step:, run:, target:)
-          if @reuse_fresh && (row = fresh_row(target))
+          if @reuse_fresh && run.options["regather"] != true && (row = fresh_row(target))
             return Workflows::Outcome.succeeded("reused", {"enrichment_id" => row.id, "qid" => row.facts["wikidata_qid"]})
           end
 

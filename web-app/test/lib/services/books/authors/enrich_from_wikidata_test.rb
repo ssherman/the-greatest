@@ -93,6 +93,14 @@ module Services
           assert_empty rows
         end
 
+        test "an unavailable Wikidata service propagates and writes no failed row" do
+          wikidata = FakeWikidataClient.new
+          wikidata.stubs(:entities).raises(::Wikidata::Exceptions::Unavailable.new("down", retry_after: 60))
+
+          assert_raises(::Wikidata::Exceptions::Unavailable) { enrich(wikidata: wikidata) }
+          assert_empty rows
+        end
+
         test "an author already processed since its row was created is skipped without calling out" do
           enrich
           ResolveWikidata.expects(:call).never

@@ -25,7 +25,8 @@ module Wikidata
       {
         "id" => entity["id"],
         "label" => Distiller.name(entity["labels"]),
-        "description" => Distiller.english(entity["descriptions"])
+        "description" => Distiller.english(entity["descriptions"]),
+        "dump_date" => entity["dump_date"]
       }.merge(ITEM_PROPERTIES.transform_values { |property| Distiller.item_ids(claims, property) }).merge(
         "publication_years" => publication_years(claims),
         "identifiers" => IDENTIFIER_PROPERTIES.transform_values { |property| Distiller.values(claims, property).grep(String) },
