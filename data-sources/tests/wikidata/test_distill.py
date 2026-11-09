@@ -1,4 +1,6 @@
 import json
+import threading
+from concurrent.futures.process import BrokenProcessPool
 
 import duckdb
 import pytest
@@ -147,6 +149,44 @@ def test_parallel_workers_produce_identical_tables(tmp_path, config, monkeypatch
         }
     assert contents[1] == contents[3]
     assert contents[3]["labels"]
+
+
+def test_a_worker_killed_mid_batch_fails_the_build_instead_of_hanging(
+    tmp_path, config, monkeypatch
+):
+    monkeypatch.setattr(distill_module, "BATCH_LINES", 7)
+    monkeypatch.setenv("WIKIDATA_TEST_KILL_BATCH", "1")
+    paths = WikidataPaths(root=tmp_path, dump_date="2026-11-01")
+    outcome = {}
+
+    def attempt():
+        try:
+            run(paths, config, threads=3)
+        except BaseException as error:
+            outcome["error"] = error
+
+    # A thread with a join timeout, so a regression to a silent hang fails instead of stalling.
+    thread = threading.Thread(target=attempt, daemon=True)
+    thread.start()
+    thread.join(timeout=60)
+    assert not thread.is_alive(), "distill hung after a worker died"
+    assert isinstance(outcome.get("error"), BrokenProcessPool)
+
+
+def test_an_empty_dump_is_a_clear_error(tmp_path, config):
+    empty = tmp_path / "empty.json"
+    empty.write_text("[\n]\n")
+    paths = WikidataPaths(root=tmp_path / "root", dump_date="2026-11-01")
+    with pytest.raises(distill_module.EmptyDump):
+        distill(
+            empty,
+            FIXTURES / "mini-redirect.sql",
+            FIXTURES / "mini-page.sql",
+            paths,
+            config,
+            memory_limit="1GB",
+            threads=2,
+        )
 
 
 def test_rerunning_replaces_stale_shards(built, config):

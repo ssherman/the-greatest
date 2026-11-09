@@ -15,7 +15,7 @@ from isal import igzip_threaded
 from wikidata.pipeline.config import KeptConfig
 
 
-def _open(path: Path, threads: int) -> IO[bytes]:
+def open_dump(path: Path, threads: int) -> IO[bytes]:
     if path.suffix == ".gz":
         return igzip_threaded.open(path, "rb", threads=threads)
     return open(path, "rb")
@@ -23,7 +23,7 @@ def _open(path: Path, threads: int) -> IO[bytes]:
 
 def iter_entities(path: Path, *, threads: int = 4) -> Iterator[dict]:
     """Every entity of a .json.gz or .json dump, one per line."""
-    with _open(Path(path), threads) as handle:
+    with open_dump(Path(path), threads) as handle:
         for raw in handle:
             line = raw.strip()
             if line in (b"", b"[", b"]"):

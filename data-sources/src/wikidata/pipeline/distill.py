@@ -9,9 +9,12 @@ after the gates.
 """
 
 import multiprocessing
+import os
 import shutil
-import threading
+import signal
+from collections import deque
 from collections.abc import Iterable, Iterator
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from pathlib import Path
 
 import duckdb
@@ -22,8 +25,7 @@ from wikidata.pipeline.config import KeptConfig
 from wikidata.pipeline.normalize import normalize_external_id, normalize_name
 from wikidata.pipeline.paths import TABLES, WikidataPaths
 from wikidata.pipeline.redirects import parse_redirects
-from wikidata.pipeline.scan import SlimEntity, slim
-from wikidata.pipeline.scan import _open as open_dump
+from wikidata.pipeline.scan import SlimEntity, open_dump, slim
 
 # A batch of raw lines is cut at whichever limit comes first. 32 MB keeps a worker's parsed
 # batch to a few hundred MB and the full dump to tens of thousands of shards (one glob).
@@ -118,6 +120,10 @@ def _shard_row(slimmed: SlimEntity, config: KeptConfig) -> dict:
     }
 
 
+class EmptyDump(RuntimeError):
+    """The dump held no entities."""
+
+
 _worker_config: KeptConfig | None = None
 _worker_con: duckdb.DuckDBPyConnection | None = None
 
@@ -134,6 +140,9 @@ def _init_worker(config: KeptConfig) -> None:
 def _process_batch(task: tuple[int, list[bytes], str]) -> int:
     """Parse one batch of raw dump lines and write its shard; returns the rows written."""
     number, lines, shards_dir = task
+    # Test hook: simulates an OOM kill on one batch.
+    if os.environ.get("WIKIDATA_TEST_KILL_BATCH") == str(number):
+        os.kill(os.getpid(), signal.SIGKILL)
     rows = []
     for line in lines:
         entity = orjson.loads(line)
@@ -174,33 +183,41 @@ def _pass_one(dump: Path, paths: WikidataPaths, config: KeptConfig, threads: int
     """The parent decompresses and slices lines; `threads - 1` workers (min 1) parse and write
     shards. In-flight batches are bounded, so memory stays at a few batches per worker."""
     workers = max(1, threads - 1)
-    in_flight = threading.BoundedSemaphore(2 * workers)
-    errors: list[BaseException] = []
-
-    def done(_rows: int) -> None:
-        in_flight.release()
-
-    def failed(error: BaseException) -> None:
-        errors.append(error)
-        in_flight.release()
-
-    context = multiprocessing.get_context("spawn")
-    with context.Pool(workers, _init_worker, (config,)) as pool:
+    pending: deque[Future] = deque()
+    executor = ProcessPoolExecutor(
+        workers,
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=_init_worker,
+        initargs=(config,),
+    )
+    try:
         for number, lines in enumerate(_raw_batches(dump, threads)):
-            in_flight.acquire()
-            if errors:
-                break
-            pool.apply_async(
-                _process_batch,
-                ((number, lines, str(paths.shards_dir)),),
-                callback=done,
-                error_callback=failed,
-            )
-        pool.close()
-        pool.join()
-    if errors:
-        raise errors[0]
-    return len(list(paths.shards_dir.glob("shard_*.parquet")))
+            if len(pending) >= 2 * workers:
+                _await_one(pending)
+            pending.append(executor.submit(_process_batch, (number, lines, str(paths.shards_dir))))
+        while pending:
+            _await_one(pending)
+    except BaseException:
+        # A worker that died (OOM kill, segfault) surfaces here as BrokenProcessPool rather
+        # than a hang. Stop everything promptly before re-raising.
+        processes = list((getattr(executor, "_processes", None) or {}).values())
+        executor.shutdown(wait=False, cancel_futures=True)
+        for process in processes:
+            process.terminate()
+        raise
+    executor.shutdown()
+    shards = len(list(paths.shards_dir.glob("shard_*.parquet")))
+    if shards == 0:
+        raise EmptyDump(f"no entities found in {dump}")
+    return shards
+
+
+def _await_one(pending: deque[Future]) -> None:
+    """Wait for the oldest-finished future and surface its error, if any."""
+    wait(pending, return_when=FIRST_COMPLETED)
+    for future in [f for f in pending if f.done()]:
+        pending.remove(future)
+        future.result()
 
 
 def _copy(con: duckdb.DuckDBPyConnection, select: str, target: Path, row_group: int = ROW_GROUP):
