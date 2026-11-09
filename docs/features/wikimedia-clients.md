@@ -22,19 +22,20 @@ test default to `http://127.0.0.1:8083`. When the service is down the client rai
 `Wikidata::Exceptions::Unavailable`, a `RateLimited`, so jobs and workflow steps wait and retry
 exactly as they do for a Wikipedia rate limit. The operations the author steps need:
 
-- `entities(ids)` -- `wbgetentities`, up to 50 ids per call.
-- `search(name)` -- `wbsearchentities`, English, items, top 10.
-- `by_statements(pairs)` -- one CirrusSearch query for items carrying any of a set of
+- `entities(ids)` -- `POST /items`, up to 50 ids per call; entities come back in `wbgetentities` shape.
+- `search(name)` -- `GET /names`, top 10, person-typed items whose whole normalized name matches (with a
+  retry that drops single-letter middle initials).
+- `by_statements(pairs)` -- `POST /by-external-id` for items carrying any of a set of
   `property=value` pairs (the identifier bridge).
-- `works(item_ids)` -- one SPARQL query returning, per item, the English titles of what it wrote
-  (P50) or is known for (P800).
-- `country_codes(item_ids)` -- one SPARQL query for a country item's ISO code (P297) and English
-  label.
-- `work_items(author_item_ids)` -- one SPARQL query returning, per author item, the work items they wrote
-  (P50) or are known for (P800) as `{"id", "label"}` pairs with the English label (the book evidence
-  resolver matches these on title).
+- `works(item_ids)` -- `POST /linked-from` (P50 read backwards, plus P800), returning per item the English
+  titles of what it wrote or is known for.
+- `country_codes(item_ids)` -- `POST /items`, reading a country item's ISO code (P297, best rank) and English
+  label from the entity.
+- `work_items(author_item_ids)` -- the same `/linked-from` call, returning per author item the work items
+  they wrote (P50) or are known for (P800) as `{"id", "label"}` pairs with the English label (the book
+  evidence resolver matches these on title).
 - `labels(item_ids)` -- English labels for arbitrary items, else the all-languages (`mul`) label
-  many items now carry instead (used for occupation and citizenship labels shown as evidence).
+  many items now carry instead (`POST /labels`, up to 500 ids; used for occupation and citizenship labels shown as evidence).
 
 `Wikipedia::Client#lead(language:, title:)` returns the plain-text lead of one article by
 exact title, following redirects, with the page's Wikidata item and whether it is a
@@ -116,13 +117,9 @@ that turns a name into a Wikipedia page directly.
 
 This applies to Wikipedia only. The Wikidata service is local and is not cached by the client.
 
-`country_codes` and `labels` are cached for 30 days, keyed per item (`wikidata:country:<id>`,
-`wikidata:label:<id>`), in `config.x.external_api_cache` rather than `Rails.cache`. These repeat
-across nearly every author. On a cache miss, `country_codes` runs one SPARQL query for the item's
-ISO code (P297) and English label (the label service falls back to `mul`), and `labels` runs one
-`wbgetentities` call scoped to `props=labels` and `languages=en|mul`. Neither ever fetches a country's whole entity -- a country such as the United
-States is megabytes of statements on its own, and this codebase only ever wants its code and its
-label.
+`Wikidata::Client` caches nothing: every call goes to the local service, which is fast enough that a
+cache would only add staleness. `config.x.external_api_cache` still serves the VIAF client and the Wikidata
+re-check job.
 
 `config.x.external_api_cache` is a Redis store (namespace `external-api`) that survives deploys,
 which the increment-6 author backfill spans for days. It is kept separate from `Rails.cache`
@@ -139,10 +136,9 @@ explicitly. Only the chosen record is stored, not every candidate a resolution s
 ## Testing
 
 - WebMock tests use trimmed real responses saved as fixture files under
-  `test/fixtures/files/wikidata/` (`wbgetentities_Q7243.json`,
-  `wbsearchentities_leo_tolstoy.json`, `haswbstatement_tolstoy.json`, `sparql_works_Q7243.json`,
-  `sparql_country_codes.json`) and `test/fixtures/files/wikipedia/` (`lead_leo_tolstoy.json`,
-  `lead_john_smith.json`). The base URLs used in tests are the real, non-loopback hosts, because
+  `test/fixtures/files/wikidata/` (`items_Q7243.json`, `items_countries.json`, `labels_countries.json`,
+  `names_leo_tolstoy.json`, `by_external_id_tolstoy.json`, `linked_from_Q7243.json`) and `test/fixtures/files/wikipedia/` (`lead_leo_tolstoy.json`,
+  `lead_john_smith.json`). The Wikipedia base URLs used in tests are the real, non-loopback hosts, because
   WebMock's `disable_net_connect!` allows `localhost` by default and a stub against `localhost`
   would prove nothing about the real host.
 - `FakeWikidataClient` and `FakeWikipediaClient` (both in `test/support/fake_wikidata_client.rb`)
