@@ -43,6 +43,18 @@ class OauthConnection < ApplicationRecord
   validates :approved_at, presence: true
 
   scope :live, -> { where(revoked_at: nil) }
+  # What the "Connected apps" list shows: live ones, newest approval first.
+  scope :listed, -> { live.includes(:application).order(approved_at: :desc, id: :desc) }
 
   def revoked? = revoked_at.present?
+
+  # The hosts the client signs in through, so a member can tell two apps with
+  # the same name apart. Hosts only: a loopback client's port is noise.
+  def redirect_hosts
+    application.redirect_uri.to_s.split.filter_map do |uri|
+      URI(uri).host
+    rescue URI::InvalidURIError
+      nil
+    end.uniq
+  end
 end

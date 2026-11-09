@@ -9,12 +9,20 @@
     create another.
   </p>
 
-  <%= render "developers/tokens/list", tokens: @tokens %>
+  <% if can_mint? %>
+    <%= render "developers/tokens/list", tokens: @tokens %>
 
-  <%# Filled by create.turbo_stream.erb with the once-only secret panel. Its own
-      region, separate from the form, so a later revoke (which refreshes the
-      form) can never wipe a secret the member has not copied yet. %>
-  <div id="developers_new_token"></div>
+    <%# Filled by create.turbo_stream.erb with the once-only secret panel. Its own
+        region, separate from the form, so a later revoke (which refreshes the
+        form) can never wipe a secret the member has not copied yet. %>
+    <div id="developers_new_token"></div>
 
-  <%= render "developers/tokens/form", tokens: @tokens %>
+    <%= render "developers/tokens/form", tokens: @tokens %>
+  <% else %>
+    <p class="text-base-content/70 mb-10">
+      Creating API tokens needs a <%= link_to "membership", membership_path, class: "link" %>.
+    </p>
+  <% end %>
+
+  <%= render "developers/tokens/connections", connections: @connections %>
 </div>

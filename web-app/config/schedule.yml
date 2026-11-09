@@ -50,3 +50,8 @@ goodreads_rebuild_enrichment:
   class: Books::GoodreadsRebuild::QueueEnrichmentJob
   cron: "*/10 * * * *"
   description: "Start enrichment for the Goodreads rebuild fixed books, most-listed first, a few hundred at a time"
+
+oauth_prune:
+  class: Oauth::PruneJob
+  cron: "45 3 * * *"
+  description: "Delete unused OAuth clients, old authorization codes and token rows no check can reach; keeps revoked rows reuse detection needs"
