@@ -12,6 +12,10 @@ module Services
     # regathers its evidence. Authors: created within the window with no
     # books_author_wikidata_qid identifier. A dry run (apply: false) only counts.
     class Recheck
+      # The same pacing as the origin backfill: one start every SPACING seconds,
+      # so thousands of books do not fire together.
+      SPACING = ::Services::Books::Categorize::Backfill::SPACING
+
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
       def self.call(dump_date:, apply: false)
@@ -28,8 +32,9 @@ module Services
         books = book_ids
         authors = author_ids
         if @apply
-          books.each { |id| start_book(id) }
-          authors.each { |id| ::Books::Authors::WikidataJob.perform_async(id, true) }
+          first_slot = Time.current
+          books.each_with_index { |id, index| start_book(id, first_slot + (index * SPACING).seconds) }
+          authors.each_with_index { |id, index| start_author(id, first_slot + (index * SPACING).seconds) }
         end
         Result.new(success?: true, errors: [], data: {books: books.size, authors: authors.size})
       end
@@ -51,13 +56,27 @@ module Services
         ::Books::Author.where(created_at: @since..).where.not(id: with_qid).order(:id).pluck(:id)
       end
 
-      def start_book(id)
+      def start_book(id, start_after)
         book = ::Books::Book.find_by(id: id)
         return if book.nil?
 
         ::Workflows::Books::BookCategorize.start(
           book, initiated_by: "wikidata_recheck",
-          options: {"context" => "backfill", "label" => "wikidata-#{@dump_date}", "regather" => true}
+          options: {"context" => "backfill", "label" => "wikidata-#{@dump_date}", "regather" => true},
+          start_after: start_after
+        )
+      end
+
+      # Just the Wikidata step: it applies its own result, and the VIAF and AI
+      # steps are not part of re-running Wikidata resolution.
+      def start_author(id, start_after)
+        author = ::Books::Author.find_by(id: id)
+        return if author.nil?
+
+        ::Workflows::Books::AuthorEnrichment.start(
+          author, initiated_by: "wikidata_recheck",
+          options: {"refresh" => true, "allow_research" => false, "only" => %w[wikidata]},
+          start_after: start_after
         )
       end
     end

@@ -54,30 +54,41 @@ module Services
         assert_equal 0, Recheck.call(dump_date: "d").data[:books]
       end
 
-      test "queues the author job only for recent authors without a QID" do
-        calls = []
-        ::Books::Authors::WikidataJob.stubs(:perform_async).with { |*args| calls << args }
+      def author_runs = WorkflowRun.where(workflow: ::Workflows::Books::AuthorEnrichment.workflow, initiated_by: "wikidata_recheck")
 
+      test "starts a Wikidata-only refresh run for recent authors without a QID" do
         result = Recheck.call(dump_date: "d", apply: true)
 
-        assert_equal [[@author.id, true]], calls
-        assert_equal 1, result.data[:authors]
+        run = author_runs.find_by!(enrichable: @author)
+        assert_equal [1, 1, "wikidata_recheck", {"refresh" => true, "allow_research" => false, "only" => ["wikidata"]}],
+          [result.data[:authors], author_runs.count, run.initiated_by, run.options]
+      end
+
+      test "starts are spaced like the origin backfill" do
+        second = ::Books::Book.where.not(id: @book.id).first
+        second.update_columns(created_at: 1.day.ago)
+        [@book, second].each { |book| evidence(book, {"wikidata_qid" => nil, "sources_failed" => []}) }
+        ::Books::Author.where.not(id: @author.id).update_all(created_at: 1.year.ago)
+        starts = []
+        ::Workflows::Books::BookCategorize.stubs(:start).with { |_book, **kwargs| starts << kwargs[:start_after] }
+
+        freeze_time do
+          Recheck.call(dump_date: "d", apply: true)
+
+          assert_equal [Time.current, Time.current + ::Services::Books::Categorize::Backfill::SPACING.seconds], starts
+        end
       end
 
       test "an author holding a QID is skipped" do
         @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q5", source: :wikidata)
-        ::Books::Authors::WikidataJob.expects(:perform_async).never
-
         assert_equal 0, Recheck.call(dump_date: "d", apply: true).data[:authors]
       end
 
       test "a dry run queues nothing and returns the counts" do
         evidence(@book, {"wikidata_qid" => nil, "sources_failed" => []})
-        ::Books::Authors::WikidataJob.expects(:perform_async).never
-
         result = Recheck.call(dump_date: "d")
 
-        assert_equal [1, 1, 0], [result.data[:books], result.data[:authors], run_for(@book).count]
+        assert_equal [1, 1, 0, 0], [result.data[:books], result.data[:authors], run_for(@book).count, author_runs.count]
       end
     end
   end
