@@ -5,8 +5,20 @@ def test_load_returns_the_kept_roots():
     config = KeptConfig.load()
     assert config.work_roots == frozenset(
         [
-            "Q7725634", "Q47461344", "Q571", "Q8261", "Q5185279", "Q25379", "Q35760",
-            "Q49084", "Q1279564", "Q12106333", "Q725377", "Q8274", "Q1004", "Q7725310",
+            "Q7725634",
+            "Q47461344",
+            "Q571",
+            "Q8261",
+            "Q5185279",
+            "Q25379",
+            "Q35760",
+            "Q49084",
+            "Q1279564",
+            "Q12106333",
+            "Q725377",
+            "Q8274",
+            "Q1004",
+            "Q7725310",
         ]
     )
     assert config.edition_type == "Q3331189"

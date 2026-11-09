@@ -1,19 +1,3 @@
-from pathlib import Path
-
-import pytest
-
-from wikidata.pipeline.config import KeptConfig
-from wikidata.pipeline.scan import iter_entities, slim
-
-FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "wikidata" / "mini-all.json"
-
-
-@pytest.fixture(scope="module")
-def slimmed():
-    config = KeptConfig.load()
-    return {e["id"]: slim(e, config) for e in iter_entities(FIXTURE)}
-
-
 def _value(entity, prop, index=0):
     return entity.claims[prop][index]["mainsnak"]["datavalue"]["value"]
 

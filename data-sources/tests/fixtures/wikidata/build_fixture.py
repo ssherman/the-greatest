@@ -199,10 +199,10 @@ ents.append(
 ents.append(
     synth("Q900010", "Sample Mangaka", "Japanese manga artist", {"P31": [stmt("P31", "Q5")]})
 )
-# Synthetic: two-hop subclass chain. Q900005 -P31-> Q900004 -P279-> Q8261 (novel) -P279-> ... roots.
-ents.append(
-    synth("Q900004", "tide pool novel", "subgenre of novel", {"P279": [stmt("P279", "Q8261")]})
-)
+# Synthetic: two-hop subclass chain, both hops through non-roots:
+# Q900005 -P31-> Q900004 -P279-> Q900007 -P279-> Q7725634 (literary work, a root).
+ents.append(synth("Q900004", "tide pool novel", "subgenre", {"P279": [stmt("P279", "Q900007")]}))
+ents.append(synth("Q900007", "tide pool fiction", "genre", {"P279": [stmt("P279", "Q7725634")]}))
 ents.append(
     synth(
         "Q900005",
@@ -249,30 +249,11 @@ ents.append(
     )
 )
 
-# Filler: unrelated synthetic items so the fixture has the shape of a real dump slice.
-FILLER = [
-    ("Lagos", "city in Nigeria"),
-    ("Ibadan", "city in Nigeria"),
-    ("Odysseus", "mythical Greek king"),
-    ("Iliad", "epic poem"),
-    ("Odyssey", "epic poem"),
-    ("War and Peace", "novel by Tolstoy"),
-    ("Anna Karenina", "novel by Tolstoy"),
-    ("Igbo language", "language"),
-    ("English", "language"),
-    ("Russian", "language"),
-    ("Yasnaya Polyana", "estate"),
-    ("Starry Night", "painting"),
-    ("Hamlet", "play"),
-    ("Shakespeare", "playwright"),
-    ("poem", "literary form"),
-    ("epic", "genre"),
-    ("manga", "comic genre"),
-]
-for i, (label, desc) in enumerate(FILLER):
-    ents.append(
-        synth(f"Q9100{i:02d}", label, desc, {"P31": [stmt("P31", "Q5")]} if i % 5 == 0 else {})
-    )
+# Filler: neutral, untyped items so the fixture has the shape of a real dump slice. No person
+# types and no real names, so nothing indexes them as anything. (Q12418, the painting, is real
+# and linked from no kept item.)
+for i in range(1, 17):
+    ents.append(synth(f"Q9100{i:02d}", f"Filler {i}", "", {}))
 
 # Dump format: "[", one entity per line ending in ",", "]".
 dump = [json.dumps(e, ensure_ascii=False, separators=(",", ":")) for e in ents]

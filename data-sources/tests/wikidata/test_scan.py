@@ -1,23 +1,10 @@
 from pathlib import Path
 
-import pytest
-
-from wikidata.pipeline.config import KeptConfig
-from wikidata.pipeline.scan import iter_entities, slim
+from wikidata.pipeline.scan import iter_entities
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "wikidata"
 PLAIN = FIXTURES / "mini-all.json"
 GZIPPED = FIXTURES / "mini-all.json.gz"
-
-
-@pytest.fixture(scope="module")
-def config():
-    return KeptConfig.load()
-
-
-@pytest.fixture(scope="module")
-def slimmed(config):
-    return {e["id"]: slim(e, config) for e in iter_entities(PLAIN)}
 
 
 def test_iter_entities_reads_gzip_and_plain():
@@ -48,9 +35,11 @@ def test_slim_drops_qualifiers_and_unlisted_properties(slimmed):
     assert edition.claims["P212"][0]["mainsnak"]["datavalue"]["value"] == "978-0-385-47454-2"
 
 
-def test_slim_extracts_type_subclass_and_form_ids(slimmed):
+def test_slim_extracts_type_subclass_and_form_ids(slimmed, config):
     assert slimmed["Q900005"].types == ["Q900004"]
-    assert slimmed["Q900004"].subclass_of == ["Q8261"]
+    assert slimmed["Q900004"].subclass_of == ["Q900007"]
+    assert slimmed["Q900007"].subclass_of == ["Q7725634"]
+    assert {"Q900004", "Q900007"}.isdisjoint(config.work_roots)
     assert slimmed["Q622400"].forms == ["Q8261"]
 
 
