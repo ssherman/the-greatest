@@ -22,6 +22,13 @@ if [ -z "${WC_DATA_VERSION:-}" ] && [ -f "$WC_DATA/current-version" ]; then
   export WC_DATA_VERSION
 fi
 
+# And the wikidata artifact.
+export WD_DATA_HOST="$WD_DATA"
+if [ -z "${WD_DATA_VERSION:-}" ] && [ -f "$WD_DATA/current-version" ]; then
+  WD_DATA_VERSION="$(cat "$WD_DATA/current-version")"
+  export WD_DATA_VERSION
+fi
+
 # The pgverify VM's data disk, mounted into its Postgres containers (compose.pgverify.yml).
 export PGVERIFY_ROOT
 

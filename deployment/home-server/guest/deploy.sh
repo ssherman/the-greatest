@@ -37,10 +37,11 @@ if ! needs_deploy; then
 fi
 
 log "deploying ${target:0:12} (was ${deployed:0:12})"
-if [ "$ROLE" = ol ]; then
+if [ "$ROLE" = ol ] || [ "$ROLE" = wikidata ]; then
   # Only a deploy with something to do takes the lock, so a no-op check every
   # 15 minutes never blocks the refresh. Never rebuild under a running data
-  # build, and never let one start mid-deploy.
+  # build, and never let one start mid-deploy. On wikidata a deploy mid-refresh
+  # would race promotion and rollback.
   exec 9>"$BUILD_LOCK"
   if ! flock -n 9; then
     log "a build or training run holds $BUILD_LOCK; deploying next time"
@@ -70,6 +71,7 @@ case "$ROLE" in
   ol) service=api; build=(recommender api) ;;
   fetcher) service=fetcher; build=(fetcher) ;;
   worldcat) service=worldcat; build=(worldcat) ;;
+  wikidata) service=wikidata; build=(wikidata) ;;
   # Nothing runs all the time: pg-restore-verify.timer starts Postgres for a night's check. A deploy
   # only builds the image the check will use.
   pgverify) service=""; build=(postgres) ;;
@@ -88,6 +90,9 @@ elif [ "$ROLE" = ol ] && [ ! -f "$OL_DATA/current-version" ]; then
   if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then "$COMPOSE" up -d cloudflared || fail "compose up cloudflared"; fi
 elif [ "$ROLE" = worldcat ] && [ ! -f "$WC_DATA/current-version" ]; then
   log "no WorldCat version yet; copy the artifact and write $WC_DATA/current-version, then touch force-deploy"
+  if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then "$COMPOSE" up -d cloudflared || fail "compose up cloudflared"; fi
+elif [ "$ROLE" = wikidata ] && [ ! -f "$WD_DATA/current-version" ]; then
+  log "no Wikidata version yet; wikidata-refresh starts the API after the first build"
   if [ "${TUNNELS_ENABLED:-0}" = 1 ]; then "$COMPOSE" up -d cloudflared || fail "compose up cloudflared"; fi
 else
   # Both services are defined on both VMs: name only this VM's.

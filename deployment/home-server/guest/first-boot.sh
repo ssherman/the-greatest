@@ -34,13 +34,14 @@ mount_data_disk() {
   # nofail: a missing disk must not hang boot; the role's scripts refuse to build or serve instead.
   grep -q "^LABEL=$label " /etc/fstab ||
     echo "LABEL=$label $mountpoint ext4 defaults,discard,nofail 0 2" >>/etc/fstab
-  # A failed mount must not stop the units installing: ol-refresh.sh refuses to build unmounted.
+  # A failed mount must not stop the units installing: ol-refresh.sh and wikidata-refresh.sh refuse to build unmounted.
   mountpoint -q "$mountpoint" || mount "$mountpoint" || log "could not mount $mountpoint"
 }
 
 case "$ROLE" in
   ol) mount_data_disk ol-data "$OL_DATA" ;;
   worldcat) mount_data_disk wc-data "$WC_DATA" ;;
+  wikidata) mount_data_disk wd-data "$WD_DATA" ;;
   # The 200 GB data disk (rpool2) at /mnt/pgverify: the restored cluster, the dumps and the row-count baseline.
   pgverify) mount_data_disk pgverify "$PGVERIFY_ROOT" ;;
   fetcher)

@@ -165,7 +165,7 @@ t_foreign_vmids_ignore_ours() {
   out="$(
     on_host() {
       printf '%s\n' '      VMID NAME   STATUS     MEM(MB)' '       110 ol     running    24576' \
-        '       120 fetcher running    4096' '       130 worldcat running   4096' \
+        '       120 fetcher running    4096' '       130 worldcat running   4096' '       150 wikidata running  12288' \
         '       101 other  running    2048' '       102 off    stopped    1024'
     }
     running_foreign_vmids
@@ -212,9 +212,9 @@ t_push_env_refuses_a_mismatch() {
 # The restore check's VM stays off until the migration turns it on: a plain provision after the merge
 # must not create VM 140 or start its timer.
 t_pgverify_is_off_unless_enabled() {
-  [ "$(unset PGVERIFY_ENABLED; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat " ] &&
-    [ "$(PGVERIFY_ENABLED=0; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat " ] &&
-    [ "$(PGVERIFY_ENABLED=1; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat pgverify " ]
+  [ "$(unset PGVERIFY_ENABLED; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat wikidata " ] &&
+    [ "$(PGVERIFY_ENABLED=0; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat wikidata " ] &&
+    [ "$(PGVERIFY_ENABLED=1; managed_roles | tr '\n' ' ')" = "fetcher ol worldcat wikidata pgverify " ]
 }
 # Every loop over the VMs goes through managed_roles, so none of them can reach a VM that was not asked for.
 t_no_role_loop_names_pgverify() {
@@ -266,7 +266,7 @@ check "the house's public IPv4 is read from the trace" t_house_ip_read
 check "an unreadable or non-IPv4 trace fails instead of returning nothing" t_house_ip_unreadable_fails
 check "the firewall step dies before writing anything when the public IPv4 can't be read" t_firewall_dies_without_house_ip
 check "--recovery re-checks the pre-existing guests after the reboot" t_recovery_rechecks_guests
-check "running_foreign_vmids ignores 110, 120 and 130 and stopped guests" t_foreign_vmids_ignore_ours
+check "running_foreign_vmids ignores 110, 120, 130 and 150 and stopped guests" t_foreign_vmids_ignore_ours
 check "running_foreign_vmids ignores 140 (pgverify) too" t_foreign_vmids_ignore_pgverify
 check "vm_ssh to ol passes its stdin to the VM, not to the host lookup" t_vm_ssh_stdin_reaches_vm
 check "an env file that lands different from what was sent stops before the deploy" t_push_env_refuses_a_mismatch

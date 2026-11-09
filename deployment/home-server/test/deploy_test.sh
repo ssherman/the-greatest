@@ -113,6 +113,22 @@ t_worldcat_with_version_tunnels() {
   echo 2025-09-04 >"$WC_DATA/current-version"; commit data-sources/app v2
   deploy && called '^compose up -d --remove-orphans worldcat cloudflared$' && ! called 'api|fetcher'
 }
+t_wikidata_without_version() {
+  setup; write_env ROLE=wikidata REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  commit data-sources/app v2
+  deploy && called '^compose build wikidata$' && ! called '^compose up -d --remove-orphans wikidata'
+}
+t_wikidata_with_version() {
+  setup; write_env ROLE=wikidata REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  echo 2026-11-01 >"$WD_DATA/current-version"
+  commit data-sources/app v2
+  deploy && called '^compose build wikidata$' && called '^compose up -d --remove-orphans wikidata$'
+}
+t_wikidata_without_version_tunnels() {
+  setup; write_env ROLE=wikidata REPO_REF=main TUNNELS_ENABLED=1 HC_DEPLOY=https://hc.test/deploy
+  commit data-sources/app v2
+  deploy && called '^compose up -d cloudflared$' && ! called '^compose up -d --remove-orphans'
+}
 t_tunnels_off_removes_running() {
   setup; export TUNNEL_RUNNING=1; commit data-sources/app v2
   deploy && called '^compose up -d --remove-orphans fetcher$' &&
@@ -200,6 +216,9 @@ check "a trainer image that fails to build stops ol before the api image is touc
 check "worldcat with no data version builds but does not start the service" t_worldcat_without_version
 check "worldcat with a data version builds and starts only the service" t_worldcat_with_version
 check "worldcat with no data version still starts the tunnel" t_worldcat_without_version_tunnels
+check "wikidata with no data version builds but does not start the service" t_wikidata_without_version
+check "wikidata with a data version builds and starts only the service" t_wikidata_with_version
+check "wikidata with no data version still starts the tunnel" t_wikidata_without_version_tunnels
 check "worldcat with a version and tunnels brings up worldcat and cloudflared only" t_worldcat_with_version_tunnels
 check "ol with no data version still starts the tunnel" t_ol_without_version_tunnels
 check "ol with a version and tunnels brings up api and cloudflared only" t_ol_with_version_tunnels
@@ -209,7 +228,18 @@ check "tunnels switched off on ol with no data version: cloudflared is still rem
 check "tunnels off and no cloudflared running: nothing is removed" t_tunnels_off_nothing_running
 check "tunnels on: cloudflared is brought up, never removed" t_tunnels_on_keeps_it
 check "a no-op ol deploy does not care about the build lock" t_ol_noop_ignores_lock
+t_wikidata_build_running() {
+  setup; write_env ROLE=wikidata REPO_REF=main TUNNELS_ENABLED=0 HC_DEPLOY=https://hc.test/deploy
+  echo 2026-11-01 >"$WD_DATA/current-version"
+  commit data-sources/app v2
+  flock "$BUILD_LOCK" sleep 3 &
+  sleep 0.5
+  deploy; rc=$?
+  wait
+  [ "$rc" = 0 ] && ! called '^compose '
+}
 check "ol does not deploy under a running build" t_ol_build_running
+check "wikidata does not deploy under a running build" t_wikidata_build_running
 check "pgverify builds the Postgres image and starts nothing" t_pgverify_builds_postgres_only
 check "a change to the Postgres Dockerfile deploys on pgverify" t_pgverify_watches_the_postgres_image
 check "the same change deploys nothing on the other roles" t_postgres_image_change_leaves_the_others

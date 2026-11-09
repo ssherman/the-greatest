@@ -93,6 +93,7 @@ verify_vms() {
     expect "$role: cloud-init instance-id is pinned" vm_ssh "$role" "sudo grep -qx the-greatest-$role /var/lib/cloud/data/instance-id"
   done
   expect "ol: recommender-train.timer is enabled" vm_ssh ol "systemctl is-enabled --quiet recommender-train.timer"
+  expect "wikidata: wikidata-refresh.timer is enabled" vm_ssh wikidata "systemctl is-enabled --quiet wikidata-refresh.timer"
   if pgverify_enabled; then
     expect "pgverify: pg-restore-verify.timer is enabled" vm_ssh pgverify "systemctl is-enabled --quiet pg-restore-verify.timer"
     expect "pgverify: has no heartbeat timer (it runs no always-on service)" vm_ssh pgverify "! systemctl is-enabled --quiet the-greatest-heartbeat.timer"
@@ -110,6 +111,11 @@ verify_vms() {
     expect "worldcat: /version answers" vm_ssh worldcat "curl -fsS 127.0.0.1:8082/version"
   else
     echo "SKIP  worldcat: no WorldCat version yet (copy the artifact and write current-version: docs/features/worldcat-data-service.md)"
+  fi
+  if vm_ssh wikidata "test -f /srv/wd-data/current-version"; then
+    expect "wikidata: /version answers" vm_ssh wikidata "curl -fsS 127.0.0.1:8083/version"
+  else
+    echo "SKIP  wikidata: no Wikidata version yet (first build running or failed: journalctl -u wikidata-refresh)"
   fi
 }
 
@@ -283,6 +289,9 @@ verify_recovery() {
   fi
   if vm_ssh worldcat "test -f /srv/wc-data/current-version"; then
     crash_service worldcat the-greatest-worldcat-1 "curl -fsS 127.0.0.1:8082/version"
+  fi
+  if vm_ssh wikidata "test -f /srv/wd-data/current-version"; then
+    crash_service wikidata the-greatest-wikidata-1 "curl -fsS 127.0.0.1:8083/version"
   fi
   log "rebooting the host"
   on_host "systemctl reboot" || true

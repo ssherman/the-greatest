@@ -290,6 +290,11 @@ recommender = [
     { name = "numpy" },
     { name = "scipy" },
 ]
+wikidata = [
+    { name = "isal" },
+    { name = "orjson" },
+    { name = "pyyaml" },
+]
 worldcat = [
     { name = "zstandard" },
 ]
@@ -308,8 +313,11 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.5,<1.6" },
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "isal", marker = "extra == 'wikidata'", specifier = ">=1.7,<2" },
     { name = "numpy", marker = "extra == 'recommender'", specifier = ">=2.1,<3" },
+    { name = "orjson", marker = "extra == 'wikidata'", specifier = ">=3.10,<4" },
     { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "pyyaml", marker = "extra == 'wikidata'", specifier = ">=6,<7" },
     { name = "rapidfuzz", specifier = ">=3.10,<4" },
     { name = "scipy", marker = "extra == 'recommender'", specifier = ">=1.14,<2" },
     { name = "splink", marker = "extra == 'calibration'", specifier = ">=4.0,<5" },
@@ -317,7 +325,7 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<1" },
     { name = "zstandard", marker = "extra == 'worldcat'", specifier = ">=0.23,<0.24" },
 ]
-provides-extras = ["calibration", "fetcher", "recommender", "worldcat"]
+provides-extras = ["calibration", "fetcher", "recommender", "worldcat", "wikidata"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -529,6 +537,26 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c1/79/165579fdcd3c2439503732ae76394bf77f5542f3dd18135b60e808e4813c/inquirer-3.4.1.tar.gz", hash = "sha256:60d169fddffe297e2f8ad54ab33698249ccfc3fc377dafb1e5cf01a0efb9cbe5", size = 14069, upload-time = "2025-08-02T18:36:27.901Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f0/fd/7c404169a3e04a908df0644893a331f253a7f221961f2b6c0cf44430ae5a/inquirer-3.4.1-py3-none-any.whl", hash = "sha256:717bf146d547b595d2495e7285fd55545cff85e5ce01decc7487d2ec6a605412", size = 18152, upload-time = "2025-08-02T18:36:26.753Z" },
+]
+
+[[package]]
+name = "isal"
+version = "1.9.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/16/43/6cf9c6b2e80f02fb7bd809ab91496cc4bd1f9145bd3a5a312a91d76af8be/isal-1.9.1.tar.gz", hash = "sha256:d210dca02a689ef2af709d2c62d2daac2e36b5d2fa06e6dc0d023c83fee77e91", size = 4255817, upload-time = "2026-11-03T16:15:59.857Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/50/bf/49c1d54551ee4843868152d7c4d4415ea87f066ab09e9c3e4ed9a5435736/isal-1.9.1-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:b644b707d2de0450f6640c1bb909278a9694c1578686b7dc88bb8a80232070c1", size = 294961, upload-time = "2026-11-03T16:14:30.468Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/21/4dfbee58858001760d6557fe96508dcef2b5a6a98b896b42dab5ff7a1e8d/isal-1.9.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:71a8e992ed4da6f2fbf5e03885d2e80727204c499208d3fbca2c6d35291fe97d", size = 242502, upload-time = "2026-11-03T16:14:31.843Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/b0/8042f37d4f2fea9122cd88548d133cf06abc99f1e10e45555f617d8d5e03/isal-1.9.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:640565f20d258b2d04134e11ffd0da3f57bce62aa1ba87b45176186c6d61e57f", size = 243053, upload-time = "2026-11-03T16:14:33.303Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/89/5d88602efe6d8ca657d8097377a158cd0da9b2ce1459c6223d917e06ca57/isal-1.9.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:98cc2ca8a16fbdb5d088df3496e3fe3fd1780635f51fe15774e6712c69b9bfe8", size = 302401, upload-time = "2026-11-03T16:14:34.726Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/e9/ce6b5d8b54cdf5efe2a52c10049bef6766473c40d51bf18d3c47922ae17e/isal-1.9.1-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:d6d7c7fd3381a060f94886c6d989c8924859c2f9072195f860c8dde956bfaf6a", size = 243409, upload-time = "2026-11-03T16:14:36.698Z" },
+    { url = "https://files.pythonhosted.org/packages/87/89/0318177f0bfd64fd45f9a5c489f9ca226b366f0b2397844bd22f678b2d71/isal-1.9.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:4fd37751129ea989bb055121549832b2ccf055c07c35536bba5ac3cf2ad9577a", size = 303975, upload-time = "2026-11-03T16:14:38.278Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/ee/3ed9c37b3324cae14018e9bfe2dd2d86d08b6ab9e6d2b0c7cc7c866bf80f/isal-1.9.1-cp312-cp312-win_amd64.whl", hash = "sha256:0646bbf6f95bf440971b0dca81f008c5cd539db1dd252fb3eff9716128588c2f", size = 226899, upload-time = "2026-11-03T16:14:39.696Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/f9/e280e460b774cd803253d9016022333342c2be154d8aa5edb5086986a3eb/isal-1.9.1-pp312-pypy312_pp80-macosx_10_15_x86_64.whl", hash = "sha256:868a844c5ebb2d8c1bae21e9b5bfcff4b087d583d32dffd19f2b14b2afd0a9cc", size = 295529, upload-time = "2026-11-03T16:15:51.913Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/b5/e7c289518f2751214a6f59dc1a0ddfd6deca95caaca9cf3e14df5dc6085c/isal-1.9.1-pp312-pypy312_pp80-macosx_11_0_arm64.whl", hash = "sha256:25751a9bb0e8eaabc09a1afd6abf5280cc447298025c0d57c44bce86088dc9e4", size = 242543, upload-time = "2026-11-03T16:15:53.719Z" },
+    { url = "https://files.pythonhosted.org/packages/15/ea/631f3d9d4ff06662f1e263df8525e50585ed2929f42c8d23f1959dea1fdb/isal-1.9.1-pp312-pypy312_pp80-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:cdc97119d6e740eb501197fd1aa4d31e8ee304d61020bb129c906503233988db", size = 242210, upload-time = "2026-11-03T16:15:55.144Z" },
+    { url = "https://files.pythonhosted.org/packages/08/cd/62a9ac1fe11aa06c6d9ae1a19f2b77163227def476dd166fdb951cb8a413/isal-1.9.1-pp312-pypy312_pp80-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:62869c6cc61216b61cd05b0aa977dced41a183cc9ac3a64d99320e7709694485", size = 298998, upload-time = "2026-11-03T16:15:56.823Z" },
+    { url = "https://files.pythonhosted.org/packages/15/c9/5d61a24920d5c1b7712c7910da708202913a7c8a96eb5fc0aa3497f21cfd/isal-1.9.1-pp312-pypy312_pp80-win_amd64.whl", hash = "sha256:5d7d08aacb02a9d5ec185d7345bba43c5c85003fb314d2853d8eec0c0f55a65c", size = 313593, upload-time = "2026-11-03T16:15:58.258Z" },
 ]
 
 [[package]]

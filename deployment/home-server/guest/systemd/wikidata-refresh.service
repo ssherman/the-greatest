@@ -1,0 +1,10 @@
+[Unit]
+Description=Download, build and promote the newest Wikidata dump (docs/features/wikidata-data-service.md)
+Wants=network-online.target
+After=network-online.target docker.service srv-wd\x2ddata.mount
+
+[Service]
+Type=oneshot
+ExecStart=/opt/the-greatest/deployment/home-server/guest/wikidata-refresh.sh
+# About 4.5 hours of download and several of build; the build lock is held throughout.
+TimeoutStartSec=24h

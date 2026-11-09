@@ -10,6 +10,7 @@ ENV_FILE="${ENV_FILE:-/etc/the-greatest/home-server.env}"
 STATE_DIR="${STATE_DIR:-/var/lib/the-greatest}"
 OL_DATA="${OL_DATA:-/srv/ol-data}"
 WC_DATA="${WC_DATA:-/srv/wc-data}"
+WD_DATA="${WD_DATA:-/srv/wd-data}"
 BUILD_LOCK="${BUILD_LOCK:-/run/ol-build.lock}"
 # pgverify only: where its data disk is mounted, and the lock the nightly restore check and a
 # deploy of its image take (a deploy must not retag the image under a running check).

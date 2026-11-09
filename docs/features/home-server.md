@@ -28,7 +28,7 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
                   │                                  │
            tunnel home-ol                    tunnel home-fetcher
                   │                                  │
-           (and tunnel home-worldcat, to VM 130)
+           (and tunnels home-worldcat, to VM 130, and home-wikidata, to VM 150)
 ┌──────────────── Proxmox host (pve-mini) ──────────────────────────────┐
 │  vmbr0  LAN, static IPv4              vmbr1  private 10.20.0.0/24, NAT │
 │   │                                    │     no IPv6, private egress   │
@@ -40,6 +40,9 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 │  VM 130 "worldcat"                                                    │
 │   cloudflared ─► worldcat:8082                                        │
 │   /srv/wc-data (own disk)                                             │
+│  VM 150 "wikidata"                                                    │
+│   cloudflared ─► wikidata:8083                                        │
+│   download + build (weekly timer), /srv/wd-data (own disk)            │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -48,12 +51,13 @@ The first target was a different machine (an i7-7700K), retired on 2026-10-03 be
 | 110 `ol` | Open Library API, dump builds, recommendations trainer | 12 | 24 GB, no ballooning | 32 GB OS disk on `local-zfs`; 300 GB data disk on `rpool2`, ext4, mounted at `/srv/ol-data` | `vmbr0`, LAN |
 | 120 `fetcher` | Camoufox page fetcher | 4 | 4 GB, no ballooning | 40 GB OS disk on `local-zfs` | `vmbr1`, static `10.20.0.10`, gateway `10.20.0.1` |
 | 130 `worldcat` | WorldCat exact-lookup API | 2 | 4 GB, no ballooning | 32 GB OS disk on `local-zfs`; 40 GB data disk on `rpool2`, ext4, mounted at `/srv/wc-data` | `vmbr0`, LAN |
+| 150 `wikidata` | Wikidata exact-lookup API and its weekly dump build | 8 | 12 GB, no ballooning | 32 GB OS disk on `local-zfs`; 400 GB data disk on `rpool2`, ext4, label `wd-data`, mounted at `/srv/wd-data` | `vmbr0`, LAN |
 | 140 `pgverify` | Nightly Postgres restore check and dev dump (below) | 4 | 8 GB, no ballooning | 32 GB OS disk on `local-zfs`; 400 GB data disk on `rpool2`, ext4, label `pgverify`, mounted at `/mnt/pgverify` | `vmbr1`, static `10.20.0.20`, gateway `10.20.0.1` |
-| 101 `musicbrainz` | MusicBrainz, built by hand | 8 | 16 GB | 1 TB on `rpool2` | LAN |
+| 101 `musicbrainz` | MusicBrainz, built by hand. **Stopped** until a second server arrives (Shane's decision, 2026-11-08), which is what makes room for VM 150's 12 GB | 8 | 16 GB | 1 TB on `rpool2` | LAN |
 
 All guests with `onboot` come back by themselves after a host reboot. VM 101 is not managed by
 `provision`, which never touches it. After a converge, and in `--verify`, provision asserts that every
-guest running beforehand other than 110, 120, 130 and 140 (VM 101 included) is still running. Its
+guest running beforehand other than 110, 120, 130, 140 and 150 (VM 101 included) is still running. Its
 Cloudflare tunnel runs inside the VM. VM 101's NIC has `firewall=1`, so once the host firewall is
 on its traffic passes through pve-firewall's bridge conntrack chains and the `vmbr1` CT-zone rule,
 even though no rule names it. Provision asserts only that it keeps running, not that its traffic is
@@ -73,6 +77,18 @@ the same way.
 
 The `worldcat` VM sits on the LAN bridge like `ol`. Its firewall (`130.fw`) accepts only SSH from
 the LAN; the API publishes on loopback and leaves through `cloudflared`.
+
+The `wikidata` VM (150) is the same shape, with `150.fw` and `/srv/wd-data`. Its API is the exact-lookup
+service in `docs/features/wikidata-data-service.md`; `wikidata-refresh.timer` (04:00 daily and 15 minutes
+after boot) runs `guest/wikidata-refresh.sh`, a copy of `ol-refresh.sh`'s promote-or-roll-back logic. The
+build downloads the dump itself (about 157 GB, roughly 4.5 hours), so the script holds the build lock for the
+whole run; a second timer firing during it defers, and so does a deploy (it takes the same lock, as on `ol`). It puts an 8 GB swap file on the data disk
+(`/srv/wd-data/swapfile`, not in fstab) once a build is certain. Memory: API `mem_limit` 1 GB, build 10 GB,
+`compose.wikidata.yml`. It writes `current-version`, runs `compose up -d wikidata` and polls `/version` on
+8083; if the API does not serve the new date in time it writes the previous date back, and with no previous
+version it removes `current-version` and stops the API. Only passing versions are kept (two, via
+`versions prune`). Until the first build passes there is no `current-version`: `deploy.sh` builds the image,
+starts only `cloudflared`, and `wikidata-heartbeat` stays silent.
 
 ## The Postgres restore check (`pgverify`, VM 140)
 
@@ -159,9 +175,9 @@ deployment/home-server/provision [mode]
 | Mode | What it does |
 |---|---|
 | (none) | Converges the host (DNS, packages, network, firewall, the ZFS ARC cap), creates any missing VM, installs each VM's env and units. A second run reports no changes. It does not create ZFS pools or Proxmox storage entries. |
-| `--rebuild ol\|fetcher\|worldcat\|pgverify` | Replaces that VM's OS disk with a fresh cloud image. The data disk is kept (`ol`'s, `worldcat`'s and `pgverify`'s). |
-| `--enable-tunnels` | Starts `cloudflared` on all three VMs. It dies unless all three tunnel tokens are set. Run it only after Cloudflare Access is in place. The flag is stored on the host, so a later `--rebuild` keeps it. |
-| `--disable-tunnels` | Removes the flag, pushes `TUNNELS_ENABLED=0` to all three VMs and forces a deploy, which stops and removes `cloudflared`. |
+| `--rebuild ol\|fetcher\|worldcat\|wikidata\|pgverify` | Replaces that VM's OS disk with a fresh cloud image. The data disk is kept (`ol`'s, `worldcat`'s, `wikidata`'s and `pgverify`'s). |
+| `--enable-tunnels` | Starts `cloudflared` on all four VMs. It dies unless all four tunnel tokens are set. Run it only after Cloudflare Access is in place. The flag is stored on the host, so a later `--rebuild` keeps it. |
+| `--disable-tunnels` | Removes the flag, pushes `TUNNELS_ENABLED=0` to all four VMs and forces a deploy, which stops and removes `cloudflared`. |
 | `--verify` | Not read-only: it re-runs convergence (DNS, packages without the upgrade, network, firewall, VM creation), so it can change things, and then fails its idempotence check if anything changed. Check classes: host (including the NIC watchdog: the timer is enabled and active, TSO and GSO are off on the NIC, the `post-up` offload line is in `/etc/network/interfaces`, and the log-only file is absent), VMs, egress (with positive controls, from the VM and the container, including the house's public IPv4 on 80 and 443), idempotence, and pre-existing guests. |
 | `--verify --external-from user@host` | Adds the exposure check: ports 22, 8006, 111 and 3128 on the host's public address, probed from that machine. |
 | `--verify --recovery` | Adds a recovery check: SIGKILLs each service's main process and expects Docker to restart it, then **reboots the host** (`systemctl reboot`), waits up to about 10 minutes, and re-runs the host, VM, egress and pre-existing guest checks. Ask before running it. |
@@ -174,16 +190,18 @@ The keys in `secrets/home-server.env` (SOPS-encrypted). Each VM receives only it
 | `PVE_HOST` | every run | What provision SSHes to (the `pve-mini` alias) |
 | `PVE_LAN_IPV4`, `PVE_LAN_GATEWAY4` | every run | The host's static LAN address and the router |
 | `OL_TUNNEL_TOKEN`, `FETCHER_TUNNEL_TOKEN` | `--enable-tunnels` | The Cloudflare tunnel tokens for `ol` and `fetcher` |
-| `WORLDCAT_TUNNEL_TOKEN` | `--enable-tunnels`; the worldcat VM | The Cloudflare tunnel token for `worldcat`. Optional until tunnels are on, then required: `--enable-tunnels` dies without all three |
+| `WORLDCAT_TUNNEL_TOKEN` | `--enable-tunnels`; the worldcat VM | The Cloudflare tunnel token for `worldcat`. Optional until tunnels are on, then required: `--enable-tunnels` dies without all four |
+| `WIKIDATA_TUNNEL_TOKEN` | `--enable-tunnels`; the wikidata VM | The Cloudflare tunnel token for `wikidata`, same rules |
 | `HC_OL_HEARTBEAT`, `HC_OL_DEPLOY`, `HC_OL_REFRESH`, `HC_FETCHER_HEARTBEAT`, `HC_FETCHER_DEPLOY` | optional | healthchecks.io ping URLs; blank means no ping |
 | `HC_WORLDCAT_HEARTBEAT`, `HC_WORLDCAT_DEPLOY` | optional; the worldcat VM | healthchecks.io ping URLs; blank means no ping |
+| `HC_WIKIDATA_HEARTBEAT`, `HC_WIKIDATA_DEPLOY`, `HC_WIKIDATA_REFRESH` | optional; the wikidata VM | healthchecks.io ping URLs; blank means no ping |
 | `PGVERIFY_ENABLED` | optional; default off | `1` makes `pgverify` a managed VM. Off, provision and `--verify` leave VM 140 alone. Set at step 7 of the Postgres move. |
 | `HC_PGVERIFY`, `HC_PGVERIFY_DEPLOY`, `PGVERIFY_*` | the `pgverify` VM | See "The Postgres restore check". Only the `pgverify` VM receives them. `HC_PGVERIFY` may not be blank. |
 | `HC_RECOMMENDER` | optional | healthchecks.io ping URL for `recommender-train`, `ol` only |
 | `HC_NIC_WATCHDOG` | optional; the host only | healthchecks.io ping URL for `nic-watchdog`; blank means no ping. Written to a mode 0600 file on the host, never to a VM |
 | `RECOMMENDATIONS_R2_ENDPOINT`, `RECOMMENDATIONS_R2_ACCESS_KEY`, `RECOMMENDATIONS_R2_SECRET_KEY`, `RECOMMENDATIONS_R2_BUCKET` | the trainer | The recommendations bucket (`docs/features/recommendations.md`, "Collaborative signal"): its S3 endpoint and a token scoped to it. All four or none; `ol` only. With none set, `recommender-train` logs a skip and does not ping. |
 | `VM_STORAGE` | optional | OS disks and cloud-init drive. Default `local-lvm`; `local-zfs` here |
-| `DATA_STORAGE` | optional | The `ol`, `worldcat` and `pgverify` data disks. Default `VM_STORAGE`; `rpool2` here |
+| `DATA_STORAGE` | optional | The `ol`, `worldcat`, `wikidata` and `pgverify` data disks. Default `VM_STORAGE`; `rpool2` here |
 | `IMAGE_STORAGE` | optional | Imported cloud images. Default `local` |
 | `PVE_LAN_DNS` | optional | The host's resolver. Default `PVE_LAN_GATEWAY4` |
 | `ARC_MAX_BYTES` | optional | ZFS ARC cap. Default 8 GiB |
@@ -240,15 +258,18 @@ deferral to the check's `/log` endpoint instead, so a run that keeps deferring s
 | `ol-heartbeat` | timer every 5 min, only if `127.0.0.1:8080/version` answers | 5 min / 15 min |
 | `fetcher-heartbeat` | timer every 5 min, only if `127.0.0.1:8081/health` answers | 5 min / 15 min |
 | `worldcat-heartbeat` | timer every 5 min, only if `127.0.0.1:8082/version` answers | 5 min / 15 min |
-| `ol-deploy`, `fetcher-deploy`, `worldcat-deploy` | `deploy.sh`: `success` on a deploy or a no-op, `fail` on error | 15 min / 1 h |
+| `wikidata-heartbeat` | timer every 5 min, only if `127.0.0.1:8083/version` answers | 5 min / 15 min |
+| `ol-deploy`, `fetcher-deploy`, `worldcat-deploy`, `wikidata-deploy` | `deploy.sh`: `success` on a deploy or a no-op, `fail` on error | 15 min / 1 h |
 | `ol-refresh` | `ol-refresh.sh`: `start`, then `success`, no-op or `fail` | 1 day / 6 h |
+| `wikidata-refresh` | `wikidata-refresh.sh`: `start`, then `success`, no-op or `fail` | 1 day / 12 h (the build itself takes most of a day) |
 | `recommender-train` | `recommender-train.sh`: `start`, then `success` with the trainer's last line or `fail` with it; a deferral goes to `/log` and does not reset the period | 1 day / 2 days |
 | `nic-watchdog` | The host's `nic-watchdog`: `success` at most hourly, on a check where the gateway answers; `/fail` with a report on the first such check after a reset, a reboot, or hang messages | 1 hour / 1 hour |
 
 `ol-heartbeat` is down until the first build finishes, because the API does not start without a
 built version. `worldcat-heartbeat` is down until the artifact is loaded and `current-version` is
 written ("Loading the WorldCat artifact (once)", below), for the same reason: the WorldCat API
-refuses to boot without a version whose gates passed.
+refuses to boot without a version whose gates passed. `wikidata-heartbeat` is down until the first
+build passes and `wikidata-refresh` writes `current-version`.
 
 ## Hung network card
 
@@ -509,8 +530,8 @@ Whole machine:
    `rpool2`, it may still hold `vm-110-*` and `vm-130-*` zvols from the previous `ol` and `worldcat` VMs,
    which nothing references any more; `zfs list -r rpool2` shows them, and deleting them is a decision for Shane.
 5. Put the tunnel tokens and ping URLs into the secrets, then run `provision --enable-tunnels` once
-   Access is in place (below). `--enable-tunnels` needs all three tokens, `WORLDCAT_TUNNEL_TOKEN`
-   included. The Open Library build does not wait for this: its timer starts about
+   Access is in place (below). `--enable-tunnels` needs all four tokens, `WORLDCAT_TUNNEL_TOKEN`
+   and `WIKIDATA_TUNNEL_TOKEN` included. The Open Library build does not wait for this: its timer starts about
    10 minutes after the `ol` VM boots. On a fresh box it must download the dumps first, so allow
    longer than the 2.5 hours measured with the dumps already present.
 6. Run `provision --verify`.
@@ -518,7 +539,7 @@ Whole machine:
    The artifact is built on the dev machine and lives there as well; see "Loading the WorldCat
    artifact (once)".
 
-One VM: `provision --rebuild ol|fetcher|worldcat`. The data disk is kept, so a rebuilt `ol` keeps
+One VM: `provision --rebuild ol|fetcher|worldcat|wikidata`. The data disk is kept, so a rebuilt `ol` keeps
 its Open Library version and a rebuilt `worldcat` keeps its artifact and `current-version`.
 
 Switch the tunnels off: run `provision --disable-tunnels`. It removes
@@ -617,7 +638,8 @@ afterwards; it queues only what is unfinished).
 
 - BIOS: "Restore on AC Power Loss" set to Power On. Remove any installer USB.
 - Cloudflare (Shane's own tool, not scheduled work):
-  1. Three dashboard-managed tunnels: `home-ol`, with `ol-api.thegreatestbooks.org` to
+  1. Four dashboard-managed tunnels (the fourth, `home-wikidata`, sends its hostname to
+     `http://wikidata:8083`, an alias on the `wikidata` service in `compose.tunnel.yml`): `home-ol`, with `ol-api.thegreatestbooks.org` to
      `http://openlibrary:8080` (an alias on the `api` service), `home-fetcher`, with `page-fetcher.thegreatestbooks.org` to
      `http://page-fetcher:8081` (an alias on the `fetcher` service), and `home-worldcat`, with
      `worldcat-api.thegreatestbooks.org` to `http://worldcat:8082` (an alias on the `worldcat`

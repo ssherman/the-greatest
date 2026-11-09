@@ -32,6 +32,10 @@ t_worldcat_beats_on_version() {
   setup; write_env ROLE=worldcat HC_HEARTBEAT=https://hc.test/beat
   "$GUEST/heartbeat.sh" && called 'curl .*127\.0\.0\.1:8082/version' && called 'hc\.test/beat$'
 }
+t_wikidata_beats_on_version() {
+  setup; write_env ROLE=wikidata HC_HEARTBEAT=https://hc.test/beat
+  "$GUEST/heartbeat.sh" && called 'curl .*127\.0\.0\.1:8083/version' && called 'hc\.test/beat$'
+}
 t_no_flag_no_reboot() { setup; "$GUEST/reboot-if-required.sh" && ! called 'systemctl reboot'; }
 t_flag_reboots() { setup; touch "$REBOOT_FLAG"; "$GUEST/reboot-if-required.sh" && called '^systemctl reboot$'; }
 t_build_defers_reboot() {
@@ -79,6 +83,19 @@ t_units_for_worldcat() {
     [ ! -f "$SYSTEMD_DIR/ol-refresh.timer" ] && [ ! -f "$SYSTEMD_DIR/recommender-train.timer" ] &&
     [ "$(find "$SYSTEMD_DIR" -type f | wc -l)" = 6 ]
 }
+t_units_for_wikidata() {
+  setup; write_env ROLE=wikidata
+  "$GUEST/install-units.sh" && [ -f "$SYSTEMD_DIR/the-greatest-deploy.timer" ] &&
+    [ -f "$SYSTEMD_DIR/the-greatest-heartbeat.timer" ] && [ -f "$SYSTEMD_DIR/reboot-if-required.timer" ] &&
+    [ -f "$SYSTEMD_DIR/wikidata-refresh.timer" ] && [ -f "$SYSTEMD_DIR/wikidata-refresh.service" ] &&
+    [ ! -f "$SYSTEMD_DIR/ol-refresh.timer" ] && [ ! -f "$SYSTEMD_DIR/recommender-train.timer" ] &&
+    called 'systemctl enable --now wikidata-refresh.timer' && [ "$(find "$SYSTEMD_DIR" -type f | wc -l)" = 8 ]
+}
+t_wikidata_timer_schedule() {
+  grep -qx 'OnCalendar=\*-\*-\* 04:00' "$GUEST/systemd/wikidata-refresh.timer" &&
+    grep -qx 'OnBootSec=15min' "$GUEST/systemd/wikidata-refresh.timer" &&
+    grep -q 'wikidata-refresh.sh' "$GUEST/systemd/wikidata-refresh.service"
+}
 t_units_for_pgverify() {
   setup; write_env ROLE=pgverify
   "$GUEST/install-units.sh" && [ -f "$SYSTEMD_DIR/pg-restore-verify.timer" ] && [ -f "$SYSTEMD_DIR/pg-restore-verify.service" ] &&
@@ -90,7 +107,7 @@ t_units_for_pgverify() {
 }
 t_others_get_no_pg_unit() {
   local r
-  for r in ol fetcher worldcat; do
+  for r in ol fetcher worldcat wikidata; do
     setup; write_env ROLE=$r
     "$GUEST/install-units.sh" && [ ! -e "$SYSTEMD_DIR/pg-restore-verify.timer" ] || return 1
   done
@@ -105,6 +122,7 @@ check "heartbeat stays silent when the service is down" t_silent_when_down
 check "the ol heartbeat asks /version" t_ol_beats_on_version
 check "the fetcher heartbeat asks /health" t_fetcher_beats_on_health
 check "the worldcat heartbeat asks /version on 8082" t_worldcat_beats_on_version
+check "the wikidata heartbeat asks /version on 8083" t_wikidata_beats_on_version
 check "no reboot-required flag, no reboot" t_no_flag_no_reboot
 check "the flag reboots" t_flag_reboots
 check "a running build defers the reboot" t_build_defers_reboot
@@ -113,6 +131,8 @@ check "the other roles do not wait for the pgverify lock" t_other_roles_ignore_t
 check "ol gets the refresh and train timers" t_units_for_ol
 check "fetcher gets neither" t_units_for_fetcher
 check "worldcat gets the three base units and nothing else" t_units_for_worldcat
+check "wikidata gets the base units and the weekly refresh timer" t_units_for_wikidata
+check "the wikidata refresh timer runs at 04:00 and 15 minutes after boot" t_wikidata_timer_schedule
 check "pgverify gets the deploy, reboot and restore-check timers and no heartbeat" t_units_for_pgverify
 check "no other role gets the restore check" t_others_get_no_pg_unit
 check "a second install changes nothing" t_units_idempotent

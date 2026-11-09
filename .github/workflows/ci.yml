@@ -132,7 +132,7 @@ jobs:
       # installed so the collaborative-filtering trainer's tests run, and the
       # worldcat extra so the WorldCat build's zstandard-backed tests run.
       - name: Install dependencies (fails on lockfile drift)
-        run: uv sync --locked --extra fetcher --extra recommender --extra worldcat
+        run: uv sync --locked --extra fetcher --extra recommender --extra worldcat --extra wikidata
 
       - name: Lint
         run: uv run ruff check .

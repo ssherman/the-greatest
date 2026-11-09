@@ -128,5 +128,44 @@ services:
       WC_API_THREADS: "${WC_API_THREADS:-2}"
       WC_API_DEADLINE_S: "${WC_API_DEADLINE_S:-25}"
 
+  # Wikidata exact-lookup API (docs/features/wikidata-data-service.md). Behind a
+  # profile like worldcat: the wikidata VM's deploy names it explicitly.
+  wikidata:
+    build:
+      context: .
+      dockerfile: wikidata.Dockerfile
+    image: the-greatest/wikidata:latest
+    profiles: ["wikidata"]
+    restart: unless-stopped
+    ports:
+      - "${WD_API_BIND:-127.0.0.1}:8083:8083"
+    volumes:
+      - ${WD_DATA_HOST:-/home/shane/wd-data}:/data:ro
+    environment:
+      WD_DATA_ROOT: /data
+      WD_DATA_VERSION: "${WD_DATA_VERSION:-}"
+      WD_API_MEMORY_LIMIT: "${WD_API_MEMORY_LIMIT:-512MB}"
+      WD_API_TEMP_DIR: "${WD_API_TEMP_DIR:-/tmp}"
+      WD_API_THREADS: "${WD_API_THREADS:-2}"
+
+  # The weekly build: same image, /data read-write. Run on demand
+  # (`docker compose --profile wikidata run --rm wikidata-build`), never `up`.
+  wikidata-build:
+    build:
+      context: .
+      dockerfile: wikidata.Dockerfile
+    image: the-greatest/wikidata:latest
+    profiles: ["wikidata"]
+    restart: "no"
+    # The image runs as an unprivileged user, but this one-shot job writes the
+    # artifact into the host's data directory, which that user cannot. It runs
+    # as root, like the Open Library `build`; the long-running `wikidata` does not.
+    user: root
+    volumes:
+      - ${WD_DATA_HOST:-/home/shane/wd-data}:/data
+    command: >-
+      python -m wikidata.pipeline.build --root /data
+      --memory-limit ${WD_BUILD_MEMORY_LIMIT:-8GB} --threads ${WD_BUILD_THREADS:-6}
+
 volumes:
   recommender-work:

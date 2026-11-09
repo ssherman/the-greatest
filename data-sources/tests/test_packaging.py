@@ -41,3 +41,22 @@ def test_zstandard_is_an_extra_not_a_core_dependency():
     ]
     assert not any(dep.startswith("zstandard") for dep in project["dependencies"])
     assert any(dep.startswith("zstandard") for dep in project["optional-dependencies"]["worldcat"])
+
+
+def test_wikidata_is_a_sibling_source_not_part_of_openlibrary():
+    import wikidata
+
+    assert wikidata.__version__
+    assert "openlibrary" not in wikidata.__file__
+
+
+def test_wikidata_dependencies_are_an_extra_not_core():
+    import tomllib
+    from pathlib import Path
+
+    project = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())[
+        "project"
+    ]
+    for name in ("isal", "orjson", "pyyaml"):
+        assert not any(dep.startswith(name) for dep in project["dependencies"])
+        assert any(dep.startswith(name) for dep in project["optional-dependencies"]["wikidata"])

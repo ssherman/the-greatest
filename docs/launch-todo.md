@@ -567,8 +567,9 @@ Goodreads re-import (section 12) is done, since that removes crufty books and fi
 the books and authors it creates already go through the full import workflow, origin step included. The
 backfill runs once here; the weekly run is section 4, step 10, and is optional.
 
-1. The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10). It needs a local
-   Wikidata copy first: remote Wikidata refuses requests whenever its lag passes 5 seconds, which in November
+1. Run the author Wikidata enrichment first (section 15, step 7): the work match depends on author QIDs.
+   The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10). It needs a local
+   Wikidata copy first (section 15): remote Wikidata refuses requests whenever its lag passes 5 seconds, which in November
    2026 was most of the day, so it cannot carry a bulk run (Wikimedia asks bulk readers to use the dumps).
 2. In production (you run it by hand with `!`; this is the only way it starts), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
    to see the count, then again with `APPLY=1`. It paces itself at one book every 8 seconds, so the whole
@@ -582,3 +583,45 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    `IDS=` and `APPLY=1`.
 5. **Rankings.** Refresh the books list weights and the book rankings, then the author rankings. Filling
    origins changes `percentage_western` and so the western-canon penalty.
+
+## 15. Local Wikidata (the service once; the re-check repeats after each refresh)
+
+Replaces remote Wikidata for bulk reads with a copy built from the weekly dump, served from the home
+server through a Cloudflare tunnel behind Cloudflare Access. Details:
+`docs/features/wikidata-data-service.md`; spec: `docs/superpowers/specs/2026-11-08-wikidata-data-service-design.md`.
+The work ships as two PRs: the Wikidata service and home-server tooling first, the Rails switch second.
+
+Steps marked "Shane runs with `!`" change the home server, Cloudflare or production, so an agent does not run them.
+
+1. **Free the old MusicBrainz VM. Shane runs with `!`.** On pve-mini: `qm set 101 --onboot 0`, so VM 101 stops
+   competing with VM 150 for memory after a reboot. Then check production's `MUSICBRAINZ_URL`: if it points
+   at VM 101, point it at `https://musicbrainz.org` before VM 101 is ever stopped.
+2. **Prove the build on the dev machine.** The dev build passes every gate.
+3. **Merge PR 1** (the Wikidata service and the home-server tooling). Nothing in production calls the
+   service yet.
+4. **Provision VM 150. Shane runs with `!`.** `provision` with the new role, then the first build and its
+   gates. Then the tunnel and Access: `bin/cfzerotrust apply --secrets-root <this checkout>` in
+   `the-greatest-cloudflare`, as in section 9 step 2. The Access app must accept the existing `prod-rails`
+   service token: production already holds it as the shared `CLOUDFLARE_ACCESS_CLIENT_ID` and
+   `CLOUDFLARE_ACCESS_CLIENT_SECRET` (WorldCat uses them), and the Wikidata client reads the same two, so
+   change no credential. The only new production setting is `WIKIDATA_SERVICE_URL`, which the same apply
+   writes into `secrets/.env.production`, as it does for `WORLDCAT_SERVICE_URL`.
+5. **Confirm production reaches the service.** From a production host, `curl` `/version` through the tunnel
+   with the Access headers. It answers with the dump date.
+6. **Only then merge PR 2** (the Rails switch), which deploys the client.
+7. **Enrich the authors from the local Wikidata, ranked authors first. Shane runs with `!`.**
+   `bin/rails "books:authors:enrich[13654]"` (13,654 is the ranked authors; it queues the Wikidata step, then
+   VIAF on a miss, then AI with research off, one author every 8 seconds). Check it with
+   `bin/rails "books:authors:enrich_report[<ISO time it printed>]"`. Do this BEFORE the section 14 origin
+   backfill, because the work match rate depends on author QIDs. Measured on dev 2026-11-09: only 714 of
+   76,006 authors have a Wikidata QID. On a 40-book sample the local copy matched 5 of 10 top-ranked books,
+   1 of 10 mid-ranked and 1 of 20 unranked, all through identifiers. When the author was found by name,
+   the author-works route matched 8 of the 14 ranked books that were still unmatched.
+8. **Re-run the stage 2 rehearsal** (section 14, step 1).
+9. **After launch, optionally turn on the re-check.** Set `config.x.wikidata.recheck_after_refresh = true`
+   (`config/initializers/wikidata.rb`; it is off everywhere until you do) and deploy. The 06:00 UTC cron
+   (`wikidata_recheck_after_refresh`) then reads `/version` daily and, when the dump date is new, re-checks
+   books and authors created in the last 90 days (`config.x.wikidata.recheck_window`) that found no QID,
+   one start every 8 seconds. To see the counts first, `bin/rails wikidata:recheck` is a dry run;
+   `APPLY=1` queues the work. It selects no book while their evidence rows list `worldcat` in
+   `sources_failed` (until WorldCat is reachable from production), because those books are left to a normal re-gather.
