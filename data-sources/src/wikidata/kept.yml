@@ -1,0 +1,24 @@
+# What the Wikidata build keeps. Everything else in the dump is dropped.
+# work_roots mirrors Wikidata::Work::WRITTEN_WORK_TYPES in the Rails app.
+work_roots: [Q7725634, Q47461344, Q571, Q8261, Q5185279, Q25379, Q35760, Q49084, Q1279564, Q12106333, Q725377, Q8274, Q1004, Q7725310]
+edition_type: Q3331189
+person_types: [Q5, Q61002, Q16017119, Q21070568]
+excluded_roots: [Q13442814]
+# Statement properties kept, besides every property in external_ids.
+statement_properties: [P31, P279, P7937, P50, P800, P629, P747, P495, P407, P136, P921, P840, P2408, P577, P569, P570, P21, P27, P106, P1559, P742, P297]
+# property -> normalizer
+external_ids:
+  P212: isbn
+  P957: isbn
+  P213: strip_spaces
+  P648: exact
+  P2969: exact
+  P8383: exact
+  P2963: exact
+  P243: exact
+  P214: exact
+  P244: exact
+  P7400: exact
+# Properties whose reverse links (person -> work) are indexed.
+reverse_links: [P50, P800]
+label_languages: [en, mul]
