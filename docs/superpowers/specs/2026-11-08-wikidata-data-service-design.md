@@ -95,6 +95,10 @@ first plan task measures them. Wikimedia limits concurrent dump downloads per IP
 resumes, and checks the published checksum. A mirror may be used if the measured download is too slow, chosen by the
 builder.
 
+**Redirects are not in the JSON dump.** Merged items come from the SQL dumps (`wikidatawiki-latest-redirect.sql.gz`,
+37 MB, and `wikidatawiki-latest-page.sql.gz`, 3.6 GB, which maps page ids to QIDs), produced about twice a month and
+downloaded with each build. (Found while planning, 2026-11-08.)
+
 ### What is kept
 
 The kept set is defined in a config file (`data-sources/src/wikidata/kept.yml` or similar), not in code. For books:
@@ -176,7 +180,7 @@ FastAPI, read-only, JSON. Routes are generic:
 | `POST /by-external-id` (pairs) | QIDs carrying any of the property=value pairs | `by_statements(pairs)` |
 | `POST /linked-from` (targets, properties) | per target, the items that link to it through those properties, with labels, excluding editions where asked | `works`, `work_items` |
 | `GET /names?q=` | person-typed items whose normalized label or alias equals the query, ranked by sitelink count, top 10 | `search(name)` |
-| `GET /meta` | dump date, counts, built-at | — |
+| `GET /version` | dump date, counts, built-at | — |
 
 `country_codes(ids)` is `POST /items` on the country QIDs, reading `P297` and the label; it needs no route of its own.
 
@@ -217,7 +221,7 @@ sample of authors the live resolver matched by name, and report how many the loc
 Without a live fallback, a book imported before its Wikidata item reached the dump stays unmatched until something asks
 again. So:
 
-- A daily Sidekiq job reads `GET /meta`. When the dump date has changed since it last looked, it queues a re-check of
+- A daily Sidekiq job reads `GET /version`. When the dump date has changed since it last looked, it queues a re-check of
   books created in the last 90 days whose latest evidence row has no Wikidata work, and authors created in the last
   90 days with no QID. Books re-gather evidence and re-run categorize in context `backfill` (no web research), under
   the stage 2 rules: a real country is never overwritten, disagreements go to the report. Authors re-run Wikidata
@@ -234,7 +238,7 @@ again. So:
    so music admin keeps working). Both go in the launch-todo with this service's steps.
 3. Build the service and Rails client on a branch; dev runs the container locally against a dev-built artifact.
 4. Provision VM 150, first build and gates on the VM, tunnel and Access.
-5. Merge the Rails switch only after production reaches the service (`/meta` answers through the tunnel). Merging first
+5. Merge the Rails switch only after production reaches the service (`/version` answers through the tunnel). Merging first
    would leave production imports with no Wikidata at all. The launch-todo gets this order, like the WorldCat deploy
    order in §9.
 6. Then the stage 2 rehearsal is re-run on dev, and launch-todo §14 drops its "needs a local Wikidata copy" note.
