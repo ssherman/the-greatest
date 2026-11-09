@@ -277,6 +277,66 @@ module Oauth
       assert_mcp_refused(tokens["access_token"])
     end
 
+    # --- the admin endpoint ----------------------------------------------------
+
+    ADMIN_RESOURCE = "https://#{BOOKS_HOST}/api/mcp/admin".freeze
+    ADMIN_SCOPE = "books:admin:read books:admin:write books:admin:merge"
+
+    def admin_connection = OauthConnection.find_by!(user: users(:admin_user), application: OauthApplication.find_by!(uid: @client_id))
+
+    def approve_admin
+      @member = users(:admin_user)
+      obtain_tokens(resource: ADMIN_RESOURCE, scope: nil)
+    end
+
+    def assert_admin_refused(access_token)
+      call_tool("merge_book", {id: books_books(:war_and_peace).id, source_id: books_books(:crime_and_punishment).id, dry_run: true},
+        token: access_token, path: "/api/mcp/admin")
+      assert_response :unauthorized
+      assert_includes response.headers["WWW-Authenticate"], "/.well-known/oauth-protected-resource/api/mcp/admin"
+    end
+
+    test "an admin signs in to the admin endpoint with no scope and can dry-run a merge" do
+      tokens = approve_admin
+
+      assert_equal ADMIN_SCOPE, tokens["scope"]
+      call_tool("merge_book", {id: books_books(:war_and_peace).id, source_id: books_books(:crime_and_punishment).id, dry_run: true},
+        token: tokens["access_token"], path: "/api/mcp/admin")
+      assert_response :success
+      assert_nil json["error"]
+      assert_not json.dig("result", "isError")
+    end
+
+    test "an admin connection stops refreshing after 30 days, and approving again restores it" do
+      tokens = approve_admin
+
+      travel 31.days do
+        refresh(tokens["refresh_token"])
+        assert_oauth_error :bad_request, "invalid_grant"
+        assert_not admin_connection.revoked?
+
+        fresh = approve_admin
+        refresh(fresh["refresh_token"])
+        assert_response :success
+        assert_equal ADMIN_SCOPE, response.parsed_body["scope"]
+      end
+    end
+
+    test "a demoted admin gets a 401 on the admin endpoint and a refresh that stays refused after re-promotion" do
+      tokens = approve_admin
+      users(:admin_user).update!(role: :user)
+
+      assert_admin_refused(tokens["access_token"])
+      refresh(tokens["refresh_token"])
+      assert_oauth_error :bad_request, "invalid_grant"
+      assert admin_connection.revoked?
+
+      users(:admin_user).update!(role: :admin)
+
+      refresh(tokens["refresh_token"])
+      assert_oauth_error :bad_request, "invalid_grant"
+    end
+
     # --- revoke --------------------------------------------------------------
 
     test "revoking with the client's own id ends the access token" do

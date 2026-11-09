@@ -3,6 +3,10 @@ require "test_helper"
 module Services
   module Api
     class AuthenticatorTest < ActiveSupport::TestCase
+      # The authenticator reads the site's scopes from Current.domain, which a
+      # request sets in production.
+      setup { Current.domain = :books }
+
       def request_with(authorization)
         env = authorization ? {"HTTP_AUTHORIZATION" => authorization} : {}
         ActionDispatch::Request.new(Rack::MockRequest.env_for("/api/v1/books", env))
@@ -157,6 +161,37 @@ module Services
         assert_equal "oauth", principal.token_kind
         assert_kind_of OauthAccessToken, principal.token
         assert_equal connection, principal.token.connection
+      end
+
+      test "an admin_mcp token on /api/mcp/admin yields an admin principal" do
+        secret = oauth_secret(oauth_connections(:admin_mcp))
+
+        result = Authenticator.call(oauth_request("/api/mcp/admin", secret))
+
+        assert result.success?
+        assert_equal :admin, result.data.tier
+        assert_includes result.data.scopes, "books:admin:merge"
+        assert_includes result.data.scopes, "books:read"
+      end
+
+      test "an admin_mcp token is :invalid_token on /api/mcp and on REST" do
+        secret = oauth_secret(oauth_connections(:admin_mcp))
+
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/mcp", secret)).errors
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/v1/books", secret)).errors
+      end
+
+      test "a member_mcp token is :invalid_token on /api/mcp/admin" do
+        secret = oauth_secret(oauth_connections(:member_mcp))
+
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/mcp/admin", secret)).errors
+      end
+
+      test "a demoted admin's admin_mcp token is :invalid_token" do
+        secret = oauth_secret(oauth_connections(:admin_mcp))
+        users(:admin_user).update!(role: :user)
+
+        assert_equal [:invalid_token], Authenticator.call(oauth_request("/api/mcp/admin", secret)).errors
       end
 
       test "a personal token's principal has token_kind personal" do

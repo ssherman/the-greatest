@@ -59,6 +59,60 @@ module Services
         assert gate.success?
       end
 
+      test "an admin connection refreshes up to 30 days after approval" do
+        connection = oauth_connections(:admin_mcp)
+        _, refresh = issue_oauth_token(connection)
+
+        travel_to connection.approved_at + 29.days + 23.hours do
+          assert refresh_gate(refresh).success?
+        end
+      end
+
+      test "an admin refresh past 30 days is invalid_grant and leaves the connection live" do
+        connection = oauth_connections(:admin_mcp)
+        _, refresh = issue_oauth_token(connection)
+
+        travel_to connection.approved_at + 30.days + 1.minute do
+          result = refresh_gate(refresh)
+
+          assert_not result.success?
+          assert_equal [:invalid_grant], result.errors
+        end
+        assert_nil connection.reload.revoked_at
+      end
+
+      test "a refresh for a connection whose resource left the registry is invalid_grant and revokes it" do
+        connection = oauth_connections(:admin_mcp)
+        _, refresh = issue_oauth_token(connection)
+        connection.update_columns(resource: "retired")
+
+        result = refresh_gate(refresh)
+
+        assert_not result.success?
+        assert_equal [:invalid_grant], result.errors
+        assert connection.reload.revoked?
+      end
+
+      test "a member connection refreshes long after 30 days" do
+        _, refresh = issue
+
+        travel_to @connection.approved_at + 400.days do
+          assert refresh_gate(refresh).success?
+        end
+      end
+
+      test "a demoted admin's refresh is invalid_grant and revokes the connection" do
+        connection = oauth_connections(:admin_mcp)
+        _, refresh = issue_oauth_token(connection)
+        connection.user.update!(role: :user)
+
+        result = refresh_gate(refresh)
+
+        assert_not result.success?
+        assert_equal [:invalid_grant], result.errors
+        assert connection.reload.revoked?
+      end
+
       test "a revoked refresh token issued under this approval is refused and revokes the connection" do
         token, refresh = issue
         token.revoke

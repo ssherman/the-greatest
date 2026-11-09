@@ -551,6 +551,9 @@ How it works: `docs/features/mcp-server.md`, "Signing in with OAuth". Design:
    hostname is redirected, arrives with no token, and cannot get in. Tell members who connected before the switch to
    remove the connector and add `https://thegreatestbooks.org/api/mcp`. Books is not live yet, so few
    connections will exist by then.
+4. **Acceptance for the admin endpoint.** As an admin, add `https://<books host>/api/mcp/admin` as a second
+   claude.ai connector (it is a separate resource from `/api/mcp`), sign in, approve, and ask for a dry-run
+   merge of two duplicate books. Admin approvals need renewing every 30 days.
 
 ## 14. Book origins (the backfill once, then weekly)
 

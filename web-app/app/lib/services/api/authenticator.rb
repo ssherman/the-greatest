@@ -17,7 +17,7 @@ module Services
     # then an OAuth access token a connector was issued through the sign-in flow
     # (Services::Oauth::AccessTokens). An OAuth token only works on the path of the resource its
     # connection was approved for (::Oauth::Resources.for_path), so it is
-    # :invalid_token on /api/v1/* and on /api/mcp/admin. An OAuth token whose
+    # :invalid_token on /api/v1/* and on the other MCP endpoint. An OAuth token whose
     # holder lost their membership is :invalid_token, never :membership_required.
     #
     # One exception: a request dispatched in-process by the MCP server already
@@ -74,7 +74,7 @@ module Services
       # sends it back through sign-in, where the member sees the real reason (D12).
       def authenticate_oauth(token)
         user = token.connection.user
-        scopes = ::Api::Scopes.effective(token.connection.scopes, user)
+        scopes = ::Oauth::Resources.usable_scopes(token.connection, Current.domain)
         return failure(:invalid_token) if scopes.empty?
 
         ::Services::Oauth::AccessTokens.record_use(token)

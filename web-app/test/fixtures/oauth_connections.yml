@@ -31,3 +31,10 @@ member_mcp:
   resource: mcp
   scopes: ["books:read"]
   approved_at: <%= 1.day.ago.to_fs(:db) %>
+
+admin_mcp:
+  user: admin_user
+  application: claude_code
+  resource: mcp_admin
+  scopes: ["books:admin:read", "books:admin:write", "books:admin:merge"]
+  approved_at: <%= 1.day.ago.to_fs(:db) %>

@@ -95,6 +95,9 @@ test.describe('Books API developer pages, signed out', () => {
     });
 
     expect(response.status()).toBe(401);
-    expect(response.headers()['www-authenticate']).toBe('Bearer');
+    const challenge = response.headers()['www-authenticate'];
+    expect(challenge).toMatch(/^Bearer /);
+    expect(challenge).toMatch(/resource_metadata="[^"]*\/\.well-known\/oauth-protected-resource\/api\/mcp"/);
+    expect(challenge).toContain('scope="books:read"');
   });
 });

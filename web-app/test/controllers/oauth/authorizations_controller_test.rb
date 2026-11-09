@@ -211,7 +211,7 @@ module Oauth
       get "/oauth/authorize", params: authorize_params
       assert_response :success
       assert_select "[data-testid=oauth-approve]", count: 0
-      assert_select "[data-testid=oauth-ineligible]"
+      assert_select "[data-testid=oauth-refusal-membership_required]"
 
       delete "/oauth/authorize", params: authorize_params
       assert_redirected_to_client(CLAUDE_URI, error: "access_denied")
@@ -224,7 +224,7 @@ module Oauth
 
       assert_response :success
       assert_select "[data-testid=oauth-approve]", count: 0
-      assert_select "[data-testid=oauth-ineligible]"
+      assert_select "[data-testid=oauth-refusal-membership_required]"
     end
 
     test "a non-member who sent no scope is told about membership, not given an error redirect" do
@@ -233,7 +233,7 @@ module Oauth
       get "/oauth/authorize", params: authorize_params(scope: nil)
 
       assert_response :success
-      assert_select "[data-testid=oauth-ineligible]"
+      assert_select "[data-testid=oauth-refusal-membership_required]"
     end
 
     test "a non-member's forged POST gets no code and creates no connection" do
@@ -297,11 +297,80 @@ module Oauth
       assert_redirected_to_client(CLAUDE_URI, error: "invalid_target")
     end
 
-    test "the admin endpoint is not a resource in this increment" do
+    ADMIN_SCOPES = %w[books:admin:read books:admin:write books:admin:merge].freeze
+
+    def admin_resource = "https://#{BOOKS_HOST}/api/mcp/admin"
+
+    test "an admin who names the admin resource and no scope gets the approval screen and all three scopes" do
+      sign_in_as(users(:admin_user), stub_auth: true)
+
+      get "/oauth/authorize", params: authorize_params(resource: admin_resource, scope: nil)
+      assert_response :success
+      assert_select "[data-testid=oauth-approve]"
+
+      post "/oauth/authorize", params: authorize_params(resource: admin_resource, scope: nil)
+      assert_redirected_to_client(CLAUDE_URI)
+      connection = OauthConnection.find_by!(user: users(:admin_user), application: @claude_ai)
+      assert_equal "mcp_admin", connection.resource
+      assert_equal ADMIN_SCOPES, connection.scopes
+      assert_equal ADMIN_SCOPES, OauthAccessGrant.order(:id).last.scopes.to_a
+    end
+
+    test "no resource and an admin scope makes an admin connection" do
+      sign_in_as(users(:admin_user), stub_auth: true)
+
+      post "/oauth/authorize", params: authorize_params(scope: "books:admin:read")
+
+      assert_redirected_to_client(CLAUDE_URI)
+      connection = OauthConnection.find_by!(user: users(:admin_user), application: @claude_ai)
+      assert_equal "mcp_admin", connection.resource
+      assert_equal ["books:admin:read"], connection.scopes
+    end
+
+    test "no resource and a member scope makes a member connection" do
+      sign_in_as(users(:admin_user), stub_auth: true)
+
+      post "/oauth/authorize", params: authorize_params(scope: "books:read")
+      connection = OauthConnection.find_by!(user: users(:admin_user), application: @claude_ai)
+      assert_equal "mcp", connection.resource
+      assert_equal ["books:read"], connection.scopes
+    end
+
+    test "a books viewer who asks for every admin scope is granted only the read one" do
+      sign_in_as(users(:books_viewer_user), stub_auth: true)
+
+      post "/oauth/authorize", params: authorize_params(resource: admin_resource, scope: ADMIN_SCOPES.join(" "))
+
+      assert_redirected_to_client(CLAUDE_URI)
+      connection = OauthConnection.find_by!(user: users(:books_viewer_user), application: @claude_ai)
+      assert_equal "mcp_admin", connection.resource
+      assert_equal ["books:admin:read"], connection.scopes
+      assert_equal ["books:admin:read"], OauthAccessGrant.order(:id).last.scopes.to_a
+    end
+
+    test "a member with no admin role is refused the admin resource, and a forged POST gets no code" do
       sign_in_as(@member, stub_auth: true)
 
-      get "/oauth/authorize", params: authorize_params(resource: "https://#{BOOKS_HOST}/api/mcp/admin")
-      assert_redirected_to_client(CLAUDE_URI, error: "invalid_target")
+      get "/oauth/authorize", params: authorize_params(resource: admin_resource, scope: nil)
+      assert_response :success
+      assert_select "[data-testid=oauth-refusal-admin_required]"
+      assert_select "[data-testid=oauth-approve]", count: 0
+
+      assert_no_difference ["OauthAccessGrant.count", "OauthConnection.count"] do
+        post "/oauth/authorize", params: authorize_params(resource: admin_resource, scope: nil)
+      end
+      assert_response :forbidden
+      assert response.location.nil?
+    end
+
+    test "a member who asks the member endpoint for an admin-only scope is told it is unavailable" do
+      sign_in_as(@member, stub_auth: true)
+
+      get "/oauth/authorize", params: authorize_params(resource: "#{Api::Host.base_url}/api/mcp", scope: "books:admin:merge")
+
+      assert_response :success
+      assert_select "[data-testid=oauth-refusal-scope_unavailable]"
+      assert_select "[data-testid=oauth-approve]", count: 0
     end
 
     test "a non-string resource is refused rather than guessed at" do
@@ -390,7 +459,7 @@ module Oauth
       assert_difference -> { OauthConnection.count }, 1 do
         post "/oauth/authorize", params: authorize_params(
           application: @claude_code, redirect_uri: "http://localhost:61000/callback",
-          scope: "books:read books:admin:merge", **forged
+          scope: "books:read books:admin:merge", resource: "https://#{BOOKS_HOST}/api/mcp", **forged
         )
       end
 

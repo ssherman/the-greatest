@@ -716,13 +716,15 @@ Rails.application.routes.draw do
 
     # OAuth discovery for the MCP endpoint (spec D3, D8). The protected-resource
     # document is served at the root and at the RFC 9728 path-suffixed location
-    # for each registered resource; /api/mcp/admin has none and 404s.
+    # for each registered resource, drawn from the registry.
     get ".well-known/oauth-authorization-server", to: "oauth/metadata#authorization_server",
       format: false
     get ".well-known/oauth-protected-resource", to: "oauth/metadata#protected_resource",
       defaults: {resource_key: "mcp"}, format: false
-    get ".well-known/oauth-protected-resource/api/mcp", to: "oauth/metadata#protected_resource",
-      defaults: {resource_key: "mcp"}, format: false
+    ::Oauth::Resources::ALL.each_value do |resource|
+      get resource.metadata_path.delete_prefix("/"), to: "oauth/metadata#protected_resource",
+        defaults: {resource_key: resource.key}, format: false
+    end
 
     # Dynamic Client Registration (RFC 7591, spec D6).
     post "api/oauth/register", to: "oauth/registrations#create", defaults: {format: :json}, format: false

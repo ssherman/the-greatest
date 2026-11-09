@@ -26,6 +26,12 @@ Rails.application.configure do
   config.x.api.oauth_register_per_minute = 10
   config.x.api.oauth_token_per_minute = 30
 
+  # How long an admin connection may keep refreshing after the admin approved
+  # it. Past this the refresh is invalid_grant (the connection is not revoked)
+  # and the admin approves again. Member connections have no such limit.
+  # Spec: docs/superpowers/specs/2026-11-02-mcp-oauth-design.md D5.
+  config.x.api.oauth_admin_approval_lifetime = 30.days
+
   # Egress ranges of hosted MCP connectors. Thousands of users reach us from
   # these few addresses, so a per-IP limit would throttle one user's neighbours.
   # An address inside a range shares one counter named for the range, with the

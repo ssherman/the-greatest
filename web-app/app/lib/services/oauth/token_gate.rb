@@ -65,14 +65,27 @@ module Services
 
         return refuse(:invalid_grant) if connection.revoked?
 
-        # Renewing the membership later does not bring this connection back:
-        # the member approves again.
-        if ::Api::Scopes.effective(connection.scopes, connection.user).empty?
+        # An admin approval is not renewed by use: past the limit the admin
+        # signs in again, and approving resets approved_at (D5). The connection
+        # stays live; only this refresh is refused.
+        return refuse(:invalid_grant) if admin_approval_expired?(connection)
+
+        # Renewing the membership, or promoting the admin again, does not bring
+        # this connection back: the member approves again. "Usable" is judged
+        # against the resource's own scopes, so a demoted admin lapses even
+        # though a member's implied books:read remains.
+        if ::Oauth::Resources.usable_scopes(connection, @domain).empty?
           Connections.revoke!(connection)
           return refuse(:invalid_grant)
         end
 
         check_resource(connection)
+      end
+
+      def admin_approval_expired?(connection)
+        return false unless ::Oauth::Resources::ALL[connection.resource.to_s]&.admin
+
+        connection.approved_at < Rails.application.config.x.api.oauth_admin_approval_lifetime.ago
       end
 
       def check_code

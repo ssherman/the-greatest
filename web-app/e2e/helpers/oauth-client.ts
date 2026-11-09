@@ -14,7 +14,11 @@ export type OauthClient = {
   authorizeUrl: string;
 };
 
-export async function registerClient(request: APIRequestContext, port: number): Promise<OauthClient> {
+export async function registerClient(
+  request: APIRequestContext,
+  port: number,
+  options: { resource?: string; scope?: string } = {}
+): Promise<OauthClient> {
   const redirectUri = `http://127.0.0.1:${port}/callback`;
   const response = await request.post('/api/oauth/register', {
     data: { redirect_uris: [redirectUri], client_name: 'E2E client' },
@@ -30,10 +34,12 @@ export async function registerClient(request: APIRequestContext, port: number): 
     redirect_uri: redirectUri,
     response_type: 'code',
     state,
-    scope: 'books:read',
+    scope: options.scope ?? 'books:read',
     code_challenge: challenge,
     code_challenge_method: 'S256',
   });
+
+  if (options.resource) query.set('resource', options.resource);
 
   return {
     clientId,
