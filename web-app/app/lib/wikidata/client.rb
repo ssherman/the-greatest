@@ -27,12 +27,18 @@ module Wikidata
     # service's kept set: they exist in Wikidata, so a caller must not treat
     # them as gone and drop a stored identifier. #dump_date is the dump the
     # most recent answer that carried one came from.
-    attr_reader :not_kept, :dump_date
+    attr_reader :not_kept
 
     def initialize(service: nil)
       @service = service || Service.new
       @not_kept = Set.new
       @dump_date = nil
+    end
+
+    # The dump the service answers from: the last answer's, else
+    # one GET /version per client (nil only if that names no date).
+    def dump_date
+      @dump_date ||= @service.get("/version")["dump_date"]
     end
 
     # Keyed by the id asked for: a merged item answers under the surviving

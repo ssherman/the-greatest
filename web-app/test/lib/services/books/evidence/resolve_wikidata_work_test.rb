@@ -409,13 +409,25 @@ module Services
 
         test "a stored QID the service reports not kept is left in place and yields no evidence" do
           Identifier.create!(identifiable: @book, identifier_type: :books_work_wikidata_qid, value: "Q50", source: :wikidata)
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "656")
           @client.stubs(:not_kept).returns(Set["Q50"])
+          @client.expects(:by_statements).never
+          @client.expects(:work_items).never
 
           data = call.data
 
           assert_nil data[:qid]
           assert_nil data[:work]
           assert_equal ["Q50"], stored_values
+          assert_includes data[:rejected], {"id" => "Q50", "reason" => "not_kept"}
+        end
+
+        test "a verified ISBN-13 keeps its slot when the other pairs fill the cap" do
+          (1..60).each { |i| Identifier.create!(identifiable: @book, identifier_type: :books_work_goodreads_id, value: "g#{i}") }
+          Identifier.create!(identifiable: @book, identifier_type: :books_work_isbn13, value: "9780385474542", source: :worldcat)
+          @client.expects(:by_statements).with { |pairs, **| pairs.size == 50 && pairs.last == ["P212", "9780385474542"] }.returns([])
+
+          call
         end
 
         test "a verified ISBN-13 is sent as a P212 statement and an edition hit resolves to its work" do

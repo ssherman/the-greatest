@@ -31,6 +31,13 @@ module Wikidata
       assert_equal "2026-11-05", @client.dump_date
     end
 
+    test "dump_date asks GET /version once when no answer has named one" do
+      stub = stub_request(:get, "#{BASE}/version").to_return(json_response({dump_date: "2026-11-05"}.to_json))
+
+      assert_equal ["2026-11-05", "2026-11-05"], [@client.dump_date, @client.dump_date]
+      assert_requested stub, times: 1
+    end
+
     test "entities records not_kept ids and leaves them and missing ids out of the answer" do
       body = {items: {"Q2" => {"id" => "Q7243", "dump_date" => "2026-11-05"}}, not_kept: ["Q1"], missing: ["Q3"]}.to_json
       stub_request(:post, "#{BASE}/items").to_return(json_response(body))

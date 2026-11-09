@@ -128,6 +128,16 @@ module Services
           assert_equal "2026-11-05", gather.data[:enrichment].facts["wikidata_dump_date"]
         end
 
+        test "an error fetching the dump date leaves it nil" do
+          ResolveWikidataWork.expects(:call).returns(resolved)
+          @wikidata.stubs(:dump_date).raises(Wikimedia::Exceptions::NetworkError.new("down"))
+          @wikidata.stubs(:labels).returns({})
+          @wikipedia.stubs(:article).returns(@article)
+          WorldCatSection.expects(:call).returns(nil)
+
+          assert_nil gather.data[:enrichment].facts["wikidata_dump_date"]
+        end
+
         test "an unavailable Wikidata service propagates and writes nothing" do
           ResolveWikidataWork.expects(:call).raises(Wikidata::Exceptions::Unavailable.new("down", retry_after: 60))
 

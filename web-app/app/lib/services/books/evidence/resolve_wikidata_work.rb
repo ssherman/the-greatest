@@ -14,7 +14,8 @@ module Services
       # A candidate that fails the check is recorded in data[:rejected] with a
       # reason: not_written_work, author_mismatch, ambiguous_edition (an edition
       # of several works, or of another edition), edition_without_work,
-      # unparseable, title_mismatch (a stored or statement hit whose label is not
+      # unparseable, not_kept (a stored QID outside the service's copy, which also ends resolution),
+      # title_mismatch (a stored or statement hit whose label is not
       # the book's title or an alternate title), ambiguous_statements, ambiguous_title.
       #
       # A stored QID that fails acceptance, or whose entity is gone, is removed when
@@ -30,7 +31,8 @@ module Services
       # A stored QID the service does not hold is removed only when Wikidata itself
       # does not have it. One reported by the client's not_kept exists but lies outside
       # the service's copy (it is not a book, author or work-like item), so the stored
-      # row is left alone and this run simply finds no evidence from it.
+      # row is left alone and resolution stops there: no other strategy runs, the result
+      # has no QID, and the rejection is recorded as not_kept.
       class ResolveWikidataWork
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         WorkLike = ::Services::Books::Verification::WorldCatCheck::WorkLike
@@ -42,6 +44,8 @@ module Services
         }.freeze
         MAX_STATEMENT_PAIRS = 50
         ANONYMOUS_QID = "Q4233718"
+        MAX_ISBN_PAIRS = 10
+        NOT_KEPT = :not_kept
 
         def self.call(book:, client: ::Wikidata::Client.new)
           new(book: book, client: client).call
@@ -64,7 +68,10 @@ module Services
         private
 
         def resolve
-          from_stored || from_statements || from_author_works || [nil, nil, nil]
+          stored = from_stored
+          return [nil, nil, nil] if stored == NOT_KEPT
+
+          stored || from_statements || from_author_works || [nil, nil, nil]
         end
 
         def from_stored
@@ -74,7 +81,10 @@ module Services
           entity = @client.entities([stored])[stored]
           work = entity && accept(entity, check_title: true)
           return [work.id, work, "stored"] if work
-          return if entity.nil? && @client.not_kept.include?(stored)
+          if entity.nil? && @client.not_kept.include?(stored)
+            @rejected << {"id" => stored, "reason" => "not_kept"}
+            return NOT_KEPT
+          end
 
           own_rows.first.destroy! if own_rows.first&.source_wikidata?
           nil
@@ -87,8 +97,9 @@ module Services
           pairs = STATEMENT_IDS.flat_map do |property, type|
             own_identifiers.where(identifier_type: type).order(:id).pluck(:value).compact_blank.map { |value| [property, value] }
           end
-          pairs += own_identifiers.verified.where(identifier_type: :books_work_isbn13).order(:id).pluck(:value).compact_blank.map { |value| ["P212", value] }
-          pairs = pairs.first(MAX_STATEMENT_PAIRS)
+          isbns = own_identifiers.verified.where(identifier_type: :books_work_isbn13).order(:id).pluck(:value).compact_blank
+            .first(MAX_ISBN_PAIRS).map { |value| ["P212", value] }
+          pairs = pairs.first(MAX_STATEMENT_PAIRS - isbns.size) + isbns
           return if pairs.empty?
 
           ids = @client.by_statements(pairs, limit: MAX_STATEMENT_PAIRS)
