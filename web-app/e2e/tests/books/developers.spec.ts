@@ -57,7 +57,10 @@ test.describe('Books API developer pages, signed out', () => {
     const response = await page.request.get('/api/v1/books?per_page=1');
 
     expect(response.status()).toBe(401);
-    expect(response.headers()['www-authenticate']).toBe('Bearer');
+    const challenge = response.headers()['www-authenticate'];
+    expect(challenge).toMatch(/^Bearer /);
+    expect(challenge).toMatch(/resource_metadata="[^"]*\/\.well-known\/oauth-protected-resource\/api\/mcp"/);
+    expect(challenge).toContain('scope="books:read"');
   });
 
   test('the documentation page explains how to connect an MCP client', async ({ page }) => {
@@ -95,6 +98,9 @@ test.describe('Books API developer pages, signed out', () => {
     });
 
     expect(response.status()).toBe(401);
-    expect(response.headers()['www-authenticate']).toBe('Bearer');
+    const challenge = response.headers()['www-authenticate'];
+    expect(challenge).toMatch(/^Bearer /);
+    expect(challenge).toMatch(/resource_metadata="[^"]*\/\.well-known\/oauth-protected-resource\/api\/mcp"/);
+    expect(challenge).toContain('scope="books:read"');
   });
 });
