@@ -157,6 +157,10 @@ services:
     image: the-greatest/wikidata:latest
     profiles: ["wikidata"]
     restart: "no"
+    # The image runs as an unprivileged user, but this one-shot job writes the
+    # artifact into the host's data directory, which that user cannot. It runs
+    # as root, like the Open Library `build`; the long-running `wikidata` does not.
+    user: root
     volumes:
       - ${WD_DATA_HOST:-/home/shane/wd-data}:/data
     command: >-

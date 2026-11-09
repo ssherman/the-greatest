@@ -68,7 +68,8 @@ t_wikidata_api() {
 t_wikidata_build() {
   cfg wikidata wikidata | jq -e '.services["wikidata-build"] as $b |
     $b.command == ["python","-m","wikidata.pipeline.build","--root","/data","--memory-limit","8GB","--threads","6"] and
-    ($b.volumes[0].read_only // false) == false and $b.restart == "no"' >/dev/null
+    ($b.volumes[0].read_only // false) == false and $b.restart == "no" and $b.user == "root" and
+    (.services.wikidata | has("user") | not)' >/dev/null
 }
 t_wikidata_off_by_default() { ! cfg wikidata | jq -e '.services | has("wikidata") or has("wikidata-build")' >/dev/null; }
 

@@ -72,7 +72,7 @@ Alongside them: `manifest.json` (dump date, counts, gate results, `gates_passed`
 
 **Redirects come from the SQL dumps**, not the JSON dump, which has none:
 `wikidatawiki-latest-redirect.sql.gz` joined to `wikidatawiki-latest-page.sql.gz` (page id to QID). They are
-produced about twice a month and downloaded with each build.
+produced about twice a month (Wikimedia's SQL dump cadence, observed 2026-11-08) and downloaded with each build.
 
 ## The API
 
@@ -83,9 +83,9 @@ JSON, read-only, port 8083. All routes are generic.
 | `GET /version` | dump date, built-at, `gates_passed`, table counts, gate results |
 | `POST /items` (at most 50 QIDs) | `items` keyed by the QID asked for (following redirects), plus `not_kept` and `missing` lists |
 | `POST /labels` (at most 500) | `en`, `mul` and `description` per QID |
-| `POST /by-external-id` (pairs, at most 500) | QIDs carrying any `property=value` pair; 422 for a property not indexed |
-| `POST /linked-from` (targets, properties, optional `exclude_types`) | per target, the kept items linking to it through `P50` and `P800`, with labels; `truncated` says whether `limit` cut the answer |
-| `GET /names?q=` | person-typed items whose normalized label or alias equals the query, ranked by sitelink count, at most 10 |
+| `POST /by-external-id` (pairs, at most 500; `limit` per property, default 10, max 100) | QIDs carrying any `property=value` pair; 422 for a property not indexed |
+| `POST /linked-from` (targets, properties, optional `exclude_types`; `limit` default 5000, max 20000) | flat `rows: [[target, source, label], ...]` of the kept items linking to each target through `P50` and `P800`, plus `truncated`, which says whether `limit` cut the answer |
+| `GET /names?q=` | person-typed items whose normalized label or alias equals the query, ranked by sitelink count; `limit` defaults to 10, max 100 |
 
 `/items` separates two absences. **`not_kept`** means the QID exists in the dump but is outside the kept set;
 **`missing`** means it is not in the dump at all. Callers must never drop a stored identifier on
@@ -128,7 +128,7 @@ Facts the build depends on:
   date. Some directories hold only lexeme files, so discovery walks newest first until one holds the entity
   dump.
 - **Two download connections.** Wikimedia allows two per IP; the download is two ranged parts, resumable,
-  checked against the published md5. About 4.5 hours.
+  checked against the published md5. About 4.5 hours, measured on 2026-11-08 (two connections at about 4.8 MB/s each).
 - **A verified existing dump is reused** on a rerun (md5 checked), so a failed distill does not re-download
   the whole dump.
 - **A failed build keeps its evidence.** The tables are deleted, but `versions/<date>/` stays with
