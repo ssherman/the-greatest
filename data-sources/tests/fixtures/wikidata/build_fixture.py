@@ -292,6 +292,19 @@ ents.append(
         },
     )
 )
+# Synthetic: a work with a preferred P50 (Ada) and a normal one (Achebe); like `wdt:P50`, only the
+# preferred author is attributed it.
+ents.append(
+    synth(
+        "Q900023",
+        "Ranked Authors Work",
+        "novel",
+        {
+            "P31": [stmt("P31", "Q900004")],
+            "P50": [stmt("P50", "Q155845"), stmt("P50", "Q900006", rank="preferred")],
+        },
+    )
+)
 # fix-round-1 end
 
 # Filler: neutral, untyped items so the fixture has the shape of a real dump slice. No person

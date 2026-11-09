@@ -91,6 +91,13 @@ def test_links_hold_author_to_work_but_not_from_the_article(built):
     assert not [link for link in links if link[2] == SCHOLARLY_ARTICLE]
 
 
+def test_links_hold_only_the_best_ranked_p50_authors(built):
+    links = rows(built, "SELECT property, target, source FROM {t}", "links")
+    # Q900023 has a preferred P50 (Q900006) and a normal one (Achebe).
+    assert ("P50", "Q900006", "Q900023") in links
+    assert ("P50", "Q155845", "Q900023") not in links
+
+
 def test_names_index_an_alias_of_a_person(built):
     names = rows(built, "SELECT name, qid FROM {t}", "names")
     assert (normalize_name("Лев Толстой"), "Q7243") in names
@@ -143,7 +150,7 @@ def test_items_row_groups_stay_small(built):
 
 
 def test_parallel_workers_produce_identical_tables(tmp_path, config, monkeypatch):
-    # Seven-line batches spread the 43 fixture entities over several shards and workers.
+    # Seven-line batches spread the 44 fixture entities over several shards and workers.
     monkeypatch.setattr(distill_module, "BATCH_LINES", 7)
     contents = {}
     for threads in (1, 3):
