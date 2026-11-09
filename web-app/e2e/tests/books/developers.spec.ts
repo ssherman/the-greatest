@@ -75,8 +75,15 @@ test.describe('Books API developer pages, signed out', () => {
     await page.goto('/developers');
 
     const url = 'https://dev-new.thegreatestbooks.org/api/mcp';
-    await expect(page.locator('#mcp-claude-code-oauth')).toContainText(url);
-    await expect(page.locator('#mcp-codex')).toContainText(url);
+    await expect(page.getByRole('heading', { level: 3, name: /signing in/i })).toBeVisible();
+    await expect(page.locator('#mcp-exact-url code').first()).toHaveText(url);
+    await expect(page.locator('#mcp-claude-apps')).toContainText('Add custom connector');
+    await expect(page.locator('#mcp-claude-code-oauth')).toHaveText(
+      `claude mcp add --transport http --scope user the-greatest-books ${url}`
+    );
+    await expect(page.locator('#mcp-codex')).toContainText(`codex mcp add the-greatest-books --url ${url}`);
+    await expect(page.locator('#mcp-codex')).toContainText('codex mcp login the-greatest-books');
+    await expect(page.locator('#mcp-revoke').getByRole('link')).toHaveAttribute('href', '/developers/tokens');
     for (const id of ['#mcp-claude-code-oauth', '#mcp-codex', '#mcp-exact-url']) {
       const text = (await page.locator(id).textContent()) ?? '';
       expect(text).not.toMatch(/\/api\/mcp\/(\s|$)/);
