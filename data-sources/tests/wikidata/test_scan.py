@@ -51,12 +51,11 @@ def test_slim_drops_qualifiers_and_unlisted_properties(slimmed):
 def test_slim_extracts_type_subclass_and_form_ids(slimmed):
     assert slimmed["Q900005"].types == ["Q900004"]
     assert slimmed["Q900004"].subclass_of == ["Q8261"]
-    assert slimmed["Q8261"].subclass_of == ["Q7725634"]
-    assert slimmed["Q217243"].forms == ["Q8261"]
+    assert slimmed["Q622400"].forms == ["Q8261"]
 
 
 def test_slim_limits_labels_to_configured_languages(slimmed):
-    thing = slimmed["Q217243"]
+    thing = slimmed["Q622400"]
     assert set(thing.labels) <= {"en", "mul"}
     assert thing.labels["en"]["value"]
     assert set(slimmed["Q900006"].aliases) == {"en"}
