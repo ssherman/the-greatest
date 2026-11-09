@@ -31,7 +31,11 @@
               <td><%= connection.scopes.join(", ") %></td>
               <td><%= connection.approved_at.to_date.to_fs(:long) %></td>
               <td><%= connection.last_used_at ? "#{time_ago_in_words(connection.last_used_at)} ago" : "Never" %></td>
-              <td></td>
+              <td>
+                <%= button_to "Revoke", developers_connection_path(connection), method: :delete,
+                      class: "btn btn-sm btn-outline", "aria-label": "Revoke #{connection.application.name}",
+                      form: {data: {turbo_confirm: "Revoke #{connection.application.name}? It is signed out immediately and has to sign in again."}} %>
+              </td>
             </tr>
           <% end %>
         </tbody>

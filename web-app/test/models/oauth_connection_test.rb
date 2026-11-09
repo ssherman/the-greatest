@@ -76,6 +76,7 @@ class OauthConnectionTest < ActiveSupport::TestCase
   test "redirect_hosts lists each host once, in order, skipping unparsable URIs" do
     app = OauthApplication.create!(name: "Multi", confidential: false, scopes: "",
       redirect_uri: "https://claude.ai/api/mcp/auth_callback\nhttps://claude.com/cb\nhttps://claude.ai/other")
+    app.redirect_uri = "https://claude.ai/api/mcp/auth_callback\nhttp://[unclosed\nhttps://claude.com/cb\nhttps://claude.ai/other"
     connection = OauthConnection.new(application: app)
 
     assert_equal ["claude.ai", "claude.com"], connection.redirect_hosts

@@ -176,6 +176,26 @@ module Developers
       assert_select "##{ActionView::RecordIdentifier.dom_id(oauth_connections(:admin_mcp))}", 0
     end
 
+    test "an admin sees their admin connection" do
+      sign_in_as(users(:admin_user), stub_auth: true)
+
+      get developers_tokens_path
+
+      assert_response :success
+      assert_select "#developers_connections ##{ActionView::RecordIdentifier.dom_id(oauth_connections(:admin_mcp))}", 1
+    end
+
+    test "a member with no live connections sees the section with no rows" do
+      oauth_connections(:member_mcp).update_columns(revoked_at: 1.day.ago)
+      sign_in_as(users(:regular_user), stub_auth: true)
+
+      get developers_tokens_path
+
+      assert_response :success
+      assert_select "#developers_connections", 1
+      assert_select "#developers_connections tbody tr", 0
+    end
+
     test "a connection whose resource left the registry still renders" do
       oauth_connections(:member_mcp).update_column(:resource, "retired")
       sign_in_as(users(:regular_user), stub_auth: true)

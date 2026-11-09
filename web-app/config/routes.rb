@@ -504,6 +504,7 @@ Rails.application.routes.draw do
     get "developers", to: "developers#show", as: :developers, constraints: {format: /html/}
     namespace :developers do
       resources :tokens, only: [:index, :create, :destroy]
+      resources :connections, only: [:destroy]
     end
   end
 
