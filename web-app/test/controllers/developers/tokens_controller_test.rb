@@ -193,7 +193,7 @@ module Developers
 
       assert_response :success
       assert_select "#developers_connections", 1
-      assert_select "#developers_connections tbody tr", 0
+      assert_select "#developers_connections table", 0
     end
 
     test "a connection whose resource left the registry still renders" do

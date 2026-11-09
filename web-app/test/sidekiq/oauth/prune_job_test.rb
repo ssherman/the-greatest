@@ -10,5 +10,11 @@ module Oauth
 
       assert_not OauthApplication.exists?(app.id)
     end
+
+    test "is scheduled daily as oauth_prune" do
+      entry = YAML.load_file(Rails.root.join("config/schedule.yml")).fetch("oauth_prune")
+      assert_equal "Oauth::PruneJob", entry["class"]
+      assert_equal PruneJob, entry["class"].constantize
+    end
   end
 end

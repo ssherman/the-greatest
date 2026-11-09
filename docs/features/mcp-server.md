@@ -258,7 +258,7 @@ Revoke is `DELETE /developers/connections/:id`, handled by `Developers::Connecti
 - every token of a revoked connection;
 - tokens on a live connection created before its `approved_at`, which no longer matter.
 
-It keeps all connections, every live token, and revoked tokens created at or after a live connection's `approved_at`. Those are what reuse detection looks up: a replayed refresh token must still be found, or the replay would look like an unknown token and the connection would not be revoked. Do not use Doorkeeper's own cleanup task (`doorkeeper:db:cleanup`, `StaleRecordsCleaner`). It deletes revoked rows and breaks that detection.
+It keeps all connections, every live token, and revoked tokens created at or after a live connection's `approved_at`. Those are what reuse detection looks up: a replayed refresh token must still be found, or the replay would look like an unknown token and the connection would not be revoked. Those revoked rows are never pruned, so each active connection keeps adding roughly one row per refresh (about 24 a day at the one-hour token life) for as long as it stays approved. A cap is possible later. Do not use Doorkeeper's own cleanup task (`doorkeeper:db:cleanup`, `StaleRecordsCleaner`). It deletes revoked rows and breaks that detection.
 
 ### Increments
 

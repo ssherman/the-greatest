@@ -166,6 +166,11 @@ for item in response.json()["data"]:
           several endpoints in one call and return their own results.
         <% end %>
       </p>
+      <p id="mcp-rate-limit">
+        However you connect, each MCP request counts once against the same
+        limits as a REST request. One tool call is one request, including
+        <code>find_book</code>.
+      </p>
       <h3 id="mcp-connect">Connect by signing in</h3>
       <p>
         Most clients need only the address. They open a browser, you sign in to
@@ -178,9 +183,11 @@ for item in response.json()["data"]:
         the client will not find the sign-in.
       </p>
       <p id="mcp-claude-apps">
-        <strong>claude.ai and the Claude desktop and mobile apps:</strong> open
+        <strong>claude.ai and the Claude desktop app:</strong> open
         Settings, then Connectors, then Add custom connector. Paste the address,
-        leave the OAuth fields empty, choose Connect and sign in.
+        leave the OAuth fields empty, choose Connect and sign in. You can't add
+        a connector in the mobile apps, but one added on claude.ai or the
+        desktop app works there too.
       </p>
       <p><strong>Claude Code:</strong> run this once.</p>
 <pre id="mcp-claude-code-oauth"><code>claude mcp add --transport http --scope user the-greatest-books <%= @mcp_url %></code></pre>
@@ -204,9 +211,7 @@ codex mcp login the-greatest-books</code></pre>
       <h3 id="mcp-with-token">With a token instead</h3>
       <p>
         It uses the same token as the REST API, and the token needs the
-        <code>books:read</code> scope. Each MCP request counts once against the
-        same limits as a REST request. One tool call is one request, including
-        <code>find_book</code>.
+        <code>books:read</code> scope.
       </p>
       <p>To connect Claude Code with a token, run this once:</p>
 <pre id="mcp-command"><code>claude mcp add --transport http --scope user the-greatest-books <%= @mcp_url %> --header "Authorization: Bearer $THE_GREATEST_TOKEN"</code></pre>
