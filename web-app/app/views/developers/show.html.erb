@@ -166,13 +166,49 @@ for item in response.json()["data"]:
           several endpoints in one call and return their own results.
         <% end %>
       </p>
+      <h3 id="mcp-connect">Connect by signing in</h3>
+      <p>
+        Most clients need only the address. They open a browser, you sign in to
+        this site and approve the connection. There is no token to copy. This
+        needs a <%= link_to "membership", membership_path %>.
+      </p>
+      <p id="mcp-exact-url">
+        Use the address exactly as <code><%= @mcp_url %></code>, with no slash
+        on the end. An address ending in <code>/</code> is not the server, and
+        the client will not find the sign-in.
+      </p>
+      <p id="mcp-claude-apps">
+        <strong>claude.ai and the Claude desktop and mobile apps:</strong> open
+        Settings, then Connectors, then Add custom connector. Paste the address,
+        leave the OAuth fields empty, choose Connect and sign in.
+      </p>
+      <p><strong>Claude Code:</strong> run this once.</p>
+<pre id="mcp-claude-code-oauth"><code>claude mcp add --transport http --scope user the-greatest-books <%= @mcp_url %></code></pre>
+      <p>
+        Then, in Claude Code, run <code>/mcp</code>, choose
+        <code>the-greatest-books</code> and choose Authenticate.
+      </p>
+      <p><strong>Codex:</strong></p>
+<pre id="mcp-codex"><code>codex mcp add the-greatest-books --url <%= @mcp_url %>
+codex mcp login the-greatest-books</code></pre>
+      <p>
+        Remote servers need a recent Codex CLI. The <code>--url</code> option is
+        what makes it a remote server.
+      </p>
+      <p id="mcp-revoke">
+        The apps you have connected are listed at
+        <%= link_to "/developers/tokens", developers_tokens_path %>. Revoke there
+        signs one out, and the app asks you to sign in again next time. Access
+        lasts as long as your membership does.
+      </p>
+      <h3 id="mcp-with-token">With a token instead</h3>
       <p>
         It uses the same token as the REST API, and the token needs the
         <code>books:read</code> scope. Each MCP request counts once against the
         same limits as a REST request. One tool call is one request, including
         <code>find_book</code>.
       </p>
-      <p>To connect Claude Code, run this once:</p>
+      <p>To connect Claude Code with a token, run this once:</p>
 <pre id="mcp-command"><code>claude mcp add --transport http --scope user the-greatest-books <%= @mcp_url %> --header "Authorization: Bearer $THE_GREATEST_TOKEN"</code></pre>
       <p id="mcp-token-setup">
         Run the <code>export THE_GREATEST_TOKEN=...</code> line from the

@@ -127,7 +127,9 @@ A composite is separate: a subclass of `Mcp::Composite` listed by its site modul
 
 ## Clients
 
-Claude Code, public endpoint. `/developers` prints this command with the real host, built from `Api::Host.base_url`; `<books host>` stands for it here:
+The instructions a member follows are on `/developers`, under "Connect by signing in" (claude.ai and the Claude apps, Claude Code, Codex), with the token route under "With a token instead". The page is edge-cached and identical for every visitor, so it never mentions the admin endpoint. The address must be used exactly as printed, with no trailing slash: an address ending in `/` is not the resource, and the client will not find the sign-in. Codex needs a recent CLI for remote servers, and `--url` is what makes `codex mcp add` register one.
+
+Claude Code with a token, public endpoint. `/developers` prints this command with the real host, built from `Api::Host.base_url`; `<books host>` stands for it here:
 
 ```
 export THE_GREATEST_TOKEN=tg_...
@@ -233,19 +235,38 @@ When a member's membership ends, the connection row stays but its effective scop
 - `config.x.api.oauth_register_per_minute` for registration, the tightest because the endpoint is open by design;
 - `config.x.api.oauth_token_per_minute` for the token endpoint.
 
+An IPv6 caller is counted per /64, not per address (an IPv4-mapped IPv6 address counts as the IPv4 one), in every per-IP window, because a single host usually controls a whole /64 and could otherwise rotate through addresses. Every token-endpoint answer is sent `no-store`, including the ones Doorkeeper's callbacks produce.
+
 Hosted connectors reach the server from a few addresses shared by many members, and a per-IP window would throttle them together. `config.x.api.connector_egress_ranges` lists the vendor-published ranges (Anthropic's two, with their sources in a comment), and `config.x.api.connector_range_per_minute` gives each window a larger budget keyed on the range instead of the address. Each range is its own key, so all Anthropic traffic shares one budget per window. This is a budget, not a skip: a full skip would hand anyone on those ranges an unbounded channel for junk tokens. Another vendor is one entry in each map. ChatGPT is not a goal, and its ranges are not configured. Per-account limits still apply after authentication.
 
 ### Edge for the discovery documents
 
 The discovery documents sit at the RFC-fixed `/.well-known/oauth-*` paths, outside `/api/`, so they do not inherit the edge's treatment of API paths, and a connector's backend cannot solve a challenge. A rule in the private Cloudflare repo gives them that treatment. It must be applied after this code is deployed and before the first claude.ai connection (`docs/launch-todo.md`, section 13). This repo records none of its details.
 
+### Connected apps
+
+`/developers/tokens` has a Connected apps section, rendered from `_connections.html.erb`. It lists the member's live connections (`OauthConnection.listed`): the app's name, the host it signs in through (`#redirect_hosts`), member or admin access, scopes, when it was approved and when it was last used. The page opens for anyone who can mint a token or has a live connection, so a member whose membership lapsed can still see and revoke what they connected. Creating and deleting personal tokens still needs a mintable scope (`require_mint_access!`).
+
+Revoke is `DELETE /developers/connections/:id`, handled by `Developers::ConnectionsController`. It needs sign-in but not membership. It finds the row through `current_user.oauth_connections.live`, so another member's id, or one already revoked, is a 404. It calls `Services::Oauth::Connections.revoke!` and answers with a Turbo Stream that replaces `#developers_connections`. The app's next request fails and it sends the member back through sign-in.
+
+### Pruning
+
+`Oauth::PruneJob` runs `Services::Oauth::Pruner` as the `oauth_prune` schedule, daily at 03:45. It deletes:
+
+- registered apps older than `oauth_unused_client_lifetime` (30 days) that have no connection row at all, meaning nobody ever finished signing in;
+- authorization codes older than `oauth_grant_retention` (1 day);
+- every token of a revoked connection;
+- tokens on a live connection created before its `approved_at`, which no longer matter.
+
+It keeps all connections, every live token, and revoked tokens created at or after a live connection's `approved_at`. Those are what reuse detection looks up: a replayed refresh token must still be found, or the replay would look like an unknown token and the connection would not be revoked. Do not use Doorkeeper's own cleanup task (`doorkeeper:db:cleanup`, `StaleRecordsCleaner`). It deletes revoked rows and breaks that detection.
+
 ### Increments
 
-Increments 1 (`/api/mcp`) and 2 (`/api/mcp/admin`, admin approval and the 30-day refresh limit) are built. Increment 3 adds Connected apps on `/developers/tokens` (a member sees and revokes connections, even after a lapse), a job that prunes registered clients with no grant after 30 days, and per-client connection instructions on `/developers`. Until then there is no page for revoking a connection.
+All three increments are built. Increment 1 is `/api/mcp`. Increment 2 is `/api/mcp/admin`, admin approval and the 30-day refresh limit. Increment 3 is Connected apps with Revoke, the daily prune, per-IPv6-/64 rate limiting, and the per-client sign-in instructions on `/developers`.
 
 ### Testing
 
-`test/controllers/oauth/` (metadata, registration, authorization), `test/integration/oauth/flow_test.rb` (the flow over HTTP: PKCE, rotation, reuse, lapse, audience binding), `test/lib/oauth/`, `test/lib/services/oauth/`, and the model tests for the four OAuth models. The Playwright specs `e2e/tests/books/oauth-authorize.spec.ts`, `account/oauth-authorize.spec.ts` and `member/oauth-authorize.spec.ts` run a real loopback listener to prove the browser lands on the callback with `code` and `state`. Acceptance (not automated): Claude Code and Codex connect by sign-in against the dev server, and claude.ai against production once the launch steps are done.
+`test/controllers/oauth/` (metadata, registration, authorization), `test/integration/oauth/flow_test.rb` (the flow over HTTP: PKCE, rotation, reuse, lapse, audience binding), `test/lib/oauth/`, `test/lib/services/oauth/`, `test/controllers/developers/connections_controller_test.rb` and `tokens_controller_test.rb` (Connected apps, Revoke, the page gate), `test/lib/services/oauth/pruner_test.rb` and `test/sidekiq/oauth/prune_job_test.rb`, the IPv6 cases in `test/lib/services/api/rate_limiter_test.rb`, and the model tests for the four OAuth models. The Playwright specs `e2e/tests/books/oauth-authorize.spec.ts`, `account/oauth-authorize.spec.ts` and `member/oauth-authorize.spec.ts` run a real loopback listener to prove the browser lands on the callback with `code` and `state`. `e2e/tests/books/member/connected-apps.spec.ts` connects an app and revokes it from `/developers/tokens`, and `e2e/tests/books/developers.spec.ts` checks the sign-in instructions carry the exact address. Acceptance (not automated): Claude Code and Codex connect by sign-in against the dev server, and claude.ai against production once the launch steps are done.
 
 ## Edge
 
@@ -261,6 +282,5 @@ The endpoints live under `/api/` so they get the edge's existing treatment of AP
 
 ## Not yet
 
-- **Connected apps and client pruning**: increment 3 of `docs/superpowers/specs/2026-11-02-mcp-oauth-design.md` (see "Signing in with OAuth").
 - **Music and games tools.** They need API operations with `x-mcp` blocks first, and the MCP routes added to those hosts.
 - **REST follow-ups** that tool users meet: book and author merges parse `dry_run` leniently (`null`, `""` and `0` mean a real merge, where category merge and delete return a 400), and the four protected categories can still be renamed, re-parented or retyped through the category PATCH. Until fixed, only the admin prompt guards against both.

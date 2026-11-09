@@ -146,6 +146,20 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "the books page explains connecting by sign-in, for each client" do
+    host! host_for(:books)
+
+    get developers_path
+
+    url = "https://dev-new.thegreatestbooks.org/api/mcp"
+    assert_select "h3#mcp-connect", 1
+    assert_select "#mcp-exact-url code", text: url
+    assert_select "pre#mcp-claude-code-oauth code", text: "claude mcp add --transport http --scope user the-greatest-books #{url}"
+    assert_select "pre#mcp-codex code", text: /codex mcp add the-greatest-books --url #{Regexp.escape(url)}\s+codex mcp login the-greatest-books/
+    assert_select "#mcp-revoke a[href=?]", developers_tokens_path
+    assert_select "#mcp-claude-apps", 1
+  end
+
   test "the MCP tool list is the catalogue, so it cannot drift" do
     host! host_for(:books)
 

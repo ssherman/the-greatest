@@ -71,6 +71,18 @@ test.describe('Books API developer pages, signed out', () => {
     await expect(page.locator('#mcp-tool-search_books')).toBeVisible();
   });
 
+  test('the documentation page gives sign-in instructions with the exact address', async ({ page }) => {
+    await page.goto('/developers');
+
+    const url = 'https://dev-new.thegreatestbooks.org/api/mcp';
+    await expect(page.locator('#mcp-claude-code-oauth')).toContainText(url);
+    await expect(page.locator('#mcp-codex')).toContainText(url);
+    for (const id of ['#mcp-claude-code-oauth', '#mcp-codex', '#mcp-exact-url']) {
+      const text = (await page.locator(id).textContent()) ?? '';
+      expect(text).not.toMatch(/\/api\/mcp\/(\s|$)/);
+    }
+  });
+
   // The copy a member reads before connecting. Pinned here, not in the
   // controller test: AGENTS.md keeps controller tests to behaviour.
   test('the MCP section says how tools differ from the endpoints and how to set the token', async ({ page }) => {
