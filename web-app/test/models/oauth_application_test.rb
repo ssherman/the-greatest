@@ -30,7 +30,7 @@ class OauthApplicationTest < ActiveSupport::TestCase
   test "destroying an application removes its connections" do
     application = oauth_applications(:claude_code)
 
-    assert_difference "OauthConnection.count", -1 do
+    assert_difference "OauthConnection.count", -2 do
       application.destroy!
     end
   end

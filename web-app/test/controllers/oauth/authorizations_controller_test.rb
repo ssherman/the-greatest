@@ -297,11 +297,11 @@ module Oauth
       assert_redirected_to_client(CLAUDE_URI, error: "invalid_target")
     end
 
-    test "the admin endpoint is not a resource in this increment" do
+    test "the admin endpoint is a resource" do
       sign_in_as(@member, stub_auth: true)
 
       get "/oauth/authorize", params: authorize_params(resource: "https://#{BOOKS_HOST}/api/mcp/admin")
-      assert_redirected_to_client(CLAUDE_URI, error: "invalid_target")
+      assert_response :success
     end
 
     test "a non-string resource is refused rather than guessed at" do
@@ -390,7 +390,7 @@ module Oauth
       assert_difference -> { OauthConnection.count }, 1 do
         post "/oauth/authorize", params: authorize_params(
           application: @claude_code, redirect_uri: "http://localhost:61000/callback",
-          scope: "books:read books:admin:merge", **forged
+          scope: "books:read books:admin:merge", resource: "https://#{BOOKS_HOST}/api/mcp", **forged
         )
       end
 

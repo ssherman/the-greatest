@@ -46,7 +46,7 @@ module Oauth
       assert_equal ["authorization_code", "refresh_token"], body["grant_types_supported"]
       assert_equal ["S256"], body["code_challenge_methods_supported"]
       assert_equal ["none"], body["token_endpoint_auth_methods_supported"]
-      assert_equal ["books:read", "offline_access"], body["scopes_supported"]
+      assert_equal ["books:read", "books:admin:read", "books:admin:write", "books:admin:merge", "offline_access"], body["scopes_supported"]
     end
 
     test "authorization server metadata is public JSON cacheable for an hour" do

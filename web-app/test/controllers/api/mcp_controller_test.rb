@@ -221,20 +221,67 @@ module Api
         response.headers["WWW-Authenticate"]
     end
 
-    test "the admin endpoint's 401 keeps the bare Bearer challenge" do
+    test "the admin endpoint's 401 names the admin resource metadata and scopes" do
       rpc("tools/list", token: nil, path: "/api/mcp/admin")
 
       assert_response :unauthorized
-      assert_equal "Bearer", response.headers["WWW-Authenticate"]
+      assert_equal %(Bearer resource_metadata="#{RESOURCE_METADATA}/admin", scope="books:admin:read books:admin:write books:admin:merge"),
+        response.headers["WWW-Authenticate"]
     end
 
-    test "an OAuth token is refused on the admin endpoint" do
+    test "a live admin_mcp token lists the admin tools" do
+      secret, = issue_oauth_token(oauth_connections(:admin_mcp))
+
+      rpc("tools/list", token: secret, path: "/api/mcp/admin")
+
+      assert_response :success
+      assert_includes json.dig("result", "tools").map { |tool| tool["name"] }, "merge_book"
+    end
+
+    test "an admin_mcp token can dry-run a merge" do
+      secret, = issue_oauth_token(oauth_connections(:admin_mcp))
+      source = books_books(:crime_and_punishment)
+
+      call_tool("merge_book", {id: @war_and_peace.id, source_id: source.id, dry_run: true}, token: secret, path: "/api/mcp/admin")
+
+      assert_response :success
+      assert_nil json["error"]
+      assert_not json.dig("result", "isError")
+      assert_equal true, tool_text.dig("meta", "dry_run")
+      assert Books::Book.exists?(source.id)
+    end
+
+    test "a viewer's read-only admin connection can search but cannot call merge_book" do
+      viewer = users(:books_viewer_user)
+      connection = OauthConnection.create!(user: viewer, application: oauth_applications(:claude_code),
+        resource: "mcp_admin", scopes: ["books:admin:read"], approved_at: Time.current)
+      secret, = issue_oauth_token(connection)
+
+      call_tool("search_admin_categories", {q: "fiction"}, token: secret, path: "/api/mcp/admin")
+      assert_response :success
+      assert_not json.dig("result", "isError")
+
+      call_tool("merge_book", {id: @war_and_peace.id, source_id: books_books(:crime_and_punishment).id, dry_run: true}, token: secret, path: "/api/mcp/admin")
+      assert_equal(-32602, json.dig("error", "code"))
+    end
+
+    test "a member OAuth token is refused on the admin endpoint with the admin challenge" do
       secret, = issue_oauth_token(oauth_connections(:member_mcp))
 
       rpc("tools/list", token: secret, path: "/api/mcp/admin")
 
       assert_response :unauthorized
-      assert_equal %(Bearer error="invalid_token"), response.headers["WWW-Authenticate"]
+      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}/admin", scope="books:admin:read books:admin:write books:admin:merge"),
+        response.headers["WWW-Authenticate"]
+    end
+
+    test "an admin OAuth token is refused on the member endpoint" do
+      secret, = issue_oauth_token(oauth_connections(:admin_mcp))
+
+      rpc("tools/list", token: secret)
+
+      assert_response :unauthorized
+      assert_equal "invalid_token", json["code"]
     end
 
     test "a non-member is a 403 membership_required" do

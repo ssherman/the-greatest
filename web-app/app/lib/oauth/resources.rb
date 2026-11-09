@@ -8,14 +8,20 @@ module Oauth
   # different one, so a token for /api/mcp is worthless on /api/mcp/admin and on
   # every /api/v1/* route (those map to no resource at all).
   #
-  # Increment 1 registers `mcp` only. `admin` is carried so a later increment
-  # adds its endpoint as one more entry here.
+  # Two entries: `mcp` (the member endpoint) and `mcp_admin` (the admin one,
+  # which offers the admin scopes). A token for one is a 401 on the other.
   #
   # Scopes are built from the domain, as Api::McpController#required_scope
   # builds the scope it checks, so nothing here names a site.
   module Resources
     Resource = Struct.new(:key, :path, :admin, keyword_init: true) do
-      def scopes(domain) = ["#{domain}:read"]
+      # An admin resource offers every admin scope of the domain, in registry
+      # order; a member resource offers the domain's read scope.
+      def scopes(domain)
+        return ["#{domain}:read"] unless admin
+
+        ::Api::Scopes.all.select { |scope| ::Api::Scopes.admin?(scope) && scope.start_with?("#{domain}:") }
+      end
 
       def url(base_url) = base_url + path
 
@@ -25,7 +31,8 @@ module Oauth
     end
 
     ALL = {
-      "mcp" => Resource.new(key: "mcp", path: "/api/mcp", admin: false)
+      "mcp" => Resource.new(key: "mcp", path: "/api/mcp", admin: false),
+      "mcp_admin" => Resource.new(key: "mcp_admin", path: "/api/mcp/admin", admin: true)
     }.freeze
 
     def self.keys = ALL.keys
@@ -60,6 +67,17 @@ module Oauth
       asked = Array(requested) - ["offline_access"]
       asked = offered if asked.empty?
       offered & asked & ::Api::Scopes.mintable_by(user)
+    end
+
+    # What a connection's token may do right now: the connection's scopes cut
+    # down to what its user may hold today, or nothing when that leaves none of
+    # the scopes its resource offers. A demoted admin's admin connection is
+    # therefore empty even though `effective` still implies a member's read scope,
+    # so the client gets a 401 and signs in again rather than a 403 (D12).
+    def self.usable_scopes(connection, domain)
+      effective = ::Api::Scopes.effective(connection.scopes, connection.user)
+      offered = fetch(connection.resource).scopes(domain)
+      effective.intersect?(offered) ? effective : []
     end
 
     def self.all_scopes(domain) = ALL.values.flat_map { |resource| resource.scopes(domain) }.uniq
