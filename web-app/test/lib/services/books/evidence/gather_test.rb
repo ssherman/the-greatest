@@ -139,10 +139,10 @@ module Services
         end
 
         test "an unavailable Wikidata service propagates and writes nothing" do
-          ResolveWikidataWork.expects(:call).raises(Wikidata::Exceptions::Unavailable.new("down", retry_after: 60))
+          ResolveWikidataWork.expects(:call).raises(::Wikidata::Exceptions::Unavailable.new("down", retry_after: 60))
 
           assert_no_difference -> { Enrichment.count } do
-            assert_raises(Wikidata::Exceptions::Unavailable) { gather }
+            assert_raises(::Wikidata::Exceptions::Unavailable) { gather }
           end
         end
 

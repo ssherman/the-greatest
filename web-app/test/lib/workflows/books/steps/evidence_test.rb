@@ -60,6 +60,14 @@ module Workflows
           assert_equal "applied", call(Evidence.new(reuse_fresh: true)).outcome
         end
 
+        test "reuse_fresh gathers anyway when the run's regather option is true" do
+          row = evidence_row("schema_version" => ::Services::Books::Evidence::Gather::SCHEMA_VERSION, "sources_failed" => [], "wikidata_qid" => nil)
+          ::Services::Books::Evidence::Gather.expects(:call).with(book: @book).returns(stub(data: {enrichment: row}))
+          run = BookEnrichment.start(@book, initiated_by: "test", options: {"regather" => true})
+
+          Evidence.new(reuse_fresh: true).call(step: run.step(:evidence), run: run, target: @book)
+        end
+
         test "the default adapter gathers even when a fresh row exists" do
           row = evidence_row("schema_version" => ::Services::Books::Evidence::Gather::SCHEMA_VERSION, "sources_failed" => [])
           ::Services::Books::Evidence::Gather.expects(:call).returns(stub(data: {enrichment: row}))
