@@ -28,11 +28,58 @@ fi
 # must then refuse, or it would fill the OS disk instead.
 mountpoint -q "$WD_DATA" || fail "$WD_DATA is not mounted"
 
+serve() {
+  # Called under `|| log`, where set -e is off: fail explicitly.
+  printf '%s\n' "$1" >"$WD_DATA/current-version.tmp" || return 1
+  mv "$WD_DATA/current-version.tmp" "$WD_DATA/current-version" || return 1
+  WD_DATA_VERSION="$1" "$COMPOSE" up -d wikidata
+}
+serving() { curl -fsS -m 10 "$API_URL/version" | jq -r '.dump_date'; }
+wait_for() {
+  local deadline=$((SECONDS + PROMOTE_TIMEOUT_S))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if [ "$(serving 2>/dev/null || true)" = "$1" ]; then return 0; fi
+    sleep "$POLL_S"
+  done
+  return 1
+}
+
+# Serve $1 (a passing version), going back to the one served now if the API will not take it.
+# Used after a build and, with no build, when a passing version was never served.
+promote() {
+  local new="$1" old
+  old="$(cat "$WD_DATA/current-version" 2>/dev/null || true)"
+  serve "$new" || log "compose up on $new failed"
+  if ! wait_for "$new"; then
+    if [ -n "$old" ]; then
+      serve "$old" || log "compose up on $old failed"
+      wait_for "$old" || log "the API did not come back on $old either"
+    else
+      # Leaving current-version would make every deploy start a crash-looping API.
+      rm -f "$WD_DATA/current-version"
+      "$COMPOSE" stop wikidata || true
+    fi
+    fail "$new passed its gates but the API did not serve it; back on ${old:-nothing}"
+  fi
+  versions prune --keep 2 --current "$new" || log "prune failed; old versions left on disk"
+  hc "" "serving $new"
+}
+
 hc start
 action="$(versions next-action)" || fail "could not ask Wikidata for the latest dump"
 log "next action: $action"
 case "$action" in
-  "skip "*) hc "" "$action"; exit 0 ;;
+  "skip "*)
+    # "Built" is not "served": a build can pass while promotion fails, and that date then
+    # stays passing. Retry the promotion here, without rebuilding.
+    newest="$(versions status 2>/dev/null | jq -r '.passing[-1] // empty' 2>/dev/null || true)"
+    served="$(cat "$WD_DATA/current-version" 2>/dev/null || true)"
+    if [ -n "$newest" ] && [ "$newest" != "$served" ]; then
+      log "$newest passed its gates but is not served (serving ${served:-nothing}); retrying promotion"
+      promote "$newest"
+      exit 0
+    fi
+    hc "" "$action"; exit 0 ;;
   "build "*) date="${action#build }" ;;
   *) fail "unexpected next-action output: $action" ;;
 esac
@@ -74,36 +121,4 @@ fi
 
 new="$(jq -r '.passing[-1] // empty' <<<"$status")"
 [ -n "$new" ] || fail "the build of $date exited 0 but no passing version exists"
-old="$(cat "$WD_DATA/current-version" 2>/dev/null || true)"
-
-serve() {
-  # Called under `|| log`, where set -e is off: fail explicitly.
-  printf '%s\n' "$1" >"$WD_DATA/current-version.tmp" || return 1
-  mv "$WD_DATA/current-version.tmp" "$WD_DATA/current-version" || return 1
-  WD_DATA_VERSION="$1" "$COMPOSE" up -d wikidata
-}
-serving() { curl -fsS -m 10 "$API_URL/version" | jq -r '.dump_date'; }
-wait_for() {
-  local deadline=$((SECONDS + PROMOTE_TIMEOUT_S))
-  while [ "$SECONDS" -lt "$deadline" ]; do
-    if [ "$(serving 2>/dev/null || true)" = "$1" ]; then return 0; fi
-    sleep "$POLL_S"
-  done
-  return 1
-}
-
-serve "$new" || log "compose up on $new failed"
-if ! wait_for "$new"; then
-  if [ -n "$old" ]; then
-    serve "$old" || log "compose up on $old failed"
-    wait_for "$old" || log "the API did not come back on $old either"
-  else
-    # Leaving current-version would make every deploy start a crash-looping API.
-    rm -f "$WD_DATA/current-version"
-    "$COMPOSE" stop wikidata || true
-  fi
-  fail "$new passed its gates but the API did not serve it; back on ${old:-nothing}"
-fi
-
-versions prune --keep 2 --current "$new" || log "prune failed; old versions left on disk"
-hc "" "serving $new"
+promote "$new"

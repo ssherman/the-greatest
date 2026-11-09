@@ -42,6 +42,25 @@ t_skip_built() {
   setup; serving 2026-08-31; export NEXT_ACTION="skip built 2026-08-31"
   refresh && ! called '^compose run --rm --no-deps -T wikidata-build$' && called 'hc\.test/refresh$'
 }
+t_skip_built_but_unserved_promotes_without_building() {
+  setup; serving 2026-08-31; export NEXT_ACTION="skip built 2026-09-30"
+  status_json '{"passing":["2026-08-31","2026-09-30"],"failed":[],"incomplete":[]}'
+  refresh && [ "$(cat "$WD_DATA/current-version")" = 2026-09-30 ] &&
+    ! called '^compose run --rm --no-deps -T wikidata-build$' &&
+    called 'versions prune --keep 2 --current 2026-09-30' && called 'hc\.test/refresh$' && ! called 'refresh/fail'
+}
+t_skip_built_unserved_promotion_fails_again() {
+  setup; serving 2026-08-31; export NEXT_ACTION="skip built 2026-09-30" BROKEN_VERSION=2026-09-30
+  status_json '{"passing":["2026-08-31","2026-09-30"],"failed":[],"incomplete":[]}'
+  ! refresh && [ "$(cat "$WD_DATA/current-version")" = 2026-08-31 ] &&
+    [ "$(command -p cat "$SANDBOX/serving")" = 2026-08-31 ] && called 'refresh/fail' &&
+    ! called 'versions prune --keep' && ! called '^compose run --rm --no-deps -T wikidata-build$'
+}
+t_skip_built_and_served_touches_nothing() {
+  setup; serving 2026-09-30; export NEXT_ACTION="skip built 2026-09-30"
+  status_json '{"passing":["2026-08-31","2026-09-30"],"failed":[],"incomplete":[]}'
+  refresh && ! called '^compose up' && ! called '^compose run --rm --no-deps -T wikidata-build$' && ! called 'refresh/fail'
+}
 t_skip_failed() {
   setup; serving 2026-08-31; export NEXT_ACTION="skip failed 2026-09-30"
   refresh && ! called '^compose run --rm --no-deps -T wikidata-build$' && ! called 'refresh/fail'
@@ -97,6 +116,9 @@ t_unreachable() {
 
 check "a dump already built is a no-op that still checks in" t_skip_built
 check "a dump whose build already failed is a quiet skip, not a rebuild" t_skip_failed
+check "a built but unserved version is promoted on skip, without a build" t_skip_built_but_unserved_promotes_without_building
+check "a skip whose promotion fails again rolls back and fails" t_skip_built_unserved_promotion_fails_again
+check "a skip with the newest passing version already served touches nothing" t_skip_built_and_served_touches_nothing
 check "a passing build is promoted and old versions pruned" t_promotes
 check "failed gates keep the old version and name the gate" t_gate_failure
 check "a build that died keeps the old version" t_crash
