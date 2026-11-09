@@ -1,0 +1,45 @@
+<%# Apps the member signed in to over OAuth (AI assistants and the like). The
+    root id is the Turbo Stream target a revoke replaces. %>
+<section id="developers_connections" class="mb-10">
+  <h2 class="text-xl font-semibold mb-3">Connected apps</h2>
+  <p class="text-base-content/70 mb-3">
+    These are AI assistants and other apps you signed in to. Revoking one signs it out.
+  </p>
+  <% if connections.empty? %>
+    <p class="text-base-content/70">No apps are connected.</p>
+  <% else %>
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>App</th>
+            <th>Signs in through</th>
+            <th>Access</th>
+            <th>Scopes</th>
+            <th>Approved</th>
+            <th>Last used</th>
+            <th><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% connections.each do |connection| %>
+            <% resource = ::Oauth::Resources::ALL[connection.resource] %>
+            <tr id="<%= dom_id(connection) %>">
+              <td class="[overflow-wrap:anywhere]"><%= connection.application.name %></td>
+              <td class="[overflow-wrap:anywhere]"><%= connection.redirect_hosts.join(", ") %></td>
+              <td><%= resource ? (resource.admin ? "Admin" : "Member") : connection.resource %></td>
+              <td><%= connection.scopes.join(", ") %></td>
+              <td><%= connection.approved_at.to_date.to_fs(:long) %></td>
+              <td><%= connection.last_used_at ? "#{time_ago_in_words(connection.last_used_at)} ago" : "Never" %></td>
+              <td>
+                <%= button_to "Revoke", developers_connection_path(connection), method: :delete,
+                      class: "btn btn-sm btn-outline", "aria-label": "Revoke #{connection.application.name}",
+                      form: {data: {turbo_confirm: "Revoke #{connection.application.name}? It is signed out immediately and has to sign in again."}} %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</section>

@@ -26,7 +26,9 @@ module Oauth
     }.freeze
 
     prepend_before_action :enforce_token_rate_limit!
-    before_action :prevent_caching
+    # Prepended after the rate limit so it runs first: Doorkeeper's own refusals
+    # (before any of our callbacks) are `no-store` too.
+    prepend_before_action :prevent_caching
 
     def create
       result = ::Services::Oauth::TokenGate.call(params: params, domain: current_domain)
@@ -42,7 +44,6 @@ module Oauth
       apply_rate_limit_headers(verdict)
       return unless verdict.exceeded?
 
-      prevent_caching
       render_rate_limited(verdict)
     end
 

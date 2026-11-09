@@ -1,0 +1,6 @@
+<%# Replace the whole section so the empty state shows when the last app goes.
+    #developers_new_token is deliberately NOT touched: a revoke must never wipe
+    a secret the member has not copied yet. %>
+<%= turbo_stream.replace "developers_connections" do %>
+  <%= render "developers/tokens/connections", connections: @connections %>
+<% end %>
