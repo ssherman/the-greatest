@@ -12,7 +12,8 @@ module Oauth
   #      URL, so the request comes back with its query intact;
   #   3. a request Doorkeeper refuses (bad scope, `plain` PKCE): an error redirect;
   #   4. a `resource` this server does not know: `invalid_target` on the redirect;
-  #   5. nothing grantable (not a member): the ineligible page, whose Return form
+  #   5. nothing grantable (no admin role, not a member, or a scope the endpoint
+  #      does not offer): the refusal page, whose Return form
   #      is the deny action;
   #   6. the approval screen.
   #
@@ -104,11 +105,23 @@ module Oauth
         current_user, @resource, Current.domain, requested: pre_auth.scopes.to_a
       )
       if @scopes.empty?
+        @refusal = refusal_reason
         render :ineligible, status: strict ? :forbidden : :ok
         return true
       end
 
       false
+    end
+
+    # Why nothing is grantable (Q-d). Holding none of the resource's scopes is
+    # the account's problem (an admin role, or membership); holding some but
+    # having asked for others means the request was for something this
+    # endpoint does not offer.
+    def refusal_reason
+      held = @resource.scopes(Current.domain) & ::Api::Scopes.mintable_by(current_user)
+      return :scope_unavailable if held.any?
+
+      @resource.admin ? :admin_required : :membership_required
     end
 
     def describe_request

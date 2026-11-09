@@ -16,6 +16,10 @@
         </ul>
       </div>
 
+      <% if @resource.admin %>
+        <p class="text-sm" data-testid="oauth-admin-reapproval">Admin access must be approved again after 30 days.</p>
+      <% end %>
+
       <p class="text-sm text-base-content/70">
         Approve only if you just started this from that app.
       </p>
