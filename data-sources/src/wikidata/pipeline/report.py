@@ -16,13 +16,13 @@ def now() -> str:
     return datetime.datetime.now(datetime.UTC).isoformat()
 
 
-def table_stats(paths: WikidataPaths) -> dict:
-    """Stats of the promoted tables (call after promotion)."""
+def table_stats(paths: WikidataPaths, *, staged: bool = False) -> dict:
+    """Stats of the tables, promoted or (staged=True) still in _staging."""
     con = duckdb.connect(database=":memory:")
     try:
         out = {}
         for name in TABLES:
-            target = paths.table(name)
+            target = paths.staged(name) if staged else paths.table(name)
             (rows,) = con.execute(f"SELECT count(*) FROM '{target}'").fetchone()
             out[name] = {"rows": rows, "bytes": target.stat().st_size}
         return out

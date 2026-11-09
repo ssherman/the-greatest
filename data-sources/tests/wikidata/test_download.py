@@ -109,3 +109,21 @@ def test_redirect_sources_come_from_the_latest_directory(tmp_path):
     assert redirect.name == "wikidatawiki-latest-redirect.sql.gz"
     assert page.name == "wikidatawiki-latest-page.sql.gz"
     assert b"redirect" in redirect.read_bytes() and b"page" in page.read_bytes()
+
+
+def test_a_verified_existing_dump_is_returned_without_any_request(tmp_path):
+    (tmp_path / "wikidata-20261105-all.json.gz").write_bytes(PAYLOAD)
+
+    def no_requests(request):
+        raise AssertionError(f"unexpected request {request.url}")
+
+    with httpx.Client(transport=httpx.MockTransport(no_requests)) as client:
+        path = download(dump_for(), tmp_path, client=client)
+    assert path.read_bytes() == PAYLOAD
+
+
+def test_a_corrupt_existing_dump_is_deleted_and_refetched(tmp_path):
+    (tmp_path / "wikidata-20261105-all.json.gz").write_bytes(b"junk")
+    with httpx.Client(transport=httpx.MockTransport(RangeServer())) as client:
+        path = download(dump_for(), tmp_path, client=client)
+    assert path.read_bytes() == PAYLOAD

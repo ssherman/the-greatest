@@ -3,8 +3,9 @@
     python -m wikidata.pipeline.versions next-action|status|prune --root /data
 
 A passing version's manifest.json records `gates_passed: true`. A build that fails its gates
-removes its version directory (the staging inside it too) and leaves `<root>/failed/<date>.json`,
-so the date is never rebuilt in a loop. A version directory with no manifest is a build that
+deletes its staged tables but keeps build_report.json and manifest.json (`gates_passed: false`),
+so the refresh script can name the failed gates and the date is never rebuilt in a loop. A
+failed directory is never served. A version directory with no manifest is a build that
 never finished: neither passing nor failed, rebuilt and eventually pruned.
 """
 
@@ -27,13 +28,9 @@ class VersionStatus:
     incomplete: list[str]
 
 
-def failed_marker(root: Path, dump_date: str) -> Path:
-    return root / "failed" / f"{dump_date}.json"
-
-
 def read_status(root: Path) -> VersionStatus:
     passing: list[str] = []
-    failed: set[str] = set()
+    failed: list[str] = []
     incomplete: list[str] = []
     versions_dir = root / "versions"
     if versions_dir.is_dir():
@@ -48,11 +45,8 @@ def read_status(root: Path) -> VersionStatus:
             elif manifest.get("gates_passed") is True:
                 passing.append(directory.name)
             else:
-                failed.add(directory.name)
-    failed_dir = root / "failed"
-    if failed_dir.is_dir():
-        failed.update(p.stem for p in failed_dir.glob("*.json"))
-    return VersionStatus(passing=passing, failed=sorted(failed), incomplete=incomplete)
+                failed.append(directory.name)
+    return VersionStatus(passing=passing, failed=failed, incomplete=incomplete)
 
 
 def decide(latest: str, status: VersionStatus) -> str:
@@ -75,7 +69,7 @@ def prune(root: Path, *, keep: int, current: str | None) -> list[Path]:
         return newest_built is not None and date < newest_built
 
     doomed = [d for d in status.passing if d not in keep_versions]
-    doomed += [d for d in status.incomplete if superseded(d) and d not in keep_versions]
+    doomed += [d for d in status.failed + status.incomplete if superseded(d)]
 
     removed: list[Path] = []
     for date in sorted(doomed):
@@ -102,7 +96,11 @@ def next_action_command(root: Path = typer.Option(..., "--root")) -> None:  # no
 @app.command("status")
 def status_command(root: Path = typer.Option(..., "--root")) -> None:  # noqa: B008
     status = read_status(root)
-    typer.echo(json.dumps({"passing": status.passing, "failed": status.failed}))
+    typer.echo(
+        json.dumps(
+            {"passing": status.passing, "failed": status.failed, "incomplete": status.incomplete}
+        )
+    )
 
 
 @app.command("prune")

@@ -5,7 +5,7 @@
 Without --dump it discovers and downloads the newest dump and the redirect SQL. Distill writes
 to `_staging`; the gates read it there; only a passing build promotes the tables into the
 version directory and writes manifest.json (the completion marker, written last). A failing
-build deletes the version directory and records `<root>/failed/<date>.json`, then exits 1.
+build deletes the version directory and exits 1.
 
 distill uses spawn multiprocessing, so this module must be run as `-m` / `__main__`.
 """
@@ -18,20 +18,18 @@ from pathlib import Path
 import httpx
 import typer
 
-from common.gates import GateResult
 from wikidata.pipeline import download as dl
 from wikidata.pipeline.config import KeptConfig
 from wikidata.pipeline.distill import distill
 from wikidata.pipeline.gates import gates_passed, run_gates
 from wikidata.pipeline.paths import TABLES, WikidataPaths
 from wikidata.pipeline.report import (
-    gate_dicts,
     manifest_dict,
     table_stats,
     write_build_report,
     write_manifest,
 )
-from wikidata.pipeline.versions import failed_marker, read_status
+from wikidata.pipeline.versions import read_status
 
 app = typer.Typer(add_completion=False)
 
@@ -41,22 +39,11 @@ class BuildFailed(RuntimeError):
 
 
 def _previous_counts(root: Path, dump_date: str) -> dict | None:
-    earlier = [d for d in read_status(root).passing if d != dump_date]
+    earlier = [d for d in read_status(root).passing if d < dump_date]
     if not earlier:
         return None
     manifest = json.loads((root / "versions" / max(earlier) / "manifest.json").read_text())
     return manifest.get("tables")
-
-
-def _record_failure(paths: WikidataPaths, root: Path, dump_date: str, results: list[GateResult]):
-    marker = failed_marker(root, dump_date)
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(
-        json.dumps(
-            {"dump_date": dump_date, "gates_passed": False, "gates": gate_dicts(results)}, indent=2
-        )
-    )
-    shutil.rmtree(paths.version_dir, ignore_errors=True)
 
 
 def build(
@@ -99,7 +86,6 @@ def build(
     if dump_date in read_status(root).passing:
         raise typer.BadParameter(f"{dump_date} is already built")
     shutil.rmtree(paths.version_dir, ignore_errors=True)
-    failed_marker(root, dump_date).unlink(missing_ok=True)
 
     typer.echo(f"building {dump_date} in {paths.version_dir}")
     started = time.time()
@@ -113,7 +99,17 @@ def build(
         typer.echo(f"  gate {result.name}: {result.status} -- {result.detail}")
 
     if not gates_passed(results):
-        _record_failure(paths, root, dump_date, results)
+        # Keep the report and a gates_passed=false manifest (the refresh script reads the
+        # failed gate names from build_report.json); drop the tables to free the disk.
+        write_build_report(
+            paths,
+            dump_date=dump_date,
+            results=results,
+            timings=timings,
+            tables=table_stats(paths, staged=True),
+        )
+        write_manifest(paths, manifest_dict(dump_date, results, counts))
+        shutil.rmtree(paths.staging_dir, ignore_errors=True)
         raise BuildFailed(f"quality gates failed for {dump_date}")
 
     for name in TABLES:

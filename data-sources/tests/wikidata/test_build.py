@@ -44,13 +44,17 @@ def test_the_fixture_build_writes_a_passing_manifest_and_all_six_tables(tmp_path
     assert read_status(tmp_path).passing == ["2026-11-05"]
 
 
-def test_a_gate_failure_exits_1_leaves_no_version_dir_and_records_the_date(tmp_path, monkeypatch):
+def test_a_gate_failure_keeps_report_and_failed_manifest_but_no_tables(tmp_path, monkeypatch):
     monkeypatch.setattr(
         build_module, "run_gates", lambda *a, **k: [GateResult("row_counts", "fail", "forced")]
     )
     with pytest.raises(BuildFailed):
         run_build(tmp_path)
-    assert not WikidataPaths(root=tmp_path, dump_date="2026-11-05").version_dir.exists()
+    paths = WikidataPaths(root=tmp_path, dump_date="2026-11-05")
+    assert json.loads(paths.manifest_path.read_text())["gates_passed"] is False
+    report = json.loads(paths.report_path.read_text())
+    assert [g["name"] for g in report["gates"] if g["status"] == "fail"] == ["row_counts"]
+    assert list(paths.version_dir.rglob("*.parquet")) == []
     assert read_status(tmp_path).failed == ["2026-11-05"]
 
     result = runner.invoke(
@@ -95,3 +99,13 @@ def test_without_dump_it_discovers_downloads_and_deletes_the_dump(tmp_path):
         manifest = build(root=tmp_path, memory_limit="1GB", threads=2, fixture=True, client=client)
     assert manifest["dump_date"] == "2026-11-05"
     assert not (tmp_path / "dumps" / "2026-11-05" / "wikidata-20261105-all.json.gz").exists()
+
+
+def test_previous_counts_ignore_later_versions(tmp_path):
+    for date, rows in (("2026-11-01", 10), ("2026-11-20", 99)):
+        directory = tmp_path / "versions" / date
+        directory.mkdir(parents=True)
+        (directory / "manifest.json").write_text(
+            json.dumps({"gates_passed": True, "tables": {"items": rows}})
+        )
+    assert build_module._previous_counts(tmp_path, "2026-11-05") == {"items": 10}

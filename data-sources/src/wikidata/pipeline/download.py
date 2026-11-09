@@ -110,6 +110,14 @@ def _fetch_part(client: httpx.Client, url: str, part: Path, start: int, end: int
         raise DownloadError(f"{part.name}: short read, expected {wanted} bytes")
 
 
+def _md5_of(path: Path) -> str:
+    digest = hashlib.md5()  # noqa: S324 - integrity check against Wikimedia's md5
+    with path.open("rb") as src:
+        while chunk := src.read(CHUNK):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def download(
     dump: Dump, dest_dir: Path, *, client: httpx.Client, connections: int = MAX_CONNECTIONS
 ) -> Path:
@@ -117,6 +125,11 @@ def download(
         raise ValueError(f"connections must be 1..{MAX_CONNECTIONS}, got {connections}")
     dest_dir.mkdir(parents=True, exist_ok=True)
     target = dest_dir / dump.url.rsplit("/", 1)[1]
+    if target.exists():
+        # A rerun after a failed distill: keep a verified copy, never hold two.
+        if _md5_of(target) == dump.md5:
+            return target
+        target.unlink()
     size = _size(client, dump.url)
     step = -(-size // connections)
     ranges = [
