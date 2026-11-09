@@ -209,7 +209,7 @@ The authenticator tries a personal token first, because `tg_...` is recognised b
 
 ### The admin endpoint
 
-`mcp_admin` offers the domain's admin scopes (on books `books:admin:read`, `books:admin:write`, `books:admin:merge`), limited to what the user may mint, so an admin holding only `books:admin:read` is granted only that scope and a write tool call is a 403 `insufficient_scope`. The principal carries the full effective set, so admin tools that dispatch to `books:read` endpoints still work. The 401 challenge on `/api/mcp/admin` carries its own `resource_metadata` URL and the admin scopes.
+`mcp_admin` offers the domain's admin scopes (on books `books:admin:read`, `books:admin:write`, `books:admin:merge`), limited to what the user may mint, so an admin holding only `books:admin:read` is granted only that scope. The write tools are not listed for that connection, so calling one is a JSON-RPC -32602 ("Tool not found"), and the REST controller behind them enforces the scope again. The principal carries the full effective set, so admin tools that dispatch to `books:read` endpoints still work. The 401 challenge on `/api/mcp/admin` carries its own `resource_metadata` URL and the admin scopes.
 
 Admin approvals expire for refresh after `config.x.api.oauth_admin_approval_lifetime` (30 days, `config/initializers/api.rb`), counted from `approved_at`. Past it a refresh is `invalid_grant` and the connection is not revoked: the admin signs in again, and approving resets `approved_at`. Exactly 30 days is still allowed. The limit applies to refresh only; an access token already issued lives out its hour. A demoted admin's refresh is `invalid_grant` and revokes the connection, and promoting the user again does not revive it.
 

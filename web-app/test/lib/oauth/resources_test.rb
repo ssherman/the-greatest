@@ -73,6 +73,13 @@ module Oauth
       assert_equal ["books:read"], Resources.usable_scopes(oauth_connections(:member_mcp), :books)
     end
 
+    test "usable scopes are empty for a connection whose resource left the registry" do
+      connection = oauth_connections(:member_mcp)
+      connection.update_columns(resource: "retired")
+
+      assert_equal [], Resources.usable_scopes(connection, :books)
+    end
+
     test "usable scopes are empty when the member lost their membership" do
       users(:regular_user).memberships.update_all(status: :unpaid)
 

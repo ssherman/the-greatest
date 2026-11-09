@@ -83,7 +83,7 @@ module Services
       end
 
       def admin_approval_expired?(connection)
-        return false unless ::Oauth::Resources.fetch(connection.resource).admin
+        return false unless ::Oauth::Resources::ALL[connection.resource.to_s]&.admin
 
         connection.approved_at < Rails.application.config.x.api.oauth_admin_approval_lifetime.ago
       end

@@ -81,6 +81,18 @@ module Services
         assert_nil connection.reload.revoked_at
       end
 
+      test "a refresh for a connection whose resource left the registry is invalid_grant and revokes it" do
+        connection = oauth_connections(:admin_mcp)
+        _, refresh = issue_oauth_token(connection)
+        connection.update_columns(resource: "retired")
+
+        result = refresh_gate(refresh)
+
+        assert_not result.success?
+        assert_equal [:invalid_grant], result.errors
+        assert connection.reload.revoked?
+      end
+
       test "a member connection refreshes long after 30 days" do
         _, refresh = issue
 

@@ -76,7 +76,10 @@ module Oauth
     # so the client gets a 401 and signs in again rather than a 403 (D12).
     def self.usable_scopes(connection, domain)
       effective = ::Api::Scopes.effective(connection.scopes, connection.user)
-      offered = fetch(connection.resource).scopes(domain)
+      resource = ALL[connection.resource.to_s]
+      return [] unless resource
+
+      offered = resource.scopes(domain)
       effective.intersect?(offered) ? effective : []
     end
 
