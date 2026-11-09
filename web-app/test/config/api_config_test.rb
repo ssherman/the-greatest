@@ -52,4 +52,11 @@ class ApiConfigTest < ActiveSupport::TestCase
     assert_equal per_ip.keys.sort, budgets.keys.sort
     budgets.each { |window, limit| assert_operator limit, :>, per_ip.fetch(window) }
   end
+
+  test "the admin approval lifetime is a positive duration" do
+    lifetime = Rails.application.config.x.api.oauth_admin_approval_lifetime
+
+    assert_kind_of ActiveSupport::Duration, lifetime
+    assert_operator lifetime, :>, 0
+  end
 end
