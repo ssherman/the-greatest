@@ -117,10 +117,22 @@ module Services
         if (range = connector_range_for(ip))
           ["#{window}:range:#{range}", config.connector_range_per_minute.fetch(window)]
         elsif window == :unauthenticated
-          ["anon:#{ip}", per_ip_limit]
+          ["anon:#{subject_address(ip)}", per_ip_limit]
         else
-          ["#{window}:ip:#{ip}", per_ip_limit]
+          ["#{window}:ip:#{subject_address(ip)}", per_ip_limit]
         end
+      end
+
+      # One host can rotate through a whole /64, so a per-address window would
+      # not bind an IPv6 caller: count the /64 instead. An IPv4-mapped address
+      # counts as its IPv4 address; an unparsable one as its own string.
+      def subject_address(ip)
+        address = IPAddr.new(ip.to_s)
+        return address.native.to_s if address.ipv4_mapped?
+
+        address.ipv6? ? "#{address.mask(64)}/64" : address.to_s
+      rescue IPAddr::Error
+        ip.to_s
       end
 
       def connector_range_for(ip)
