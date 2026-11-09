@@ -307,7 +307,6 @@ module Oauth
       get "/oauth/authorize", params: authorize_params(resource: admin_resource, scope: nil)
       assert_response :success
       assert_select "[data-testid=oauth-approve]"
-      assert_select "[data-testid=oauth-admin-reapproval]"
 
       post "/oauth/authorize", params: authorize_params(resource: admin_resource, scope: nil)
       assert_redirected_to_client(CLAUDE_URI)
@@ -328,11 +327,8 @@ module Oauth
       assert_equal ["books:admin:read"], connection.scopes
     end
 
-    test "no resource and a member scope makes a member connection, with no admin notice" do
+    test "no resource and a member scope makes a member connection" do
       sign_in_as(users(:admin_user), stub_auth: true)
-
-      get "/oauth/authorize", params: authorize_params(scope: "books:read")
-      assert_select "[data-testid=oauth-admin-reapproval]", count: 0
 
       post "/oauth/authorize", params: authorize_params(scope: "books:read")
       connection = OauthConnection.find_by!(user: users(:admin_user), application: @claude_ai)
