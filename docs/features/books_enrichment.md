@@ -182,6 +182,11 @@ locations and book type from the same evidence the origin judge reads, and write
 (knowledge, then research when it applies). It runs after `categorize`, so the two share at most one
 research call per book per workflow run.
 
+**The switch.** The judge is off until `config.x.ai.categories_judge_enabled` is true, read from ENV
+`BOOKS_CATEGORIES_JUDGE_ENABLED` (`1` or `true`; off by default in every environment). Off, `Judge.call` writes one
+`skipped` row with reason `disabled`, makes no AI call and applies nothing, and the workflow step succeeds. A skipped
+row is not done, so the backfill still plans those books once the switch is on.
+
 **Dossier.** `Categorize::Dossier` now also carries what the category judge needs: the record's description
 (1,000 characters) and the categories the book holds now (direct links of the four types, each with its
 source and, for a location, its ancestors); Wikidata's `genres`, `main_subjects`, `narrative_locations`,
@@ -215,6 +220,9 @@ migration behind the candidates. A failed chooser call fails the judge row, so t
   subjects, 5 locations, 1 audience. An entry over the cap is held back (`cap`).
 - `high` answers are written; `medium` only with external support (`Categories::Support`: Wikidata, Wikipedia,
   WorldCat or Goodreads names the category), else held back `unsupported_medium`; `low` is held back.
+- Removals (a confident, externally evidenced re-judge only) never touch a legacy link the judge named: a link
+  among the candidates offered for an unmatched name, or whose name key equals a proposed name's, stays. A type
+  is stripped only when it has at least one `high` or `medium` pick; low picks protect but do not enable removals.
 - A new link has source `ai`. A held `legacy` or `inherited` link the judge picked is upgraded to `ai`
   (`confirmed`) only after the confidence and support rule above passes (a `medium` pick with no support is
   held back `unsupported_medium` even when the book holds the link); an inherited one is cap-checked first.
