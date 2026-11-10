@@ -132,6 +132,8 @@ module Admin
         assert_not ::Books::Book.exists?(a.id)
         assert ::Books::Book.exists?(b.id)
         assert @pending.reload.merged?
+        assert_equal @admin, @pending.resolved_by
+        assert @pending.resolved_via_admin_ui?
       end
 
       test "merge B into A deletes B" do
@@ -275,6 +277,7 @@ module Admin
         @pending.reload
         assert @pending.not_duplicate?
         assert_equal @admin, @pending.resolved_by
+        assert @pending.resolved_via_admin_ui?
         assert_equal "Different novels.", @pending.resolution_note
         assert_not_nil @pending.resolved_at
       end

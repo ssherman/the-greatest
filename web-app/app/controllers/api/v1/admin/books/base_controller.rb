@@ -15,7 +15,15 @@ module Api
           # an export: a query matching more than this should be refined.
           SEARCH_LIMIT = 1000
 
+          before_action :set_acting_user
+
           private
+
+          # Lets mergers record who resolved a duplicate pair (see Current).
+          def set_acting_user
+            Current.acting_user = current_principal.user
+            Current.acting_via = "api"
+          end
 
           # The search text, or nil after rendering the 400 -- so a blank query
           # is never an empty 200 and never a page of the whole table.

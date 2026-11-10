@@ -28,6 +28,19 @@ module Api
             assert_kind_of Array, json[:warnings]
           end
 
+          test "merging a queued pair stamps it resolved by the token's user via the api" do
+            a, b = [@source.id, @target.id].minmax
+            pair = DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: a, item_b_id: b, source: :human)
+
+            merge({source_id: @source.id})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            pair.reload
+            assert pair.merged?
+            assert_equal users(:admin_user), pair.resolved_by
+            assert pair.resolved_via_api?
+          end
+
           test "dry_run leaves both records and says so" do
             ::Books::Book::Merger.expects(:new).never
 

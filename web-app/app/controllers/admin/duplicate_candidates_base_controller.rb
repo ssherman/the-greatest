@@ -45,6 +45,7 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
     end
 
     @pair.update!(status: :not_duplicate, resolved_at: Time.current, resolved_by: current_user,
+      resolved_via: :admin_ui,
       resolution_note: params[:resolution_note].presence)
     back_to_index(notice: "Marked as not a duplicate.")
   end

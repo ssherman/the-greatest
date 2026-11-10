@@ -27,6 +27,47 @@ module Services
         assert_equal @type, decision.record_type
       end
 
+      test "stamps resolved_by and resolved_via from Current" do
+        pair = Flag.call(item_type: @type, ids: [@a.id, @b.id], source: :ai).data
+        admin = users(:admin_user)
+
+        Current.set(acting_user: admin, acting_via: "api") do
+          RecordMerge.call(item_type: @type, source_id: @a.id, target_id: @b.id)
+        end
+
+        pair.reload
+        assert pair.merged?
+        assert_equal admin, pair.resolved_by
+        assert pair.resolved_via_api?
+      end
+
+      test "with no Current context the pair is merged with nil who/how" do
+        pair = Flag.call(item_type: @type, ids: [@a.id, @b.id], source: :ai).data
+
+        RecordMerge.call(item_type: @type, source_id: @a.id, target_id: @b.id)
+
+        pair.reload
+        assert pair.merged?
+        assert_nil pair.resolved_by_id
+        assert_nil pair.resolved_via
+      end
+
+      test "the stamp rolls back with the merger's transaction" do
+        pair = Flag.call(item_type: @type, ids: [@a.id, @b.id], source: :ai).data
+
+        ActiveRecord::Base.transaction do
+          Current.set(acting_user: users(:admin_user), acting_via: "api") do
+            RecordMerge.call(item_type: @type, source_id: @a.id, target_id: @b.id)
+          end
+          raise ActiveRecord::Rollback
+        end
+
+        pair.reload
+        assert pair.pending?
+        assert_nil pair.resolved_by_id
+        assert_nil pair.resolved_via
+      end
+
       test "drops a repointed pair that would collide with an existing row" do
         Flag.call(item_type: @type, ids: [@a.id, @c.id], source: :ai)
         survivor_pair = Flag.call(item_type: @type, ids: [@b.id, @c.id], source: :ai).data
